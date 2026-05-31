@@ -1,0 +1,12 @@
+
+alloc array<int32_t> a;
+a(10);
+
+int32_t x;
+x = 5;
+
+a[0] = x + 3;
+
+a.uninit();
+del a;
+

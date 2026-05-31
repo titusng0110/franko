@@ -1,1 +1,4 @@
 .vscode/
+*.out
+*.zip
+antlr4-cpp-runtime-4.13.2-source/
