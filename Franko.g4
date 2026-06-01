@@ -1,103 +1,161 @@
 grammar Franko;
 
+@lexer::members {
+    private int groupingDepth = 0;
+}
+
 // ---------- PARSER ----------
 
 program
-    : statement* EOF
+    : separators* (statement (separators+ statement)*)? separators* EOF
     ;
 
-// Statements
-
 statement
-    : varDecl ';'
-    | delStmt ';'
-    | assignStmt ';'
-    | arrayInitStmt ';'
-    | arrayUninitStmt ';'
-    | exprStmt ';'
+    : varDecl
+    | delStmt
+    | assignStmt
+    | arrayInitStmt
+    | arrayUninitStmt
+    | arrayMemsetStmt
+    | arrayMemcpyStmt
+    | printStmt
+    | exprStmt
+    ;
+
+separators
+    : (SEMI | NEWLINE)+
     ;
 
 // Variable declaration
-
 varDecl
-    : type IDENTIFIER                // slab / stack variable
-    | 'alloc' type IDENTIFIER        // heap variable
+    : type IDENTIFIER
+    | ALLOC type IDENTIFIER
     ;
 
 // Delete
-
 delStmt
-    : 'del' IDENTIFIER
+    : DEL IDENTIFIER
     ;
 
 // Assignment
-
 assignStmt
-    : lvalue '=' expr
+    : lvalue ASSIGN expr
     ;
 
 // ---------- ARRAY ----------
 
-// Initialization: x(10)
+// Initialization: a(10)
 arrayInitStmt
-    : IDENTIFIER '(' expr ')'
+    : IDENTIFIER LPAREN expr RPAREN
     ;
 
-// Uninitialization: x.uninit()
+// Uninitialization: a.uninit()
 arrayUninitStmt
-    : IDENTIFIER '.' 'uninit' '(' ')'
+    : IDENTIFIER DOT UNINIT LPAREN RPAREN
     ;
 
-// L-values
+// Memset: a.memset(0)
+arrayMemsetStmt
+    : IDENTIFIER DOT MEMSET LPAREN expr RPAREN
+    ;
+
+// Memcpy: a.memcpy(b)
+arrayMemcpyStmt
+    : IDENTIFIER DOT MEMCPY LPAREN IDENTIFIER RPAREN
+    ;
+
+// Print: print(x, y, z)
+printStmt
+    : PRINT LPAREN exprList? RPAREN
+    ;
+
+exprList
+    : expr (COMMA expr)*
+    ;
 
 lvalue
     : IDENTIFIER
-    | IDENTIFIER '[' expr ']'
+    | IDENTIFIER LBRACK expr RBRACK
     ;
 
-// ---------- EXPRESSION STATEMENT ----------
 exprStmt
     : expr
     ;
 
-
-// ---------- EXPRESSIONS ----------
-
-
 expr
-    : '-' expr                         # UnaryMinus
-    | expr op=('*' | '/') expr        # MulDiv
-    | expr op=('+' | '-') expr        # AddSub
-    | atom                            # AtomExpr
+    : MINUS expr                     # UnaryMinus
+    | expr op=(STAR | SLASH) expr    # MulDiv
+    | expr op=(PLUS | MINUS) expr    # AddSub
+    | atom                           # AtomExpr
     ;
-
 
 atom
     : INT_LITERAL
     | IDENTIFIER
-    | IDENTIFIER '[' expr ']'
-    | '(' expr ')'
+    | IDENTIFIER LBRACK expr RBRACK
+    | LPAREN expr RPAREN
     ;
 
-// ---------- TYPES ----------
-
 type
-    : 'int32_t'
-    | 'uint32_t'
-    | 'float32_t'
-    | 'char8_t'
-    | 'array' '<' type '>'
+    : INT32_T
+    | UINT32_T
+    | FLOAT32_T
+    | CHAR8_T
+    | ARRAY LT type GT
+    | ARRAY LT type COMMA INT_LITERAL GT
     ;
 
 // ---------- LEXER ----------
 
+// Keywords
+ALLOC    : 'alloc' ;
+DEL      : 'del' ;
+PRINT    : 'print' ;
+UNINIT   : 'uninit' ;
+MEMSET   : 'memset' ;
+MEMCPY   : 'memcpy' ;
 
-IDENTIFIER : [a-zA-Z_][a-zA-Z0-9_]* ;
+INT32_T   : 'int32_t' ;
+UINT32_T  : 'uint32_t' ;
+FLOAT32_T : 'float32_t' ;
+CHAR8_T   : 'char8_t' ;
+ARRAY     : 'array' ;
 
+// Operators / punctuation
+ASSIGN : '=' ;
+PLUS   : '+' ;
+MINUS  : '-' ;
+STAR   : '*' ;
+SLASH  : '/' ;
+DOT    : '.' ;
+COMMA  : ',' ;
+SEMI   : ';' ;
+LT     : '<' ;
+GT     : '>' ;
+
+// Grouping with depth tracking
+LPAREN : '(' { groupingDepth++; } ;
+RPAREN : ')' { if (groupingDepth > 0) groupingDepth--; } ;
+
+LBRACK : '[' { groupingDepth++; } ;
+RBRACK : ']' { if (groupingDepth > 0) groupingDepth--; } ;
+
+// Identifiers / literals
+IDENTIFIER  : [a-zA-Z_][a-zA-Z0-9_]* ;
 INT_LITERAL : [0-9]+ ;
 
-// Single-line comments
+// Comments
 COMMENT : '//' ~[\r\n]* -> skip ;
 
-// Whitespace
-WS : [ \t\r\n]+ -> skip ;
+// Horizontal whitespace
+WS : [ \t]+ -> skip ;
+
+// Newlines
+NEWLINE
+    : ('\r'? '\n')+
+      {
+          if (groupingDepth > 0) {
+              skip();
+          }
+      }
+    ;
