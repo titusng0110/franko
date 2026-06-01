@@ -10,7 +10,7 @@ public class Main {
         // Input / output file paths
         String sourceFile = "test.fr";
         String templateFile = "ProgramTemplate.cpp";
-        String outputFile = "out.cpp";
+        String outputFile = "build/out.cpp";
 
         // ----- Lex / parse -----
         CharStream input = CharStreams.fromFileName(sourceFile);
@@ -28,10 +28,20 @@ public class Main {
 
         // ----- Build AST -----
         FrankoASTVisitor visitor = new FrankoASTVisitor();
-        ASTNode ast = visitor.visit(tree);
+        ASTNode rawAst = visitor.visit(tree);
 
         // ----- Debug: print AST -----
-        System.out.println("==== AST ====");
+        System.out.println("==== Raw AST ====");
+        ASTPrinter.print(rawAst, 0);
+
+        // Desugar AST
+        
+        Desugarer desugarer = new Desugarer();
+        ASTNode ast = desugarer.desugar(rawAst);
+
+
+        // ----- Debug: print AST -----
+        System.out.println("==== Desugared AST ====");
         ASTPrinter.print(ast, 0);
 
         // ----- Generate C++ body -----

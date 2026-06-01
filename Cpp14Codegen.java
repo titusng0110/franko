@@ -1,12 +1,11 @@
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 class VarInfo {
-    String type;
+    TypeNode type;
     boolean isHeap;
 
-    VarInfo(String type, boolean isHeap) {
+    VarInfo(TypeNode type, boolean isHeap) {
         this.type = type;
         this.isHeap = isHeap;
     }
@@ -54,9 +53,32 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node instanceof BlockNode) {
+            emitBlock((BlockNode) node);
+            return;
+        }
+
+        if (node instanceof IfNode) {
+            emitIf((IfNode) node);
+            return;
+        }
+
+        if (node instanceof WhileNode) {
+            emitWhile((WhileNode) node);
+            return;
+        }
+
         if (node instanceof VarDeclNode) {
             emitVarDecl((VarDeclNode) node);
             return;
+        }
+
+        // These sugar nodes should have been removed by Desugarer.
+        if (node instanceof VarDeclInitNode || node instanceof VarDeclArrayInitNode) {
+            throw new RuntimeException(
+                "Sugar node reached codegen. Run Desugarer before Cpp14Codegen: "
+                + node.getClass().getSimpleName()
+            );
         }
 
         if (node instanceof AssignNode) {
@@ -109,6 +131,52 @@ public class Cpp14Codegen {
         );
     }
 
+    private void emitBlock(BlockNode node) {
+        emitLine("{");
+        indentLevel++;
+        for (ASTNode stmt : node.statements) {
+            emitStmt(stmt);
+        }
+        indentLevel--;
+        emitLine("}");
+    }
+
+    private void emitIf(IfNode node) {
+        emitLine("if (" + emitExpr(node.condition) + ")");
+        emitControlledStmt(node.thenBranch);
+
+        if (node.elseBranch != null) {
+            emitLine("else");
+            emitControlledStmt(node.elseBranch);
+        }
+    }
+
+    private void emitWhile(WhileNode node) {
+        emitLine("while (" + emitExpr(node.condition) + ")");
+        emitControlledStmt(node.body);
+    }
+
+    /**
+     * Emits a statement as the body of if/while.
+     *
+     * If it's already a block, emit it directly:
+     *   if (cond)
+     *   { ... }
+     *
+     * Otherwise indent a single statement:
+     *   if (cond)
+     *       x = 1;
+     */
+    private void emitControlledStmt(ASTNode node) {
+        if (node instanceof BlockNode) {
+            emitStmt(node);
+        } else {
+            indentLevel++;
+            emitStmt(node);
+            indentLevel--;
+        }
+    }
+
     private void emitVarDecl(VarDeclNode node) {
         symbols.put(node.name, new VarInfo(node.type, node.isHeap));
 
@@ -155,14 +223,19 @@ public class Cpp14Codegen {
 
     private void emitPrint(PrintNode node) {
         if (node.args == null || node.args.isEmpty()) {
-            emitLine("std::cout << \"\";");
+            emitLine("std::cout << '\\n';");
             return;
         }
 
         StringBuilder sb = new StringBuilder("std::cout");
-        for (ASTNode arg : node.args) {
-            sb.append(" << ").append(emitExpr(arg));
+
+        for (int i = 0; i < node.args.size(); i++) {
+            if (i > 0) {
+                sb.append(" << ' '");
+            }
+            sb.append(" << ").append(emitExpr(node.args.get(i)));
         }
+
         sb.append(" << '\\n';");
         emitLine(sb.toString());
     }
@@ -209,65 +282,34 @@ public class Cpp14Codegen {
         throw new RuntimeException("Unsupported lvalue node: " + node.getClass().getSimpleName());
     }
 
-    private String emitType(String frankoType) {
-        // Remove whitespace just in case
-        frankoType = frankoType.replace(" ", "");
-
-        switch (frankoType) {
-            case "int32_t":
-                return "int32_t";
-            case "uint32_t":
-                return "uint32_t";
-            case "float32_t":
-                return "float";
-            case "char8_t":
-                return "char";
-            default:
-                break;
-        }
-
-        if (!frankoType.startsWith("array<") || !frankoType.endsWith(">")) {
-            throw new RuntimeException("Unsupported Franko type: " + frankoType);
-        }
-
-        String inner = frankoType.substring("array<".length(), frankoType.length() - 1);
-        int split = findTopLevelComma(inner);
-
-        if (split == -1) {
-            String elemType = emitType(inner);
-            return "Franko_Dynamic_Array<" + elemType + ">";
-        } else {
-            String elem = inner.substring(0, split);
-            String size = inner.substring(split + 1);
-            String elemType = emitType(elem);
-            return "Franko_Static_Array<" + elemType + ", " + size + ">";
-        }
-    }
-
     /**
-     * Finds the comma at the top nesting level inside array<...>.
-     *
-     * Examples:
-     * - "int32_t" -> -1
-     * - "int32_t,8" -> comma position
-     * - "array<int32_t>,8" -> top-level comma position
+     * Emits a C++ type from the Franko TypeNode hierarchy.
      */
-    private int findTopLevelComma(String s) {
-        int depth = 0;
+    private String emitType(TypeNode type) {
+        if (type instanceof PrimitiveTypeNode) {
+            PrimitiveKind kind = ((PrimitiveTypeNode) type).kind;
 
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-
-            if (c == '<') {
-                depth++;
-            } else if (c == '>') {
-                depth--;
-            } else if (c == ',' && depth == 0) {
-                return i;
-            }
+            return switch (kind) {
+                case INT32 -> "int32_t";
+                case UINT32 -> "uint32_t";
+                case FLOAT32 -> "float";
+                case CHAR8 -> "char";
+            };
         }
 
-        return -1;
+        if (type instanceof DynamicArrayTypeNode) {
+            DynamicArrayTypeNode t = (DynamicArrayTypeNode) type;
+            return "Franko_Dynamic_Array<" + emitType(t.elementType) + ">";
+        }
+
+        if (type instanceof StaticArrayTypeNode) {
+            StaticArrayTypeNode t = (StaticArrayTypeNode) type;
+            return "Franko_Static_Array<" + emitType(t.elementType) + ", " + t.size + ">";
+        }
+
+        throw new RuntimeException(
+            "Unsupported Franko type node in codegen: " + type.getClass().getSimpleName()
+        );
     }
 
     private String emitVarAccess(String name) {
@@ -281,8 +323,7 @@ public class Cpp14Codegen {
     }
 
     private String emitReceiver(String name) {
-        // Same underlying representation as variable access,
-        // but semantically clearer when used for method calls / indexing.
+        // Same as variable access, but semantically highlights method/[] receiver use.
         return emitVarAccess(name);
     }
 
