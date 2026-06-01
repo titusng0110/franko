@@ -7,10 +7,41 @@ grammar Franko;
 // ---------- PARSER ----------
 
 program
-    : separators* (statement (separators+ statement)*)? separators* EOF
+    : separators* (statement separators*)* EOF
     ;
 
 statement
+    : simpleStmt   # SimpleStatement
+    | ifStmt       # IfStatement
+    | whileStmt    # WhileStatement
+    | block        # BlockStatement
+    ;
+
+// Reusable separator rule
+separators
+    : (SEMI | NEWLINE)+
+    ;
+
+// ---------- BLOCK ----------
+
+block
+    : LBRACE separators* (statement separators*)* RBRACE
+    ;
+
+// ---------- CONTROL FLOW ----------
+
+ifStmt
+    : IF LPAREN expr RPAREN separators* statement
+      (separators* ELSE separators* statement)?
+    ;
+
+whileStmt
+    : WHILE LPAREN expr RPAREN separators* statement
+    ;
+
+// ---------- SIMPLE STATEMENTS ----------
+
+simpleStmt
     : varDecl
     | delStmt
     | assignStmt
@@ -22,49 +53,54 @@ statement
     | exprStmt
     ;
 
-separators
-    : (SEMI | NEWLINE)+
-    ;
+// ---------- VARIABLE DECLARATION ----------
 
-// Variable declaration
 varDecl
-    : type IDENTIFIER
-    | ALLOC type IDENTIFIER
+    : type IDENTIFIER declSuffix?
+    | ALLOC type IDENTIFIER declSuffix?
     ;
 
-// Delete
+declSuffix
+    : ASSIGN expr        # DeclAssignInit
+    | LPAREN expr RPAREN # DeclArrayInit
+    ;
+
+// ---------- DELETE ----------
+
 delStmt
     : DEL IDENTIFIER
     ;
 
-// Assignment
+// ---------- ASSIGNMENT ----------
+
 assignStmt
     : lvalue ASSIGN expr
     ;
 
 // ---------- ARRAY ----------
 
-// Initialization: a(10)
+// Existing standalone array init statement: a(10)
 arrayInitStmt
     : IDENTIFIER LPAREN expr RPAREN
     ;
 
-// Uninitialization: a.uninit()
+// a.uninit()
 arrayUninitStmt
     : IDENTIFIER DOT UNINIT LPAREN RPAREN
     ;
 
-// Memset: a.memset(0)
+// a.memset(0)
 arrayMemsetStmt
     : IDENTIFIER DOT MEMSET LPAREN expr RPAREN
     ;
 
-// Memcpy: a.memcpy(b)
+// a.memcpy(b)
 arrayMemcpyStmt
     : IDENTIFIER DOT MEMCPY LPAREN IDENTIFIER RPAREN
     ;
 
-// Print: print(x, y, z)
+// ---------- PRINT ----------
+
 printStmt
     : PRINT LPAREN exprList? RPAREN
     ;
@@ -73,20 +109,27 @@ exprList
     : expr (COMMA expr)*
     ;
 
+// ---------- LVALUES ----------
+
 lvalue
     : IDENTIFIER
     | IDENTIFIER LBRACK expr RBRACK
     ;
 
+// ---------- EXPRESSION STATEMENT ----------
+
 exprStmt
     : expr
     ;
 
+// ---------- EXPRESSIONS ----------
+
 expr
-    : MINUS expr                     # UnaryMinus
-    | expr op=(STAR | SLASH) expr    # MulDiv
-    | expr op=(PLUS | MINUS) expr    # AddSub
-    | atom                           # AtomExpr
+    : MINUS expr                                  # UnaryMinus
+    | expr op=(STAR | SLASH) expr                 # MulDiv
+    | expr op=(PLUS | MINUS) expr                 # AddSub
+    | expr op=(EQ | NEQ | LE | GE | LT | GT) expr # Compare
+    | atom                                        # AtomExpr
     ;
 
 atom
@@ -96,13 +139,15 @@ atom
     | LPAREN expr RPAREN
     ;
 
+// ---------- TYPES ----------
+
 type
-    : INT32_T
-    | UINT32_T
-    | FLOAT32_T
-    | CHAR8_T
-    | ARRAY LT type GT
-    | ARRAY LT type COMMA INT_LITERAL GT
+    : INT32_T                             # Int32Type
+    | UINT32_T                            # Uint32Type
+    | FLOAT32_T                           # Float32Type
+    | CHAR8_T                             # Char8Type
+    | ARRAY LT type GT                    # DynamicArrayType
+    | ARRAY LT type COMMA INT_LITERAL GT  # StaticArrayType
     ;
 
 // ---------- LEXER ----------
@@ -114,14 +159,24 @@ PRINT    : 'print' ;
 UNINIT   : 'uninit' ;
 MEMSET   : 'memset' ;
 MEMCPY   : 'memcpy' ;
+IF       : 'if' ;
+ELSE     : 'else' ;
+WHILE    : 'while' ;
 
-INT32_T   : 'int32_t' ;
+// Primitive / type keywords
+// If you want int as an alias of int32_t:
+INT32_T   : 'int32_t' | 'int' ;
 UINT32_T  : 'uint32_t' ;
 FLOAT32_T : 'float32_t' ;
 CHAR8_T   : 'char8_t' ;
 ARRAY     : 'array' ;
 
 // Operators / punctuation
+EQ     : '==' ;
+NEQ    : '!=' ;
+LE     : '<=' ;
+GE     : '>=' ;
+
 ASSIGN : '=' ;
 PLUS   : '+' ;
 MINUS  : '-' ;
@@ -139,6 +194,11 @@ RPAREN : ')' { if (groupingDepth > 0) groupingDepth--; } ;
 
 LBRACK : '[' { groupingDepth++; } ;
 RBRACK : ']' { if (groupingDepth > 0) groupingDepth--; } ;
+
+// IMPORTANT: do NOT include braces in groupingDepth
+// because newlines inside { } should remain statement separators.
+LBRACE : '{' ;
+RBRACE : '}' ;
 
 // Identifiers / literals
 IDENTIFIER  : [a-zA-Z_][a-zA-Z0-9_]* ;

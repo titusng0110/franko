@@ -1,192 +1,32 @@
-// ============================================================
-// Franko Showcase Program
-// Demonstrates:
-// - heap + stack variables
-// - dynamic arrays
-// - static arrays
-// - array init / uninit
-// - memset / memcpy
-// - unary minus
-// - precedence and multiline expressions
-// - print
-// ============================================================
+int32_t x;
+int32_t y=20;
+x = 10
 
+if (x < y)
+    print(x);
 
-// ===== Heap dynamic arrays =====
-alloc array<int32_t> a
-a(6)
+if (x == y) {
+    print(1);
+} else {
+    print(0);
+}
 
-alloc array<int32_t> e
-e(6)
+while (x != 0) {
+    print(x);
+    x = x - 1;
+}
+int32_t z;
+z = 0
+if (x + y * 2 >= z - 1)
+    print(999);
 
+array<int32_t> arr(5);
+int i=0;
+while(i<5){
+    arr[i] = i-2
+    i = i+1
+}
 
-// ===== Stack dynamic array =====
-array<int32_t> b
-b(6)
-
-
-// ===== Static arrays =====
-array<int32_t, 6> s
-array<int32_t, 6> t
-
-
-// ===== Heap static array =====
-alloc array<int32_t, 6> hs
-
-
-// ===== Nested dynamic array declaration =====
-// (Declared to show type support; not initialized/used deeply here)
-alloc array<array<int32_t>> nested
-
-
-// ===== Scalars =====
-int32_t x
-int32_t y
-int32_t z
-int32_t m
-int32_t n
-
-
-// ============================================================
-// Phase 1: scalar arithmetic + fill heap dynamic array a
-// ============================================================
-
-x = 3
-y = 4
-z = (
-    x + y * 5
-)
-
-a[0] = x
-a[1] = y
-a[2] = z
-a[3] = a[0] + a[1] + a[2]
-a[4] = a[3] - a[0]
-a[5] = -(
-    a[1] - 10
-)
-
-// Marker + values from a
-print(1001)
-print(a[0], a[1], a[2], a[3], a[4], a[5])
-
-
-// ============================================================
-// Phase 2: dynamic-to-dynamic copy (a -> b)
-// ============================================================
-
-b.memset(0)
-b.memcpy(a)
-
-x = b[5] + b[4]
-y = b[3] / 2
-z = x + y
-
-print(1002)
-print(x, y, z)
-
-
-// ============================================================
-// Phase 3: fill static stack array s manually
-// ============================================================
-
-s[0] = 11
-s[1] = 22
-s[2] = 33
-s[3] = s[0] + s[1]
-s[4] = s[2] - s[0]
-s[5] = -5
-
-print(1003)
-print(s[0], s[1], s[2], s[3], s[4], s[5])
-
-
-// ============================================================
-// Phase 4: static-to-static copy (s -> t)
-// ============================================================
-
-t.memcpy(s)
-
-x = t[0] + t[1]
-y = t[2] + t[3]
-z = t[4] + t[5]
-
-print(1004)
-print(x, y, z)
-
-
-// ============================================================
-// Phase 5: static-to-dynamic copy (s -> e)
-// ============================================================
-
-e.memset(0)
-e.memcpy(s)
-
-x = e[0]
-y = e[1]
-z = e[2] + e[3] + e[4] + e[5]
-
-print(1005)
-print(x, y, z)
-
-
-// ============================================================
-// Phase 6: dynamic-to-static copy (a -> hs)
-// ============================================================
-
-hs.memcpy(a)
-
-x = hs[0]
-y = hs[1]
-z = hs[2] + hs[3]
-
-print(1006)
-print(x, y, z)
-
-
-// ============================================================
-// Phase 7: multiline expressions + unary minus
-// ============================================================
-
-m = -5
-n = -(
-    m + 3
-)
-
-x = (
-    (n + 10) * 2
-)
-
-print(1007)
-print(m, n, x)
-
-
-// ============================================================
-// Phase 8: overwrite a from mixed sources
-// ============================================================
-
-a[0] = t[0]
-a[1] = e[1]
-a[2] = hs[2]
-a[3] = a[0] + a[1]
-a[4] = a[2] + a[3]
-a[5] = -(
-    a[4]
-)
-
-print(1008)
-print(a[0], a[1], a[2], a[3], a[4], a[5])
-
-
-// ============================================================
-// Cleanup
-// ============================================================
-
-a.uninit()
-b.uninit()
-e.uninit()
-
-del a
-del e
-del hs
-del nested
+i=0
+while(i<5){     print(arr[i])
+    i = i+1}
