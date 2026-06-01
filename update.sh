@@ -20,9 +20,11 @@ step() {
 
 mkdir -p build/generated build/classes
 
-step 'rm -f build/generated/* build/classes/* build/out.cpp build/out.out'
+step 'rm -f build/generated/* build/classes/*'
+
 step 'java -Xmx500M -cp "'"$ANTLR_CP"'" org.antlr.v4.Tool -visitor -o build/generated Franko.g4'
+
 step 'javac -cp "'"$ANTLR_CP:build/generated"'" -d build/classes *.java build/generated/*.java'
-step 'java -cp "'"$ANTLR_CP:build/classes:build/generated"'" Main'
-step 'g++ -std=c++14 -Wall -Wextra -Wpedantic -Wshadow -Iinclude build/out.cpp -o build/out.out'
-step './build/out.out'
+
+echo
+echo "Compiler toolchain updated successfully."

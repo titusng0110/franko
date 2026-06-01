@@ -1,0 +1,509 @@
+
+// ============================================================
+// BFS Maze Showcase for Franko
+// ============================================================
+//
+// This program demonstrates:
+//
+//   1. Nested static arrays
+//   2. Chained indexing like map[r][c]
+//   3. Breadth-First Search (BFS)
+//   4. A manually implemented cyclic queue
+//   5. Parent-pointer reconstruction of the shortest path
+//   6. Pretty-printing the solved maze row by row
+//
+// Cell meanings inside the maze:
+//
+//   0 = open / walkable space
+//   1 = wall
+//   2 = start
+//   3 = goal
+//   4 = shortest-path overlay
+//
+// The maze is 15 x 15.
+// We construct four horizontal barrier rows, each with one gap.
+// BFS then finds the shortest path from start to goal.
+// Finally, we reconstruct the path and print the solved maze.
+//
+// ============================================================
+
+
+// ------------------------------------------------------------
+// Maze state arrays
+// ------------------------------------------------------------
+
+// Main maze grid.
+// map[r][c] represents the cell at row r, column c.
+array<array<int,15>,15> map
+
+// visited[r][c] = 1 once BFS has discovered cell (r, c).
+// visited[r][c] = 0 means the cell has not been reached yet.
+array<array<int,15>,15> visited
+
+// dist[r][c] stores the shortest distance from the start cell
+// to cell (r, c), measured in BFS step count.
+array<array<int,15>,15> dist
+
+// path[r][c] = 1 if the cell belongs to the final shortest path
+// from start to goal.
+// path[r][c] = 0 otherwise.
+array<array<int,15>,15> path
+
+
+// ------------------------------------------------------------
+// Parent pointers for path reconstruction
+// ------------------------------------------------------------
+//
+// When BFS visits a new cell (nr, nc), we record which cell
+// led to it:
+//
+//   parentR[nr][nc] = previous row
+//   parentC[nr][nc] = previous col
+//
+// After BFS reaches the goal, we can reconstruct the shortest path
+// by walking backward:
+//
+//   goal -> parent -> parent -> ... -> start
+
+array<array<int,15>,15> parentR
+array<array<int,15>,15> parentC
+
+
+// ------------------------------------------------------------
+// BFS queue
+// ------------------------------------------------------------
+//
+// We implement a queue manually using a fixed-size array.
+//
+// Each queued position is packed into one integer:
+//
+//   pos = r * cols + c
+//
+// Later, row and column are recovered with:
+//
+//   r = pos / cols
+//   c = pos - r * cols
+//
+// head points at the current front of the queue.
+// tail points at the next free slot.
+// Both wrap around, forming a cyclic queue.
+
+alloc array<int,10000> q
+
+
+// ------------------------------------------------------------
+// Temporary row buffer for pretty printing
+// ------------------------------------------------------------
+//
+// line[c] stores one row of output before printing.
+// This lets us print an entire maze row in one print(...) call
+// instead of printing single cells one-by-one.
+
+array<int,15> line
+
+
+// ------------------------------------------------------------
+// Basic scalar variables
+// ------------------------------------------------------------
+
+// Maze dimensions
+int rows = 15
+int cols = 15
+
+// Start cell coordinates
+int startR = 1
+int startC = 1
+
+// Goal cell coordinates
+int goalR = 13
+int goalC = 13
+
+// Queue pointers
+int head = 0
+int tail = 0
+
+// General-purpose coordinate / loop variables
+int r = 0
+int c = 0
+int i = 0
+
+// Current encoded queue value
+int pos = 0
+
+// Neighbor coordinates
+int nr = 0
+int nc = 0
+
+// found = 1 if BFS reached the goal; otherwise 0
+int found = 0
+
+// done is used while walking backward through parent pointers
+int done = 0
+
+
+// ------------------------------------------------------------
+// Initialize helper arrays
+// ------------------------------------------------------------
+
+// Open everything initially
+map.memset(0)
+
+// No cells visited yet
+visited.memset(0)
+
+// Distance values start at 0 everywhere
+dist.memset(0)
+
+// No path overlay yet
+path.memset(0)
+
+// NOTE:
+// We do not use parentR.memset(-1) / parentC.memset(-1),
+// because low-level byte-style memset on integers may not behave
+// the way we want.
+// Instead, parent pointers are written only when a cell is first visited.
+
+
+// ------------------------------------------------------------
+// Build maze border walls
+// ------------------------------------------------------------
+//
+// The outer border is made entirely of walls.
+// This makes neighbor exploration simpler, because BFS can safely
+// examine up/down/left/right without needing extra bounds checks.
+// If a move reaches the border, it simply hits a wall.
+
+i = 0
+while (i < cols) {
+    map[0][i] = 1
+    map[rows - 1][i] = 1
+    map[i][0] = 1
+    map[i][cols - 1] = 1
+    i = i + 1
+}
+
+
+// ------------------------------------------------------------
+// Build the interior maze structure
+// ------------------------------------------------------------
+//
+// We create four horizontal obstacle rows:
+//
+//   row 3
+//   row 6
+//   row 9
+//   row 12
+//
+// Each barrier row is blocked except for one gap:
+//
+//   row 3  -> gap at col 7
+//   row 6  -> gap at col 4
+//   row 9  -> gap at col 11
+//   row 12 -> gap at col 6
+//
+// This forces the shortest path to bend through the maze in a
+// nontrivial way, making BFS easy to verify.
+
+
+// Row 3 barrier with one opening at column 7
+c = 1
+while (c < cols - 1) {
+    if (c != 7) {
+        map[3][c] = 1
+    }
+    c = c + 1
+}
+
+// Row 6 barrier with one opening at column 4
+c = 1
+while (c < cols - 1) {
+    if (c != 4) {
+        map[6][c] = 1
+    }
+    c = c + 1
+}
+
+// Row 9 barrier with one opening at column 11
+c = 1
+while (c < cols - 1) {
+    if (c != 11) {
+        map[9][c] = 1
+    }
+    c = c + 1
+}
+
+// Row 12 barrier with one opening at column 6
+c = 1
+while (c < cols - 1) {
+    if (c != 6) {
+        map[12][c] = 1
+    }
+    c = c + 1
+}
+
+
+// ------------------------------------------------------------
+// Mark start and goal
+// ------------------------------------------------------------
+//
+// The start and goal are still traversable cells.
+// BFS only treats value 1 as blocked.
+
+map[startR][startC] = 2
+map[goalR][goalC] = 3
+
+
+// ------------------------------------------------------------
+// BFS initialization
+// ------------------------------------------------------------
+//
+// Start cell is visited immediately at distance 0.
+// Then it is pushed into the queue.
+
+visited[startR][startC] = 1
+dist[startR][startC] = 0
+
+q[tail] = startR * cols + startC
+tail = tail + 1
+
+// Wrap around in cyclic queue if tail reaches array end
+if (tail == 10000) {
+    tail = 0
+}
+
+
+// ------------------------------------------------------------
+// BFS loop
+// ------------------------------------------------------------
+//
+// While the queue is not empty:
+//
+//   1. Pop the front cell
+//   2. Decode row/column
+//   3. Examine the four neighbors
+//   4. For each valid unvisited neighbor:
+//        - mark visited
+//        - set distance
+//        - record parent
+//        - enqueue it
+
+while (head != tail) {
+
+    // Pop current front element
+    pos = q[head]
+    head = head + 1
+
+    // Wrap around in cyclic queue if head reaches array end
+    if (head == 10000) {
+        head = 0
+    }
+
+    // Decode packed queue value back into row/column
+    r = pos / cols
+    c = pos - r * cols
+
+
+    // --------------------------------------------------------
+    // Try moving UP
+    // --------------------------------------------------------
+    nr = r - 1
+    nc = c
+
+    // Ignore walls
+    if (map[nr][nc] != 1) {
+
+        // Only process if this cell has never been visited before
+        if (visited[nr][nc] == 0) {
+            visited[nr][nc] = 1
+            dist[nr][nc] = dist[r][c] + 1
+
+            // Record where we came from
+            parentR[nr][nc] = r
+            parentC[nr][nc] = c
+
+            // Push neighbor into queue
+            q[tail] = nr * cols + nc
+            tail = tail + 1
+            if (tail == 10000) {
+                tail = 0
+            }
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Try moving DOWN
+    // --------------------------------------------------------
+    nr = r + 1
+    nc = c
+
+    if (map[nr][nc] != 1) {
+        if (visited[nr][nc] == 0) {
+            visited[nr][nc] = 1
+            dist[nr][nc] = dist[r][c] + 1
+            parentR[nr][nc] = r
+            parentC[nr][nc] = c
+
+            q[tail] = nr * cols + nc
+            tail = tail + 1
+            if (tail == 10000) {
+                tail = 0
+            }
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Try moving LEFT
+    // --------------------------------------------------------
+    nr = r
+    nc = c - 1
+
+    if (map[nr][nc] != 1) {
+        if (visited[nr][nc] == 0) {
+            visited[nr][nc] = 1
+            dist[nr][nc] = dist[r][c] + 1
+            parentR[nr][nc] = r
+            parentC[nr][nc] = c
+
+            q[tail] = nr * cols + nc
+            tail = tail + 1
+            if (tail == 10000) {
+                tail = 0
+            }
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Try moving RIGHT
+    // --------------------------------------------------------
+    nr = r
+    nc = c + 1
+
+    if (map[nr][nc] != 1) {
+        if (visited[nr][nc] == 0) {
+            visited[nr][nc] = 1
+            dist[nr][nc] = dist[r][c] + 1
+            parentR[nr][nc] = r
+            parentC[nr][nc] = c
+
+            q[tail] = nr * cols + nc
+            tail = tail + 1
+            if (tail == 10000) {
+                tail = 0
+            }
+        }
+    }
+}
+
+
+// ------------------------------------------------------------
+// Reconstruct shortest path
+// ------------------------------------------------------------
+//
+// If BFS reached the goal, then we walk backward through the
+// parent pointers:
+//
+//   goal -> parent -> parent -> ... -> start
+//
+// and mark each cell in path[r][c].
+
+found = 0
+if (visited[goalR][goalC] != 0) {
+    found = 1
+}
+
+if (found != 0) {
+    r = goalR
+    c = goalC
+    done = 0
+
+    while (done == 0) {
+        path[r][c] = 1
+
+        // Stop once we reach the start cell
+        if (r == startR) {
+            if (c == startC) {
+                done = 1
+            }
+        }
+
+        // Otherwise, move one step backward to the parent
+        if (done == 0) {
+            nr = parentR[r][c]
+            nc = parentC[r][c]
+            r = nr
+            c = nc
+        }
+    }
+}
+
+
+// ------------------------------------------------------------
+// Output
+// ------------------------------------------------------------
+//
+// First section:
+//   1001
+//   shortest distance or -1
+//
+// Second section:
+//   1002
+//   solved maze row by row
+//
+// For each row:
+//   1. copy original maze row into `line`
+//   2. overlay any path cell with value 4
+//   3. restore the start (2) and goal (3) markers
+//   4. print the row in one call
+
+// Marker: distance section
+print(1001)
+
+// Print shortest distance if the goal was found
+if (found != 0) {
+    print(dist[goalR][goalC])
+} else {
+    print(-1)
+}
+
+// Marker: solved maze section
+print(1002)
+
+// Print solved maze row by row
+r = 0
+while (r < rows) {
+
+    // Copy one row into the temporary output buffer
+    c = 0
+    while (c < cols) {
+        line[c] = map[r][c]
+
+        // Overlay shortest path on top of the maze.
+        // We mark path cells as 4.
+        if (path[r][c] != 0) {
+            line[c] = 4
+        }
+
+        c = c + 1
+    }
+
+    // Restore start and goal symbols after path overlay,
+    // so they remain visible as 2 and 3 instead of becoming 4.
+    if (r == startR) {
+        line[startC] = 2
+    }
+    if (r == goalR) {
+        line[goalC] = 3
+    }
+
+    // Print the row in a human-readable single line
+    print(
+        line[0], line[1], line[2], line[3], line[4],
+        line[5], line[6], line[7], line[8], line[9],
+        line[10], line[11], line[12], line[13], line[14]
+    )
+
+    r = r + 1
+}

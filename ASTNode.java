@@ -154,11 +154,11 @@ class BinOpNode extends ASTNode {
 
 // Array access
 class ArrayAccessNode extends ASTNode {
-    String name;
+    ASTNode target;
     ASTNode index;
 
-    ArrayAccessNode(String name, ASTNode index) {
-        this.name = name;
+    ArrayAccessNode(ASTNode target, ASTNode index) {
+        this.target = target;
         this.index = index;
     }
 }
@@ -176,30 +176,32 @@ class ArrayInitNode extends ASTNode {
 
 // Array uninit
 class ArrayUninitNode extends ASTNode {
-    String name;
+    ASTNode receiver;
 
-    ArrayUninitNode(String name) {
-        this.name = name;
+    ArrayUninitNode(ASTNode receiver) {
+        this.receiver = receiver;
     }
 }
 
+
 // Array memset
 class ArrayMemsetNode extends ASTNode {
-    String name;
+    ASTNode receiver;
     ASTNode value;
 
-    ArrayMemsetNode(String name, ASTNode value) {
-        this.name = name;
+    ArrayMemsetNode(ASTNode receiver, ASTNode value) {
+        this.receiver = receiver;
         this.value = value;
     }
 }
 
+
 // Array memcpy
 class ArrayMemcpyNode extends ASTNode {
-    String target;
-    String source;
+    ASTNode target;
+    ASTNode source;
 
-    ArrayMemcpyNode(String target, String source) {
+    ArrayMemcpyNode(ASTNode target, ASTNode source) {
         this.target = target;
         this.source = source;
     }
