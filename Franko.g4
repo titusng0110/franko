@@ -63,11 +63,14 @@ exprStmt
 
 // ---------- EXPRESSIONS ----------
 
+
 expr
-    : expr op=('*' | '/') expr        # MulDiv
+    : '-' expr                         # UnaryMinus
+    | expr op=('*' | '/') expr        # MulDiv
     | expr op=('+' | '-') expr        # AddSub
     | atom                            # AtomExpr
     ;
+
 
 atom
     : INT_LITERAL
@@ -88,8 +91,13 @@ type
 
 // ---------- LEXER ----------
 
+
 IDENTIFIER : [a-zA-Z_][a-zA-Z0-9_]* ;
 
 INT_LITERAL : [0-9]+ ;
 
+// Single-line comments
+COMMENT : '//' ~[\r\n]* -> skip ;
+
+// Whitespace
 WS : [ \t\r\n]+ -> skip ;

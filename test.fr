@@ -1,12 +1,81 @@
-
+// ===== Heap array =====
 alloc array<int32_t> a;
 a(10);
 
+// ===== Another heap array =====
+alloc array<int32_t> b;
+b(5);
+
+// ===== Stack array (NEW) =====
+array<int32_t> c;
+c(8);
+
+// ===== Nested array (NEW) =====
+alloc array<array<int32_t>> d;
+
+// ===== Scalars =====
 int32_t x;
-x = 5;
+int32_t y;
+int32_t z;
 
-a[0] = x + 3;
+// ===== Basic assignments =====
+x = 10;
+y = 20;
+z = x + y * 2;
 
-a.uninit();
+// ===== Fill a =====
+a[0] = x;
+a[1] = y;
+a[2] = z;
+a[3] = x + y + z;
+a[4] = a[0] + a[1] + a[2];
+
+// ===== Use a =====
+x = a[2] * 2;
+y = a[3] - a[1];
+z = a[4] + x;
+
+// ===== Fill b from a =====
+b[0] = a[0];
+b[1] = a[1] + a[2];
+b[2] = a[3] * 2;
+b[3] = b[1] + b[2];
+b[4] = z;
+
+// ===== Chain computations =====
+x = b[3] + b[4];
+y = (x + z) * 2;
+z = y / 3;
+
+// ===== Modify a again =====
+a[0] = x;
+a[1] = y;
+a[2] = z;
+
+// ===== Use stack array c =====
+c[0] = 1;
+c[1] = 2;
+c[2] = c[0] + c[1];
+c[3] = c[2] * 3;
+
+// ===== More mixing =====
+x = c[3] + a[0];
+y = b[2] + c[2];
+z = x + y;
+
+// ===== Cleanup =====
+a.uninit();     // explicit
+b.uninit();     // explicit
+
+del c;          // this is illegal, deleting stack variables is not allowed. user would have meant c.uninit();
 del a;
+del b;
 
+// NOTE: d is declared but unused (good future test case)
+
+
+int32_t m;
+m = -5;
+
+int32_t n;
+n = -(m + 3);
