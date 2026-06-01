@@ -22,6 +22,12 @@ public interface FrankoVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitStatement(FrankoParser.StatementContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link FrankoParser#separators}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSeparators(FrankoParser.SeparatorsContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link FrankoParser#varDecl}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -51,6 +57,30 @@ public interface FrankoVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitArrayUninitStmt(FrankoParser.ArrayUninitStmtContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link FrankoParser#arrayMemsetStmt}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitArrayMemsetStmt(FrankoParser.ArrayMemsetStmtContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link FrankoParser#arrayMemcpyStmt}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitArrayMemcpyStmt(FrankoParser.ArrayMemcpyStmtContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link FrankoParser#printStmt}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitPrintStmt(FrankoParser.PrintStmtContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link FrankoParser#exprList}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitExprList(FrankoParser.ExprListContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link FrankoParser#lvalue}.
 	 * @param ctx the parse tree

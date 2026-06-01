@@ -27,6 +27,16 @@ public interface FrankoListener extends ParseTreeListener {
 	 */
 	void exitStatement(FrankoParser.StatementContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link FrankoParser#separators}.
+	 * @param ctx the parse tree
+	 */
+	void enterSeparators(FrankoParser.SeparatorsContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link FrankoParser#separators}.
+	 * @param ctx the parse tree
+	 */
+	void exitSeparators(FrankoParser.SeparatorsContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link FrankoParser#varDecl}.
 	 * @param ctx the parse tree
 	 */
@@ -76,6 +86,46 @@ public interface FrankoListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitArrayUninitStmt(FrankoParser.ArrayUninitStmtContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link FrankoParser#arrayMemsetStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterArrayMemsetStmt(FrankoParser.ArrayMemsetStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link FrankoParser#arrayMemsetStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitArrayMemsetStmt(FrankoParser.ArrayMemsetStmtContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link FrankoParser#arrayMemcpyStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterArrayMemcpyStmt(FrankoParser.ArrayMemcpyStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link FrankoParser#arrayMemcpyStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitArrayMemcpyStmt(FrankoParser.ArrayMemcpyStmtContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link FrankoParser#printStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterPrintStmt(FrankoParser.PrintStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link FrankoParser#printStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitPrintStmt(FrankoParser.PrintStmtContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link FrankoParser#exprList}.
+	 * @param ctx the parse tree
+	 */
+	void enterExprList(FrankoParser.ExprListContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link FrankoParser#exprList}.
+	 * @param ctx the parse tree
+	 */
+	void exitExprList(FrankoParser.ExprListContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link FrankoParser#lvalue}.
 	 * @param ctx the parse tree

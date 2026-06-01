@@ -54,6 +54,7 @@ class IntNode extends ASTNode {
     }
 }
 
+// Unary operation
 class UnaryOpNode extends ASTNode {
     String op;
     ASTNode expr;
@@ -63,7 +64,6 @@ class UnaryOpNode extends ASTNode {
         this.expr = expr;
     }
 }
-
 
 // Binary operation
 class BinOpNode extends ASTNode {
@@ -109,6 +109,28 @@ class ArrayUninitNode extends ASTNode {
     }
 }
 
+// Array memset
+class ArrayMemsetNode extends ASTNode {
+    String name;
+    ASTNode value;
+
+    ArrayMemsetNode(String name, ASTNode value) {
+        this.name = name;
+        this.value = value;
+    }
+}
+
+// Array memcpy
+class ArrayMemcpyNode extends ASTNode {
+    String target;
+    String source;
+
+    ArrayMemcpyNode(String target, String source) {
+        this.target = target;
+        this.source = source;
+    }
+}
+
 // Delete
 class DelNode extends ASTNode {
     String name;
@@ -117,6 +139,16 @@ class DelNode extends ASTNode {
         this.name = name;
     }
 }
+
+
+class PrintNode extends ASTNode {
+    List<ASTNode> args;
+
+    PrintNode(List<ASTNode> args) {
+        this.args = args;
+    }
+}
+
 
 
 // ================= VISITOR =================
@@ -129,18 +161,15 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         List<ASTNode> statements = new ArrayList<>();
 
         for (FrankoParser.StatementContext stmt : ctx.statement()) {
-            
             ASTNode node = visit(stmt);
             if (node != null) {
                 statements.add(node);
             }
-
         }
 
         return new ProgramNode(statements);
     }
 
-    
     @Override
     public ASTNode visitStatement(FrankoParser.StatementContext ctx) {
         if (ctx.varDecl() != null) return visit(ctx.varDecl());
@@ -148,6 +177,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         if (ctx.assignStmt() != null) return visit(ctx.assignStmt());
         if (ctx.arrayInitStmt() != null) return visit(ctx.arrayInitStmt());
         if (ctx.arrayUninitStmt() != null) return visit(ctx.arrayUninitStmt());
+        if (ctx.arrayMemsetStmt() != null) return visit(ctx.arrayMemsetStmt());
+        if (ctx.arrayMemcpyStmt() != null) return visit(ctx.arrayMemcpyStmt());
+        if (ctx.printStmt() != null) return visit(ctx.printStmt());
         if (ctx.exprStmt() != null) return visit(ctx.exprStmt());
 
         return null; // safety fallback
@@ -195,6 +227,24 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return new ArrayUninitNode(ctx.IDENTIFIER().getText());
     }
 
+    // array memset: a.memset(0)
+    @Override
+    public ASTNode visitArrayMemsetStmt(FrankoParser.ArrayMemsetStmtContext ctx) {
+        return new ArrayMemsetNode(
+            ctx.IDENTIFIER().getText(),
+            visit(ctx.expr())
+        );
+    }
+
+    // array memcpy: a.memcpy(b)
+    @Override
+    public ASTNode visitArrayMemcpyStmt(FrankoParser.ArrayMemcpyStmtContext ctx) {
+        return new ArrayMemcpyNode(
+            ctx.IDENTIFIER(0).getText(),
+            ctx.IDENTIFIER(1).getText()
+        );
+    }
+
     // lvalue
     @Override
     public ASTNode visitLvalue(FrankoParser.LvalueContext ctx) {
@@ -229,7 +279,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return visit(ctx.expr());
     }
 
-    
     @Override
     public ASTNode visitUnaryMinus(FrankoParser.UnaryMinusContext ctx) {
         return new UnaryOpNode(
@@ -237,7 +286,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             visit(ctx.expr())
         );
     }
-
 
     // +
     @Override
@@ -249,7 +297,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         );
     }
 
-    // *
+    // * /
     @Override
     public ASTNode visitMulDiv(FrankoParser.MulDivContext ctx) {
         return new BinOpNode(
@@ -259,18 +307,38 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         );
     }
 
-        
     @Override
     public ASTNode visitExprStmt(FrankoParser.ExprStmtContext ctx) {
         return visit(ctx.expr());
     }
 
+    @Override
+    public ASTNode visitPrintStmt(FrankoParser.PrintStmtContext ctx) {
+        List<ASTNode> args = new ArrayList<>();
+
+        if (ctx.exprList() != null) {
+            for (FrankoParser.ExprContext exprCtx : ctx.exprList().expr()) {
+                args.add(visit(exprCtx));
+            }
+        }
+
+        return new PrintNode(args);
+    }
+
 }
+
+
+// ================= AST PRINTER =================
 
 class ASTPrinter {
 
     public static void print(ASTNode node, int indent) {
         String pad = "  ".repeat(indent);
+
+        if (node == null) {
+            System.out.println(pad + "NULL NODE (BUG)");
+            return;
+        }
 
         if (node instanceof ProgramNode) {
             System.out.println(pad + "Program");
@@ -281,7 +349,7 @@ class ASTPrinter {
 
         else if (node instanceof VarDeclNode) {
             VarDeclNode n = (VarDeclNode) node;
-            System.out.println(pad + "VarDecl: " + n.type + " " + n.name + 
+            System.out.println(pad + "VarDecl: " + n.type + " " + n.name +
                 (n.isHeap ? " (heap)" : ""));
         }
 
@@ -299,13 +367,11 @@ class ASTPrinter {
             System.out.println(pad + "Int: " + ((IntNode) node).value);
         }
 
-                
         else if (node instanceof UnaryOpNode) {
             UnaryOpNode n = (UnaryOpNode) node;
             System.out.println(pad + "UnaryOp: " + n.op);
             print(n.expr, indent + 1);
         }
-
 
         else if (node instanceof BinOpNode) {
             BinOpNode n = (BinOpNode) node;
@@ -327,18 +393,32 @@ class ASTPrinter {
         }
 
         else if (node instanceof ArrayUninitNode) {
-            System.out.println(pad + "ArrayUninit: " + 
+            System.out.println(pad + "ArrayUninit: " +
                 ((ArrayUninitNode) node).name);
         }
 
+        else if (node instanceof ArrayMemsetNode) {
+            ArrayMemsetNode n = (ArrayMemsetNode) node;
+            System.out.println(pad + "ArrayMemset: " + n.name);
+            print(n.value, indent + 1);
+        }
+
+        else if (node instanceof ArrayMemcpyNode) {
+            ArrayMemcpyNode n = (ArrayMemcpyNode) node;
+            System.out.println(pad + "ArrayMemcpy: " + n.target + " <- " + n.source);
+        }
+
         else if (node instanceof DelNode) {
-            System.out.println(pad + "Delete: " + 
+            System.out.println(pad + "Delete: " +
                 ((DelNode) node).name);
         }
         
-        else if (node == null) {
-            System.out.println(pad + "NULL NODE (BUG)");
-            return;
+        else if (node instanceof PrintNode) {
+            PrintNode n = (PrintNode) node;
+            System.out.println(pad + "Print");
+            for (ASTNode arg : n.args) {
+                print(arg, indent + 1);
+            }
         }
 
         else {

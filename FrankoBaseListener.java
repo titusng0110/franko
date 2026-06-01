@@ -40,6 +40,18 @@ public class FrankoBaseListener implements FrankoListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterSeparators(FrankoParser.SeparatorsContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSeparators(FrankoParser.SeparatorsContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterVarDecl(FrankoParser.VarDeclContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -95,6 +107,54 @@ public class FrankoBaseListener implements FrankoListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitArrayUninitStmt(FrankoParser.ArrayUninitStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterArrayMemsetStmt(FrankoParser.ArrayMemsetStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitArrayMemsetStmt(FrankoParser.ArrayMemsetStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterArrayMemcpyStmt(FrankoParser.ArrayMemcpyStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitArrayMemcpyStmt(FrankoParser.ArrayMemcpyStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterPrintStmt(FrankoParser.PrintStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitPrintStmt(FrankoParser.PrintStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterExprList(FrankoParser.ExprListContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitExprList(FrankoParser.ExprListContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *

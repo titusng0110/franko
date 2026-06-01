@@ -1,81 +1,192 @@
-// ===== Heap array =====
-alloc array<int32_t> a;
-a(10);
+// ============================================================
+// Franko Showcase Program
+// Demonstrates:
+// - heap + stack variables
+// - dynamic arrays
+// - static arrays
+// - array init / uninit
+// - memset / memcpy
+// - unary minus
+// - precedence and multiline expressions
+// - print
+// ============================================================
 
-// ===== Another heap array =====
-alloc array<int32_t> b;
-b(5);
 
-// ===== Stack array (NEW) =====
-array<int32_t> c;
-c(8);
+// ===== Heap dynamic arrays =====
+alloc array<int32_t> a
+a(6)
 
-// ===== Nested array (NEW) =====
-alloc array<array<int32_t>> d;
+alloc array<int32_t> e
+e(6)
+
+
+// ===== Stack dynamic array =====
+array<int32_t> b
+b(6)
+
+
+// ===== Static arrays =====
+array<int32_t, 6> s
+array<int32_t, 6> t
+
+
+// ===== Heap static array =====
+alloc array<int32_t, 6> hs
+
+
+// ===== Nested dynamic array declaration =====
+// (Declared to show type support; not initialized/used deeply here)
+alloc array<array<int32_t>> nested
+
 
 // ===== Scalars =====
-int32_t x;
-int32_t y;
-int32_t z;
-
-// ===== Basic assignments =====
-x = 10;
-y = 20;
-z = x + y * 2;
-
-// ===== Fill a =====
-a[0] = x;
-a[1] = y;
-a[2] = z;
-a[3] = x + y + z;
-a[4] = a[0] + a[1] + a[2];
-
-// ===== Use a =====
-x = a[2] * 2;
-y = a[3] - a[1];
-z = a[4] + x;
-
-// ===== Fill b from a =====
-b[0] = a[0];
-b[1] = a[1] + a[2];
-b[2] = a[3] * 2;
-b[3] = b[1] + b[2];
-b[4] = z;
-
-// ===== Chain computations =====
-x = b[3] + b[4];
-y = (x + z) * 2;
-z = y / 3;
-
-// ===== Modify a again =====
-a[0] = x;
-a[1] = y;
-a[2] = z;
-
-// ===== Use stack array c =====
-c[0] = 1;
-c[1] = 2;
-c[2] = c[0] + c[1];
-c[3] = c[2] * 3;
-
-// ===== More mixing =====
-x = c[3] + a[0];
-y = b[2] + c[2];
-z = x + y;
-
-// ===== Cleanup =====
-a.uninit();     // explicit
-b.uninit();     // explicit
-
-del c;          // this is illegal, deleting stack variables is not allowed. user would have meant c.uninit();
-del a;
-del b;
-
-// NOTE: d is declared but unused (good future test case)
+int32_t x
+int32_t y
+int32_t z
+int32_t m
+int32_t n
 
 
-int32_t m;
-m = -5;
+// ============================================================
+// Phase 1: scalar arithmetic + fill heap dynamic array a
+// ============================================================
 
-int32_t n;
-n = -(m + 3);
+x = 3
+y = 4
+z = (
+    x + y * 5
+)
+
+a[0] = x
+a[1] = y
+a[2] = z
+a[3] = a[0] + a[1] + a[2]
+a[4] = a[3] - a[0]
+a[5] = -(
+    a[1] - 10
+)
+
+// Marker + values from a
+print(1001)
+print(a[0], a[1], a[2], a[3], a[4], a[5])
+
+
+// ============================================================
+// Phase 2: dynamic-to-dynamic copy (a -> b)
+// ============================================================
+
+b.memset(0)
+b.memcpy(a)
+
+x = b[5] + b[4]
+y = b[3] / 2
+z = x + y
+
+print(1002)
+print(x, y, z)
+
+
+// ============================================================
+// Phase 3: fill static stack array s manually
+// ============================================================
+
+s[0] = 11
+s[1] = 22
+s[2] = 33
+s[3] = s[0] + s[1]
+s[4] = s[2] - s[0]
+s[5] = -5
+
+print(1003)
+print(s[0], s[1], s[2], s[3], s[4], s[5])
+
+
+// ============================================================
+// Phase 4: static-to-static copy (s -> t)
+// ============================================================
+
+t.memcpy(s)
+
+x = t[0] + t[1]
+y = t[2] + t[3]
+z = t[4] + t[5]
+
+print(1004)
+print(x, y, z)
+
+
+// ============================================================
+// Phase 5: static-to-dynamic copy (s -> e)
+// ============================================================
+
+e.memset(0)
+e.memcpy(s)
+
+x = e[0]
+y = e[1]
+z = e[2] + e[3] + e[4] + e[5]
+
+print(1005)
+print(x, y, z)
+
+
+// ============================================================
+// Phase 6: dynamic-to-static copy (a -> hs)
+// ============================================================
+
+hs.memcpy(a)
+
+x = hs[0]
+y = hs[1]
+z = hs[2] + hs[3]
+
+print(1006)
+print(x, y, z)
+
+
+// ============================================================
+// Phase 7: multiline expressions + unary minus
+// ============================================================
+
+m = -5
+n = -(
+    m + 3
+)
+
+x = (
+    (n + 10) * 2
+)
+
+print(1007)
+print(m, n, x)
+
+
+// ============================================================
+// Phase 8: overwrite a from mixed sources
+// ============================================================
+
+a[0] = t[0]
+a[1] = e[1]
+a[2] = hs[2]
+a[3] = a[0] + a[1]
+a[4] = a[2] + a[3]
+a[5] = -(
+    a[4]
+)
+
+print(1008)
+print(a[0], a[1], a[2], a[3], a[4], a[5])
+
+
+// ============================================================
+// Cleanup
+// ============================================================
+
+a.uninit()
+b.uninit()
+e.uninit()
+
+del a
+del e
+del hs
+del nested
