@@ -41,20 +41,6 @@ public class Cpp14Codegen {
         return templateSource.replace("__FRANKO_PROGRAM__", body.trim());
     }
 
-    /**
-     * Optional convenience helper:
-     * generate a standalone .cpp translation unit directly.
-     */
-    public String generateStandalone(ASTNode root) {
-        StringBuilder cpp = new StringBuilder();
-        cpp.append("#include \"FrankoRuntime.hpp\"\n\n");
-        cpp.append("int main() {\n");
-        cpp.append(indentBlock(generate(root), 1));
-        cpp.append("    return 0;\n");
-        cpp.append("}\n");
-        return cpp.toString();
-    }
-
     private void emitStmt(ASTNode node) {
         if (node == null) {
             throw new RuntimeException("Cannot emit null AST node");
@@ -177,7 +163,7 @@ public class Cpp14Codegen {
         for (ASTNode arg : node.args) {
             sb.append(" << ").append(emitExpr(arg));
         }
-        sb.append("<<'\\n';");
+        sb.append(" << '\\n';");
         emitLine(sb.toString());
     }
 
