@@ -203,16 +203,26 @@ public class Desugarer {
         }
 
         if (stmt instanceof ArrayUninitNode) {
-            return stmt;
+            ArrayUninitNode n = (ArrayUninitNode) stmt;
+            return new ArrayUninitNode(
+                desugarExpr(n.receiver)
+            );
         }
 
         if (stmt instanceof ArrayMemsetNode) {
             ArrayMemsetNode n = (ArrayMemsetNode) stmt;
-            return new ArrayMemsetNode(n.name, desugarExpr(n.value));
+            return new ArrayMemsetNode(
+                desugarExpr(n.receiver),
+                desugarExpr(n.value)
+            );
         }
 
         if (stmt instanceof ArrayMemcpyNode) {
-            return stmt;
+            ArrayMemcpyNode n = (ArrayMemcpyNode) stmt;
+            return new ArrayMemcpyNode(
+                desugarExpr(n.target),
+                desugarExpr(n.source)
+            );
         }
 
         if (stmt instanceof DelNode) {
@@ -274,7 +284,7 @@ public class Desugarer {
         if (expr instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) expr;
             return new ArrayAccessNode(
-                n.name,
+                desugarExpr(n.target),
                 desugarExpr(n.index)
             );
         }
@@ -291,7 +301,10 @@ public class Desugarer {
 
         if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
-            return new ArrayAccessNode(n.name, desugarExpr(n.index));
+            return new ArrayAccessNode(
+                desugarExpr(n.target),
+                desugarExpr(n.index)
+            );
         }
 
         throw new RuntimeException(

@@ -77,26 +77,39 @@ assignStmt
     : lvalue ASSIGN expr
     ;
 
-// ---------- ARRAY ----------
+// ---------- RECEIVER EXPRESSIONS ----------
+
+// Can be used for:
+//   arr
+//   arr[i]
+//   map[r][c]
+//   nested[i][j][k]
+receiverExpr
+    : IDENTIFIER (LBRACK expr RBRACK)*
+    ;
+
+// ---------- ARRAY / METHOD-LIKE OPERATIONS ----------
 
 // Existing standalone array init statement: a(10)
+// Keep this restricted to plain identifiers for now,
+// since declaration sugar/desugaring already handles array creation nicely.
 arrayInitStmt
     : IDENTIFIER LPAREN expr RPAREN
     ;
 
-// a.uninit()
+// Receiver-based uninit
 arrayUninitStmt
-    : IDENTIFIER DOT UNINIT LPAREN RPAREN
+    : receiverExpr DOT UNINIT LPAREN RPAREN
     ;
 
-// a.memset(0)
+// Receiver-based memset
 arrayMemsetStmt
-    : IDENTIFIER DOT MEMSET LPAREN expr RPAREN
+    : receiverExpr DOT MEMSET LPAREN expr RPAREN
     ;
 
-// a.memcpy(b)
+// Receiver-based memcpy
 arrayMemcpyStmt
-    : IDENTIFIER DOT MEMCPY LPAREN IDENTIFIER RPAREN
+    : receiverExpr DOT MEMCPY LPAREN receiverExpr RPAREN
     ;
 
 // ---------- PRINT ----------
@@ -111,9 +124,12 @@ exprList
 
 // ---------- LVALUES ----------
 
+// Supports:
+//   x
+//   arr[i]
+//   map[r][c]
 lvalue
-    : IDENTIFIER
-    | IDENTIFIER LBRACK expr RBRACK
+    : IDENTIFIER (LBRACK expr RBRACK)*
     ;
 
 // ---------- EXPRESSION STATEMENT ----------
@@ -129,13 +145,17 @@ expr
     | expr op=(STAR | SLASH) expr                 # MulDiv
     | expr op=(PLUS | MINUS) expr                 # AddSub
     | expr op=(EQ | NEQ | LE | GE | LT | GT) expr # Compare
-    | atom                                        # AtomExpr
+    | postfixExpr                                 # PostfixExprOnly
     ;
 
-atom
+// Postfix indexing supports chained [] in expressions
+postfixExpr
+    : primary (LBRACK expr RBRACK)*
+    ;
+
+primary
     : INT_LITERAL
     | IDENTIFIER
-    | IDENTIFIER LBRACK expr RBRACK
     | LPAREN expr RPAREN
     ;
 
@@ -164,7 +184,6 @@ ELSE     : 'else' ;
 WHILE    : 'while' ;
 
 // Primitive / type keywords
-// If you want int as an alias of int32_t:
 INT32_T   : 'int32_t' | 'int' ;
 UINT32_T  : 'uint32_t' ;
 FLOAT32_T : 'float32_t' ;

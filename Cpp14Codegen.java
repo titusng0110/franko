@@ -195,20 +195,34 @@ public class Cpp14Codegen {
         emitLine(lhs + " = " + rhs + ";");
     }
 
+    /**
+     * ArrayInit is still name-based in your AST, because declaration sugar lowers:
+     *
+     *   array<int> arr(10);
+     *
+     * into:
+     *   VarDeclNode(arr)
+     *   ArrayInitNode("arr", 10)
+     */
     private void emitArrayInit(ArrayInitNode node) {
-        emitLine(emitReceiver(node.name) + ".init(" + emitExpr(node.size) + ");");
+        emitLine(emitVarReceiver(node.name) + ".init(" + emitExpr(node.size) + ");");
     }
 
     private void emitArrayUninit(ArrayUninitNode node) {
-        emitLine(emitReceiver(node.name) + ".uninit();");
+        emitLine(emitReceiverExpr(node.receiver) + ".uninit();");
     }
 
     private void emitArrayMemset(ArrayMemsetNode node) {
-        emitLine(emitReceiver(node.name) + ".memset(" + emitExpr(node.value) + ");");
+        emitLine(emitReceiverExpr(node.receiver) + ".memset(" + emitExpr(node.value) + ");");
     }
 
     private void emitArrayMemcpy(ArrayMemcpyNode node) {
-        emitLine(emitReceiver(node.target) + ".memcpy(" + emitReceiver(node.source) + ");");
+        emitLine(
+            emitReceiverExpr(node.target)
+            + ".memcpy("
+            + emitReceiverExpr(node.source)
+            + ");"
+        );
     }
 
     private void emitDel(DelNode node) {
@@ -261,7 +275,7 @@ public class Cpp14Codegen {
 
         if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
-            return emitReceiver(n.name) + "[" + emitExpr(n.index) + "]";
+            return emitExpr(n.target) + "[" + emitExpr(n.index) + "]";
         }
 
         throw new RuntimeException(
@@ -276,10 +290,36 @@ public class Cpp14Codegen {
 
         if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
-            return emitReceiver(n.name) + "[" + emitExpr(n.index) + "]";
+            return emitExpr(n.target) + "[" + emitExpr(n.index) + "]";
         }
 
-        throw new RuntimeException("Unsupported lvalue node: " + node.getClass().getSimpleName());
+        throw new RuntimeException(
+            "Unsupported lvalue node: " + node.getClass().getSimpleName()
+        );
+    }
+
+    /**
+     * Emits a receiver expression for method-like array operations.
+     *
+     * Examples:
+     *   arr           -> arr   or (*arr) if heap
+     *   arr[i]        -> arr[i]
+     *   map[r][c]     -> map[r][c]
+     *
+     * Important:
+     * - var receivers still respect heap-vs-nonheap via emitVarAccess
+     * - general nested expressions recurse through emitExpr
+     */
+    private String emitReceiverExpr(ASTNode node) {
+        return emitExpr(node);
+    }
+
+    /**
+     * Emits a receiver for a plain variable name.
+     * Used for name-based operations like ArrayInitNode.
+     */
+    private String emitVarReceiver(String name) {
+        return emitVarAccess(name);
     }
 
     /**
@@ -320,11 +360,6 @@ public class Cpp14Codegen {
         }
 
         return name;
-    }
-
-    private String emitReceiver(String name) {
-        // Same as variable access, but semantically highlights method/[] receiver use.
-        return emitVarAccess(name);
     }
 
     private VarInfo requireVar(String name) {

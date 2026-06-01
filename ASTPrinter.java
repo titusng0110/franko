@@ -26,21 +26,27 @@ public class ASTPrinter {
 
         else if (node instanceof VarDeclNode) {
             VarDeclNode n = (VarDeclNode) node;
-            System.out.println(pad + "VarDecl: " + typeToString(n.type) + " " + n.name +
-                (n.isHeap ? " (heap)" : ""));
+            System.out.println(
+                pad + "VarDecl: " + typeToString(n.type) + " " + n.name +
+                (n.isHeap ? " (heap)" : "")
+            );
         }
 
         else if (node instanceof VarDeclInitNode) {
             VarDeclInitNode n = (VarDeclInitNode) node;
-            System.out.println(pad + "VarDeclInit: " + typeToString(n.type) + " " + n.name +
-                (n.isHeap ? " (heap)" : ""));
+            System.out.println(
+                pad + "VarDeclInit: " + typeToString(n.type) + " " + n.name +
+                (n.isHeap ? " (heap)" : "")
+            );
             print(n.init, indent + 1);
         }
 
         else if (node instanceof VarDeclArrayInitNode) {
             VarDeclArrayInitNode n = (VarDeclArrayInitNode) node;
-            System.out.println(pad + "VarDeclArrayInit: " + typeToString(n.type) + " " + n.name +
-                (n.isHeap ? " (heap)" : ""));
+            System.out.println(
+                pad + "VarDeclArrayInit: " + typeToString(n.type) + " " + n.name +
+                (n.isHeap ? " (heap)" : "")
+            );
             print(n.size, indent + 1);
         }
 
@@ -95,8 +101,11 @@ public class ASTPrinter {
 
         else if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
-            System.out.println(pad + "ArrayAccess: " + n.name);
-            print(n.index, indent + 1);
+            System.out.println(pad + "ArrayAccess");
+            System.out.println(pad + "  Target:");
+            print(n.target, indent + 2);
+            System.out.println(pad + "  Index:");
+            print(n.index, indent + 2);
         }
 
         else if (node instanceof ArrayInitNode) {
@@ -106,18 +115,28 @@ public class ASTPrinter {
         }
 
         else if (node instanceof ArrayUninitNode) {
-            System.out.println(pad + "ArrayUninit: " + ((ArrayUninitNode) node).name);
+            ArrayUninitNode n = (ArrayUninitNode) node;
+            System.out.println(pad + "ArrayUninit");
+            System.out.println(pad + "  Receiver:");
+            print(n.receiver, indent + 2);
         }
 
         else if (node instanceof ArrayMemsetNode) {
             ArrayMemsetNode n = (ArrayMemsetNode) node;
-            System.out.println(pad + "ArrayMemset: " + n.name);
-            print(n.value, indent + 1);
+            System.out.println(pad + "ArrayMemset");
+            System.out.println(pad + "  Receiver:");
+            print(n.receiver, indent + 2);
+            System.out.println(pad + "  Value:");
+            print(n.value, indent + 2);
         }
 
         else if (node instanceof ArrayMemcpyNode) {
             ArrayMemcpyNode n = (ArrayMemcpyNode) node;
-            System.out.println(pad + "ArrayMemcpy: " + n.target + " <- " + n.source);
+            System.out.println(pad + "ArrayMemcpy");
+            System.out.println(pad + "  Target:");
+            print(n.target, indent + 2);
+            System.out.println(pad + "  Source:");
+            print(n.source, indent + 2);
         }
 
         else if (node instanceof DelNode) {
