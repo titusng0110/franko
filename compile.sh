@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+trap 'echo "Error: command failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: ./compile.sh <source.fr>"
+    echo "Usage: ./compile.sh <source.fr>" >&2
     exit 1
 fi
 
 SRC="$1"
 
 if [[ ! -f "$SRC" ]]; then
-    echo "Error: source file not found: $SRC"
+    echo "Error: source file not found: $SRC" >&2
     exit 1
 fi
 

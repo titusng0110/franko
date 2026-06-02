@@ -225,15 +225,15 @@ public class Cpp14Codegen {
         );
     }
 
+    
     private void emitDel(DelNode node) {
-        VarInfo info = requireVar(node.name);
-
-        if (!info.isHeap) {
-            throw new RuntimeException("Cannot delete non-heap variable: " + node.name);
-        }
-
+        // SemanticAnalyzer is responsible for validating:
+        // - variable exists
+        // - variable is heap-allocated
+        // - variable has not already been deleted
         emitLine("std::free(" + node.name + ");");
     }
+
 
     private void emitPrint(PrintNode node) {
         if (node.args == null || node.args.isEmpty()) {
@@ -352,8 +352,9 @@ public class Cpp14Codegen {
         );
     }
 
+    
     private String emitVarAccess(String name) {
-        VarInfo info = requireVar(name);
+        VarInfo info = requireVarForCodegen(name);
 
         if (info.isHeap) {
             return "(*" + name + ")";
@@ -362,15 +363,22 @@ public class Cpp14Codegen {
         return name;
     }
 
-    private VarInfo requireVar(String name) {
+
+    
+    private VarInfo requireVarForCodegen(String name) {
         VarInfo info = symbols.get(name);
 
         if (info == null) {
-            throw new RuntimeException("Unknown variable in codegen: " + name);
+            throw new IllegalStateException(
+                "Internal compiler error: codegen encountered unknown variable '"
+                + name
+                + "'. SemanticAnalyzer should have rejected this earlier."
+            );
         }
 
         return info;
     }
+
 
     private void emitLine(String s) {
         for (int i = 0; i < indentLevel; i++) {
