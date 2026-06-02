@@ -139,13 +139,69 @@ exprStmt
     ;
 
 // ---------- EXPRESSIONS ----------
+//
+// Precedence (lowest to highest):
+//   ||
+//   &&
+//   |
+//   ^
+//   &
+//   == !=
+//   < <= > >=
+//   << >>
+//   + -
+//   * /
+//   unary (- !)
+//   postfix []
 
 expr
-    : MINUS expr                                  # UnaryMinus
-    | expr op=(STAR | SLASH) expr                 # MulDiv
-    | expr op=(PLUS | MINUS) expr                 # AddSub
-    | expr op=(EQ | NEQ | LE | GE | LT | GT) expr # Compare
-    | postfixExpr                                 # PostfixExprOnly
+    : logicalOrExpr
+    ;
+
+logicalOrExpr
+    : logicalAndExpr (OROR logicalAndExpr)*
+    ;
+
+logicalAndExpr
+    : bitwiseOrExpr (ANDAND bitwiseOrExpr)*
+    ;
+
+bitwiseOrExpr
+    : bitwiseXorExpr (PIPE bitwiseXorExpr)*
+    ;
+
+bitwiseXorExpr
+    : bitwiseAndExpr (CARET bitwiseAndExpr)*
+    ;
+
+bitwiseAndExpr
+    : equalityExpr (AMP equalityExpr)*
+    ;
+
+equalityExpr
+    : relationalExpr ((EQ | NEQ) relationalExpr)*
+    ;
+
+relationalExpr
+    : shiftExpr ((LE | GE | LT | GT) shiftExpr)*
+    ;
+
+shiftExpr
+    : additiveExpr ((LT LT | GT GT) additiveExpr)*
+    ;
+
+additiveExpr
+    : multiplicativeExpr ((PLUS | MINUS) multiplicativeExpr)*
+    ;
+
+multiplicativeExpr
+    : unaryExpr ((STAR | SLASH) unaryExpr)*
+    ;
+
+unaryExpr
+    : MINUS unaryExpr   # UnaryMinus
+    | BANG unaryExpr    # LogicalNot
+    | postfixExpr       # PostfixExprOnly
     ;
 
 // Postfix indexing supports chained [] in expressions
@@ -201,7 +257,7 @@ INT16_T   : 'int16_t' ;
 INT32_T   : 'int32_t' | 'int' ;
 INT64_T   : 'int64_t' ;
 
-UINT8_T   : 'uint8_t' | 'char';
+UINT8_T   : 'uint8_t' | 'char' ;
 UINT16_T  : 'uint16_t' ;
 UINT32_T  : 'uint32_t' ;
 UINT64_T  : 'uint64_t' ;
@@ -209,21 +265,27 @@ UINT64_T  : 'uint64_t' ;
 ARRAY     : 'array' ;
 
 // Operators / punctuation
-EQ     : '==' ;
-NEQ    : '!=' ;
-LE     : '<=' ;
-GE     : '>=' ;
+EQ      : '==' ;
+NEQ     : '!=' ;
+LE      : '<=' ;
+GE      : '>=' ;
+ANDAND  : '&&' ;
+OROR    : '||' ;
 
-ASSIGN : '=' ;
-PLUS   : '+' ;
-MINUS  : '-' ;
-STAR   : '*' ;
-SLASH  : '/' ;
-DOT    : '.' ;
-COMMA  : ',' ;
-SEMI   : ';' ;
-LT     : '<' ;
-GT     : '>' ;
+ASSIGN  : '=' ;
+PLUS    : '+' ;
+MINUS   : '-' ;
+STAR    : '*' ;
+SLASH   : '/' ;
+BANG    : '!' ;
+AMP     : '&' ;
+PIPE    : '|' ;
+CARET   : '^' ;
+DOT     : '.' ;
+COMMA   : ',' ;
+SEMI    : ';' ;
+LT      : '<' ;
+GT      : '>' ;
 
 // Grouping with depth tracking
 LPAREN : '(' { groupingDepth++; } ;

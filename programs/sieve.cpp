@@ -4,40 +4,38 @@ int main() {
     uint32_t n;
     n = 80;
     Franko_Dynamic_Array<uint8_t> isPrime;
-    isPrime.init((n + 1));
-    uint32_t i;
-    i = 0;
-    while ((i <= n))
-    {
-        isPrime[i] = 1;
-        i = (i + 1);
-    }
+    isPrime.init(static_cast<uint32_t>((n + 1)));
+    isPrime.memset(0b00000001);
     isPrime[0] = 0;
-    isPrime[1] = 0;
+    if (static_cast<uint8_t>((n >= 1)))
+    {
+        isPrime[1] = 0;
+    }
     uint32_t p;
     p = 2;
-    while (((p * p) <= n))
+    while (static_cast<uint8_t>((static_cast<uint32_t>((p * p)) <= n)))
     {
-        if ((isPrime[p] != 0))
+        if (static_cast<uint8_t>((isPrime[p] != 0)))
         {
             uint32_t j;
-            j = (p * p);
-            while ((j <= n))
+            j = static_cast<uint32_t>((p * p));
+            while (static_cast<uint8_t>((j <= n)))
             {
                 isPrime[j] = 0;
-                j = (j + p);
+                j = static_cast<uint32_t>((j + p));
             }
         }
-        p = (p + 1);
+        p = static_cast<uint32_t>((p + 1));
     }
+    uint32_t i;
     i = 2;
-    while ((i <= n))
+    while (static_cast<uint8_t>((i <= n)))
     {
-        if ((isPrime[i] != 0))
+        if (static_cast<uint8_t>((isPrime[i] != 0)))
         {
             std::cout << i << '\n';
         }
-        i = (i + 1);
+        i = static_cast<uint32_t>((i + 1));
     }
     isPrime.uninit();
     return 0;
