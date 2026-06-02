@@ -198,21 +198,26 @@ public class StatementChecker {
             ctx.error("memset() receiver type is not memsetable: " + types.typeToString(receiverType));
         }
 
-        // Current temporary rule:
-        // memset fill values must currently be int32_t.
-        TypeNode valueType = expressions.inferExprType(node.value);
-        if (!(valueType instanceof PrimitiveTypeNode)
-                || ((PrimitiveTypeNode) valueType).kind != PrimitiveKind.INT32) {
-            ctx.error("memset() fill value must currently be int32_t, got " + types.typeToString(valueType));
-        }
+        PrimitiveTypeNode byteType = new PrimitiveTypeNode(PrimitiveKind.UINT8);
 
-        // If the fill value is literally written as an integer literal, also ensure it
-        // actually fits int32_t.
-        expressions.ensureExprFitsTargetType(
-                node.value,
-                new PrimitiveTypeNode(PrimitiveKind.INT32),
-                "memset() fill value is invalid"
-        );
+        if (expressions.isIntegerLiteralExpr(node.value)) {
+            // Literal path:
+            // allow any integer literal that fits in uint8_t
+            expressions.ensureExprFitsTargetType(
+                    node.value,
+                    byteType,
+                    "memset() fill value must be a byte literal fitting uint8_t"
+            );
+        } else {
+            // Non-literal path:
+            // strict same type: require uint8_t / char
+            TypeNode valueType = expressions.inferExprType(node.value);
+            if (!(valueType instanceof PrimitiveTypeNode)
+                    || ((PrimitiveTypeNode) valueType).kind != PrimitiveKind.UINT8) {
+                ctx.error("memset() fill value must currently be uint8_t/char, got "
+                        + types.typeToString(valueType));
+            }
+        }
     }
 
     private void visitArrayMemcpy(ArrayMemcpyNode node) {
