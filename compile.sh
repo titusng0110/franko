@@ -28,7 +28,7 @@ echo "Binary:   $BIN_OUT"
 
 java -cp "$ANTLR_CP:build/classes:build/generated" Main "$SRC" -o "$CPP_OUT"
 
-g++ -std=c++14 -Wall -Wextra -Wpedantic -Wshadow -Iinclude "$CPP_OUT" -o "$BIN_OUT"
+g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow -Iinclude "$CPP_OUT" -o "$BIN_OUT"
 
 echo
 echo "Compilation finished."
