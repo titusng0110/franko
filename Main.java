@@ -14,12 +14,6 @@ public class Main {
 
         // ------------------------------------------------------------
         // Parse CLI arguments
-        //
-        // Supported:
-        //   java Main
-        //   java Main bfs.fr
-        //   java Main bfs.fr -o bfs.cpp
-        //   java Main bfs.fr -o bfs.cpp -t ProgramTemplate.cpp
         // ------------------------------------------------------------
         if (args.length > 0) {
             sourceFile = args[0];
@@ -29,20 +23,20 @@ public class Main {
             switch (args[i]) {
                 case "-o":
                     if (i + 1 >= args.length) {
-                        die("Missing value after -o");
+                        throw new IllegalArgumentException("Missing value after -o");
                     }
                     outputFile = args[++i];
                     break;
 
                 case "-t":
                     if (i + 1 >= args.length) {
-                        die("Missing value after -t");
+                        throw new IllegalArgumentException("Missing value after -t");
                     }
                     templateFile = args[++i];
                     break;
 
                 default:
-                    die("Unknown argument: " + args[i]);
+                    throw new IllegalArgumentException("Unknown argument: " + args[i]);
             }
         }
 
@@ -56,8 +50,9 @@ public class Main {
 
         // Stop if syntax errors occurred
         if (parser.getNumberOfSyntaxErrors() > 0) {
-            System.err.println("Parse failed: " + parser.getNumberOfSyntaxErrors() + " syntax error(s).");
-            return;
+            throw new RuntimeException(
+                "Parse failed: " + parser.getNumberOfSyntaxErrors() + " syntax error(s)."
+            );
         }
 
         // ----- Build AST -----
@@ -76,12 +71,16 @@ public class Main {
         System.out.println("==== Desugared AST ====");
         ASTPrinter.print(ast, 0);
 
+        // ----- Semantic analysis -----
+        SemanticAnalyzer sema = new SemanticAnalyzer();
+        sema.analyze(ast);  // let SemanticException propagate naturally
+
+        System.out.println("==== Semantic Analysis ====");
+        System.out.println("Semantic analysis passed.");
+
         // ----- Generate C++ body -----
         Cpp14Codegen codegen = new Cpp14Codegen();
         String generatedBody = codegen.generate(ast);
-
-        System.out.println("\n==== GENERATED FRANKO PROGRAM BODY ====");
-        System.out.println(generatedBody);
 
         // ----- Load template -----
         String template = Files.readString(Path.of(templateFile), StandardCharsets.UTF_8);
@@ -103,14 +102,7 @@ public class Main {
         // ----- Write output file -----
         Files.writeString(outPath, finalCpp, StandardCharsets.UTF_8);
 
-        System.out.println("\nC++ code written to: " + outputFile);
-    }
-
-    private static void die(String msg) {
-        System.err.println("Error: " + msg);
-        System.err.println("Usage:");
-        System.err.println("  java Main [source.fr] [-o output.cpp] [-t template.cpp]");
-        System.exit(1);
+        System.out.println("\nSuccessfully compiled to C++14: " + outputFile);
     }
 
     private static String indentBlock(String text, int levels) {
