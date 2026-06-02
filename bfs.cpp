@@ -7,7 +7,7 @@ int main() {
     Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> path;
     Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> parentR;
     Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> parentC;
-    Franko_Static_Array<int32_t, 10000>* q = new Franko_Static_Array<int32_t, 10000>();
+    Franko_Static_Array<int32_t, 10000>* q = static_cast<Franko_Static_Array<int32_t, 10000>*>(std::malloc(sizeof(Franko_Static_Array<int32_t, 10000>)));
     Franko_Static_Array<int32_t, 15> line;
     int32_t rows;
     rows = 15;
@@ -246,5 +246,6 @@ int main() {
         std::cout << line[0] << ' ' << line[1] << ' ' << line[2] << ' ' << line[3] << ' ' << line[4] << ' ' << line[5] << ' ' << line[6] << ' ' << line[7] << ' ' << line[8] << ' ' << line[9] << ' ' << line[10] << ' ' << line[11] << ' ' << line[12] << ' ' << line[13] << ' ' << line[14] << '\n';
         r = (r + 1);
     }
+    std::free(q);
     return 0;
 }

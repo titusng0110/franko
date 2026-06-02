@@ -183,7 +183,7 @@ public class Cpp14Codegen {
         String cppType = emitType(node.type);
 
         if (node.isHeap) {
-            emitLine(cppType + "* " + node.name + " = new " + cppType + "();");
+            emitLine(cppType + "* " + node.name + " = static_cast<" + cppType + "*>(std::malloc(sizeof(" + cppType + ")));");
         } else {
             emitLine(cppType + " " + node.name + ";");
         }
@@ -232,7 +232,7 @@ public class Cpp14Codegen {
             throw new RuntimeException("Cannot delete non-heap variable: " + node.name);
         }
 
-        emitLine("delete " + node.name + ";");
+        emitLine("std::free(" + node.name + ");");
     }
 
     private void emitPrint(PrintNode node) {
