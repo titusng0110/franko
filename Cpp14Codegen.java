@@ -4,12 +4,169 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class Cpp14Codegen {
+    
     private static final class VarInfo {
         final boolean isHeap;
+        final TypeNode type;
 
-        VarInfo(boolean isHeap) {
+        VarInfo(TypeNode type, boolean isHeap) {
+            this.type = type;
             this.isHeap = isHeap;
         }
+    }
+
+    private boolean isCompileTimeIntegerConstantExpr(ASTNode expr) {
+        if (expr == null) return false;
+
+        if (expr instanceof IntNode) {
+            return true;
+        }
+
+        if (expr instanceof UnaryOpNode) {
+            UnaryOpNode n = (UnaryOpNode) expr;
+            if ("-".equals(n.op) || "!".equals(n.op)) {
+                return isCompileTimeIntegerConstantExpr(n.expr);
+            }
+            return false;
+        }
+
+        if (expr instanceof BinOpNode) {
+            BinOpNode n = (BinOpNode) expr;
+            return isCompileTimeIntegerConstantExpr(n.left)
+                    && isCompileTimeIntegerConstantExpr(n.right);
+        }
+
+        return false;
+    }
+    
+    private TypeNode inferExprTypeForCodegen(ASTNode node) {
+        if (node instanceof IntNode) {
+            return new PrimitiveTypeNode(PrimitiveKind.INT32);
+        }
+
+        if (node instanceof VarNode) {
+            VarInfo info = requireVarForCodegen(((VarNode) node).name);
+            return info.type;
+        }
+
+        if (node instanceof ArrayAccessNode) {
+            ArrayAccessNode n = (ArrayAccessNode) node;
+            TypeNode targetType = inferExprTypeForCodegen(n.target);
+
+            if (targetType instanceof DynamicArrayTypeNode) {
+                return ((DynamicArrayTypeNode) targetType).elementType;
+            }
+
+            if (targetType instanceof StaticArrayTypeNode) {
+                return ((StaticArrayTypeNode) targetType).elementType;
+            }
+
+            throw new IllegalStateException(
+                "Internal compiler error: non-array target reached codegen in ArrayAccessNode"
+            );
+        }
+
+        if (node instanceof UnaryOpNode) {
+            UnaryOpNode n = (UnaryOpNode) node;
+            TypeNode operandType = inferExprTypeForCodegen(n.expr);
+
+            if ("-".equals(n.op)) {
+                // Franko unary minus result type = operand type
+                return operandType;
+            }
+
+            if ("!".equals(n.op)) {
+                // Franko logical-not result type = uint8_t / char
+                return new PrimitiveTypeNode(PrimitiveKind.UINT8);
+            }
+
+            throw new IllegalStateException(
+                "Internal compiler error: unsupported unary operator in codegen type inference: " + n.op
+            );
+        }
+
+        if (node instanceof BinOpNode) {
+            BinOpNode n = (BinOpNode) node;
+            String op = n.op;
+
+            boolean leftConst = isCompileTimeIntegerConstantExpr(n.left);
+            boolean rightConst = isCompileTimeIntegerConstantExpr(n.right);
+
+            TypeNode left = inferExprTypeForCodegen(n.left);
+            TypeNode right = inferExprTypeForCodegen(n.right);
+
+            // logical
+            if ("&&".equals(op) || "||".equals(op)) {
+                return new PrimitiveTypeNode(PrimitiveKind.UINT8);
+            }
+
+            // comparison
+            if ("==".equals(op) || "!=".equals(op)
+                    || "<".equals(op) || ">".equals(op)
+                    || "<=".equals(op) || ">=".equals(op)) {
+                return new PrimitiveTypeNode(PrimitiveKind.UINT8);
+            }
+
+            // bitwise
+            if ("&".equals(op) || "|".equals(op) || "^".equals(op)) {
+                if (leftConst && rightConst) {
+                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
+                }
+                if (leftConst && !rightConst) {
+                    return right;
+                }
+                if (!leftConst && rightConst) {
+                    return left;
+                }
+                return left;
+            }
+
+            // arithmetic
+            if ("+".equals(op) || "-".equals(op) || "*".equals(op) || "/".equals(op)) {
+                if (leftConst && rightConst) {
+                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
+                }
+                if (leftConst && !rightConst) {
+                    return right;
+                }
+                if (!leftConst && rightConst) {
+                    return left;
+                }
+                return left;
+            }
+
+            // shift
+            if ("<<".equals(op) || ">>".equals(op)) {
+                if (leftConst && rightConst) {
+                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
+                }
+                if (leftConst && !rightConst) {
+                    // Your current semantic rule keeps literal lhs default-int32 in mixed shifts
+                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
+                }
+                if (!leftConst && rightConst) {
+                    return left;
+                }
+                return left;
+            }
+
+            throw new IllegalStateException(
+                "Internal compiler error: unsupported binary operator in codegen type inference: " + op
+            );
+        }
+
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported expression node in codegen type inference: "
+            + node.getClass().getSimpleName()
+        );
+    }
+    
+    private boolean isPrimitiveIntegerType(TypeNode t) {
+        return t instanceof PrimitiveTypeNode;
+    }
+    
+    private String emitCastToFrankoType(TypeNode type, String exprText) {
+        return "static_cast<" + emitType(type) + ">(" + exprText + ")";
     }
 
     private final Deque<Map<String, VarInfo>> scopes = new ArrayDeque<>();
@@ -177,7 +334,7 @@ public class Cpp14Codegen {
     }
 
     private void emitVarDecl(VarDeclNode node) {
-        declareVarForCodegen(node.name, new VarInfo(node.isHeap));
+        declareVarForCodegen(node.name, new VarInfo(node.type, node.isHeap));
 
         String cppType = emitType(node.type);
 
@@ -247,7 +404,19 @@ public class Cpp14Codegen {
             if (i > 0) {
                 sb.append(" << ' '");
             }
-            sb.append(" << ").append(emitExpr(node.args.get(i)));
+
+            ASTNode arg = node.args.get(i);
+            TypeNode argType = inferExprTypeForCodegen(arg);
+            String emitted = emitExpr(arg);
+
+            if (argType instanceof PrimitiveTypeNode) {
+                PrimitiveKind kind = ((PrimitiveTypeNode) argType).kind;
+                if (kind == PrimitiveKind.INT8 || kind == PrimitiveKind.UINT8) {
+                    emitted = "(+(" + emitted + "))";
+                }
+            }
+
+            sb.append(" << ").append(emitted);
         }
 
         sb.append(" << '\\n';");
@@ -256,9 +425,7 @@ public class Cpp14Codegen {
 
     private String emitExpr(ASTNode node) {
         if (node instanceof IntNode) {
-            // Preserve the source literal spelling exactly.
-            // This allows decimal, binary (0b...), and hex (0x...) forms
-            // to pass directly through to C++14.
+            // Preserve the original literal spelling exactly.
             return ((IntNode) node).value;
         }
 
@@ -268,12 +435,38 @@ public class Cpp14Codegen {
 
         if (node instanceof UnaryOpNode) {
             UnaryOpNode n = (UnaryOpNode) node;
-            return "(" + n.op + emitExpr(n.expr) + ")";
+            String inner = emitExpr(n.expr);
+            String raw = "(" + n.op + inner + ")";
+
+            TypeNode resultType = inferExprTypeForCodegen(node);
+
+            // Preserve Franko result type at this expression node.
+            // This is especially important for:
+            //   !x   -> uint8_t instead of C++ bool
+            //   -x   -> operand type (e.g. int8_t / uint8_t / etc.)
+            if (isPrimitiveIntegerType(resultType)) {
+                return emitCastToFrankoType(resultType, raw);
+            }
+
+            return raw;
         }
 
         if (node instanceof BinOpNode) {
             BinOpNode n = (BinOpNode) node;
-            return "(" + emitExpr(n.left) + " " + n.op + " " + emitExpr(n.right) + ")";
+            String left = emitExpr(n.left);
+            String right = emitExpr(n.right);
+            String raw = "(" + left + " " + n.op + " " + right + ")";
+
+            TypeNode resultType = inferExprTypeForCodegen(node);
+
+            // Preserve Franko result types:
+            //   comparisons/logicals -> uint8_t (not C++ bool)
+            //   arithmetic/bitwise/shift -> Franko-defined result type
+            if (isPrimitiveIntegerType(resultType)) {
+                return emitCastToFrankoType(resultType, raw);
+            }
+
+            return raw;
         }
 
         if (node instanceof ArrayAccessNode) {

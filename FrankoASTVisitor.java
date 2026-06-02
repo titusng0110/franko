@@ -1,9 +1,79 @@
 import java.util.ArrayList;
 import java.util.List;
 
+import org.antlr.v4.runtime.ParserRuleContext;
+
 // ================= VISITOR =================
 
 public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
+
+    // ============================================================
+    // Helpers
+    // ============================================================
+
+    /**
+     * Left-folds a binary-expression rule whose parse tree shape is:
+     *
+     *   operand (op operand)*
+     *
+     * Examples:
+     *   a + b - c
+     *   x && y || z
+     *   p & q ^ r   (for the specific rule layer being visited)
+     */
+    private ASTNode foldSimpleBinaryRule(ParserRuleContext ctx) {
+        ASTNode current = visit(ctx.getChild(0));
+
+        for (int i = 1; i < ctx.getChildCount(); i += 2) {
+            String op = ctx.getChild(i).getText();
+            ASTNode rhs = visit(ctx.getChild(i + 1));
+            current = new BinOpNode(op, current, rhs);
+        }
+
+        return current;
+    }
+
+    /**
+     * Left-folds shiftExpr for Option 3 grammar:
+     *
+     *   shiftExpr
+     *       : additiveExpr ((LT LT | GT GT) additiveExpr)*
+     *       ;
+     *
+     * Since << and >> are NOT lexer tokens, we reconstruct them from
+     * two consecutive '<' or '>' tokens in the parse tree.
+     */
+    private ASTNode foldShiftExpr(FrankoParser.ShiftExprContext ctx) {
+        ASTNode current = visit(ctx.additiveExpr(0));
+
+        int exprIndex = 1;
+        int childIndex = 1;
+
+        while (childIndex < ctx.getChildCount()) {
+            String first = ctx.getChild(childIndex).getText();
+            String second = ctx.getChild(childIndex + 1).getText();
+
+            String op;
+            if ("<".equals(first) && "<".equals(second)) {
+                op = "<<";
+            } else if (">".equals(first) && ">".equals(second)) {
+                op = ">>";
+            } else {
+                throw new RuntimeException(
+                    "Internal AST visitor error: expected shift operator token pair, got '"
+                    + first + "' and '" + second + "'"
+                );
+            }
+
+            ASTNode rhs = visit(ctx.additiveExpr(exprIndex));
+            current = new BinOpNode(op, current, rhs);
+
+            exprIndex++;
+            childIndex += 3; // token, token, additiveExpr
+        }
+
+        return current;
+    }
 
     // ============================================================
     // Program / Statements
@@ -315,34 +385,67 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     // ============================================================
 
     @Override
+    public ASTNode visitExpr(FrankoParser.ExprContext ctx) {
+        return visit(ctx.logicalOrExpr());
+    }
+
+    @Override
+    public ASTNode visitLogicalOrExpr(FrankoParser.LogicalOrExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitLogicalAndExpr(FrankoParser.LogicalAndExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitBitwiseOrExpr(FrankoParser.BitwiseOrExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitBitwiseXorExpr(FrankoParser.BitwiseXorExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitBitwiseAndExpr(FrankoParser.BitwiseAndExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitEqualityExpr(FrankoParser.EqualityExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitRelationalExpr(FrankoParser.RelationalExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitShiftExpr(FrankoParser.ShiftExprContext ctx) {
+        return foldShiftExpr(ctx);
+    }
+
+    @Override
+    public ASTNode visitAdditiveExpr(FrankoParser.AdditiveExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitMultiplicativeExpr(FrankoParser.MultiplicativeExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
     public ASTNode visitUnaryMinus(FrankoParser.UnaryMinusContext ctx) {
-        return new UnaryOpNode("-", visit(ctx.expr()));
+        return new UnaryOpNode("-", visit(ctx.unaryExpr()));
     }
 
     @Override
-    public ASTNode visitAddSub(FrankoParser.AddSubContext ctx) {
-        return new BinOpNode(
-            ctx.op.getText(),
-            visit(ctx.expr(0)),
-            visit(ctx.expr(1))
-        );
-    }
-
-    @Override
-    public ASTNode visitMulDiv(FrankoParser.MulDivContext ctx) {
-        return new BinOpNode(
-            ctx.op.getText(),
-            visit(ctx.expr(0)),
-            visit(ctx.expr(1))
-        );
-    }
-
-    @Override
-    public ASTNode visitCompare(FrankoParser.CompareContext ctx) {
-        return new BinOpNode(
-            ctx.op.getText(),
-            visit(ctx.expr(0)),
-            visit(ctx.expr(1))
-        );
+    public ASTNode visitLogicalNot(FrankoParser.LogicalNotContext ctx) {
+        return new UnaryOpNode("!", visit(ctx.unaryExpr()));
     }
 }

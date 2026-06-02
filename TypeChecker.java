@@ -10,6 +10,7 @@ public class TypeChecker {
     private final SemanticAnalyzer.Context ctx;
 
     private static final PrimitiveTypeNode INT32 = new PrimitiveTypeNode(PrimitiveKind.INT32);
+    private static final PrimitiveTypeNode UINT8 = new PrimitiveTypeNode(PrimitiveKind.UINT8);
     private static final PrimitiveTypeNode UINT32 = new PrimitiveTypeNode(PrimitiveKind.UINT32);
 
     public TypeChecker(SemanticAnalyzer.Context ctx) {
@@ -18,6 +19,14 @@ public class TypeChecker {
 
     public TypeNode int32Type() {
         return INT32;
+    }
+
+    /**
+     * Canonical bool-like result type for logical/comparison operators.
+     * In Franko, this is represented as uint8_t (lexer alias: char).
+     */
+    public TypeNode uint8Type() {
+        return UINT8;
     }
 
     public TypeNode uint32Type() {
@@ -135,12 +144,29 @@ public class TypeChecker {
         }
     }
 
+    public void ensureUnsignedIntegral(TypeNode t, String message) {
+        if (!isUnsignedIntegral(t)) {
+            ctx.error(message);
+        }
+    }
+
+    public boolean areSameIntegralType(TypeNode a, TypeNode b) {
+        if (a == null || b == null) return false;
+        if (isArrayType(a) || isArrayType(b)) return false;
+        return isIntegral(a) && isIntegral(b) && sameType(a, b);
+    }
+
+    public void ensureSameIntegralType(TypeNode a, TypeNode b, String message) {
+        if (!areSameIntegralType(a, b)) {
+            ctx.error(message);
+        }
+    }
+
     public void ensureConditionType(TypeNode t, String where) {
         if (isArrayType(t) || !isPrimitive(t)) {
             ctx.error(where + " must be a scalar primitive expression, got " + typeToString(t));
         }
     }
-
 
     /**
      * Assignment compatibility policy for NON-LITERAL expressions:
@@ -169,18 +195,21 @@ public class TypeChecker {
         }
     }
 
-
+    /**
+     * Comparisons are allowed between any integer types (mixed types allowed),
+     * but never on arrays.
+     */
     public boolean areComparable(TypeNode a, TypeNode b) {
-        if (sameType(a, b)) return true;
-        return isPrimitive(a) && isPrimitive(b);
+        if (a == null || b == null) return false;
+        if (isArrayType(a) || isArrayType(b)) return false;
+        return isIntegral(a) && isIntegral(b);
     }
 
     /**
-     * Integer promotion policy:
-     *  - same signedness: choose wider
-     *  - mixed signed/unsigned:
-     *      * if signed width > unsigned width, keep signed
-     *      * otherwise keep unsigned
+     * Legacy helper. With the new operator rules, arithmetic/bitwise operators
+     * no longer use promotion; they require exact same integer type.
+     *
+     * Kept here in case older code still references it.
      */
     public TypeNode numericPromotion(TypeNode a, TypeNode b) {
         PrimitiveKind ka = kindOf(a);

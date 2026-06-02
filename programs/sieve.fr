@@ -1,20 +1,15 @@
+
 uint32_t n = 80
 
-// Dynamic array of flags: 1 = prime, 0 = not prime
-array<char> isPrime(n + 1)
+array<char> isPrime
+isPrime(n + 1)
+isPrime.memset(0b00000001)
 
-// Initialize all entries to 1
-uint32_t i = 0
-while (i <= n) {
-    isPrime[i] = 1
-    i = i + 1
+isPrime[0] = 0
+if (n >= 1) {
+    isPrime[1] = 0
 }
 
-// 0 and 1 are not prime
-isPrime[0] = 0
-isPrime[1] = 0
-
-// Sieve
 uint32_t p = 2
 while (p * p <= n) {
     if (isPrime[p] != 0) {
@@ -27,8 +22,7 @@ while (p * p <= n) {
     p = p + 1
 }
 
-// Print primes
-i = 2
+uint32_t i = 2
 while (i <= n) {
     if (isPrime[i] != 0) {
         print(i)
@@ -36,5 +30,4 @@ while (i <= n) {
     i = i + 1
 }
 
-// Cleanup for dynamic array
 isPrime.uninit()

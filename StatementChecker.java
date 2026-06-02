@@ -108,29 +108,17 @@ public class StatementChecker {
         ctx.error("Unsupported AST node in statement context: " + node.getClass().getSimpleName());
     }
 
+    
     private void visitAssign(AssignNode node) {
         TypeNode lhsType = expressions.inferLValueType(node.target);
-        TypeNode rhsType = expressions.inferExprType(node.value);
 
-        if (expressions.isIntegerLiteralExpr(node.value)) {
-            // Literal path:
-            // allow assignment if the literal numerically fits the target type.
-            expressions.ensureExprFitsTargetType(
-                    node.value,
-                    lhsType,
-                    "Cannot assign integer literal to target of type " + types.typeToString(lhsType)
-            );
-        } else {
-            // Non-literal path:
-            // strict same-type only, arrays not assignable at all.
-            types.ensureAssignable(
-                    lhsType,
-                    rhsType,
-                    "Cannot assign expression of type " + types.typeToString(rhsType)
-                            + " to target of type " + types.typeToString(lhsType)
-            );
-        }
+        expressions.ensureExprAssignableToType(
+                node.value,
+                lhsType,
+                "Cannot assign expression to target of type " + types.typeToString(lhsType)
+        );
     }
+
 
     private void visitIf(IfNode node) {
         TypeNode condType = expressions.inferExprType(node.condition);
@@ -147,6 +135,7 @@ public class StatementChecker {
         visitStatement(node.body);
     }
 
+    
     private void visitArrayInit(ArrayInitNode node) {
         SemanticAnalyzer.Symbol sym = ctx.resolve(node.name);
         if (sym == null) {
@@ -165,19 +154,9 @@ public class StatementChecker {
                         + "' to be of dynamic array type"
         );
 
-        TypeNode sizeType = expressions.inferExprType(node.size);
-        types.ensureIntegral(
-                sizeType,
-                "Array size expression for '" + node.name + "' must be an integral scalar, got "
-                        + types.typeToString(sizeType)
-        );
-
-        // If the size expression is a literal, it must fit uint32_t and be non-negative.
-        expressions.ensureExprFitsArraySize(
-                node.size,
-                "Array size expression for '" + node.name + "' is invalid"
-        );
+        expressions.ensureArraySizeExprCompatible(node.size, "Array size expression for '" + node.name + "' is invalid");
     }
+
 
     private void visitArrayUninit(ArrayUninitNode node) {
         TypeNode receiverType = expressions.inferExprType(node.receiver);
@@ -194,13 +173,23 @@ public class StatementChecker {
                 "memset() receiver must be an array, got " + types.typeToString(receiverType)
         );
 
-        if (!types.isMemsetable(receiverType)) {
-            ctx.error("memset() receiver type is not memsetable: " + types.typeToString(receiverType));
+        TypeNode element;
+        if (receiverType instanceof DynamicArrayTypeNode) {
+            element = ((DynamicArrayTypeNode) receiverType).elementType;
+        } else if (receiverType instanceof StaticArrayTypeNode) {
+            element = ((StaticArrayTypeNode) receiverType).elementType;
+        } else {
+            // Should be unreachable due to ensureArrayType above
+            throw new IllegalStateException("Internal compiler error: expected array type, got " + types.typeToString(receiverType));
+        }
+
+        if (!types.isMemsetable(element)) {
+            ctx.error("memset() receiver elementtype is not memsetable: " + types.typeToString(receiverType));
         }
 
         PrimitiveTypeNode byteType = new PrimitiveTypeNode(PrimitiveKind.UINT8);
 
-        if (expressions.isIntegerLiteralExpr(node.value)) {
+        if (expressions.isCompileTimeIntegerConstantExpr(node.value)) {
             // Literal path:
             // allow any integer literal that fits in uint8_t
             expressions.ensureExprFitsTargetType(

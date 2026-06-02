@@ -45,7 +45,7 @@ struct Franko_Static_Array {
             std::memcpy(data, other.data, sizeof(T) * count);
     }
 
-    void memset(int byteValue) {
+    void memset(uint8_t byteValue) {
         if (N > 0) {
             std::memset(data, byteValue, sizeof(T) * N);
         }
@@ -120,7 +120,7 @@ struct Franko_Dynamic_Array {
         }
     }
 
-    void memset(int byteValue) {
+    void memset(uint8_t byteValue) {
         if (data == nullptr)
             throw std::runtime_error("Franko_Dynamic_Array memset on uninitialized array");
 

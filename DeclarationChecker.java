@@ -20,38 +20,22 @@ public class DeclarationChecker {
         ctx.declare(node.name, node.type, node.isHeap);
     }
 
+    
     public void checkVarDeclInit(VarDeclInitNode node) {
         validateDeclaredType(node.type, "Variable '" + node.name + "'");
 
         // Analyze initializer before declaration so the variable is not visible
         // inside its own initializer.
-        TypeNode initType = expressions.inferExprType(node.init);
-
-        if (expressions.isIntegerLiteralExpr(node.init)) {
-            // Literal path:
-            // allow assignment if the literal numerically fits the declared type.
-            expressions.ensureExprFitsTargetType(
-                    node.init,
-                    node.type,
-                    "Cannot initialize variable '" + node.name + "' of type "
-                            + types.typeToString(node.type)
-            );
-        } else {
-            // Non-literal path:
-            // strict same-type only, arrays not assignable at all.
-            types.ensureAssignable(
-                    node.type,
-                    initType,
-                    "Cannot initialize variable '" + node.name + "' of type "
-                            + types.typeToString(node.type)
-                            + " with expression of type "
-                            + types.typeToString(initType)
-            );
-        }
+        expressions.ensureExprAssignableToType(
+                node.init,
+                node.type,
+                "Cannot initialize variable '" + node.name + "' of type "
+                        + types.typeToString(node.type)
+        );
 
         ctx.declare(node.name, node.type, node.isHeap);
     }
-
+    
     public void checkVarDeclArrayInit(VarDeclArrayInitNode node) {
         validateDeclaredType(node.type, "Variable '" + node.name + "'");
 
@@ -60,18 +44,7 @@ public class DeclarationChecker {
                 "Declaration-style array initialization requires a dynamic array type for '" + node.name + "'"
         );
 
-        TypeNode sizeType = expressions.inferExprType(node.size);
-        types.ensureIntegral(
-                sizeType,
-                "Array size expression for '" + node.name + "' must be an integral scalar, got "
-                        + types.typeToString(sizeType)
-        );
-
-        // If the size expression is a literal, it must fit uint32_t and be non-negative.
-        expressions.ensureExprFitsArraySize(
-                node.size,
-                "Array size expression for '" + node.name + "' is invalid"
-        );
+        expressions.ensureArraySizeExprCompatible(node.size, "Array size expression for '" + node.name + "' is invalid");
 
         ctx.declare(node.name, node.type, node.isHeap);
     }
