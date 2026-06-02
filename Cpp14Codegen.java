@@ -1,18 +1,18 @@
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-class VarInfo {
-    TypeNode type;
-    boolean isHeap;
-
-    VarInfo(TypeNode type, boolean isHeap) {
-        this.type = type;
-        this.isHeap = isHeap;
-    }
-}
-
 public class Cpp14Codegen {
-    private final Map<String, VarInfo> symbols = new LinkedHashMap<>();
+    private static final class VarInfo {
+        final boolean isHeap;
+
+        VarInfo(boolean isHeap) {
+            this.isHeap = isHeap;
+        }
+    }
+
+    private final Deque<Map<String, VarInfo>> scopes = new ArrayDeque<>();
     private final StringBuilder out = new StringBuilder();
     private int indentLevel = 0;
 
@@ -22,27 +22,20 @@ public class Cpp14Codegen {
      * Intended for replacing __FRANKO_PROGRAM__ inside ProgramTemplate.cpp.
      */
     public String generate(ASTNode root) {
-        symbols.clear();
+        scopes.clear();
         out.setLength(0);
         indentLevel = 0;
 
+        pushScope();
         emitStmt(root);
+        popScope();
 
         return out.toString();
     }
 
-    /**
-     * Optional convenience helper:
-     * inject the generated program body into a template string.
-     */
-    public String injectIntoTemplate(ASTNode root, String templateSource) {
-        String body = indentBlock(generate(root), 1);
-        return templateSource.replace("__FRANKO_PROGRAM__", body.trim());
-    }
-
     private void emitStmt(ASTNode node) {
         if (node == null) {
-            throw new RuntimeException("Cannot emit null AST node");
+            throw new IllegalStateException("Internal compiler error: cannot emit null AST node");
         }
 
         if (node instanceof ProgramNode) {
@@ -75,8 +68,9 @@ public class Cpp14Codegen {
 
         // These sugar nodes should have been removed by Desugarer.
         if (node instanceof VarDeclInitNode || node instanceof VarDeclArrayInitNode) {
-            throw new RuntimeException(
-                "Sugar node reached codegen. Run Desugarer before Cpp14Codegen: "
+            throw new IllegalStateException(
+                "Internal compiler error: sugar node reached codegen. "
+                + "Run Desugarer before Cpp14Codegen: "
                 + node.getClass().getSimpleName()
             );
         }
@@ -126,17 +120,22 @@ public class Cpp14Codegen {
             return;
         }
 
-        throw new RuntimeException(
-            "Unsupported statement node for codegen: " + node.getClass().getSimpleName()
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported statement node for codegen: "
+            + node.getClass().getSimpleName()
         );
     }
 
     private void emitBlock(BlockNode node) {
         emitLine("{");
         indentLevel++;
+
+        pushScope();
         for (ASTNode stmt : node.statements) {
             emitStmt(stmt);
         }
+        popScope();
+
         indentLevel--;
         emitLine("}");
     }
@@ -178,12 +177,15 @@ public class Cpp14Codegen {
     }
 
     private void emitVarDecl(VarDeclNode node) {
-        symbols.put(node.name, new VarInfo(node.type, node.isHeap));
+        declareVarForCodegen(node.name, new VarInfo(node.isHeap));
 
         String cppType = emitType(node.type);
 
         if (node.isHeap) {
-            emitLine(cppType + "* " + node.name + " = static_cast<" + cppType + "*>(std::malloc(sizeof(" + cppType + ")));");
+            emitLine(
+                cppType + "* " + node.name
+                + " = static_cast<" + cppType + "*>(std::malloc(sizeof(" + cppType + ")));"
+            );
         } else {
             emitLine(cppType + " " + node.name + ";");
         }
@@ -205,27 +207,26 @@ public class Cpp14Codegen {
      *   ArrayInitNode("arr", 10)
      */
     private void emitArrayInit(ArrayInitNode node) {
-        emitLine(emitVarReceiver(node.name) + ".init(" + emitExpr(node.size) + ");");
+        emitLine(emitVarAccess(node.name) + ".init(" + emitExpr(node.size) + ");");
     }
 
     private void emitArrayUninit(ArrayUninitNode node) {
-        emitLine(emitReceiverExpr(node.receiver) + ".uninit();");
+        emitLine(emitExpr(node.receiver) + ".uninit();");
     }
 
     private void emitArrayMemset(ArrayMemsetNode node) {
-        emitLine(emitReceiverExpr(node.receiver) + ".memset(" + emitExpr(node.value) + ");");
+        emitLine(emitExpr(node.receiver) + ".memset(" + emitExpr(node.value) + ");");
     }
 
     private void emitArrayMemcpy(ArrayMemcpyNode node) {
         emitLine(
-            emitReceiverExpr(node.target)
+            emitExpr(node.target)
             + ".memcpy("
-            + emitReceiverExpr(node.source)
+            + emitExpr(node.source)
             + ");"
         );
     }
 
-    
     private void emitDel(DelNode node) {
         // SemanticAnalyzer is responsible for validating:
         // - variable exists
@@ -233,7 +234,6 @@ public class Cpp14Codegen {
         // - variable has not already been deleted
         emitLine("std::free(" + node.name + ");");
     }
-
 
     private void emitPrint(PrintNode node) {
         if (node.args == null || node.args.isEmpty()) {
@@ -278,8 +278,9 @@ public class Cpp14Codegen {
             return emitExpr(n.target) + "[" + emitExpr(n.index) + "]";
         }
 
-        throw new RuntimeException(
-            "Unsupported expression node for codegen: " + node.getClass().getSimpleName()
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported expression node for codegen: "
+            + node.getClass().getSimpleName()
         );
     }
 
@@ -293,33 +294,10 @@ public class Cpp14Codegen {
             return emitExpr(n.target) + "[" + emitExpr(n.index) + "]";
         }
 
-        throw new RuntimeException(
-            "Unsupported lvalue node: " + node.getClass().getSimpleName()
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported lvalue node for codegen: "
+            + node.getClass().getSimpleName()
         );
-    }
-
-    /**
-     * Emits a receiver expression for method-like array operations.
-     *
-     * Examples:
-     *   arr           -> arr   or (*arr) if heap
-     *   arr[i]        -> arr[i]
-     *   map[r][c]     -> map[r][c]
-     *
-     * Important:
-     * - var receivers still respect heap-vs-nonheap via emitVarAccess
-     * - general nested expressions recurse through emitExpr
-     */
-    private String emitReceiverExpr(ASTNode node) {
-        return emitExpr(node);
-    }
-
-    /**
-     * Emits a receiver for a plain variable name.
-     * Used for name-based operations like ArrayInitNode.
-     */
-    private String emitVarReceiver(String name) {
-        return emitVarAccess(name);
     }
 
     /**
@@ -347,12 +325,12 @@ public class Cpp14Codegen {
             return "Franko_Static_Array<" + emitType(t.elementType) + ", " + t.size + ">";
         }
 
-        throw new RuntimeException(
-            "Unsupported Franko type node in codegen: " + type.getClass().getSimpleName()
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported Franko type node in codegen: "
+            + type.getClass().getSimpleName()
         );
     }
 
-    
     private String emitVarAccess(String name) {
         VarInfo info = requireVarForCodegen(name);
 
@@ -363,42 +341,54 @@ public class Cpp14Codegen {
         return name;
     }
 
+    private void pushScope() {
+        scopes.push(new LinkedHashMap<>());
+    }
 
-    
-    private VarInfo requireVarForCodegen(String name) {
-        VarInfo info = symbols.get(name);
+    private void popScope() {
+        Map<String, VarInfo> popped = scopes.poll();
+        if (popped == null) {
+            throw new IllegalStateException("Internal compiler error: attempted to pop empty codegen scope stack");
+        }
+    }
 
-        if (info == null) {
+    private void declareVarForCodegen(String name, VarInfo info) {
+        Map<String, VarInfo> current = scopes.peek();
+        if (current == null) {
             throw new IllegalStateException(
-                "Internal compiler error: codegen encountered unknown variable '"
-                + name
-                + "'. SemanticAnalyzer should have rejected this earlier."
+                "Internal compiler error: no active codegen scope when declaring '" + name + "'"
             );
         }
 
-        return info;
+        if (current.containsKey(name)) {
+            throw new IllegalStateException(
+                "Internal compiler error: duplicate declaration reached codegen in same scope for '"
+                + name + "'"
+            );
+        }
+
+        current.put(name, info);
     }
 
+    private VarInfo requireVarForCodegen(String name) {
+        for (Map<String, VarInfo> scope : scopes) {
+            VarInfo info = scope.get(name);
+            if (info != null) {
+                return info;
+            }
+        }
+
+        throw new IllegalStateException(
+            "Internal compiler error: codegen encountered unknown variable '"
+            + name
+            + "'. SemanticAnalyzer should have rejected this earlier."
+        );
+    }
 
     private void emitLine(String s) {
         for (int i = 0; i < indentLevel; i++) {
             out.append("    ");
         }
         out.append(s).append('\n');
-    }
-
-    private String indentBlock(String text, int levels) {
-        String indent = "    ".repeat(levels);
-        String[] lines = text.split("\\R", -1);
-
-        StringBuilder sb = new StringBuilder();
-        for (String line : lines) {
-            if (!line.isEmpty()) {
-                sb.append(indent).append(line);
-            }
-            sb.append('\n');
-        }
-
-        return sb.toString();
     }
 }
