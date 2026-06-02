@@ -1,46 +1,48 @@
 #include "FrankoRuntime.hpp"
 
 int main() {
-    Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> map;
-    Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> visited;
-    Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> dist;
-    Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> path;
-    Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> parentR;
-    Franko_Static_Array<Franko_Static_Array<int32_t, 15>, 15> parentC;
-    Franko_Static_Array<int32_t, 10000>* q = static_cast<Franko_Static_Array<int32_t, 10000>*>(std::malloc(sizeof(Franko_Static_Array<int32_t, 10000>)));
-    Franko_Static_Array<int32_t, 15> line;
-    int32_t rows;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 15>, 15> map;
+    Franko_Static_Array<Franko_Static_Array<uint8_t, 15>, 15> visited;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 15>, 15> dist;
+    Franko_Static_Array<Franko_Static_Array<uint8_t, 15>, 15> path;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 15>, 15> parentR;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 15>, 15> parentC;
+    Franko_Static_Array<uint32_t, 10000>* q = static_cast<Franko_Static_Array<uint32_t, 10000>*>(std::malloc(sizeof(Franko_Static_Array<uint32_t, 10000>)));
+    Franko_Static_Array<uint32_t, 15> line;
+    uint32_t rows;
     rows = 15;
-    int32_t cols;
+    uint32_t cols;
     cols = 15;
-    int32_t startR;
+    uint32_t startR;
     startR = 1;
-    int32_t startC;
+    uint32_t startC;
     startC = 1;
-    int32_t goalR;
+    uint32_t goalR;
     goalR = 13;
-    int32_t goalC;
+    uint32_t goalC;
     goalC = 13;
-    int32_t head;
+    uint32_t head;
     head = 0;
-    int32_t tail;
+    uint32_t tail;
     tail = 0;
-    int32_t r;
+    uint32_t r;
     r = 0;
-    int32_t c;
+    uint32_t c;
     c = 0;
-    int32_t i;
+    uint32_t i;
     i = 0;
-    int32_t pos;
+    uint32_t pos;
     pos = 0;
-    int32_t nr;
+    uint32_t nr;
     nr = 0;
-    int32_t nc;
+    uint32_t nc;
     nc = 0;
-    int32_t found;
+    uint8_t found;
     found = 0;
-    int32_t done;
+    uint8_t done;
     done = 0;
+    uint8_t bfsActive;
+    bfsActive = 1;
     map.memset(0);
     visited.memset(0);
     dist.memset(0);
@@ -100,93 +102,106 @@ int main() {
     {
         tail = 0;
     }
-    while ((head != tail))
+    while ((bfsActive != 0))
     {
-        pos = (*q)[head];
-        head = (head + 1);
-        if ((head == 10000))
+        if ((head != tail))
         {
-            head = 0;
-        }
-        r = (pos / cols);
-        c = (pos - (r * cols));
-        nr = (r - 1);
-        nc = c;
-        if ((map[nr][nc] != 1))
-        {
-            if ((visited[nr][nc] == 0))
+            pos = (*q)[head];
+            head = (head + 1);
+            if ((head == 10000))
             {
-                visited[nr][nc] = 1;
-                dist[nr][nc] = (dist[r][c] + 1);
-                parentR[nr][nc] = r;
-                parentC[nr][nc] = c;
-                (*q)[tail] = ((nr * cols) + nc);
-                tail = (tail + 1);
-                if ((tail == 10000))
+                head = 0;
+            }
+            r = (pos / cols);
+            c = (pos - (r * cols));
+            if ((r == goalR))
+            {
+                if ((c == goalC))
                 {
-                    tail = 0;
+                    found = 1;
+                    bfsActive = 0;
+                }
+            }
+            if ((bfsActive != 0))
+            {
+                nr = (r - 1);
+                nc = c;
+                if ((map[nr][nc] != 1))
+                {
+                    if ((visited[nr][nc] == 0))
+                    {
+                        visited[nr][nc] = 1;
+                        dist[nr][nc] = (dist[r][c] + 1);
+                        parentR[nr][nc] = r;
+                        parentC[nr][nc] = c;
+                        (*q)[tail] = ((nr * cols) + nc);
+                        tail = (tail + 1);
+                        if ((tail == 10000))
+                        {
+                            tail = 0;
+                        }
+                    }
+                }
+                nr = (r + 1);
+                nc = c;
+                if ((map[nr][nc] != 1))
+                {
+                    if ((visited[nr][nc] == 0))
+                    {
+                        visited[nr][nc] = 1;
+                        dist[nr][nc] = (dist[r][c] + 1);
+                        parentR[nr][nc] = r;
+                        parentC[nr][nc] = c;
+                        (*q)[tail] = ((nr * cols) + nc);
+                        tail = (tail + 1);
+                        if ((tail == 10000))
+                        {
+                            tail = 0;
+                        }
+                    }
+                }
+                nr = r;
+                nc = (c - 1);
+                if ((map[nr][nc] != 1))
+                {
+                    if ((visited[nr][nc] == 0))
+                    {
+                        visited[nr][nc] = 1;
+                        dist[nr][nc] = (dist[r][c] + 1);
+                        parentR[nr][nc] = r;
+                        parentC[nr][nc] = c;
+                        (*q)[tail] = ((nr * cols) + nc);
+                        tail = (tail + 1);
+                        if ((tail == 10000))
+                        {
+                            tail = 0;
+                        }
+                    }
+                }
+                nr = r;
+                nc = (c + 1);
+                if ((map[nr][nc] != 1))
+                {
+                    if ((visited[nr][nc] == 0))
+                    {
+                        visited[nr][nc] = 1;
+                        dist[nr][nc] = (dist[r][c] + 1);
+                        parentR[nr][nc] = r;
+                        parentC[nr][nc] = c;
+                        (*q)[tail] = ((nr * cols) + nc);
+                        tail = (tail + 1);
+                        if ((tail == 10000))
+                        {
+                            tail = 0;
+                        }
+                    }
                 }
             }
         }
-        nr = (r + 1);
-        nc = c;
-        if ((map[nr][nc] != 1))
+        else
         {
-            if ((visited[nr][nc] == 0))
-            {
-                visited[nr][nc] = 1;
-                dist[nr][nc] = (dist[r][c] + 1);
-                parentR[nr][nc] = r;
-                parentC[nr][nc] = c;
-                (*q)[tail] = ((nr * cols) + nc);
-                tail = (tail + 1);
-                if ((tail == 10000))
-                {
-                    tail = 0;
-                }
-            }
+            bfsActive = 0;
         }
-        nr = r;
-        nc = (c - 1);
-        if ((map[nr][nc] != 1))
-        {
-            if ((visited[nr][nc] == 0))
-            {
-                visited[nr][nc] = 1;
-                dist[nr][nc] = (dist[r][c] + 1);
-                parentR[nr][nc] = r;
-                parentC[nr][nc] = c;
-                (*q)[tail] = ((nr * cols) + nc);
-                tail = (tail + 1);
-                if ((tail == 10000))
-                {
-                    tail = 0;
-                }
-            }
-        }
-        nr = r;
-        nc = (c + 1);
-        if ((map[nr][nc] != 1))
-        {
-            if ((visited[nr][nc] == 0))
-            {
-                visited[nr][nc] = 1;
-                dist[nr][nc] = (dist[r][c] + 1);
-                parentR[nr][nc] = r;
-                parentC[nr][nc] = c;
-                (*q)[tail] = ((nr * cols) + nc);
-                tail = (tail + 1);
-                if ((tail == 10000))
-                {
-                    tail = 0;
-                }
-            }
-        }
-    }
-    found = 0;
-    if ((visited[goalR][goalC] != 0))
-    {
-        found = 1;
     }
     if ((found != 0))
     {

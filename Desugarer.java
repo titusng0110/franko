@@ -43,7 +43,7 @@ public class Desugarer {
     /**
      * Appends a desugared statement into an output statement list.
      *
-     * This is where we FLATTEN declaration sugar into multiple statements.
+     * This is where we flatten declaration sugar into multiple statements.
      */
     private void appendDesugaredStmt(ASTNode stmt, List<ASTNode> out) {
         if (stmt == null) return;
@@ -111,7 +111,7 @@ public class Desugarer {
     }
 
     /**
-     * Desugars a statement in a SINGLE-STMT position, such as:
+     * Desugars a statement in a single-statement position, such as:
      * - if (...) <statement>
      * - else <statement>
      * - while (...) <statement>
@@ -199,7 +199,10 @@ public class Desugarer {
 
         if (stmt instanceof ArrayInitNode) {
             ArrayInitNode n = (ArrayInitNode) stmt;
-            return new ArrayInitNode(n.name, desugarExpr(n.size));
+            return new ArrayInitNode(
+                n.name,
+                desugarExpr(n.size)
+            );
         }
 
         if (stmt instanceof ArrayUninitNode) {
@@ -259,6 +262,8 @@ public class Desugarer {
     private ASTNode desugarExpr(ASTNode expr) {
         if (expr == null) return null;
 
+        // Preserve literal spelling exactly as produced by the parser/visitor.
+        // No parsing, validation, or range checks here.
         if (expr instanceof IntNode) {
             return expr;
         }
@@ -269,7 +274,10 @@ public class Desugarer {
 
         if (expr instanceof UnaryOpNode) {
             UnaryOpNode n = (UnaryOpNode) expr;
-            return new UnaryOpNode(n.op, desugarExpr(n.expr));
+            return new UnaryOpNode(
+                n.op,
+                desugarExpr(n.expr)
+            );
         }
 
         if (expr instanceof BinOpNode) {

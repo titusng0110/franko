@@ -256,7 +256,10 @@ public class Cpp14Codegen {
 
     private String emitExpr(ASTNode node) {
         if (node instanceof IntNode) {
-            return Integer.toString(((IntNode) node).value);
+            // Preserve the source literal spelling exactly.
+            // This allows decimal, binary (0b...), and hex (0x...) forms
+            // to pass directly through to C++14.
+            return ((IntNode) node).value;
         }
 
         if (node instanceof VarNode) {
@@ -308,10 +311,14 @@ public class Cpp14Codegen {
             PrimitiveKind kind = ((PrimitiveTypeNode) type).kind;
 
             return switch (kind) {
+                case INT8 -> "int8_t";
+                case INT16 -> "int16_t";
                 case INT32 -> "int32_t";
+                case INT64 -> "int64_t";
+                case UINT8 -> "uint8_t";
+                case UINT16 -> "uint16_t";
                 case UINT32 -> "uint32_t";
-                case FLOAT32 -> "float";
-                case CHAR8 -> "char";
+                case UINT64 -> "uint64_t";
             };
         }
 
@@ -322,7 +329,7 @@ public class Cpp14Codegen {
 
         if (type instanceof StaticArrayTypeNode) {
             StaticArrayTypeNode t = (StaticArrayTypeNode) type;
-            return "Franko_Static_Array<" + emitType(t.elementType) + ", " + t.size + ">";
+            return "Franko_Static_Array<" + emitType(t.elementType) + ", " + t.sizeLiteral + ">";
         }
 
         throw new IllegalStateException(

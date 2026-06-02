@@ -1,13 +1,16 @@
-
 // Type node
 sealed abstract class TypeNode extends ASTNode
     permits PrimitiveTypeNode, DynamicArrayTypeNode, StaticArrayTypeNode {}
 
 enum PrimitiveKind {
+    INT8,
+    INT16,
     INT32,
+    INT64,
+    UINT8,
+    UINT16,
     UINT32,
-    FLOAT32,
-    CHAR8
+    UINT64
 }
 
 final class PrimitiveTypeNode extends TypeNode {
@@ -28,13 +31,10 @@ final class DynamicArrayTypeNode extends TypeNode {
 
 final class StaticArrayTypeNode extends TypeNode {
     TypeNode elementType;
-    int size;
+    String sizeLiteral;
 
-    StaticArrayTypeNode(TypeNode elementType, int size) {
+    StaticArrayTypeNode(TypeNode elementType, String sizeLiteral) {
         this.elementType = elementType;
-        this.size = size;
+        this.sizeLiteral = sizeLiteral;
     }
 }
-
-
-

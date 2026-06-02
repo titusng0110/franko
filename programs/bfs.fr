@@ -1,4 +1,3 @@
-
 // ============================================================
 // BFS Maze Showcase for Franko
 // ============================================================
@@ -34,20 +33,20 @@
 
 // Main maze grid.
 // map[r][c] represents the cell at row r, column c.
-array<array<int,15>,15> map
+array<array<uint32_t,15>,15> map
 
 // visited[r][c] = 1 once BFS has discovered cell (r, c).
 // visited[r][c] = 0 means the cell has not been reached yet.
-array<array<int,15>,15> visited
+array<array<char,15>,15> visited
 
 // dist[r][c] stores the shortest distance from the start cell
 // to cell (r, c), measured in BFS step count.
-array<array<int,15>,15> dist
+array<array<uint32_t,15>,15> dist
 
 // path[r][c] = 1 if the cell belongs to the final shortest path
 // from start to goal.
 // path[r][c] = 0 otherwise.
-array<array<int,15>,15> path
+array<array<char,15>,15> path
 
 
 // ------------------------------------------------------------
@@ -65,8 +64,8 @@ array<array<int,15>,15> path
 //
 //   goal -> parent -> parent -> ... -> start
 
-array<array<int,15>,15> parentR
-array<array<int,15>,15> parentC
+array<array<uint32_t,15>,15> parentR
+array<array<uint32_t,15>,15> parentC
 
 
 // ------------------------------------------------------------
@@ -88,7 +87,7 @@ array<array<int,15>,15> parentC
 // tail points at the next free slot.
 // Both wrap around, forming a cyclic queue.
 
-alloc array<int,10000> q
+alloc array<uint32_t,10000> q
 
 
 // ------------------------------------------------------------
@@ -99,7 +98,7 @@ alloc array<int,10000> q
 // This lets us print an entire maze row in one print(...) call
 // instead of printing single cells one-by-one.
 
-array<int,15> line
+array<uint32_t,15> line
 
 
 // ------------------------------------------------------------
@@ -107,38 +106,42 @@ array<int,15> line
 // ------------------------------------------------------------
 
 // Maze dimensions
-int rows = 15
-int cols = 15
+uint32_t rows = 15
+uint32_t cols = 15
 
 // Start cell coordinates
-int startR = 1
-int startC = 1
+uint32_t startR = 1
+uint32_t startC = 1
 
 // Goal cell coordinates
-int goalR = 13
-int goalC = 13
+uint32_t goalR = 13
+uint32_t goalC = 13
 
 // Queue pointers
-int head = 0
-int tail = 0
+uint32_t head = 0
+uint32_t tail = 0
 
 // General-purpose coordinate / loop variables
-int r = 0
-int c = 0
-int i = 0
+uint32_t r = 0
+uint32_t c = 0
+uint32_t i = 0
 
 // Current encoded queue value
-int pos = 0
+uint32_t pos = 0
 
 // Neighbor coordinates
-int nr = 0
-int nc = 0
+uint32_t nr = 0
+uint32_t nc = 0
 
 // found = 1 if BFS reached the goal; otherwise 0
-int found = 0
+char found = 0
 
 // done is used while walking backward through parent pointers
-int done = 0
+char done = 0
+
+// bfsActive controls the BFS loop because the language has no break
+// and currently also has no && operator.
+char bfsActive = 1
 
 
 // ------------------------------------------------------------
@@ -276,124 +279,137 @@ if (tail == 10000) {
 // BFS loop
 // ------------------------------------------------------------
 //
-// While the queue is not empty:
+// Because the language currently has no break and no && operator,
+// we run with a char loop flag.
 //
-//   1. Pop the front cell
-//   2. Decode row/column
-//   3. Examine the four neighbors
-//   4. For each valid unvisited neighbor:
-//        - mark visited
-//        - set distance
-//        - record parent
-//        - enqueue it
+// bfsActive becomes 0 when either:
+//   1. the queue becomes empty, or
+//   2. the goal is reached
 
-while (head != tail) {
+while (bfsActive != 0) {
 
-    // Pop current front element
-    pos = q[head]
-    head = head + 1
+    if (head != tail) {
 
-    // Wrap around in cyclic queue if head reaches array end
-    if (head == 10000) {
-        head = 0
-    }
+        // Pop current front element
+        pos = q[head]
+        head = head + 1
 
-    // Decode packed queue value back into row/column
-    r = pos / cols
-    c = pos - r * cols
+        // Wrap around in cyclic queue if head reaches array end
+        if (head == 10000) {
+            head = 0
+        }
 
+        // Decode packed queue value back into row/column
+        r = pos / cols
+        c = pos - r * cols
 
-    // --------------------------------------------------------
-    // Try moving UP
-    // --------------------------------------------------------
-    nr = r - 1
-    nc = c
-
-    // Ignore walls
-    if (map[nr][nc] != 1) {
-
-        // Only process if this cell has never been visited before
-        if (visited[nr][nc] == 0) {
-            visited[nr][nc] = 1
-            dist[nr][nc] = dist[r][c] + 1
-
-            // Record where we came from
-            parentR[nr][nc] = r
-            parentC[nr][nc] = c
-
-            // Push neighbor into queue
-            q[tail] = nr * cols + nc
-            tail = tail + 1
-            if (tail == 10000) {
-                tail = 0
+        // If this is the goal, stop BFS early
+        if (r == goalR) {
+            if (c == goalC) {
+                found = 1
+                bfsActive = 0
             }
         }
-    }
+
+        // Only explore neighbors if we have not stopped
+        if (bfsActive != 0) {
+
+            // --------------------------------------------------------
+            // Try moving UP
+            // --------------------------------------------------------
+            nr = r - 1
+            nc = c
+
+            // Ignore walls
+            if (map[nr][nc] != 1) {
+
+                // Only process if this cell has never been visited before
+                if (visited[nr][nc] == 0) {
+                    visited[nr][nc] = 1
+                    dist[nr][nc] = dist[r][c] + 1
+
+                    // Record where we came from
+                    parentR[nr][nc] = r
+                    parentC[nr][nc] = c
+
+                    // Push neighbor into queue
+                    q[tail] = nr * cols + nc
+                    tail = tail + 1
+                    if (tail == 10000) {
+                        tail = 0
+                    }
+                }
+            }
 
 
-    // --------------------------------------------------------
-    // Try moving DOWN
-    // --------------------------------------------------------
-    nr = r + 1
-    nc = c
+            // --------------------------------------------------------
+            // Try moving DOWN
+            // --------------------------------------------------------
+            nr = r + 1
+            nc = c
 
-    if (map[nr][nc] != 1) {
-        if (visited[nr][nc] == 0) {
-            visited[nr][nc] = 1
-            dist[nr][nc] = dist[r][c] + 1
-            parentR[nr][nc] = r
-            parentC[nr][nc] = c
+            if (map[nr][nc] != 1) {
+                if (visited[nr][nc] == 0) {
+                    visited[nr][nc] = 1
+                    dist[nr][nc] = dist[r][c] + 1
+                    parentR[nr][nc] = r
+                    parentC[nr][nc] = c
 
-            q[tail] = nr * cols + nc
-            tail = tail + 1
-            if (tail == 10000) {
-                tail = 0
+                    q[tail] = nr * cols + nc
+                    tail = tail + 1
+                    if (tail == 10000) {
+                        tail = 0
+                    }
+                }
+            }
+
+
+            // --------------------------------------------------------
+            // Try moving LEFT
+            // --------------------------------------------------------
+            nr = r
+            nc = c - 1
+
+            if (map[nr][nc] != 1) {
+                if (visited[nr][nc] == 0) {
+                    visited[nr][nc] = 1
+                    dist[nr][nc] = dist[r][c] + 1
+                    parentR[nr][nc] = r
+                    parentC[nr][nc] = c
+
+                    q[tail] = nr * cols + nc
+                    tail = tail + 1
+                    if (tail == 10000) {
+                        tail = 0
+                    }
+                }
+            }
+
+
+            // --------------------------------------------------------
+            // Try moving RIGHT
+            // --------------------------------------------------------
+            nr = r
+            nc = c + 1
+
+            if (map[nr][nc] != 1) {
+                if (visited[nr][nc] == 0) {
+                    visited[nr][nc] = 1
+                    dist[nr][nc] = dist[r][c] + 1
+                    parentR[nr][nc] = r
+                    parentC[nr][nc] = c
+
+                    q[tail] = nr * cols + nc
+                    tail = tail + 1
+                    if (tail == 10000) {
+                        tail = 0
+                    }
+                }
             }
         }
-    }
 
-
-    // --------------------------------------------------------
-    // Try moving LEFT
-    // --------------------------------------------------------
-    nr = r
-    nc = c - 1
-
-    if (map[nr][nc] != 1) {
-        if (visited[nr][nc] == 0) {
-            visited[nr][nc] = 1
-            dist[nr][nc] = dist[r][c] + 1
-            parentR[nr][nc] = r
-            parentC[nr][nc] = c
-
-            q[tail] = nr * cols + nc
-            tail = tail + 1
-            if (tail == 10000) {
-                tail = 0
-            }
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Try moving RIGHT
-    // --------------------------------------------------------
-    nr = r
-    nc = c + 1
-
-    if (map[nr][nc] != 1) {
-        if (visited[nr][nc] == 0) {
-            visited[nr][nc] = 1
-            dist[nr][nc] = dist[r][c] + 1
-            parentR[nr][nc] = r
-            parentC[nr][nc] = c
-
-            q[tail] = nr * cols + nc
-            tail = tail + 1
-            if (tail == 10000) {
-                tail = 0
-            }
-        }
+    } else {
+        bfsActive = 0
     }
 }
 
@@ -408,11 +424,6 @@ while (head != tail) {
 //   goal -> parent -> parent -> ... -> start
 //
 // and mark each cell in path[r][c].
-
-found = 0
-if (visited[goalR][goalC] != 0) {
-    found = 1
-}
 
 if (found != 0) {
     r = goalR

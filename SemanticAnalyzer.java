@@ -52,7 +52,9 @@ public class SemanticAnalyzer {
         void declare(String name, TypeNode type, boolean isHeap) {
             Map<String, Symbol> current = scopes.peek();
             if (current == null) {
-                throw new IllegalStateException("Internal compiler error: no active scope when declaring '" + name + "'");
+                throw new IllegalStateException(
+                    "Internal compiler error: no active scope when declaring '" + name + "'"
+                );
             }
             if (current.containsKey(name)) {
                 error("Duplicate declaration of variable '" + name + "' in the same scope");

@@ -98,8 +98,33 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     // ============================================================
 
     @Override
+    public ASTNode visitInt8Type(FrankoParser.Int8TypeContext ctx) {
+        return new PrimitiveTypeNode(PrimitiveKind.INT8);
+    }
+
+    @Override
+    public ASTNode visitInt16Type(FrankoParser.Int16TypeContext ctx) {
+        return new PrimitiveTypeNode(PrimitiveKind.INT16);
+    }
+
+    @Override
     public ASTNode visitInt32Type(FrankoParser.Int32TypeContext ctx) {
         return new PrimitiveTypeNode(PrimitiveKind.INT32);
+    }
+
+    @Override
+    public ASTNode visitInt64Type(FrankoParser.Int64TypeContext ctx) {
+        return new PrimitiveTypeNode(PrimitiveKind.INT64);
+    }
+
+    @Override
+    public ASTNode visitUint8Type(FrankoParser.Uint8TypeContext ctx) {
+        return new PrimitiveTypeNode(PrimitiveKind.UINT8);
+    }
+
+    @Override
+    public ASTNode visitUint16Type(FrankoParser.Uint16TypeContext ctx) {
+        return new PrimitiveTypeNode(PrimitiveKind.UINT16);
     }
 
     @Override
@@ -108,13 +133,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitFloat32Type(FrankoParser.Float32TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.FLOAT32);
-    }
-
-    @Override
-    public ASTNode visitChar8Type(FrankoParser.Char8TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.CHAR8);
+    public ASTNode visitUint64Type(FrankoParser.Uint64TypeContext ctx) {
+        return new PrimitiveTypeNode(PrimitiveKind.UINT64);
     }
 
     @Override
@@ -126,8 +146,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitStaticArrayType(FrankoParser.StaticArrayTypeContext ctx) {
         TypeNode elemType = (TypeNode) visit(ctx.type());
-        int size = Integer.parseInt(ctx.INT_LITERAL().getText());
-        return new StaticArrayTypeNode(elemType, size);
+        String sizeLiteral = ctx.integerLiteral().getText();
+        return new StaticArrayTypeNode(elemType, sizeLiteral);
     }
 
     // ============================================================
@@ -225,9 +245,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
      * Builds nested ArrayAccessNode chains from receiverExpr.
      *
      * Examples:
-     *   arr         -> VarNode("arr")
-     *   arr[i]      -> ArrayAccessNode(VarNode("arr"), i)
-     *   map[r][c]   -> ArrayAccessNode(ArrayAccessNode(VarNode("map"), r), c)
+     *   arr       -> VarNode("arr")
+     *   arr[i]    -> ArrayAccessNode(VarNode("arr"), i)
+     *   map[r][c] -> ArrayAccessNode(ArrayAccessNode(VarNode("map"), r), c)
      */
     @Override
     public ASTNode visitReceiverExpr(FrankoParser.ReceiverExprContext ctx) {
@@ -274,8 +294,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitPrimary(FrankoParser.PrimaryContext ctx) {
-        if (ctx.INT_LITERAL() != null) {
-            return new IntNode(Integer.parseInt(ctx.INT_LITERAL().getText()));
+        if (ctx.integerLiteral() != null) {
+            return visit(ctx.integerLiteral());
         }
 
         if (ctx.IDENTIFIER() != null) {
@@ -283,6 +303,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         return visit(ctx.expr());
+    }
+
+    @Override
+    public ASTNode visitIntegerLiteral(FrankoParser.IntegerLiteralContext ctx) {
+        return new IntNode(ctx.getText());
     }
 
     // ============================================================
