@@ -111,9 +111,25 @@ public class StatementChecker {
     private void visitAssign(AssignNode node) {
         TypeNode lhsType = expressions.inferLValueType(node.target);
         TypeNode rhsType = expressions.inferExprType(node.value);
-        types.ensureAssignable(lhsType, rhsType,
-                "Cannot assign expression of type " + types.typeToString(rhsType)
-                        + " to target of type " + types.typeToString(lhsType));
+
+        if (expressions.isIntegerLiteralExpr(node.value)) {
+            // Literal path:
+            // allow assignment if the literal numerically fits the target type.
+            expressions.ensureExprFitsTargetType(
+                    node.value,
+                    lhsType,
+                    "Cannot assign integer literal to target of type " + types.typeToString(lhsType)
+            );
+        } else {
+            // Non-literal path:
+            // strict same-type only, arrays not assignable at all.
+            types.ensureAssignable(
+                    lhsType,
+                    rhsType,
+                    "Cannot assign expression of type " + types.typeToString(rhsType)
+                            + " to target of type " + types.typeToString(lhsType)
+            );
+        }
     }
 
     private void visitIf(IfNode node) {
@@ -143,51 +159,81 @@ public class StatementChecker {
             ctx.error("Array init on deleted variable '" + node.name + "'");
         }
 
-        types.ensureDynamicArrayType(sym.type,
-                "Array init statement '" + node.name + "(...)' requires '" + node.name + "' to be of dynamic array type");
+        types.ensureDynamicArrayType(
+                sym.type,
+                "Array init statement '" + node.name + "(...)' requires '" + node.name
+                        + "' to be of dynamic array type"
+        );
 
         TypeNode sizeType = expressions.inferExprType(node.size);
-        types.ensureIntegral(sizeType,
+        types.ensureIntegral(
+                sizeType,
                 "Array size expression for '" + node.name + "' must be an integral scalar, got "
-                        + types.typeToString(sizeType));
+                        + types.typeToString(sizeType)
+        );
+
+        // If the size expression is a literal, it must fit uint32_t and be non-negative.
+        expressions.ensureExprFitsArraySize(
+                node.size,
+                "Array size expression for '" + node.name + "' is invalid"
+        );
     }
 
     private void visitArrayUninit(ArrayUninitNode node) {
         TypeNode receiverType = expressions.inferExprType(node.receiver);
-        types.ensureArrayType(receiverType,
-                "uninit() receiver must be an array, got " + types.typeToString(receiverType));
+        types.ensureArrayType(
+                receiverType,
+                "uninit() receiver must be an array, got " + types.typeToString(receiverType)
+        );
     }
 
     private void visitArrayMemset(ArrayMemsetNode node) {
         TypeNode receiverType = expressions.inferExprType(node.receiver);
-        types.ensureArrayType(receiverType,
-                "memset() receiver must be an array, got " + types.typeToString(receiverType));
+        types.ensureArrayType(
+                receiverType,
+                "memset() receiver must be an array, got " + types.typeToString(receiverType)
+        );
 
         if (!types.isMemsetable(receiverType)) {
             ctx.error("memset() receiver type is not memsetable: " + types.typeToString(receiverType));
         }
 
-        // Temporary language rule:
-        // until char8_t-backed memset semantics are implemented, only int32_t is allowed.
+        // Current temporary rule:
+        // memset fill values must currently be int32_t.
         TypeNode valueType = expressions.inferExprType(node.value);
         if (!(valueType instanceof PrimitiveTypeNode)
                 || ((PrimitiveTypeNode) valueType).kind != PrimitiveKind.INT32) {
             ctx.error("memset() fill value must currently be int32_t, got " + types.typeToString(valueType));
         }
+
+        // If the fill value is literally written as an integer literal, also ensure it
+        // actually fits int32_t.
+        expressions.ensureExprFitsTargetType(
+                node.value,
+                new PrimitiveTypeNode(PrimitiveKind.INT32),
+                "memset() fill value is invalid"
+        );
     }
 
     private void visitArrayMemcpy(ArrayMemcpyNode node) {
         TypeNode targetType = expressions.inferExprType(node.target);
         TypeNode sourceType = expressions.inferExprType(node.source);
 
-        types.ensureArrayType(targetType,
-                "memcpy() target must be an array, got " + types.typeToString(targetType));
-        types.ensureArrayType(sourceType,
-                "memcpy() source must be an array, got " + types.typeToString(sourceType));
+        types.ensureArrayType(
+                targetType,
+                "memcpy() target must be an array, got " + types.typeToString(targetType)
+        );
+
+        types.ensureArrayType(
+                sourceType,
+                "memcpy() source must be an array, got " + types.typeToString(sourceType)
+        );
 
         if (!types.sameType(targetType, sourceType)) {
-            ctx.error("memcpy() requires identical source/target array types, got "
-                    + types.typeToString(targetType) + " and " + types.typeToString(sourceType));
+            ctx.error(
+                    "memcpy() requires identical source/target array types, got "
+                            + types.typeToString(targetType) + " and " + types.typeToString(sourceType)
+            );
         }
     }
 

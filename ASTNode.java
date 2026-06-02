@@ -1,4 +1,3 @@
-// ================= AST NODES =================
 import java.util.List;
 
 // Base AST node
@@ -120,10 +119,16 @@ class VarNode extends ASTNode {
 }
 
 // Integer literal
+//
+// Keep the original source text exactly as written.
+// Examples:
+//   "123"
+//   "0b10101010"
+//   "0xFF"
 class IntNode extends ASTNode {
-    int value;
+    String value;
 
-    IntNode(int value) {
+    IntNode(String value) {
         this.value = value;
     }
 }
@@ -183,7 +188,6 @@ class ArrayUninitNode extends ASTNode {
     }
 }
 
-
 // Array memset
 class ArrayMemsetNode extends ASTNode {
     ASTNode receiver;
@@ -194,7 +198,6 @@ class ArrayMemsetNode extends ASTNode {
         this.value = value;
     }
 }
-
 
 // Array memcpy
 class ArrayMemcpyNode extends ASTNode {

@@ -160,10 +160,14 @@ public class ASTPrinter {
         if (type instanceof PrimitiveTypeNode) {
             PrimitiveKind kind = ((PrimitiveTypeNode) type).kind;
             return switch (kind) {
+                case INT8 -> "int8_t";
+                case INT16 -> "int16_t";
                 case INT32 -> "int32_t";
+                case INT64 -> "int64_t";
+                case UINT8 -> "uint8_t";
+                case UINT16 -> "uint16_t";
                 case UINT32 -> "uint32_t";
-                case FLOAT32 -> "float32_t";
-                case CHAR8 -> "char8_t";
+                case UINT64 -> "uint64_t";
             };
         }
 
@@ -174,7 +178,7 @@ public class ASTPrinter {
 
         if (type instanceof StaticArrayTypeNode) {
             StaticArrayTypeNode t = (StaticArrayTypeNode) type;
-            return "array<" + typeToString(t.elementType) + "," + t.size + ">";
+            return "array<" + typeToString(t.elementType) + "," + t.sizeLiteral + ">";
         }
 
         return "<unknown-type>";

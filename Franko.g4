@@ -154,20 +154,32 @@ postfixExpr
     ;
 
 primary
-    : INT_LITERAL
+    : integerLiteral
     | IDENTIFIER
     | LPAREN expr RPAREN
+    ;
+
+// ---------- INTEGER LITERALS ----------
+
+integerLiteral
+    : INT_LITERAL
+    | BIN_LITERAL
+    | HEX_LITERAL
     ;
 
 // ---------- TYPES ----------
 
 type
-    : INT32_T                             # Int32Type
+    : INT8_T                              # Int8Type
+    | INT16_T                             # Int16Type
+    | INT32_T                             # Int32Type
+    | INT64_T                             # Int64Type
+    | UINT8_T                             # Uint8Type
+    | UINT16_T                            # Uint16Type
     | UINT32_T                            # Uint32Type
-    | FLOAT32_T                           # Float32Type
-    | CHAR8_T                             # Char8Type
+    | UINT64_T                            # Uint64Type
     | ARRAY LT type GT                    # DynamicArrayType
-    | ARRAY LT type COMMA INT_LITERAL GT  # StaticArrayType
+    | ARRAY LT type COMMA integerLiteral GT  # StaticArrayType
     ;
 
 // ---------- LEXER ----------
@@ -184,10 +196,16 @@ ELSE     : 'else' ;
 WHILE    : 'while' ;
 
 // Primitive / type keywords
+INT8_T    : 'int8_t' ;
+INT16_T   : 'int16_t' ;
 INT32_T   : 'int32_t' | 'int' ;
+INT64_T   : 'int64_t' ;
+
+UINT8_T   : 'uint8_t' | 'char';
+UINT16_T  : 'uint16_t' ;
 UINT32_T  : 'uint32_t' ;
-FLOAT32_T : 'float32_t' ;
-CHAR8_T   : 'char8_t' ;
+UINT64_T  : 'uint64_t' ;
+
 ARRAY     : 'array' ;
 
 // Operators / punctuation
@@ -221,6 +239,8 @@ RBRACE : '}' ;
 
 // Identifiers / literals
 IDENTIFIER  : [a-zA-Z_][a-zA-Z0-9_]* ;
+BIN_LITERAL : '0' [bB] [01]+ ;
+HEX_LITERAL : '0' [xX] [0-9a-fA-F]+ ;
 INT_LITERAL : [0-9]+ ;
 
 // Comments
