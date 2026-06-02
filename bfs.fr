@@ -507,3 +507,5 @@ while (r < rows) {
 
     r = r + 1
 }
+
+del q
