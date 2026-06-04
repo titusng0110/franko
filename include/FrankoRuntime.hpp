@@ -15,25 +15,22 @@ struct Franko_Static_Array {
     T data[N];
 
     const T& operator[](uint32_t index) const {
-        if (index >= N) {
+        if (index >= N)
             throw std::runtime_error("Franko_Static_Array index out of bounds");
-        }
         return data[index];
     }
 
     T& operator[](uint32_t index) {
-        if (index >= N) {
+        if (index >= N)
             throw std::runtime_error("Franko_Static_Array index out of bounds");
-        }
         return data[index];
     }
 
     template <uint32_t M>
     void memcpy(const Franko_Static_Array<T, M>& other) {
         const uint32_t count = (N < M) ? N : M;
-        if (count > 0) {
+        if (count > 0)
             std::memcpy(data, other.data, sizeof(T) * count);
-        }
     }
 
     void memcpy(const Franko_Dynamic_Array<T>& other) {
@@ -46,9 +43,8 @@ struct Franko_Static_Array {
     }
 
     void memset(uint8_t byteValue) {
-        if (N > 0) {
+        if (N > 0)
             std::memset(data, byteValue, sizeof(T) * N);
-        }
     }
 };
 
@@ -115,9 +111,8 @@ struct Franko_Dynamic_Array {
             throw std::runtime_error("Franko_Dynamic_Array memcpy on uninitialized array");
         
         const uint32_t count = (length < M) ? length : M;
-        if (count > 0) {
+        if (count > 0)
             std::memcpy(data, other.data, sizeof(T) * count);
-        }
     }
 
     void memset(uint8_t byteValue) {

@@ -229,6 +229,32 @@ public class StatementChecker {
                             + types.typeToString(targetType) + " and " + types.typeToString(sourceType)
             );
         }
+
+        TypeNode targetElement;
+        if (targetType instanceof DynamicArrayTypeNode) {
+            targetElement = ((DynamicArrayTypeNode) targetType).elementType;
+        } else if (targetType instanceof StaticArrayTypeNode) {
+            targetElement = ((StaticArrayTypeNode) targetType).elementType;
+        } else {
+            // Should be unreachable due to ensureArrayType above
+            throw new IllegalStateException("Internal compiler error: expected array type, got " + types.typeToString(targetType));
+        }
+        if (!types.isMemcpyable(targetElement)) {
+            ctx.error("memcpy() target array element type is not memcpyable: " + types.typeToString(targetType));
+        }
+
+        TypeNode sourceElement;
+        if (sourceType instanceof DynamicArrayTypeNode) {
+            sourceElement = ((DynamicArrayTypeNode) sourceType).elementType;
+        } else if (sourceType instanceof StaticArrayTypeNode) {
+            sourceElement = ((StaticArrayTypeNode) sourceType).elementType;
+        } else {
+            // Should be unreachable due to ensureArrayType above
+            throw new IllegalStateException("Internal compiler error: expected array type, got " + types.typeToString(sourceType));
+        }
+        if (!types.isMemcpyable(sourceElement)) {
+            ctx.error("memcpy() source array element type is not memcpyable: " + types.typeToString(sourceType));
+        }
     }
 
     private void visitDelete(DelNode node) {
