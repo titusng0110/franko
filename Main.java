@@ -10,7 +10,8 @@ public class Main {
         // Defaults
         String sourceFile = "test.fr";
         String templateFile = "ProgramTemplate.cpp";
-        String outputFile = "build/out.cpp";
+        String outputFile = "test.cpp";
+        boolean verbose = false;
 
         // ------------------------------------------------------------
         // Parse CLI arguments
@@ -35,6 +36,10 @@ public class Main {
                     templateFile = args[++i];
                     break;
 
+                case "-v":
+                    verbose = true;
+                    break;
+
                 default:
                     throw new IllegalArgumentException("Unknown argument: " + args[i]);
             }
@@ -48,7 +53,6 @@ public class Main {
 
         ParseTree tree = parser.program();
 
-        // Stop if syntax errors occurred
         if (parser.getNumberOfSyntaxErrors() > 0) {
             throw new RuntimeException(
                 "Parse failed: " + parser.getNumberOfSyntaxErrors() + " syntax error(s)."
@@ -59,21 +63,25 @@ public class Main {
         FrankoASTVisitor visitor = new FrankoASTVisitor();
         ASTNode rawAst = visitor.visit(tree);
 
-        // ----- Debug: print raw AST -----
-        System.out.println("==== Raw AST ====");
-        ASTPrinter.print(rawAst, 0);
+        // Conditional debug print
+        if (verbose) {
+            System.out.println("==== Raw AST ====");
+            ASTPrinter.print(rawAst, 0);
+        }
 
         // ----- Desugar AST -----
         Desugarer desugarer = new Desugarer();
         ASTNode ast = desugarer.desugar(rawAst);
 
-        // ----- Debug: print desugared AST -----
-        System.out.println("==== Desugared AST ====");
-        ASTPrinter.print(ast, 0);
+        // Conditional debug print
+        if (verbose) {
+            System.out.println("==== Desugared AST ====");
+            ASTPrinter.print(ast, 0);
+        }
 
         // ----- Semantic analysis -----
         SemanticAnalyzer sema = new SemanticAnalyzer();
-        sema.analyze(ast);  // let SemanticException propagate naturally
+        sema.analyze(ast);
 
         System.out.println("==== Semantic Analysis ====");
         System.out.println("Semantic analysis passed.");
@@ -90,7 +98,10 @@ public class Main {
         }
 
         // ----- Inject generated code into template -----
-        String finalCpp = template.replace("__FRANKO_PROGRAM__", indentBlock(generatedBody, 1).trim());
+        String finalCpp = template.replace(
+            "__FRANKO_PROGRAM__",
+            indentBlock(generatedBody, 1).trim()
+        );
 
         // ----- Ensure output directory exists if needed -----
         Path outPath = Path.of(outputFile);
@@ -102,7 +113,7 @@ public class Main {
         // ----- Write output file -----
         Files.writeString(outPath, finalCpp, StandardCharsets.UTF_8);
 
-        System.out.println("\nSuccessfully compiled to C++14: " + outputFile);
+        System.out.println("Successfully compiled to C++14: " + outputFile);
     }
 
     private static String indentBlock(String text, int levels) {
