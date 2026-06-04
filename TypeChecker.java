@@ -120,6 +120,25 @@ public class TypeChecker {
         return false;
     }
 
+    public boolean isMemcpyable(TypeNode t) {
+        if (t == null) return false;
+
+        if (t instanceof PrimitiveTypeNode) {
+            return true;
+        }
+
+        if (t instanceof DynamicArrayTypeNode) {
+            return false;
+        }
+
+        if (t instanceof StaticArrayTypeNode) {
+            StaticArrayTypeNode s = (StaticArrayTypeNode) t;
+            return isMemcpyable(s.elementType);
+        }
+
+        return false;
+    }
+
     public void ensureArrayType(TypeNode t, String message) {
         if (!isArrayType(t)) {
             ctx.error(message);
