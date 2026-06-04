@@ -5,6 +5,12 @@ trap 'echo "Error: command failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+run() {
+    printf '%q ' "$@"
+    printf '\n'
+    "$@"
+}
+
 if [[ $# -lt 1 ]]; then
     echo "Usage: ./compile.sh <source.fr>" >&2
     exit 1
@@ -33,26 +39,23 @@ CLS_DIR="$BUILD_DIR/classes"
 # Ensure compiled classes exist
 if [[ ! -d "$CLS_DIR" ]]; then
     echo "Build not found. Running toolchain..."
-    "$ROOT/toolchain.sh"
+    run "$ROOT/update.sh"
 fi
 
 BASENAME="${SRC%.fr}"
 CPP_OUT="${BASENAME}.cpp"
 BIN_OUT="${BASENAME}.out"
 
-echo "Source:   $SRC"
-echo "C++ out:  $CPP_OUT"
-echo "Binary:   $BIN_OUT"
+echo "Source: $SRC"
 echo
 
-java -cp "$ANTLR_CP:$CLS_DIR:$GEN_DIR" Main "$SRC" -o "$CPP_OUT"
+run java -cp "$ANTLR_CP:$CLS_DIR:$GEN_DIR" Main "$SRC" -o "$CPP_OUT"
+echo
 
-g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
+run g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
     -I"$ROOT/include" \
     "$CPP_OUT" -o "$BIN_OUT"
-
+echo "Successfully compiled to binary output: $BIN_OUT"
 echo
+
 echo "✅ Compilation finished."
-echo "Generated:"
-echo "  $CPP_OUT"
-echo "  $BIN_OUT"
