@@ -83,8 +83,10 @@ public class Main {
         SemanticAnalyzer sema = new SemanticAnalyzer();
         SemanticASTNode semaAST = sema.analyze(ast);
 
-        System.out.println("==== Semantic AST ====");
-        SemanticASTPrinter.print(semaAST, 0);
+        if (verbose) {
+            System.out.println("==== Semantic AST ====");
+            SemanticASTPrinter.print(semaAST, 0);
+        }
 
         // ----- Legality checking -----
         System.out.println("==== Legality Checking ====");
