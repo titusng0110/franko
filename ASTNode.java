@@ -1,9 +1,18 @@
 import java.util.List;
 
-// Base AST node
+// ============================================================
+// Base nodes
+// ============================================================
+
 abstract class ASTNode {}
 
-// Program
+// Expressions and types are also AST nodes
+abstract class TypeNode extends ASTNode {}
+
+// ============================================================
+// Program / block / statements
+// ============================================================
+
 class ProgramNode extends ASTNode {
     List<ASTNode> statements;
 
@@ -12,7 +21,6 @@ class ProgramNode extends ASTNode {
     }
 }
 
-// Block
 class BlockNode extends ASTNode {
     List<ASTNode> statements;
 
@@ -21,7 +29,66 @@ class BlockNode extends ASTNode {
     }
 }
 
-// Plain variable declaration (core form)
+class ExprStmtNode extends ASTNode {
+    ASTNode expr;
+
+    ExprStmtNode(ASTNode expr) {
+        this.expr = expr;
+    }
+}
+
+class AssignNode extends ASTNode {
+    ASTNode target;
+    ASTNode value;
+
+    AssignNode(ASTNode target, ASTNode value) {
+        this.target = target;
+        this.value = value;
+    }
+}
+
+class IfNode extends ASTNode {
+    ASTNode condition;
+    ASTNode thenBranch;
+    ASTNode elseBranch; // null if absent
+
+    IfNode(ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
+        this.condition = condition;
+        this.thenBranch = thenBranch;
+        this.elseBranch = elseBranch;
+    }
+}
+
+class WhileNode extends ASTNode {
+    ASTNode condition;
+    ASTNode body;
+
+    WhileNode(ASTNode condition, ASTNode body) {
+        this.condition = condition;
+        this.body = body;
+    }
+}
+
+class DelNode extends ASTNode {
+    String name;
+
+    DelNode(String name) {
+        this.name = name;
+    }
+}
+
+class PrintNode extends ASTNode {
+    List<ASTNode> args;
+
+    PrintNode(List<ASTNode> args) {
+        this.args = args;
+    }
+}
+
+// ============================================================
+// Declarations
+// ============================================================
+
 class VarDeclNode extends ASTNode {
     TypeNode type;
     String name;
@@ -34,10 +101,7 @@ class VarDeclNode extends ASTNode {
     }
 }
 
-// Sugar: declaration with scalar initializer
-// Example:
-//   int32_t x = 1;
-//   alloc int32_t y = 10;
+// After desugaring, this ASTNode should not exist
 class VarDeclInitNode extends ASTNode {
     TypeNode type;
     String name;
@@ -52,14 +116,7 @@ class VarDeclInitNode extends ASTNode {
     }
 }
 
-// Sugar: declaration with array-style init
-// Example:
-//   array<int32_t> arr(20);
-//   alloc array<int32_t> arr(20);
-//
-// Later, the Desugarer can lower this into:
-//   VarDeclNode(...)
-//   ArrayInitNode(name, size)
+// After desugaring, this ASTNode should not exist
 class VarDeclArrayInitNode extends ASTNode {
     TypeNode type;
     String name;
@@ -74,42 +131,60 @@ class VarDeclArrayInitNode extends ASTNode {
     }
 }
 
-// Assignment
-class AssignNode extends ASTNode {
-    ASTNode target;
-    ASTNode value;
+// ============================================================
+// Types
+// ============================================================
 
-    AssignNode(ASTNode target, ASTNode value) {
-        this.target = target;
-        this.value = value;
+enum PrimitiveKind {
+    INT8,
+    INT16,
+    INT32,
+    INT64,
+    UINT8,
+    UINT16,
+    UINT32,
+    UINT64
+}
+
+class PrimitiveTypeNode extends TypeNode {
+    PrimitiveKind kind;
+
+    PrimitiveTypeNode(PrimitiveKind kind) {
+        this.kind = kind;
     }
 }
 
-// If
-class IfNode extends ASTNode {
-    ASTNode condition;
-    ASTNode thenBranch;
-    ASTNode elseBranch; // null if absent
+class DynamicArrayTypeNode extends TypeNode {
+    TypeNode elementType;
 
-    IfNode(ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
-        this.condition = condition;
-        this.thenBranch = thenBranch;
-        this.elseBranch = elseBranch;
+    DynamicArrayTypeNode(TypeNode elementType) {
+        this.elementType = elementType;
     }
 }
 
-// While
-class WhileNode extends ASTNode {
-    ASTNode condition;
-    ASTNode body;
+class StaticArrayTypeNode extends TypeNode {
+    TypeNode elementType;
+    String sizeLiteral;
+    // Keeping original token text exactly, like IntNode does.
 
-    WhileNode(ASTNode condition, ASTNode body) {
-        this.condition = condition;
-        this.body = body;
+    StaticArrayTypeNode(TypeNode elementType, String sizeLiteral) {
+        this.elementType = elementType;
+        this.sizeLiteral = sizeLiteral;
     }
 }
 
-// Variable reference
+class AddrTypeNode extends TypeNode {
+    TypeNode referencedType;
+
+    AddrTypeNode(TypeNode referencedType) {
+        this.referencedType = referencedType;
+    }
+}
+
+// ============================================================
+// Primary / atoms
+// ============================================================
+
 class VarNode extends ASTNode {
     String name;
 
@@ -118,13 +193,6 @@ class VarNode extends ASTNode {
     }
 }
 
-// Integer literal
-//
-// Keep the original source text exactly as written.
-// Examples:
-//   "123"
-//   "0b10101010"
-//   "0xFF"
 class IntNode extends ASTNode {
     String value;
 
@@ -133,7 +201,10 @@ class IntNode extends ASTNode {
     }
 }
 
-// Unary operation
+// ============================================================
+// Unary / binary expressions
+// ============================================================
+
 class UnaryOpNode extends ASTNode {
     String op;
     ASTNode expr;
@@ -144,7 +215,6 @@ class UnaryOpNode extends ASTNode {
     }
 }
 
-// Binary operation
 class BinOpNode extends ASTNode {
     String op;
     ASTNode left;
@@ -157,7 +227,10 @@ class BinOpNode extends ASTNode {
     }
 }
 
-// Array access
+// ============================================================
+// Postfix / access / call
+// ============================================================
+
 class ArrayAccessNode extends ASTNode {
     ASTNode target;
     ASTNode index;
@@ -168,62 +241,42 @@ class ArrayAccessNode extends ASTNode {
     }
 }
 
-// Array init
-class ArrayInitNode extends ASTNode {
-    String name;
-    ASTNode size;
-
-    ArrayInitNode(String name, ASTNode size) {
-        this.name = name;
-        this.size = size;
-    }
-}
-
-// Array uninit
-class ArrayUninitNode extends ASTNode {
-    ASTNode receiver;
-
-    ArrayUninitNode(ASTNode receiver) {
-        this.receiver = receiver;
-    }
-}
-
-// Array memset
-class ArrayMemsetNode extends ASTNode {
-    ASTNode receiver;
-    ASTNode value;
-
-    ArrayMemsetNode(ASTNode receiver, ASTNode value) {
-        this.receiver = receiver;
-        this.value = value;
-    }
-}
-
-// Array memcpy
-class ArrayMemcpyNode extends ASTNode {
+class MemberAccessNode extends ASTNode {
     ASTNode target;
-    ASTNode source;
+    String memberName;
 
-    ArrayMemcpyNode(ASTNode target, ASTNode source) {
+    MemberAccessNode(ASTNode target, String memberName) {
         this.target = target;
-        this.source = source;
+        this.memberName = memberName;
     }
 }
 
-// Delete
-class DelNode extends ASTNode {
-    String name;
-
-    DelNode(String name) {
-        this.name = name;
-    }
-}
-
-// Print
-class PrintNode extends ASTNode {
+class CallNode extends ASTNode {
+    ASTNode callee;
     List<ASTNode> args;
 
-    PrintNode(List<ASTNode> args) {
+    CallNode(ASTNode callee, List<ASTNode> args) {
+        this.callee = callee;
         this.args = args;
+    }
+}
+
+// ============================================================
+// Address / pointer-style expressions
+// ============================================================
+
+class GetAddrNode extends ASTNode {
+    ASTNode target;
+
+    GetAddrNode(ASTNode target) {
+        this.target = target;
+    }
+}
+
+class DerefNode extends ASTNode {
+    ASTNode expr;
+
+    DerefNode(ASTNode expr) {
+        this.expr = expr;
     }
 }

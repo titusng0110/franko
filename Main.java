@@ -81,14 +81,20 @@ public class Main {
 
         // ----- Semantic analysis -----
         SemanticAnalyzer sema = new SemanticAnalyzer();
-        sema.analyze(ast);
+        SemanticASTNode semaAST = sema.analyze(ast);
 
-        System.out.println("==== Semantic Analysis ====");
-        System.out.println("Semantic analysis passed.");
+        System.out.println("==== Semantic AST ====");
+        SemanticASTPrinter.print(semaAST, 0);
+
+        // ----- Legality checking -----
+        System.out.println("==== Legality Checking ====");
+        MasterChecker masterChecker = new MasterChecker();
+        masterChecker.check(semaAST);
+        System.out.println("All checks passed.");
 
         // ----- Generate C++ body -----
         Cpp14Codegen codegen = new Cpp14Codegen();
-        String generatedBody = codegen.generate(ast);
+        String generatedBody = codegen.generate(semaAST);
 
         // ----- Load template -----
         String template = Files.readString(Path.of(templateFile), StandardCharsets.UTF_8);

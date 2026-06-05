@@ -1,690 +1,547 @@
 import java.math.BigInteger;
+import java.util.Set;
 
 /**
- * ExpressionChecker infers expression types and validates expression-level
- * semantics, delegating reusable type logic to TypeChecker.
+ * ============================================================================
+ * EXPRESSION CHECKER
+ * ============================================================================
  *
- * Operator rules implemented:
+ * PURPOSE:
+ * ExpressionChecker validates expression-level legality rules on the fully
+ * lowered and type-decorated Semantic AST.
  *
- *  Logical:
- *    &&, ||, !
- *      - operands: any integer type
- *      - result: uint8_t
+ * The SemanticAnalyzer has already:
  *
- *  Comparison:
- *    <, >, <=, >=, ==, !=
- *      - operands: any integer types, mixed allowed
- *      - result: uint8_t
+ *   - resolved variable names to VariableSymbol objects,
+ *   - assigned every expression a mechanical SemanticType,
+ *   - folded integer constants into BigInteger constantValue fields where
+ *     possible,
+ *   - lowered intrinsic syntax such as array memset/memcpy/uninit,
+ *   - performed structural lvalue checks needed for correct lowering.
  *
- *  Bitwise:
- *    &, |, ^
- *      - operands: same integer type
- *      - result: that same type
+ * This checker performs the stricter Franko legality checks for expressions.
  *
- *  Arithmetic:
- *    +, -, *, /
- *      - operands: same integer type
- *      - result: that same type
+ * ----------------------------------------------------------------------------
+ * IMPORTANT INTEGER CONSTANT RULE
+ * ----------------------------------------------------------------------------
  *
- *  Shift:
- *    <<, >>
- *      - left: any integer type
- *      - right: unsigned integer type
- *      - result: left operand type
+ * Integer literals and folded constant integer expressions are "fluid".
  *
- * Arrays are never valid operands for these operators.
+ * Their SemanticType may be the analyzer fallback type, usually int32_t, but
+ * that type is not binding during legality checking.
  *
- * Integer literal behavior:
- *   - fully literal expressions are compile-time evaluated
- *   - if one side is a literal constant and the other side has a concrete type,
- *     the literal is checked against that concrete type where the operator rules
- *     make that meaningful
+ * Instead:
+ *
+ *   - constants are represented as BigInteger values,
+ *   - when used with a typed nonconstant expression, the constant must fit the
+ *     other side's contextual type,
+ *   - if both sides are constants, the expression may remain a BigInteger
+ *     constant until checked by a later contextual use such as assignment,
+ *     array-size checking, or intrinsic argument checking.
+ *
+ * Examples:
+ *
+ *   uint8_t x;
+ *
+ *   x + 1       valid, because 1 fits uint8_t
+ *   x + 255     valid, because 255 fits uint8_t
+ *   x + 256     invalid, because 256 does not fit uint8_t
+ *
+ *   x << 7      valid
+ *   x << 255    valid
+ *   x << 256    invalid, because RHS must fit uint8_t for uint8_t lhs
+ *
+ *   int32_t y;
+ *   y << 9999999999999999999999
+ *               invalid, because RHS does not fit uint32_t
+ *
+ * ----------------------------------------------------------------------------
+ * ADDRESS RULES
+ * ----------------------------------------------------------------------------
+ *
+ * Addresses are:
+ *
+ *   - assignable,
+ *   - copyable,
+ *   - dereferenceable,
+ *   - comparable with compatible address types.
+ *
+ * Addresses are not integer arithmetic values.
+ *
+ * Therefore:
+ *
+ *   - address comparisons are allowed only between identical addr<T> types,
+ *   - address arithmetic, bitwise operations, and shifts are rejected,
+ *   - deref(expr) requires expr to have addr<T> type,
+ *   - getaddr(expr) requires expr to be an addressable storage-backed lvalue.
+ *
+ * ============================================================================
  */
 public class ExpressionChecker {
+    private static final Set<String> LOGICAL_OPS =
+        Set.of("&&", "||");
+
+    private static final Set<String> COMPARISON_OPS =
+        Set.of("==", "!=", "<", ">", "<=", ">=");
+
+    private static final Set<String> SHIFT_OPS =
+        Set.of("<<", ">>");
+
+    private static final Set<String> ARITHMETIC_OPS =
+        Set.of("+", "-", "*", "/");
+
+    private static final Set<String> BITWISE_OPS =
+        Set.of("&", "|", "^");
+
     private final SemanticAnalyzer.Context ctx;
     private final TypeChecker types;
 
-    public ExpressionChecker(SemanticAnalyzer.Context ctx, TypeChecker types) {
+    public ExpressionChecker(
+        SemanticAnalyzer.Context ctx,
+        TypeChecker types
+    ) {
         this.ctx = ctx;
         this.types = types;
     }
 
-    public TypeNode inferExprType(ASTNode node) {
+    /**
+     * Validates a semantic expression node.
+     *
+     * This method assumes type inference has already happened. It does not
+     * compute expression types; it only checks whether the already-inferred
+     * expression is legal according to Franko's rules.
+     */
+    public void checkExpr(SemanticExprNode node) {
         if (node == null) {
-            ctx.error("Internal error: null expression encountered");
-            return types.int32Type();
-        }
-
-        // ------------------------------------------------------------
-        // Integer literal
-        // ------------------------------------------------------------
-        if (node instanceof IntNode) {
-            /*
-             * Raw integer literals still default to int32_t when seen in
-             * isolation. Mixed literal/non-literal typing is handled higher
-             * up in binary/unary operator logic via compile-time constant
-             * detection and fit checks.
-             */
-            return types.int32Type();
-        }
-
-        // ------------------------------------------------------------
-        // Variable reference
-        // ------------------------------------------------------------
-        if (node instanceof VarNode) {
-            VarNode n = (VarNode) node;
-            SemanticAnalyzer.Symbol sym = ctx.resolve(n.name);
-
-            if (sym == null) {
-                ctx.error("Use of undeclared variable '" + n.name + "'");
-                return types.int32Type();
-            }
-
-            if (sym.deleted) {
-                ctx.error("Use of deleted variable '" + n.name + "'");
-            }
-
-            return sym.type;
-        }
-
-        // ------------------------------------------------------------
-        // Unary operators
-        // ------------------------------------------------------------
-        if (node instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) node;
-
-            if ("-".equals(n.op)) {
-                BigInteger folded = tryEvaluateIntegerConstant(n);
-                if (folded != null) {
-                    // Compile-time constant expression. Keep default literal
-                    // expression type here; target-fit is checked later.
-                    return types.int32Type();
-                }
-
-                TypeNode operandType = inferExprType(n.expr);
-                types.ensureIntegral(
-                        operandType,
-                        "Unary '-' requires an integer scalar operand, got "
-                                + types.typeToString(operandType)
-                );
-                return operandType;
-            }
-
-            if ("!".equals(n.op)) {
-                BigInteger folded = tryEvaluateIntegerConstant(n);
-                if (folded != null) {
-                    return types.uint8Type();
-                }
-
-                TypeNode operandType = inferExprType(n.expr);
-                types.ensureIntegral(
-                        operandType,
-                        "Unary '!' requires an integer scalar operand, got "
-                                + types.typeToString(operandType)
-                );
-                return types.uint8Type();
-            }
-
-            TypeNode operandType = inferExprType(n.expr);
-            ctx.error("Unsupported unary operator '" + n.op + "'");
-            return operandType;
-        }
-
-        // ------------------------------------------------------------
-        // Binary operators
-        // ------------------------------------------------------------
-        if (node instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) node;
-            String op = n.op;
-
-            BigInteger leftConst = tryEvaluateIntegerConstant(n.left);
-            BigInteger rightConst = tryEvaluateIntegerConstant(n.right);
-            boolean leftIsConst = leftConst != null;
-            boolean rightIsConst = rightConst != null;
-
-            TypeNode left = inferExprType(n.left);
-            TypeNode right = inferExprType(n.right);
-
-            // ---------- logical ----------
-            
-            if ("&&".equals(op) || "||".equals(op)) {
-                if (leftIsConst && rightIsConst) {
-                    tryEvaluateIntegerConstant(n); // force validation / folding
-                    return types.uint8Type();
-                }
-
-                types.ensureIntegral(
-                        left,
-                        "Left operand of '" + op + "' must be an integer scalar, got "
-                                + types.typeToString(left)
-                );
-                types.ensureIntegral(
-                        right,
-                        "Right operand of '" + op + "' must be an integer scalar, got "
-                                + types.typeToString(right)
-                );
-
-                // mixed variable/literal adaptation stays
-                if (leftIsConst && !rightIsConst) {
-                    ensureConstantFitsType(
-                            leftConst,
-                            right,
-                            "Left integer literal of '" + op + "' does not fit type "
-                                    + types.typeToString(right)
-                    );
-                } else if (!leftIsConst && rightIsConst) {
-                    ensureConstantFitsType(
-                            rightConst,
-                            left,
-                            "Right integer literal of '" + op + "' does not fit type "
-                                    + types.typeToString(left)
-                    );
-                }
-
-                return types.uint8Type();
-            }
-
-
-            // ---------- comparison ----------
-            if ("==".equals(op) || "!=".equals(op)
-                || "<".equals(op) || ">".equals(op)
-                || "<=".equals(op) || ">=".equals(op)) {
-
-            if (leftIsConst && rightIsConst) {
-                tryEvaluateIntegerConstant(n); // force validation / folding
-                return types.uint8Type();
-            }
-
-            if (!types.areComparable(left, right)) {
-                ctx.error(
-                        "Operands of comparison '" + op + "' must both be integer scalars; got "
-                                + types.typeToString(left) + " and " + types.typeToString(right)
-                );
-            }
-
-            // mixed variable/literal adaptation stays
-            if (leftIsConst && !rightIsConst) {
-                ensureConstantFitsType(
-                        leftConst,
-                        right,
-                        "Left integer literal of comparison '" + op + "' does not fit type "
-                                + types.typeToString(right)
-                );
-            } else if (!leftIsConst && rightIsConst) {
-                ensureConstantFitsType(
-                        rightConst,
-                        left,
-                        "Right integer literal of comparison '" + op + "' does not fit type "
-                                + types.typeToString(left)
-                );
-            }
-
-            return types.uint8Type();
-        }
-
-            // ---------- bitwise ----------
-            if ("&".equals(op) || "|".equals(op) || "^".equals(op)) {
-                if (leftIsConst && rightIsConst) {
-                    tryEvaluateIntegerConstant(n); // force validation / folding
-                    return types.int32Type();
-                }
-
-                if (leftIsConst && !rightIsConst) {
-                    types.ensureIntegral(
-                            right,
-                            "Right operand of '" + op + "' must be an integer scalar, got "
-                                    + types.typeToString(right)
-                    );
-
-                    ensureConstantFitsType(
-                            leftConst,
-                            right,
-                            "Left integer literal of '" + op + "' does not fit type "
-                                    + types.typeToString(right)
-                    );
-
-                    return right;
-                }
-
-                if (!leftIsConst && rightIsConst) {
-                    types.ensureIntegral(
-                            left,
-                            "Left operand of '" + op + "' must be an integer scalar, got "
-                                    + types.typeToString(left)
-                    );
-
-                    ensureConstantFitsType(
-                            rightConst,
-                            left,
-                            "Right integer literal of '" + op + "' does not fit type "
-                                    + types.typeToString(left)
-                    );
-
-                    return left;
-                }
-
-                types.ensureIntegral(
-                        left,
-                        "Left operand of '" + op + "' must be an integer scalar, got "
-                                + types.typeToString(left)
-                );
-                types.ensureIntegral(
-                        right,
-                        "Right operand of '" + op + "' must be an integer scalar, got "
-                                + types.typeToString(right)
-                );
-
-                if (!types.areSameIntegralType(left, right)) {
-                    ctx.error(
-                            "Operands of '" + op + "' must have the same integer type; got "
-                                    + types.typeToString(left) + " and " + types.typeToString(right)
-                    );
-                }
-
-                return left;
-            }
-
-
-            // ---------- arithmetic ----------
-            if ("+".equals(op) || "-".equals(op) || "*".equals(op) || "/".equals(op)) {
-                if (leftIsConst && rightIsConst) {
-                    tryEvaluateIntegerConstant(n); // force validation / folding
-                    return types.int32Type();
-                }
-
-                if (leftIsConst && !rightIsConst) {
-                    types.ensureIntegral(
-                            right,
-                            "Right operand of '" + op + "' must be an integer scalar, got "
-                                    + types.typeToString(right)
-                    );
-
-                    ensureConstantFitsType(
-                            leftConst,
-                            right,
-                            "Left integer literal of '" + op + "' does not fit type "
-                                    + types.typeToString(right)
-                    );
-
-                    return right;
-                }
-
-                if (!leftIsConst && rightIsConst) {
-                    types.ensureIntegral(
-                            left,
-                            "Left operand of '" + op + "' must be an integer scalar, got "
-                                    + types.typeToString(left)
-                    );
-
-                    ensureConstantFitsType(
-                            rightConst,
-                            left,
-                            "Right integer literal of '" + op + "' does not fit type "
-                                    + types.typeToString(left)
-                    );
-
-                    return left;
-                }
-
-                types.ensureIntegral(
-                        left,
-                        "Left operand of '" + op + "' must be an integer scalar, got "
-                                + types.typeToString(left)
-                );
-                types.ensureIntegral(
-                        right,
-                        "Right operand of '" + op + "' must be an integer scalar, got "
-                                + types.typeToString(right)
-                );
-
-                if (!types.areSameIntegralType(left, right)) {
-                    ctx.error(
-                            "Operands of '" + op + "' must have the same integer type; got "
-                                    + types.typeToString(left) + " and " + types.typeToString(right)
-                    );
-                }
-
-                return left;
-            }
-
-            // ---------- shift ----------
-            if ("<<".equals(op) || ">>".equals(op)) {
-                if (leftIsConst && rightIsConst) {
-                    tryEvaluateIntegerConstant(n); // force validation / folding
-                    return types.int32Type();
-                }
-
-                // Non-fully-constant case:
-                // left must be integral
-                // right must be unsigned integral if non-constant
-                // if right is a constant literal, only require >= 0 here
-
-                if (!leftIsConst) {
-                    types.ensureIntegral(
-                            left,
-                            "Left operand of '" + op + "' must be an integer scalar, got "
-                                    + types.typeToString(left)
-                    );
-                }
-
-                if (rightIsConst) {
-                    if (rightConst.signum() < 0) {
-                        ctx.error("Right operand of '" + op + "' must be a non-negative integer literal");
-                    }
-                } else {
-                    types.ensureUnsignedIntegral(
-                            right,
-                            "Right operand of '" + op + "' must be an unsigned integer scalar, got "
-                                    + types.typeToString(right)
-                    );
-                }
-
-                if (!leftIsConst && rightIsConst) {
-                    return left;
-                }
-
-                if (leftIsConst && !rightIsConst) {
-                    // Keep your current behavior here:
-                    // literal lhs remains default int32_t in mixed shift expressions.
-                    return types.int32Type();
-                }
-
-                return left;
-            }
-
-
-            ctx.error("Unsupported binary operator '" + op + "'");
-            return left;
-        }
-
-        // ------------------------------------------------------------
-        // Array access
-        // ------------------------------------------------------------
-        if (node instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) node;
-
-            TypeNode targetType = inferExprType(n.target);
-            TypeNode indexType = inferExprType(n.index);
-
-            types.ensureArrayType(
-                    targetType,
-                    "Indexed expression must be an array, got " + types.typeToString(targetType)
-            );
-
-            types.ensureIntegral(
-                    indexType,
-                    "Array index must be an integer scalar, got " + types.typeToString(indexType)
-            );
-
-            return types.elementTypeOf(targetType);
-        }
-
-        ctx.error("Unsupported AST node in expression context: " + node.getClass().getSimpleName());
-        return types.int32Type();
-    }
-
-    public TypeNode inferLValueType(ASTNode node) {
-        if (node instanceof VarNode || node instanceof ArrayAccessNode) {
-            return inferExprType(node);
-        }
-
-        ctx.error("Left-hand side is not assignable: " + node.getClass().getSimpleName());
-        return types.int32Type();
-    }
-
-    /**
-     * If expr is a compile-time integer constant expression,
-     * ensure it fits the given target type.
-     *
-     * Non-constant expressions are ignored here.
-     */
-    public void ensureExprFitsTargetType(ASTNode expr, TypeNode targetType, String messageOnFailure) {
-        BigInteger value = tryEvaluateIntegerConstant(expr);
-        if (value == null) {
             return;
         }
 
-        ensureConstantFitsType(value, targetType, messageOnFailure);
-    }
-
-    /**
-     * If expr is a compile-time integer constant expression,
-     * ensure it is a valid array size:
-     *   - must not be negative
-     *   - must fit uint32_t
-     *
-     * Non-constant expressions are ignored here; callers should separately
-     * type-check that the expression is integral.
-     */
-    public void ensureExprFitsArraySize(ASTNode expr, String messageOnFailure) {
-        BigInteger value = tryEvaluateIntegerConstant(expr);
-        if (value == null) {
+        if (node instanceof SemanticIntLiteralNode) {
             return;
         }
 
-        if (value.signum() < 0) {
-            ctx.error(messageOnFailure + ": array size cannot be negative");
+        if (node instanceof SemanticVarExprNode n) {
+            visitVarExpr(n);
             return;
         }
 
-        if (!types.fitsArraySizeValue(value)) {
-            ctx.error(
-                    messageOnFailure
-                    + ": array size value " + value
-                    + " does not fit in uint32_t"
-            );
-        }
-    }
-
-    
-    /**
-     * Assignment / initialization compatibility rule:
-     *
-     * - if expr is a compile-time integer constant expression, treat it like an
-     *   integer literal and only check whether its value fits the target type
-     * - otherwise fall back to ordinary assignability rules
-     */
-    public void ensureExprAssignableToType(ASTNode expr, TypeNode targetType, String messageOnFailure) {
-        if (isCompileTimeIntegerConstantExpr(expr)) {
-            ensureExprFitsTargetType(expr, targetType, messageOnFailure);
+        if (node instanceof SemanticUnaryOpNode n) {
+            visitUnaryOp(n);
             return;
         }
 
-        TypeNode valueType = inferExprType(expr);
-        types.ensureAssignable(targetType, valueType, messageOnFailure);
-    }
-
-    
-    public void ensureArraySizeExprCompatible(ASTNode expr, String messageOnFailure) {
-        if (isCompileTimeIntegerConstantExpr(expr)) {
-            ensureExprFitsArraySize(expr, messageOnFailure);
+        if (node instanceof SemanticBinOpNode n) {
+            visitBinOp(n);
             return;
         }
 
-        TypeNode sizeType = inferExprType(expr);
-        if (!types.sameType(sizeType, types.uint32Type())) {
-            ctx.error(messageOnFailure + ": expected uint32_t, got " + types.typeToString(sizeType));
+        if (node instanceof SemanticArrayAccessNode n) {
+            visitArrayAccess(n);
+            return;
         }
-    }
 
+        if (node instanceof SemanticGetAddrNode n) {
+            visitGetAddr(n);
+            return;
+        }
 
-    /**
-     * Returns true iff the expression is a compile-time integer constant
-     * expression under the current folding rules.
-     */
-    public boolean isCompileTimeIntegerConstantExpr(ASTNode expr) {
-        return tryEvaluateIntegerConstant(expr) != null;
+        if (node instanceof SemanticDerefNode n) {
+            visitDeref(n);
+            return;
+        }
+
+        ctx.error("Unknown semantic expression node: "
+            + node.getClass().getSimpleName());
     }
 
     // ============================================================
-    // Compile-time constant evaluation helpers
+    // Basic Expressions
     // ============================================================
 
-    private int forceInt32(BigInteger value) {
-        // Deliberately truncates/wraps to low 32 bits.
-        // This is the behavior you said you want for compile-time constant folding.
-        return value.intValue();
+    private void visitVarExpr(SemanticVarExprNode node) {
+        if (node.symbol.deleted) {
+            ctx.error("Use of deleted variable '" + node.symbol.name + "'");
+        }
     }
 
-    private BigInteger boxedInt32(int value) {
-        return BigInteger.valueOf(value);
+    private void visitUnaryOp(SemanticUnaryOpNode node) {
+        checkExpr(node.expr);
+
+        switch (node.op) {
+            case "!" -> {
+                types.ensureIntegral(
+                    node.expr.type,
+                    "Unary '!' requires an integer operand"
+                );
+            }
+
+            case "-" -> {
+                types.ensureIntegral(
+                    node.expr.type,
+                    "Unary '-' requires an integer operand"
+                );
+
+                /*
+                 * If the operand is a folded constant, the analyzer already
+                 * folded the negated BigInteger value into this node.
+                 *
+                 * Do not range-check here. The result remains a fluid constant
+                 * until assigned to or otherwise checked against a contextual
+                 * concrete integer type.
+                 */
+            }
+
+            default -> {
+                ctx.error("Unknown unary operator '" + node.op + "'");
+            }
+        }
     }
+
+    // ============================================================
+    // Binary Operators
+    // ============================================================
+
+    private void visitBinOp(SemanticBinOpNode node) {
+        checkExpr(node.left);
+        checkExpr(node.right);
+
+        String op = node.op;
+
+        if (op.equals("/")
+            && node.right.isConstant()
+            && BigInteger.ZERO.equals(node.right.constantValue)) {
+            ctx.error("Division by zero in compile-time constant expression");
+        }
+
+        /*
+         * Logical operators:
+         *
+         *   && ||
+         *
+         * Franko rules:
+         *
+         *   - operands must be integer expressions,
+         *   - mixed integer types are allowed,
+         *   - if one side is a constant, it must fit the other side's type,
+         *   - result is uint8_t/char, already assigned by SemanticAnalyzer.
+         */
+        if (LOGICAL_OPS.contains(op)) {
+            types.ensureMixedIntegralOperandsWithConstantFit(
+                node.left,
+                node.right,
+                op
+            );
+            return;
+        }
+
+        /*
+         * Comparison operators:
+         *
+         *   == != < > <= >=
+         *
+         * Franko rules:
+         *
+         *   - integer comparisons allow mixed integer types,
+         *   - if one integer side is a constant, it must fit the other side's
+         *     concrete type,
+         *   - address comparisons are allowed only for identical addr<T> types,
+         *   - address-vs-integer comparison is invalid,
+         *   - result is uint8_t/char, already assigned by SemanticAnalyzer.
+         */
+        if (COMPARISON_OPS.contains(op)) {
+            visitComparison(node, op);
+            return;
+        }
+
+        /*
+         * Shift operators:
+         *
+         *   << >>
+         *
+         * Franko rules:
+         *
+         *   - lhs must be an integer expression,
+         *   - nonconstant rhs must be unsigned integer type,
+         *   - constant rhs must be >= 0,
+         *   - constant rhs must fit the unsigned variant of lhs type,
+         *   - result type is lhs type, already assigned by SemanticAnalyzer.
+         */
+        if (SHIFT_OPS.contains(op)) {
+            types.ensureValidShiftOperands(
+                node.left,
+                node.right,
+                op
+            );
+            return;
+        }
+
+        /*
+         * Arithmetic operators:
+         *
+         *   + - * /
+         *
+         * Franko rules:
+         *
+         *   - operands must be integers,
+         *   - nonconstant operands must have exactly the same integer type,
+         *   - fluid constants must fit the other side's concrete type,
+         *   - addresses and arrays are rejected because they are not integers.
+         */
+        if (ARITHMETIC_OPS.contains(op)) {
+            types.ensureSameIntegralTypeOrFit(
+                node.left,
+                node.right,
+                op
+            );
+            return;
+        }
+
+        /*
+         * Bitwise operators:
+         *
+         *   & | ^
+         *
+         * Franko rules:
+         *
+         *   - operands must be integers,
+         *   - nonconstant operands must have exactly the same integer type,
+         *   - fluid constants must fit the other side's concrete type,
+         *   - addresses and arrays are rejected because they are not integers.
+         */
+        if (BITWISE_OPS.contains(op)) {
+            types.ensureSameIntegralTypeOrFit(
+                node.left,
+                node.right,
+                op
+            );
+            return;
+        }
+
+        ctx.error("Unknown binary operator '" + op + "'");
+    }
+
+    private void visitComparison(
+        SemanticBinOpNode node,
+        String op
+    ) {
+        boolean leftAddr = types.isAddressType(node.left.type);
+        boolean rightAddr = types.isAddressType(node.right.type);
+
+        if (leftAddr && rightAddr) {
+            if (!types.sameType(node.left.type, node.right.type)) {
+                ctx.error("Address comparison '" + op
+                    + "' requires identical address types, got "
+                    + node.left.type.describe()
+                    + " and "
+                    + node.right.type.describe());
+            }
+            return;
+        }
+
+        if (leftAddr || rightAddr) {
+            ctx.error("Cannot compare address and non-address using '" + op
+                + "', got "
+                + node.left.type.describe()
+                + " and "
+                + node.right.type.describe());
+            return;
+        }
+
+        types.ensureMixedIntegralOperandsWithConstantFit(
+            node.left,
+            node.right,
+            op
+        );
+    }
+
+    // ============================================================
+    // Array Access
+    // ============================================================
+
+    private void visitArrayAccess(SemanticArrayAccessNode node) {
+        checkExpr(node.target);
+
+        types.ensureArrayType(
+            node.target.type,
+            "Indexed expression must be an array"
+        );
+
+        ensureArrayIndexCompatible(
+            node.index,
+            "Array index"
+        );
+    }
+
+    // ============================================================
+    // Address Expressions
+    // ============================================================
+
+    private void visitGetAddr(SemanticGetAddrNode node) {
+        checkExpr(node.target);
+
+        if (!isStorageBackedLValue(node.target)) {
+            ctx.error("Operand of 'getaddr' must be an addressable storage-backed lvalue");
+        }
+    }
+
+    private void visitDeref(SemanticDerefNode node) {
+        checkExpr(node.expr);
+
+        types.ensureAddressType(
+            node.expr.type,
+            "Operand of 'deref' must be an address type"
+        );
+    }
+
+    // ============================================================
+    // LValue / Storage Helpers
+    // ============================================================
 
     /**
-     * Evaluates an expression as a compile-time integer constant expression.
+     * Stronger than a plain node.isLValue() test.
      *
-     * Returns:
-     *   - BigInteger value if fully constant
-     *   - null if not a constant integer expression
+     * Today, Franko's storage-backed lvalues are:
      *
-     * Side effect:
-     *   emits semantic errors for invalid constant operations
-     *   (e.g. division by zero, negative shift counts)
+     *   - variables,
+     *   - array elements whose target is storage-backed,
+     *   - dereferenced addresses.
+     *
+     * This mirrors the SemanticAnalyzer's structural lvalue validation so the
+     * MasterChecker remains robust even if a Semantic AST is constructed
+     * manually or by a future compiler phase.
      */
-    private BigInteger tryEvaluateIntegerConstant(ASTNode expr) {
+    private boolean isStorageBackedLValue(SemanticExprNode expr) {
         if (expr == null) {
-            return null;
+            return false;
         }
 
-        if (expr instanceof IntNode) {
-            IntNode n = (IntNode) expr;
-            try {
-                return types.parseIntegerLiteral(n.value);
-            } catch (IllegalArgumentException ex) {
-                ctx.error("Invalid integer literal '" + n.value + "'");
-                return BigInteger.ZERO;
-            }
+        if (!expr.isLValue()) {
+            return false;
         }
 
-        if (expr instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) expr;
-            BigInteger inner = tryEvaluateIntegerConstant(n.expr);
-            if (inner == null) {
-                return null;
-            }
-
-            if ("-".equals(n.op)) {
-                int v = forceInt32(inner);
-                return boxedInt32(-v);
-            }
-
-            if ("!".equals(n.op)) {
-                int v = forceInt32(inner);
-                return v == 0 ? BigInteger.ONE : BigInteger.ZERO;
-            }
-
-            return null;
+        if (expr instanceof SemanticVarExprNode) {
+            return true;
         }
 
-        if (expr instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) expr;
-
-            BigInteger left = tryEvaluateIntegerConstant(n.left);
-            BigInteger right = tryEvaluateIntegerConstant(n.right);
-
-            if (left == null || right == null) {
-                return null;
-            }
-
-            return evaluateBinaryConstant(n.op, left, right);
+        if (expr instanceof SemanticDerefNode) {
+            return true;
         }
 
-        return null;
+        if (expr instanceof SemanticArrayAccessNode arrayAccess) {
+            return isStorageBackedLValue(arrayAccess.target);
+        }
+
+        /*
+         * Future lvalue nodes, such as SemanticMemberAccessNode, should be
+         * explicitly added above once their storage semantics are known.
+         */
+        return false;
     }
 
-    private BigInteger evaluateBinaryConstant(String op, BigInteger left, BigInteger right) {
-        int l = forceInt32(left);
-        int r = forceInt32(right);
+    // ============================================================
+    // Array Size Helper
+    // ============================================================
 
-        switch (op) {
-            // ---------- arithmetic ----------
-            case "+":
-                return boxedInt32(l + r);
+    /**
+     * Checks expressions used as array sizes.
+     *
+     * Franko rule currently used by the checker:
+     *
+     *   - constant size expressions must be nonnegative and fit uint32_t,
+     *   - nonconstant size expressions must have exactly uint32_t type.
+     *
+     * This method is used by StatementChecker for dynamic array init.
+     */
+    public void ensureArraySizeCompatible(
+        SemanticExprNode size,
+        String message
+    ) {
+        checkExpr(size);
 
-            case "-":
-                return boxedInt32(l - r);
+        if (size.isConstant()) {
+            if (size.constantValue.signum() <= 0) {
+                ctx.error(message + ": array size must be greater than zero");
+            } else if (!types.fitsBigIntegerToPrimitive(
+                    size.constantValue,
+                    SemanticPrimitiveKind.UINT32
+                )) {
+                ctx.error(message + ": array size does not fit in uint32_t");
+            }
 
-            case "*":
-                return boxedInt32(l * r);
-
-            case "/":
-                if (r == 0) {
-                    ctx.error("Division by zero in compile-time constant expression");
-                    return BigInteger.ZERO;
-                }
-                return boxedInt32(l / r);
-
-            // ---------- bitwise ----------
-            case "&":
-                return boxedInt32(l & r);
-
-            case "|":
-                return boxedInt32(l | r);
-
-            case "^":
-                return boxedInt32(l ^ r);
-
-            // ---------- shift ----------
-            case "<<":
-                // Special rule you requested:
-                // check original recursively-evaluated RHS is >= 0, then shift.
-                if (right.signum() < 0) {
-                    ctx.error("Left shift count cannot be negative in compile-time constant expression");
-                    return BigInteger.ZERO;
-                }
-                return boxedInt32(l << r);
-
-            case ">>":
-                if (right.signum() < 0) {
-                    ctx.error("Right shift count cannot be negative in compile-time constant expression");
-                    return BigInteger.ZERO;
-                }
-                return boxedInt32(l >> r);
-
-            // ---------- comparison ----------
-            case "==":
-                return l == r ? BigInteger.ONE : BigInteger.ZERO;
-
-            case "!=":
-                return l != r ? BigInteger.ONE : BigInteger.ZERO;
-
-            case "<":
-                return l < r ? BigInteger.ONE : BigInteger.ZERO;
-
-            case ">":
-                return l > r ? BigInteger.ONE : BigInteger.ZERO;
-
-            case "<=":
-                return l <= r ? BigInteger.ONE : BigInteger.ZERO;
-
-            case ">=":
-                return l >= r ? BigInteger.ONE : BigInteger.ZERO;
-
-            // ---------- logical ----------
-            case "&&":
-                return (l != 0 && r != 0) ? BigInteger.ONE : BigInteger.ZERO;
-
-            case "||":
-                return (l != 0 || r != 0) ? BigInteger.ONE : BigInteger.ZERO;
-
-            default:
-                return null;
-        }
-    }
-
-    private void ensureConstantFitsType(BigInteger value, TypeNode targetType, String messageOnFailure) {
-        if (!(targetType instanceof PrimitiveTypeNode)) {
-            ctx.error(messageOnFailure + ": target type is not a primitive integer type");
             return;
         }
 
-        PrimitiveKind kind = ((PrimitiveTypeNode) targetType).kind;
-        if (!types.fitsBigIntegerToPrimitive(value, kind)) {
-            ctx.error(
-                    messageOnFailure
-                            + ": value " + value
-                            + " does not fit in " + types.typeToString(targetType)
-            );
+        if (!(size.type instanceof SemanticPrimitiveType pt
+            && pt.kind == SemanticPrimitiveKind.UINT32)) {
+            ctx.error(message + ": expected uint32_t, got "
+                + size.type.describe());
+        }
+    }
+
+    /**
+     * Checks expressions used as array indexes.
+     *
+     * Franko array index rule:
+     *
+     *   - constant index expressions must be nonnegative and fit uint32_t,
+     *   - nonconstant index expressions must have exactly uint32_t type.
+     *
+     * This matches the generated C++ runtime representation where array indexing
+     * operators take uint32_t indexes.
+     *
+     * Examples:
+     *
+     *   arr[0]          valid
+     *   arr[123]        valid if 123 fits uint32_t
+     *   arr[-1]         invalid
+     *   arr[999999999999999999999999] invalid
+     *
+     *   uint32_t i;
+     *   arr[i]          valid
+     *
+     *   int32_t i;
+     *   arr[i]          invalid
+     *
+     *   uint8_t i;
+     *   arr[i]          invalid, even though uint8_t is unsigned;
+     *                   nonconstant indexes must be exactly uint32_t.
+     */
+    public void ensureArrayIndexCompatible(
+        SemanticExprNode index,
+        String message
+    ) {
+        checkExpr(index);
+
+        if (index == null) {
+            ctx.error(message + ": index expression cannot be null");
+            return;
+        }
+
+        if (index.isConstant()) {
+            if (index.constantValue == null) {
+                ctx.error(message + ": missing constant index value");
+                return;
+            }
+
+            if (index.constantValue.signum() < 0) {
+                ctx.error(message + ": array index cannot be negative");
+                return;
+            }
+
+            if (!types.fitsBigIntegerToPrimitive(
+                    index.constantValue,
+                    SemanticPrimitiveKind.UINT32
+                )) {
+                ctx.error(message + ": array index does not fit in uint32_t");
+            }
+
+            return;
+        }
+
+        if (!(index.type instanceof SemanticPrimitiveType pt
+            && pt.kind == SemanticPrimitiveKind.UINT32)) {
+            ctx.error(message + ": expected uint32_t, got "
+                + types.describeSafe(index.type));
         }
     }
 }

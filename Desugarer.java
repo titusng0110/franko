@@ -15,8 +15,7 @@ public class Desugarer {
     }
 
     /**
-     * Desugars a list of statements, flattening top-level or block-level
-     * declaration sugar into core statements.
+     * Desugars a list of statements, flattening declaration sugar into core statements.
      *
      * Examples:
      *
@@ -43,12 +42,15 @@ public class Desugarer {
     /**
      * Appends a desugared statement into an output statement list.
      *
-     * This is where we flatten declaration sugar into multiple statements.
+     * This is where declaration sugar can expand into multiple statements.
      */
     private void appendDesugaredStmt(ASTNode stmt, List<ASTNode> out) {
         if (stmt == null) return;
 
         // Sugar: int32_t x = 1;
+        // becomes:
+        //   int32_t x;
+        //   x = 1;
         if (stmt instanceof VarDeclInitNode) {
             VarDeclInitNode n = (VarDeclInitNode) stmt;
 
@@ -64,29 +66,39 @@ public class Desugarer {
         }
 
         // Sugar: array<int32_t> arr(20);
-        //        alloc array<int32_t> arr(20);
+        // becomes:
+        //   array<int32_t> arr;
+        //   arr(20);
+        //
+        // Since call syntax is now a normal expression,
+        // this lowers to an ExprStmtNode(CallNode(...)).
         if (stmt instanceof VarDeclArrayInitNode) {
             VarDeclArrayInitNode n = (VarDeclArrayInitNode) stmt;
 
             out.add(new VarDeclNode(n.type, n.name, n.isHeap));
 
             if (n.size != null) {
-                out.add(new ArrayInitNode(
-                    n.name,
-                    desugarExpr(n.size)
+                List<ASTNode> args = new ArrayList<>();
+                args.add(desugarExpr(n.size));
+
+                out.add(new ExprStmtNode(
+                    new CallNode(
+                        new VarNode(n.name),
+                        args
+                    )
                 ));
             }
             return;
         }
 
-        // Blocks need recursive statement-list desugaring
+        // Blocks recursively flatten statement sugar inside them.
         if (stmt instanceof BlockNode) {
             BlockNode b = (BlockNode) stmt;
             out.add(new BlockNode(desugarStmtList(b.statements)));
             return;
         }
 
-        // If / else bodies are single-statement positions
+        // If/else single-statement positions may require wrapping
         if (stmt instanceof IfNode) {
             IfNode n = (IfNode) stmt;
             out.add(new IfNode(
@@ -106,18 +118,16 @@ public class Desugarer {
             return;
         }
 
-        // Ordinary statement: recursively rewrite children if needed
         out.add(desugarStmt(stmt));
     }
 
     /**
-     * Desugars a statement in a single-statement position, such as:
-     * - if (...) <statement>
-     * - else <statement>
-     * - while (...) <statement>
+     * Desugars a statement in a single-statement position such as:
+     *   if (...) <statement>
+     *   else <statement>
+     *   while (...) <statement>
      *
-     * If the statement is sugar that expands to multiple statements,
-     * wrap the lowered result in a BlockNode.
+     * If sugar expands to multiple statements, wrap the lowered result in a BlockNode.
      */
     private ASTNode desugarStmt(ASTNode stmt) {
         if (stmt == null) return null;
@@ -153,9 +163,14 @@ public class Desugarer {
             lowered.add(new VarDeclNode(n.type, n.name, n.isHeap));
 
             if (n.size != null) {
-                lowered.add(new ArrayInitNode(
-                    n.name,
-                    desugarExpr(n.size)
+                List<ASTNode> args = new ArrayList<>();
+                args.add(desugarExpr(n.size));
+
+                lowered.add(new ExprStmtNode(
+                    new CallNode(
+                        new VarNode(n.name),
+                        args
+                    )
                 ));
             }
 
@@ -197,61 +212,28 @@ public class Desugarer {
             );
         }
 
-        if (stmt instanceof ArrayInitNode) {
-            ArrayInitNode n = (ArrayInitNode) stmt;
-            return new ArrayInitNode(
-                n.name,
-                desugarExpr(n.size)
-            );
+        if (stmt instanceof ExprStmtNode) {
+            ExprStmtNode n = (ExprStmtNode) stmt;
+            return new ExprStmtNode(desugarExpr(n.expr));
         }
 
-        if (stmt instanceof ArrayUninitNode) {
-            ArrayUninitNode n = (ArrayUninitNode) stmt;
-            return new ArrayUninitNode(
-                desugarExpr(n.receiver)
-            );
-        }
+        if (stmt instanceof PrintNode) {
+            PrintNode n = (PrintNode) stmt;
+            List<ASTNode> args = new ArrayList<>();
 
-        if (stmt instanceof ArrayMemsetNode) {
-            ArrayMemsetNode n = (ArrayMemsetNode) stmt;
-            return new ArrayMemsetNode(
-                desugarExpr(n.receiver),
-                desugarExpr(n.value)
-            );
-        }
+            for (ASTNode arg : n.args) {
+                args.add(desugarExpr(arg));
+            }
 
-        if (stmt instanceof ArrayMemcpyNode) {
-            ArrayMemcpyNode n = (ArrayMemcpyNode) stmt;
-            return new ArrayMemcpyNode(
-                desugarExpr(n.target),
-                desugarExpr(n.source)
-            );
+            return new PrintNode(args);
         }
 
         if (stmt instanceof DelNode) {
             return stmt;
         }
 
-        if (stmt instanceof PrintNode) {
-            PrintNode n = (PrintNode) stmt;
-            List<ASTNode> args = new ArrayList<>();
-            for (ASTNode arg : n.args) {
-                args.add(desugarExpr(arg));
-            }
-            return new PrintNode(args);
-        }
-
         if (stmt instanceof VarDeclNode) {
             return stmt;
-        }
-
-        // Expression statements
-        if (stmt instanceof IntNode
-                || stmt instanceof VarNode
-                || stmt instanceof UnaryOpNode
-                || stmt instanceof BinOpNode
-                || stmt instanceof ArrayAccessNode) {
-            return desugarExpr(stmt);
         }
 
         throw new RuntimeException(
@@ -262,8 +244,6 @@ public class Desugarer {
     private ASTNode desugarExpr(ASTNode expr) {
         if (expr == null) return null;
 
-        // Preserve literal spelling exactly as produced by the parser/visitor.
-        // No parsing, validation, or range checks here.
         if (expr instanceof IntNode) {
             return expr;
         }
@@ -297,21 +277,74 @@ public class Desugarer {
             );
         }
 
+        if (expr instanceof MemberAccessNode) {
+            MemberAccessNode n = (MemberAccessNode) expr;
+            return new MemberAccessNode(
+                desugarExpr(n.target),
+                n.memberName
+            );
+        }
+
+        if (expr instanceof CallNode) {
+            CallNode n = (CallNode) expr;
+
+            List<ASTNode> args = new ArrayList<>();
+            for (ASTNode arg : n.args) {
+                args.add(desugarExpr(arg));
+            }
+
+            return new CallNode(
+                desugarExpr(n.callee),
+                args
+            );
+        }
+
+        if (expr instanceof GetAddrNode) {
+            GetAddrNode n = (GetAddrNode) expr;
+            return new GetAddrNode(
+                desugarLValue(n.target)
+            );
+        }
+
+        if (expr instanceof DerefNode) {
+            DerefNode n = (DerefNode) expr;
+            return new DerefNode(
+                desugarExpr(n.expr)
+            );
+        }
+
         throw new RuntimeException(
             "Unsupported expression in desugarer: " + expr.getClass().getSimpleName()
         );
     }
 
     private ASTNode desugarLValue(ASTNode node) {
+        if (node == null) return null;
+
         if (node instanceof VarNode) {
             return node;
+        }
+
+        if (node instanceof DerefNode) {
+            DerefNode n = (DerefNode) node;
+            return new DerefNode(
+                desugarExpr(n.expr)
+            );
         }
 
         if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
             return new ArrayAccessNode(
-                desugarExpr(n.target),
+                desugarLValue(n.target),
                 desugarExpr(n.index)
+            );
+        }
+
+        if (node instanceof MemberAccessNode) {
+            MemberAccessNode n = (MemberAccessNode) node;
+            return new MemberAccessNode(
+                desugarLValue(n.target),
+                n.memberName
             );
         }
 
