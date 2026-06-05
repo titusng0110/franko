@@ -1,467 +1,736 @@
 import java.math.BigInteger;
+import java.util.Objects;
 
 /**
- * TypeChecker contains type-system helpers used by the other checkers.
+ * ============================================================================
+ * TYPE CHECKER
+ * ============================================================================
  *
- * It does not orchestrate statement traversal; it only answers questions about
- * types and reports type-related semantic errors through the shared context.
+ * PURPOSE:
+ * TypeChecker provides reusable Franko type-system predicates and validation
+ * helpers for the MasterChecker sub-checkers.
+ *
+ * This class does not traverse the AST by itself. Instead, StatementChecker,
+ * ExpressionChecker, and DeclarationChecker call into TypeChecker whenever they
+ * need to answer questions such as:
+ *
+ *   - are these two SemanticType objects exactly the same type?
+ *   - is this type an integer primitive?
+ *   - is this type an unsigned integer primitive?
+ *   - is this type an array?
+ *   - is this type an address?
+ *   - can this BigInteger constant fit into a target primitive type?
+ *   - is this assignment type-compatible?
+ *   - are these operands legal for arithmetic, bitwise, logical, comparison,
+ *     or shift operators?
+ *
+ * ----------------------------------------------------------------------------
+ * IMPORTANT: FLUID INTEGER CONSTANTS
+ * ----------------------------------------------------------------------------
+ *
+ * Franko integer literals and folded constant integer expressions are fluid.
+ *
+ * The SemanticAnalyzer stores integer literal values as BigInteger constants
+ * and gives literal nodes a fallback SemanticType, typically int32_t. That
+ * fallback type is useful for keeping the Semantic AST fully decorated, but it
+ * is not treated as a binding source-language type when the expression is a
+ * constant.
+ *
+ * Instead, during checking:
+ *
+ *   - a constant expression is checked by its BigInteger value;
+ *   - when a constant appears next to a nonconstant typed integer expression,
+ *     the constant must fit the other side's concrete type;
+ *   - when a constant is assigned to a primitive integer target, it must fit
+ *     that target type;
+ *   - when both operands are constants, the expression may remain a BigInteger
+ *     constant until a later contextual check, such as assignment, array size,
+ *     or intrinsic argument checking.
+ *
+ * Examples:
+ *
+ *   uint8_t x;
+ *
+ *   x = 255;     valid
+ *   x = 256;     invalid
+ *
+ *   x + 1;       valid, because 1 fits uint8_t
+ *   x + 255;     valid, because 255 fits uint8_t
+ *   x + 256;     invalid, because 256 does not fit uint8_t
+ *
+ * ----------------------------------------------------------------------------
+ * SHIFT CONSTANT RULE
+ * ----------------------------------------------------------------------------
+ *
+ * For shift operators:
+ *
+ *   lhs << rhs
+ *   lhs >> rhs
+ *
+ * Franko requires:
+ *
+ *   - lhs to be an integer expression;
+ *   - nonconstant rhs to be an unsigned integer expression;
+ *   - constant rhs to be nonnegative;
+ *   - constant rhs to fit the unsigned variant of the lhs type.
+ *
+ * Examples:
+ *
+ *   int32_t x;
+ *
+ *   x << 3                         valid, 3 fits uint32_t
+ *   x << -1                        invalid, negative shift count
+ *   x << 9999999999999999999999    invalid, does not fit uint32_t
+ *
+ *   uint8_t b;
+ *
+ *   b << 255                       valid
+ *   b << 256                       invalid, does not fit uint8_t
+ *
+ * ----------------------------------------------------------------------------
+ * ADDRESS RULES
+ * ----------------------------------------------------------------------------
+ *
+ * Franko addresses are strongly typed addr<T> values.
+ *
+ * They are:
+ *
+ *   - assignable,
+ *   - copyable,
+ *   - dereferenceable,
+ *   - comparable with compatible address types.
+ *
+ * They are not integer arithmetic values.
+ *
+ * Therefore:
+ *
+ *   - addr<T> assignment requires exactly addr<T> on the RHS;
+ *   - raw integer constants cannot be assigned to address variables;
+ *   - address comparisons require identical addr<T> types;
+ *   - arithmetic, bitwise, and shift operators reject addresses because
+ *     addresses are not integral types.
+ *
+ * ============================================================================
  */
 public class TypeChecker {
     private final SemanticAnalyzer.Context ctx;
 
-    private static final PrimitiveTypeNode INT32 = new PrimitiveTypeNode(PrimitiveKind.INT32);
-    private static final PrimitiveTypeNode UINT8 = new PrimitiveTypeNode(PrimitiveKind.UINT8);
-    private static final PrimitiveTypeNode UINT32 = new PrimitiveTypeNode(PrimitiveKind.UINT32);
-
     public TypeChecker(SemanticAnalyzer.Context ctx) {
-        this.ctx = ctx;
+        this.ctx = Objects.requireNonNull(ctx);
     }
 
-    public TypeNode int32Type() {
-        return INT32;
-    }
+    // ============================================================
+    // Type Equality / Type Structure
+    // ============================================================
 
     /**
-     * Canonical bool-like result type for logical/comparison operators.
-     * In Franko, this is represented as uint8_t (lexer alias: char).
+     * Returns true if two Franko semantic types are exactly the same type.
+     *
+     * Notes:
+     *
+     *   - primitive types must have the same primitive kind;
+     *   - dynamic arrays must have the same element type;
+     *   - static arrays must have the same element type and numerically equal
+     *     size literals;
+     *   - address types must reference the same type.
      */
-    public TypeNode uint8Type() {
-        return UINT8;
-    }
-
-    public TypeNode uint32Type() {
-        return UINT32;
-    }
-
-    public boolean sameType(TypeNode a, TypeNode b) {
+    public boolean sameType(SemanticType a, SemanticType b) {
         if (a == null || b == null) return false;
-        if (a.getClass() != b.getClass()) return false;
 
-        if (a instanceof PrimitiveTypeNode) {
-            PrimitiveTypeNode pa = (PrimitiveTypeNode) a;
-            PrimitiveTypeNode pb = (PrimitiveTypeNode) b;
+        if (a.getClass() != b.getClass()) {
+            return false;
+        }
+
+        if (a instanceof SemanticPrimitiveType pa && b instanceof SemanticPrimitiveType pb) {
             return pa.kind == pb.kind;
         }
 
-        if (a instanceof DynamicArrayTypeNode) {
-            DynamicArrayTypeNode da = (DynamicArrayTypeNode) a;
-            DynamicArrayTypeNode db = (DynamicArrayTypeNode) b;
+        if (a instanceof SemanticDynamicArrayType da && b instanceof SemanticDynamicArrayType db) {
             return sameType(da.elementType, db.elementType);
         }
 
-        if (a instanceof StaticArrayTypeNode) {
-            StaticArrayTypeNode sa = (StaticArrayTypeNode) a;
-            StaticArrayTypeNode sb = (StaticArrayTypeNode) b;
+        if (a instanceof SemanticStaticArrayType sa && b instanceof SemanticStaticArrayType sb) {
             return sameType(sa.elementType, sb.elementType)
-                    && sameStaticArraySize(sa.sizeLiteral, sb.sizeLiteral);
+                && equalArraySizeLiterals(sa.sizeLiteral, sb.sizeLiteral);
+        }
+
+        if (a instanceof SemanticAddrType aa && b instanceof SemanticAddrType ab) {
+            return sameType(aa.referencedType, ab.referencedType);
+        }
+
+        if (a instanceof SemanticFunctionType fa && b instanceof SemanticFunctionType fb) {
+            if (fa.parameterTypes.size() != fb.parameterTypes.size()) {
+                return false;
+            }
+
+            for (int i = 0; i < fa.parameterTypes.size(); i++) {
+                if (!sameType(fa.parameterTypes.get(i), fb.parameterTypes.get(i))) {
+                    return false;
+                }
+            }
+
+            return sameType(fa.returnType, fb.returnType);
         }
 
         return false;
     }
 
-    public boolean isPrimitive(TypeNode t) {
-        return t instanceof PrimitiveTypeNode;
+    public String describeSafe(SemanticType type) {
+        return type == null ? "<null>" : type.describe();
     }
 
-    public boolean isNumeric(TypeNode t) {
-        return isIntegral(t);
-    }
+    // ============================================================
+    // Type Classification
+    // ============================================================
 
-    public boolean isIntegral(TypeNode t) {
-        if (!(t instanceof PrimitiveTypeNode)) return false;
+    public boolean isIntegral(SemanticType t) {
+        if (!(t instanceof SemanticPrimitiveType pt)) {
+            return false;
+        }
 
-        PrimitiveKind k = ((PrimitiveTypeNode) t).kind;
-        return switch (k) {
+        return switch (pt.kind) {
             case INT8, INT16, INT32, INT64,
                  UINT8, UINT16, UINT32, UINT64 -> true;
         };
     }
 
-    public boolean isSignedIntegral(TypeNode t) {
-        if (!(t instanceof PrimitiveTypeNode)) return false;
+    public boolean isSignedIntegral(SemanticType t) {
+        if (!(t instanceof SemanticPrimitiveType pt)) {
+            return false;
+        }
 
-        PrimitiveKind k = ((PrimitiveTypeNode) t).kind;
-        return switch (k) {
-            case INT8, INT16, INT32, INT64 -> true;
-            case UINT8, UINT16, UINT32, UINT64 -> false;
-        };
+        return isSigned(pt.kind);
     }
 
-    public boolean isUnsignedIntegral(TypeNode t) {
-        if (!(t instanceof PrimitiveTypeNode)) return false;
+    public boolean isUnsignedIntegral(SemanticType t) {
+        if (!(t instanceof SemanticPrimitiveType pt)) {
+            return false;
+        }
 
-        PrimitiveKind k = ((PrimitiveTypeNode) t).kind;
-        return switch (k) {
+        return switch (pt.kind) {
             case UINT8, UINT16, UINT32, UINT64 -> true;
             case INT8, INT16, INT32, INT64 -> false;
         };
     }
 
-    public boolean isArrayType(TypeNode t) {
-        return t instanceof DynamicArrayTypeNode || t instanceof StaticArrayTypeNode;
+    public boolean isArrayType(SemanticType t) {
+        return t instanceof SemanticDynamicArrayType
+            || t instanceof SemanticStaticArrayType;
     }
 
-    public boolean isMemsetable(TypeNode t) {
-        if (t == null) return false;
-
-        if (t instanceof PrimitiveTypeNode) {
-            return true;
-        }
-
-        if (t instanceof DynamicArrayTypeNode) {
-            return false;
-        }
-
-        if (t instanceof StaticArrayTypeNode) {
-            StaticArrayTypeNode s = (StaticArrayTypeNode) t;
-            return isMemsetable(s.elementType);
-        }
-
-        return false;
+    public boolean isDynamicArrayType(SemanticType t) {
+        return t instanceof SemanticDynamicArrayType;
     }
 
-    public boolean isMemcpyable(TypeNode t) {
-        if (t == null) return false;
-
-        if (t instanceof PrimitiveTypeNode) {
-            return true;
-        }
-
-        if (t instanceof DynamicArrayTypeNode) {
-            return false;
-        }
-
-        if (t instanceof StaticArrayTypeNode) {
-            StaticArrayTypeNode s = (StaticArrayTypeNode) t;
-            return isMemcpyable(s.elementType);
-        }
-
-        return false;
+    public boolean isStaticArrayType(SemanticType t) {
+        return t instanceof SemanticStaticArrayType;
     }
 
-    public void ensureArrayType(TypeNode t, String message) {
-        if (!isArrayType(t)) {
-            ctx.error(message);
-        }
+    public boolean isAddressType(SemanticType t) {
+        return t instanceof SemanticAddrType;
     }
 
-    public void ensureDynamicArrayType(TypeNode t, String message) {
-        if (!(t instanceof DynamicArrayTypeNode)) {
-            ctx.error(message + ", got " + typeToString(t));
+    public SemanticPrimitiveKind primitiveKindOf(SemanticType type) {
+        if (type instanceof SemanticPrimitiveType pt) {
+            return pt.kind;
         }
+
+        return null;
     }
 
-    public void ensureNumeric(TypeNode t, String message) {
-        if (!isNumeric(t)) {
-            ctx.error(message);
+    public SemanticType elementTypeOfArray(SemanticType type) {
+        if (type instanceof SemanticDynamicArrayType d) {
+            return d.elementType;
         }
+
+        if (type instanceof SemanticStaticArrayType s) {
+            return s.elementType;
+        }
+
+        return null;
     }
 
-    public void ensureIntegral(TypeNode t, String message) {
+    public SemanticType referencedTypeOfAddress(SemanticType type) {
+        if (type instanceof SemanticAddrType a) {
+            return a.referencedType;
+        }
+
+        return null;
+    }
+
+    // ============================================================
+    // Basic Ensure Helpers
+    // ============================================================
+
+    public void ensureIntegral(SemanticType t, String message) {
         if (!isIntegral(t)) {
-            ctx.error(message);
+            ctx.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureUnsignedIntegral(TypeNode t, String message) {
+    public void ensureSignedIntegral(SemanticType t, String message) {
+        if (!isSignedIntegral(t)) {
+            ctx.error(message + ", got " + describeSafe(t));
+        }
+    }
+
+    public void ensureUnsignedIntegral(SemanticType t, String message) {
         if (!isUnsignedIntegral(t)) {
-            ctx.error(message);
+            ctx.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public boolean areSameIntegralType(TypeNode a, TypeNode b) {
-        if (a == null || b == null) return false;
-        if (isArrayType(a) || isArrayType(b)) return false;
-        return isIntegral(a) && isIntegral(b) && sameType(a, b);
-    }
-
-    public void ensureSameIntegralType(TypeNode a, TypeNode b, String message) {
-        if (!areSameIntegralType(a, b)) {
-            ctx.error(message);
+    public void ensureArrayType(SemanticType t, String message) {
+        if (!isArrayType(t)) {
+            ctx.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureConditionType(TypeNode t, String where) {
-        if (isArrayType(t) || !isPrimitive(t)) {
-            ctx.error(where + " must be a scalar primitive expression, got " + typeToString(t));
+    public void ensureDynamicArrayType(SemanticType t, String message) {
+        if (!isDynamicArrayType(t)) {
+            ctx.error(message + ", got " + describeSafe(t));
         }
     }
+
+    public void ensureStaticArrayType(SemanticType t, String message) {
+        if (!isStaticArrayType(t)) {
+            ctx.error(message + ", got " + describeSafe(t));
+        }
+    }
+
+    public void ensureAddressType(SemanticType t, String message) {
+        if (!isAddressType(t)) {
+            ctx.error(message + ", got " + describeSafe(t));
+        }
+    }
+
+    public void ensureSameType(SemanticType expected, SemanticType actual, String message) {
+        if (!sameType(expected, actual)) {
+            ctx.error(message + ": expected "
+                + describeSafe(expected)
+                + ", got "
+                + describeSafe(actual));
+        }
+    }
+
+    // ============================================================
+    // Assignment Compatibility
+    // ============================================================
 
     /**
-     * Assignment compatibility policy for NON-LITERAL expressions:
+     * Checks Franko assignment legality.
      *
-     *  - exact same type only
-     *  - arrays are not assignable at all
+     * Rules:
      *
-     * Integer literal assignments are handled separately by the semantic layer
-     * via ensureIntegerLiteralFitsType(...).
-     */
-    public void ensureAssignable(TypeNode target, TypeNode value, String messageOnFailure) {
-        if (target == null || value == null) {
-            ctx.error(messageOnFailure);
-            return;
-        }
-
-        // Arrays are never assignable through ordinary assignment/initialization.
-        if (isArrayType(target) || isArrayType(value)) {
-            ctx.error(messageOnFailure);
-            return;
-        }
-
-        // For non-literals, assignment must be exact same type.
-        if (!sameType(target, value)) {
-            ctx.error(messageOnFailure);
-        }
-    }
-
-    /**
-     * Comparisons are allowed between any integer types (mixed types allowed),
-     * but never on arrays.
-     */
-    public boolean areComparable(TypeNode a, TypeNode b) {
-        if (a == null || b == null) return false;
-        if (isArrayType(a) || isArrayType(b)) return false;
-        return isIntegral(a) && isIntegral(b);
-    }
-
-    /**
-     * Legacy helper. With the new operator rules, arithmetic/bitwise operators
-     * no longer use promotion; they require exact same integer type.
+     *   1. Arrays are not directly assignable.
      *
-     * Kept here in case older code still references it.
-     */
-    public TypeNode numericPromotion(TypeNode a, TypeNode b) {
-        PrimitiveKind ka = kindOf(a);
-        PrimitiveKind kb = kindOf(b);
-
-        if (ka == kb) {
-            return new PrimitiveTypeNode(ka);
-        }
-
-        boolean aSigned = isSigned(ka);
-        boolean bSigned = isSigned(kb);
-        int wa = bitWidth(ka);
-        int wb = bitWidth(kb);
-
-        if (aSigned == bSigned) {
-            return new PrimitiveTypeNode(wa >= wb ? ka : kb);
-        }
-
-        PrimitiveKind signedKind = aSigned ? ka : kb;
-        PrimitiveKind unsignedKind = aSigned ? kb : ka;
-
-        int signedWidth = bitWidth(signedKind);
-        int unsignedWidth = bitWidth(unsignedKind);
-
-        if (signedWidth > unsignedWidth) {
-            return new PrimitiveTypeNode(signedKind);
-        }
-
-        return new PrimitiveTypeNode(unsignedKind);
-    }
-
-    public PrimitiveKind kindOf(TypeNode t) {
-        if (!(t instanceof PrimitiveTypeNode)) {
-            return PrimitiveKind.INT32;
-        }
-        return ((PrimitiveTypeNode) t).kind;
-    }
-
-    public TypeNode elementTypeOf(TypeNode t) {
-        if (t instanceof DynamicArrayTypeNode) {
-            return ((DynamicArrayTypeNode) t).elementType;
-        }
-        if (t instanceof StaticArrayTypeNode) {
-            return ((StaticArrayTypeNode) t).elementType;
-        }
-
-        ctx.error("Attempted to fetch element type of non-array type " + typeToString(t));
-        return INT32;
-    }
-
-    /**
-     * Converts a positive integer literal string into a BigInteger.
+     *      array<int> a;
+     *      array<int> b;
+     *      a = b;           invalid
      *
-     * Supported forms:
-     *   123
-     *   0b1010
-     *   0B1010
-     *   0xFF
-     *   0XFF
+     *      Array operations must use array intrinsics such as init, memcpy,
+     *      memset, or uninit.
      *
-     * The AST stores unary minus separately, so this method expects
-     * an unsigned textual literal only.
-     */
-    public BigInteger parseIntegerLiteral(String literalText) {
-        if (literalText == null || literalText.isEmpty()) {
-            throw new IllegalArgumentException("Empty integer literal");
-        }
-
-        if (literalText.startsWith("0b") || literalText.startsWith("0B")) {
-            return new BigInteger(literalText.substring(2), 2);
-        }
-
-        if (literalText.startsWith("0x") || literalText.startsWith("0X")) {
-            return new BigInteger(literalText.substring(2), 16);
-        }
-
-        return new BigInteger(literalText, 10);
-    }
-
-    /**
-     * Returns a canonical decimal string for a positive integer literal.
+     *   2. Primitive integer targets accept:
      *
-     * Examples:
-     *   "42"       -> "42"
-     *   "0b001010" -> "10"
-     *   "0xFF"     -> "255"
-     */
-    public String normalizeIntegerLiteralToDecimal(String literalText) {
-        return parseIntegerLiteral(literalText).toString();
-    }
-
-    /**
-     * Returns a canonical decimal string, optionally applying unary minus.
+     *      - nonconstant expressions of exactly the same primitive type;
+     *      - constant BigInteger expressions if the value fits the target type.
      *
-     * Examples:
-     *   ("0x80", false) -> "128"
-     *   ("0x80", true)  -> "-128"
+     *      uint8_t x;
+     *      x = 255;         valid
+     *      x = 256;         invalid
+     *
+     *   3. Address targets require exact same address type.
+     *
+     *      addr<int> p;
+     *      addr<int> q;
+     *      p = q;           valid
+     *
+     *      p = 0;           invalid
+     *      p = 123;         invalid
+     *      p = addr<uint8>; invalid
+     *
+     *   4. Other types, such as future function values, require exact type
+     *      equality unless Franko later defines special conversion rules.
      */
-    public String normalizeIntegerLiteralToDecimal(String literalText, boolean negative) {
-        BigInteger value = parseIntegerLiteral(literalText);
-        if (negative) {
-            value = value.negate();
-        }
-        return value.toString();
-    }
-
-    /**
-     * Checks whether an integer literal (with sign represented separately)
-     * fits inside the target primitive integer type.
-     */
-    public boolean fitsIntegerLiteralToType(String literalText, boolean negative, TypeNode targetType) {
-        if (!(targetType instanceof PrimitiveTypeNode)) {
-            return false;
-        }
-
-        PrimitiveKind kind = ((PrimitiveTypeNode) targetType).kind;
-        BigInteger value = parseIntegerLiteral(literalText);
-
-        if (negative) {
-            value = value.negate();
-        }
-
-        return fitsBigIntegerToPrimitive(value, kind);
-    }
-
-    /**
-     * Same as fitsIntegerLiteralToType, but reports a semantic error on failure.
-     */
-    public void ensureIntegerLiteralFitsType(
-            String literalText,
-            boolean negative,
-            TypeNode targetType,
-            String messageOnFailure
+    public void ensureAssignable(
+        SemanticType targetType,
+        SemanticExprNode expr,
+        String message
     ) {
-        if (!(targetType instanceof PrimitiveTypeNode)) {
-            ctx.error(messageOnFailure);
+        if (targetType == null || expr == null || expr.type == null) {
+            ctx.error(message + ": internal null type");
             return;
         }
 
-        try {
-            if (!fitsIntegerLiteralToType(literalText, negative, targetType)) {
-                String rendered = negative ? "-" + literalText : literalText;
-                ctx.error(
-                    messageOnFailure
-                    + ": literal " + rendered
-                    + " does not fit in " + typeToString(targetType)
-                );
+        if (isArrayType(targetType) || isArrayType(expr.type)) {
+            ctx.error(message + ": arrays cannot be directly assigned");
+            return;
+        }
+
+        if (targetType instanceof SemanticPrimitiveType targetPrimitive) {
+            if (expr.isConstant()) {
+                if (!fitsBigIntegerToPrimitive(expr.constantValue, targetPrimitive.kind)) {
+                    ctx.error(message + ": constant value "
+                        + expr.constantValue
+                        + " does not fit in "
+                        + targetType.describe());
+                }
+                return;
             }
-        } catch (IllegalArgumentException ex) {
-            String rendered = negative ? "-" + literalText : literalText;
-            ctx.error(
-                messageOnFailure
-                + ": invalid integer literal " + rendered
+
+            if (!sameType(targetType, expr.type)) {
+                ctx.error(message + ": expected "
+                    + targetType.describe()
+                    + ", got "
+                    + expr.type.describe());
+            }
+
+            return;
+        }
+
+        if (targetType instanceof SemanticAddrType) {
+            if (!sameType(targetType, expr.type)) {
+                ctx.error(message + ": expected "
+                    + targetType.describe()
+                    + ", got "
+                    + expr.type.describe());
+            }
+
+            return;
+        }
+
+        if (!sameType(targetType, expr.type)) {
+            ctx.error(message + ": expected "
+                + targetType.describe()
+                + ", got "
+                + expr.type.describe());
+        }
+    }
+
+    // ============================================================
+    // Operator Helpers: Arithmetic / Bitwise
+    // ============================================================
+
+    /**
+     * Checks arithmetic and bitwise operand compatibility.
+     *
+     * Applies to:
+     *
+     *   + - * / & | ^
+     *
+     * Franko rules:
+     *
+     *   - both operands must be integer expressions;
+     *   - arrays and addresses are rejected because they are not integral;
+     *   - if both operands are nonconstant, their types must be exactly equal;
+     *   - if exactly one operand is constant, that constant must fit the other
+     *     operand's concrete integer type;
+     *   - if both operands are constants, allow the expression for now because
+     *     the folded BigInteger result is checked later in a contextual position.
+     */
+    public void ensureSameIntegralTypeOrFit(
+        SemanticExprNode left,
+        SemanticExprNode right,
+        String op
+    ) {
+        if (left == null || right == null) {
+            ctx.error("Operands of '" + op + "' cannot be null");
+            return;
+        }
+
+        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
+        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
+
+        if (!isIntegral(left.type) || !isIntegral(right.type)) {
+            return;
+        }
+
+        boolean leftConst = left.isConstant();
+        boolean rightConst = right.isConstant();
+
+        if (leftConst && rightConst) {
+            return;
+        }
+
+        if (leftConst) {
+            requireConstantFitsType(
+                left.constantValue,
+                right.type,
+                "Left constant for operator '" + op + "'"
+            );
+            return;
+        }
+
+        if (rightConst) {
+            requireConstantFitsType(
+                right.constantValue,
+                left.type,
+                "Right constant for operator '" + op + "'"
+            );
+            return;
+        }
+
+        if (!sameType(left.type, right.type)) {
+            ctx.error("Operands of '" + op + "' must have the same integer type, got "
+                + left.type.describe()
+                + " and "
+                + right.type.describe());
+        }
+    }
+
+    // ============================================================
+    // Operator Helpers: Logical / Comparison Integer Side
+    // ============================================================
+
+    /**
+     * Checks integer operands for operators that allow mixed integer types.
+     *
+     * Applies to the integer side of:
+     *
+     *   && ||
+     *   == != < > <= >=
+     *
+     * Franko rules:
+     *
+     *   - operands must be integer expressions;
+     *   - mixed nonconstant integer types are allowed;
+     *   - if one operand is a constant and the other is nonconstant, the
+     *     constant must fit the nonconstant side's concrete integer type;
+     *   - if both operands are constants, allow the expression for now;
+     *   - if both operands are nonconstant, no same-type requirement applies.
+     *
+     * Address comparisons are handled separately in ExpressionChecker before
+     * this helper is called.
+     */
+    public void ensureMixedIntegralOperandsWithConstantFit(
+        SemanticExprNode left,
+        SemanticExprNode right,
+        String op
+    ) {
+        if (left == null || right == null) {
+            ctx.error("Operands of '" + op + "' cannot be null");
+            return;
+        }
+
+        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
+        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
+
+        if (!isIntegral(left.type) || !isIntegral(right.type)) {
+            return;
+        }
+
+        boolean leftConst = left.isConstant();
+        boolean rightConst = right.isConstant();
+
+        if (leftConst && rightConst) {
+            return;
+        }
+
+        if (leftConst) {
+            requireConstantFitsType(
+                left.constantValue,
+                right.type,
+                "Left constant for operator '" + op + "'"
+            );
+            return;
+        }
+
+        if (rightConst) {
+            requireConstantFitsType(
+                right.constantValue,
+                left.type,
+                "Right constant for operator '" + op + "'"
             );
         }
     }
 
+    // ============================================================
+    // Operator Helpers: Shift
+    // ============================================================
+
     /**
-     * Array-size literals must fit in uint32_t.
+     * Checks Franko shift operator operands.
      *
-     * This is intended for:
-     *   - static array type sizes: array<int8_t, 16>
-     *   - literal runtime array init sizes, if you choose to enforce it there
+     * Applies to:
+     *
+     *   << >>
+     *
+     * Rules:
+     *
+     *   - left operand must be an integer expression;
+     *   - right operand must be an integer expression;
+     *   - nonconstant right operand must be unsigned integer type;
+     *   - constant right operand must be nonnegative;
+     *   - constant right operand must fit the unsigned variant of the left
+     *     operand's primitive type.
+     *
+     * Examples:
+     *
+     *   int32_t x;
+     *
+     *   x << 3                         valid
+     *   x << -1                        invalid
+     *   x << 9999999999999999999999    invalid, does not fit uint32_t
+     *
+     *   uint8_t b;
+     *
+     *   b << 255                       valid
+     *   b << 256                       invalid, does not fit uint8_t
      */
-    public boolean fitsArraySizeLiteral(String literalText) {
-        try {
-            BigInteger value = parseIntegerLiteral(literalText);
-            return fitsBigIntegerToPrimitive(value, PrimitiveKind.UINT32);
-        } catch (IllegalArgumentException ex) {
-            return false;
+    public void ensureValidShiftOperands(
+        SemanticExprNode left,
+        SemanticExprNode right,
+        String op
+    ) {
+        if (left == null || right == null) {
+            ctx.error("Operands of '" + op + "' cannot be null");
+            return;
         }
-    }
 
-    /**
-     * Reports an error if an array-size literal is invalid or does not fit uint32_t.
-     */
-    public void ensureArraySizeLiteralFitsUint32(String literalText, String messageOnFailure) {
-        try {
-            BigInteger value = parseIntegerLiteral(literalText);
+        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
+        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
 
-            if (!fitsBigIntegerToPrimitive(value, PrimitiveKind.UINT32)) {
-                ctx.error(
-                    messageOnFailure
-                    + ": array size literal " + literalText
-                    + " does not fit in uint32_t"
-                );
-            }
-        } catch (IllegalArgumentException ex) {
-            ctx.error(
-                messageOnFailure
-                + ": invalid array size literal " + literalText
+        if (!isIntegral(left.type) || !isIntegral(right.type)) {
+            return;
+        }
+
+        /*
+         * If the left side is itself a constant, validate it against its current
+         * semantic type. Today that is usually the analyzer's fallback int32_t.
+         *
+         * Pure constant expressions can still be contextually checked later by
+         * assignment or another enclosing operation.
+         */
+        if (left.isConstant()) {
+            requireConstantFitsType(
+                left.constantValue,
+                left.type,
+                "Left constant for operator '" + op + "'"
             );
         }
+
+        if (right.isConstant()) {
+            if (right.constantValue == null) {
+                ctx.error("Right constant for operator '" + op + "' has no constant value");
+                return;
+            }
+
+            if (right.constantValue.signum() < 0) {
+                ctx.error("Right operand of '" + op + "' cannot be negative");
+                return;
+            }
+
+            SemanticPrimitiveKind leftKind = primitiveKindOf(left.type);
+
+            if (leftKind == null) {
+                ctx.error("Left operand of '" + op + "' must be a primitive integer, got "
+                    + describeSafe(left.type));
+                return;
+            }
+
+            SemanticPrimitiveKind rhsContextKind = unsignedVariantOf(leftKind);
+
+            requireConstantFitsPrimitive(
+                right.constantValue,
+                rhsContextKind,
+                "Right constant for operator '" + op + "'"
+            );
+
+            return;
+        }
+
+        ensureUnsignedIntegral(
+            right.type,
+            "Right operand of '" + op + "' must be unsigned"
+        );
     }
 
-    /**
-     * For runtime expressions that have already been reduced to a signed value.
-     * Array sizes must be in uint32_t range.
-     */
-    public boolean fitsArraySizeValue(BigInteger value) {
-        return fitsBigIntegerToPrimitive(value, PrimitiveKind.UINT32);
+    public SemanticPrimitiveKind unsignedVariantOf(SemanticPrimitiveKind kind) {
+        return switch (kind) {
+            case INT8, UINT8 -> SemanticPrimitiveKind.UINT8;
+            case INT16, UINT16 -> SemanticPrimitiveKind.UINT16;
+            case INT32, UINT32 -> SemanticPrimitiveKind.UINT32;
+            case INT64, UINT64 -> SemanticPrimitiveKind.UINT64;
+        };
     }
 
-    /**
-     * Compares static array size literals semantically.
-     *
-     * So these compare equal:
-     *   array<int, 16>
-     *   array<int, 0x10>
-     *   array<int, 0b10000>
-     *
-     * Invalid or out-of-range sizes are NOT considered equal.
-     */
-    public boolean sameStaticArraySize(String a, String b) {
-        try {
-            BigInteger av = parseIntegerLiteral(a);
-            BigInteger bv = parseIntegerLiteral(b);
+    public SemanticPrimitiveKind signedVariantOf(SemanticPrimitiveKind kind) {
+        return switch (kind) {
+            case INT8, UINT8 -> SemanticPrimitiveKind.INT8;
+            case INT16, UINT16 -> SemanticPrimitiveKind.INT16;
+            case INT32, UINT32 -> SemanticPrimitiveKind.INT32;
+            case INT64, UINT64 -> SemanticPrimitiveKind.INT64;
+        };
+    }
 
-            if (!fitsBigIntegerToPrimitive(av, PrimitiveKind.UINT32)) return false;
-            if (!fitsBigIntegerToPrimitive(bv, PrimitiveKind.UINT32)) return false;
+    // ============================================================
+    // Constant Fit Helpers
+    // ============================================================
 
-            return av.equals(bv);
-        } catch (IllegalArgumentException ex) {
-            return false;
+    public void requireConstantFitsType(
+        BigInteger value,
+        SemanticType contextType,
+        String message
+    ) {
+        if (!(contextType instanceof SemanticPrimitiveType pt)) {
+            ctx.error(message + ": expected primitive integer context, got "
+                + describeSafe(contextType));
+            return;
+        }
+
+        requireConstantFitsPrimitive(value, pt.kind, message);
+    }
+
+    public void requireConstantFitsPrimitive(
+        BigInteger value,
+        SemanticPrimitiveKind kind,
+        String message
+    ) {
+        if (value == null) {
+            ctx.error(message + ": missing constant value");
+            return;
+        }
+
+        if (kind == null) {
+            ctx.error(message + ": missing primitive kind");
+            return;
+        }
+
+        if (!fitsBigIntegerToPrimitive(value, kind)) {
+            ctx.error(message + ": constant value "
+                + value
+                + " does not fit in "
+                + kind.name());
         }
     }
 
-    public int bitWidth(TypeNode t) {
-        if (!(t instanceof PrimitiveTypeNode)) return 32;
-        return bitWidth(((PrimitiveTypeNode) t).kind);
+    public boolean fitsBigIntegerToPrimitive(
+        BigInteger value,
+        SemanticPrimitiveKind kind
+    ) {
+        if (value == null || kind == null) {
+            return false;
+        }
+
+        int bits = bitWidth(kind);
+        boolean signed = isSigned(kind);
+
+        BigInteger two = BigInteger.valueOf(2);
+
+        BigInteger min = signed
+            ? two.pow(bits - 1).negate()
+            : BigInteger.ZERO;
+
+        BigInteger max = signed
+            ? two.pow(bits - 1).subtract(BigInteger.ONE)
+            : two.pow(bits).subtract(BigInteger.ONE);
+
+        return value.compareTo(min) >= 0
+            && value.compareTo(max) <= 0;
     }
 
-    public int bitWidth(PrimitiveKind kind) {
+    public int bitWidth(SemanticPrimitiveKind kind) {
         return switch (kind) {
             case INT8, UINT8 -> 8;
             case INT16, UINT16 -> 16;
@@ -470,64 +739,128 @@ public class TypeChecker {
         };
     }
 
-    public boolean isSigned(PrimitiveKind kind) {
+    public boolean isSigned(SemanticPrimitiveKind kind) {
         return switch (kind) {
             case INT8, INT16, INT32, INT64 -> true;
             case UINT8, UINT16, UINT32, UINT64 -> false;
         };
     }
 
-    public BigInteger minValue(PrimitiveKind kind) {
-        int bits = bitWidth(kind);
-
-        if (isSigned(kind)) {
-            return BigInteger.valueOf(2).pow(bits - 1).negate();
-        }
-
-        return BigInteger.ZERO;
+    public boolean isUnsigned(SemanticPrimitiveKind kind) {
+        return !isSigned(kind);
     }
 
-    public BigInteger maxValue(PrimitiveKind kind) {
-        int bits = bitWidth(kind);
+    // ============================================================
+    // Memset / Memcpy Element Constraints
+    // ============================================================
 
-        if (isSigned(kind)) {
-            return BigInteger.valueOf(2).pow(bits - 1).subtract(BigInteger.ONE);
+    /**
+     * Returns true if values of this type can be safely used as elements of an
+     * array that is memset.
+     *
+     * Current conservative rule:
+     *
+     *   - primitive integer elements are memsetable;
+     *   - static arrays are memsetable if their element type is memsetable;
+     *   - dynamic arrays are not memsetable as element values;
+     *   - addresses are not memsetable.
+     *
+     * This means:
+     *
+     *   array<int>              can be memset
+     *   array<array<int, 4>>    can be memset
+     *   array<array<int>>       cannot be memset
+     *   array<addr<int>>        cannot be memset
+     */
+    public boolean isMemsetable(SemanticType t) {
+        if (t == null) {
+            return false;
         }
 
-        return BigInteger.valueOf(2).pow(bits).subtract(BigInteger.ONE);
+        if (t instanceof SemanticPrimitiveType) {
+            return true;
+        }
+
+        if (t instanceof SemanticAddrType) {
+            return false;
+        }
+
+        if (t instanceof SemanticDynamicArrayType) {
+            return false;
+        }
+
+        if (t instanceof SemanticStaticArrayType s) {
+            return isMemsetable(s.elementType);
+        }
+
+        return false;
     }
 
-    public boolean fitsBigIntegerToPrimitive(BigInteger value, PrimitiveKind kind) {
-        return value.compareTo(minValue(kind)) >= 0
-                && value.compareTo(maxValue(kind)) <= 0;
+    /**
+     * Returns true if values of this type can be copied byte-for-byte by memcpy.
+     *
+     * Current conservative rule:
+     *
+     *   - primitive integer elements are memcpyable;
+     *   - static arrays are memcpyable if their element type is memcpyable;
+     *   - dynamic arrays are not memcpyable as element values;
+     *   - addresses are memcpyable.
+     */
+    public boolean isMemcpyable(SemanticType t) {
+        if (t == null) {
+            return false;
+        }
+
+        if (t instanceof SemanticPrimitiveType) {
+            return true;
+        }
+
+        if (t instanceof SemanticAddrType) {
+            return true;
+        }
+
+        if (t instanceof SemanticDynamicArrayType) {
+            return false;
+        }
+
+        if (t instanceof SemanticStaticArrayType s) {
+            return isMemcpyable(s.elementType);
+        }
+
+        return false;
     }
 
-    public String typeToString(TypeNode t) {
-        if (t == null) return "<null>";
+    // ============================================================
+    // Array Size / Literal Utilities
+    // ============================================================
 
-        if (t instanceof PrimitiveTypeNode) {
-            PrimitiveKind k = ((PrimitiveTypeNode) t).kind;
-            return switch (k) {
-                case INT8 -> "int8_t";
-                case INT16 -> "int16_t";
-                case INT32 -> "int32_t";
-                case INT64 -> "int64_t";
-                case UINT8 -> "uint8_t";
-                case UINT16 -> "uint16_t";
-                case UINT32 -> "uint32_t";
-                case UINT64 -> "uint64_t";
-            };
+    public boolean equalArraySizeLiterals(String a, String b) {
+        try {
+            return parseIntegerLiteral(a).equals(parseIntegerLiteral(b));
+        } catch (Exception e) {
+            return Objects.equals(a, b);
+        }
+    }
+
+    public BigInteger parseIntegerLiteral(String val) {
+        if (val == null) {
+            throw new IllegalArgumentException("null integer literal");
         }
 
-        if (t instanceof DynamicArrayTypeNode) {
-            return "array<" + typeToString(((DynamicArrayTypeNode) t).elementType) + ">";
+        String s = val.trim();
+
+        if (s.startsWith("+")) {
+            s = s.substring(1);
         }
 
-        if (t instanceof StaticArrayTypeNode) {
-            StaticArrayTypeNode s = (StaticArrayTypeNode) t;
-            return "array<" + typeToString(s.elementType) + ", " + s.sizeLiteral + ">";
+        if (s.toLowerCase().startsWith("0b")) {
+            return new BigInteger(s.substring(2), 2);
         }
 
-        return t.getClass().getSimpleName();
+        if (s.toLowerCase().startsWith("0x")) {
+            return new BigInteger(s.substring(2), 16);
+        }
+
+        return new BigInteger(s, 10);
     }
 }

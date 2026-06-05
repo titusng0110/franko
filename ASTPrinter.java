@@ -1,5 +1,3 @@
-// ================= AST PRINTER =================
-
 public class ASTPrinter {
 
     public static void print(ASTNode node, int indent) {
@@ -10,6 +8,7 @@ public class ASTPrinter {
             return;
         }
 
+        // --- Statements & Blocks ---
         if (node instanceof ProgramNode) {
             System.out.println(pad + "Program");
             for (ASTNode stmt : ((ProgramNode) node).statements) {
@@ -24,6 +23,12 @@ public class ASTPrinter {
             }
         }
 
+        else if (node instanceof ExprStmtNode) {
+            System.out.println(pad + "ExprStmt");
+            print(((ExprStmtNode) node).expr, indent + 1);
+        }
+
+        // --- Declarations ---
         else if (node instanceof VarDeclNode) {
             VarDeclNode n = (VarDeclNode) node;
             System.out.println(
@@ -50,6 +55,7 @@ public class ASTPrinter {
             print(n.size, indent + 1);
         }
 
+        // --- Control Flow & Basic Statements ---
         else if (node instanceof AssignNode) {
             System.out.println(pad + "Assign");
             print(((AssignNode) node).target, indent + 1);
@@ -78,6 +84,19 @@ public class ASTPrinter {
             print(n.body, indent + 2);
         }
 
+        else if (node instanceof DelNode) {
+            System.out.println(pad + "Delete: " + ((DelNode) node).name);
+        }
+
+        else if (node instanceof PrintNode) {
+            PrintNode n = (PrintNode) node;
+            System.out.println(pad + "Print");
+            for (ASTNode arg : n.args) {
+                print(arg, indent + 1);
+            }
+        }
+
+        // --- Expressions ---
         else if (node instanceof VarNode) {
             System.out.println(pad + "Var: " + ((VarNode) node).name);
         }
@@ -99,6 +118,7 @@ public class ASTPrinter {
             print(n.right, indent + 1);
         }
 
+        // --- Access & Calls (Refactored from specific array instructions) ---
         else if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
             System.out.println(pad + "ArrayAccess");
@@ -108,51 +128,41 @@ public class ASTPrinter {
             print(n.index, indent + 2);
         }
 
-        else if (node instanceof ArrayInitNode) {
-            ArrayInitNode n = (ArrayInitNode) node;
-            System.out.println(pad + "ArrayInit: " + n.name);
-            print(n.size, indent + 1);
+        else if (node instanceof MemberAccessNode) {
+            MemberAccessNode n = (MemberAccessNode) node;
+            System.out.println(pad + "MemberAccess: " + n.memberName);
+            print(n.target, indent + 1);
         }
 
-        else if (node instanceof ArrayUninitNode) {
-            ArrayUninitNode n = (ArrayUninitNode) node;
-            System.out.println(pad + "ArrayUninit");
-            System.out.println(pad + "  Receiver:");
-            print(n.receiver, indent + 2);
-        }
-
-        else if (node instanceof ArrayMemsetNode) {
-            ArrayMemsetNode n = (ArrayMemsetNode) node;
-            System.out.println(pad + "ArrayMemset");
-            System.out.println(pad + "  Receiver:");
-            print(n.receiver, indent + 2);
-            System.out.println(pad + "  Value:");
-            print(n.value, indent + 2);
-        }
-
-        else if (node instanceof ArrayMemcpyNode) {
-            ArrayMemcpyNode n = (ArrayMemcpyNode) node;
-            System.out.println(pad + "ArrayMemcpy");
-            System.out.println(pad + "  Target:");
-            print(n.target, indent + 2);
-            System.out.println(pad + "  Source:");
-            print(n.source, indent + 2);
-        }
-
-        else if (node instanceof DelNode) {
-            System.out.println(pad + "Delete: " + ((DelNode) node).name);
-        }
-
-        else if (node instanceof PrintNode) {
-            PrintNode n = (PrintNode) node;
-            System.out.println(pad + "Print");
-            for (ASTNode arg : n.args) {
-                print(arg, indent + 1);
+        else if (node instanceof CallNode) {
+            CallNode n = (CallNode) node;
+            System.out.println(pad + "Call");
+            System.out.println(pad + "  Callee:");
+            print(n.callee, indent + 2);
+            if (!n.args.isEmpty()) {
+                System.out.println(pad + "  Args:");
+                for (ASTNode arg : n.args) {
+                    print(arg, indent + 2);
+                }
             }
         }
 
+        // --- Memory / Pointers ---
+        else if (node instanceof GetAddrNode) {
+            GetAddrNode n = (GetAddrNode) node;
+            System.out.println(pad + "GetAddr");
+            print(n.target, indent + 1);
+        }
+
+        else if (node instanceof DerefNode) {
+            DerefNode n = (DerefNode) node;
+            System.out.println(pad + "Deref");
+            print(n.expr, indent + 1);
+        }
+
+        // --- Fallback ---
         else {
-            System.out.println(pad + "Unknown node: " + node.getClass());
+            System.out.println(pad + "Unknown node: " + node.getClass().getSimpleName());
         }
     }
 
@@ -179,6 +189,11 @@ public class ASTPrinter {
         if (type instanceof StaticArrayTypeNode) {
             StaticArrayTypeNode t = (StaticArrayTypeNode) type;
             return "array<" + typeToString(t.elementType) + "," + t.sizeLiteral + ">";
+        }
+
+        if (type instanceof AddrTypeNode) {
+            AddrTypeNode t = (AddrTypeNode) type;
+            return "addr<" + typeToString(t.referencedType) + ">";
         }
 
         return "<unknown-type>";

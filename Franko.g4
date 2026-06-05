@@ -40,15 +40,16 @@ whileStmt
     ;
 
 // ---------- SIMPLE STATEMENTS ----------
-
+//
+// NOTE:
+// - standalone a(10) is no longer a special parser rule;
+//   it parses as a normal expression statement (call syntax)
+// - x.memset(...), x.memcpy(...), x.uninit() are also now
+//   parsed as ordinary member-call expressions
 simpleStmt
     : varDecl
     | delStmt
     | assignStmt
-    | arrayInitStmt
-    | arrayUninitStmt
-    | arrayMemsetStmt
-    | arrayMemcpyStmt
     | printStmt
     | exprStmt
     ;
@@ -77,43 +78,14 @@ assignStmt
     : lvalue ASSIGN expr
     ;
 
-// ---------- RECEIVER EXPRESSIONS ----------
-
-// Can be used for:
-//   arr
-//   arr[i]
-//   map[r][c]
-//   nested[i][j][k]
-receiverExpr
-    : IDENTIFIER (LBRACK expr RBRACK)*
-    ;
-
-// ---------- ARRAY / METHOD-LIKE OPERATIONS ----------
-
-// Existing standalone array init statement: a(10)
-// Keep this restricted to plain identifiers for now,
-// since declaration sugar/desugaring already handles array creation nicely.
-arrayInitStmt
-    : IDENTIFIER LPAREN expr RPAREN
-    ;
-
-// Receiver-based uninit
-arrayUninitStmt
-    : receiverExpr DOT UNINIT LPAREN RPAREN
-    ;
-
-// Receiver-based memset
-arrayMemsetStmt
-    : receiverExpr DOT MEMSET LPAREN expr RPAREN
-    ;
-
-// Receiver-based memcpy
-arrayMemcpyStmt
-    : receiverExpr DOT MEMCPY LPAREN receiverExpr RPAREN
-    ;
-
 // ---------- PRINT ----------
-
+//
+// Keeping print as a dedicated statement for now.
+// obj.print() still works as a generic member call expression.
+//
+// If you later want global user-defined function print(...),
+// you should consider removing this statement form too and
+// treating print as a builtin function resolved semantically.
 printStmt
     : PRINT LPAREN exprList? RPAREN
     ;
@@ -123,13 +95,31 @@ exprList
     ;
 
 // ---------- LVALUES ----------
-
-// Supports:
+//
+// Supports future struct field assignment:
 //   x
 //   arr[i]
-//   map[r][c]
+//   obj.field
+//   obj.field[i]
+//   deref(p)
+//   deref(p).field
+//   deref(p)[i]
+//   (deref(p)).field[i]
+//
+// Intentionally does NOT allow function-call results as lvalues.
 lvalue
-    : IDENTIFIER (LBRACK expr RBRACK)*
+    : lvalueAtom lvalueSuffix*
+    ;
+
+lvalueAtom
+    : IDENTIFIER
+    | derefExpr
+    | LPAREN lvalue RPAREN
+    ;
+
+lvalueSuffix
+    : indexSuffix
+    | memberSuffix
     ;
 
 // ---------- EXPRESSION STATEMENT ----------
@@ -152,7 +142,7 @@ exprStmt
 //   + -
 //   * /
 //   unary (- !)
-//   postfix []
+//   postfix [] () .
 
 expr
     : logicalOrExpr
@@ -204,15 +194,95 @@ unaryExpr
     | postfixExpr       # PostfixExprOnly
     ;
 
-// Postfix indexing supports chained [] in expressions
+// ---------- POSTFIX / MEMBER / CALL / INDEX ----------
+//
+// This is the key future-proofing refactor.
+//
+// Supports:
+//   a[i]
+//   foo(x)
+//   foo(x, y)
+//   obj.field
+//   obj.method()
+//   obj.method(x)[i]
+//   deref(p).field
+//   deref(p).memset(0)
+//   (foo(x)).bar(y)[z]
 postfixExpr
-    : primary (LBRACK expr RBRACK)*
+    : primary postfixSuffix*
+    ;
+
+postfixSuffix
+    : indexSuffix
+    | callSuffix
+    | memberSuffix
+    ;
+
+indexSuffix
+    : LBRACK expr RBRACK
+    ;
+
+callSuffix
+    : LPAREN argumentList? RPAREN
+    ;
+
+argumentList
+    : expr (COMMA expr)*
+    ;
+
+memberSuffix
+    : DOT memberName
+    ;
+
+// ---------- MEMBER NAMES ----------
+//
+// Important:
+// Because words like 'memset' are lexer keywords in this grammar,
+// they do NOT tokenize as IDENTIFIER.
+// So if you want abc.memset(...) or obj.print(),
+// the parser must allow those keyword tokens after DOT.
+//
+// This rule is intentionally broad so that keywords can appear
+// as member/field/method names after a dot.
+memberName
+    : IDENTIFIER
+    | ALLOC
+    | DEL
+    | PRINT
+    | UNINIT
+    | MEMSET
+    | MEMCPY
+    | IF
+    | ELSE
+    | WHILE
+    | ADDR
+    | GETADDR
+    | DEREF
+    | INT8_T
+    | INT16_T
+    | INT32_T
+    | INT64_T
+    | UINT8_T
+    | UINT16_T
+    | UINT32_T
+    | UINT64_T
+    | ARRAY
     ;
 
 primary
     : integerLiteral
     | IDENTIFIER
+    | getAddrExpr
+    | derefExpr
     | LPAREN expr RPAREN
+    ;
+
+getAddrExpr
+    : GETADDR LPAREN lvalue RPAREN
+    ;
+
+derefExpr
+    : DEREF LPAREN expr RPAREN
     ;
 
 // ---------- INTEGER LITERALS ----------
@@ -226,43 +296,47 @@ integerLiteral
 // ---------- TYPES ----------
 
 type
-    : INT8_T                              # Int8Type
-    | INT16_T                             # Int16Type
-    | INT32_T                             # Int32Type
-    | INT64_T                             # Int64Type
-    | UINT8_T                             # Uint8Type
-    | UINT16_T                            # Uint16Type
-    | UINT32_T                            # Uint32Type
-    | UINT64_T                            # Uint64Type
-    | ARRAY LT type GT                    # DynamicArrayType
-    | ARRAY LT type COMMA integerLiteral GT  # StaticArrayType
+    : INT8_T                                # Int8Type
+    | INT16_T                               # Int16Type
+    | INT32_T                               # Int32Type
+    | INT64_T                               # Int64Type
+    | UINT8_T                               # Uint8Type
+    | UINT16_T                              # Uint16Type
+    | UINT32_T                              # Uint32Type
+    | UINT64_T                              # Uint64Type
+    | ARRAY LT type GT                      # DynamicArrayType
+    | ARRAY LT type COMMA integerLiteral GT # StaticArrayType
+    | ADDR LT type GT                       # AddrType
     ;
 
 // ---------- LEXER ----------
 
 // Keywords
-ALLOC    : 'alloc' ;
-DEL      : 'del' ;
-PRINT    : 'print' ;
-UNINIT   : 'uninit' ;
-MEMSET   : 'memset' ;
-MEMCPY   : 'memcpy' ;
-IF       : 'if' ;
-ELSE     : 'else' ;
-WHILE    : 'while' ;
+ALLOC   : 'alloc' ;
+DEL     : 'del' ;
+PRINT   : 'print' ;
+UNINIT  : 'uninit' ;
+MEMSET  : 'memset' ;
+MEMCPY  : 'memcpy' ;
+IF      : 'if' ;
+ELSE    : 'else' ;
+WHILE   : 'while' ;
+ADDR    : 'addr' ;
+GETADDR : 'getaddr' ;
+DEREF   : 'deref' ;
 
 // Primitive / type keywords
-INT8_T    : 'int8_t' ;
-INT16_T   : 'int16_t' ;
-INT32_T   : 'int32_t' | 'int' ;
-INT64_T   : 'int64_t' ;
+INT8_T   : 'int8_t' ;
+INT16_T  : 'int16_t' ;
+INT32_T  : 'int32_t' | 'int' ;
+INT64_T  : 'int64_t' ;
 
-UINT8_T   : 'uint8_t' | 'char' ;
-UINT16_T  : 'uint16_t' ;
-UINT32_T  : 'uint32_t' ;
-UINT64_T  : 'uint64_t' ;
+UINT8_T  : 'uint8_t' | 'char' ;
+UINT16_T : 'uint16_t' ;
+UINT32_T : 'uint32_t' ;
+UINT64_T : 'uint64_t' ;
 
-ARRAY     : 'array' ;
+ARRAY    : 'array' ;
 
 // Operators / punctuation
 EQ      : '==' ;

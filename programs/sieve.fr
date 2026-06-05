@@ -1,33 +1,134 @@
+// ============================================================
+// Franko Sieve of Eratosthenes Showcase
+// ============================================================
+//
+// Prints all prime numbers <= n.
+//
+// Demonstrates:
+//
+//   - uint32_t arithmetic
+//   - declaration initializer sugar
+//   - dynamic arrays
+//   - char as a uint8_t-like flag type
+//   - arr(size) dynamic initialization
+//   - memset()
+//   - uninit()
+//   - while loops
+//   - if statements
+//   - chained integer conditions
+//
+// Output for n = 80:
+//
+//   2
+//   3
+//   5
+//   7
+//   11
+//   13
+//   17
+//   19
+//   23
+//   29
+//   31
+//   37
+//   41
+//   43
+//   47
+//   53
+//   59
+//   61
+//   67
+//   71
+//   73
+//   79
+// ============================================================
 
-uint32_t n = 80
 
-array<char> isPrime
-isPrime(n + 1)
-isPrime.memset(0b00000001)
+// ------------------------------------------------------------
+// Configuration
+// ------------------------------------------------------------
 
-isPrime[0] = 0
+uint32_t n = 80;
+
+
+// ------------------------------------------------------------
+// Prime flag array
+// ------------------------------------------------------------
+//
+// isPrime[i] meaning:
+//
+//   0 = not prime
+//   1 = probably prime / still unmarked
+//
+// The array has n + 1 entries so index n is valid.
+
+array<char> isPrime;
+
+isPrime(n + 1);
+
+
+// Initially mark every entry as prime.
+// char behaves like uint8_t in the current semantic model, so
+// 1 fits naturally.
+
+isPrime.memset(1);
+
+
+// 0 and 1 are not prime.
+
+isPrime[0] = 0;
+
 if (n >= 1) {
-    isPrime[1] = 0
+    isPrime[1] = 0;
 }
 
-uint32_t p = 2
+
+// ------------------------------------------------------------
+// Sieve
+// ------------------------------------------------------------
+//
+// For each prime p with p * p <= n,
+// mark all multiples of p starting at p * p as composite.
+
+uint32_t p = 2;
+
 while (p * p <= n) {
+
     if (isPrime[p] != 0) {
-        uint32_t j = p * p
+
+        uint32_t j = p * p;
+
         while (j <= n) {
-            isPrime[j] = 0
-            j = j + p
+            isPrime[j] = 0;
+            j = j + p;
         }
     }
-    p = p + 1
+
+    p = p + 1;
 }
 
-uint32_t i = 2
+
+// ------------------------------------------------------------
+// Output primes
+// ------------------------------------------------------------
+
+print(3001);
+
+uint32_t i = 2;
+
 while (i <= n) {
     if (isPrime[i] != 0) {
-        print(i)
+        print(i);
     }
-    i = i + 1
+
+    i = i + 1;
 }
 
-isPrime.uninit()
+print(3002);
+
+
+// ------------------------------------------------------------
+// Cleanup
+// ------------------------------------------------------------
+
+isPrime.uninit();

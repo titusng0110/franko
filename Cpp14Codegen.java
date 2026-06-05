@@ -1,303 +1,267 @@
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
+/**
+ * ============================================================================
+ * CPP14 CODE GENERATOR
+ * ============================================================================
+ *
+ * PURPOSE:
+ * Cpp14Codegen emits C++14 code from the fully lowered, type-checked Semantic
+ * AST.
+ *
+ * This generator assumes these phases have already succeeded:
+ *
+ *   1. Parser
+ *   2. AST visitor
+ *   3. Desugarer
+ *   4. SemanticAnalyzer
+ *   5. MasterChecker
+ *
+ * Therefore, this code generator does not perform legality checking. It trusts
+ * that:
+ *
+ *   - variables are resolved to VariableSymbol objects,
+ *   - expression types are already inferred,
+ *   - invalid operators were rejected,
+ *   - invalid assignments were rejected,
+ *   - invalid address arithmetic was rejected,
+ *   - invalid array intrinsic usage was rejected.
+ *
+ * ----------------------------------------------------------------------------
+ * ADDRESS REPRESENTATION
+ * ----------------------------------------------------------------------------
+ *
+ * Franko:
+ *
+ *   addr<T>
+ *
+ * is emitted as:
+ *
+ *   T*
+ *
+ * Franko:
+ *
+ *   getaddr(x)
+ *
+ * is emitted as:
+ *
+ *   (&x)
+ *
+ * Franko:
+ *
+ *   deref(p)
+ *
+ * is emitted as:
+ *
+ *   (*p)
+ *
+ * Because the checker rejects pointer arithmetic and raw numeric address
+ * construction, the generated C++ pointer representation remains constrained
+ * to Franko's safe typed-address model.
+ *
+ * ----------------------------------------------------------------------------
+ * ARRAY REPRESENTATION
+ * ----------------------------------------------------------------------------
+ *
+ * Franko dynamic arrays:
+ *
+ *   array<T>
+ *
+ * emit as:
+ *
+ *   Franko_Dynamic_Array<T>
+ *
+ * Franko static arrays:
+ *
+ *   array<T, N>
+ *
+ * emit as:
+ *
+ *   Franko_Static_Array<T, N>
+ *
+ * Array intrinsics are lowered by SemanticAnalyzer:
+ *
+ *   arr(size)          -> SemanticArrayInitNode
+ *   arr.uninit()       -> SemanticArrayUninitNode
+ *   arr.memset(value)  -> SemanticArrayMemsetNode
+ *   arr.memcpy(src)    -> SemanticArrayMemcpyNode
+ *
+ * ============================================================================
+ */
 public class Cpp14Codegen {
-    
-    private static final class VarInfo {
-        final boolean isHeap;
-        final TypeNode type;
 
-        VarInfo(TypeNode type, boolean isHeap) {
-            this.type = type;
-            this.isHeap = isHeap;
-        }
-    }
-
-    private boolean isCompileTimeIntegerConstantExpr(ASTNode expr) {
-        if (expr == null) return false;
-
-        if (expr instanceof IntNode) {
-            return true;
-        }
-
-        if (expr instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) expr;
-            if ("-".equals(n.op) || "!".equals(n.op)) {
-                return isCompileTimeIntegerConstantExpr(n.expr);
-            }
-            return false;
-        }
-
-        if (expr instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) expr;
-            return isCompileTimeIntegerConstantExpr(n.left)
-                    && isCompileTimeIntegerConstantExpr(n.right);
-        }
-
-        return false;
-    }
-    
-    private TypeNode inferExprTypeForCodegen(ASTNode node) {
-        if (node instanceof IntNode) {
-            return new PrimitiveTypeNode(PrimitiveKind.INT32);
-        }
-
-        if (node instanceof VarNode) {
-            VarInfo info = requireVarForCodegen(((VarNode) node).name);
-            return info.type;
-        }
-
-        if (node instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) node;
-            TypeNode targetType = inferExprTypeForCodegen(n.target);
-
-            if (targetType instanceof DynamicArrayTypeNode) {
-                return ((DynamicArrayTypeNode) targetType).elementType;
-            }
-
-            if (targetType instanceof StaticArrayTypeNode) {
-                return ((StaticArrayTypeNode) targetType).elementType;
-            }
-
-            throw new IllegalStateException(
-                "Internal compiler error: non-array target reached codegen in ArrayAccessNode"
-            );
-        }
-
-        if (node instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) node;
-            TypeNode operandType = inferExprTypeForCodegen(n.expr);
-
-            if ("-".equals(n.op)) {
-                // Franko unary minus result type = operand type
-                return operandType;
-            }
-
-            if ("!".equals(n.op)) {
-                // Franko logical-not result type = uint8_t / char
-                return new PrimitiveTypeNode(PrimitiveKind.UINT8);
-            }
-
-            throw new IllegalStateException(
-                "Internal compiler error: unsupported unary operator in codegen type inference: " + n.op
-            );
-        }
-
-        if (node instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) node;
-            String op = n.op;
-
-            boolean leftConst = isCompileTimeIntegerConstantExpr(n.left);
-            boolean rightConst = isCompileTimeIntegerConstantExpr(n.right);
-
-            TypeNode left = inferExprTypeForCodegen(n.left);
-            TypeNode right = inferExprTypeForCodegen(n.right);
-
-            // logical
-            if ("&&".equals(op) || "||".equals(op)) {
-                return new PrimitiveTypeNode(PrimitiveKind.UINT8);
-            }
-
-            // comparison
-            if ("==".equals(op) || "!=".equals(op)
-                    || "<".equals(op) || ">".equals(op)
-                    || "<=".equals(op) || ">=".equals(op)) {
-                return new PrimitiveTypeNode(PrimitiveKind.UINT8);
-            }
-
-            // bitwise
-            if ("&".equals(op) || "|".equals(op) || "^".equals(op)) {
-                if (leftConst && rightConst) {
-                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
-                }
-                if (leftConst && !rightConst) {
-                    return right;
-                }
-                if (!leftConst && rightConst) {
-                    return left;
-                }
-                return left;
-            }
-
-            // arithmetic
-            if ("+".equals(op) || "-".equals(op) || "*".equals(op) || "/".equals(op)) {
-                if (leftConst && rightConst) {
-                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
-                }
-                if (leftConst && !rightConst) {
-                    return right;
-                }
-                if (!leftConst && rightConst) {
-                    return left;
-                }
-                return left;
-            }
-
-            // shift
-            if ("<<".equals(op) || ">>".equals(op)) {
-                if (leftConst && rightConst) {
-                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
-                }
-                if (leftConst && !rightConst) {
-                    // Your current semantic rule keeps literal lhs default-int32 in mixed shifts
-                    return new PrimitiveTypeNode(PrimitiveKind.INT32);
-                }
-                if (!leftConst && rightConst) {
-                    return left;
-                }
-                return left;
-            }
-
-            throw new IllegalStateException(
-                "Internal compiler error: unsupported binary operator in codegen type inference: " + op
-            );
-        }
-
-        throw new IllegalStateException(
-            "Internal compiler error: unsupported expression node in codegen type inference: "
-            + node.getClass().getSimpleName()
-        );
-    }
-    
-    private boolean isPrimitiveIntegerType(TypeNode t) {
-        return t instanceof PrimitiveTypeNode;
-    }
-    
-    private String emitCastToFrankoType(TypeNode type, String exprText) {
-        return "static_cast<" + emitType(type) + ">(" + exprText + ")";
-    }
-
-    private final Deque<Map<String, VarInfo>> scopes = new ArrayDeque<>();
     private final StringBuilder out = new StringBuilder();
     private int indentLevel = 0;
 
     /**
-     * Generates ONLY the Franko program body.
+     * Generates only the Franko program body.
      *
      * Intended for replacing __FRANKO_PROGRAM__ inside ProgramTemplate.cpp.
      */
-    public String generate(ASTNode root) {
-        scopes.clear();
+    public String generate(SemanticASTNode root) {
+        if (root == null) {
+            throw new IllegalStateException("Internal compiler error: cannot generate code for null Semantic AST");
+        }
+
         out.setLength(0);
         indentLevel = 0;
 
-        pushScope();
-        emitStmt(root);
-        popScope();
+        emitNode(root);
 
         return out.toString();
     }
 
-    private void emitStmt(ASTNode node) {
-        if (node == null) {
-            throw new IllegalStateException("Internal compiler error: cannot emit null AST node");
-        }
+    // ============================================================
+    // Root Dispatch
+    // ============================================================
 
-        if (node instanceof ProgramNode) {
-            ProgramNode p = (ProgramNode) node;
-            for (ASTNode stmt : p.statements) {
-                emitStmt(stmt);
-            }
+    private void emitNode(SemanticASTNode node) {
+        if (node instanceof SemanticProgramNode program) {
+            emitProgram(program);
             return;
         }
 
-        if (node instanceof BlockNode) {
-            emitBlock((BlockNode) node);
+        if (node instanceof SemanticStmtNode stmt) {
+            emitStmt(stmt);
             return;
         }
 
-        if (node instanceof IfNode) {
-            emitIf((IfNode) node);
-            return;
-        }
-
-        if (node instanceof WhileNode) {
-            emitWhile((WhileNode) node);
-            return;
-        }
-
-        if (node instanceof VarDeclNode) {
-            emitVarDecl((VarDeclNode) node);
-            return;
-        }
-
-        // These sugar nodes should have been removed by Desugarer.
-        if (node instanceof VarDeclInitNode || node instanceof VarDeclArrayInitNode) {
-            throw new IllegalStateException(
-                "Internal compiler error: sugar node reached codegen. "
-                + "Run Desugarer before Cpp14Codegen: "
-                + node.getClass().getSimpleName()
-            );
-        }
-
-        if (node instanceof AssignNode) {
-            emitAssign((AssignNode) node);
-            return;
-        }
-
-        if (node instanceof ArrayInitNode) {
-            emitArrayInit((ArrayInitNode) node);
-            return;
-        }
-
-        if (node instanceof ArrayUninitNode) {
-            emitArrayUninit((ArrayUninitNode) node);
-            return;
-        }
-
-        if (node instanceof ArrayMemsetNode) {
-            emitArrayMemset((ArrayMemsetNode) node);
-            return;
-        }
-
-        if (node instanceof ArrayMemcpyNode) {
-            emitArrayMemcpy((ArrayMemcpyNode) node);
-            return;
-        }
-
-        if (node instanceof DelNode) {
-            emitDel((DelNode) node);
-            return;
-        }
-
-        if (node instanceof PrintNode) {
-            emitPrint((PrintNode) node);
-            return;
-        }
-
-        // Expression statement
-        if (node instanceof IntNode
-                || node instanceof VarNode
-                || node instanceof UnaryOpNode
-                || node instanceof BinOpNode
-                || node instanceof ArrayAccessNode) {
-            emitLine(emitExpr(node) + ";");
+        if (node instanceof SemanticExprNode expr) {
+            emitLine(emitExpr(expr) + ";");
             return;
         }
 
         throw new IllegalStateException(
-            "Internal compiler error: unsupported statement node for codegen: "
-            + node.getClass().getSimpleName()
+            "Internal compiler error: unsupported SemanticASTNode for codegen: "
+                + node.getClass().getSimpleName()
         );
     }
 
-    private void emitBlock(BlockNode node) {
+    private void emitProgram(SemanticProgramNode node) {
+        for (SemanticStmtNode stmt : node.statements) {
+            emitStmt(stmt);
+        }
+    }
+
+    // ============================================================
+    // Statements
+    // ============================================================
+
+    private void emitStmt(SemanticStmtNode node) {
+        if (node == null) {
+            throw new IllegalStateException("Internal compiler error: cannot emit null statement");
+        }
+
+        if (node instanceof SemanticProgramNode program) {
+            emitProgram(program);
+            return;
+        }
+
+        if (node instanceof SemanticBlockNode block) {
+            emitBlock(block);
+            return;
+        }
+
+        if (node instanceof SemanticVarDeclNode decl) {
+            emitVarDecl(decl);
+            return;
+        }
+
+        if (node instanceof SemanticAssignNode assign) {
+            emitAssign(assign);
+            return;
+        }
+
+        if (node instanceof SemanticIfNode ifNode) {
+            emitIf(ifNode);
+            return;
+        }
+
+        if (node instanceof SemanticWhileNode whileNode) {
+            emitWhile(whileNode);
+            return;
+        }
+
+        if (node instanceof SemanticDelNode del) {
+            emitDel(del);
+            return;
+        }
+
+        if (node instanceof SemanticPrintNode print) {
+            emitPrint(print);
+            return;
+        }
+
+        if (node instanceof SemanticExprStmtNode exprStmt) {
+            emitLine(emitExpr(exprStmt.expr) + ";");
+            return;
+        }
+
+        if (node instanceof SemanticArrayInitNode init) {
+            emitArrayInit(init);
+            return;
+        }
+
+        if (node instanceof SemanticArrayUninitNode uninit) {
+            emitArrayUninit(uninit);
+            return;
+        }
+
+        if (node instanceof SemanticArrayMemsetNode memset) {
+            emitArrayMemset(memset);
+            return;
+        }
+
+        if (node instanceof SemanticArrayMemcpyNode memcpy) {
+            emitArrayMemcpy(memcpy);
+            return;
+        }
+
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported semantic statement for codegen: "
+                + node.getClass().getSimpleName()
+        );
+    }
+
+    private void emitBlock(SemanticBlockNode node) {
         emitLine("{");
         indentLevel++;
 
-        pushScope();
-        for (ASTNode stmt : node.statements) {
+        for (SemanticStmtNode stmt : node.statements) {
             emitStmt(stmt);
         }
-        popScope();
 
         indentLevel--;
         emitLine("}");
     }
 
-    private void emitIf(IfNode node) {
+    private void emitVarDecl(SemanticVarDeclNode node) {
+        VariableSymbol sym = node.symbol;
+
+        String cppType = emitType(sym.type);
+        String name = emitSymbolName(sym);
+
+        if (sym.isHeap) {
+            /*
+             * Use new/delete rather than malloc/free.
+             *
+             * This matters for array wrapper structs because default member
+             * initializers such as:
+             *
+             *   uint32_t length = 0;
+             *   T* data = nullptr;
+             *
+             * are only reliably initialized through construction.
+             */
+            emitLine(cppType + "* " + name + " = new " + cppType + "();");
+        } else {
+            emitLine(cppType + " " + name + ";");
+        }
+    }
+
+    private void emitAssign(SemanticAssignNode node) {
+        emitLine(emitLValue(node.target) + " = " + emitExpr(node.value) + ";");
+    }
+
+    private void emitIf(SemanticIfNode node) {
         emitLine("if (" + emitExpr(node.condition) + ")");
         emitControlledStmt(node.thenBranch);
 
@@ -307,92 +271,38 @@ public class Cpp14Codegen {
         }
     }
 
-    private void emitWhile(WhileNode node) {
+    private void emitWhile(SemanticWhileNode node) {
         emitLine("while (" + emitExpr(node.condition) + ")");
         emitControlledStmt(node.body);
     }
 
-    /**
-     * Emits a statement as the body of if/while.
-     *
-     * If it's already a block, emit it directly:
-     *   if (cond)
-     *   { ... }
-     *
-     * Otherwise indent a single statement:
-     *   if (cond)
-     *       x = 1;
-     */
-    private void emitControlledStmt(ASTNode node) {
-        if (node instanceof BlockNode) {
+    private void emitControlledStmt(SemanticStmtNode node) {
+        if (node instanceof SemanticBlockNode) {
             emitStmt(node);
-        } else {
-            indentLevel++;
-            emitStmt(node);
-            indentLevel--;
+            return;
         }
+
+        indentLevel++;
+        emitStmt(node);
+        indentLevel--;
     }
 
-    private void emitVarDecl(VarDeclNode node) {
-        declareVarForCodegen(node.name, new VarInfo(node.type, node.isHeap));
+    private void emitDel(SemanticDelNode node) {
+        VariableSymbol sym = node.symbol;
 
-        String cppType = emitType(node.type);
-
-        if (node.isHeap) {
-            emitLine(
-                cppType + "* " + node.name
-                + " = static_cast<" + cppType + "*>(std::malloc(sizeof(" + cppType + ")));"
+        if (!sym.isHeap) {
+            throw new IllegalStateException(
+                "Internal compiler error: non-heap del reached codegen for variable '"
+                    + sym.name
+                    + "'. MasterChecker should have rejected this."
             );
-        } else {
-            emitLine(cppType + " " + node.name + ";");
         }
+
+        emitLine("delete " + emitSymbolName(sym) + ";");
+        emitLine(emitSymbolName(sym) + " = nullptr;");
     }
 
-    private void emitAssign(AssignNode node) {
-        String lhs = emitLValue(node.target);
-        String rhs = emitExpr(node.value);
-        emitLine(lhs + " = " + rhs + ";");
-    }
-
-    /**
-     * ArrayInit is still name-based in your AST, because declaration sugar lowers:
-     *
-     *   array<int> arr(10);
-     *
-     * into:
-     *   VarDeclNode(arr)
-     *   ArrayInitNode("arr", 10)
-     */
-    private void emitArrayInit(ArrayInitNode node) {
-        emitLine(emitVarAccess(node.name) + ".init(" + emitExpr(node.size) + ");");
-    }
-
-    private void emitArrayUninit(ArrayUninitNode node) {
-        emitLine(emitExpr(node.receiver) + ".uninit();");
-    }
-
-    private void emitArrayMemset(ArrayMemsetNode node) {
-        emitLine(emitExpr(node.receiver) + ".memset(" + emitExpr(node.value) + ");");
-    }
-
-    private void emitArrayMemcpy(ArrayMemcpyNode node) {
-        emitLine(
-            emitExpr(node.target)
-            + ".memcpy("
-            + emitExpr(node.source)
-            + ");"
-        );
-    }
-
-    private void emitDel(DelNode node) {
-        // SemanticAnalyzer is responsible for validating:
-        // - variable exists
-        // - variable is heap-allocated
-        // - variable has not already been deleted
-        emitLine("std::free(" + node.name + ");");
-    }
-
-    private void emitPrint(PrintNode node) {
+    private void emitPrint(SemanticPrintNode node) {
         if (node.args == null || node.args.isEmpty()) {
             emitLine("std::cout << '\\n';");
             return;
@@ -405,190 +315,316 @@ public class Cpp14Codegen {
                 sb.append(" << ' '");
             }
 
-            ASTNode arg = node.args.get(i);
-            TypeNode argType = inferExprTypeForCodegen(arg);
-            String emitted = emitExpr(arg);
-
-            if (argType instanceof PrimitiveTypeNode) {
-                PrimitiveKind kind = ((PrimitiveTypeNode) argType).kind;
-                if (kind == PrimitiveKind.INT8 || kind == PrimitiveKind.UINT8) {
-                    emitted = "(+(" + emitted + "))";
-                }
-            }
-
-            sb.append(" << ").append(emitted);
+            SemanticExprNode arg = node.args.get(i);
+            sb.append(" << ").append(emitPrintableExpr(arg));
         }
 
         sb.append(" << '\\n';");
+
         emitLine(sb.toString());
     }
 
-    private String emitExpr(ASTNode node) {
-        if (node instanceof IntNode) {
-            // Preserve the original literal spelling exactly.
-            return ((IntNode) node).value;
+    // ============================================================
+    // Array Intrinsics
+    // ============================================================
+
+    private void emitArrayInit(SemanticArrayInitNode node) {
+        emitLine(
+            emitVarAccess(node.symbol)
+                + ".init("
+                + emitExpr(node.size)
+                + ");"
+        );
+    }
+
+    private void emitArrayUninit(SemanticArrayUninitNode node) {
+        emitLine(
+            emitExpr(node.receiver)
+                + ".uninit();"
+        );
+    }
+
+    private void emitArrayMemset(SemanticArrayMemsetNode node) {
+        emitLine(
+            emitExpr(node.receiver)
+                + ".memset("
+                + emitExpr(node.value)
+                + ");"
+        );
+    }
+
+    private void emitArrayMemcpy(SemanticArrayMemcpyNode node) {
+        emitLine(
+            emitExpr(node.target)
+                + ".memcpy("
+                + emitExpr(node.source)
+                + ");"
+        );
+    }
+
+    // ============================================================
+    // Expressions
+    // ============================================================
+
+    private String emitExpr(SemanticExprNode node) {
+        if (node == null) {
+            throw new IllegalStateException("Internal compiler error: cannot emit null expression");
         }
 
-        if (node instanceof VarNode) {
-            return emitVarAccess(((VarNode) node).name);
+        if (node instanceof SemanticIntLiteralNode literal) {
+            return emitIntLiteral(literal);
         }
 
-        if (node instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) node;
-            String inner = emitExpr(n.expr);
-            String raw = "(" + n.op + inner + ")";
+        if (node instanceof SemanticVarExprNode var) {
+            return emitVarAccess(var.symbol);
+        }
 
-            TypeNode resultType = inferExprTypeForCodegen(node);
+        if (node instanceof SemanticUnaryOpNode unary) {
+            return emitUnaryOp(unary);
+        }
 
-            // Preserve Franko result type at this expression node.
-            // This is especially important for:
-            //   !x   -> uint8_t instead of C++ bool
-            //   -x   -> operand type (e.g. int8_t / uint8_t / etc.)
-            if (isPrimitiveIntegerType(resultType)) {
-                return emitCastToFrankoType(resultType, raw);
+        if (node instanceof SemanticBinOpNode bin) {
+            return emitBinOp(bin);
+        }
+
+        if (node instanceof SemanticArrayAccessNode access) {
+            return emitArrayAccess(access);
+        }
+
+        if (node instanceof SemanticGetAddrNode getAddr) {
+            return emitGetAddr(getAddr);
+        }
+
+        if (node instanceof SemanticDerefNode deref) {
+            return emitDeref(deref);
+        }
+
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported semantic expression for codegen: "
+                + node.getClass().getSimpleName()
+        );
+    }
+
+    private String emitIntLiteral(SemanticIntLiteralNode node) {
+        /*
+         * Preserve exact source spelling:
+         *
+         *   123
+         *   0b1010
+         *   0xff
+         *
+         * Contextual casts are emitted by parent expressions or assignments
+         * when required by C++ implicit conversion rules.
+         */
+        return node.rawValue;
+    }
+
+    private String emitUnaryOp(SemanticUnaryOpNode node) {
+        String inner = emitExpr(node.expr);
+        String raw = "(" + node.op + inner + ")";
+
+        return castToSemanticExprTypeIfNeeded(node, raw);
+    }
+
+    private String emitBinOp(SemanticBinOpNode node) {
+        String left = emitExpr(node.left);
+        String right = emitExpr(node.right);
+
+        String raw = "(" + left + " " + node.op + " " + right + ")";
+
+        return castToSemanticExprTypeIfNeeded(node, raw);
+    }
+
+    private String emitArrayAccess(SemanticArrayAccessNode node) {
+        return "("
+            + emitExpr(node.target)
+            + "["
+            + emitExpr(node.index)
+            + "])";
+    }
+
+    private String emitGetAddr(SemanticGetAddrNode node) {
+        /*
+         * Franko getaddr(lvalue) -> C++ &lvalue
+         *
+         * Use emitLValue rather than emitExpr so invalid temporary expressions
+         * cannot accidentally be address-taken by codegen.
+         */
+        return "(&" + emitLValue(node.target) + ")";
+    }
+
+    private String emitDeref(SemanticDerefNode node) {
+        /*
+         * Franko deref(p) -> C++ (*p)
+         *
+         * The expression is also an lvalue in Franko, and C++ (*p) is an lvalue.
+         */
+        return "(*" + emitExpr(node.expr) + ")";
+    }
+
+    // ============================================================
+    // LValues
+    // ============================================================
+
+    private String emitLValue(SemanticExprNode node) {
+        if (node instanceof SemanticVarExprNode var) {
+            return emitVarAccess(var.symbol);
+        }
+
+        if (node instanceof SemanticArrayAccessNode access) {
+            return emitArrayAccess(access);
+        }
+
+        if (node instanceof SemanticDerefNode deref) {
+            return emitDeref(deref);
+        }
+
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported lvalue expression for codegen: "
+                + node.getClass().getSimpleName()
+        );
+    }
+
+    // ============================================================
+    // Types
+    // ============================================================
+
+    private String emitType(SemanticType type) {
+        if (type instanceof SemanticPrimitiveType primitive) {
+            return emitPrimitiveType(primitive.kind);
+        }
+
+        if (type instanceof SemanticDynamicArrayType dynamicArray) {
+            return "Franko_Dynamic_Array<"
+                + emitType(dynamicArray.elementType)
+                + ">";
+        }
+
+        if (type instanceof SemanticStaticArrayType staticArray) {
+            return "Franko_Static_Array<"
+                + emitType(staticArray.elementType)
+                + ", "
+                + staticArray.sizeLiteral
+                + ">";
+        }
+
+        if (type instanceof SemanticAddrType addr) {
+            return emitType(addr.referencedType) + "*";
+        }
+
+        throw new IllegalStateException(
+            "Internal compiler error: unsupported semantic type for codegen: "
+                + type.getClass().getSimpleName()
+        );
+    }
+
+    private String emitPrimitiveType(SemanticPrimitiveKind kind) {
+        return switch (kind) {
+            case INT8 -> "int8_t";
+            case INT16 -> "int16_t";
+            case INT32 -> "int32_t";
+            case INT64 -> "int64_t";
+
+            case UINT8 -> "uint8_t";
+            case UINT16 -> "uint16_t";
+            case UINT32 -> "uint32_t";
+            case UINT64 -> "uint64_t";
+        };
+    }
+
+    // ============================================================
+    // Symbol / Variable Access
+    // ============================================================
+
+    private String emitVarAccess(VariableSymbol symbol) {
+        if (symbol == null) {
+            throw new IllegalStateException("Internal compiler error: null symbol in codegen");
+        }
+
+        if (symbol.isHeap) {
+            return "(*" + emitSymbolName(symbol) + ")";
+        }
+
+        return emitSymbolName(symbol);
+    }
+
+    private String emitSymbolName(VariableSymbol symbol) {
+        /*
+         * Currently, SemanticAnalyzer rejects duplicate declarations only within
+         * the same lexical scope, and C++ also supports block-local shadowing.
+         *
+         * Therefore the raw source name is currently sufficient.
+         *
+         * If Franko later permits symbols that are not valid C++ identifiers,
+         * or if generated temporaries are introduced, centralize name mangling
+         * here.
+         */
+        return symbol.name;
+    }
+
+    // ============================================================
+    // Casts / Result Type Preservation
+    // ============================================================
+
+    private String castToSemanticExprTypeIfNeeded(
+        SemanticExprNode node,
+        String raw
+    ) {
+        if (node.type instanceof SemanticPrimitiveType) {
+            return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
+        }
+
+        /*
+         * Do not cast addresses or arrays.
+         *
+         * Address comparisons are cast by the comparison node's uint8_t result
+         * type, not by the address-valued subexpressions themselves.
+         */
+        return raw;
+    }
+
+    // ============================================================
+    // Print Helpers
+    // ============================================================
+
+    private String emitPrintableExpr(SemanticExprNode expr) {
+        String emitted = emitExpr(expr);
+
+        if (expr.type instanceof SemanticPrimitiveType primitive) {
+            /*
+             * int8_t / uint8_t are usually aliases of char-like types.
+             * Unary plus promotes them so std::cout prints a number rather than
+             * a character.
+             */
+            if (primitive.kind == SemanticPrimitiveKind.INT8
+                || primitive.kind == SemanticPrimitiveKind.UINT8) {
+                return "(+(" + emitted + "))";
             }
 
-            return raw;
+            return emitted;
         }
 
-        if (node instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) node;
-            String left = emitExpr(n.left);
-            String right = emitExpr(n.right);
-            String raw = "(" + left + " " + n.op + " " + right + ")";
-
-            TypeNode resultType = inferExprTypeForCodegen(node);
-
-            // Preserve Franko result types:
-            //   comparisons/logicals -> uint8_t (not C++ bool)
-            //   arithmetic/bitwise/shift -> Franko-defined result type
-            if (isPrimitiveIntegerType(resultType)) {
-                return emitCastToFrankoType(resultType, raw);
-            }
-
-            return raw;
+        if (expr.type instanceof SemanticAddrType) {
+            /*
+             * Avoid accidental char-pointer string printing for addresses.
+             *
+             * Print address values as raw pointer addresses.
+             */
+            return "static_cast<const void*>(" + emitted + ")";
         }
 
-        if (node instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) node;
-            return emitExpr(n.target) + "[" + emitExpr(n.index) + "]";
-        }
-
-        throw new IllegalStateException(
-            "Internal compiler error: unsupported expression node for codegen: "
-            + node.getClass().getSimpleName()
-        );
+        return emitted;
     }
 
-    private String emitLValue(ASTNode node) {
-        if (node instanceof VarNode) {
-            return emitVarAccess(((VarNode) node).name);
-        }
-
-        if (node instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) node;
-            return emitExpr(n.target) + "[" + emitExpr(n.index) + "]";
-        }
-
-        throw new IllegalStateException(
-            "Internal compiler error: unsupported lvalue node for codegen: "
-            + node.getClass().getSimpleName()
-        );
-    }
-
-    /**
-     * Emits a C++ type from the Franko TypeNode hierarchy.
-     */
-    private String emitType(TypeNode type) {
-        if (type instanceof PrimitiveTypeNode) {
-            PrimitiveKind kind = ((PrimitiveTypeNode) type).kind;
-
-            return switch (kind) {
-                case INT8 -> "int8_t";
-                case INT16 -> "int16_t";
-                case INT32 -> "int32_t";
-                case INT64 -> "int64_t";
-                case UINT8 -> "uint8_t";
-                case UINT16 -> "uint16_t";
-                case UINT32 -> "uint32_t";
-                case UINT64 -> "uint64_t";
-            };
-        }
-
-        if (type instanceof DynamicArrayTypeNode) {
-            DynamicArrayTypeNode t = (DynamicArrayTypeNode) type;
-            return "Franko_Dynamic_Array<" + emitType(t.elementType) + ">";
-        }
-
-        if (type instanceof StaticArrayTypeNode) {
-            StaticArrayTypeNode t = (StaticArrayTypeNode) type;
-            return "Franko_Static_Array<" + emitType(t.elementType) + ", " + t.sizeLiteral + ">";
-        }
-
-        throw new IllegalStateException(
-            "Internal compiler error: unsupported Franko type node in codegen: "
-            + type.getClass().getSimpleName()
-        );
-    }
-
-    private String emitVarAccess(String name) {
-        VarInfo info = requireVarForCodegen(name);
-
-        if (info.isHeap) {
-            return "(*" + name + ")";
-        }
-
-        return name;
-    }
-
-    private void pushScope() {
-        scopes.push(new LinkedHashMap<>());
-    }
-
-    private void popScope() {
-        Map<String, VarInfo> popped = scopes.poll();
-        if (popped == null) {
-            throw new IllegalStateException("Internal compiler error: attempted to pop empty codegen scope stack");
-        }
-    }
-
-    private void declareVarForCodegen(String name, VarInfo info) {
-        Map<String, VarInfo> current = scopes.peek();
-        if (current == null) {
-            throw new IllegalStateException(
-                "Internal compiler error: no active codegen scope when declaring '" + name + "'"
-            );
-        }
-
-        if (current.containsKey(name)) {
-            throw new IllegalStateException(
-                "Internal compiler error: duplicate declaration reached codegen in same scope for '"
-                + name + "'"
-            );
-        }
-
-        current.put(name, info);
-    }
-
-    private VarInfo requireVarForCodegen(String name) {
-        for (Map<String, VarInfo> scope : scopes) {
-            VarInfo info = scope.get(name);
-            if (info != null) {
-                return info;
-            }
-        }
-
-        throw new IllegalStateException(
-            "Internal compiler error: codegen encountered unknown variable '"
-            + name
-            + "'. SemanticAnalyzer should have rejected this earlier."
-        );
-    }
+    // ============================================================
+    // Output Helpers
+    // ============================================================
 
     private void emitLine(String s) {
         for (int i = 0; i < indentLevel; i++) {
             out.append("    ");
         }
+
         out.append(s).append('\n');
     }
 }
