@@ -10,95 +10,62 @@ import java.util.Set;
  * ExpressionChecker validates expression-level legality rules on the fully
  * lowered and type-decorated Semantic AST.
  *
- * The SemanticAnalyzer has already:
+ * Important behavior in this version:
  *
- *   - resolved variable names to VariableSymbol objects,
- *   - assigned every expression a mechanical SemanticType,
- *   - folded integer constants into BigInteger constantValue fields where
- *     possible,
- *   - lowered intrinsic syntax such as array memset/memcpy/uninit,
- *   - performed structural lvalue checks needed for correct lowering.
+ *   - Binary expression result typing may use the nonconstant side when one
+ *     side is a fluid constant.
  *
- * This checker performs the stricter Franko legality checks for expressions.
+ *   - For shifts, this means:
  *
- * ----------------------------------------------------------------------------
- * IMPORTANT INTEGER CONSTANT RULE
- * ----------------------------------------------------------------------------
+ *         1 << x
  *
- * Integer literals and folded constant integer expressions are "fluid".
+ *     may be decorated with x's type.
  *
- * Their SemanticType may be the analyzer fallback type, usually int32_t, but
- * that type is not binding during legality checking.
+ *   - However, RHS shift rules remain strict:
  *
- * Instead:
+ *         x << y
  *
- *   - constants are represented as BigInteger values,
- *   - when used with a typed nonconstant expression, the constant must fit the
- *     other side's contextual type,
- *   - if both sides are constants, the expression may remain a BigInteger
- *     constant until checked by a later contextual use such as assignment,
- *     array-size checking, or intrinsic argument checking.
+ *     requires y to be unsigned integer if y is nonconstant.
  *
- * Examples:
+ *   - Constant fitting is still enforced:
  *
- *   uint8_t x;
+ *         x << 256
  *
- *   x + 1       valid, because 1 fits uint8_t
- *   x + 255     valid, because 255 fits uint8_t
- *   x + 256     invalid, because 256 does not fit uint8_t
+ *     must be rejected if 256 does not fit the required unsigned shift-count
+ *     type.
  *
- *   x << 7      valid
- *   x << 255    valid
- *   x << 256    invalid, because RHS must fit uint8_t for uint8_t lhs
+ *   - Additional check added here:
  *
- *   int32_t y;
- *   y << 9999999999999999999999
- *               invalid, because RHS does not fit uint32_t
+ *         999 << uint8Var
  *
- * ----------------------------------------------------------------------------
- * ADDRESS RULES
- * ----------------------------------------------------------------------------
- *
- * Addresses are:
- *
- *   - assignable,
- *   - copyable,
- *   - dereferenceable,
- *   - comparable with compatible address types.
- *
- * Addresses are not integer arithmetic values.
- *
- * Therefore:
- *
- *   - address comparisons are allowed only between identical addr<T> types,
- *   - address arithmetic, bitwise operations, and shifts are rejected,
- *   - deref(expr) requires expr to have addr<T> type,
- *   - getaddr(expr) requires expr to be an addressable storage-backed lvalue.
+ *     rejects if 999 does not fit uint8_t, because Option A result typing uses
+ *     the nonconstant side as the contextual type when the other side is a
+ *     literal/fluid constant.
  *
  * ============================================================================
  */
 public class ExpressionChecker {
     private static final Set<String> LOGICAL_OPS =
-        Set.of("&&", "||");
+            Set.of("&&", "||");
 
     private static final Set<String> COMPARISON_OPS =
-        Set.of("==", "!=", "<", ">", "<=", ">=");
+            Set.of("==", "!=", "<", ">", "<=", ">=");
 
     private static final Set<String> SHIFT_OPS =
-        Set.of("<<", ">>");
+            Set.of("<<", ">>");
 
     private static final Set<String> ARITHMETIC_OPS =
-        Set.of("+", "-", "*", "/");
+            Set.of("+", "-", "*", "/");
 
     private static final Set<String> BITWISE_OPS =
-        Set.of("&", "|", "^");
+            Set.of("&", "|", "^");
 
     private final SemanticAnalyzer.Context ctx;
     private final TypeChecker types;
 
     public ExpressionChecker(
-        SemanticAnalyzer.Context ctx,
-        TypeChecker types
+            SemanticAnalyzer.Context ctx,
+            TypeChecker types
     ) {
         this.ctx = ctx;
         this.types = types;
@@ -151,7 +118,7 @@ public class ExpressionChecker {
         }
 
         ctx.error("Unknown semantic expression node: "
-            + node.getClass().getSimpleName());
+                + node.getClass().getSimpleName());
     }
 
     // ============================================================
@@ -170,15 +137,15 @@ public class ExpressionChecker {
         switch (node.op) {
             case "!" -> {
                 types.ensureIntegral(
-                    node.expr.type,
-                    "Unary '!' requires an integer operand"
+                        node.expr.type,
+                        "Unary '!' requires an integer operand"
                 );
             }
 
             case "-" -> {
                 types.ensureIntegral(
-                    node.expr.type,
-                    "Unary '-' requires an integer operand"
+                        node.expr.type,
+                        "Unary '-' requires an integer operand"
                 );
 
                 /*
@@ -208,8 +175,8 @@ public class ExpressionChecker {
         String op = node.op;
 
         if (op.equals("/")
-            && node.right.isConstant()
-            && BigInteger.ZERO.equals(node.right.constantValue)) {
+                && node.right.isConstant()
+                && BigInteger.ZERO.equals(node.right.constantValue)) {
             ctx.error("Division by zero in compile-time constant expression");
         }
 
@@ -223,13 +190,13 @@ public class ExpressionChecker {
          *   - operands must be integer expressions,
          *   - mixed integer types are allowed,
          *   - if one side is a constant, it must fit the other side's type,
-         *   - result is uint8_t/char, already assigned by SemanticAnalyzer.
+         *   - result is uint8_t, already assigned by SemanticAnalyzer.
          */
         if (LOGICAL_OPS.contains(op)) {
             types.ensureMixedIntegralOperandsWithConstantFit(
-                node.left,
-                node.right,
-                op
+                    node.left,
+                    node.right,
+                    op
             );
             return;
         }
@@ -238,15 +205,6 @@ public class ExpressionChecker {
          * Comparison operators:
          *
          *   == != < > <= >=
-         *
-         * Franko rules:
-         *
-         *   - integer comparisons allow mixed integer types,
-         *   - if one integer side is a constant, it must fit the other side's
-         *     concrete type,
-         *   - address comparisons are allowed only for identical addr<T> types,
-         *   - address-vs-integer comparison is invalid,
-         *   - result is uint8_t/char, already assigned by SemanticAnalyzer.
          */
         if (COMPARISON_OPS.contains(op)) {
             visitComparison(node, op);
@@ -261,17 +219,31 @@ public class ExpressionChecker {
          * Franko rules:
          *
          *   - lhs must be an integer expression,
+         *   - rhs must be an integer expression,
          *   - nonconstant rhs must be unsigned integer type,
          *   - constant rhs must be >= 0,
          *   - constant rhs must fit the unsigned variant of lhs type,
-         *   - result type is lhs type, already assigned by SemanticAnalyzer.
+         *   - result type is assigned by SemanticAnalyzer.
+         *
+         * Requested Option A:
+         *
+         *   If exactly one side is a literal/fluid constant, the analyzer
+         *   infers the result type from the nonconstant side.
+         *
+         * Extra checker rule here:
+         *
+         *   If lhs is constant and rhs is nonconstant, require lhs constant to
+         *   fit rhs's concrete primitive type.
          */
         if (SHIFT_OPS.contains(op)) {
             types.ensureValidShiftOperands(
-                node.left,
-                node.right,
-                op
+                    node.left,
+                    node.right,
+                    op
             );
+
+            ensureLeftShiftLiteralFitsRightSideWhenNeeded(node, op);
+
             return;
         }
 
@@ -279,19 +251,12 @@ public class ExpressionChecker {
          * Arithmetic operators:
          *
          *   + - * /
-         *
-         * Franko rules:
-         *
-         *   - operands must be integers,
-         *   - nonconstant operands must have exactly the same integer type,
-         *   - fluid constants must fit the other side's concrete type,
-         *   - addresses and arrays are rejected because they are not integers.
          */
         if (ARITHMETIC_OPS.contains(op)) {
             types.ensureSameIntegralTypeOrFit(
-                node.left,
-                node.right,
-                op
+                    node.left,
+                    node.right,
+                    op
             );
             return;
         }
@@ -300,19 +265,12 @@ public class ExpressionChecker {
          * Bitwise operators:
          *
          *   & | ^
-         *
-         * Franko rules:
-         *
-         *   - operands must be integers,
-         *   - nonconstant operands must have exactly the same integer type,
-         *   - fluid constants must fit the other side's concrete type,
-         *   - addresses and arrays are rejected because they are not integers.
          */
         if (BITWISE_OPS.contains(op)) {
             types.ensureSameIntegralTypeOrFit(
-                node.left,
-                node.right,
-                op
+                    node.left,
+                    node.right,
+                    op
             );
             return;
         }
@@ -321,8 +279,8 @@ public class ExpressionChecker {
     }
 
     private void visitComparison(
-        SemanticBinOpNode node,
-        String op
+            SemanticBinOpNode node,
+            String op
     ) {
         boolean leftAddr = types.isAddressType(node.left.type);
         boolean rightAddr = types.isAddressType(node.right.type);
@@ -330,28 +288,83 @@ public class ExpressionChecker {
         if (leftAddr && rightAddr) {
             if (!types.sameType(node.left.type, node.right.type)) {
                 ctx.error("Address comparison '" + op
-                    + "' requires identical address types, got "
-                    + node.left.type.describe()
-                    + " and "
-                    + node.right.type.describe());
+                        + "' requires identical address types, got "
+                        + node.left.type.describe()
+                        + " and "
+                        + node.right.type.describe());
             }
             return;
         }
 
         if (leftAddr || rightAddr) {
             ctx.error("Cannot compare address and non-address using '" + op
-                + "', got "
-                + node.left.type.describe()
-                + " and "
-                + node.right.type.describe());
+                    + "', got "
+                    + node.left.type.describe()
+                    + " and "
+                    + node.right.type.describe());
             return;
         }
 
         types.ensureMixedIntegralOperandsWithConstantFit(
-            node.left,
-            node.right,
-            op
+                node.left,
+                node.right,
+                op
         );
+    }
+
+    /**
+     * Extra Option-A shift check.
+     *
+     * Because SemanticAnalyzer now decorates:
+     *
+     *   1 << x
+     *
+     * using x's type when x is nonconstant, the left fluid constant should also
+     * be required to fit x's concrete primitive type.
+     *
+     * Example:
+     *
+     *   uint8_t x;
+     *
+     *   1 << x;     valid, 1 fits uint8_t
+     *   999 << x;   invalid, 999 does not fit uint8_t
+     *
+     * This does not replace TypeChecker.ensureValidShiftOperands(...). That
+     * method should still enforce the normal Franko shift-count rules,
+     * especially that the RHS is unsigned when nonconstant.
+     */
+    private void ensureLeftShiftLiteralFitsRightSideWhenNeeded(
+            SemanticBinOpNode node,
+            String op
+    ) {
+        if (!SHIFT_OPS.contains(op)) {
+            return;
+        }
+
+        if (!node.left.isConstant()) {
+            return;
+        }
+
+        if (node.right.isConstant()) {
+            return;
+        }
+
+        if (!(node.right.type instanceof SemanticPrimitiveType rightPrimitive)) {
+            /*
+             * ensureValidShiftOperands should already report that the RHS is not
+             * an integer. Avoid producing a confusing duplicate error here.
+             */
+            return;
+        }
+
+        if (!types.fitsBigIntegerToPrimitive(
+                node.left.constantValue,
+                rightPrimitive.kind
+        )) {
+            ctx.error("Left constant operand of shift '" + op
+                    + "' does not fit contextual type "
+                    + node.right.type.describe());
+        }
     }
 
     // ============================================================
@@ -362,13 +375,13 @@ public class ExpressionChecker {
         checkExpr(node.target);
 
         types.ensureArrayType(
-            node.target.type,
-            "Indexed expression must be an array"
+                node.target.type,
+                "Indexed expression must be an array"
         );
 
         ensureArrayIndexCompatible(
-            node.index,
-            "Array index"
+                node.index,
+                "Array index"
         );
     }
 
@@ -388,8 +401,8 @@ public class ExpressionChecker {
         checkExpr(node.expr);
 
         types.ensureAddressType(
-            node.expr.type,
-            "Operand of 'deref' must be an address type"
+                node.expr.type,
+                "Operand of 'deref' must be an address type"
         );
     }
 
@@ -405,10 +418,6 @@ public class ExpressionChecker {
      *   - variables,
      *   - array elements whose target is storage-backed,
      *   - dereferenced addresses.
-     *
-     * This mirrors the SemanticAnalyzer's structural lvalue validation so the
-     * MasterChecker remains robust even if a Semantic AST is constructed
-     * manually or by a future compiler phase.
      */
     private boolean isStorageBackedLValue(SemanticExprNode expr) {
         if (expr == null) {
@@ -445,16 +454,14 @@ public class ExpressionChecker {
     /**
      * Checks expressions used as array sizes.
      *
-     * Franko rule currently used by the checker:
+     * Franko rule:
      *
-     *   - constant size expressions must be nonnegative and fit uint32_t,
+     *   - constant size expressions must be positive and fit uint32_t,
      *   - nonconstant size expressions must have exactly uint32_t type.
-     *
-     * This method is used by StatementChecker for dynamic array init.
      */
     public void ensureArraySizeCompatible(
-        SemanticExprNode size,
-        String message
+            SemanticExprNode size,
+            String message
     ) {
         checkExpr(size);
 
@@ -464,7 +471,7 @@ public class ExpressionChecker {
             } else if (!types.fitsBigIntegerToPrimitive(
                     size.constantValue,
                     SemanticPrimitiveKind.UINT32
-                )) {
+            )) {
                 ctx.error(message + ": array size does not fit in uint32_t");
             }
 
@@ -472,9 +479,9 @@ public class ExpressionChecker {
         }
 
         if (!(size.type instanceof SemanticPrimitiveType pt
-            && pt.kind == SemanticPrimitiveKind.UINT32)) {
+                && pt.kind == SemanticPrimitiveKind.UINT32)) {
             ctx.error(message + ": expected uint32_t, got "
-                + size.type.describe());
+                    + size.type.describe());
         }
     }
 
@@ -485,30 +492,10 @@ public class ExpressionChecker {
      *
      *   - constant index expressions must be nonnegative and fit uint32_t,
      *   - nonconstant index expressions must have exactly uint32_t type.
-     *
-     * This matches the generated C++ runtime representation where array indexing
-     * operators take uint32_t indexes.
-     *
-     * Examples:
-     *
-     *   arr[0]          valid
-     *   arr[123]        valid if 123 fits uint32_t
-     *   arr[-1]         invalid
-     *   arr[999999999999999999999999] invalid
-     *
-     *   uint32_t i;
-     *   arr[i]          valid
-     *
-     *   int32_t i;
-     *   arr[i]          invalid
-     *
-     *   uint8_t i;
-     *   arr[i]          invalid, even though uint8_t is unsigned;
-     *                   nonconstant indexes must be exactly uint32_t.
      */
     public void ensureArrayIndexCompatible(
-        SemanticExprNode index,
-        String message
+            SemanticExprNode index,
+            String message
     ) {
         checkExpr(index);
 
@@ -531,7 +518,7 @@ public class ExpressionChecker {
             if (!types.fitsBigIntegerToPrimitive(
                     index.constantValue,
                     SemanticPrimitiveKind.UINT32
-                )) {
+            )) {
                 ctx.error(message + ": array index does not fit in uint32_t");
             }
 
@@ -539,9 +526,9 @@ public class ExpressionChecker {
         }
 
         if (!(index.type instanceof SemanticPrimitiveType pt
-            && pt.kind == SemanticPrimitiveKind.UINT32)) {
+                && pt.kind == SemanticPrimitiveKind.UINT32)) {
             ctx.error(message + ": expected uint32_t, got "
-                + types.describeSafe(index.type));
+                    + types.describeSafe(index.type));
         }
     }
 }

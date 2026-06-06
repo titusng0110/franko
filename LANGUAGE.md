@@ -421,36 +421,6 @@ x = 1 + 2; // valid: folded to 3, fits uint8_t
 x = 1000;  // invalid: does not fit uint8_t
 ```
 
-## 9.1 Important Constant Typing Limitation
-
-The current semantic analyzer mechanically gives arithmetic, bitwise, and shift expressions the type of their **left-hand side**.
-
-Therefore, the following are not always equivalent in the current implementation:
-
-```franko
-uint8_t x;
-uint8_t y;
-
-y = x + 1; // usually valid: expression result type is uint8_t
-y = 1 + x; // may be invalid: expression result type is mechanically int32_t
-```
-
-The operator checker may accept `1 + x` as an operation, because `1` fits `uint8_t`, but the resulting expression may still be decorated as `int32_t`, causing assignment to `uint8_t` to fail.
-
-Practical rule:
-
-```franko
-// Prefer this when the result type matters:
-x + 1
-
-// Avoid this if assigning back to x's type:
-1 + x
-```
-
-This is current compiler behavior, not a mathematical language ideal.
-
----
-
 # 10. Constant Folding
 
 The semantic analyzer folds pure integer constant expressions when safe.
@@ -910,9 +880,12 @@ Rules:
 - operands must be integers,
 - arrays are invalid,
 - addresses are invalid,
-- if both operands are nonconstant, they must have exactly the same integer type,
-- if one operand is constant, it must fit the other operand's concrete type,
-- result type is mechanically the left operand's type.
+- both nonconstant operands must have exactly the same integer type,
+- constants must fit the other side's concrete type,
+- if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type,
+- if both operands are nonconstant, they must have exactly the same primitive integer type, and the result type is that shared type,
+- if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
+
 
 Valid:
 
@@ -964,11 +937,13 @@ Bitwise operators:
 Rules:
 
 - operands must be integers,
-- both nonconstant operands must have exactly the same integer type,
-- constants must fit the other side's concrete type,
 - arrays are invalid,
 - addresses are invalid,
-- result type is mechanically the left operand's type.
+- both nonconstant operands must have exactly the same integer type,
+- constants must fit the other side's concrete type,
+- if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type,
+- if both operands are nonconstant, they must have exactly the same primitive integer type, and the result type is that shared type,
+- if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
 
 Valid:
 
@@ -1002,12 +977,15 @@ Shift operators:
 
 Rules:
 
-- left operand must be an integer,
-- right operand must be an integer,
-- nonconstant right operand must be an unsigned integer type,
-- constant right operand must be nonnegative,
-- constant right operand must fit the unsigned variant of the left operand type,
-- result type is the left operand type.
+* left operand must be an integer,
+* right operand must be an integer,
+* if the right operand is a nonconstant expression, it must have an unsigned integer type,
+* if the right operand is a constant, it must be nonnegative and must fit the unsigned variant of the left operand's type,
+* if the left operand is a constant and the right operand is nonconstant, the left constant must fit the right operand's concrete type,
+* if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type,
+* if both operands are nonconstant, the result type is the left operand's type; the right operand is only the shift count,
+* if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
+
 
 Examples:
 
@@ -1054,7 +1032,49 @@ int32_t amount;
 x = x << amount; // invalid: nonconstant shift count must be unsigned
 ```
 
-Current limitation: if the left side of a shift is itself a constant, the checker validates it against its current semantic type, usually `int32_t`.
+When the left operand is a constant and the right operand is nonconstant, the result type is inferred from the nonconstant right operand, but the right operand must still be an unsigned integer type.
+
+Valid:
+
+```franko
+uint8_t amount;
+
+amount = 3;
+
+uint8_t y;
+y = 1 << amount; // valid: result type is uint8_t, and 1 fits uint8_t
+```
+
+Invalid:
+
+```franko
+uint8_t amount;
+
+amount = 3;
+
+uint8_t y;
+y = 999 << amount; // invalid: 999 does not fit uint8_t
+```
+
+Invalid:
+
+```franko
+int32_t amount;
+
+amount = 3;
+
+int32_t y;
+y = 1 << amount; // invalid: nonconstant shift count must be unsigned
+```
+
+For pure constant shifts, the expression remains a fluid constant until used in a contextual position:
+
+```franko
+uint8_t b;
+
+b = 1 << 3; // valid: folded to 8, and 8 fits uint8_t
+b = 1 << 8; // invalid when assigned to uint8_t: folded to 256, which does not fit uint8_t
+```
 
 ---
 
@@ -1464,8 +1484,8 @@ xs(10);
 
 Rules for dynamic array initialization:
 
+- target must be a storage-backed lvalue,
 - target must be a dynamic array,
-- target must currently be a direct variable,
 - exactly one argument is required,
 - size must be compatible with `uint32_t`,
 - constant sizes must be greater than zero,
@@ -1522,40 +1542,6 @@ array<int, 20> arr;
 
 arr(20); // invalid: arr is static, not dynamic
 ```
-
-### Current Lowering Restriction
-
-Dynamic array initialization currently lowers only for direct variable targets.
-
-Supported:
-
-```franko
-array<int> arr;
-
-arr(20);
-```
-
-Not currently supported as dynamic array initialization:
-
-```franko
-deref(p)(20);
-arrs[i](20);
-```
-
-Example:
-
-```franko
-array<int32_t> xs;
-addr<array<int32_t>> p;
-
-p = getaddr(xs);
-
-deref(p)(10); // not currently lowered as dynamic array init
-```
-
-This limitation exists because the current semantic node for array initialization stores a direct variable symbol, not an arbitrary lvalue receiver.
-
----
 
 ## 18.3 Array Access
 
@@ -1685,10 +1671,10 @@ Array operations are written using call syntax but lowered into special semantic
 Supported array intrinsics:
 
 ```franko
-arr(size)
-arr.uninit()
-arr.memset(value)
-arr.memcpy(source)
+target(size)
+target.uninit()
+target.memset(value)
+target.memcpy(source)
 ```
 
 These are not general function calls.
@@ -1707,9 +1693,31 @@ Invalid:
 x = arr.memset(0); // invalid: intrinsic is not an expression value
 ```
 
----
+The receiver or target of an array intrinsic must usually be a storage-backed array lvalue. This means the operation must apply to real mutable storage, such as:
 
-## 19.1 `arr(size)`
+* a variable,
+* a dereferenced address,
+* an array element whose containing array expression is storage-backed.
+
+Examples of storage-backed array targets:
+
+```franko
+arr
+deref(p)
+arrs[i]
+```
+
+Examples that are not storage-backed array targets:
+
+```franko
+getaddr(arr)
+x + y
+1
+```
+
+***
+
+## 19.1 `target(size)`
 
 Dynamic array initialization.
 
@@ -1723,12 +1731,13 @@ arr(100);
 
 Rules:
 
-- available only on dynamic arrays,
-- target must be a direct variable,
-- exactly one argument,
-- size must be:
-  - a positive constant fitting `uint32_t`, or
-  - a nonconstant expression of exactly type `uint32_t`.
+* available only on dynamic arrays,
+* target must be a storage-backed lvalue,
+* target must have dynamic array type,
+* exactly one argument is required,
+* size must be:
+  * a positive constant fitting `uint32_t`, or
+  * a nonconstant expression of exactly type `uint32_t`.
 
 Valid:
 
@@ -1738,7 +1747,7 @@ array<int32_t> arr;
 arr(100);
 ```
 
-Valid:
+Valid with a nonconstant `uint32_t` size:
 
 ```franko
 array<int32_t> arr;
@@ -1748,7 +1757,39 @@ n = 100;
 arr(n);
 ```
 
-Invalid:
+Valid through an address:
+
+```franko
+array<int32_t> arr;
+addr<array<int32_t>> p;
+
+p = getaddr(arr);
+
+deref(p)(100);
+```
+
+This is valid because:
+
+```franko
+deref(p)
+```
+
+is a storage-backed lvalue of type:
+
+```franko
+array<int32_t>
+```
+
+Valid for nested dynamic array elements when the target element is storage-backed:
+
+```franko
+array<array<int32_t>> arrs;
+
+arrs(3);
+arrs[0](10);
+```
+
+Invalid because static arrays are not dynamically initialized:
 
 ```franko
 array<int32_t, 10> arr;
@@ -1756,27 +1797,45 @@ array<int32_t, 10> arr;
 arr(10); // invalid: static array
 ```
 
-Invalid:
+Invalid because the target is not a dynamic array:
+
+```franko
+int32_t x;
+
+x(10); // invalid: x is not a dynamic array
+```
+
+Invalid argument counts:
 
 ```franko
 array<int32_t> arr;
 
 arr();     // invalid
 arr(1, 2); // invalid
-arr(-1);   // invalid
-arr(0);    // invalid
 ```
 
-Current lowering restriction:
+Invalid sizes:
 
 ```franko
-deref(p)(10); // not currently lowered as dynamic array init
-arrs[i](10);  // not currently lowered as dynamic array init
+array<int32_t> arr;
+
+arr(-1); // invalid: size must be positive
+arr(0);  // invalid: size must be positive
 ```
 
----
+Invalid nonconstant size type:
 
-## 19.2 `arr.uninit()`
+```franko
+array<int32_t> arr;
+int32_t n;
+
+n = 10;
+arr(n); // invalid: nonconstant size must be uint32_t
+```
+
+***
+
+## 19.2 `target.uninit()`
 
 Dynamic array uninitialization.
 
@@ -1791,15 +1850,16 @@ arr.uninit();
 
 Rules:
 
-- receiver must be a storage-backed lvalue,
-- receiver must be a dynamic array,
-- takes exactly zero arguments.
+* receiver must be a storage-backed lvalue,
+* receiver must be a dynamic array,
+* takes exactly zero arguments.
 
 Valid:
 
 ```franko
 array<int32_t> arr;
 
+arr(100);
 arr.uninit();
 ```
 
@@ -1809,11 +1869,13 @@ Valid through an address:
 array<int32_t> arr;
 addr<array<int32_t>> p;
 
+arr(100);
 p = getaddr(arr);
+
 deref(p).uninit();
 ```
 
-Invalid:
+Invalid because static arrays cannot be uninitialized:
 
 ```franko
 array<int32_t, 10> arr;
@@ -1821,9 +1883,17 @@ array<int32_t, 10> arr;
 arr.uninit(); // invalid: static array
 ```
 
----
+Invalid because `uninit` takes no arguments:
 
-## 19.3 `arr.memset(value)`
+```franko
+array<int32_t> arr;
+
+arr.uninit(1); // invalid
+```
+
+***
+
+## 19.3 `target.memset(value)`
 
 Fills an array byte-wise.
 
@@ -1838,15 +1908,15 @@ arr.memset(0);
 
 Rules:
 
-- receiver must be a storage-backed lvalue,
-- receiver may be dynamic or static array,
-- receiver element type must be memsetable,
-- takes exactly one argument,
-- fill value must be:
-  - a constant fitting `uint8_t`, or
-  - a nonconstant expression of exactly type `uint8_t`.
+* receiver must be a storage-backed lvalue,
+* receiver may be a dynamic or static array,
+* receiver element type must be memsetable,
+* takes exactly one argument,
+* fill value must be:
+  * a constant fitting `uint8_t`, or
+  * a nonconstant expression of exactly type `uint8_t`.
 
-Valid:
+Valid on a dynamic array:
 
 ```franko
 array<int32_t> arr;
@@ -1855,7 +1925,7 @@ arr(10);
 arr.memset(0);
 ```
 
-Valid:
+Valid on a static array:
 
 ```franko
 array<uint8_t, 128> bytes;
@@ -1863,15 +1933,27 @@ array<uint8_t, 128> bytes;
 bytes.memset(255);
 ```
 
-Invalid:
+Valid through an address:
+
+```franko
+array<int32_t> arr;
+addr<array<int32_t>> p;
+
+arr(10);
+p = getaddr(arr);
+
+deref(p).memset(0);
+```
+
+Invalid because the fill value does not fit `uint8_t`:
 
 ```franko
 array<uint8_t, 128> bytes;
 
-bytes.memset(256); // invalid: does not fit uint8_t
+bytes.memset(256); // invalid
 ```
 
-Invalid:
+Invalid because a nonconstant fill value must have exactly type `uint8_t`:
 
 ```franko
 array<uint8_t, 128> bytes;
@@ -1880,29 +1962,55 @@ uint32_t x;
 bytes.memset(x); // invalid: nonconstant fill must be uint8_t
 ```
 
----
+Invalid because the receiver is not an array:
+
+```franko
+int32_t x;
+
+x.memset(0); // invalid
+```
+
+***
 
 ## 19.4 Memsetable Element Types
 
 Current memsetable types:
 
-| Element type | Memsetable? |
-|---|---|
-| primitive integers | yes |
-| static arrays of memsetable elements | yes |
-| dynamic arrays | no |
-| addresses | no |
+| Element type                         | Memsetable? |
+| ------------------------------------ | ----------- |
+| primitive integers                   | yes         |
+| static arrays of memsetable elements | yes         |
+| dynamic arrays                       | no          |
+| addresses                            | no          |
 
 Examples:
 
 ```franko
-array<int32_t> a;           // memsetable
-array<array<int32_t, 4>> b; // memsetable
-array<array<int32_t>> c;    // not memsetable
-array<addr<int32_t>> d;     // not memsetable
+array<int32_t> a;            // memsetable
+array<array<int32_t, 4>> b;  // memsetable
+array<array<int32_t>> c;     // not memsetable
+array<addr<int32_t>> d;      // not memsetable
 ```
 
----
+A static array element is memsetable only when its own element type is also memsetable.
+
+Example:
+
+```franko
+array<array<uint8_t, 4>, 8> bytes;
+
+bytes.memset(0); // valid
+```
+
+Invalid:
+
+```franko
+array<array<int32_t>, 8> nestedDynamicArrays;
+
+nestedDynamicArrays.memset(0); // invalid: dynamic array elements are not memsetable
+```
+
+***
 
 ## 19.5 `target.memcpy(source)`
 
@@ -1922,24 +2030,27 @@ a.memcpy(b);
 
 Rules:
 
-- target must be a storage-backed lvalue array,
-- source must be a storage-backed lvalue array,
-- both target and source may be dynamic or static arrays,
-- target and source element types must match exactly,
-- static/dynamic shape does not need to match,
-- static lengths do not need to match,
-- element type must be memcpyable.
+* target must be a storage-backed lvalue array,
+* source must be a storage-backed lvalue array,
+* both target and source may be dynamic or static arrays,
+* target and source element types must match exactly,
+* static/dynamic shape does not need to match,
+* static lengths do not need to match,
+* element type must be memcpyable.
 
-Valid:
+Valid between dynamic arrays:
 
 ```franko
 array<int32_t> a;
 array<int32_t> b;
 
+a(10);
+b(10);
+
 a.memcpy(b);
 ```
 
-Valid:
+Valid between static arrays with different lengths:
 
 ```franko
 array<int32_t, 10> a;
@@ -1948,17 +2059,37 @@ array<int32_t, 20> b;
 a.memcpy(b);
 ```
 
-Valid:
+Valid between dynamic and static arrays:
 
 ```franko
 array<int32_t> d;
 array<int32_t, 10> s;
 
+d(10);
+
 d.memcpy(s);
 s.memcpy(d);
 ```
 
-Invalid:
+Valid through addresses:
+
+```franko
+array<int32_t> a;
+array<int32_t> b;
+
+addr<array<int32_t>> pa;
+addr<array<int32_t>> pb;
+
+a(10);
+b(10);
+
+pa = getaddr(a);
+pb = getaddr(b);
+
+deref(pa).memcpy(deref(pb));
+```
+
+Invalid because the element types differ:
 
 ```franko
 array<int32_t> a;
@@ -1967,29 +2098,67 @@ array<uint8_t> b;
 a.memcpy(b); // invalid: element types differ
 ```
 
----
+Invalid because the source is not storage-backed:
+
+```franko
+array<int32_t> a;
+addr<array<int32_t>> p;
+
+a.memcpy(getaddr(a)); // invalid: source is an address, not an array lvalue
+```
+
+Invalid because `memcpy` takes exactly one argument:
+
+```franko
+array<int32_t> a;
+array<int32_t> b;
+array<int32_t> c;
+
+a.memcpy();     // invalid
+a.memcpy(b, c); // invalid
+```
+
+***
 
 ## 19.6 Memcpyable Element Types
 
 Current memcpyable types:
 
-| Element type | Memcpyable? |
-|---|---|
-| primitive integers | yes |
-| addresses | yes |
-| static arrays of memcpyable elements | yes |
-| dynamic arrays | no |
+| Element type                         | Memcpyable? |
+| ------------------------------------ | ----------- |
+| primitive integers                   | yes         |
+| addresses                            | yes         |
+| static arrays of memcpyable elements | yes         |
+| dynamic arrays                       | no          |
 
 Examples:
 
 ```franko
-array<int32_t> a;           // memcpyable
-array<addr<int32_t>> b;     // memcpyable
-array<array<int32_t, 4>> c; // memcpyable
-array<array<int32_t>> d;    // not memcpyable
+array<int32_t> a;            // memcpyable
+array<addr<int32_t>> b;      // memcpyable
+array<array<int32_t, 4>> c;  // memcpyable
+array<array<int32_t>> d;     // not memcpyable
 ```
 
----
+A static array element is memcpyable only when its own element type is also memcpyable.
+
+Example:
+
+```franko
+array<array<int32_t, 4>, 8> matrixA;
+array<array<int32_t, 4>, 8> matrixB;
+
+matrixA.memcpy(matrixB); // valid
+```
+
+Invalid:
+
+```franko
+array<array<int32_t>, 8> a;
+array<array<int32_t>, 8> b;
+
+a.memcpy(b); // invalid: dynamic array elements are not memcpyable
+```
 
 # 20. Addresses
 
@@ -2337,8 +2506,8 @@ Example:
 array<int32_t> arr;
 addr<array<int32_t>> p;
 
-arr(10);
 p = getaddr(arr);
+deref(p)(10);
 ```
 
 Then:
@@ -2349,13 +2518,6 @@ deref(p).memset(0);
 
 is valid if the dereferenced array satisfies the intrinsic rules.
 
-Current limitation:
-
-```franko
-deref(p)(10);
-```
-
-is not currently lowered as dynamic array initialization because `arr(size)` only supports direct variable targets.
 
 ---
 
@@ -2659,24 +2821,8 @@ depending on the intended operation.
 
 ---
 
-## 24.8 Dynamic Array Initialization Is Limited
 
-Only direct variable targets are currently lowered:
-
-```franko
-arr(10); // supported
-```
-
-Not currently supported:
-
-```franko
-deref(p)(10);
-arrs[i](10);
-```
-
----
-
-## 24.9 No Full Array Lifetime Checking
+## 24.8 No Full Array Lifetime Checking
 
 The checker validates intrinsic legality, but it does not fully prove:
 
@@ -2687,7 +2833,7 @@ The checker validates intrinsic legality, but it does not fully prove:
 
 ---
 
-## 24.10 Delete Checking Is Limited
+## 24.9 Delete Checking Is Limited
 
 Delete checking is currently:
 
@@ -2699,7 +2845,7 @@ It does not fully track dangling addresses or ownership.
 
 ---
 
-## 24.11 Address Lifetime Is Not Fully Tracked
+## 24.10 Address Lifetime Is Not Fully Tracked
 
 This may not be fully diagnosed:
 
@@ -2715,29 +2861,14 @@ deref(p);
 
 ---
 
-## 24.12 Print Checking Is Loose
+## 24.11 Print Checking Is Loose
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set.
 
 ---
 
-## 24.13 Expression Result Types Are Mechanical
 
-Arithmetic, bitwise, and shift expression types come from the left operand.
-
-This can create surprising behavior with constants on the left:
-
-```franko
-uint8_t x;
-uint8_t y;
-
-y = x + 1; // preferred
-y = 1 + x; // may fail because result is mechanically int32_t
-```
-
----
-
-## 24.14 Unsupported Operators
+## 24.12 Unsupported Operators
 
 The following are not currently implemented:
 
@@ -2976,27 +3107,4 @@ deref(p).uninit();
 
 This is valid because `memset` and `uninit` accept storage-backed array lvalues.
 
-However, this is not currently supported as dynamic array initialization:
-
-```franko
-deref(p)(10); // not currently lowered
-```
-
 ---
-
-## 26.14 Constant Typing Limitation Example
-
-```franko
-uint8_t x;
-uint8_t y;
-
-x = 10;
-
-y = x + 1; // preferred
-y = 1 + x; // may fail in current implementation
-```
-
-The second assignment may fail because the result type is mechanically taken from the left operand, and the left operand `1` is usually decorated as `int32_t`.
-
----
-
