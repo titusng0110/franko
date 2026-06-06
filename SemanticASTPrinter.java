@@ -231,7 +231,8 @@ public class SemanticASTPrinter {
     private static void printArrayInit(SemanticArrayInitNode node, int indent) {
         line(indent, "SemanticArrayInitNode");
 
-        printSymbol("symbol", node.symbol, indent + 1);
+        line(indent + 1, "target:");
+        printExpr(node.target, indent + 2);
 
         line(indent + 1, "size:");
         printExpr(node.size, indent + 2);

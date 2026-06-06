@@ -79,10 +79,16 @@
  *
  * Array intrinsics are lowered by SemanticAnalyzer:
  *
- *   arr(size)          -> SemanticArrayInitNode
- *   arr.uninit()       -> SemanticArrayUninitNode
- *   arr.memset(value)  -> SemanticArrayMemsetNode
- *   arr.memcpy(src)    -> SemanticArrayMemcpyNode
+ *   target(size)          -> SemanticArrayInitNode
+ *   target.uninit()       -> SemanticArrayUninitNode
+ *   target.memset(value)  -> SemanticArrayMemsetNode
+ *   target.memcpy(src)    -> SemanticArrayMemcpyNode
+ *
+ * SemanticArrayInitNode now stores a SemanticExprNode target instead of a direct
+ * VariableSymbol, so codegen supports:
+ *
+ *   arr(20);
+ *   deref(p)(20);
  *
  * ============================================================================
  */
@@ -328,9 +334,31 @@ public class Cpp14Codegen {
     // Array Intrinsics
     // ============================================================
 
+    /**
+     * Emits:
+     *
+     *   target(size)
+     *
+     * as:
+     *
+     *   target.init(size);
+     *
+     * Important:
+     *
+     * SemanticArrayInitNode now stores a SemanticExprNode target, not a
+     * VariableSymbol. This allows:
+     *
+     *   arr(20);
+     *   deref(p)(20);
+     *
+     * to emit as:
+     *
+     *   arr.init(20);
+     *   (*p).init(20);
+     */
     private void emitArrayInit(SemanticArrayInitNode node) {
         emitLine(
-            emitVarAccess(node.symbol)
+            emitLValue(node.target)
                 + ".init("
                 + emitExpr(node.size)
                 + ");"
@@ -339,14 +367,14 @@ public class Cpp14Codegen {
 
     private void emitArrayUninit(SemanticArrayUninitNode node) {
         emitLine(
-            emitExpr(node.receiver)
+            emitLValue(node.receiver)
                 + ".uninit();"
         );
     }
 
     private void emitArrayMemset(SemanticArrayMemsetNode node) {
         emitLine(
-            emitExpr(node.receiver)
+            emitLValue(node.receiver)
                 + ".memset("
                 + emitExpr(node.value)
                 + ");"
@@ -355,9 +383,9 @@ public class Cpp14Codegen {
 
     private void emitArrayMemcpy(SemanticArrayMemcpyNode node) {
         emitLine(
-            emitExpr(node.target)
+            emitLValue(node.target)
                 + ".memcpy("
-                + emitExpr(node.source)
+                + emitLValue(node.source)
                 + ");"
         );
     }

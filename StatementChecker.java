@@ -38,32 +38,25 @@
  *
  * Intrinsic support:
  *
- *   arr(size)
- *      - dynamic arrays only
- *      - size must be uint32_t, or a constant fitting uint32_t
+ *   target(size)
+ *      - target must be a storage-backed dynamic array lvalue
+ *      - size must be uint32_t, or a positive constant fitting uint32_t
  *
- *   arr.uninit()
- *      - dynamic arrays only
+ *   target.uninit()
+ *      - target must be a storage-backed dynamic array lvalue
  *
- *   arr.memset(byte)
- *      - dynamic arrays and static arrays
+ *   target.memset(byte)
+ *      - target may be dynamic or static array
  *      - receiver must be a storage-backed lvalue
  *      - fill value must be uint8_t/char, or a constant fitting uint8_t
  *
  *   target.memcpy(source)
- *      - dynamic arrays and static arrays
+ *      - target and source may be dynamic or static arrays
  *      - target and source must both be storage-backed lvalue arrays
  *      - target/source element types must match
  *      - static/dynamic shape and static lengths do not need to match
  *
- * This matches the generated C++ model:
- *
- *   Static<T, N>.memcpy(Static<T, M>)
- *   Static<T, N>.memcpy(Dynamic<T>)
- *   Dynamic<T>.memcpy(Dynamic<T>)
- *   Dynamic<T>.memcpy(Static<T, M>)
- *
- * ============================================================================
+ * ============================================================================ 
  */
 public class StatementChecker {
     private final SemanticAnalyzer.Context ctx;
@@ -72,10 +65,10 @@ public class StatementChecker {
     private final TypeChecker types;
 
     public StatementChecker(
-        SemanticAnalyzer.Context ctx,
-        DeclarationChecker declarations,
-        ExpressionChecker expressions,
-        TypeChecker types
+            SemanticAnalyzer.Context ctx,
+            DeclarationChecker declarations,
+            ExpressionChecker expressions,
+            TypeChecker types
     ) {
         this.ctx = ctx;
         this.declarations = declarations;
@@ -149,7 +142,7 @@ public class StatementChecker {
         }
 
         ctx.error("Unknown semantic statement node: "
-            + node.getClass().getSimpleName());
+                + node.getClass().getSimpleName());
     }
 
     // ============================================================
@@ -175,9 +168,9 @@ public class StatementChecker {
         }
 
         types.ensureAssignable(
-            node.target.type,
-            node.value,
-            "Invalid assignment"
+                node.target.type,
+                node.value,
+                "Invalid assignment"
         );
     }
 
@@ -185,8 +178,8 @@ public class StatementChecker {
         expressions.checkExpr(node.condition);
 
         types.ensureIntegral(
-            node.condition.type,
-            "if condition must be an integer"
+                node.condition.type,
+                "if condition must be an integer"
         );
 
         checkStmt(node.thenBranch);
@@ -200,8 +193,8 @@ public class StatementChecker {
         expressions.checkExpr(node.condition);
 
         types.ensureIntegral(
-            node.condition.type,
-            "while condition must be an integer"
+                node.condition.type,
+                "while condition must be an integer"
         );
 
         checkStmt(node.body);
@@ -245,40 +238,44 @@ public class StatementChecker {
     /**
      * Checks:
      *
-     *   arr(size)
+     *   target(size)
      *
-     * Rule:
+     * Rules:
      *
-     *   init is available only on dynamic arrays.
+     *   - target must be a storage-backed lvalue,
+     *   - target must be a dynamic array,
+     *   - size must be a valid dynamic array size.
+     *
+     * This now supports:
+     *
+     *   arr(20);
+     *   deref(p)(20);
+     *
+     * because SemanticArrayInitNode stores SemanticExprNode target instead of
+     * only a direct VariableSymbol.
      */
     private void visitArrayInit(SemanticArrayInitNode node) {
-        if (node.symbol == null) {
-            ctx.error("Array init target symbol cannot be null");
-            expressions.ensureArraySizeCompatible(node.size, "Array size");
-            return;
+        expressions.checkExpr(node.target);
+
+        if (!isStorageBackedLValue(node.target)) {
+            ctx.error("Array init target must be a storage-backed lvalue");
         }
 
-        if (node.symbol.deleted) {
-            ctx.error("Array init on deleted variable '" + node.symbol.name + "'");
-        }
-
-        if (!types.isDynamicArrayType(node.symbol.type)) {
-            ctx.error("Array init requires dynamic array type for '"
-                + node.symbol.name
-                + "', got "
-                + types.describeSafe(node.symbol.type));
+        if (!types.isDynamicArrayType(node.target.type)) {
+            ctx.error("Array init requires dynamic array type, got "
+                    + types.describeSafe(node.target.type));
         }
 
         expressions.ensureArraySizeCompatible(
-            node.size,
-            "Array size"
+                node.size,
+                "Array size"
         );
     }
 
     /**
      * Checks:
      *
-     *   arr.uninit()
+     *   target.uninit()
      *
      * Rule:
      *
@@ -293,14 +290,14 @@ public class StatementChecker {
 
         if (!types.isDynamicArrayType(node.receiver.type)) {
             ctx.error("uninit() receiver must be a dynamic array, got "
-                + types.describeSafe(node.receiver.type));
+                    + types.describeSafe(node.receiver.type));
         }
     }
 
     /**
      * Checks:
      *
-     *   arr.memset(value)
+     *   target.memset(value)
      *
      * Rule:
      *
@@ -315,15 +312,15 @@ public class StatementChecker {
         }
 
         types.ensureArrayType(
-            node.receiver.type,
-            "memset() receiver must be an array"
+                node.receiver.type,
+                "memset() receiver must be an array"
         );
 
         SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
 
         if (elementType != null && !types.isMemsetable(elementType)) {
             ctx.error("memset() receiver element type is not memsetable: "
-                + elementType.describe());
+                    + elementType.describe());
         }
 
         ensureMemsetValueCompatible(node.value);
@@ -338,27 +335,6 @@ public class StatementChecker {
      *
      *   memcpy is available between dynamic/static arrays as long as their
      *   element types match.
-     *
-     * Valid examples:
-     *
-     *   array<int> a;
-     *   array<int> b;
-     *   a.memcpy(b);
-     *
-     *   array<int, 10> s;
-     *   array<int, 20> t;
-     *   s.memcpy(t);
-     *
-     *   array<int> d;
-     *   array<int, 10> s;
-     *   d.memcpy(s);
-     *   s.memcpy(d);
-     *
-     * Invalid:
-     *
-     *   array<int> a;
-     *   array<uint8_t> b;
-     *   a.memcpy(b);
      */
     private void visitArrayMemcpy(SemanticArrayMemcpyNode node) {
         expressions.checkExpr(node.target);
@@ -373,13 +349,13 @@ public class StatementChecker {
         }
 
         types.ensureArrayType(
-            node.target.type,
-            "memcpy() target must be an array"
+                node.target.type,
+                "memcpy() target must be an array"
         );
 
         types.ensureArrayType(
-            node.source.type,
-            "memcpy() source must be an array"
+                node.source.type,
+                "memcpy() source must be an array"
         );
 
         SemanticType targetElem = types.elementTypeOfArray(node.target.type);
@@ -388,20 +364,20 @@ public class StatementChecker {
         if (targetElem != null && sourceElem != null) {
             if (!types.sameType(targetElem, sourceElem)) {
                 ctx.error("memcpy() requires source and target arrays to have identical element types, got "
-                    + targetElem.describe()
-                    + " and "
-                    + sourceElem.describe());
+                        + targetElem.describe()
+                        + " and "
+                        + sourceElem.describe());
             }
         }
 
         if (targetElem != null && !types.isMemcpyable(targetElem)) {
             ctx.error("memcpy() target array element type is not memcpyable: "
-                + targetElem.describe());
+                    + targetElem.describe());
         }
 
         if (sourceElem != null && !types.isMemcpyable(sourceElem)) {
             ctx.error("memcpy() source array element type is not memcpyable: "
-                + sourceElem.describe());
+                    + sourceElem.describe());
         }
     }
 
@@ -417,17 +393,17 @@ public class StatementChecker {
 
         if (value.isConstant()) {
             types.requireConstantFitsPrimitive(
-                value.constantValue,
-                SemanticPrimitiveKind.UINT8,
-                "memset() fill value"
+                    value.constantValue,
+                    SemanticPrimitiveKind.UINT8,
+                    "memset() fill value"
             );
             return;
         }
 
         if (!(value.type instanceof SemanticPrimitiveType pt
-            && pt.kind == SemanticPrimitiveKind.UINT8)) {
+                && pt.kind == SemanticPrimitiveKind.UINT8)) {
             ctx.error("memset() fill value must be uint8_t/char, got "
-                + types.describeSafe(value.type));
+                    + types.describeSafe(value.type));
         }
     }
 
@@ -435,6 +411,18 @@ public class StatementChecker {
     // LValue / Storage Helpers
     // ============================================================
 
+    /**
+     * Stronger than SemanticExprNode.isLValue().
+     *
+     * Storage-backed lvalues are currently:
+     *
+     *   - variables,
+     *   - dereferenced addresses,
+     *   - array elements whose target is storage-backed.
+     *
+     * This intentionally rejects synthetic/non-storage lvalues unless their
+     * storage semantics are explicitly added here later.
+     */
     private boolean isStorageBackedLValue(SemanticExprNode expr) {
         if (expr == null) {
             return false;

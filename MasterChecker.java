@@ -37,6 +37,27 @@ import java.util.Set;
  * flags before each check(...) call so repeated checks over the same Semantic AST
  * are deterministic.
  *
+ * ----------------------------------------------------------------------------
+ * ARRAY INIT NOTE
+ * ----------------------------------------------------------------------------
+ *
+ * SemanticArrayInitNode no longer stores a direct VariableSymbol.
+ *
+ * It now stores:
+ *
+ *   SemanticExprNode target
+ *   SemanticExprNode size
+ *
+ * This allows dynamic array initialization through arbitrary storage-backed
+ * dynamic array lvalues, such as:
+ *
+ *   arr(20);
+ *   deref(p)(20);
+ *   arrs[i](20);
+ *
+ * Therefore symbol collection must walk the target expression rather than
+ * directly adding a symbol field.
+ *
  * ============================================================================
  */
 public class MasterChecker {
@@ -53,9 +74,9 @@ public class MasterChecker {
         this.typeChecker = new TypeChecker(ctx);
         this.expressionChecker = new ExpressionChecker(ctx, typeChecker);
         this.declarationChecker =
-            new DeclarationChecker(ctx, expressionChecker, typeChecker);
+                new DeclarationChecker(ctx, expressionChecker, typeChecker);
         this.statementChecker =
-            new StatementChecker(ctx, declarationChecker, expressionChecker, typeChecker);
+                new StatementChecker(ctx, declarationChecker, expressionChecker, typeChecker);
     }
 
     /**
@@ -92,7 +113,7 @@ public class MasterChecker {
             expressionChecker.checkExpr(expr);
         } else {
             ctx.error("Unknown SemanticASTNode type passed to MasterChecker: "
-                + node.getClass().getSimpleName());
+                    + node.getClass().getSimpleName());
         }
 
         if (ctx.hasErrors()) {
@@ -105,10 +126,10 @@ public class MasterChecker {
 
         for (int i = 0; i < ctx.getErrors().size(); i++) {
             sb.append("  ")
-              .append(i + 1)
-              .append(". ")
-              .append(ctx.getErrors().get(i))
-              .append('\n');
+                    .append(i + 1)
+                    .append(". ")
+                    .append(ctx.getErrors().get(i))
+                    .append('\n');
         }
 
         return sb.toString();
@@ -120,7 +141,7 @@ public class MasterChecker {
 
     private void resetDeletedFlags(SemanticASTNode root) {
         Set<VariableSymbol> symbols =
-            Collections.newSetFromMap(new IdentityHashMap<>());
+                Collections.newSetFromMap(new IdentityHashMap<>());
 
         collectSymbols(root, symbols);
 
@@ -132,8 +153,8 @@ public class MasterChecker {
     }
 
     private void collectSymbols(
-        SemanticASTNode node,
-        Set<VariableSymbol> out
+            SemanticASTNode node,
+            Set<VariableSymbol> out
     ) {
         if (node == null) {
             return;
@@ -194,8 +215,26 @@ public class MasterChecker {
             return;
         }
 
+        /*
+         * Updated for lvalue-based dynamic array initialization.
+         *
+         * Old design:
+         *
+         *   out.add(n.symbol);
+         *
+         * New design:
+         *
+         *   SemanticArrayInitNode.target is a SemanticExprNode.
+         *
+         * This is necessary because the initialized array may now be nested
+         * inside an expression:
+         *
+         *   arr(20);          // target is SemanticVarExprNode(arr)
+         *   deref(p)(20);     // target is SemanticDerefNode(SemanticVarExprNode(p))
+         *   arrs[i](20);      // target is SemanticArrayAccessNode(...)
+         */
         if (node instanceof SemanticArrayInitNode n) {
-            out.add(n.symbol);
+            collectSymbolsFromExpr(n.target, out);
             collectSymbolsFromExpr(n.size, out);
             return;
         }
@@ -214,12 +253,13 @@ public class MasterChecker {
         if (node instanceof SemanticArrayMemcpyNode n) {
             collectSymbolsFromExpr(n.target, out);
             collectSymbolsFromExpr(n.source, out);
+            return;
         }
     }
 
     private void collectSymbolsFromExpr(
-        SemanticExprNode expr,
-        Set<VariableSymbol> out
+            SemanticExprNode expr,
+            Set<VariableSymbol> out
     ) {
         if (expr == null) {
             return;
@@ -258,6 +298,7 @@ public class MasterChecker {
 
         if (expr instanceof SemanticDerefNode n) {
             collectSymbolsFromExpr(n.expr, out);
+            return;
         }
     }
 }
