@@ -33,7 +33,7 @@ step() {
 
 mkdir -p "$GEN_DIR" "$CLS_DIR"
 
-step "find \"$GEN_DIR\" -type f -delete & find \"$CLS_DIR\" -type f -delete"
+step "rm -rf \"$GEN_DIR\"/* \"$CLS_DIR\"/*"
 
 step "java -Xmx500M -cp \"$ANTLR_CP\" org.antlr.v4.Tool -visitor -o \"$GEN_DIR\" Franko.g4"
 
