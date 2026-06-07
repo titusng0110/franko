@@ -1,4 +1,4 @@
-# [Click here for Franko Language Specification](https://github.com/titusng0110/franko/blob/main/LANGUAGE.md)
+# [Click here for Franko Language Specification](https://github.com/titusng0110/franko/blob/main/docs/LANGUAGE.md)
 
 Make sure you have GCC 6 or above and Java 25 JDK installed.
 
