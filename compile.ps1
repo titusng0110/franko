@@ -2,13 +2,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 trap {
-    Write-Error "Error: command failed: $($_.InvocationInfo.Line.Trim())"
-    Write-Error $_
+    [Console]::Error.WriteLine("Error: command failed: $($_.InvocationInfo.Line.Trim())")
+    [Console]::Error.WriteLine($_.Exception.Message)
     exit 1
 }
 
 # Resolve project root: script location
-$ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ROOT = $PSScriptRoot
 
 function Run {
     param(
@@ -18,7 +18,14 @@ function Run {
 
     Write-Host ($Command -join " ")
 
-    & $Command[0] @($Command[1..($Command.Count - 1)])
+    $exe = $Command[0]
+    $argv = @()
+
+    if ($Command.Count -gt 1) {
+        $argv = $Command[1..($Command.Count - 1)]
+    }
+
+    & $exe @argv
 
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed with exit code $LASTEXITCODE`: $($Command -join ' ')"
@@ -64,7 +71,13 @@ if (-not (Test-Path -LiteralPath $CLS_DIR -PathType Container)) {
         throw "Toolchain update script not found: $UPDATE_SCRIPT"
     }
 
-    Run powershell.exe -ExecutionPolicy Bypass -File $UPDATE_SCRIPT
+    $PSExe = if ($PSVersionTable.PSEdition -eq "Core") {
+        "pwsh"
+    } else {
+        "powershell.exe"
+    }
+
+    Run $PSExe -ExecutionPolicy Bypass -File $UPDATE_SCRIPT
 }
 
 $BASENAME = if ($SRC.EndsWith(".fr")) {
@@ -77,33 +90,36 @@ $BASENAME = if ($SRC.EndsWith(".fr")) {
 }
 
 $CPP_OUT = "$BASENAME.cpp"
-$BIN_OUT = "$BASENAME.out"
+$BIN_OUT = "$BASENAME.exe"
 
 Write-Host "Source: $SRC"
 Write-Host ""
 
-Run java `
-    -cp "$ANTLR_CP;$CLS_DIR;$GEN_DIR" `
-    Main `
-    $SRC `
-    -o `
+Run @(
+    "java",
+    "-cp", "$ANTLR_CP;$CLS_DIR;$GEN_DIR",
+    "Main",
+    $SRC,
+    "-o",
     $CPP_OUT
+)
 
 Write-Host ""
 
-Run g++ `
-    -O3 `
-    -std=c++14 `
-    -Wall `
-    -Wextra `
-    -Wpedantic `
-    -Wshadow `
-    "-I$ROOT\include" `
-    $CPP_OUT `
-    -o `
+Run @(
+    "g++",
+    "-O3",
+    "-std=c++14",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Wshadow",
+    "-I$ROOT\include",
+    $CPP_OUT,
+    "-o",
     $BIN_OUT
+)
 
 Write-Host "Successfully compiled to binary output: $BIN_OUT"
 Write-Host ""
-
 Write-Host "✅ Compilation finished."
