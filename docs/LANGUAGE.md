@@ -2599,7 +2599,7 @@ Valid for nested dynamic array elements when the target element is storage-backe
 array<array<int32_t>> arrs;
 
 arrs(3);
-arrs10;
+arrs[0](10);
 ```
 
 Invalid because static arrays are not dynamically initialized:
