@@ -11,18 +11,54 @@ import java.util.Objects;
  * helpers for the MasterChecker sub-checkers.
  *
  * This class does not traverse the AST by itself. Instead, StatementChecker,
- * ExpressionChecker, and DeclarationChecker call into TypeChecker whenever they
- * need to answer questions such as:
+ * ExpressionChecker, FunctionChecker, and DeclarationChecker call into
+ * TypeChecker whenever they need to answer questions such as:
  *
  *   - are these two SemanticType objects exactly the same type?
+ *   - is this type void?
  *   - is this type an integer primitive?
  *   - is this type an unsigned integer primitive?
  *   - is this type an array?
  *   - is this type an address?
  *   - can this BigInteger constant fit into a target primitive type?
  *   - is this assignment type-compatible?
+ *   - is this type valid as a function return type?
  *   - are these operands legal for arithmetic, bitwise, logical, comparison,
  *     or shift operators?
+ *
+ * ----------------------------------------------------------------------------
+ * VOID RULE
+ * ----------------------------------------------------------------------------
+ *
+ * void is not an ordinary value type.
+ *
+ * It is valid only where Franko explicitly permits it, currently:
+ *
+ *   - function return types.
+ *
+ * It is not valid for:
+ *
+ *   - variables,
+ *   - array element types,
+ *   - address referenced types,
+ *   - assignment values,
+ *   - ordinary expression value contexts.
+ *
+ * ----------------------------------------------------------------------------
+ * FUNCTION RETURN TYPE RULE
+ * ----------------------------------------------------------------------------
+ *
+ * A function return type must be either:
+ *
+ *   - void,
+ *   - a primitive integer type,
+ *   - an address type addr<T>.
+ *
+ * Array types cannot be returned directly because arrays are not assignable in
+ * Franko. Functions that need to expose arrays should return:
+ *
+ *   addr<array<T>>
+ *   addr<array<T, N>>
  *
  * ----------------------------------------------------------------------------
  * IMPORTANT: FLUID INTEGER CONSTANTS
@@ -45,47 +81,7 @@ import java.util.Objects;
  *     that target type;
  *   - when both operands are constants, the expression may remain a BigInteger
  *     constant until a later contextual check, such as assignment, array size,
- *     or intrinsic argument checking.
- *
- * Examples:
- *
- *   uint8_t x;
- *
- *   x = 255;     valid
- *   x = 256;     invalid
- *
- *   x + 1;       valid, because 1 fits uint8_t
- *   x + 255;     valid, because 255 fits uint8_t
- *   x + 256;     invalid, because 256 does not fit uint8_t
- *
- * ----------------------------------------------------------------------------
- * SHIFT CONSTANT RULE
- * ----------------------------------------------------------------------------
- *
- * For shift operators:
- *
- *   lhs << rhs
- *   lhs >> rhs
- *
- * Franko requires:
- *
- *   - lhs to be an integer expression;
- *   - nonconstant rhs to be an unsigned integer expression;
- *   - constant rhs to be nonnegative;
- *   - constant rhs to fit the unsigned variant of the lhs type.
- *
- * Examples:
- *
- *   int32_t x;
- *
- *   x << 3                         valid, 3 fits uint32_t
- *   x << -1                        invalid, negative shift count
- *   x << 9999999999999999999999    invalid, does not fit uint32_t
- *
- *   uint8_t b;
- *
- *   b << 255                       valid
- *   b << 256                       invalid, does not fit uint8_t
+ *     intrinsic argument checking, return checking, or call argument checking.
  *
  * ----------------------------------------------------------------------------
  * ADDRESS RULES
@@ -128,17 +124,25 @@ public class TypeChecker {
      *
      * Notes:
      *
+     *   - void equals void;
      *   - primitive types must have the same primitive kind;
      *   - dynamic arrays must have the same element type;
      *   - static arrays must have the same element type and numerically equal
      *     size literals;
-     *   - address types must reference the same type.
+     *   - address types must reference the same type;
+     *   - function types must have equal parameter types and return type.
      */
     public boolean sameType(SemanticType a, SemanticType b) {
-        if (a == null || b == null) return false;
+        if (a == null || b == null) {
+            return false;
+        }
 
         if (a.getClass() != b.getClass()) {
             return false;
+        }
+
+        if (a instanceof SemanticVoidType && b instanceof SemanticVoidType) {
+            return true;
         }
 
         if (a instanceof SemanticPrimitiveType pa && b instanceof SemanticPrimitiveType pb) {
@@ -151,7 +155,7 @@ public class TypeChecker {
 
         if (a instanceof SemanticStaticArrayType sa && b instanceof SemanticStaticArrayType sb) {
             return sameType(sa.elementType, sb.elementType)
-                && equalArraySizeLiterals(sa.sizeLiteral, sb.sizeLiteral);
+                    && equalArraySizeLiterals(sa.sizeLiteral, sb.sizeLiteral);
         }
 
         if (a instanceof SemanticAddrType aa && b instanceof SemanticAddrType ab) {
@@ -182,6 +186,10 @@ public class TypeChecker {
     // ============================================================
     // Type Classification
     // ============================================================
+
+    public boolean isVoidType(SemanticType t) {
+        return t instanceof SemanticVoidType;
+    }
 
     public boolean isIntegral(SemanticType t) {
         if (!(t instanceof SemanticPrimitiveType pt)) {
@@ -215,7 +223,7 @@ public class TypeChecker {
 
     public boolean isArrayType(SemanticType t) {
         return t instanceof SemanticDynamicArrayType
-            || t instanceof SemanticStaticArrayType;
+                || t instanceof SemanticStaticArrayType;
     }
 
     public boolean isDynamicArrayType(SemanticType t) {
@@ -228,6 +236,40 @@ public class TypeChecker {
 
     public boolean isAddressType(SemanticType t) {
         return t instanceof SemanticAddrType;
+    }
+
+    /**
+     * Returns true if a value of this type can participate in ordinary Franko
+     * assignment with '='.
+     *
+     * Current assignable value types:
+     *
+     *   - primitive integer types;
+     *   - address types.
+     *
+     * Non-assignable:
+     *
+     *   - void;
+     *   - dynamic arrays;
+     *   - static arrays;
+     *   - function types.
+     */
+    public boolean isAssignableValueType(SemanticType t) {
+        return t instanceof SemanticPrimitiveType
+                || t instanceof SemanticAddrType;
+    }
+
+    /**
+     * Valid function return types are:
+     *
+     *   - void;
+     *   - primitive integer types;
+     *   - address types.
+     *
+     * Array return types are invalid because arrays are not assignable.
+     */
+    public boolean isValidFunctionReturnType(SemanticType t) {
+        return isVoidType(t) || isAssignableValueType(t);
     }
 
     public SemanticPrimitiveKind primitiveKindOf(SemanticType type) {
@@ -261,6 +303,12 @@ public class TypeChecker {
     // ============================================================
     // Basic Ensure Helpers
     // ============================================================
+
+    public void ensureNotVoid(SemanticType t, String message) {
+        if (isVoidType(t)) {
+            ctx.error(message + ", got void");
+        }
+    }
 
     public void ensureIntegral(SemanticType t, String message) {
         if (!isIntegral(t)) {
@@ -307,10 +355,31 @@ public class TypeChecker {
     public void ensureSameType(SemanticType expected, SemanticType actual, String message) {
         if (!sameType(expected, actual)) {
             ctx.error(message + ": expected "
-                + describeSafe(expected)
-                + ", got "
-                + describeSafe(actual));
+                    + describeSafe(expected)
+                    + ", got "
+                    + describeSafe(actual));
         }
+    }
+
+    public void ensureValidFunctionReturnType(SemanticType type, String message) {
+        if (type == null) {
+            ctx.error(message + ": return type is null");
+            return;
+        }
+
+        if (isValidFunctionReturnType(type)) {
+            return;
+        }
+
+        if (isArrayType(type)) {
+            ctx.error(message + ": arrays cannot be returned directly; use addr<"
+                    + type.describe()
+                    + "> instead");
+            return;
+        }
+
+        ctx.error(message + ": invalid function return type "
+                + describeSafe(type));
     }
 
     // ============================================================
@@ -322,7 +391,9 @@ public class TypeChecker {
      *
      * Rules:
      *
-     *   1. Arrays are not directly assignable.
+     *   1. void cannot participate in assignment.
+     *
+     *   2. Arrays are not directly assignable.
      *
      *      array<int> a;
      *      array<int> b;
@@ -331,35 +402,33 @@ public class TypeChecker {
      *      Array operations must use array intrinsics such as init, memcpy,
      *      memset, or uninit.
      *
-     *   2. Primitive integer targets accept:
+     *   3. Primitive integer targets accept:
      *
      *      - nonconstant expressions of exactly the same primitive type;
      *      - constant BigInteger expressions if the value fits the target type.
      *
-     *      uint8_t x;
-     *      x = 255;         valid
-     *      x = 256;         invalid
+     *   4. Address targets require exact same address type.
      *
-     *   3. Address targets require exact same address type.
-     *
-     *      addr<int> p;
-     *      addr<int> q;
-     *      p = q;           valid
-     *
-     *      p = 0;           invalid
-     *      p = 123;         invalid
-     *      p = addr<uint8>; invalid
-     *
-     *   4. Other types, such as future function values, require exact type
-     *      equality unless Franko later defines special conversion rules.
+     *   5. Other types require exact type equality unless Franko later defines
+     *      special conversion rules.
      */
     public void ensureAssignable(
-        SemanticType targetType,
-        SemanticExprNode expr,
-        String message
+            SemanticType targetType,
+            SemanticExprNode expr,
+            String message
     ) {
         if (targetType == null || expr == null || expr.type == null) {
             ctx.error(message + ": internal null type");
+            return;
+        }
+
+        if (isVoidType(targetType)) {
+            ctx.error(message + ": cannot assign to void type");
+            return;
+        }
+
+        if (isVoidType(expr.type)) {
+            ctx.error(message + ": cannot assign void value");
             return;
         }
 
@@ -372,18 +441,18 @@ public class TypeChecker {
             if (expr.isConstant()) {
                 if (!fitsBigIntegerToPrimitive(expr.constantValue, targetPrimitive.kind)) {
                     ctx.error(message + ": constant value "
-                        + expr.constantValue
-                        + " does not fit in "
-                        + targetType.describe());
+                            + expr.constantValue
+                            + " does not fit in "
+                            + targetType.describe());
                 }
                 return;
             }
 
             if (!sameType(targetType, expr.type)) {
                 ctx.error(message + ": expected "
-                    + targetType.describe()
-                    + ", got "
-                    + expr.type.describe());
+                        + targetType.describe()
+                        + ", got "
+                        + expr.type.describe());
             }
 
             return;
@@ -392,9 +461,9 @@ public class TypeChecker {
         if (targetType instanceof SemanticAddrType) {
             if (!sameType(targetType, expr.type)) {
                 ctx.error(message + ": expected "
-                    + targetType.describe()
-                    + ", got "
-                    + expr.type.describe());
+                        + targetType.describe()
+                        + ", got "
+                        + expr.type.describe());
             }
 
             return;
@@ -402,9 +471,9 @@ public class TypeChecker {
 
         if (!sameType(targetType, expr.type)) {
             ctx.error(message + ": expected "
-                + targetType.describe()
-                + ", got "
-                + expr.type.describe());
+                    + targetType.describe()
+                    + ", got "
+                    + expr.type.describe());
         }
     }
 
@@ -422,7 +491,8 @@ public class TypeChecker {
      * Franko rules:
      *
      *   - both operands must be integer expressions;
-     *   - arrays and addresses are rejected because they are not integral;
+     *   - arrays, addresses, and void are rejected because they are not
+     *     integral;
      *   - if both operands are nonconstant, their types must be exactly equal;
      *   - if exactly one operand is constant, that constant must fit the other
      *     operand's concrete integer type;
@@ -430,9 +500,9 @@ public class TypeChecker {
      *     the folded BigInteger result is checked later in a contextual position.
      */
     public void ensureSameIntegralTypeOrFit(
-        SemanticExprNode left,
-        SemanticExprNode right,
-        String op
+            SemanticExprNode left,
+            SemanticExprNode right,
+            String op
     ) {
         if (left == null || right == null) {
             ctx.error("Operands of '" + op + "' cannot be null");
@@ -455,27 +525,27 @@ public class TypeChecker {
 
         if (leftConst) {
             requireConstantFitsType(
-                left.constantValue,
-                right.type,
-                "Left constant for operator '" + op + "'"
+                    left.constantValue,
+                    right.type,
+                    "Left constant for operator '" + op + "'"
             );
             return;
         }
 
         if (rightConst) {
             requireConstantFitsType(
-                right.constantValue,
-                left.type,
-                "Right constant for operator '" + op + "'"
+                    right.constantValue,
+                    left.type,
+                    "Right constant for operator '" + op + "'"
             );
             return;
         }
 
         if (!sameType(left.type, right.type)) {
             ctx.error("Operands of '" + op + "' must have the same integer type, got "
-                + left.type.describe()
-                + " and "
-                + right.type.describe());
+                    + left.type.describe()
+                    + " and "
+                    + right.type.describe());
         }
     }
 
@@ -504,9 +574,9 @@ public class TypeChecker {
      * this helper is called.
      */
     public void ensureMixedIntegralOperandsWithConstantFit(
-        SemanticExprNode left,
-        SemanticExprNode right,
-        String op
+            SemanticExprNode left,
+            SemanticExprNode right,
+            String op
     ) {
         if (left == null || right == null) {
             ctx.error("Operands of '" + op + "' cannot be null");
@@ -529,18 +599,18 @@ public class TypeChecker {
 
         if (leftConst) {
             requireConstantFitsType(
-                left.constantValue,
-                right.type,
-                "Left constant for operator '" + op + "'"
+                    left.constantValue,
+                    right.type,
+                    "Left constant for operator '" + op + "'"
             );
             return;
         }
 
         if (rightConst) {
             requireConstantFitsType(
-                right.constantValue,
-                left.type,
-                "Right constant for operator '" + op + "'"
+                    right.constantValue,
+                    left.type,
+                    "Right constant for operator '" + op + "'"
             );
         }
     }
@@ -564,24 +634,11 @@ public class TypeChecker {
      *   - constant right operand must be nonnegative;
      *   - constant right operand must fit the unsigned variant of the left
      *     operand's primitive type.
-     *
-     * Examples:
-     *
-     *   int32_t x;
-     *
-     *   x << 3                         valid
-     *   x << -1                        invalid
-     *   x << 9999999999999999999999    invalid, does not fit uint32_t
-     *
-     *   uint8_t b;
-     *
-     *   b << 255                       valid
-     *   b << 256                       invalid, does not fit uint8_t
      */
     public void ensureValidShiftOperands(
-        SemanticExprNode left,
-        SemanticExprNode right,
-        String op
+            SemanticExprNode left,
+            SemanticExprNode right,
+            String op
     ) {
         if (left == null || right == null) {
             ctx.error("Operands of '" + op + "' cannot be null");
@@ -604,9 +661,9 @@ public class TypeChecker {
          */
         if (left.isConstant()) {
             requireConstantFitsType(
-                left.constantValue,
-                left.type,
-                "Left constant for operator '" + op + "'"
+                    left.constantValue,
+                    left.type,
+                    "Left constant for operator '" + op + "'"
             );
         }
 
@@ -625,24 +682,24 @@ public class TypeChecker {
 
             if (leftKind == null) {
                 ctx.error("Left operand of '" + op + "' must be a primitive integer, got "
-                    + describeSafe(left.type));
+                        + describeSafe(left.type));
                 return;
             }
 
             SemanticPrimitiveKind rhsContextKind = unsignedVariantOf(leftKind);
 
             requireConstantFitsPrimitive(
-                right.constantValue,
-                rhsContextKind,
-                "Right constant for operator '" + op + "'"
+                    right.constantValue,
+                    rhsContextKind,
+                    "Right constant for operator '" + op + "'"
             );
 
             return;
         }
 
         ensureUnsignedIntegral(
-            right.type,
-            "Right operand of '" + op + "' must be unsigned"
+                right.type,
+                "Right operand of '" + op + "' must be unsigned"
         );
     }
 
@@ -669,13 +726,13 @@ public class TypeChecker {
     // ============================================================
 
     public void requireConstantFitsType(
-        BigInteger value,
-        SemanticType contextType,
-        String message
+            BigInteger value,
+            SemanticType contextType,
+            String message
     ) {
         if (!(contextType instanceof SemanticPrimitiveType pt)) {
             ctx.error(message + ": expected primitive integer context, got "
-                + describeSafe(contextType));
+                    + describeSafe(contextType));
             return;
         }
 
@@ -683,9 +740,9 @@ public class TypeChecker {
     }
 
     public void requireConstantFitsPrimitive(
-        BigInteger value,
-        SemanticPrimitiveKind kind,
-        String message
+            BigInteger value,
+            SemanticPrimitiveKind kind,
+            String message
     ) {
         if (value == null) {
             ctx.error(message + ": missing constant value");
@@ -699,15 +756,15 @@ public class TypeChecker {
 
         if (!fitsBigIntegerToPrimitive(value, kind)) {
             ctx.error(message + ": constant value "
-                + value
-                + " does not fit in "
-                + kind.name());
+                    + value
+                    + " does not fit in "
+                    + kind.name());
         }
     }
 
     public boolean fitsBigIntegerToPrimitive(
-        BigInteger value,
-        SemanticPrimitiveKind kind
+            BigInteger value,
+            SemanticPrimitiveKind kind
     ) {
         if (value == null || kind == null) {
             return false;
@@ -719,15 +776,15 @@ public class TypeChecker {
         BigInteger two = BigInteger.valueOf(2);
 
         BigInteger min = signed
-            ? two.pow(bits - 1).negate()
-            : BigInteger.ZERO;
+                ? two.pow(bits - 1).negate()
+                : BigInteger.ZERO;
 
         BigInteger max = signed
-            ? two.pow(bits - 1).subtract(BigInteger.ONE)
-            : two.pow(bits).subtract(BigInteger.ONE);
+                ? two.pow(bits - 1).subtract(BigInteger.ONE)
+                : two.pow(bits).subtract(BigInteger.ONE);
 
         return value.compareTo(min) >= 0
-            && value.compareTo(max) <= 0;
+                && value.compareTo(max) <= 0;
     }
 
     public int bitWidth(SemanticPrimitiveKind kind) {
@@ -763,17 +820,11 @@ public class TypeChecker {
      *   - primitive integer elements are memsetable;
      *   - static arrays are memsetable if their element type is memsetable;
      *   - dynamic arrays are not memsetable as element values;
-     *   - addresses are not memsetable.
-     *
-     * This means:
-     *
-     *   array<int>              can be memset
-     *   array<array<int, 4>>    can be memset
-     *   array<array<int>>       cannot be memset
-     *   array<addr<int>>        cannot be memset
+     *   - addresses are not memsetable;
+     *   - void is not memsetable.
      */
     public boolean isMemsetable(SemanticType t) {
-        if (t == null) {
+        if (t == null || isVoidType(t)) {
             return false;
         }
 
@@ -804,10 +855,11 @@ public class TypeChecker {
      *   - primitive integer elements are memcpyable;
      *   - static arrays are memcpyable if their element type is memcpyable;
      *   - dynamic arrays are not memcpyable as element values;
-     *   - addresses are memcpyable.
+     *   - addresses are memcpyable;
+     *   - void is not memcpyable.
      */
     public boolean isMemcpyable(SemanticType t) {
-        if (t == null) {
+        if (t == null || isVoidType(t)) {
             return false;
         }
 

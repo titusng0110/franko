@@ -30,11 +30,30 @@ abstract class SemanticExprNode extends SemanticASTNode {
 // Program / Blocks
 // ============================================================
 
-class SemanticProgramNode extends SemanticStmtNode {
-    public final List<SemanticStmtNode> statements;
+/**
+ * Program node now contains top-level items, not only statements.
+ *
+ * Valid top-level items currently include:
+ *
+ *   - SemanticFunctionDeclNode
+ *   - SemanticStmtNode
+ *
+ * This matches the raw grammar:
+ *
+ *   program
+ *       : separators* (topLevelItem separators*)* EOF
+ *       ;
+ *
+ *   topLevelItem
+ *       : functionDecl
+ *       | statement
+ *       ;
+ */
+class SemanticProgramNode extends SemanticASTNode {
+    public final List<SemanticASTNode> topLevelItems;
 
-    public SemanticProgramNode(List<SemanticStmtNode> statements) {
-        this.statements = List.copyOf(statements);
+    public SemanticProgramNode(List<SemanticASTNode> topLevelItems) {
+        this.topLevelItems = List.copyOf(topLevelItems);
     }
 }
 
@@ -51,6 +70,39 @@ class SemanticExprStmtNode extends SemanticStmtNode {
 
     public SemanticExprStmtNode(SemanticExprNode expr) {
         this.expr = Objects.requireNonNull(expr);
+    }
+}
+
+/**
+ * Semantic function declaration.
+ *
+ * The FunctionSymbol stores:
+ *
+ *   - function name,
+ *   - parameter symbols,
+ *   - function type/signature,
+ *   - builtin flag.
+ *
+ * Raw AST declaration ownership is analyzer-local bookkeeping, not symbol
+ * state. SemanticAnalyzer.Context maps raw FunctionDeclNode objects to their
+ * registered FunctionSymbol using IdentityHashMap.
+ *
+ * parameterVariables are the function parameters as ordinary local variables
+ * declared in the function's initial scope.
+ */
+class SemanticFunctionDeclNode extends SemanticASTNode {
+    public final FunctionSymbol symbol;
+    public final List<VariableSymbol> parameterVariables;
+    public final SemanticBlockNode body;
+
+    public SemanticFunctionDeclNode(
+            FunctionSymbol symbol,
+            List<VariableSymbol> parameterVariables,
+            SemanticBlockNode body
+    ) {
+        this.symbol = Objects.requireNonNull(symbol);
+        this.parameterVariables = List.copyOf(parameterVariables);
+        this.body = Objects.requireNonNull(body);
     }
 }
 
@@ -119,6 +171,35 @@ class SemanticPrintNode extends SemanticStmtNode {
 
     public SemanticPrintNode(List<SemanticExprNode> args) {
         this.args = List.copyOf(args);
+    }
+}
+
+/**
+ * Return statement.
+ *
+ * The SemanticAnalyzer attaches the function that owns this return.
+ *
+ * value is:
+ *
+ *   - null for `return;`
+ *   - non-null for `return expr;`
+ *
+ * The analyzer does not enforce return compatibility.
+ * Later statement/type checkers should validate:
+ *
+ *   - return outside a function,
+ *   - return; in non-void functions,
+ *   - return expr; in void functions,
+ *   - return expression type compatibility,
+ *   - missing return in non-void functions.
+ */
+class SemanticReturnNode extends SemanticStmtNode {
+    public final FunctionSymbol function;
+    public final SemanticExprNode value; // null for `return;`
+
+    public SemanticReturnNode(FunctionSymbol function, SemanticExprNode value) {
+        this.function = Objects.requireNonNull(function);
+        this.value = value;
     }
 }
 
@@ -287,6 +368,42 @@ class SemanticArrayAccessNode extends SemanticExprNode {
     @Override
     public boolean isLValue() {
         return true;
+    }
+}
+
+/**
+ * User-defined function call.
+ *
+ * This is produced from raw:
+ *
+ *   CallNode(
+ *       callee = VarNode("foo"),
+ *       args = [...]
+ *   )
+ *
+ * after overload resolution.
+ *
+ * The expression type is the selected function's return type.
+ * If the return type is void, the later checker should reject value-use
+ * contexts where void is not allowed.
+ */
+class SemanticFunctionCallNode extends SemanticExprNode {
+    public final FunctionSymbol function;
+    public final List<SemanticExprNode> args;
+
+    public SemanticFunctionCallNode(
+            SemanticType type,
+            FunctionSymbol function,
+            List<SemanticExprNode> args
+    ) {
+        super(type, null);
+        this.function = Objects.requireNonNull(function);
+        this.args = List.copyOf(args);
+    }
+
+    @Override
+    public boolean isLValue() {
+        return false;
     }
 }
 

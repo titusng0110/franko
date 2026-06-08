@@ -1,5 +1,6 @@
 // ============================================================
 // Franko BFS Showcase: Castle Escape
+// Function-Based Version
 // ============================================================
 //
 // Cell meanings:
@@ -16,6 +17,9 @@
 //
 // Demonstrates:
 //
+//   - functions
+//   - void functions
+//   - non-void function return
 //   - declaration initializer sugar
 //   - nested static arrays
 //   - chained indexing: grid[r][c]
@@ -32,106 +36,42 @@
 
 
 // ------------------------------------------------------------
-// Grid state
-// ------------------------------------------------------------
-
-array<array<uint32_t, 12>, 12> grid;
-array<array<char, 12>, 12> visited;
-array<array<char, 12>, 12> path;
-array<array<uint32_t, 12>, 12> dist;
-
-array<array<uint32_t, 12>, 12> parentR;
-array<array<uint32_t, 12>, 12> parentC;
-
-
-// ------------------------------------------------------------
-// Temporary output row
-// ------------------------------------------------------------
-
-array<uint32_t, 12> line;
-
-
-// ------------------------------------------------------------
-// BFS queue
-// ------------------------------------------------------------
-//
-// Dynamic heap-owned queue.
-//
-// Position packing:
-//
-//   packed = r * cols + c
-//
-// Decoding:
-//
-//   r = packed / cols
-//   c = packed - r * cols
-//
-// Queue capacity is intentionally larger than rows * cols.
-
-alloc array<uint32_t> queue(256);
-
-
-// ------------------------------------------------------------
-// Scalar variables
-// ------------------------------------------------------------
-
-uint32_t rows = 12;
-uint32_t cols = 12;
-uint32_t qCap = 256;
-
-uint32_t startR = 1;
-uint32_t startC = 1;
-
-uint32_t goalR = 10;
-uint32_t goalC = 10;
-
-uint32_t head = 0;
-uint32_t tail = 0;
-
-uint32_t r = 0;
-uint32_t c = 0;
-uint32_t i = 0;
-
-uint32_t pos = 0;
-uint32_t nr = 0;
-uint32_t nc = 0;
-
-char found = 0;
-
-
-// ------------------------------------------------------------
-// Address showcase
-// ------------------------------------------------------------
-//
-// Later, after BFS succeeds, this address will point directly
-// at dist[goalR][goalC].
-
-addr<uint32_t> answer;
-
-
-// ------------------------------------------------------------
 // Initialize arrays
 // ------------------------------------------------------------
 
-grid.memset(0);
-visited.memset(0);
-path.memset(0);
-dist.memset(0);
+func initArrays(
+    addr<array<array<uint32_t, 12>, 12>> grid,
+    addr<array<array<char, 12>, 12>> visited,
+    addr<array<array<char, 12>, 12>> path,
+    addr<array<array<uint32_t, 12>, 12>> dist
+) -> void {
+    deref(grid).memset(0)
+    deref(visited).memset(0)
+    deref(path).memset(0)
+    deref(dist).memset(0)
+}
 
 
 // ------------------------------------------------------------
 // Build outer border walls
 // ------------------------------------------------------------
 
-i = 0;
-while (i < cols) {
-    grid[0][i] = 1;
-    grid[rows - 1][i] = 1;
+func buildBorderWalls(
+    addr<array<array<uint32_t, 12>, 12>> grid,
+    uint32_t rows,
+    uint32_t cols
+) -> void {
+    uint32_t i = 0
 
-    grid[i][0] = 1;
-    grid[i][cols - 1] = 1;
+    while (i < cols) {
+        deref(grid)[0][i] = 1
+        deref(grid)[rows - 1][i] = 1
 
-    i = i + 1;
+        deref(grid)[i][0] = 1
+        deref(grid)[i][cols - 1] = 1
+
+        i = i + 1
+    }
 }
 
 
@@ -141,299 +81,539 @@ while (i < cols) {
 //
 // The maze has several barriers with deliberate openings.
 // This version is connected, so BFS can reach the goal.
+// ------------------------------------------------------------
 
+func buildCastleWalls(
+    addr<array<array<uint32_t, 12>, 12>> grid,
+    uint32_t rows,
+    uint32_t cols
+) -> void {
+    uint32_t r = 0
+    uint32_t c = 0
 
-// Horizontal wall at row 3, opening at column 8
-c = 1;
-while (c < cols - 1) {
-    if (c != 8) {
-        grid[3][c] = 1;
+    // Horizontal wall at row 3, opening at column 8
+    c = 1
+    while (c < cols - 1) {
+        if (c != 8) {
+            deref(grid)[3][c] = 1
+        }
+
+        c = c + 1
     }
 
-    c = c + 1;
+    // Horizontal wall at row 6, opening at column 2
+    c = 1
+    while (c < cols - 1) {
+        if (c != 2) {
+            deref(grid)[6][c] = 1
+        }
+
+        c = c + 1
+    }
+
+    // Horizontal wall at row 8, opening at column 9
+    c = 1
+    while (c < cols - 1) {
+        if (c != 9) {
+            deref(grid)[8][c] = 1
+        }
+
+        c = c + 1
+    }
+
+    // Vertical wall at column 5 with multiple openings
+    r = 1
+    while (r < rows - 1) {
+        if ((r != 2) && (r != 5) && (r != 7) && (r != 9)) {
+            deref(grid)[r][5] = 1
+        }
+
+        r = r + 1
+    }
+
+    // Extra blocks that do not disconnect the maze
+    deref(grid)[2][2] = 1
+    deref(grid)[2][3] = 1
+    deref(grid)[5][8] = 1
+    deref(grid)[9][7] = 1
+    deref(grid)[10][7] = 1
 }
 
 
-// Horizontal wall at row 6, opening at column 2
-c = 1;
-while (c < cols - 1) {
-    if (c != 2) {
-        grid[6][c] = 1;
-    }
-
-    c = c + 1;
-}
-
-
-// Horizontal wall at row 8, opening at column 9
-c = 1;
-while (c < cols - 1) {
-    if (c != 9) {
-        grid[8][c] = 1;
-    }
-
-    c = c + 1;
-}
-
-
-// Vertical wall at column 5 with multiple openings
+// ------------------------------------------------------------
+// Try visiting one neighboring cell
+// ------------------------------------------------------------
 //
-// Openings:
+// If the target cell is not a wall and has not been visited:
 //
-//   row 2  lets the search pass from the start side to the row-3 opening
-//   row 5  lets the search move back toward the row-6 opening
-//   row 7  lets the search cross after passing row 6
-//   row 9  gives another lower-region passage
-
-r = 1;
-while (r < rows - 1) {
-    if ((r != 2) && (r != 5) && (r != 7) && (r != 9)) {
-        grid[r][5] = 1;
-    }
-
-    r = r + 1;
-}
-
-
-// Extra blocks that do not disconnect the maze
-grid[2][2] = 1;
-grid[2][3] = 1;
-grid[5][8] = 1;
-grid[9][7] = 1;
-grid[10][7] = 1;
-
-// ------------------------------------------------------------
-// Mark start and goal
+//   - mark visited
+//   - set distance
+//   - write parent pointer
+//   - enqueue packed position
+//
+// This function exists because the UP/DOWN/LEFT/RIGHT logic is
+// genuinely repeated BFS logic.
 // ------------------------------------------------------------
 
-grid[startR][startC] = 2;
-grid[goalR][goalC] = 3;
+func tryVisit(
+    addr<array<array<uint32_t, 12>, 12>> grid,
+    addr<array<array<char, 12>, 12>> visited,
+    addr<array<array<uint32_t, 12>, 12>> dist,
+    addr<array<array<uint32_t, 12>, 12>> parentR,
+    addr<array<array<uint32_t, 12>, 12>> parentC,
+    addr<array<uint32_t>> queue,
+    addr<uint32_t> tail,
+    uint32_t qCap,
+    uint32_t cols,
+    uint32_t r,
+    uint32_t c,
+    uint32_t nr,
+    uint32_t nc
+) -> void {
+    if ((deref(grid)[nr][nc] != 1) && (deref(visited)[nr][nc] == 0)) {
+        deref(visited)[nr][nc] = 1
+        deref(dist)[nr][nc] = deref(dist)[r][c] + 1
 
+        deref(parentR)[nr][nc] = r
+        deref(parentC)[nr][nc] = c
 
-// ------------------------------------------------------------
-// BFS initialization
-// ------------------------------------------------------------
+        deref(queue)[deref(tail)] = nr * cols + nc
 
-visited[startR][startC] = 1;
-dist[startR][startC] = 0;
-
-queue[tail] = startR * cols + startC;
-
-tail = tail + 1;
-if (tail == qCap) {
-    tail = 0;
-}
-
-
-// ------------------------------------------------------------
-// BFS loop
-// ------------------------------------------------------------
-
-while ((head != tail) && (found == 0)) {
-
-    // Pop front
-    pos = queue[head];
-
-    head = head + 1;
-    if (head == qCap) {
-        head = 0;
-    }
-
-    // Decode position
-    r = pos / cols;
-    c = pos - r * cols;
-
-    // Check whether we reached the goal
-    if ((r == goalR) && (c == goalC)) {
-        found = 1;
-    }
-
-    if (found == 0) {
-
-        // ----------------------------------------------------
-        // UP
-        // ----------------------------------------------------
-
-        nr = r - 1;
-        nc = c;
-
-        if ((grid[nr][nc] != 1) && (visited[nr][nc] == 0)) {
-            visited[nr][nc] = 1;
-            dist[nr][nc] = dist[r][c] + 1;
-
-            parentR[nr][nc] = r;
-            parentC[nr][nc] = c;
-
-            queue[tail] = nr * cols + nc;
-
-            tail = tail + 1;
-            if (tail == qCap) {
-                tail = 0;
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // DOWN
-        // ----------------------------------------------------
-
-        nr = r + 1;
-        nc = c;
-
-        if ((grid[nr][nc] != 1) && (visited[nr][nc] == 0)) {
-            visited[nr][nc] = 1;
-            dist[nr][nc] = dist[r][c] + 1;
-
-            parentR[nr][nc] = r;
-            parentC[nr][nc] = c;
-
-            queue[tail] = nr * cols + nc;
-
-            tail = tail + 1;
-            if (tail == qCap) {
-                tail = 0;
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // LEFT
-        // ----------------------------------------------------
-
-        nr = r;
-        nc = c - 1;
-
-        if ((grid[nr][nc] != 1) && (visited[nr][nc] == 0)) {
-            visited[nr][nc] = 1;
-            dist[nr][nc] = dist[r][c] + 1;
-
-            parentR[nr][nc] = r;
-            parentC[nr][nc] = c;
-
-            queue[tail] = nr * cols + nc;
-
-            tail = tail + 1;
-            if (tail == qCap) {
-                tail = 0;
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // RIGHT
-        // ----------------------------------------------------
-
-        nr = r;
-        nc = c + 1;
-
-        if ((grid[nr][nc] != 1) && (visited[nr][nc] == 0)) {
-            visited[nr][nc] = 1;
-            dist[nr][nc] = dist[r][c] + 1;
-
-            parentR[nr][nc] = r;
-            parentC[nr][nc] = c;
-
-            queue[tail] = nr * cols + nc;
-
-            tail = tail + 1;
-            if (tail == qCap) {
-                tail = 0;
-            }
+        deref(tail) = deref(tail) + 1
+        if (deref(tail) == qCap) {
+            deref(tail) = 0
         }
     }
 }
 
 
 // ------------------------------------------------------------
-// Queue no longer needed
+// Run BFS
+// ------------------------------------------------------------
+//
+// Returns:
+//
+//   1 if goal was found
+//   0 otherwise
 // ------------------------------------------------------------
 
-del queue;
+func runBfs(
+    addr<array<array<uint32_t, 12>, 12>> grid,
+    addr<array<array<char, 12>, 12>> visited,
+    addr<array<array<uint32_t, 12>, 12>> dist,
+    addr<array<array<uint32_t, 12>, 12>> parentR,
+    addr<array<array<uint32_t, 12>, 12>> parentC,
+    addr<array<uint32_t>> queue,
+    uint32_t qCap,
+    uint32_t cols,
+    uint32_t startR,
+    uint32_t startC,
+    uint32_t goalR,
+    uint32_t goalC
+) -> char {
+    uint32_t head = 0
+    uint32_t tail = 0
+
+    uint32_t r = 0
+    uint32_t c = 0
+
+    uint32_t pos = 0
+    uint32_t nr = 0
+    uint32_t nc = 0
+
+    char found = 0
+
+    // BFS initialization
+    deref(visited)[startR][startC] = 1
+    deref(dist)[startR][startC] = 0
+
+    deref(queue)[tail] = startR * cols + startC
+
+    tail = tail + 1
+    if (tail == qCap) {
+        tail = 0
+    }
+
+    while ((head != tail) && (found == 0)) {
+
+        // Pop front
+        pos = deref(queue)[head]
+
+        head = head + 1
+        if (head == qCap) {
+            head = 0
+        }
+
+        // Decode position
+        r = pos / cols
+        c = pos - r * cols
+
+        // Check whether we reached the goal
+        if ((r == goalR) && (c == goalC)) {
+            found = 1
+        }
+
+        if (found == 0) {
+
+            // UP
+            nr = r - 1
+            nc = c
+
+            tryVisit(
+                grid,
+                visited,
+                dist,
+                parentR,
+                parentC,
+                queue,
+                getaddr(tail),
+                qCap,
+                cols,
+                r,
+                c,
+                nr,
+                nc
+            )
+
+            // DOWN
+            nr = r + 1
+            nc = c
+
+            tryVisit(
+                grid,
+                visited,
+                dist,
+                parentR,
+                parentC,
+                queue,
+                getaddr(tail),
+                qCap,
+                cols,
+                r,
+                c,
+                nr,
+                nc
+            )
+
+            // LEFT
+            nr = r
+            nc = c - 1
+
+            tryVisit(
+                grid,
+                visited,
+                dist,
+                parentR,
+                parentC,
+                queue,
+                getaddr(tail),
+                qCap,
+                cols,
+                r,
+                c,
+                nr,
+                nc
+            )
+
+            // RIGHT
+            nr = r
+            nc = c + 1
+
+            tryVisit(
+                grid,
+                visited,
+                dist,
+                parentR,
+                parentC,
+                queue,
+                getaddr(tail),
+                qCap,
+                cols,
+                r,
+                c,
+                nr,
+                nc
+            )
+        }
+    }
+
+    return found
+}
 
 
 // ------------------------------------------------------------
-// Reconstruct path
+// Reconstruct shortest path
 // ------------------------------------------------------------
 
-if (found != 0) {
-    r = goalR;
-    c = goalC;
+func reconstructPath(
+    addr<array<array<char, 12>, 12>> path,
+    addr<array<array<uint32_t, 12>, 12>> parentR,
+    addr<array<array<uint32_t, 12>, 12>> parentC,
+    uint32_t startR,
+    uint32_t startC,
+    uint32_t goalR,
+    uint32_t goalC
+) -> void {
+    uint32_t r = 0
+    uint32_t c = 0
+
+    uint32_t nr = 0
+    uint32_t nc = 0
+
+    r = goalR
+    c = goalC
 
     while ((r != startR) || (c != startC)) {
-        path[r][c] = 1;
+        deref(path)[r][c] = 1
 
-        nr = parentR[r][c];
-        nc = parentC[r][c];
+        nr = deref(parentR)[r][c]
+        nc = deref(parentC)[r][c]
 
-        r = nr;
-        c = nc;
+        r = nr
+        c = nc
     }
 
-    path[startR][startC] = 1;
+    deref(path)[startR][startC] = 1
 }
-
-
-// ------------------------------------------------------------
-// Print result header
-// ------------------------------------------------------------
-//
-// Output format:
-//
-//   2001
-//   shortest distance, or -1 if unreachable
-//   2002
-//   solved grid rows
-//
-// Path cells are printed as 4.
-// Start remains 2.
-// Goal remains 3.
-
-print(2001);
-
-if (found != 0) {
-    answer = getaddr(dist[goalR][goalC]);
-    print(deref(answer));
-} else {
-    print(-1);
-}
-
-print(2002);
 
 
 // ------------------------------------------------------------
 // Print solved grid
 // ------------------------------------------------------------
+//
+// IMPORTANT:
+// Keep each grid row printed as one print(...) call with 12 values.
+// This preserves the original output format.
+// ------------------------------------------------------------
 
-r = 0;
-while (r < rows) {
+func printSolvedGrid(
+    addr<array<array<uint32_t, 12>, 12>> grid,
+    addr<array<array<char, 12>, 12>> path,
+    addr<array<uint32_t, 12>> line,
+    uint32_t rows,
+    uint32_t cols,
+    uint32_t startR,
+    uint32_t startC,
+    uint32_t goalR,
+    uint32_t goalC
+) -> void {
+    uint32_t r = 0
+    uint32_t c = 0
 
-    // Copy the original grid row into a temporary row buffer.
-    line.memcpy(grid[r]);
+    r = 0
+    while (r < rows) {
 
-    // Overlay path cells.
-    c = 0;
-    while (c < cols) {
-        if (path[r][c] != 0) {
-            line[c] = 4;
+        // Copy original grid row into temporary row buffer.
+        deref(line).memcpy(deref(grid)[r])
+
+        // Overlay path cells.
+        c = 0
+        while (c < cols) {
+            if (deref(path)[r][c] != 0) {
+                deref(line)[c] = 4
+            }
+
+            c = c + 1
         }
 
-        c = c + 1;
+        // Restore start and goal markers.
+        if (r == startR) {
+            deref(line)[startC] = 2
+        }
+
+        if (r == goalR) {
+            deref(line)[goalC] = 3
+        }
+
+        print(
+            deref(line)[0], deref(line)[1], deref(line)[2], deref(line)[3],
+            deref(line)[4], deref(line)[5], deref(line)[6], deref(line)[7],
+            deref(line)[8], deref(line)[9], deref(line)[10], deref(line)[11]
+        )
+
+        r = r + 1
+    }
+}
+
+
+// ------------------------------------------------------------
+// Main
+// ------------------------------------------------------------
+
+func main() -> int32_t {
+
+    // ------------------------------------------------------------
+    // Grid state
+    // ------------------------------------------------------------
+
+    array<array<uint32_t, 12>, 12> grid
+    array<array<char, 12>, 12> visited
+    array<array<char, 12>, 12> path
+    array<array<uint32_t, 12>, 12> dist
+
+    array<array<uint32_t, 12>, 12> parentR
+    array<array<uint32_t, 12>, 12> parentC
+
+
+    // ------------------------------------------------------------
+    // Temporary output row
+    // ------------------------------------------------------------
+
+    array<uint32_t, 12> line
+
+
+    // ------------------------------------------------------------
+    // BFS queue
+    // ------------------------------------------------------------
+
+    alloc array<uint32_t> queue
+
+
+    // ------------------------------------------------------------
+    // Scalar variables
+    // ------------------------------------------------------------
+
+    uint32_t rows = 12
+    uint32_t cols = 12
+    uint32_t qCap = 256
+
+    uint32_t startR = 1
+    uint32_t startC = 1
+
+    uint32_t goalR = 10
+    uint32_t goalC = 10
+
+    char found = 0
+
+    addr<uint32_t> answer
+
+
+    // ------------------------------------------------------------
+    // Initialize heap dynamic queue
+    // ------------------------------------------------------------
+
+    queue(qCap)
+
+
+    // ------------------------------------------------------------
+    // Initialize arrays and maze
+    // ------------------------------------------------------------
+
+    initArrays(
+        getaddr(grid),
+        getaddr(visited),
+        getaddr(path),
+        getaddr(dist)
+    )
+
+    buildBorderWalls(
+        getaddr(grid),
+        rows,
+        cols
+    )
+
+    buildCastleWalls(
+        getaddr(grid),
+        rows,
+        cols
+    )
+
+
+    // ------------------------------------------------------------
+    // Mark start and goal
+    // ------------------------------------------------------------
+
+    grid[startR][startC] = 2
+    grid[goalR][goalC] = 3
+
+
+    // ------------------------------------------------------------
+    // Run BFS
+    // ------------------------------------------------------------
+
+    found = runBfs(
+        getaddr(grid),
+        getaddr(visited),
+        getaddr(dist),
+        getaddr(parentR),
+        getaddr(parentC),
+        getaddr(queue),
+        qCap,
+        cols,
+        startR,
+        startC,
+        goalR,
+        goalC
+    )
+
+
+    // ------------------------------------------------------------
+    // Queue no longer needed
+    // ------------------------------------------------------------
+
+    del queue
+
+
+    // ------------------------------------------------------------
+    // Reconstruct path
+    // ------------------------------------------------------------
+
+    if (found != 0) {
+        reconstructPath(
+            getaddr(path),
+            getaddr(parentR),
+            getaddr(parentC),
+            startR,
+            startC,
+            goalR,
+            goalC
+        )
     }
 
-    // Restore start and goal markers.
-    if (r == startR) {
-        line[startC] = 2;
+
+    // ------------------------------------------------------------
+    // Print result header
+    // ------------------------------------------------------------
+    //
+    // Output format:
+    //
+    //   3001
+    //   shortest distance, or -1 if unreachable
+    //   3002
+    //   solved grid rows
+    //
+    // Path cells are printed as 4.
+    // Start remains 2.
+    // Goal remains 3.
+    // ------------------------------------------------------------
+
+    print(3001)
+
+    if (found != 0) {
+        answer = getaddr(dist[goalR][goalC])
+        print(deref(answer))
+    } else {
+        print(-1)
     }
 
-    if (r == goalR) {
-        line[goalC] = 3;
-    }
+    print(3002)
 
-    print(
-        line[0], line[1], line[2], line[3],
-        line[4], line[5], line[6], line[7],
-        line[8], line[9], line[10], line[11]
-    );
 
-    r = r + 1;
+    // ------------------------------------------------------------
+    // Print solved grid
+    // ------------------------------------------------------------
+
+    printSolvedGrid(
+        getaddr(grid),
+        getaddr(path),
+        getaddr(line),
+        rows,
+        cols,
+        startR,
+        startC,
+        goalR,
+        goalC
+    )
+
+    return 0
 }
