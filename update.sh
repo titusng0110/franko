@@ -37,7 +37,7 @@ step "rm -rf \"$GEN_DIR\"/* \"$CLS_DIR\"/*"
 
 step "java -Xmx500M -cp \"$ANTLR_CP\" org.antlr.v4.Tool -visitor -o \"$GEN_DIR\" Franko.g4"
 
-step "javac -cp \"$ANTLR_CP:$GEN_DIR\" -d \"$CLS_DIR\" *.java \"$GEN_DIR\"/*.java"
+step "javac --release 25 -Xlint:all,-auxiliaryclass -cp \"$ANTLR_CP:$GEN_DIR\" -d \"$CLS_DIR\" *.java \"$GEN_DIR\"/*.java"
 
 echo
 echo "✅ Compiler toolchain updated successfully."
