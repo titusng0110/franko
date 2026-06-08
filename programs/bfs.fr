@@ -577,9 +577,9 @@ func main() -> int32_t {
     //
     // Output format:
     //
-    //   3001
+    //   4001
     //   shortest distance, or -1 if unreachable
-    //   3002
+    //   4002
     //   solved grid rows
     //
     // Path cells are printed as 4.
@@ -587,7 +587,7 @@ func main() -> int32_t {
     // Goal remains 3.
     // ------------------------------------------------------------
 
-    print(3001)
+    print(4001)
 
     if (found != 0) {
         answer = getaddr(dist[goalR][goalC])
@@ -596,7 +596,7 @@ func main() -> int32_t {
         print(-1)
     }
 
-    print(3002)
+    print(4002)
 
 
     // ------------------------------------------------------------

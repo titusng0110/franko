@@ -1,0 +1,243 @@
+// ============================================================
+// Franko Recursive Merge Sort Showcase: 50 Elements
+// Global-Array Version
+// ============================================================
+//
+// Demonstrates:
+//
+//   - global static arrays
+//   - recursive functions
+//   - void and non-void functions
+//   - global variables referenced inside functions
+//   - uint32_t indexes
+//   - int32_t values
+//   - merge sort using a global helper copy buffer
+//   - copying merged results back into the main array
+//
+// Global scope in Franko allows declarations only, so the
+// arrays are declared globally and initialized inside a
+// function body.
+// ============================================================
+
+
+// ------------------------------------------------------------
+// Global arrays
+// ------------------------------------------------------------
+
+array<int32_t, 50> a
+array<int32_t, 50> b
+
+
+// ------------------------------------------------------------
+// Print array contents
+// ------------------------------------------------------------
+
+func printArray(uint32_t n) -> void {
+    uint32_t i = 0
+
+    while (i < n) {
+        print(a[i])
+        i = i + 1
+    }
+}
+
+
+// ------------------------------------------------------------
+// Initialize unsorted data
+// ------------------------------------------------------------
+
+func initData() -> void {
+    a[0] = 42
+    a[1] = 7
+    a[2] = 19
+    a[3] = 3
+    a[4] = 100
+    a[5] = 55
+    a[6] = 1
+    a[7] = 88
+    a[8] = 12
+    a[9] = 33
+
+    a[10] = 21
+    a[11] = 5
+    a[12] = 77
+    a[13] = 60
+    a[14] = 2
+    a[15] = 50
+    a[16] = 91
+    a[17] = 14
+    a[18] = 39
+    a[19] = 73
+
+    a[20] = 8
+    a[21] = 65
+    a[22] = 27
+    a[23] = 44
+    a[24] = 6
+    a[25] = 99
+    a[26] = 31
+    a[27] = 58
+    a[28] = 16
+    a[29] = 82
+
+    a[30] = 24
+    a[31] = 70
+    a[32] = 11
+    a[33] = 47
+    a[34] = 35
+    a[35] = 94
+    a[36] = 29
+    a[37] = 63
+    a[38] = 18
+    a[39] = 76
+
+    a[40] = 4
+    a[41] = 53
+    a[42] = 68
+    a[43] = 10
+    a[44] = 97
+    a[45] = 26
+    a[46] = 41
+    a[47] = 80
+    a[48] = 22
+    a[49] = 56
+}
+
+
+// ------------------------------------------------------------
+// Merge two sorted ranges
+// ------------------------------------------------------------
+//
+// Merges:
+//
+//   a[low..mid]
+//   a[mid+1..high]
+//
+// into global helper array b, then copies the merged region
+// back into a.
+// ------------------------------------------------------------
+
+func merge(uint32_t low, uint32_t mid, uint32_t high) -> void {
+    uint32_t i = 0
+    uint32_t j = 0
+    uint32_t k = 0
+
+    i = low
+    j = mid + 1
+    k = low
+
+    // Merge while both halves still have elements
+    while (i <= mid && j <= high) {
+        if (a[i] <= a[j]) {
+            b[k] = a[i]
+            i = i + 1
+        } else {
+            b[k] = a[j]
+            j = j + 1
+        }
+
+        k = k + 1
+    }
+
+    // Copy any remaining left-half elements
+    while (i <= mid) {
+        b[k] = a[i]
+        i = i + 1
+        k = k + 1
+    }
+
+    // Copy any remaining right-half elements
+    while (j <= high) {
+        b[k] = a[j]
+        j = j + 1
+        k = k + 1
+    }
+
+    // Copy merged result back into a
+    k = low
+    while (k <= high) {
+        a[k] = b[k]
+        k = k + 1
+    }
+}
+
+
+// ------------------------------------------------------------
+// Recursive merge sort
+// ------------------------------------------------------------
+//
+// Sorts:
+//
+//   a[low..high]
+//
+// Base case:
+//   range of size 0 or 1
+// ------------------------------------------------------------
+
+func mergeSort(uint32_t low, uint32_t high) -> void {
+    uint32_t mid = 0
+
+    if (low < high) {
+        mid = low + ((high - low) / 2)
+
+        mergeSort(low, mid)
+        mergeSort(mid + 1, high)
+        merge(low, mid, high)
+    }
+}
+
+
+// ------------------------------------------------------------
+// Verification pass
+// ------------------------------------------------------------
+//
+// Returns:
+//
+//   1 if sorted
+//   0 otherwise
+// ------------------------------------------------------------
+
+func isSorted(uint32_t n) -> uint8_t {
+    uint32_t k = 1
+    uint8_t sorted = 1
+
+    while (k < n) {
+        if (a[k] < a[k - 1]) {
+            sorted = 0
+        }
+
+        k = k + 1
+    }
+
+    return sorted
+}
+
+
+// ------------------------------------------------------------
+// Main
+// ------------------------------------------------------------
+
+func main() -> int32_t {
+    uint32_t n = 50
+    uint8_t sorted = 0
+
+    initData()
+
+    // Print unsorted array
+    print(3001)
+    printArray(n)
+
+    mergeSort(0, n - 1)
+
+    // Print sorted array
+    print(3002)
+    printArray(n)
+
+    // Verify sortedness
+    sorted = isSorted(n)
+
+    print(3003)
+    print(sorted)
+
+    return 0
+}

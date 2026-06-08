@@ -251,7 +251,7 @@ int32_t main()
     {
         reconstructPath((&path), (&parentR), (&parentC), startR, startC, goalR, goalC);
     }
-    std::cout << 3001 << '\n';
+    std::cout << 4001 << '\n';
     if (static_cast<uint8_t>((found != 0)))
     {
         answer = (&((dist[goalR])[goalC]));
@@ -261,7 +261,7 @@ int32_t main()
     {
         std::cout << static_cast<int32_t>((-1)) << '\n';
     }
-    std::cout << 3002 << '\n';
+    std::cout << 4002 << '\n';
     printSolvedGrid((&grid), (&path), (&line), rows, cols, startR, startC, goalR, goalC);
     return static_cast<int32_t>(0);
 }
