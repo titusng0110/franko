@@ -10,6 +10,7 @@
  * The SemanticAnalyzer has already:
  *
  *   - resolved variable references to VariableSymbol objects,
+ *   - resolved function calls to FunctionSymbol overloads,
  *   - assigned every expression a SemanticType,
  *   - folded integer constants into BigInteger values when possible,
  *   - lowered array intrinsic syntax into dedicated Semantic AST nodes,
@@ -19,13 +20,44 @@
  *
  *   - assignment target validity,
  *   - assignment type compatibility,
+ *   - void-expression rejection in value-producing statement contexts,
  *   - if/while condition validity,
+ *   - print argument validity,
  *   - delete legality,
  *   - dynamic array initialization legality,
  *   - dynamic array uninitialization legality,
  *   - array memset legality,
  *   - array memcpy legality,
  *   - recursive traversal through blocks and nested statements.
+ *
+ * ----------------------------------------------------------------------------
+ * FUNCTION / RETURN NOTE
+ * ----------------------------------------------------------------------------
+ *
+ * Function-level return rules are handled by FunctionChecker, not here.
+ *
+ * FunctionChecker should intercept SemanticReturnNode before delegating normal
+ * statements to StatementChecker.
+ *
+ * If StatementChecker sees a SemanticReturnNode directly, it reports a defensive
+ * error instead of treating it as an unknown node.
+ *
+ * ----------------------------------------------------------------------------
+ * VOID VALUE-CONTEXT RULE
+ * ----------------------------------------------------------------------------
+ *
+ * A void-returning function call is allowed as an expression statement:
+ *
+ *     logDone();
+ *
+ * But a void expression is invalid in value-producing contexts:
+ *
+ *     x = logDone();       invalid
+ *     if (logDone()) {}    invalid
+ *     print(logDone());    invalid
+ *     arr(logDone());      invalid
+ *
+ * StatementChecker enforces this for statement-level value contexts.
  *
  * ----------------------------------------------------------------------------
  * ARRAY INTRINSIC RULES
@@ -56,7 +88,7 @@
  *      - target/source element types must match
  *      - static/dynamic shape and static lengths do not need to match
  *
- * ============================================================================ 
+ * ============================================================================
  */
 public class StatementChecker {
     private final SemanticAnalyzer.Context ctx;
@@ -116,6 +148,11 @@ public class StatementChecker {
             return;
         }
 
+        if (node instanceof SemanticReturnNode n) {
+            visitReturnOutsideFunctionChecker(n);
+            return;
+        }
+
         if (node instanceof SemanticExprStmtNode n) {
             visitExprStmt(n);
             return;
@@ -155,6 +192,15 @@ public class StatementChecker {
         }
     }
 
+    /**
+     * Expression statements are allowed even if the expression has void type.
+     *
+     * This is what permits:
+     *
+     *     logDone();
+     *
+     * where logDone returns void.
+     */
     private void visitExprStmt(SemanticExprStmtNode node) {
         expressions.checkExpr(node.expr);
     }
@@ -167,6 +213,18 @@ public class StatementChecker {
             ctx.error("Left-hand side of assignment must be an addressable storage-backed lvalue");
         }
 
+        if (isVoidType(node.target.type)) {
+            ctx.error("Left-hand side of assignment cannot have void type");
+            return;
+        }
+
+        if (!ensureValueExpression(
+                node.value,
+                "Right-hand side of assignment"
+        )) {
+            return;
+        }
+
         types.ensureAssignable(
                 node.target.type,
                 node.value,
@@ -177,10 +235,15 @@ public class StatementChecker {
     private void visitIf(SemanticIfNode node) {
         expressions.checkExpr(node.condition);
 
-        types.ensureIntegral(
-                node.condition.type,
-                "if condition must be an integer"
-        );
+        if (ensureValueExpression(
+                node.condition,
+                "if condition"
+        )) {
+            types.ensureIntegral(
+                    node.condition.type,
+                    "if condition must be an integer"
+            );
+        }
 
         checkStmt(node.thenBranch);
 
@@ -192,10 +255,15 @@ public class StatementChecker {
     private void visitWhile(SemanticWhileNode node) {
         expressions.checkExpr(node.condition);
 
-        types.ensureIntegral(
-                node.condition.type,
-                "while condition must be an integer"
-        );
+        if (ensureValueExpression(
+                node.condition,
+                "while condition"
+        )) {
+            types.ensureIntegral(
+                    node.condition.type,
+                    "while condition must be an integer"
+            );
+        }
 
         checkStmt(node.body);
     }
@@ -203,7 +271,27 @@ public class StatementChecker {
     private void visitPrint(SemanticPrintNode node) {
         for (SemanticExprNode arg : node.args) {
             expressions.checkExpr(arg);
+
+            ensureValueExpression(
+                    arg,
+                    "print argument"
+            );
         }
+    }
+
+    /**
+     * Return statements should be handled by FunctionChecker because return
+     * legality depends on the enclosing function's declared return type.
+     *
+     * This defensive branch prevents returns from being reported as unknown
+     * statements if they accidentally reach StatementChecker.
+     */
+    private void visitReturnOutsideFunctionChecker(SemanticReturnNode node) {
+        if (node.value != null) {
+            expressions.checkExpr(node.value);
+        }
+
+        ctx.error("Return statement was checked outside FunctionChecker");
     }
 
     // ============================================================
@@ -246,7 +334,7 @@ public class StatementChecker {
      *   - target must be a dynamic array,
      *   - size must be a valid dynamic array size.
      *
-     * This now supports:
+     * This supports:
      *
      *   arr(20);
      *   deref(p)(20);
@@ -266,6 +354,10 @@ public class StatementChecker {
                     + types.describeSafe(node.target.type));
         }
 
+        /*
+         * ensureArraySizeCompatible checks the size expression itself and
+         * rejects void/non-uint32/non-fitting constants.
+         */
         expressions.ensureArraySizeCompatible(
                 node.size,
                 "Array size"
@@ -323,7 +415,12 @@ public class StatementChecker {
                     + elementType.describe());
         }
 
-        ensureMemsetValueCompatible(node.value);
+        if (ensureValueExpression(
+                node.value,
+                "memset() fill value"
+        )) {
+            ensureMemsetValueCompatible(node.value);
+        }
     }
 
     /**
@@ -405,6 +502,39 @@ public class StatementChecker {
             ctx.error("memset() fill value must be uint8_t/char, got "
                     + types.describeSafe(value.type));
         }
+    }
+
+    // ============================================================
+    // Value Context Helpers
+    // ============================================================
+
+    /**
+     * Ensures an expression is usable as a value.
+     *
+     * This is where StatementChecker enforces:
+     *
+     *   - void-returning calls are allowed as statements,
+     *   - void-returning calls are not allowed where a value is required.
+     */
+    private boolean ensureValueExpression(
+            SemanticExprNode expr,
+            String where
+    ) {
+        if (expr == null) {
+            ctx.error(where + " cannot be null");
+            return false;
+        }
+
+        if (isVoidType(expr.type)) {
+            ctx.error(where + " cannot be void");
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isVoidType(SemanticType type) {
+        return type instanceof SemanticVoidType;
     }
 
     // ============================================================

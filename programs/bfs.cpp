@@ -1,6 +1,218 @@
 #include "FrankoRuntime.hpp"
 
-int main() {
+void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist);
+void buildBorderWalls(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, uint32_t rows, uint32_t cols);
+void buildCastleWalls(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, uint32_t rows, uint32_t cols);
+void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc);
+uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
+void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
+void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<uint32_t, 12>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
+int32_t main();
+
+void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist)
+{
+    (*grid).memset(static_cast<uint8_t>(0));
+    (*visited).memset(static_cast<uint8_t>(0));
+    (*path).memset(static_cast<uint8_t>(0));
+    (*dist).memset(static_cast<uint8_t>(0));
+}
+
+void buildBorderWalls(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, uint32_t rows, uint32_t cols)
+{
+    uint32_t i;
+    i = static_cast<uint32_t>(0);
+    while (static_cast<uint8_t>((i < cols)))
+    {
+        (((*grid)[static_cast<uint32_t>(0)])[i]) = static_cast<uint32_t>(1);
+        (((*grid)[static_cast<uint32_t>((rows - 1))])[i]) = static_cast<uint32_t>(1);
+        (((*grid)[i])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
+        (((*grid)[i])[static_cast<uint32_t>((cols - 1))]) = static_cast<uint32_t>(1);
+        i = static_cast<uint32_t>((i + 1));
+    }
+}
+
+void buildCastleWalls(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, uint32_t rows, uint32_t cols)
+{
+    uint32_t r;
+    r = static_cast<uint32_t>(0);
+    uint32_t c;
+    c = static_cast<uint32_t>(0);
+    c = static_cast<uint32_t>(1);
+    while (static_cast<uint8_t>((c < static_cast<uint32_t>((cols - 1)))))
+    {
+        if (static_cast<uint8_t>((c != 8)))
+        {
+            (((*grid)[static_cast<uint32_t>(3)])[c]) = static_cast<uint32_t>(1);
+        }
+        c = static_cast<uint32_t>((c + 1));
+    }
+    c = static_cast<uint32_t>(1);
+    while (static_cast<uint8_t>((c < static_cast<uint32_t>((cols - 1)))))
+    {
+        if (static_cast<uint8_t>((c != 2)))
+        {
+            (((*grid)[static_cast<uint32_t>(6)])[c]) = static_cast<uint32_t>(1);
+        }
+        c = static_cast<uint32_t>((c + 1));
+    }
+    c = static_cast<uint32_t>(1);
+    while (static_cast<uint8_t>((c < static_cast<uint32_t>((cols - 1)))))
+    {
+        if (static_cast<uint8_t>((c != 9)))
+        {
+            (((*grid)[static_cast<uint32_t>(8)])[c]) = static_cast<uint32_t>(1);
+        }
+        c = static_cast<uint32_t>((c + 1));
+    }
+    r = static_cast<uint32_t>(1);
+    while (static_cast<uint8_t>((r < static_cast<uint32_t>((rows - 1)))))
+    {
+        if (static_cast<uint8_t>((static_cast<uint8_t>((static_cast<uint8_t>((static_cast<uint8_t>((r != 2)) && static_cast<uint8_t>((r != 5)))) && static_cast<uint8_t>((r != 7)))) && static_cast<uint8_t>((r != 9)))))
+        {
+            (((*grid)[r])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
+        }
+        r = static_cast<uint32_t>((r + 1));
+    }
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
+}
+
+void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc)
+{
+    if (static_cast<uint8_t>((static_cast<uint8_t>(((((*grid)[nr])[nc]) != 1)) && static_cast<uint8_t>(((((*visited)[nr])[nc]) == 0)))))
+    {
+        (((*visited)[nr])[nc]) = static_cast<uint8_t>(1);
+        (((*dist)[nr])[nc]) = static_cast<uint32_t>(((((*dist)[r])[c]) + 1));
+        (((*parentR)[nr])[nc]) = r;
+        (((*parentC)[nr])[nc]) = c;
+        ((*queue)[(*tail)]) = static_cast<uint32_t>((static_cast<uint32_t>((nr * cols)) + nc));
+        (*tail) = static_cast<uint32_t>(((*tail) + 1));
+        if (static_cast<uint8_t>(((*tail) == qCap)))
+        {
+            (*tail) = static_cast<uint32_t>(0);
+        }
+    }
+}
+
+uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
+{
+    uint32_t head;
+    head = static_cast<uint32_t>(0);
+    uint32_t tail;
+    tail = static_cast<uint32_t>(0);
+    uint32_t r;
+    r = static_cast<uint32_t>(0);
+    uint32_t c;
+    c = static_cast<uint32_t>(0);
+    uint32_t pos;
+    pos = static_cast<uint32_t>(0);
+    uint32_t nr;
+    nr = static_cast<uint32_t>(0);
+    uint32_t nc;
+    nc = static_cast<uint32_t>(0);
+    uint8_t found;
+    found = static_cast<uint8_t>(0);
+    (((*visited)[startR])[startC]) = static_cast<uint8_t>(1);
+    (((*dist)[startR])[startC]) = static_cast<uint32_t>(0);
+    ((*queue)[tail]) = static_cast<uint32_t>((static_cast<uint32_t>((startR * cols)) + startC));
+    tail = static_cast<uint32_t>((tail + 1));
+    if (static_cast<uint8_t>((tail == qCap)))
+    {
+        tail = static_cast<uint32_t>(0);
+    }
+    while (static_cast<uint8_t>((static_cast<uint8_t>((head != tail)) && static_cast<uint8_t>((found == 0)))))
+    {
+        pos = ((*queue)[head]);
+        head = static_cast<uint32_t>((head + 1));
+        if (static_cast<uint8_t>((head == qCap)))
+        {
+            head = static_cast<uint32_t>(0);
+        }
+        r = static_cast<uint32_t>((pos / cols));
+        c = static_cast<uint32_t>((pos - static_cast<uint32_t>((r * cols))));
+        if (static_cast<uint8_t>((static_cast<uint8_t>((r == goalR)) && static_cast<uint8_t>((c == goalC)))))
+        {
+            found = static_cast<uint8_t>(1);
+        }
+        if (static_cast<uint8_t>((found == 0)))
+        {
+            nr = static_cast<uint32_t>((r - 1));
+            nc = c;
+            tryVisit(grid, visited, dist, parentR, parentC, queue, (&tail), qCap, cols, r, c, nr, nc);
+            nr = static_cast<uint32_t>((r + 1));
+            nc = c;
+            tryVisit(grid, visited, dist, parentR, parentC, queue, (&tail), qCap, cols, r, c, nr, nc);
+            nr = r;
+            nc = static_cast<uint32_t>((c - 1));
+            tryVisit(grid, visited, dist, parentR, parentC, queue, (&tail), qCap, cols, r, c, nr, nc);
+            nr = r;
+            nc = static_cast<uint32_t>((c + 1));
+            tryVisit(grid, visited, dist, parentR, parentC, queue, (&tail), qCap, cols, r, c, nr, nc);
+        }
+    }
+    return found;
+}
+
+void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
+{
+    uint32_t r;
+    r = static_cast<uint32_t>(0);
+    uint32_t c;
+    c = static_cast<uint32_t>(0);
+    uint32_t nr;
+    nr = static_cast<uint32_t>(0);
+    uint32_t nc;
+    nc = static_cast<uint32_t>(0);
+    r = goalR;
+    c = goalC;
+    while (static_cast<uint8_t>((static_cast<uint8_t>((r != startR)) || static_cast<uint8_t>((c != startC)))))
+    {
+        (((*path)[r])[c]) = static_cast<uint8_t>(1);
+        nr = (((*parentR)[r])[c]);
+        nc = (((*parentC)[r])[c]);
+        r = nr;
+        c = nc;
+    }
+    (((*path)[startR])[startC]) = static_cast<uint8_t>(1);
+}
+
+void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<uint32_t, 12>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
+{
+    uint32_t r;
+    r = static_cast<uint32_t>(0);
+    uint32_t c;
+    c = static_cast<uint32_t>(0);
+    r = static_cast<uint32_t>(0);
+    while (static_cast<uint8_t>((r < rows)))
+    {
+        (*line).memcpy(((*grid)[r]));
+        c = static_cast<uint32_t>(0);
+        while (static_cast<uint8_t>((c < cols)))
+        {
+            if (static_cast<uint8_t>(((((*path)[r])[c]) != 0)))
+            {
+                ((*line)[c]) = static_cast<uint32_t>(4);
+            }
+            c = static_cast<uint32_t>((c + 1));
+        }
+        if (static_cast<uint8_t>((r == startR)))
+        {
+            ((*line)[startC]) = static_cast<uint32_t>(2);
+        }
+        if (static_cast<uint8_t>((r == goalR)))
+        {
+            ((*line)[goalC]) = static_cast<uint32_t>(3);
+        }
+        std::cout << ((*line)[static_cast<uint32_t>(0)]) << ' ' << ((*line)[static_cast<uint32_t>(1)]) << ' ' << ((*line)[static_cast<uint32_t>(2)]) << ' ' << ((*line)[static_cast<uint32_t>(3)]) << ' ' << ((*line)[static_cast<uint32_t>(4)]) << ' ' << ((*line)[static_cast<uint32_t>(5)]) << ' ' << ((*line)[static_cast<uint32_t>(6)]) << ' ' << ((*line)[static_cast<uint32_t>(7)]) << ' ' << ((*line)[static_cast<uint32_t>(8)]) << ' ' << ((*line)[static_cast<uint32_t>(9)]) << ' ' << ((*line)[static_cast<uint32_t>(10)]) << ' ' << ((*line)[static_cast<uint32_t>(11)]) << '\n';
+        r = static_cast<uint32_t>((r + 1));
+    }
+}
+
+int32_t main()
+{
     Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12> grid;
     Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12> visited;
     Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12> path;
@@ -9,199 +221,37 @@ int main() {
     Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12> parentC;
     Franko_Static_Array<uint32_t, 12> line;
     Franko_Dynamic_Array<uint32_t>* queue = new Franko_Dynamic_Array<uint32_t>();
-    (*queue).init(256);
     uint32_t rows;
-    rows = 12;
+    rows = static_cast<uint32_t>(12);
     uint32_t cols;
-    cols = 12;
+    cols = static_cast<uint32_t>(12);
     uint32_t qCap;
-    qCap = 256;
+    qCap = static_cast<uint32_t>(256);
     uint32_t startR;
-    startR = 1;
+    startR = static_cast<uint32_t>(1);
     uint32_t startC;
-    startC = 1;
+    startC = static_cast<uint32_t>(1);
     uint32_t goalR;
-    goalR = 10;
+    goalR = static_cast<uint32_t>(10);
     uint32_t goalC;
-    goalC = 10;
-    uint32_t head;
-    head = 0;
-    uint32_t tail;
-    tail = 0;
-    uint32_t r;
-    r = 0;
-    uint32_t c;
-    c = 0;
-    uint32_t i;
-    i = 0;
-    uint32_t pos;
-    pos = 0;
-    uint32_t nr;
-    nr = 0;
-    uint32_t nc;
-    nc = 0;
+    goalC = static_cast<uint32_t>(10);
     uint8_t found;
-    found = 0;
+    found = static_cast<uint8_t>(0);
     uint32_t* answer;
-    grid.memset(0);
-    visited.memset(0);
-    path.memset(0);
-    dist.memset(0);
-    i = 0;
-    while (static_cast<uint8_t>((i < cols)))
-    {
-        ((grid[0])[i]) = 1;
-        ((grid[static_cast<uint32_t>((rows - 1))])[i]) = 1;
-        ((grid[i])[0]) = 1;
-        ((grid[i])[static_cast<uint32_t>((cols - 1))]) = 1;
-        i = static_cast<uint32_t>((i + 1));
-    }
-    c = 1;
-    while (static_cast<uint8_t>((c < static_cast<uint32_t>((cols - 1)))))
-    {
-        if (static_cast<uint8_t>((c != 8)))
-        {
-            ((grid[3])[c]) = 1;
-        }
-        c = static_cast<uint32_t>((c + 1));
-    }
-    c = 1;
-    while (static_cast<uint8_t>((c < static_cast<uint32_t>((cols - 1)))))
-    {
-        if (static_cast<uint8_t>((c != 2)))
-        {
-            ((grid[6])[c]) = 1;
-        }
-        c = static_cast<uint32_t>((c + 1));
-    }
-    c = 1;
-    while (static_cast<uint8_t>((c < static_cast<uint32_t>((cols - 1)))))
-    {
-        if (static_cast<uint8_t>((c != 9)))
-        {
-            ((grid[8])[c]) = 1;
-        }
-        c = static_cast<uint32_t>((c + 1));
-    }
-    r = 1;
-    while (static_cast<uint8_t>((r < static_cast<uint32_t>((rows - 1)))))
-    {
-        if (static_cast<uint8_t>((static_cast<uint8_t>((static_cast<uint8_t>((static_cast<uint8_t>((r != 2)) && static_cast<uint8_t>((r != 5)))) && static_cast<uint8_t>((r != 7)))) && static_cast<uint8_t>((r != 9)))))
-        {
-            ((grid[r])[5]) = 1;
-        }
-        r = static_cast<uint32_t>((r + 1));
-    }
-    ((grid[2])[2]) = 1;
-    ((grid[2])[3]) = 1;
-    ((grid[5])[8]) = 1;
-    ((grid[9])[7]) = 1;
-    ((grid[10])[7]) = 1;
-    ((grid[startR])[startC]) = 2;
-    ((grid[goalR])[goalC]) = 3;
-    ((visited[startR])[startC]) = 1;
-    ((dist[startR])[startC]) = 0;
-    ((*queue)[tail]) = static_cast<uint32_t>((static_cast<uint32_t>((startR * cols)) + startC));
-    tail = static_cast<uint32_t>((tail + 1));
-    if (static_cast<uint8_t>((tail == qCap)))
-    {
-        tail = 0;
-    }
-    while (static_cast<uint8_t>((static_cast<uint8_t>((head != tail)) && static_cast<uint8_t>((found == 0)))))
-    {
-        pos = ((*queue)[head]);
-        head = static_cast<uint32_t>((head + 1));
-        if (static_cast<uint8_t>((head == qCap)))
-        {
-            head = 0;
-        }
-        r = static_cast<uint32_t>((pos / cols));
-        c = static_cast<uint32_t>((pos - static_cast<uint32_t>((r * cols))));
-        if (static_cast<uint8_t>((static_cast<uint8_t>((r == goalR)) && static_cast<uint8_t>((c == goalC)))))
-        {
-            found = 1;
-        }
-        if (static_cast<uint8_t>((found == 0)))
-        {
-            nr = static_cast<uint32_t>((r - 1));
-            nc = c;
-            if (static_cast<uint8_t>((static_cast<uint8_t>((((grid[nr])[nc]) != 1)) && static_cast<uint8_t>((((visited[nr])[nc]) == 0)))))
-            {
-                ((visited[nr])[nc]) = 1;
-                ((dist[nr])[nc]) = static_cast<uint32_t>((((dist[r])[c]) + 1));
-                ((parentR[nr])[nc]) = r;
-                ((parentC[nr])[nc]) = c;
-                ((*queue)[tail]) = static_cast<uint32_t>((static_cast<uint32_t>((nr * cols)) + nc));
-                tail = static_cast<uint32_t>((tail + 1));
-                if (static_cast<uint8_t>((tail == qCap)))
-                {
-                    tail = 0;
-                }
-            }
-            nr = static_cast<uint32_t>((r + 1));
-            nc = c;
-            if (static_cast<uint8_t>((static_cast<uint8_t>((((grid[nr])[nc]) != 1)) && static_cast<uint8_t>((((visited[nr])[nc]) == 0)))))
-            {
-                ((visited[nr])[nc]) = 1;
-                ((dist[nr])[nc]) = static_cast<uint32_t>((((dist[r])[c]) + 1));
-                ((parentR[nr])[nc]) = r;
-                ((parentC[nr])[nc]) = c;
-                ((*queue)[tail]) = static_cast<uint32_t>((static_cast<uint32_t>((nr * cols)) + nc));
-                tail = static_cast<uint32_t>((tail + 1));
-                if (static_cast<uint8_t>((tail == qCap)))
-                {
-                    tail = 0;
-                }
-            }
-            nr = r;
-            nc = static_cast<uint32_t>((c - 1));
-            if (static_cast<uint8_t>((static_cast<uint8_t>((((grid[nr])[nc]) != 1)) && static_cast<uint8_t>((((visited[nr])[nc]) == 0)))))
-            {
-                ((visited[nr])[nc]) = 1;
-                ((dist[nr])[nc]) = static_cast<uint32_t>((((dist[r])[c]) + 1));
-                ((parentR[nr])[nc]) = r;
-                ((parentC[nr])[nc]) = c;
-                ((*queue)[tail]) = static_cast<uint32_t>((static_cast<uint32_t>((nr * cols)) + nc));
-                tail = static_cast<uint32_t>((tail + 1));
-                if (static_cast<uint8_t>((tail == qCap)))
-                {
-                    tail = 0;
-                }
-            }
-            nr = r;
-            nc = static_cast<uint32_t>((c + 1));
-            if (static_cast<uint8_t>((static_cast<uint8_t>((((grid[nr])[nc]) != 1)) && static_cast<uint8_t>((((visited[nr])[nc]) == 0)))))
-            {
-                ((visited[nr])[nc]) = 1;
-                ((dist[nr])[nc]) = static_cast<uint32_t>((((dist[r])[c]) + 1));
-                ((parentR[nr])[nc]) = r;
-                ((parentC[nr])[nc]) = c;
-                ((*queue)[tail]) = static_cast<uint32_t>((static_cast<uint32_t>((nr * cols)) + nc));
-                tail = static_cast<uint32_t>((tail + 1));
-                if (static_cast<uint8_t>((tail == qCap)))
-                {
-                    tail = 0;
-                }
-            }
-        }
-    }
+    (*queue).init(qCap);
+    initArrays((&grid), (&visited), (&path), (&dist));
+    buildBorderWalls((&grid), rows, cols);
+    buildCastleWalls((&grid), rows, cols);
+    ((grid[startR])[startC]) = static_cast<uint32_t>(2);
+    ((grid[goalR])[goalC]) = static_cast<uint32_t>(3);
+    found = runBfs((&grid), (&visited), (&dist), (&parentR), (&parentC), (&(*queue)), qCap, cols, startR, startC, goalR, goalC);
     delete queue;
     queue = nullptr;
     if (static_cast<uint8_t>((found != 0)))
     {
-        r = goalR;
-        c = goalC;
-        while (static_cast<uint8_t>((static_cast<uint8_t>((r != startR)) || static_cast<uint8_t>((c != startC)))))
-        {
-            ((path[r])[c]) = 1;
-            nr = ((parentR[r])[c]);
-            nc = ((parentC[r])[c]);
-            r = nr;
-            c = nc;
-        }
-        ((path[startR])[startC]) = 1;
+        reconstructPath((&path), (&parentR), (&parentC), startR, startC, goalR, goalC);
     }
-    std::cout << 2001 << '\n';
+    std::cout << 3001 << '\n';
     if (static_cast<uint8_t>((found != 0)))
     {
         answer = (&((dist[goalR])[goalC]));
@@ -211,30 +261,7 @@ int main() {
     {
         std::cout << static_cast<int32_t>((-1)) << '\n';
     }
-    std::cout << 2002 << '\n';
-    r = 0;
-    while (static_cast<uint8_t>((r < rows)))
-    {
-        line.memcpy((grid[r]));
-        c = 0;
-        while (static_cast<uint8_t>((c < cols)))
-        {
-            if (static_cast<uint8_t>((((path[r])[c]) != 0)))
-            {
-                (line[c]) = 4;
-            }
-            c = static_cast<uint32_t>((c + 1));
-        }
-        if (static_cast<uint8_t>((r == startR)))
-        {
-            (line[startC]) = 2;
-        }
-        if (static_cast<uint8_t>((r == goalR)))
-        {
-            (line[goalC]) = 3;
-        }
-        std::cout << (line[0]) << ' ' << (line[1]) << ' ' << (line[2]) << ' ' << (line[3]) << ' ' << (line[4]) << ' ' << (line[5]) << ' ' << (line[6]) << ' ' << (line[7]) << ' ' << (line[8]) << ' ' << (line[9]) << ' ' << (line[10]) << ' ' << (line[11]) << '\n';
-        r = static_cast<uint32_t>((r + 1));
-    }
-    return 0;
+    std::cout << 3002 << '\n';
+    printSolvedGrid((&grid), (&path), (&line), rows, cols, startR, startC, goalR, goalC);
+    return static_cast<int32_t>(0);
 }

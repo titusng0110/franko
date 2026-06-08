@@ -1,3 +1,6 @@
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * ============================================================================
  * CPP14 CODE GENERATOR
@@ -19,11 +22,37 @@
  * that:
  *
  *   - variables are resolved to VariableSymbol objects,
+ *   - function calls are resolved to FunctionSymbol overloads,
  *   - expression types are already inferred,
  *   - invalid operators were rejected,
  *   - invalid assignments were rejected,
  *   - invalid address arithmetic was rejected,
- *   - invalid array intrinsic usage was rejected.
+ *   - invalid array intrinsic usage was rejected,
+ *   - invalid function return usage was rejected.
+ *
+ * ----------------------------------------------------------------------------
+ * FUNCTION REPRESENTATION
+ * ----------------------------------------------------------------------------
+ *
+ * Franko:
+ *
+ *   func main() -> int32_t {
+ *       return 0;
+ *   }
+ *
+ * emits as:
+ *
+ *   int32_t main()
+ *   {
+ *       return static_cast<int32_t>(0);
+ *   }
+ *
+ * Function prototypes are emitted before function definitions so Franko forward
+ * references and mutual recursion compile in C++.
+ *
+ * Function calls are emitted using the selected FunctionSymbol. Primitive
+ * arguments are cast to the selected parameter type to preserve Franko overload
+ * resolution in C++.
  *
  * ----------------------------------------------------------------------------
  * ADDRESS REPRESENTATION
@@ -53,10 +82,6 @@
  *
  *   (*p)
  *
- * Because the checker rejects pointer arithmetic and raw numeric address
- * construction, the generated C++ pointer representation remains constrained
- * to Franko's safe typed-address model.
- *
  * ----------------------------------------------------------------------------
  * ARRAY REPRESENTATION
  * ----------------------------------------------------------------------------
@@ -79,12 +104,12 @@
  *
  * Array intrinsics are lowered by SemanticAnalyzer:
  *
- *   target(size)          -> SemanticArrayInitNode
- *   target.uninit()       -> SemanticArrayUninitNode
- *   target.memset(value)  -> SemanticArrayMemsetNode
- *   target.memcpy(src)    -> SemanticArrayMemcpyNode
+ *   target(size)         -> SemanticArrayInitNode
+ *   target.uninit()      -> SemanticArrayUninitNode
+ *   target.memset(value) -> SemanticArrayMemsetNode
+ *   target.memcpy(src)   -> SemanticArrayMemcpyNode
  *
- * SemanticArrayInitNode now stores a SemanticExprNode target instead of a direct
+ * SemanticArrayInitNode stores a SemanticExprNode target instead of a direct
  * VariableSymbol, so codegen supports:
  *
  *   arr(20);
@@ -98,13 +123,14 @@ public class Cpp14Codegen {
     private int indentLevel = 0;
 
     /**
-     * Generates only the Franko program body.
-     *
-     * Intended for replacing __FRANKO_PROGRAM__ inside ProgramTemplate.cpp.
+     * Generates the Franko program as C++14 source content intended to replace
+     * __FRANKO_PROGRAM__ inside ProgramTemplate.cpp.
      */
     public String generate(SemanticASTNode root) {
         if (root == null) {
-            throw new IllegalStateException("Internal compiler error: cannot generate code for null Semantic AST");
+            throw new IllegalStateException(
+                    "Internal compiler error: cannot generate code for null Semantic AST"
+            );
         }
 
         out.setLength(0);
@@ -125,6 +151,11 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node instanceof SemanticFunctionDeclNode fn) {
+            emitFunctionDecl(fn);
+            return;
+        }
+
         if (node instanceof SemanticStmtNode stmt) {
             emitStmt(stmt);
             return;
@@ -136,15 +167,138 @@ public class Cpp14Codegen {
         }
 
         throw new IllegalStateException(
-            "Internal compiler error: unsupported SemanticASTNode for codegen: "
-                + node.getClass().getSimpleName()
+                "Internal compiler error: unsupported SemanticASTNode for codegen: "
+                        + node.getClass().getSimpleName()
         );
     }
 
+    /**
+     * Emits top-level items.
+     *
+     * Function declarations are handled specially:
+     *
+     *   1. Emit all function prototypes first.
+     *   2. Emit all top-level items in source order.
+     *
+     * The prototype pass is necessary because Franko allows:
+     *
+     *   - forward references,
+     *   - direct recursion,
+     *   - mutual recursion.
+     */
     private void emitProgram(SemanticProgramNode node) {
-        for (SemanticStmtNode stmt : node.statements) {
-            emitStmt(stmt);
+        List<SemanticFunctionDeclNode> functions = new ArrayList<>();
+
+        for (SemanticASTNode item : node.topLevelItems) {
+            if (item instanceof SemanticFunctionDeclNode fn) {
+                functions.add(fn);
+            }
         }
+
+        if (!functions.isEmpty()) {
+            for (SemanticFunctionDeclNode fn : functions) {
+                emitFunctionPrototype(fn);
+            }
+
+            emitLine("");
+        }
+
+        for (SemanticASTNode item : node.topLevelItems) {
+            if (item instanceof SemanticFunctionDeclNode fn) {
+                emitFunctionDecl(fn);
+                emitLine("");
+                continue;
+            }
+
+            if (item instanceof SemanticStmtNode stmt) {
+                /*
+                 * With the updated template:
+                 *
+                 *   #include "FrankoRuntime.hpp"
+                 *   __FRANKO_PROGRAM__
+                 *
+                 * users should normally put executable code inside:
+                 *
+                 *   func main() -> int32_t { ... }
+                 *
+                 * This branch is retained for compatibility with existing
+                 * top-level semantic statement tests, but arbitrary C++
+                 * statements at namespace scope will not be valid C++.
+                 */
+                emitStmt(stmt);
+                continue;
+            }
+
+            if (item instanceof SemanticExprNode expr) {
+                emitLine(emitExpr(expr) + ";");
+                continue;
+            }
+
+            if (item == null) {
+                throw new IllegalStateException(
+                        "Internal compiler error: null top-level item in SemanticProgramNode"
+                );
+            }
+
+            throw new IllegalStateException(
+                    "Internal compiler error: unsupported top-level item for codegen: "
+                            + item.getClass().getSimpleName()
+            );
+        }
+    }
+
+    // ============================================================
+    // Functions
+    // ============================================================
+
+    private void emitFunctionPrototype(SemanticFunctionDeclNode node) {
+        emitLine(emitFunctionHeader(node) + ";");
+    }
+
+    private void emitFunctionDecl(SemanticFunctionDeclNode node) {
+        emitLine(emitFunctionHeader(node));
+
+        if (node.body == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: function '"
+                            + node.symbol.name
+                            + "' has null body"
+            );
+        }
+
+        emitBlock(node.body);
+    }
+
+    private String emitFunctionHeader(SemanticFunctionDeclNode node) {
+        if (node == null || node.symbol == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: null function declaration or symbol"
+            );
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(emitType(node.symbol.returnType()));
+        sb.append(" ");
+        sb.append(emitFunctionName(node.symbol));
+        sb.append("(");
+
+        List<ParameterSymbol> params = node.symbol.parameters;
+
+        for (int i = 0; i < params.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            ParameterSymbol param = params.get(i);
+            sb.append(emitType(param.type));
+            sb.append(" ");
+            sb.append(emitSymbolName(param));
+        }
+
+        sb.append(")");
+
+        return sb.toString();
     }
 
     // ============================================================
@@ -153,12 +307,9 @@ public class Cpp14Codegen {
 
     private void emitStmt(SemanticStmtNode node) {
         if (node == null) {
-            throw new IllegalStateException("Internal compiler error: cannot emit null statement");
-        }
-
-        if (node instanceof SemanticProgramNode program) {
-            emitProgram(program);
-            return;
+            throw new IllegalStateException(
+                    "Internal compiler error: cannot emit null statement"
+            );
         }
 
         if (node instanceof SemanticBlockNode block) {
@@ -196,6 +347,11 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node instanceof SemanticReturnNode ret) {
+            emitReturn(ret);
+            return;
+        }
+
         if (node instanceof SemanticExprStmtNode exprStmt) {
             emitLine(emitExpr(exprStmt.expr) + ";");
             return;
@@ -222,8 +378,8 @@ public class Cpp14Codegen {
         }
 
         throw new IllegalStateException(
-            "Internal compiler error: unsupported semantic statement for codegen: "
-                + node.getClass().getSimpleName()
+                "Internal compiler error: unsupported semantic statement for codegen: "
+                        + node.getClass().getSimpleName()
         );
     }
 
@@ -264,7 +420,12 @@ public class Cpp14Codegen {
     }
 
     private void emitAssign(SemanticAssignNode node) {
-        emitLine(emitLValue(node.target) + " = " + emitExpr(node.value) + ";");
+        emitLine(
+                emitLValue(node.target)
+                        + " = "
+                        + emitExprAsType(node.value, node.target.type)
+                        + ";"
+        );
     }
 
     private void emitIf(SemanticIfNode node) {
@@ -298,9 +459,9 @@ public class Cpp14Codegen {
 
         if (!sym.isHeap) {
             throw new IllegalStateException(
-                "Internal compiler error: non-heap del reached codegen for variable '"
-                    + sym.name
-                    + "'. MasterChecker should have rejected this."
+                    "Internal compiler error: non-heap del reached codegen for variable '"
+                            + sym.name
+                            + "'. MasterChecker should have rejected this."
             );
         }
 
@@ -330,6 +491,19 @@ public class Cpp14Codegen {
         emitLine(sb.toString());
     }
 
+    private void emitReturn(SemanticReturnNode node) {
+        if (node.value == null) {
+            emitLine("return;");
+            return;
+        }
+
+        SemanticType targetType = node.function != null
+                ? node.function.returnType()
+                : node.value.type;
+
+        emitLine("return " + emitExprAsType(node.value, targetType) + ";");
+    }
+
     // ============================================================
     // Array Intrinsics
     // ============================================================
@@ -342,51 +516,44 @@ public class Cpp14Codegen {
      * as:
      *
      *   target.init(size);
-     *
-     * Important:
-     *
-     * SemanticArrayInitNode now stores a SemanticExprNode target, not a
-     * VariableSymbol. This allows:
-     *
-     *   arr(20);
-     *   deref(p)(20);
-     *
-     * to emit as:
-     *
-     *   arr.init(20);
-     *   (*p).init(20);
      */
     private void emitArrayInit(SemanticArrayInitNode node) {
         emitLine(
-            emitLValue(node.target)
-                + ".init("
-                + emitExpr(node.size)
-                + ");"
+                emitLValue(node.target)
+                        + ".init("
+                        + emitExprAsType(
+                                node.size,
+                                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
+                        )
+                        + ");"
         );
     }
 
     private void emitArrayUninit(SemanticArrayUninitNode node) {
         emitLine(
-            emitLValue(node.receiver)
-                + ".uninit();"
+                emitLValue(node.receiver)
+                        + ".uninit();"
         );
     }
 
     private void emitArrayMemset(SemanticArrayMemsetNode node) {
         emitLine(
-            emitLValue(node.receiver)
-                + ".memset("
-                + emitExpr(node.value)
-                + ");"
+                emitLValue(node.receiver)
+                        + ".memset("
+                        + emitExprAsType(
+                                node.value,
+                                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8)
+                        )
+                        + ");"
         );
     }
 
     private void emitArrayMemcpy(SemanticArrayMemcpyNode node) {
         emitLine(
-            emitLValue(node.target)
-                + ".memcpy("
-                + emitLValue(node.source)
-                + ");"
+                emitLValue(node.target)
+                        + ".memcpy("
+                        + emitLValue(node.source)
+                        + ");"
         );
     }
 
@@ -396,7 +563,9 @@ public class Cpp14Codegen {
 
     private String emitExpr(SemanticExprNode node) {
         if (node == null) {
-            throw new IllegalStateException("Internal compiler error: cannot emit null expression");
+            throw new IllegalStateException(
+                    "Internal compiler error: cannot emit null expression"
+            );
         }
 
         if (node instanceof SemanticIntLiteralNode literal) {
@@ -419,6 +588,10 @@ public class Cpp14Codegen {
             return emitArrayAccess(access);
         }
 
+        if (node instanceof SemanticFunctionCallNode call) {
+            return emitFunctionCall(call);
+        }
+
         if (node instanceof SemanticGetAddrNode getAddr) {
             return emitGetAddr(getAddr);
         }
@@ -428,8 +601,8 @@ public class Cpp14Codegen {
         }
 
         throw new IllegalStateException(
-            "Internal compiler error: unsupported semantic expression for codegen: "
-                + node.getClass().getSimpleName()
+                "Internal compiler error: unsupported semantic expression for codegen: "
+                        + node.getClass().getSimpleName()
         );
     }
 
@@ -441,8 +614,7 @@ public class Cpp14Codegen {
          *   0b1010
          *   0xff
          *
-         * Contextual casts are emitted by parent expressions or assignments
-         * when required by C++ implicit conversion rules.
+         * Binary literals are valid in C++14.
          */
         return node.rawValue;
     }
@@ -465,18 +637,68 @@ public class Cpp14Codegen {
 
     private String emitArrayAccess(SemanticArrayAccessNode node) {
         return "("
-            + emitExpr(node.target)
-            + "["
-            + emitExpr(node.index)
-            + "])";
+                + emitExpr(node.target)
+                + "["
+                + emitExprAsType(
+                        node.index,
+                        new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
+                )
+                + "])";
+    }
+
+    private String emitFunctionCall(SemanticFunctionCallNode node) {
+        FunctionSymbol fn = node.function;
+
+        if (fn == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: function call has null resolved function"
+            );
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(emitFunctionName(fn));
+        sb.append("(");
+
+        List<SemanticType> parameterTypes = fn.parameterTypes();
+
+        if (parameterTypes.size() != node.args.size()) {
+            throw new IllegalStateException(
+                    "Internal compiler error: resolved function call arity mismatch for "
+                            + fn.fullSignatureString()
+                            + ": expected "
+                            + parameterTypes.size()
+                            + ", got "
+                            + node.args.size()
+            );
+        }
+
+        for (int i = 0; i < node.args.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            SemanticExprNode arg = node.args.get(i);
+            SemanticType paramType = parameterTypes.get(i);
+
+            /*
+             * This cast is essential for preserving Franko overload resolution.
+             *
+             * Franko has already selected exactly one overload. C++ overload
+             * resolution should not get a chance to reinterpret literal or
+             * folded-constant arguments differently.
+             */
+            sb.append(emitExprAsType(arg, paramType));
+        }
+
+        sb.append(")");
+
+        return sb.toString();
     }
 
     private String emitGetAddr(SemanticGetAddrNode node) {
         /*
          * Franko getaddr(lvalue) -> C++ &lvalue
-         *
-         * Use emitLValue rather than emitExpr so invalid temporary expressions
-         * cannot accidentally be address-taken by codegen.
          */
         return "(&" + emitLValue(node.target) + ")";
     }
@@ -484,8 +706,6 @@ public class Cpp14Codegen {
     private String emitDeref(SemanticDerefNode node) {
         /*
          * Franko deref(p) -> C++ (*p)
-         *
-         * The expression is also an lvalue in Franko, and C++ (*p) is an lvalue.
          */
         return "(*" + emitExpr(node.expr) + ")";
     }
@@ -508,8 +728,8 @@ public class Cpp14Codegen {
         }
 
         throw new IllegalStateException(
-            "Internal compiler error: unsupported lvalue expression for codegen: "
-                + node.getClass().getSimpleName()
+                "Internal compiler error: unsupported lvalue expression for codegen: "
+                        + node.getClass().getSimpleName()
         );
     }
 
@@ -518,22 +738,26 @@ public class Cpp14Codegen {
     // ============================================================
 
     private String emitType(SemanticType type) {
+        if (type instanceof SemanticVoidType) {
+            return "void";
+        }
+
         if (type instanceof SemanticPrimitiveType primitive) {
             return emitPrimitiveType(primitive.kind);
         }
 
         if (type instanceof SemanticDynamicArrayType dynamicArray) {
             return "Franko_Dynamic_Array<"
-                + emitType(dynamicArray.elementType)
-                + ">";
+                    + emitType(dynamicArray.elementType)
+                    + ">";
         }
 
         if (type instanceof SemanticStaticArrayType staticArray) {
             return "Franko_Static_Array<"
-                + emitType(staticArray.elementType)
-                + ", "
-                + staticArray.sizeLiteral
-                + ">";
+                    + emitType(staticArray.elementType)
+                    + ", "
+                    + staticArray.sizeLiteral
+                    + ">";
         }
 
         if (type instanceof SemanticAddrType addr) {
@@ -541,8 +765,8 @@ public class Cpp14Codegen {
         }
 
         throw new IllegalStateException(
-            "Internal compiler error: unsupported semantic type for codegen: "
-                + type.getClass().getSimpleName()
+                "Internal compiler error: unsupported semantic type for codegen: "
+                        + type.getClass().getSimpleName()
         );
     }
 
@@ -561,12 +785,14 @@ public class Cpp14Codegen {
     }
 
     // ============================================================
-    // Symbol / Variable Access
+    // Symbol / Name Emission
     // ============================================================
 
     private String emitVarAccess(VariableSymbol symbol) {
         if (symbol == null) {
-            throw new IllegalStateException("Internal compiler error: null symbol in codegen");
+            throw new IllegalStateException(
+                    "Internal compiler error: null symbol in codegen"
+            );
         }
 
         if (symbol.isHeap) {
@@ -582,21 +808,96 @@ public class Cpp14Codegen {
          * the same lexical scope, and C++ also supports block-local shadowing.
          *
          * Therefore the raw source name is currently sufficient.
+         */
+        return symbol.name;
+    }
+
+    private String emitFunctionName(FunctionSymbol symbol) {
+        /*
+         * Franko supports overloads by parameter type/order.
+         * C++ also supports overloads by parameter type/order.
          *
-         * If Franko later permits symbols that are not valid C++ identifiers,
-         * or if generated temporaries are introduced, centralize name mangling
-         * here.
+         * Because Franko rejects declarations that differ only by return type,
+         * the raw function name can be emitted directly.
          */
         return symbol.name;
     }
 
     // ============================================================
-    // Casts / Result Type Preservation
+    // Casts / Contextual Emission
     // ============================================================
 
+    /**
+     * Emits an expression in a context that expects targetType.
+     *
+     * This is used for:
+     *
+     *   - assignments,
+     *   - returns,
+     *   - function call arguments,
+     *   - array sizes,
+     *   - array indexes,
+     *   - memset values.
+     *
+     * Primitive casts are emitted explicitly to preserve Franko's contextual
+     * constant typing and overload resolution.
+     */
+    private String emitExprAsType(
+            SemanticExprNode expr,
+            SemanticType targetType
+    ) {
+        String raw = emitExpr(expr);
+
+        if (targetType instanceof SemanticPrimitiveType) {
+            /*
+            * Constants are fluid in Franko, so keep contextual casts for them.
+            *
+            * Examples:
+            *
+            *   uint8_t x;
+            *   x = 1;
+            *
+            * should emit:
+            *
+            *   x = static_cast<uint8_t>(1);
+            *
+            * Function call arguments also rely on contextual primitive casts to
+            * preserve Franko overload resolution.
+            */
+            if (expr.isConstant()) {
+                return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
+            }
+
+            /*
+            * If the expression is already semantically the requested primitive
+            * type, do not wrap it again.
+            *
+            * This avoids:
+            *
+            *   static_cast<uint32_t>(static_cast<uint32_t>((x + 1)))
+            *
+            * because emitBinOp(...) already emitted:
+            *
+            *   static_cast<uint32_t>((x + 1))
+            */
+            if (sameSemanticType(expr.type, targetType)) {
+                return raw;
+            }
+
+            return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
+        }
+
+        /*
+        * Do not cast arrays or addresses unless Franko later defines explicit
+        * conversions for them. Address arguments/returns are already strongly
+        * typed and checked exactly.
+        */
+        return raw;
+    }
+
     private String castToSemanticExprTypeIfNeeded(
-        SemanticExprNode node,
-        String raw
+            SemanticExprNode node,
+            String raw
     ) {
         if (node.type instanceof SemanticPrimitiveType) {
             return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
@@ -604,9 +905,6 @@ public class Cpp14Codegen {
 
         /*
          * Do not cast addresses or arrays.
-         *
-         * Address comparisons are cast by the comparison node's uint8_t result
-         * type, not by the address-valued subexpressions themselves.
          */
         return raw;
     }
@@ -625,7 +923,7 @@ public class Cpp14Codegen {
              * a character.
              */
             if (primitive.kind == SemanticPrimitiveKind.INT8
-                || primitive.kind == SemanticPrimitiveKind.UINT8) {
+                    || primitive.kind == SemanticPrimitiveKind.UINT8) {
                 return "(+(" + emitted + "))";
             }
 
@@ -635,8 +933,6 @@ public class Cpp14Codegen {
         if (expr.type instanceof SemanticAddrType) {
             /*
              * Avoid accidental char-pointer string printing for addresses.
-             *
-             * Print address values as raw pointer addresses.
              */
             return "static_cast<const void*>(" + emitted + ")";
         }
@@ -654,5 +950,13 @@ public class Cpp14Codegen {
         }
 
         out.append(s).append('\n');
+    }
+
+    private boolean sameSemanticType(SemanticType a, SemanticType b) {
+        if (a == null || b == null) {
+            return false;
+        }
+
+        return a.equals(b);
     }
 }

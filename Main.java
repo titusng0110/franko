@@ -108,7 +108,7 @@ public class Main {
         // ----- Inject generated code into template -----
         String finalCpp = template.replace(
             "__FRANKO_PROGRAM__",
-            indentBlock(generatedBody, 1).trim()
+            indentBlock(generatedBody, 0).trim()
         );
 
         // ----- Ensure output directory exists if needed -----

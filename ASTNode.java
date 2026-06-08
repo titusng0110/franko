@@ -10,14 +10,14 @@ abstract class ASTNode {}
 abstract class TypeNode extends ASTNode {}
 
 // ============================================================
-// Program / block / statements
+// Program / top-level / block / statements
 // ============================================================
 
 class ProgramNode extends ASTNode {
-    List<ASTNode> statements;
+    List<ASTNode> topLevelItems;
 
-    ProgramNode(List<ASTNode> statements) {
-        this.statements = statements;
+    ProgramNode(List<ASTNode> topLevelItems) {
+        this.topLevelItems = topLevelItems;
     }
 }
 
@@ -82,6 +82,47 @@ class PrintNode extends ASTNode {
 
     PrintNode(List<ASTNode> args) {
         this.args = args;
+    }
+}
+
+class ReturnNode extends ASTNode {
+    ASTNode value; // null for `return;`
+
+    ReturnNode(ASTNode value) {
+        this.value = value;
+    }
+}
+
+// ============================================================
+// Function declarations
+// ============================================================
+
+class FunctionDeclNode extends ASTNode {
+    String name;
+    List<ParameterNode> parameters;
+    TypeNode returnType;
+    BlockNode body;
+
+    FunctionDeclNode(
+        String name,
+        List<ParameterNode> parameters,
+        TypeNode returnType,
+        BlockNode body
+    ) {
+        this.name = name;
+        this.parameters = parameters;
+        this.returnType = returnType;
+        this.body = body;
+    }
+}
+
+class ParameterNode extends ASTNode {
+    TypeNode type;
+    String name;
+
+    ParameterNode(TypeNode type, String name) {
+        this.type = type;
+        this.name = name;
     }
 }
 
@@ -154,6 +195,10 @@ class PrimitiveTypeNode extends TypeNode {
     }
 }
 
+class VoidTypeNode extends TypeNode {
+    VoidTypeNode() {}
+}
+
 class DynamicArrayTypeNode extends TypeNode {
     TypeNode elementType;
 
@@ -165,7 +210,6 @@ class DynamicArrayTypeNode extends TypeNode {
 class StaticArrayTypeNode extends TypeNode {
     TypeNode elementType;
     String sizeLiteral;
-    // Keeping original token text exactly, like IntNode does.
 
     StaticArrayTypeNode(TypeNode elementType, String sizeLiteral) {
         this.elementType = elementType;

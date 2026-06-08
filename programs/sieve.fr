@@ -44,91 +44,94 @@
 // ============================================================
 
 
-// ------------------------------------------------------------
-// Configuration
-// ------------------------------------------------------------
+func main() -> int {
+    // ------------------------------------------------------------
+    // Configuration
+    // ------------------------------------------------------------
 
-uint32_t n = 80;
-
-
-// ------------------------------------------------------------
-// Prime flag array
-// ------------------------------------------------------------
-//
-// isPrime[i] meaning:
-//
-//   0 = not prime
-//   1 = probably prime / still unmarked
-//
-// The array has n + 1 entries so index n is valid.
-
-array<char> isPrime;
-
-isPrime(n + 1);
+    uint32_t n = 80;
 
 
-// Initially mark every entry as prime.
-// char behaves like uint8_t in the current semantic model, so
-// 1 fits naturally.
+    // ------------------------------------------------------------
+    // Prime flag array
+    // ------------------------------------------------------------
+    //
+    // isPrime[i] meaning:
+    //
+    //   0 = not prime
+    //   1 = probably prime / still unmarked
+    //
+    // The array has n + 1 entries so index n is valid.
 
-isPrime.memset(1);
+    array<char> isPrime;
+
+    isPrime(n + 1);
 
 
-// 0 and 1 are not prime.
+    // Initially mark every entry as prime.
+    // char behaves like uint8_t in the current semantic model, so
+    // 1 fits naturally.
 
-isPrime[0] = 0;
-
-if (n >= 1) {
-    isPrime[1] = 0;
-}
+    isPrime.memset(1);
 
 
-// ------------------------------------------------------------
-// Sieve
-// ------------------------------------------------------------
-//
-// For each prime p with p * p <= n,
-// mark all multiples of p starting at p * p as composite.
+    // 0 and 1 are not prime.
 
-uint32_t p = 2;
+    isPrime[0] = 0;
 
-while (p * p <= n) {
+    if (n >= 1) {
+        isPrime[1] = 0;
+    }
 
-    if (isPrime[p] != 0) {
 
-        uint32_t j = p * p;
+    // ------------------------------------------------------------
+    // Sieve
+    // ------------------------------------------------------------
+    //
+    // For each prime p with p * p <= n,
+    // mark all multiples of p starting at p * p as composite.
 
-        while (j <= n) {
-            isPrime[j] = 0;
-            j = j + p;
+    uint32_t p = 2;
+
+    while (p * p <= n) {
+
+        if (isPrime[p] != 0) {
+
+            uint32_t j = p * p;
+
+            while (j <= n) {
+                isPrime[j] = 0;
+                j = j + p;
+            }
         }
+
+        p = p + 1;
     }
 
-    p = p + 1;
-}
 
+    // ------------------------------------------------------------
+    // Output primes
+    // ------------------------------------------------------------
 
-// ------------------------------------------------------------
-// Output primes
-// ------------------------------------------------------------
+    print(1001);
 
-print(3001);
+    uint32_t i = 2;
 
-uint32_t i = 2;
+    while (i <= n) {
+        if (isPrime[i] != 0) {
+            print(i);
+        }
 
-while (i <= n) {
-    if (isPrime[i] != 0) {
-        print(i);
+        i = i + 1;
     }
 
-    i = i + 1;
+    print(1002);
+
+
+    // ------------------------------------------------------------
+    // Cleanup
+    // ------------------------------------------------------------
+
+    isPrime.uninit();
+    return 0;
 }
-
-print(3002);
-
-
-// ------------------------------------------------------------
-// Cleanup
-// ------------------------------------------------------------
-
-isPrime.uninit();

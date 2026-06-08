@@ -7,8 +7,50 @@ grammar Franko;
 // ---------- PARSER ----------
 
 program
-    : separators* (statement separators*)* EOF
+    : separators* (topLevelItem separators*)* EOF
     ;
+
+topLevelItem
+    : functionDecl
+    | statement
+    ;
+
+// ---------- FUNCTIONS ----------
+//
+// Function syntax:
+//
+//   func name(type param, type param) -> returnType {
+//       return expr;
+//   }
+//
+// returnType may be:
+//   - any ordinary Franko type
+//   - void
+//
+// void is intentionally NOT part of the normal type rule.
+// This prevents declarations such as:
+//   void x;
+//   array<void> xs;
+//   addr<void> p;
+//
+functionDecl
+    : FUNC IDENTIFIER LPAREN parameterList? RPAREN ARROW returnType separators* block
+    ;
+
+parameterList
+    : parameter (COMMA parameter)*
+    ;
+
+parameter
+    : type IDENTIFIER
+    ;
+
+returnType
+    : type
+    | VOID
+    ;
+
+// ---------- STATEMENTS ----------
 
 statement
     : simpleStmt   # SimpleStatement
@@ -42,13 +84,21 @@ whileStmt
 // ---------- SIMPLE STATEMENTS ----------
 //
 // NOTE:
-// - standalone a(10) is no longer a special parser rule;
-//   it parses as a normal expression statement (call syntax)
-// - x.memset(...), x.memcpy(...), x.uninit() are also now
-//   parsed as ordinary member-call expressions
+// - standalone a(10) parses as a normal expression statement.
+// - x.memset(...), x.memcpy(...), x.uninit() are parsed as
+//   ordinary member-call expressions.
+// - function calls also parse as expression statements.
+//
+// Array intrinsics such as:
+//   arr.memset(0)
+//   arr.memcpy(other)
+//   arr.uninit()
+// should be recognized semantically from normal member-call syntax,
+// not hardcoded in the lexer/parser.
 simpleStmt
     : varDecl
     | delStmt
+    | returnStmt
     | assignStmt
     | printStmt
     | exprStmt
@@ -72,6 +122,16 @@ delStmt
     : DEL IDENTIFIER
     ;
 
+// ---------- RETURN ----------
+//
+// Semantic checker decides:
+//   - return expr; is invalid in void functions
+//   - return; is invalid in non-void functions
+//   - return outside a function is invalid
+returnStmt
+    : RETURN expr?
+    ;
+
 // ---------- ASSIGNMENT ----------
 
 assignStmt
@@ -85,7 +145,7 @@ assignStmt
 //
 // If you later want global user-defined function print(...),
 // you should consider removing this statement form too and
-// treating print as a builtin function resolved semantically.
+// treating print as a builtin or normal function resolved semantically.
 printStmt
     : PRINT LPAREN exprList? RPAREN
     ;
@@ -196,8 +256,6 @@ unaryExpr
 
 // ---------- POSTFIX / MEMBER / CALL / INDEX ----------
 //
-// This is the key future-proofing refactor.
-//
 // Supports:
 //   a[i]
 //   foo(x)
@@ -237,21 +295,23 @@ memberSuffix
 // ---------- MEMBER NAMES ----------
 //
 // Important:
-// Because words like 'memset' are lexer keywords in this grammar,
-// they do NOT tokenize as IDENTIFIER.
-// So if you want abc.memset(...) or obj.print(),
-// the parser must allow those keyword tokens after DOT.
+// Some words such as 'print', 'if', 'while', and type names are lexer
+// keywords in this grammar, so they do NOT tokenize as IDENTIFIER.
 //
-// This rule is intentionally broad so that keywords can appear
-// as member/field/method names after a dot.
+// If such words should be syntactically allowed after '.', the parser
+// must explicitly allow those keyword tokens here.
+//
+// Ordinary words such as 'memset', 'memcpy', and 'uninit' are no longer
+// lexer keywords. They tokenize as IDENTIFIER and therefore work through
+// the IDENTIFIER alternative below.
 memberName
     : IDENTIFIER
+    | FUNC
+    | RETURN
+    | VOID
     | ALLOC
     | DEL
     | PRINT
-    | UNINIT
-    | MEMSET
-    | MEMCPY
     | IF
     | ELSE
     | WHILE
@@ -311,13 +371,15 @@ type
 
 // ---------- LEXER ----------
 
+// Function keywords
+FUNC   : 'func' ;
+RETURN : 'return' ;
+VOID   : 'void' ;
+
 // Keywords
 ALLOC   : 'alloc' ;
 DEL     : 'del' ;
 PRINT   : 'print' ;
-UNINIT  : 'uninit' ;
-MEMSET  : 'memset' ;
-MEMCPY  : 'memcpy' ;
 IF      : 'if' ;
 ELSE    : 'else' ;
 WHILE   : 'while' ;
@@ -345,6 +407,7 @@ LE      : '<=' ;
 GE      : '>=' ;
 ANDAND  : '&&' ;
 OROR    : '||' ;
+ARROW   : '->' ;
 
 ASSIGN  : '=' ;
 PLUS    : '+' ;

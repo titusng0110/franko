@@ -15,11 +15,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
      * Left-folds a binary-expression rule whose parse tree shape is:
      *
      *   operand (op operand)*
-     *
-     * Examples:
-     *   a + b - c
-     *   x && y || z
-     *   p & q ^ r   (for the specific rule layer being visited)
      */
     private ASTNode foldSimpleBinaryRule(ParserRuleContext ctx) {
         ASTNode current = visit(ctx.getChild(0));
@@ -39,9 +34,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
      *   shiftExpr
      *       : additiveExpr ((LT LT | GT GT) additiveExpr)*
      *       ;
-     *
-     * Since << and >> are not lexer tokens, they appear as pairs of LT/LT
-     * or GT/GT in the parse tree.
      */
     private ASTNode foldShiftExpr(FrankoParser.ShiftExprContext ctx) {
         ASTNode current = visit(ctx.additiveExpr(0));
@@ -69,20 +61,16 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             current = new BinOpNode(op, current, rhs);
 
             exprIndex++;
-            childIndex += 3; // token, token, additiveExpr
+            childIndex += 3;
         }
 
         return current;
     }
 
-    /**
-     * Apply postfix-style suffixes to a base expression:
-     *
-     *   - [expr]      -> ArrayAccessNode
-     *   - (args...)   -> CallNode
-     *   - .member     -> MemberAccessNode
-     */
-    private ASTNode applyPostfixSuffixes(ASTNode base, List<FrankoParser.PostfixSuffixContext> suffixes) {
+    private ASTNode applyPostfixSuffixes(
+        ASTNode base,
+        List<FrankoParser.PostfixSuffixContext> suffixes
+    ) {
         ASTNode current = base;
 
         for (FrankoParser.PostfixSuffixContext suffix : suffixes) {
@@ -112,18 +100,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    /**
-     * Apply lvalue suffixes to a base lvalue atom.
-     *
-     * Grammar allows:
-     *   lvalueSuffix
-     *       : indexSuffix
-     *       | memberSuffix
-     *       ;
-     *
-     * Function calls are intentionally NOT allowed in lvalues.
-     */
-    private ASTNode applyLvalueSuffixes(ASTNode base, List<FrankoParser.LvalueSuffixContext> suffixes) {
+    private ASTNode applyLvalueSuffixes(
+        ASTNode base,
+        List<FrankoParser.LvalueSuffixContext> suffixes
+    ) {
         ASTNode current = base;
 
         for (FrankoParser.LvalueSuffixContext suffix : suffixes) {
@@ -144,22 +124,82 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     // ============================================================
-    // Program / Statements
+    // Program / top-level items
     // ============================================================
 
     @Override
     public ASTNode visitProgram(FrankoParser.ProgramContext ctx) {
-        List<ASTNode> statements = new ArrayList<>();
+        List<ASTNode> topLevelItems = new ArrayList<>();
 
-        for (FrankoParser.StatementContext stmt : ctx.statement()) {
-            ASTNode node = visit(stmt);
+        for (FrankoParser.TopLevelItemContext itemCtx : ctx.topLevelItem()) {
+            ASTNode node = visit(itemCtx);
             if (node != null) {
-                statements.add(node);
+                topLevelItems.add(node);
             }
         }
 
-        return new ProgramNode(statements);
+        return new ProgramNode(topLevelItems);
     }
+
+    @Override
+    public ASTNode visitTopLevelItem(FrankoParser.TopLevelItemContext ctx) {
+        if (ctx.functionDecl() != null) {
+            return visit(ctx.functionDecl());
+        }
+
+        if (ctx.statement() != null) {
+            return visit(ctx.statement());
+        }
+
+        throw new RuntimeException("Unknown topLevelItem: " + ctx.getText());
+    }
+
+    // ============================================================
+    // Function declarations
+    // ============================================================
+
+    @Override
+    public ASTNode visitFunctionDecl(FrankoParser.FunctionDeclContext ctx) {
+        String name = ctx.IDENTIFIER().getText();
+
+        List<ParameterNode> parameters = new ArrayList<>();
+
+        if (ctx.parameterList() != null) {
+            for (FrankoParser.ParameterContext paramCtx : ctx.parameterList().parameter()) {
+                parameters.add((ParameterNode) visit(paramCtx));
+            }
+        }
+
+        TypeNode returnType = (TypeNode) visit(ctx.returnType());
+        BlockNode body = (BlockNode) visit(ctx.block());
+
+        return new FunctionDeclNode(name, parameters, returnType, body);
+    }
+
+    @Override
+    public ASTNode visitParameter(FrankoParser.ParameterContext ctx) {
+        TypeNode type = (TypeNode) visit(ctx.type());
+        String name = ctx.IDENTIFIER().getText();
+
+        return new ParameterNode(type, name);
+    }
+
+    @Override
+    public ASTNode visitReturnType(FrankoParser.ReturnTypeContext ctx) {
+        if (ctx.type() != null) {
+            return visit(ctx.type());
+        }
+
+        if (ctx.VOID() != null) {
+            return new VoidTypeNode();
+        }
+
+        throw new RuntimeException("Unknown returnType: " + ctx.getText());
+    }
+
+    // ============================================================
+    // Statements
+    // ============================================================
 
     @Override
     public ASTNode visitSimpleStatement(FrankoParser.SimpleStatementContext ctx) {
@@ -185,11 +225,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitSimpleStmt(FrankoParser.SimpleStmtContext ctx) {
         if (ctx.varDecl() != null) return visit(ctx.varDecl());
         if (ctx.delStmt() != null) return visit(ctx.delStmt());
+        if (ctx.returnStmt() != null) return visit(ctx.returnStmt());
         if (ctx.assignStmt() != null) return visit(ctx.assignStmt());
         if (ctx.printStmt() != null) return visit(ctx.printStmt());
         if (ctx.exprStmt() != null) return visit(ctx.exprStmt());
 
-        return null;
+        throw new RuntimeException("Unknown simpleStmt: " + ctx.getText());
     }
 
     @Override
@@ -225,6 +266,47 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode body = visit(ctx.statement());
 
         return new WhileNode(condition, body);
+    }
+
+    @Override
+    public ASTNode visitReturnStmt(FrankoParser.ReturnStmtContext ctx) {
+        ASTNode value = null;
+
+        if (ctx.expr() != null) {
+            value = visit(ctx.expr());
+        }
+
+        return new ReturnNode(value);
+    }
+
+    @Override
+    public ASTNode visitAssignStmt(FrankoParser.AssignStmtContext ctx) {
+        ASTNode target = visit(ctx.lvalue());
+        ASTNode value = visit(ctx.expr());
+        return new AssignNode(target, value);
+    }
+
+    @Override
+    public ASTNode visitDelStmt(FrankoParser.DelStmtContext ctx) {
+        return new DelNode(ctx.IDENTIFIER().getText());
+    }
+
+    @Override
+    public ASTNode visitPrintStmt(FrankoParser.PrintStmtContext ctx) {
+        List<ASTNode> args = new ArrayList<>();
+
+        if (ctx.exprList() != null) {
+            for (FrankoParser.ExprContext exprCtx : ctx.exprList().expr()) {
+                args.add(visit(exprCtx));
+            }
+        }
+
+        return new PrintNode(args);
+    }
+
+    @Override
+    public ASTNode visitExprStmt(FrankoParser.ExprStmtContext ctx) {
+        return new ExprStmtNode(visit(ctx.expr()));
     }
 
     // ============================================================
@@ -307,6 +389,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         if (ctx.declSuffix() instanceof FrankoParser.DeclAssignInitContext) {
             FrankoParser.DeclAssignInitContext initCtx =
                 (FrankoParser.DeclAssignInitContext) ctx.declSuffix();
+
             ASTNode init = visit(initCtx.expr());
             return new VarDeclInitNode(type, name, isHeap, init);
         }
@@ -314,45 +397,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         if (ctx.declSuffix() instanceof FrankoParser.DeclArrayInitContext) {
             FrankoParser.DeclArrayInitContext initCtx =
                 (FrankoParser.DeclArrayInitContext) ctx.declSuffix();
+
             ASTNode size = visit(initCtx.expr());
             return new VarDeclArrayInitNode(type, name, isHeap, size);
         }
 
         throw new RuntimeException("Unknown declSuffix: " + ctx.declSuffix().getText());
-    }
-
-    // ============================================================
-    // Statements
-    // ============================================================
-
-    @Override
-    public ASTNode visitAssignStmt(FrankoParser.AssignStmtContext ctx) {
-        ASTNode target = visit(ctx.lvalue());
-        ASTNode value = visit(ctx.expr());
-        return new AssignNode(target, value);
-    }
-
-    @Override
-    public ASTNode visitDelStmt(FrankoParser.DelStmtContext ctx) {
-        return new DelNode(ctx.IDENTIFIER().getText());
-    }
-
-    @Override
-    public ASTNode visitPrintStmt(FrankoParser.PrintStmtContext ctx) {
-        List<ASTNode> args = new ArrayList<>();
-
-        if (ctx.exprList() != null) {
-            for (FrankoParser.ExprContext exprCtx : ctx.exprList().expr()) {
-                args.add(visit(exprCtx));
-            }
-        }
-
-        return new PrintNode(args);
-    }
-
-    @Override
-    public ASTNode visitExprStmt(FrankoParser.ExprStmtContext ctx) {
-        return new ExprStmtNode(visit(ctx.expr()));
     }
 
     // ============================================================
