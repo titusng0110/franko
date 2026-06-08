@@ -63,7 +63,7 @@ try {
         & java -Xmx500M -cp $ANTLR_CP org.antlr.v4.Tool -visitor -o $GEN_DIR Franko.g4
     }
 
-    Step "javac -cp `"$ANTLR_CP;$GEN_DIR`" -d `"$CLS_DIR`" *.java `"$GEN_DIR\*.java`"" {
+    Step "javac --release 25 -Xlint:all,-auxiliaryclass -cp `"$ANTLR_CP;$GEN_DIR`" -d `"$CLS_DIR`" *.java `"$GEN_DIR\*.java`"" {
         $javaFiles = @(
             Get-ChildItem -LiteralPath $ROOT -Filter "*.java" -File
             Get-ChildItem -LiteralPath $GEN_DIR -Filter "*.java" -File
