@@ -13,7 +13,7 @@ Franko source
 
 It documents both intended language behavior and important current implementation restrictions.
 
----
+***
 
 ## Table of Contents
 
@@ -28,62 +28,75 @@ It documents both intended language behavior and important current implementatio
 9. [Fluid Integer Constants](#9-fluid-integer-constants)
 10. [Constant Folding](#10-constant-folding)
 11. [Declarations](#11-declarations)
-12. [Heap Variables and `alloc`](#12-heap-variables-and-alloc)
-13. [Assignment](#13-assignment)
-14. [Lvalues and Storage-Backed Expressions](#14-lvalues-and-storage-backed-expressions)
-15. [Operators](#15-operators)
-16. [Conditions](#16-conditions)
-17. [Statements](#17-statements)
-18. [Arrays](#18-arrays)
-19. [Array Intrinsics](#19-array-intrinsics)
-20. [Addresses](#20-addresses)
-21. [`del` and Delete Checking](#21-del-and-delete-checking)
-22. [Type Equality](#22-type-equality)
-23. [Declaration Type Validity](#23-declaration-type-validity)
-24. [Unsupported or Restricted Features](#24-unsupported-or-restricted-features)
-25. [Runtime and Backend Notes](#25-runtime-and-backend-notes)
-26. [Examples](#26-examples)
+12. [Functions](#12-functions)
+13. [Heap Variables and `alloc`](#13-heap-variables-and-alloc)
+14. [Assignment](#14-assignment)
+15. [Lvalues and Storage-Backed Expressions](#15-lvalues-and-storage-backed-expressions)
+16. [Operators](#16-operators)
+17. [Conditions](#17-conditions)
+18. [Statements](#18-statements)
+19. [Arrays](#19-arrays)
+20. [Array Intrinsics](#20-array-intrinsics)
+21. [Addresses](#21-addresses)
+22. [`del` and Delete Checking](#22-del-and-delete-checking)
+23. [Type Equality](#23-type-equality)
+24. [Declaration Type Validity](#24-declaration-type-validity)
+25. [Unsupported or Restricted Features](#25-unsupported-or-restricted-features)
+26. [Runtime and Backend Notes](#26-runtime-and-backend-notes)
+27. [Examples](#27-examples)
 
----
+***
 
 # 1. Overview
 
 Franko is a small statically typed language with:
 
-- fixed-width signed and unsigned integer types,
-- dynamic arrays,
-- static arrays,
-- typed addresses using `addr<T>`,
-- explicit address operations:
-  - `getaddr(...)`,
-  - `deref(...)`,
-- assignment,
-- blocks,
-- `if`,
-- `while`,
-- `print`,
-- `del`,
-- heap-owned variables using `alloc`,
-- array intrinsics:
-  - `arr(size)`,
-  - `arr.uninit()`,
-  - `arr.memset(value)`,
-  - `arr.memcpy(source)`.
+* fixed-width signed and unsigned integer types,
+* dynamic arrays,
+* static arrays,
+* typed addresses using `addr<T>`,
+* explicit address operations:
+  * `getaddr(...)`,
+  * `deref(...)`,
+* user-defined functions,
+* function overloading,
+* function calls inside function bodies,
+* `void` and non-`void` return types,
+* global variable declarations,
+* global function declarations,
+* assignment,
+* blocks,
+* `if`,
+* `while`,
+* `return`,
+* `print`,
+* `del`,
+* heap-owned variables using `alloc`,
+* array intrinsics:
+  * `arr(size)`,
+  * `arr.uninit()`,
+  * `arr.memset(value)`,
+  * `arr.memcpy(source)`.
 
 Franko currently does **not** implement:
 
-- user-defined functions,
-- general function calls,
-- structs/classes,
-- fields,
-- floating-point types,
-- a distinct boolean type,
-- strings as a checked semantic type,
-- implicit numeric conversions except for fluid integer constants.
+* nested functions,
+* first-class function values,
+* anonymous functions or lambdas,
+* function pointers,
+* structs/classes,
+* fields,
+* general methods,
+* generics,
+* imports/modules,
+* floating-point types,
+* a distinct boolean type,
+* strings as a checked semantic type,
+* implicit numeric conversions except for fluid integer constants.
 
 Franko currently targets C++14.
 
----
+***
 
 # 2. Source Files
 
@@ -92,105 +105,246 @@ Franko source files commonly use the `.fr` extension.
 Example:
 
 ```franko
-int32_t x;
-x = 1;
+func main() -> int32_t {
+    int32_t x;
+    x = 1;
 
-print(x);
+    print(x);
+
+    return 0;
+}
 ```
 
----
+***
 
 # 3. Program Structure
 
-A Franko program is a sequence of statements.
+A Franko program is a sequence of **top-level items**.
+
+Current valid top-level items are:
+
+* global variable declarations;
+* function declarations.
+
+Executable statements are **not** currently allowed in global scope.
+
+Invalid global-scope items include:
+
+* assignments;
+* `print`;
+* function calls;
+* `if`;
+* `while`;
+* `return`;
+* `del`;
+* blocks;
+* array intrinsic calls.
+
+Execution should be rooted in a user-defined `main` function.
+
+Example:
 
 ```franko
-int32_t x;
-x = 10;
-
-if (x > 0) {
-    print(x);
+func main() -> int32_t {
+    return 0;
 }
 ```
 
-Blocks introduce nested lexical scopes:
+Valid global declarations:
 
 ```franko
-int32_t x;
+uint32_t counter;
 
-{
-    int32_t y;
-    y = 1;
+func main() -> int32_t {
+    counter = 1;
+    return 0;
 }
-
-x = 2;
 ```
 
-Variables declared inside a block are not visible outside that block.
+Invalid global executable statement:
 
----
+```franko
+uint32_t counter;
+
+counter = 1; // invalid at global scope
+```
+
+Invalid global function call:
+
+```franko
+func hello() -> void {
+    print(1);
+}
+
+hello(); // invalid at global scope
+```
+
+Function calls are valid inside function bodies:
+
+```franko
+func hello() -> void {
+    print(1);
+}
+
+func main() -> int32_t {
+    hello();
+    return 0;
+}
+```
+
+Blocks inside function bodies introduce nested lexical scopes:
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+    x = 0;
+
+    {
+        int32_t y;
+        y = 1;
+        x = y;
+    }
+
+    return x;
+}
+```
+
+***
 
 # 4. Lexical Scoping and Symbols
 
 Franko uses lexical scope.
+
+Function bodies can resolve names from:
+
+* their parameter scope,
+* local block scopes,
+* enclosing block scopes,
+* global variable scope,
+* global function declarations for calls.
+
+***
 
 ## 4.1 Declaration Lookup
 
 Variable references resolve to the nearest declaration in the current scope stack.
 
 ```franko
-int32_t x;
+uint32_t g;
 
-{
-    int32_t y;
-    x = 1; // refers to outer x
-    y = 2; // refers to inner y
+func main() -> int32_t {
+    int32_t x;
+
+    {
+        int32_t y;
+        x = 1; // refers to outer local x
+        y = 2; // refers to inner y
+        g = 3; // refers to global g
+    }
+
+    return x;
 }
 ```
+
+***
 
 ## 4.2 Duplicate Declarations
 
 Declaring the same variable name twice in the same scope is illegal.
+
+Invalid:
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+    uint8_t x; // invalid
+
+    return 0;
+}
+```
+
+Duplicate global variable declarations are also invalid:
 
 ```franko
 int32_t x;
 uint8_t x; // invalid
 ```
 
+***
+
 ## 4.3 Shadowing
 
 Shadowing in an inner block is allowed.
 
 ```franko
-int32_t x;
+func main() -> int32_t {
+    int32_t x;
 
-{
-    uint8_t x; // allowed: different inner scope
-    x = 1;     // refers to inner x
+    {
+        uint8_t x; // allowed: different inner scope
+        x = 1;     // refers to inner x
+    }
+
+    x = 2;         // refers to outer x
+
+    return x;
 }
-
-x = 2;         // refers to outer x
 ```
+
+***
 
 ## 4.4 Use Before Declaration
 
-A variable must be declared before it is used.
+Local variables must be declared before they are used within their lexical scope.
 
 Invalid:
 
 ```franko
-x = 10; // invalid if x has not been declared
+func main() -> int32_t {
+    x = 10; // invalid: local x has not been declared
+    int32_t x;
+
+    return 0;
+}
 ```
+
+Global variable declarations are registered before function bodies are analyzed.
+
+Therefore, a function may reference a global variable declared later in the source file:
+
+```franko
+func main() -> int32_t {
+    g = 10;
+    return 0;
+}
+
+uint32_t g;
+```
+
+This is valid because `g` is a global variable declaration.
+
+However, global scope itself may contain only variable declarations and function declarations. Global assignments are still invalid:
+
+```franko
+uint32_t g;
+
+g = 10; // invalid: assignment is not allowed at global scope
+```
+
+***
 
 ## 4.5 Undeclared Variables
 
 Using an undeclared variable is illegal.
 
 ```franko
-x = 1; // invalid if x was never declared
+func main() -> int32_t {
+    x = 1; // invalid if x was never declared
+    return 0;
+}
 ```
 
----
+***
 
 # 5. Desugaring
 
@@ -200,6 +354,8 @@ Desugaring does not change program meaning. It rewrites compact user-facing synt
 
 After desugaring, normal declaration, assignment, array initialization, heap, and type checking rules apply.
 
+***
+
 ## 5.1 Declaration Initializer Sugar
 
 This:
@@ -208,7 +364,7 @@ This:
 int x = 10;
 ```
 
-is accepted and desugared to:
+is accepted in statement contexts where declaration followed by assignment is legal, and is desugared to:
 
 ```franko
 int x;
@@ -221,21 +377,48 @@ So:
 int x = 10;
 ```
 
-is legal Franko source, but semantically behaves exactly like a declaration followed by an assignment.
+semantically behaves exactly like a declaration followed by an assignment.
 
 The initializer must obey normal assignment rules.
 
-Valid:
+Valid inside a function body:
 
 ```franko
-uint8_t x = 255;
+func main() -> int32_t {
+    uint8_t x = 255;
+    return 0;
+}
 ```
 
 Invalid:
 
 ```franko
-uint8_t x = 256; // invalid: 256 does not fit uint8_t
+func main() -> int32_t {
+    uint8_t x = 256; // invalid: 256 does not fit uint8_t
+    return 0;
+}
 ```
+
+At global scope, declaration initializer sugar is currently invalid if it desugars into an assignment, because global executable statements are not allowed.
+
+Invalid:
+
+```franko
+uint32_t g = 1; // invalid at global scope for now
+```
+
+Use:
+
+```franko
+uint32_t g;
+
+func main() -> int32_t {
+    g = 1;
+    return 0;
+}
+```
+
+***
 
 ## 5.2 Allocated Dynamic Array Initialization Sugar
 
@@ -245,7 +428,7 @@ This:
 alloc array<int> arr(20);
 ```
 
-is accepted and desugared to:
+is accepted in statement contexts where the desugared initialization statement is legal, and is desugared to:
 
 ```franko
 alloc array<int> arr;
@@ -260,12 +443,14 @@ alloc array<int> arr(20);
 
 means:
 
-1. declare `arr` as a heap-owned dynamic array of `int`,
+1. declare `arr` as a heap-owned dynamic array of `int`;
 2. initialize `arr` with dynamic size `20`.
 
 The desugared `arr(20);` still follows the normal dynamic array initialization rules.
 
----
+At global scope this form is invalid for now because the initialization component is an executable statement.
+
+***
 
 # 6. Types
 
@@ -276,34 +461,39 @@ primitive integers
 dynamic arrays
 static arrays
 typed addresses
+function return-only void
 ```
 
 There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8_t`.
 
----
+`void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
+
+***
 
 # 7. Primitive Integer Types
 
 Franko supports fixed-width signed and unsigned integer types.
 
-| Type | Meaning | Range |
-|---|---|---|
-| `int8_t` | signed 8-bit integer | `-128` to `127` |
-| `int16_t` | signed 16-bit integer | `-32768` to `32767` |
-| `int32_t` | signed 32-bit integer | `-2147483648` to `2147483647` |
-| `int64_t` | signed 64-bit integer | `-9223372036854775808` to `9223372036854775807` |
-| `uint8_t` | unsigned 8-bit integer | `0` to `255` |
-| `uint16_t` | unsigned 16-bit integer | `0` to `65535` |
-| `uint32_t` | unsigned 32-bit integer | `0` to `4294967295` |
-| `uint64_t` | unsigned 64-bit integer | `0` to `18446744073709551615` |
+| Type       | Meaning                 | Range                                           |
+| ---------- | ----------------------- | ----------------------------------------------- |
+| `int8_t`   | signed 8-bit integer    | `-128` to `127`                                 |
+| `int16_t`  | signed 16-bit integer   | `-32768` to `32767`                             |
+| `int32_t`  | signed 32-bit integer   | `-2147483648` to `2147483647`                   |
+| `int64_t`  | signed 64-bit integer   | `-9223372036854775808` to `9223372036854775807` |
+| `uint8_t`  | unsigned 8-bit integer  | `0` to `255`                                    |
+| `uint16_t` | unsigned 16-bit integer | `0` to `65535`                                  |
+| `uint32_t` | unsigned 32-bit integer | `0` to `4294967295`                             |
+| `uint64_t` | unsigned 64-bit integer | `0` to `18446744073709551615`                   |
+
+***
 
 ## 7.1 Integer Type Aliases
 
 Franko supports the convenient alias:
 
 | Alias | Canonical type |
-|---|---|
-| `int` | `int32_t` |
+| ----- | -------------- |
+| `int` | `int32_t`      |
 
 Therefore these declarations are equivalent:
 
@@ -335,6 +525,8 @@ x = 10;
 
 If the parser defines aliases such as `char`, they should be understood as aliases to canonical primitive types. In the current semantic model, `char` behavior corresponds to `uint8_t`.
 
+***
+
 ## 7.2 Boolean-Like Values
 
 Franko currently does not have a separate `bool` type.
@@ -346,7 +538,7 @@ Boolean-like results from comparison and logical operators use `uint8_t`, with:
 1 = true
 ```
 
----
+***
 
 # 8. Integer Literals
 
@@ -381,10 +573,10 @@ There is no documented octal literal syntax in the current semantic checker.
 
 Important distinction:
 
-- `+123` may be accepted as part of integer literal syntax.
-- Unary `+x` is **not** currently implemented as a semantic unary operator.
+* `+123` may be accepted as part of integer literal syntax.
+* Unary `+x` is **not** currently implemented as a semantic unary operator.
 
----
+***
 
 # 9. Fluid Integer Constants
 
@@ -395,31 +587,47 @@ This means their initial semantic type is not always binding. Instead, when a co
 Example:
 
 ```franko
-uint8_t x;
+func main() -> int32_t {
+    uint8_t x;
 
-x = 255; // valid
-x = 256; // invalid: 256 does not fit uint8_t
+    x = 255; // valid
+    x = 256; // invalid: 256 does not fit uint8_t
+
+    return 0;
+}
 ```
 
 Another example:
 
 ```franko
-uint8_t x;
-x = 10;
+func main() -> int32_t {
+    uint8_t x;
+    x = 10;
 
-x = x + 1;   // valid: 1 fits uint8_t
-x = x + 255; // valid: 255 fits uint8_t
-x = x + 256; // invalid: 256 does not fit uint8_t
+    x = x + 1;   // valid: 1 fits uint8_t
+    x = x + 255; // valid: 255 fits uint8_t
+    x = x + 256; // invalid: 256 does not fit uint8_t
+
+    return 0;
+}
 ```
 
 Pure constant expressions remain fluid until used in a contextual position:
 
 ```franko
-uint8_t x;
+func main() -> int32_t {
+    uint8_t x;
 
-x = 1 + 2; // valid: folded to 3, fits uint8_t
-x = 1000;  // invalid: does not fit uint8_t
+    x = 1 + 2; // valid: folded to 3, fits uint8_t
+    x = 1000;  // invalid: does not fit uint8_t
+
+    return 0;
+}
 ```
+
+Fluid constants also participate in function overload resolution. A folded integer constant may match a primitive integer parameter if its `BigInteger` value fits that parameter type.
+
+***
 
 # 10. Constant Folding
 
@@ -441,15 +649,15 @@ If folding would require invalid arithmetic, the expression is not folded and la
 Examples:
 
 ```franko
-1 / 0   // division by zero error during checking
-1 << -1 // invalid shift count
+1 / 0    // division by zero error during checking
+1 << -1  // invalid shift count
 ```
 
 Constants are folded using arbitrary-precision `BigInteger`, not fixed-width wrapping arithmetic.
 
 Integer overflow is not applied during folding. Range checking happens when the value is used in a concrete type context.
 
----
+***
 
 # 11. Declarations
 
@@ -489,7 +697,9 @@ int32_t x;
 x = 1;
 ```
 
-The initializer must obey normal assignment rules.
+The initializer must obey normal assignment rules and is only valid where the resulting assignment is legal.
+
+***
 
 ## 11.1 Duplicate Declarations
 
@@ -498,38 +708,672 @@ Declaring the same variable name twice in the same scope is illegal.
 Invalid:
 
 ```franko
-int x;
-uint8_t x; // invalid: duplicate declaration in the same scope
+func main() -> int32_t {
+    int x;
+    uint8_t x; // invalid: duplicate declaration in the same scope
+
+    return 0;
+}
 ```
+
+***
 
 ## 11.2 Shadowing
 
 A variable may be redeclared in an inner block, creating a new variable that shadows the outer one.
 
 ```franko
-int x;
+func main() -> int32_t {
+    int x;
 
-{
-    uint8_t x;
-    x = 1; // refers to inner x
+    {
+        uint8_t x;
+        x = 1; // refers to inner x
+    }
+
+    x = 2; // refers to outer x
+
+    return x;
 }
-
-x = 2; // refers to outer x
 ```
+
+***
 
 ## 11.3 Use Before Declaration
 
-A variable must be declared before it is used.
+Local variables must be declared before they are used.
 
 Invalid:
 
 ```franko
-x = 10; // invalid if x has not been declared
+func main() -> int32_t {
+    x = 10; // invalid if x has not been declared
+    int32_t x;
+
+    return 0;
+}
 ```
 
----
+Global variables are registered before function bodies are checked, so a function may refer to a later global declaration.
 
-# 12. Heap Variables and `alloc`
+***
+
+## 11.4 Global Variable Declarations
+
+Variable declarations are allowed at global scope.
+
+Global variable declarations create storage that can be referenced by function bodies.
+
+Example:
+
+```franko
+uint32_t counter;
+
+func main() -> int32_t {
+    counter = 1;
+    print(counter);
+    return 0;
+}
+```
+
+Global variables may be declared before or after functions that use them:
+
+```franko
+func main() -> int32_t {
+    g = 123;
+    return 0;
+}
+
+uint32_t g;
+```
+
+This is valid because the compiler registers all global variable declarations before analyzing function bodies.
+
+Only declarations are allowed at global scope. Initializer sugar at global scope is not currently allowed if it desugars into an assignment.
+
+Invalid:
+
+```franko
+uint32_t g = 1; // invalid at global scope for now
+```
+
+Invalid:
+
+```franko
+uint32_t g;
+
+g = 1; // invalid: global assignment
+```
+
+Global variables follow the same declaration type validity rules as local variables.
+
+Duplicate global variable declarations are invalid:
+
+```franko
+uint32_t x;
+uint8_t x; // invalid: duplicate global declaration
+```
+
+***
+
+# 12. Functions
+
+Franko supports user-defined functions.
+
+Function declarations are global top-level items.
+
+Function declarations are not valid inside blocks or inside other function bodies.
+
+***
+
+## 12.1 Function Declaration Syntax
+
+A function declaration uses the `func` keyword:
+
+```franko
+func name(parameters) -> returnType {
+    statements
+}
+```
+
+A function declaration must have:
+
+* the `func` keyword;
+* an identifier;
+* a parameter list, even if empty;
+* an explicit return type after `->`;
+* a block body.
+
+Example:
+
+```franko
+func main() -> int32_t {
+    return 0;
+}
+```
+
+Empty parameter lists are written with `()`:
+
+```franko
+func hello() -> void {
+    print(1);
+}
+```
+
+***
+
+## 12.2 Function Declaration Placement
+
+Function declarations are valid only in global scope.
+
+Valid:
+
+```franko
+func f() -> int32_t {
+    return 1;
+}
+```
+
+Invalid:
+
+```franko
+func main() -> int32_t {
+    func nested() -> int32_t {
+        return 1;
+    }
+
+    return 0;
+}
+```
+
+Nested functions are not currently supported.
+
+***
+
+## 12.3 Function Parameters
+
+Function parameters are treated as local variables inside the function body.
+
+Parameter names are required because they define variable names available inside the function body.
+
+Example:
+
+```franko
+func addOne(uint32_t x) -> uint32_t {
+    return x + 1;
+}
+```
+
+Duplicate parameter names inside the same function are invalid:
+
+```franko
+func bad(int32_t x, uint32_t x) -> int32_t {
+    return x;
+}
+```
+
+This is invalid because parameters occupy the same initial function-body scope.
+
+Parameters cannot have type `void`.
+
+Invalid:
+
+```franko
+func f(void x) -> void {
+}
+```
+
+***
+
+## 12.4 `void`
+
+`void` is valid as a function return type.
+
+```franko
+func logDone() -> void {
+    print(1);
+}
+```
+
+`void` is not an ordinary value type.
+
+It is invalid for:
+
+* variables;
+* array element types;
+* address referenced types;
+* function parameters.
+
+Invalid:
+
+```franko
+void x;
+array<void> xs;
+addr<void> p;
+
+func f(void x) -> void {
+}
+```
+
+`void` is allowed only where the language explicitly permits it, currently as a function return type.
+
+***
+
+## 12.5 Function Signatures and Overloading
+
+Franko supports function overloading.
+
+Function declarations are grouped by function identifier.
+
+A function signature is determined by:
+
+* the function identifier;
+* the ordered list of parameter types.
+
+Parameter order is part of the function signature.
+
+Parameter names are not part of the function signature.
+
+Return type is not part of the function signature.
+
+Valid overloads:
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(uint32_t x) -> uint32_t {
+    return x;
+}
+```
+
+These are valid because the signatures differ:
+
+```text
+f(int32_t)
+f(uint32_t)
+```
+
+Valid overloads by parameter order:
+
+```franko
+func f(int32_t x, uint32_t y) -> int32_t {
+    return x;
+}
+
+func f(uint32_t y, int32_t x) -> int32_t {
+    return x;
+}
+```
+
+These are different signatures:
+
+```text
+f(int32_t, uint32_t)
+f(uint32_t, int32_t)
+```
+
+Duplicate declarations are invalid even if parameter names differ:
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(int32_t y) -> int32_t {
+    return y;
+}
+```
+
+Duplicate declarations are invalid even if return types differ:
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(int32_t x) -> uint32_t {
+    return 0;
+}
+```
+
+Both declarations have the same signature:
+
+```text
+f(int32_t)
+```
+
+Duplicate function declarations are compilation errors.
+
+A duplicate function declaration is not inserted into the overload table and does not participate in overload resolution.
+
+***
+
+## 12.6 Function Call Resolution
+
+A function call resolves by:
+
+* callee identifier;
+* ordered argument expressions.
+
+Parameter names are not used in call resolution.
+
+A function call is valid if and only if exactly one overload is applicable.
+
+An overload is applicable when each argument matches the corresponding parameter in order.
+
+For nonconstant arguments:
+
+* the argument type must exactly match the parameter type.
+
+For folded integer constants:
+
+* the constant is fluid;
+* it may match a primitive integer parameter if its `BigInteger` value fits that parameter type.
+
+Example:
+
+```franko
+func f(uint8_t x) -> void {
+}
+
+func main() -> int32_t {
+    f(255); // valid
+    return 0;
+}
+```
+
+Invalid:
+
+```franko
+func f(uint8_t x) -> void {
+}
+
+func main() -> int32_t {
+    f(256); // invalid: 256 does not fit uint8_t
+    return 0;
+}
+```
+
+Ambiguous:
+
+```franko
+func f(uint8_t x) -> void {
+}
+
+func f(uint32_t x) -> void {
+}
+
+func main() -> int32_t {
+    f(1); // invalid: 1 fits both uint8_t and uint32_t
+    return 0;
+}
+```
+
+If no overload is applicable, the call is invalid.
+
+If more than one overload is applicable, the call is ambiguous and invalid.
+
+Address arguments match only by exact address type.
+
+Array arguments currently cannot be passed by value because arrays are not assignable value types in ordinary Franko assignment. To pass arrays to functions, use addresses to arrays.
+
+Example:
+
+```franko
+func clear(addr<array<int32_t>> p) -> void {
+    deref(p).memset(0);
+}
+```
+
+***
+
+## 12.7 Bare Function Names
+
+A bare function name is not a value.
+
+Invalid:
+
+```franko
+func f() -> int32_t {
+    return 1;
+}
+
+func main() -> int32_t {
+    print(f); // invalid
+    return 0;
+}
+```
+
+Function values are not currently supported.
+
+***
+
+## 12.8 Function Call Expressions
+
+A function call expression has the return type of the selected function.
+
+```franko
+func getValue() -> int32_t {
+    return 10;
+}
+
+func main() -> int32_t {
+    int32_t x;
+    x = getValue();
+    return x;
+}
+```
+
+A `void`-returning function call is valid as an expression statement:
+
+```franko
+func logDone() -> void {
+    print(1);
+}
+
+func main() -> int32_t {
+    logDone();
+    return 0;
+}
+```
+
+A `void`-returning function call is invalid in value-producing contexts:
+
+```franko
+func logDone() -> void {
+}
+
+func main() -> int32_t {
+    int32_t x;
+    x = logDone(); // invalid
+    return 0;
+}
+```
+
+***
+
+## 12.9 Return Statements
+
+Return checking is handled by later legality/type checkers, not by the initial semantic analyzer.
+
+A `void` function:
+
+* is not required to contain a return statement;
+* may use bare `return`;
+* must not use `return expr`.
+
+Valid:
+
+```franko
+func f() -> void {
+}
+```
+
+Valid:
+
+```franko
+func f() -> void {
+    return;
+}
+```
+
+Invalid:
+
+```franko
+func f() -> void {
+    return 1;
+}
+```
+
+A non-`void` function:
+
+* must contain a return statement with an expression;
+* must not use bare `return`;
+* must return an expression compatible with the declared return type.
+
+Valid:
+
+```franko
+func getValue() -> int32_t {
+    return 10;
+}
+```
+
+Invalid:
+
+```franko
+func getValue() -> int32_t {
+}
+```
+
+Invalid:
+
+```franko
+func getValue() -> int32_t {
+    return;
+}
+```
+
+Return compatibility for non-`void` functions:
+
+* constant integer expressions may be accepted if the constant value fits in the declared return type;
+* nonconstant expressions must have exactly the same semantic type as the declared return type;
+* returned address expressions must exactly match the declared address type.
+
+***
+
+## 12.10 Function Return Types
+
+A function return type must be either:
+
+* `void`;
+* a primitive integer type;
+* an address type, `addr<T>`.
+
+Invalid function return types currently include:
+
+* dynamic arrays, `array<T>`;
+* static arrays, `array<T, N>`.
+
+Arrays cannot be returned directly because arrays are not assignable in Franko.
+
+Returning an array by value would imply an implicit array copy or assignment, but Franko requires array movement to be explicit through array intrinsics and addresses.
+
+If a function needs to operate on an array, pass an address to the array:
+
+```franko
+func fill(addr<array<int32_t>> p) -> void {
+    deref(p).memset(0);
+}
+```
+
+If a function needs to return access to an array, return an address to the array:
+
+```franko
+func getArray(addr<array<int32_t>> p) -> addr<array<int32_t>> {
+    return p;
+}
+```
+
+For static arrays, use an address to the exact static array type:
+
+```franko
+func getBuffer(
+    addr<array<uint8_t, 128>> p
+) -> addr<array<uint8_t, 128>> {
+    return p;
+}
+```
+
+Invalid dynamic array return:
+
+```franko
+func makeArray() -> array<int32_t> {
+    array<int32_t> arr;
+    arr(10);
+    return arr;
+}
+```
+
+Invalid static array return:
+
+```franko
+func makeBuffer() -> array<uint8_t, 128> {
+    array<uint8_t, 128> buffer;
+    buffer.memset(0);
+    return buffer;
+}
+```
+
+`void` is a special valid function return type. It does not represent an assignable value.
+
+***
+
+## 12.11 Forward References and Recursion
+
+Function signatures are registered before function bodies are analyzed.
+
+Therefore, function bodies may reference functions declared later in the same program.
+
+Valid forward reference:
+
+```franko
+func a() -> int32_t {
+    return b();
+}
+
+func b() -> int32_t {
+    return 1;
+}
+```
+
+Direct recursion is allowed if the recursive call matches the function's registered signature:
+
+```franko
+func countdown(int32_t x) -> int32_t {
+    return countdown(x - 1);
+}
+```
+
+Mutual recursion is allowed if all involved function signatures are registered before body analysis:
+
+```franko
+func even(int32_t x) -> int32_t {
+    return odd(x - 1);
+}
+
+func odd(int32_t x) -> int32_t {
+    return even(x - 1);
+}
+```
+
+Termination and full return-path legality are separate checker concerns.
+
+***
+
+# 13. Heap Variables and `alloc`
 
 Franko supports heap-owned variables using `alloc`.
 
@@ -546,10 +1390,14 @@ The `alloc` keyword marks the variable as heap-owned. Heap-owned variables may b
 Example:
 
 ```franko
-alloc int x;
+func main() -> int32_t {
+    alloc int x;
 
-x = 10;
-del x;
+    x = 10;
+    del x;
+
+    return 0;
+}
 ```
 
 Non-heap variables cannot be deleted.
@@ -557,14 +1405,20 @@ Non-heap variables cannot be deleted.
 Invalid:
 
 ```franko
-int x;
+func main() -> int32_t {
+    int x;
 
-del x; // invalid: x is not heap-owned
+    del x; // invalid: x is not heap-owned
+
+    return 0;
+}
 ```
 
-## 12.1 Allocated Dynamic Array Initialization Sugar
+***
 
-Allocated dynamic arrays may use compact declaration-plus-initialization syntax:
+## 13.1 Allocated Dynamic Array Initialization Sugar
+
+Allocated dynamic arrays may use compact declaration-plus-initialization syntax in statement contexts:
 
 ```franko
 alloc array<int> arr(20);
@@ -589,14 +1443,14 @@ alloc array<int> arr(20);
 
 means:
 
-1. declare `arr` as a heap-owned dynamic array of `int`,
+1. declare `arr` as a heap-owned dynamic array of `int`;
 2. initialize `arr` with dynamic size `20`.
 
 The size expression must satisfy normal dynamic array size rules.
 
----
+***
 
-# 13. Assignment
+# 14. Assignment
 
 Assignment syntax:
 
@@ -608,23 +1462,27 @@ The left-hand side must be a storage-backed lvalue.
 
 Valid assignment targets include:
 
-- variables,
-- array elements,
-- dereferenced addresses.
+* variables,
+* array elements,
+* dereferenced addresses.
 
 Examples:
 
 ```franko
-int32_t x;
-x = 1;
+func main() -> int32_t {
+    int32_t x;
+    x = 1;
 
-array<int32_t> arr;
-arr(10);
-arr[0] = 42;
+    array<int32_t> arr;
+    arr(10);
+    arr[0] = 42;
 
-addr<int32_t> p;
-p = getaddr(x);
-deref(p) = 100;
+    addr<int32_t> p;
+    p = getaddr(x);
+    deref(p) = 100;
+
+    return 0;
+}
 ```
 
 Invalid assignment targets:
@@ -635,7 +1493,9 @@ x + y = 3;       // invalid
 getaddr(x) = p;  // invalid
 ```
 
-## 13.1 Primitive Assignment
+***
+
+## 14.1 Primitive Assignment
 
 A primitive integer variable may be assigned:
 
@@ -667,7 +1527,9 @@ uint32_t b;
 a = b; // invalid
 ```
 
-## 13.2 Address Assignment
+***
+
+## 14.2 Address Assignment
 
 Address assignment requires exact address type equality.
 
@@ -707,7 +1569,9 @@ p = 123;
 p = 0xdeadbeef;
 ```
 
-## 13.3 Array Assignment
+***
+
+## 14.3 Array Assignment
 
 Arrays cannot be directly assigned.
 
@@ -730,23 +1594,24 @@ a.uninit();
 
 depending on the intended operation.
 
----
+***
 
-# 14. Lvalues and Storage-Backed Expressions
+# 15. Lvalues and Storage-Backed Expressions
 
 A storage-backed lvalue is an expression that refers to a real mutable storage location.
 
 Current storage-backed lvalues are:
 
-| Expression | Lvalue? |
-|---|---|
-| variable | yes |
-| array element of storage-backed array | yes |
-| `deref(address)` | yes |
-| integer literal | no |
-| arithmetic expression | no |
-| comparison expression | no |
-| `getaddr(...)` result | no |
+| Expression                            | Lvalue? |
+| ------------------------------------- | ------- |
+| variable                              | yes     |
+| array element of storage-backed array | yes     |
+| `deref(address)`                      | yes     |
+| integer literal                       | no      |
+| arithmetic expression                 | no      |
+| comparison expression                 | no      |
+| function call result                  | no      |
+| `getaddr(...)` result                 | no      |
 
 Valid:
 
@@ -765,14 +1630,14 @@ getaddr(x) = p;
 
 This distinction matters for:
 
-- assignment targets,
-- `getaddr(...)` operands,
-- array intrinsic receivers,
-- `memcpy` sources.
+* assignment targets,
+* `getaddr(...)` operands,
+* array intrinsic receivers,
+* `memcpy` sources.
 
----
+***
 
-# 15. Operators
+# 16. Operators
 
 Franko operators apply primarily to integer expressions.
 
@@ -780,34 +1645,34 @@ Addresses have special comparison rules.
 
 Arrays are not arithmetic values.
 
----
+***
 
-## 15.1 Operator Precedence
+## 16.1 Operator Precedence
 
 From highest precedence to lowest:
 
-| Precedence | Operators / Forms |
-|---:|---|
-| 1 | postfix expressions, array access `a[i]`, `deref(a)` |
-| 2 | unary `-x`, `!x` |
-| 3 | multiplicative `*`, `/` |
-| 4 | additive `+`, `-` |
-| 5 | shift `<<`, `>>` |
-| 6 | relational `<`, `<=`, `>`, `>=` |
-| 7 | equality `==`, `!=` |
-| 8 | bitwise AND `&` |
-| 9 | bitwise XOR `^` |
-| 10 | bitwise OR `|` |
-| 11 | logical AND `&&` |
-| 12 | logical OR `||` |
+| Precedence | Operators / Forms                                                    |    |    |
+| ---------: | -------------------------------------------------------------------- | -- | -- |
+|          1 | postfix expressions, function calls, array access `a[i]`, `deref(a)` |    |    |
+|          2 | unary `-x`, `!x`                                                     |    |    |
+|          3 | multiplicative `*`, `/`                                              |    |    |
+|          4 | additive `+`, `-`                                                    |    |    |
+|          5 | shift `<<`, `>>`                                                     |    |    |
+|          6 | relational `<`, `<=`, `>`, `>=`                                      |    |    |
+|          7 | equality `==`, `!=`                                                  |    |    |
+|          8 | bitwise AND `&`                                                      |    |    |
+|          9 | bitwise XOR `^`                                                      |    |    |
+|         10 | bitwise OR \`                                                        | \` |    |
+|         11 | logical AND `&&`                                                     |    |    |
+|         12 | logical OR \`                                                        |    | \` |
 
 Binary operators are intended to associate left-to-right.
 
----
+***
 
-## 15.2 Unary Operators
+## 16.2 Unary Operators
 
-### 15.2.1 Logical NOT
+### 16.2.1 Logical NOT
 
 Syntax:
 
@@ -817,11 +1682,11 @@ Syntax:
 
 Rules:
 
-- operand must be an integer,
-- zero is false,
-- nonzero is true,
-- result type is `uint8_t`,
-- result value is `0` or `1`.
+* operand must be an integer;
+* zero is false;
+* nonzero is true;
+* result type is `uint8_t`;
+* result value is `0` or `1`.
 
 Example:
 
@@ -830,7 +1695,7 @@ uint8_t b;
 b = !0; // b = 1
 ```
 
-### 15.2.2 Unary Minus
+### 16.2.2 Unary Minus
 
 Syntax:
 
@@ -840,9 +1705,9 @@ Syntax:
 
 Rules:
 
-- operand must be an integer,
-- result type is the operand type,
-- constants are folded as arbitrary-precision values before contextual checking.
+* operand must be an integer;
+* result type is the operand type;
+* constants are folded as arbitrary-precision values before contextual checking.
 
 Example:
 
@@ -851,7 +1716,7 @@ int32_t x;
 x = -1;
 ```
 
-### 15.2.3 Unsupported Unary Operators
+### 16.2.3 Unsupported Unary Operators
 
 Unsupported unary operators include:
 
@@ -862,9 +1727,9 @@ Unsupported unary operators include:
 
 Note that `+123` may be accepted as a literal form, but unary `+x` is not a supported semantic unary operator.
 
----
+***
 
-## 15.3 Arithmetic Operators
+## 16.3 Arithmetic Operators
 
 Arithmetic operators:
 
@@ -877,15 +1742,14 @@ Arithmetic operators:
 
 Rules:
 
-- operands must be integers,
-- arrays are invalid,
-- addresses are invalid,
-- both nonconstant operands must have exactly the same integer type,
-- constants must fit the other side's concrete type,
-- if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type,
-- if both operands are nonconstant, they must have exactly the same primitive integer type, and the result type is that shared type,
-- if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
-
+* operands must be integers;
+* arrays are invalid;
+* addresses are invalid;
+* both nonconstant operands must have exactly the same integer type;
+* constants must fit the other side's concrete type;
+* if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type;
+* if both operands are nonconstant, they must have exactly the same primitive integer type, and the result type is that shared type;
+* if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
 
 Valid:
 
@@ -922,9 +1786,9 @@ x = 1 / 0; // invalid
 
 The modulus operator `%` is not currently implemented.
 
----
+***
 
-## 15.4 Bitwise Operators
+## 16.4 Bitwise Operators
 
 Bitwise operators:
 
@@ -936,14 +1800,14 @@ Bitwise operators:
 
 Rules:
 
-- operands must be integers,
-- arrays are invalid,
-- addresses are invalid,
-- both nonconstant operands must have exactly the same integer type,
-- constants must fit the other side's concrete type,
-- if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type,
-- if both operands are nonconstant, they must have exactly the same primitive integer type, and the result type is that shared type,
-- if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
+* operands must be integers;
+* arrays are invalid;
+* addresses are invalid;
+* both nonconstant operands must have exactly the same integer type;
+* constants must fit the other side's concrete type;
+* if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type;
+* if both operands are nonconstant, they must have exactly the same primitive integer type, and the result type is that shared type;
+* if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
 
 Valid:
 
@@ -964,9 +1828,9 @@ uint32_t y;
 x = x & y; // invalid
 ```
 
----
+***
 
-## 15.5 Shift Operators
+## 16.5 Shift Operators
 
 Shift operators:
 
@@ -977,15 +1841,14 @@ Shift operators:
 
 Rules:
 
-* left operand must be an integer,
-* right operand must be an integer,
-* if the right operand is a nonconstant expression, it must have an unsigned integer type,
-* if the right operand is a constant, it must be nonnegative and must fit the unsigned variant of the left operand's type,
-* if the left operand is a constant and the right operand is nonconstant, the left constant must fit the right operand's concrete type,
-* if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type,
-* if both operands are nonconstant, the result type is the left operand's type; the right operand is only the shift count,
+* left operand must be an integer;
+* right operand must be an integer;
+* if the right operand is a nonconstant expression, it must have an unsigned integer type;
+* if the right operand is a constant, it must be nonnegative and must fit the unsigned variant of the left operand's type;
+* if the left operand is a constant and the right operand is nonconstant, the left constant must fit the right operand's concrete type;
+* if exactly one operand is constant and the other operand is nonconstant, the result type is the nonconstant operand's type;
+* if both operands are nonconstant, the result type is the left operand's type; the right operand is only the shift count;
 * if both operands are constant, the expression is folded when possible and remains a fluid constant until used in a contextual position.
-
 
 Examples:
 
@@ -1032,53 +1895,18 @@ int32_t amount;
 x = x << amount; // invalid: nonconstant shift count must be unsigned
 ```
 
-When the left operand is a constant and the right operand is nonconstant, the result type is inferred from the nonconstant right operand, but the right operand must still be an unsigned integer type.
-
-Valid:
-
-```franko
-uint8_t amount;
-
-amount = 3;
-
-uint8_t y;
-y = 1 << amount; // valid: result type is uint8_t, and 1 fits uint8_t
-```
-
-Invalid:
-
-```franko
-uint8_t amount;
-
-amount = 3;
-
-uint8_t y;
-y = 999 << amount; // invalid: 999 does not fit uint8_t
-```
-
-Invalid:
-
-```franko
-int32_t amount;
-
-amount = 3;
-
-int32_t y;
-y = 1 << amount; // invalid: nonconstant shift count must be unsigned
-```
-
 For pure constant shifts, the expression remains a fluid constant until used in a contextual position:
 
 ```franko
 uint8_t b;
 
 b = 1 << 3; // valid: folded to 8, and 8 fits uint8_t
-b = 1 << 8; // invalid when assigned to uint8_t: folded to 256, which does not fit uint8_t
+b = 1 << 8; // invalid when assigned to uint8_t: folded to 256
 ```
 
----
+***
 
-## 15.6 Comparison Operators
+## 16.6 Comparison Operators
 
 Comparison operators:
 
@@ -1093,11 +1921,11 @@ Comparison operators:
 
 For integer operands:
 
-- operands may be any integer types,
-- mixed integer types are allowed,
-- if one side is a constant and the other side is nonconstant, the constant must fit the nonconstant side's concrete type,
-- result type is `uint8_t`,
-- result value is `0` or `1`.
+* operands may be any integer types;
+* mixed integer types are allowed;
+* if one side is a constant and the other side is nonconstant, the constant must fit the nonconstant side's concrete type;
+* result type is `uint8_t`;
+* result value is `0` or `1`.
 
 Valid:
 
@@ -1122,11 +1950,11 @@ if (a == 999) {
 
 `999` does not fit `uint8_t`.
 
-Address comparison is also supported, but only between identical address types. See [Address Comparison](#209-address-comparison).
+Address comparison is also supported, but only between identical address types.
 
----
+***
 
-## 15.7 Logical Operators
+## 16.7 Logical Operators
 
 Logical operators:
 
@@ -1138,14 +1966,14 @@ Logical operators:
 
 Rules for `&&` and `||`:
 
-- operands must be integers,
-- mixed integer types are allowed,
-- constants must fit the other side's concrete type when compared with a nonconstant,
-- zero is false,
-- nonzero is true,
-- result type is `uint8_t`,
-- result value is `0` or `1`,
-- `&&` and `||` are intended to short-circuit.
+* operands must be integers;
+* mixed integer types are allowed;
+* constants must fit the other side's concrete type when paired with a nonconstant;
+* zero is false;
+* nonzero is true;
+* result type is `uint8_t`;
+* result value is `0` or `1`;
+* `&&` and `||` are intended to short-circuit.
 
 Example:
 
@@ -1160,9 +1988,9 @@ if (x && b) {
 
 Addresses are not valid operands to logical operators.
 
----
+***
 
-## 15.8 No Address Arithmetic
+## 16.8 No Address Arithmetic
 
 Addresses are not integers.
 
@@ -1190,9 +2018,9 @@ deref(p + 1);
 
 Franko intentionally does not support pointer arithmetic.
 
----
+***
 
-# 16. Conditions
+# 17. Conditions
 
 `if` and `while` conditions must be integer expressions.
 
@@ -1245,25 +2073,29 @@ if (p == q) {
 }
 ```
 
----
+***
 
-# 17. Statements
+# 18. Statements
 
-Franko supports:
+Franko supports the following statements inside function bodies and blocks:
 
-- variable declarations,
-- assignments,
-- blocks,
-- `if`,
-- `while`,
-- `print`,
-- `del`,
-- expression statements,
-- array intrinsic statement forms.
+* variable declarations;
+* assignments;
+* blocks;
+* `if`;
+* `while`;
+* `return`;
+* `print`;
+* `del`;
+* expression statements;
+* function call statements;
+* array intrinsic statement forms.
 
----
+Executable statements are not allowed at global scope.
 
-## 17.1 Blocks
+***
+
+## 18.1 Blocks
 
 A block is a sequence of statements enclosed in braces:
 
@@ -1277,9 +2109,9 @@ A block is a sequence of statements enclosed in braces:
 
 Blocks create a new lexical scope.
 
----
+***
 
-## 17.2 If Statements
+## 18.2 If Statements
 
 Syntax:
 
@@ -1313,9 +2145,9 @@ if (x > 0) {
 }
 ```
 
----
+***
 
-## 17.3 While Statements
+## 18.3 While Statements
 
 Syntax:
 
@@ -1339,9 +2171,33 @@ while (i < 10) {
 }
 ```
 
----
+***
 
-## 17.4 Print Statements
+## 18.4 Return Statements
+
+Return statements are valid inside function bodies.
+
+Bare return:
+
+```franko
+return;
+```
+
+Return with expression:
+
+```franko
+return expr;
+```
+
+A bare `return` is valid only in a `void` function.
+
+A `return expr` statement is required for non-`void` functions.
+
+Return expression compatibility is checked against the declared return type.
+
+***
+
+## 18.5 Print Statements
 
 Syntax:
 
@@ -1364,19 +2220,26 @@ print(1, 2, 3);
 
 Current limitation: printing arrays or other complex values may depend on backend code generation support. The semantic checker currently does not reject every backend-unprintable expression.
 
----
+***
 
-## 17.5 Expression Statements
+## 18.6 Expression Statements
 
 A legal expression may appear as a statement.
+
+Function calls are commonly used as expression statements when the return value is ignored or when the function returns `void`.
 
 Example:
 
 ```franko
-x + 1;
-```
+func logDone() -> void {
+    print(1);
+}
 
-However, many expression statements are only useful for their side effects, and most Franko expressions have no side effects.
+func main() -> int32_t {
+    logDone();
+    return 0;
+}
+```
 
 Array intrinsic calls are special expression-statement forms:
 
@@ -1387,19 +2250,17 @@ arr.memcpy(other);
 arr.uninit();
 ```
 
-General function calls are not currently implemented.
-
-Invalid:
+Most non-call expressions have no side effects, so although they may be parsed as expression statements, they are usually not useful:
 
 ```franko
-foo(1, 2);
+x + 1;
 ```
 
-unless `foo(1, 2)` matches a recognized intrinsic form.
+A `void`-returning function call is valid as an expression statement, but invalid in value-producing contexts.
 
----
+***
 
-# 18. Arrays
+# 19. Arrays
 
 Franko supports two array categories:
 
@@ -1424,9 +2285,9 @@ array<array<int32_t, 4>, 8> matrix;
 
 Arrays are not arithmetic values and cannot be directly assigned.
 
----
+***
 
-## 18.1 Static Arrays
+## 19.1 Static Arrays
 
 A static array has a compile-time size:
 
@@ -1436,9 +2297,9 @@ array<int32_t, 10> xs;
 
 Static array size rules:
 
-- size must be a valid integer literal,
-- size must be greater than zero,
-- size must fit `uint32_t`.
+* size must be a valid integer literal;
+* size must be greater than zero;
+* size must fit `uint32_t`.
 
 Valid:
 
@@ -1466,9 +2327,9 @@ array<int32_t, 10> xs;
 xs(10); // invalid: array init is only for dynamic arrays
 ```
 
----
+***
 
-## 18.2 Dynamic Arrays
+## 19.2 Dynamic Arrays
 
 A dynamic array has runtime size:
 
@@ -1484,13 +2345,13 @@ xs(10);
 
 Rules for dynamic array initialization:
 
-- target must be a storage-backed lvalue,
-- target must be a dynamic array,
-- exactly one argument is required,
-- size must be compatible with `uint32_t`,
-- constant sizes must be greater than zero,
-- constant sizes must fit `uint32_t`,
-- nonconstant sizes must have exactly type `uint32_t`.
+* target must be a storage-backed lvalue;
+* target must be a dynamic array;
+* exactly one argument is required;
+* size must be compatible with `uint32_t`;
+* constant sizes must be greater than zero;
+* constant sizes must fit `uint32_t`;
+* nonconstant sizes must have exactly type `uint32_t`.
 
 Valid:
 
@@ -1527,23 +2388,9 @@ array<int32_t> xs;
 xs(0); // invalid: size must be greater than zero
 ```
 
-Static arrays are different:
+***
 
-```franko
-array<int, 20> arr;
-```
-
-Static arrays already have their size in the type and are not initialized with `arr(size)`.
-
-Invalid:
-
-```franko
-array<int, 20> arr;
-
-arr(20); // invalid: arr is static, not dynamic
-```
-
-## 18.3 Array Access
+## 19.3 Array Access
 
 Array indexing syntax:
 
@@ -1555,11 +2402,11 @@ The target must be an array.
 
 Index rules:
 
-- constant index:
-  - must be nonnegative,
-  - must fit `uint32_t`;
-- nonconstant index:
-  - must have exactly type `uint32_t`.
+* constant index:
+  * must be nonnegative;
+  * must fit `uint32_t`;
+* nonconstant index:
+  * must have exactly type `uint32_t`.
 
 Valid:
 
@@ -1601,9 +2448,9 @@ xs[-1] = 42; // invalid
 
 Current limitation: the checker validates index type/range but does not generally prove that an index is within the actual array length.
 
----
+***
 
-## 18.4 Array Elements as Lvalues
+## 19.4 Array Elements as Lvalues
 
 Array elements are storage-backed lvalues when the array target is storage-backed.
 
@@ -1626,9 +2473,9 @@ p = getaddr(xs[0]);
 
 Nested array elements may also be lvalues when each target is storage-backed.
 
----
+***
 
-## 18.5 Array Direct Assignment Is Invalid
+## 19.5 Array Direct Assignment Is Invalid
 
 Arrays cannot be assigned directly.
 
@@ -1651,20 +2498,20 @@ a.uninit();
 
 depending on the intended operation.
 
----
+***
 
-## 18.6 Array Lifetime Limitations
+## 19.6 Array Lifetime Limitations
 
 The checker validates intrinsic legality, but it does not fully prove:
 
-- dynamic array initialized before indexing,
-- dynamic array not used after `uninit`,
-- dynamic array not initialized twice,
-- all array accesses are within bounds.
+* dynamic array initialized before indexing;
+* dynamic array not used after `uninit`;
+* dynamic array not initialized twice;
+* all array accesses are within bounds.
 
----
+***
 
-# 19. Array Intrinsics
+# 20. Array Intrinsics
 
 Array operations are written using call syntax but lowered into special semantic nodes.
 
@@ -1693,11 +2540,7 @@ Invalid:
 x = arr.memset(0); // invalid: intrinsic is not an expression value
 ```
 
-The receiver or target of an array intrinsic must usually be a storage-backed array lvalue. This means the operation must apply to real mutable storage, such as:
-
-* a variable,
-* a dereferenced address,
-* an array element whose containing array expression is storage-backed.
+The receiver or target of an array intrinsic must usually be a storage-backed array lvalue.
 
 Examples of storage-backed array targets:
 
@@ -1717,7 +2560,7 @@ x + y
 
 ***
 
-## 19.1 `target(size)`
+## 20.1 `target(size)`
 
 Dynamic array initialization.
 
@@ -1731,31 +2574,13 @@ arr(100);
 
 Rules:
 
-* available only on dynamic arrays,
-* target must be a storage-backed lvalue,
-* target must have dynamic array type,
-* exactly one argument is required,
+* available only on dynamic arrays;
+* target must be a storage-backed lvalue;
+* target must have dynamic array type;
+* exactly one argument is required;
 * size must be:
   * a positive constant fitting `uint32_t`, or
   * a nonconstant expression of exactly type `uint32_t`.
-
-Valid:
-
-```franko
-array<int32_t> arr;
-
-arr(100);
-```
-
-Valid with a nonconstant `uint32_t` size:
-
-```franko
-array<int32_t> arr;
-uint32_t n;
-
-n = 100;
-arr(n);
-```
 
 Valid through an address:
 
@@ -1768,25 +2593,13 @@ p = getaddr(arr);
 deref(p)(100);
 ```
 
-This is valid because:
-
-```franko
-deref(p)
-```
-
-is a storage-backed lvalue of type:
-
-```franko
-array<int32_t>
-```
-
 Valid for nested dynamic array elements when the target element is storage-backed:
 
 ```franko
 array<array<int32_t>> arrs;
 
 arrs(3);
-arrs[0](10);
+arrs10;
 ```
 
 Invalid because static arrays are not dynamically initialized:
@@ -1795,14 +2608,6 @@ Invalid because static arrays are not dynamically initialized:
 array<int32_t, 10> arr;
 
 arr(10); // invalid: static array
-```
-
-Invalid because the target is not a dynamic array:
-
-```franko
-int32_t x;
-
-x(10); // invalid: x is not a dynamic array
 ```
 
 Invalid argument counts:
@@ -1819,23 +2624,13 @@ Invalid sizes:
 ```franko
 array<int32_t> arr;
 
-arr(-1); // invalid: size must be positive
-arr(0);  // invalid: size must be positive
-```
-
-Invalid nonconstant size type:
-
-```franko
-array<int32_t> arr;
-int32_t n;
-
-n = 10;
-arr(n); // invalid: nonconstant size must be uint32_t
+arr(-1); // invalid
+arr(0);  // invalid
 ```
 
 ***
 
-## 19.2 `target.uninit()`
+## 20.2 `target.uninit()`
 
 Dynamic array uninitialization.
 
@@ -1850,18 +2645,9 @@ arr.uninit();
 
 Rules:
 
-* receiver must be a storage-backed lvalue,
-* receiver must be a dynamic array,
+* receiver must be a storage-backed lvalue;
+* receiver must be a dynamic array;
 * takes exactly zero arguments.
-
-Valid:
-
-```franko
-array<int32_t> arr;
-
-arr(100);
-arr.uninit();
-```
 
 Valid through an address:
 
@@ -1893,7 +2679,7 @@ arr.uninit(1); // invalid
 
 ***
 
-## 19.3 `target.memset(value)`
+## 20.3 `target.memset(value)`
 
 Fills an array byte-wise.
 
@@ -1908,10 +2694,10 @@ arr.memset(0);
 
 Rules:
 
-* receiver must be a storage-backed lvalue,
-* receiver may be a dynamic or static array,
-* receiver element type must be memsetable,
-* takes exactly one argument,
+* receiver must be a storage-backed lvalue;
+* receiver may be a dynamic or static array;
+* receiver element type must be memsetable;
+* takes exactly one argument;
 * fill value must be:
   * a constant fitting `uint8_t`, or
   * a nonconstant expression of exactly type `uint8_t`.
@@ -1959,20 +2745,12 @@ Invalid because a nonconstant fill value must have exactly type `uint8_t`:
 array<uint8_t, 128> bytes;
 uint32_t x;
 
-bytes.memset(x); // invalid: nonconstant fill must be uint8_t
-```
-
-Invalid because the receiver is not an array:
-
-```franko
-int32_t x;
-
-x.memset(0); // invalid
+bytes.memset(x); // invalid
 ```
 
 ***
 
-## 19.4 Memsetable Element Types
+## 20.4 Memsetable Element Types
 
 Current memsetable types:
 
@@ -1994,12 +2772,12 @@ array<addr<int32_t>> d;      // not memsetable
 
 A static array element is memsetable only when its own element type is also memsetable.
 
-Example:
+Valid:
 
 ```franko
 array<array<uint8_t, 4>, 8> bytes;
 
-bytes.memset(0); // valid
+bytes.memset(0);
 ```
 
 Invalid:
@@ -2007,12 +2785,12 @@ Invalid:
 ```franko
 array<array<int32_t>, 8> nestedDynamicArrays;
 
-nestedDynamicArrays.memset(0); // invalid: dynamic array elements are not memsetable
+nestedDynamicArrays.memset(0); // invalid
 ```
 
 ***
 
-## 19.5 `target.memcpy(source)`
+## 20.5 `target.memcpy(source)`
 
 Copies array contents byte-wise according to the generated C++ array model.
 
@@ -2030,12 +2808,12 @@ a.memcpy(b);
 
 Rules:
 
-* target must be a storage-backed lvalue array,
-* source must be a storage-backed lvalue array,
-* both target and source may be dynamic or static arrays,
-* target and source element types must match exactly,
-* static/dynamic shape does not need to match,
-* static lengths do not need to match,
+* target must be a storage-backed lvalue array;
+* source must be a storage-backed lvalue array;
+* both target and source may be dynamic or static arrays;
+* target and source element types must match exactly;
+* static/dynamic shape does not need to match;
+* static lengths do not need to match;
 * element type must be memcpyable.
 
 Valid between dynamic arrays:
@@ -2095,7 +2873,7 @@ Invalid because the element types differ:
 array<int32_t> a;
 array<uint8_t> b;
 
-a.memcpy(b); // invalid: element types differ
+a.memcpy(b); // invalid
 ```
 
 Invalid because the source is not storage-backed:
@@ -2104,10 +2882,10 @@ Invalid because the source is not storage-backed:
 array<int32_t> a;
 addr<array<int32_t>> p;
 
-a.memcpy(getaddr(a)); // invalid: source is an address, not an array lvalue
+a.memcpy(getaddr(a)); // invalid
 ```
 
-Invalid because `memcpy` takes exactly one argument:
+Invalid argument counts:
 
 ```franko
 array<int32_t> a;
@@ -2120,7 +2898,7 @@ a.memcpy(b, c); // invalid
 
 ***
 
-## 19.6 Memcpyable Element Types
+## 20.6 Memcpyable Element Types
 
 Current memcpyable types:
 
@@ -2142,13 +2920,13 @@ array<array<int32_t>> d;     // not memcpyable
 
 A static array element is memcpyable only when its own element type is also memcpyable.
 
-Example:
+Valid:
 
 ```franko
 array<array<int32_t, 4>, 8> matrixA;
 array<array<int32_t, 4>, 8> matrixB;
 
-matrixA.memcpy(matrixB); // valid
+matrixA.memcpy(matrixB);
 ```
 
 Invalid:
@@ -2157,10 +2935,12 @@ Invalid:
 array<array<int32_t>, 8> a;
 array<array<int32_t>, 8> b;
 
-a.memcpy(b); // invalid: dynamic array elements are not memcpyable
+a.memcpy(b); // invalid
 ```
 
-# 20. Addresses
+***
+
+# 21. Addresses
 
 Franko has typed addresses:
 
@@ -2181,17 +2961,19 @@ addr<array<int32_t>> ap;
 
 Addresses are:
 
-- typed,
-- assignable,
-- copyable,
-- dereferenceable,
-- comparable.
+* typed;
+* assignable;
+* copyable;
+* dereferenceable;
+* comparable.
 
 Addresses are not arithmetic values.
 
----
+`addr<void>` is invalid because `void` is not an ordinary value type.
 
-## 20.1 Creating Addresses with `getaddr`
+***
+
+## 21.1 Creating Addresses with `getaddr`
 
 Syntax:
 
@@ -2261,9 +3043,9 @@ Invalid:
 getaddr(x) = p; // invalid
 ```
 
----
+***
 
-## 20.2 Dereferencing with `deref`
+## 21.2 Dereferencing with `deref`
 
 Syntax:
 
@@ -2314,9 +3096,9 @@ int32_t x;
 deref(x); // invalid: x is not an address
 ```
 
----
+***
 
-## 20.3 Nested Addresses
+## 21.3 Nested Addresses
 
 Franko supports addresses to addresses.
 
@@ -2361,9 +3143,9 @@ Example:
 deref(deref(pp)) = 5;
 ```
 
----
+***
 
-## 20.4 Address Assignment
+## 21.4 Address Assignment
 
 Address assignment requires exact type equality.
 
@@ -2402,9 +3184,9 @@ p = 0xdeadbeef;
 
 Raw integers cannot be converted to addresses.
 
----
+***
 
-## 20.5 Address Comparison
+## 21.5 Address Comparison
 
 Addresses may be compared using:
 
@@ -2464,9 +3246,9 @@ if (a == x) {
 
 Address comparison produces `uint8_t`.
 
----
+***
 
-## 20.6 No Address Arithmetic
+## 21.6 No Address Arithmetic
 
 Addresses are not integers.
 
@@ -2494,9 +3276,9 @@ deref(p + 1);
 
 Franko intentionally does not support pointer arithmetic.
 
----
+***
 
-## 20.7 Addresses of Arrays
+## 21.7 Addresses of Arrays
 
 Arrays may be addressed.
 
@@ -2518,10 +3300,9 @@ deref(p).memset(0);
 
 is valid if the dereferenced array satisfies the intrinsic rules.
 
+***
 
----
-
-## 20.8 Address Lifetime Limitations
+## 21.8 Address Lifetime Limitations
 
 Address lifetime is not fully tracked.
 
@@ -2539,9 +3320,9 @@ deref(p);
 
 The compiler does not fully track dangling addresses or aliasing through addresses.
 
----
+***
 
-# 21. `del` and Delete Checking
+# 22. `del` and Delete Checking
 
 The semantic model distinguishes between heap and non-heap variables.
 
@@ -2597,15 +3378,17 @@ print(x); // invalid
 
 Dynamic array `uninit()` is separate from `del`.
 
-## 21.1 Delete Checking Limitations
+***
+
+## 22.1 Delete Checking Limitations
 
 Current limitations:
 
-- delete checking is symbol-based,
-- aliasing through addresses is not fully tracked,
-- dangling addresses are not fully detected,
-- delete state checking is path-insensitive and traversal-based,
-- deleting in one branch may affect later checking conservatively.
+* delete checking is symbol-based;
+* aliasing through addresses is not fully tracked;
+* dangling addresses are not fully detected;
+* delete state checking is path-insensitive and traversal-based;
+* deleting in one branch may affect later checking conservatively.
 
 Example of limitation:
 
@@ -2619,15 +3402,15 @@ print(x); // may be rejected because x was marked deleted during checking
 
 The compiler does not perform full ownership, lifetime, alias, or dangling-address analysis.
 
----
+***
 
-# 22. Type Equality
+# 23. Type Equality
 
 Franko uses exact semantic type equality in many places.
 
----
+***
 
-## 22.1 Primitive Equality
+## 23.1 Primitive Equality
 
 Primitive types are equal only if they have the same kind.
 
@@ -2637,9 +3420,11 @@ int32_t  != uint32_t
 int32_t  == int32_t
 ```
 
----
+The alias `int` canonicalizes to `int32_t`.
 
-## 22.2 Dynamic Array Equality
+***
+
+## 23.2 Dynamic Array Equality
 
 Dynamic arrays are equal if their element types are equal.
 
@@ -2648,14 +3433,14 @@ array<int32_t> == array<int32_t>
 array<int32_t> != array<uint8_t>
 ```
 
----
+***
 
-## 22.3 Static Array Equality
+## 23.3 Static Array Equality
 
 Static arrays are equal if:
 
-- element types are equal,
-- sizes are numerically equal.
+* element types are equal;
+* sizes are numerically equal.
 
 For example, these sizes are considered equal if parsed successfully:
 
@@ -2665,9 +3450,9 @@ array<int32_t, 0x10>
 array<int32_t, 0b10000>
 ```
 
----
+***
 
-## 22.4 Address Equality
+## 23.4 Address Equality
 
 Address types are equal if their referenced types are equal.
 
@@ -2676,16 +3461,47 @@ addr<int32_t> == addr<int32_t>
 addr<int32_t> != addr<uint8_t>
 ```
 
----
+***
 
-# 23. Declaration Type Validity
+## 23.5 Function Signature Equality
 
-A declared type is valid if it is one of:
+Function signatures are equal if they have:
 
-- primitive integer type,
-- dynamic array of a valid type,
-- static array of a valid type with valid size,
-- address of a valid type.
+* the same function identifier;
+* the same ordered list of parameter types.
+
+Return type is not part of function signature equality.
+
+Parameter names are not part of function signature equality.
+
+Therefore these are duplicate signatures:
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(int32_t y) -> uint32_t {
+    return 0;
+}
+```
+
+Both have signature:
+
+```text
+f(int32_t)
+```
+
+***
+
+# 24. Declaration Type Validity
+
+A declared variable type is valid if it is one of:
+
+* primitive integer type;
+* dynamic array of a valid non-`void` type;
+* static array of a valid non-`void` type with valid size;
+* address of a valid non-`void` type.
 
 Valid:
 
@@ -2697,6 +3513,14 @@ addr<int32_t> p;
 addr<array<int32_t>> ap;
 ```
 
+Invalid:
+
+```franko
+void x;
+array<void> xs;
+addr<void> p;
+```
+
 Invalid static sizes:
 
 ```franko
@@ -2705,40 +3529,43 @@ array<int32_t, -1> b;
 array<int32_t, 999999999999999999999999999999999> c;
 ```
 
----
+A function return type has separate rules. It may be:
 
-# 24. Unsupported or Restricted Features
+* `void`;
+* a primitive integer type;
+* an address type.
+
+Array return types are invalid.
+
+***
+
+# 25. Unsupported or Restricted Features
 
 The current Franko implementation intentionally leaves several areas restricted or incomplete.
 
----
+***
 
-## 24.1 No User-Defined Functions
+## 25.1 Function Restrictions
 
-Function declarations and general calls are not implemented.
+User-defined functions and general function calls are implemented.
 
-General user-defined function calls are not supported:
+Current function restrictions:
 
-```franko
-foo();
-foo(1);
-foo(x, y);
-```
+* function declarations are valid only in global scope;
+* nested functions are not supported;
+* first-class function values are not supported;
+* function pointers are not supported;
+* anonymous functions/lambdas are not supported;
+* methods are not supported;
+* parameter names are not used in overload resolution;
+* return type is not used in overload resolution;
+* arrays cannot be returned by value;
+* `void` calls cannot be used in value-producing contexts;
+* full path-sensitive return analysis is not currently performed.
 
-The call syntax is currently used mainly to recognize array intrinsics:
+***
 
-```franko
-arr(100);
-arr.memset(0);
-arr.memcpy(other);
-arr.uninit();
-```
-
-Function types and function symbols exist in the internal semantic model preemptively, but source-level function semantics are not active yet.
-
----
-
-## 24.2 No General Methods
+## 25.2 No General Methods
 
 Only array intrinsic member calls are recognized.
 
@@ -2759,29 +3586,29 @@ x.field;
 
 unless implemented later by a future semantic pass.
 
----
+***
 
-## 24.3 No Structs or Fields
+## 25.3 No Structs or Fields
 
 There are no user-defined aggregate types beyond arrays.
 
 General member access is not currently implemented.
 
----
+***
 
-## 24.4 No Floating-Point Types
+## 25.4 No Floating-Point Types
 
 Only integer primitives are supported.
 
----
+***
 
-## 24.5 No Separate Boolean Type
+## 25.5 No Separate Boolean Type
 
 Boolean results use `uint8_t`.
 
----
+***
 
-## 24.6 No Implicit Numeric Conversions for Nonconstants
+## 25.6 No Implicit Numeric Conversions for Nonconstants
 
 This is invalid:
 
@@ -2794,9 +3621,9 @@ a = b;
 
 Constants are special and may fit contextually.
 
----
+***
 
-## 24.7 Arrays Are Not Assignable
+## 25.7 Arrays Are Not Assignable
 
 Arrays cannot be assigned directly.
 
@@ -2819,33 +3646,32 @@ a.uninit();
 
 depending on the intended operation.
 
----
+***
 
-
-## 24.8 No Full Array Lifetime Checking
+## 25.8 No Full Array Lifetime Checking
 
 The checker validates intrinsic legality, but it does not fully prove:
 
-- dynamic array initialized before indexing,
-- dynamic array not used after `uninit`,
-- dynamic array not initialized twice,
-- all array accesses are within bounds.
+* dynamic array initialized before indexing;
+* dynamic array not used after `uninit`;
+* dynamic array not initialized twice;
+* all array accesses are within bounds.
 
----
+***
 
-## 24.9 Delete Checking Is Limited
+## 25.9 Delete Checking Is Limited
 
 Delete checking is currently:
 
-- symbol-based,
-- path-insensitive,
-- not alias-aware.
+* symbol-based;
+* path-insensitive;
+* not alias-aware.
 
 It does not fully track dangling addresses or ownership.
 
----
+***
 
-## 24.10 Address Lifetime Is Not Fully Tracked
+## 25.10 Address Lifetime Is Not Fully Tracked
 
 This may not be fully diagnosed:
 
@@ -2859,28 +3685,53 @@ del x;
 deref(p);
 ```
 
----
+***
 
-## 24.11 Print Checking Is Loose
+## 25.11 Print Checking Is Loose
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set.
 
----
+***
 
-
-## 24.12 Unsupported Operators
+## 25.12 Unsupported Operators
 
 The following are not currently implemented:
 
 ```franko
-%x   // modulus is not implemented
-~x   // bitwise NOT is not implemented
-+x   // unary plus is not implemented as a semantic unary operator
+%   // modulus is not implemented
+~x  // bitwise NOT is not implemented
++x  // unary plus is not implemented as a semantic unary operator
 ```
 
----
+***
 
-# 25. Runtime and Backend Notes
+## 25.13 Global Scope Is Declaration-Only
+
+Only the following nodes are valid at global scope:
+
+* variable declaration nodes;
+* function declaration nodes.
+
+The following are invalid at global scope:
+
+```franko
+x = 1;
+print(x);
+f();
+if (x) {}
+while (x) {}
+return 0;
+del x;
+{
+    int32_t x;
+}
+arr(10);
+arr.memset(0);
+```
+
+***
+
+# 26. Runtime and Backend Notes
 
 The current compiler targets C++14.
 
@@ -2897,214 +3748,710 @@ Dynamic<T>.memcpy(Static<T, M>)
 
 Static array sizes must be greater than zero because generated C++ uses fixed-size arrays, and zero-length C++ arrays are not standard.
 
----
+Function signatures are registered before function bodies are analyzed so that forward references, direct recursion, and mutual recursion can be resolved.
 
-# 26. Examples
+Global variable declarations are also registered before function bodies are analyzed, so functions can reference globals declared later in source order.
 
-## 26.1 Basic Integers
+***
 
-```franko
-int32_t x;
-int32_t y;
+# 27. Examples
 
-x = 10;
-y = x + 5;
+Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-print(y);
-```
+***
 
----
-
-## 26.2 Using `int` Alias
+## 27.1 Basic Integers
 
 ```franko
-int x = 10;
-print(x);
-```
+func main() -> int32_t {
+    int32_t x;
+    int32_t y;
 
-Equivalent to:
+    x = 10;
+    y = x + 5;
 
-```franko
-int32_t x;
-x = 10;
-print(x);
-```
+    print(y);
 
----
-
-## 26.3 Constants Fitting Smaller Types
-
-```franko
-uint8_t b;
-
-b = 255; // valid
-// b = 256; // invalid
-```
-
----
-
-## 26.4 Dynamic Array
-
-```franko
-array<int32_t> xs;
-uint32_t i;
-
-xs(10);
-
-i = 0;
-xs[i] = 42;
-
-print(xs[i]);
-
-xs.uninit();
-```
-
----
-
-## 26.5 Static Array
-
-```franko
-array<uint8_t, 128> buffer;
-
-buffer.memset(0);
-buffer[0] = 255;
-```
-
----
-
-## 26.6 Array Copy
-
-```franko
-array<int32_t> a;
-array<int32_t, 10> b;
-
-a(10);
-
-b.memset(0);
-a.memcpy(b);
-```
-
----
-
-## 26.7 Heap Variable
-
-```franko
-alloc int x;
-
-x = 10;
-print(x);
-
-del x;
-```
-
----
-
-## 26.8 Allocated Dynamic Array Initialization Sugar
-
-```franko
-alloc array<int> arr(20);
-
-arr.memset(0);
-
-del arr;
-```
-
-Equivalent to:
-
-```franko
-alloc array<int> arr;
-arr(20);
-
-arr.memset(0);
-
-del arr;
-```
-
----
-
-## 26.9 Addresses
-
-```franko
-int32_t x;
-addr<int32_t> p;
-
-x = 1;
-p = getaddr(x);
-
-deref(p) = deref(p) + 1;
-
-print(x);
-```
-
----
-
-## 26.10 Address of Array Element
-
-```franko
-array<int32_t> arr;
-addr<int32_t> p;
-
-arr(60);
-arr[30] = 123;
-
-p = getaddr(arr[30]);
-
-print(deref(p));
-```
-
----
-
-## 26.11 Nested Addresses
-
-```franko
-int32_t x;
-addr<int32_t> p;
-addr<addr<int32_t>> pp;
-
-x = 1;
-
-p = getaddr(x);
-pp = getaddr(p);
-
-deref(deref(pp)) = 5;
-
-print(x);
-```
-
----
-
-## 26.12 Address Comparison
-
-```franko
-int32_t x;
-int32_t y;
-
-addr<int32_t> a;
-addr<int32_t> b;
-
-a = getaddr(x);
-b = getaddr(y);
-
-if (a != b) {
-    print(1);
+    return 0;
 }
 ```
 
----
+***
 
-## 26.13 Dynamic Array Through Address
+## 27.2 Using `int` Alias
 
 ```franko
-array<int32_t> arr;
-addr<array<int32_t>> p;
+func main() -> int {
+    int x;
+    x = 10;
 
-arr(10);
-p = getaddr(arr);
+    print(x);
 
-deref(p).memset(0);
-deref(p).uninit();
+    return 0;
+}
+```
+
+Equivalent to:
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+    x = 10;
+
+    print(x);
+
+    return 0;
+}
+```
+
+***
+
+## 27.3 Constants Fitting Smaller Types
+
+```franko
+func main() -> int32_t {
+    uint8_t b;
+
+    b = 255; // valid
+    // b = 256; // invalid
+
+    return 0;
+}
+```
+
+***
+
+## 27.4 Dynamic Array
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+    uint32_t i;
+
+    xs(10);
+
+    i = 0;
+    xs[i] = 42;
+
+    print(xs[i]);
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+***
+
+## 27.5 Static Array
+
+```franko
+func main() -> int32_t {
+    array<uint8_t, 128> buffer;
+
+    buffer.memset(0);
+    buffer[0] = 255;
+
+    return 0;
+}
+```
+
+***
+
+## 27.6 Array Copy
+
+```franko
+func main() -> int32_t {
+    array<int32_t> a;
+    array<int32_t, 10> b;
+
+    a(10);
+
+    b.memset(0);
+    a.memcpy(b);
+
+    return 0;
+}
+```
+
+***
+
+## 27.7 Heap Variable
+
+```franko
+func main() -> int32_t {
+    alloc int x;
+
+    x = 10;
+    print(x);
+
+    del x;
+
+    return 0;
+}
+```
+
+***
+
+## 27.8 Allocated Dynamic Array Initialization Sugar
+
+```franko
+func main() -> int32_t {
+    alloc array<int> arr(20);
+
+    arr.memset(0);
+
+    del arr;
+
+    return 0;
+}
+```
+
+Equivalent to:
+
+```franko
+func main() -> int32_t {
+    alloc array<int> arr;
+    arr(20);
+
+    arr.memset(0);
+
+    del arr;
+
+    return 0;
+}
+```
+
+***
+
+## 27.9 Addresses
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+    addr<int32_t> p;
+
+    x = 1;
+    p = getaddr(x);
+
+    deref(p) = deref(p) + 1;
+
+    print(x);
+
+    return 0;
+}
+```
+
+***
+
+## 27.10 Address of Array Element
+
+```franko
+func main() -> int32_t {
+    array<int32_t> arr;
+    addr<int32_t> p;
+
+    arr(60);
+    arr[30] = 123;
+
+    p = getaddr(arr[30]);
+
+    print(deref(p));
+
+    return 0;
+}
+```
+
+***
+
+## 27.11 Nested Addresses
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+    addr<int32_t> p;
+    addr<addr<int32_t>> pp;
+
+    x = 1;
+
+    p = getaddr(x);
+    pp = getaddr(p);
+
+    deref(deref(pp)) = 5;
+
+    print(x);
+
+    return 0;
+}
+```
+
+***
+
+## 27.12 Address Comparison
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+    int32_t y;
+
+    addr<int32_t> a;
+    addr<int32_t> b;
+
+    a = getaddr(x);
+    b = getaddr(y);
+
+    if (a != b) {
+        print(1);
+    }
+
+    return 0;
+}
+```
+
+***
+
+## 27.13 Dynamic Array Through Address
+
+```franko
+func main() -> int32_t {
+    array<int32_t> arr;
+    addr<array<int32_t>> p;
+
+    arr(10);
+    p = getaddr(arr);
+
+    deref(p).memset(0);
+    deref(p).uninit();
+
+    return 0;
+}
 ```
 
 This is valid because `memset` and `uninit` accept storage-backed array lvalues.
 
----
+***
+
+## 27.14 Valid Empty-Parameter `main`
+
+```franko
+func main() -> int {
+    return 0;
+}
+```
+
+Valid if `int` is the canonical alias for `int32_t`.
+
+***
+
+## 27.15 Valid `void` Function
+
+```franko
+func voidfunc() -> void {
+}
+```
+
+A `void` function does not need to return.
+
+***
+
+## 27.16 Valid `void` Function with Bare Return
+
+```franko
+func logDone() -> void {
+    return;
+}
+```
+
+***
+
+## 27.17 Invalid `void` Function Returning a Value
+
+```franko
+func badVoid() -> void {
+    return 1;
+}
+```
+
+Invalid because `void` functions must not return an expression.
+
+***
+
+## 27.18 Valid Non-`void` Function
+
+```franko
+func getValue() -> int32_t {
+    return 10;
+}
+```
+
+***
+
+## 27.19 Invalid Non-`void` Function with No Return
+
+```franko
+func getValue() -> int32_t {
+}
+```
+
+Invalid because a non-`void` function must return an expression.
+
+***
+
+## 27.20 Invalid Non-`void` Function with Bare Return
+
+```franko
+func getValue() -> int32_t {
+    return;
+}
+```
+
+Invalid because a non-`void` function must return an expression.
+
+***
+
+## 27.21 Valid Overloads by Parameter Type
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(uint32_t x) -> uint32_t {
+    return x;
+}
+```
+
+Valid because the ordered parameter type lists differ:
+
+```text
+f(int32_t)
+f(uint32_t)
+```
+
+***
+
+## 27.22 Valid Overloads by Parameter Order
+
+```franko
+func f(int32_t x, uint32_t y) -> int32_t {
+    return x;
+}
+
+func f(uint32_t y, int32_t x) -> int32_t {
+    return x;
+}
+```
+
+Valid because parameter order is part of the function signature:
+
+```text
+f(int32_t, uint32_t)
+f(uint32_t, int32_t)
+```
+
+***
+
+## 27.23 Invalid Duplicate with Different Parameter Names
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(int32_t y) -> int32_t {
+    return y;
+}
+```
+
+Invalid because parameter names are not part of the function signature.
+
+Both declarations have:
+
+```text
+f(int32_t)
+```
+
+***
+
+## 27.24 Invalid Duplicate with Different Return Types
+
+```franko
+func f(int32_t x) -> int32_t {
+    return x;
+}
+
+func f(int32_t x) -> uint32_t {
+    return 0;
+}
+```
+
+Invalid because return type is not part of the function signature.
+
+Both declarations have:
+
+```text
+f(int32_t)
+```
+
+***
+
+## 27.25 Invalid Duplicate Parameter Names Inside One Function
+
+```franko
+func bad(int32_t x, uint32_t x) -> int32_t {
+    return x;
+}
+```
+
+Invalid because parameters are variables inside the function body, and the same scope cannot contain two variables named `x`.
+
+***
+
+## 27.26 Valid Forward Reference
+
+```franko
+func a() -> int32_t {
+    return b();
+}
+
+func b() -> int32_t {
+    return 1;
+}
+```
+
+Valid because function signatures are registered before function bodies are analyzed.
+
+***
+
+## 27.27 Valid Direct Recursion
+
+```franko
+func countdown(int32_t x) -> int32_t {
+    return countdown(x - 1);
+}
+```
+
+Syntactically and symbolically valid if the recursive call matches the registered signature.
+
+Termination and full return-path legality are separate checker concerns.
+
+***
+
+## 27.28 Valid Mutual Recursion
+
+```franko
+func even(int32_t x) -> int32_t {
+    return odd(x - 1);
+}
+
+func odd(int32_t x) -> int32_t {
+    return even(x - 1);
+}
+```
+
+Valid at the function-resolution level because both signatures are registered before body analysis.
+
+***
+
+## 27.29 Valid Constant Argument Overload Resolution
+
+```franko
+func f(uint8_t x) -> void {
+    print(x);
+}
+
+func main() -> int32_t {
+    f(255); // valid: 255 fits uint8_t
+    return 0;
+}
+```
+
+***
+
+## 27.30 Invalid Constant Argument Overload Resolution
+
+```franko
+func f(uint8_t x) -> void {
+    print(x);
+}
+
+func main() -> int32_t {
+    f(256); // invalid: 256 does not fit uint8_t
+    return 0;
+}
+```
+
+***
+
+## 27.31 Ambiguous Constant Argument Overload Resolution
+
+```franko
+func f(uint8_t x) -> void {
+}
+
+func f(uint32_t x) -> void {
+}
+
+func main() -> int32_t {
+    f(1); // invalid: 1 fits both uint8_t and uint32_t
+    return 0;
+}
+```
+
+***
+
+## 27.32 Valid Global Variable Used Before Source Declaration
+
+```franko
+func main() -> int32_t {
+    g = 10;
+    print(g);
+    return 0;
+}
+
+uint32_t g;
+```
+
+Valid because global variable declarations are registered before function bodies are analyzed.
+
+***
+
+## 27.33 Invalid Global Assignment
+
+```franko
+uint32_t g;
+
+g = 10; // invalid: assignment is not allowed at global scope
+```
+
+***
+
+## 27.34 Valid Address Return
+
+```franko
+func getPointer(addr<int32_t> p) -> addr<int32_t> {
+    return p;
+}
+```
+
+Valid because `addr<int32_t>` is assignable.
+
+***
+
+## 27.35 Valid Address-to-Dynamic-Array Return
+
+```franko
+func getArray(addr<array<int32_t>> p) -> addr<array<int32_t>> {
+    return p;
+}
+```
+
+Valid because the return type is an address type, not an array type.
+
+***
+
+## 27.36 Valid Address-to-Static-Array Return
+
+```franko
+func getBuffer(
+    addr<array<uint8_t, 128>> p
+) -> addr<array<uint8_t, 128>> {
+    return p;
+}
+```
+
+Valid because `addr<array<uint8_t, 128>>` is assignable.
+
+***
+
+## 27.37 Invalid Dynamic Array Return
+
+```franko
+func makeArray() -> array<int32_t> {
+    array<int32_t> arr;
+
+    arr(10);
+
+    return arr;
+}
+```
+
+Invalid because `array<int32_t>` is not assignable and therefore cannot be a function return type.
+
+Use an address-returning design instead.
+
+***
+
+## 27.38 Invalid Static Array Return
+
+```franko
+func makeBuffer() -> array<uint8_t, 128> {
+    array<uint8_t, 128> buffer;
+
+    buffer.memset(0);
+
+    return buffer;
+}
+```
+
+Invalid because `array<uint8_t, 128>` is not assignable and therefore cannot be a function return type.
+
+***
+
+## 27.39 Recommended Array-Through-Address Pattern
+
+```franko
+func fill(addr<array<int32_t>> p) -> void {
+    deref(p).memset(0);
+}
+
+func main() -> int32_t {
+    array<int32_t> arr;
+    addr<array<int32_t>> p;
+
+    arr(10);
+
+    p = getaddr(arr);
+
+    fill(p);
+
+    return 0;
+}
+```
+
+The function receives an address to the array and mutates the caller-owned array explicitly.
+
+***
+
+## 27.40 Recommended Copied-Array Pattern
+
+If the user wants a separate array result, the program should explicitly create and copy array storage instead of returning an array by value.
+
+```franko
+func copyInto(
+    addr<array<int32_t>> target,
+    addr<array<int32_t>> source
+) -> void {
+    deref(target).memcpy(deref(source));
+}
+
+func main() -> int32_t {
+    array<int32_t> a;
+    array<int32_t> b;
+
+    addr<array<int32_t>> pa;
+    addr<array<int32_t>> pb;
+
+    a(10);
+    b(10);
+
+    pa = getaddr(a);
+    pb = getaddr(b);
+
+    copyInto(pb, pa);
+
+    return 0;
+}
+```
+
+This keeps allocation, copying, and ownership explicit.

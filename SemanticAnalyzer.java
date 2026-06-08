@@ -8,38 +8,63 @@ import java.util.*;
  * ============================================================================
  *
  * PURPOSE:
- * The SemanticAnalyzer bridges the gap between the raw syntactic parser output
- * and the later semantic legality checkers. Its primary job is to transform the
- * untyped parser AST (ASTNode) into a strongly-typed, scope-resolved Semantic AST
- * (SemanticASTNode).
+ * SemanticAnalyzer bridges the gap between the raw parser AST and the later
+ * legality checkers. It lowers an untyped ASTNode tree into a strongly typed,
+ * scope-resolved SemanticASTNode tree.
  *
  * This phase performs the compiler's first semantic pass. It does not try to
- * prove that every language rule is satisfied. Instead, it builds a decorated
- * semantic tree where:
+ * prove every Franko legality rule. Instead, it builds a decorated semantic
+ * tree where:
  *
- *   - variable names are resolved to symbols,
- *   - function names are resolved to overloaded function symbols,
- *   - types are mapped into canonical SemanticType objects,
+ *   - variable names are resolved to VariableSymbol objects,
+ *   - function calls are resolved to overloaded FunctionSymbol objects,
+ *   - parser TypeNode objects become canonical SemanticType objects,
  *   - expressions carry mechanically inferred result types,
- *   - foldable integer expressions carry constantValue metadata,
- *   - storage intrinsics are lowered into dedicated Semantic AST nodes,
- *   - and storage-sensitive constructs are checked well enough to ensure that
- *     the lowered tree has a meaningful shape.
+ *   - foldable integer expressions carry BigInteger constantValue metadata,
+ *   - array storage intrinsics are lowered into dedicated Semantic AST nodes,
+ *   - storage-sensitive constructs are shaped enough for later checkers.
  *
+ * ----------------------------------------------------------------------------
+ * GLOBAL SCOPE RULE
+ * ----------------------------------------------------------------------------
+ *
+ * Global scope currently allows only:
+ *
+ *   - variable declarations,
+ *   - function declarations.
+ *
+ * No executable statements are allowed globally for now:
+ *
+ *   - assignments,
+ *   - prints,
+ *   - function calls,
+ *   - if / while,
+ *   - return,
+ *   - del,
+ *   - blocks,
+ *   - array intrinsic calls.
+ *
+ * Execution should be rooted in:
+ *
+ *   func main() -> int32_t { ... }
+ *
+ * ----------------------------------------------------------------------------
  * IMPORTANT:
+ * ----------------------------------------------------------------------------
+ *
  * This analyzer intentionally does not perform every language legality check.
  *
- * In particular, later checkers should still validate:
+ * Later checkers still validate:
  *
  *   - return; in non-void functions,
  *   - return expr; in void functions,
- *   - return expression compatibility with the declared return type,
+ *   - return expression compatibility,
  *   - missing return in non-void functions,
- *   - whether a void-returning function call appears in a value context,
- *   - full assignment compatibility,
- *   - full arithmetic/operator validity,
+ *   - void-returning calls in value contexts,
+ *   - assignment compatibility,
+ *   - arithmetic/operator validity,
  *   - array intrinsic argument compatibility,
- *   - deletion legality.
+ *   - delete legality.
  */
 public class SemanticAnalyzer {
 
@@ -50,70 +75,58 @@ public class SemanticAnalyzer {
     }
 
     public static final class Context {
-        private final Deque<Map<String, VariableSymbol>> scopes = new ArrayDeque<>();
+        // ============================================================
+        // Scope State
+        // ============================================================
+
+        private final Deque<Map<String, VariableSymbol>> scopes =
+                new ArrayDeque<>();
 
         /*
-        * Callable function overload table.
-        *
-        * Functions are grouped by identifier. Within a group, declarations are
-        * rejected as duplicates if they have the same function declaration
-        * signature:
-        *
-        *   function identifier
-        *   + ordered parameter type list
-        *
-        * Parameter names are intentionally not part of declaration identity.
-        * Return type is also intentionally not part of declaration identity.
-        *
-        * Therefore these are rejected as duplicates:
-        *
-        *   func f(int32_t x) -> int32_t
-        *   func f(int32_t y) -> uint32_t
-        *
-        * because both have the same signature:
-        *
-        *   f(int32_t)
-        *
-        * But these are distinct overloads:
-        *
-        *   func f(int32_t x, uint32_t y) -> int32_t
-        *   func f(uint32_t y, int32_t x) -> int32_t
-        *
-        * because parameter order is part of the signature.
-        *
-        * This mirrors variable declaration behavior: the duplicate is reported
-        * as a compilation error and is not inserted into the symbol table.
-        */
-        private final Map<String, List<FunctionSymbol>> functions = new LinkedHashMap<>();
+         * Raw global VarDeclNode -> registered global symbol.
+         *
+         * Used so global declarations are registered before function body
+         * analysis, then reused when lowering the final SemanticProgramNode.
+         */
+        private final IdentityHashMap<VarDeclNode, VariableSymbol> varDeclSymbols =
+                new IdentityHashMap<>();
+
+        // ============================================================
+        // Function State
+        // ============================================================
 
         /*
-         * Analyzer-local mapping from raw function declaration nodes to the
-         * FunctionSymbol registered for that declaration.
+         * Function overload table.
          *
-         * FunctionSymbol intentionally does not store rawDecl.
+         * Declaration identity:
          *
-         * This map preserves the two-phase analysis workflow:
+         *   function name + ordered parameter types
          *
-         *   Phase 1: register all function signatures.
-         *   Phase 2: analyze each function body using the symbol registered
-         *            for that exact raw declaration object.
+         * Parameter names and return type are not part of the signature.
+         */
+        private final Map<String, List<FunctionSymbol>> functions =
+                new LinkedHashMap<>();
+
+        /*
+         * Raw FunctionDeclNode -> registered FunctionSymbol.
          *
-         * IdentityHashMap is intentional. Raw AST nodes are compiler objects,
-         * not semantic value objects, so declaration association is based on
-         * object identity rather than equals/hashCode.
+         * Used for two-phase function analysis:
          *
-         * Duplicate function declarations are not inserted here, matching the
-         * behavior of duplicate variable declarations. During body analysis,
-         * such declarations receive fallback symbols so additional errors can
-         * still be collected.
+         *   1. register all signatures,
+         *   2. analyze bodies using the exact registered symbol.
          */
         private final IdentityHashMap<FunctionDeclNode, FunctionSymbol> functionDeclSymbols =
                 new IdentityHashMap<>();
+
+        // ============================================================
+        // Diagnostics
+        // ============================================================
 
         private final List<String> errors = new ArrayList<>();
 
         void clear() {
             scopes.clear();
+            varDeclSymbols.clear();
             functions.clear();
             functionDeclSymbols.clear();
             errors.clear();
@@ -127,7 +140,7 @@ public class SemanticAnalyzer {
             scopes.pop();
         }
 
-        void declare(VariableSymbol sym) {
+        boolean declare(VariableSymbol sym) {
             Map<String, VariableSymbol> current = scopes.peek();
 
             if (current == null) {
@@ -136,10 +149,11 @@ public class SemanticAnalyzer {
 
             if (current.containsKey(sym.name)) {
                 error("Duplicate declaration of variable '" + sym.name + "' in the same scope");
-                return;
+                return false;
             }
 
             current.put(sym.name, sym);
+            return true;
         }
 
         VariableSymbol resolve(String name) {
@@ -171,6 +185,10 @@ public class SemanticAnalyzer {
             functionDeclSymbols.put(decl, fn);
         }
 
+        FunctionSymbol findRegisteredFunction(FunctionDeclNode decl) {
+            return functionDeclSymbols.get(decl);
+        }
+
         FunctionSymbol resolveFunction(String name, List<SemanticExprNode> args) {
             List<FunctionSymbol> overloads = functions.get(name);
 
@@ -198,6 +216,11 @@ public class SemanticAnalyzer {
                 error("Ambiguous call to overloaded function '"
                         + formatCallSignature(name, argTypes)
                         + "': argument constants fit multiple overloads");
+
+                /*
+                 * Return one candidate as fallback so analysis can continue.
+                 * The call is already invalid because an error was reported.
+                 */
                 return matches.get(0);
             }
 
@@ -207,10 +230,6 @@ public class SemanticAnalyzer {
         boolean hasAnyFunctionNamed(String name) {
             List<FunctionSymbol> overloads = functions.get(name);
             return overloads != null && !overloads.isEmpty();
-        }
-
-        FunctionSymbol findRegisteredFunction(FunctionDeclNode decl) {
-            return functionDeclSymbols.get(decl);
         }
 
         List<FunctionSymbol> getFunctionsByName(String name) {
@@ -239,12 +258,6 @@ public class SemanticAnalyzer {
                 ParameterSymbol left = a.get(i);
                 ParameterSymbol right = b.get(i);
 
-                /*
-                * Franko function declaration identity uses ordered parameter types.
-                *
-                * Parameter names are not part of the function signature.
-                * Return type is also not part of the function signature.
-                */
                 if (!sameType(left.type, right.type)) {
                     return false;
                 }
@@ -284,17 +297,11 @@ public class SemanticAnalyzer {
             }
 
             /*
-            * Fluid integer constants may match any primitive integer parameter
-            * whose range can represent the constant value.
-            *
-            * Examples:
-            *
-            *   func f(uint8_t x)
-            *   f(255)     valid candidate
-            *   f(256)     not a uint8_t candidate
-            *
-            * If multiple overloads are valid candidates, the call is ambiguous.
-            */
+             * Folded integer constants are fluid during call resolution.
+             *
+             * A constant argument may match any primitive integer parameter
+             * whose range can represent the constant value.
+             */
             if (arg.isConstant()
                     && parameterType instanceof SemanticPrimitiveType primitive) {
                 return fitsBigIntegerToPrimitive(
@@ -304,14 +311,8 @@ public class SemanticAnalyzer {
             }
 
             /*
-            * Nonconstant expressions must match exactly.
-            *
-            * This also covers:
-            *
-            *   - address arguments,
-            *   - array arguments,
-            *   - nonconstant primitive arguments.
-            */
+             * Nonconstant expressions must match exactly.
+             */
             return sameType(arg.type, parameterType);
         }
 
@@ -382,7 +383,8 @@ public class SemanticAnalyzer {
                     sb.append(", ");
                 }
 
-                sb.append(argTypes.get(i).describe());
+                SemanticType type = argTypes.get(i);
+                sb.append(type == null ? "<null>" : type.describe());
             }
 
             sb.append(")");
@@ -457,8 +459,7 @@ public class SemanticAnalyzer {
         } else if (root instanceof FunctionDeclNode fn) {
             /*
              * Allow analyzing a standalone function declaration for tests.
-             * We still register its signature first so recursive calls can
-             * resolve.
+             * Register its signature first so recursive calls can resolve.
              */
             registerFunctionSignature(fn);
             result = analyzeFunctionDecl(fn);
@@ -514,15 +515,50 @@ public class SemanticAnalyzer {
 
     private SemanticProgramNode analyzeProgram(ProgramNode program) {
         /*
+         * Phase 0:
+         * Validate top-level item kinds.
+         */
+        for (ASTNode item : program.topLevelItems) {
+            if (item instanceof VarDeclNode || item instanceof FunctionDeclNode) {
+                continue;
+            }
+
+            ctx.error("Invalid global top-level item '"
+                    + item.getClass().getSimpleName()
+                    + "': only variable declarations and function declarations are allowed at global scope");
+        }
+
+        /*
          * Phase 1:
-         * Register all function signatures before analyzing any body.
+         * Register all global variables before function body analysis.
          *
-         * This allows forward references:
+         * This lets functions reference global variables declared later in the
+         * source file.
+         */
+        for (ASTNode item : program.topLevelItems) {
+            if (!(item instanceof VarDeclNode n)) {
+                continue;
+            }
+
+            SemanticType type = analyzeNormalType(n.type);
+
+            VariableSymbol sym = new VariableSymbol(
+                    n.name,
+                    type,
+                    n.isHeap
+            );
+
+            if (ctx.declare(sym)) {
+                ctx.varDeclSymbols.put(n, sym);
+            }
+        }
+
+        /*
+         * Phase 2:
+         * Register all function signatures before analyzing any function body.
          *
-         *   func a() -> int32_t { return b(); }
-         *   func b() -> int32_t { return 1; }
-         *
-         * It also enables direct recursion and mutual recursion.
+         * This enables forward references, direct recursion, and mutual
+         * recursion.
          */
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof FunctionDeclNode fn) {
@@ -531,28 +567,42 @@ public class SemanticAnalyzer {
         }
 
         /*
-         * Phase 2:
-         * Analyze top-level items.
+         * Phase 3:
+         * Lower allowed top-level items.
          *
-         * Function declarations become SemanticFunctionDeclNode.
-         * Top-level statements remain SemanticStmtNode.
+         * Invalid top-level items are not lowered.
          */
         List<SemanticASTNode> semanticItems = new ArrayList<>();
 
         for (ASTNode item : program.topLevelItems) {
+            if (item instanceof VarDeclNode n) {
+                VariableSymbol sym = ctx.varDeclSymbols.get(n);
+
+                /*
+                 * Null means registration failed, usually because this was a
+                 * duplicate global variable declaration. The error was already
+                 * reported by ctx.declare(...).
+                 */
+                if (sym != null) {
+                    semanticItems.add(new SemanticVarDeclNode(sym));
+                }
+
+                continue;
+            }
+
             if (item instanceof FunctionDeclNode fn) {
                 SemanticFunctionDeclNode lowered = analyzeFunctionDecl(fn);
 
                 if (lowered != null) {
                     semanticItems.add(lowered);
                 }
-            } else {
-                SemanticStmtNode lowered = analyzeStmt(item);
 
-                if (lowered != null) {
-                    semanticItems.add(lowered);
-                }
+                continue;
             }
+
+            /*
+             * Invalid top-level items were already reported in Phase 0.
+             */
         }
 
         return new SemanticProgramNode(semanticItems);
@@ -563,26 +613,13 @@ public class SemanticAnalyzer {
      *
      *   - function identifier,
      *   - ordered parameter type list,
-     *   - return type as metadata.
+     *   - return type metadata.
      *
      * Function declaration identity is:
      *
      *   identifier + ordered parameter type list
      *
-     * Parameter names are intentionally not part of function declaration identity.
-     * Return type is also intentionally not part of function declaration identity.
-     *
-     * Therefore these are rejected as duplicates:
-     *
-     *   func f(int32_t x) -> int32_t
-     *   func f(int32_t y) -> uint32_t
-     *
-     * because both have the same signature:
-     *
-     *   f(int32_t)
-     *
-     * The duplicate function declaration behaves like a duplicate variable
-     * declaration: it is reported and not inserted into the function table.
+     * Parameter names and return type are not part of declaration identity.
      */
     private void registerFunctionSignature(FunctionDeclNode fn) {
         String name = fn.name;
@@ -617,13 +654,9 @@ public class SemanticAnalyzer {
 
         if (symbol == null) {
             /*
-             * This usually means signature registration failed, for example due
-             * to a duplicate function declaration. Build a fallback symbol so
-             * the body can still be analyzed and additional errors can be
-             * collected.
-             *
-             * The fallback symbol is intentionally not inserted into the
-             * overload table.
+             * Usually means signature registration failed, for example due to a
+             * duplicate function declaration. Build a fallback symbol so the
+             * body can still be analyzed and additional errors can be collected.
              */
             List<ParameterSymbol> fallbackParams = new ArrayList<>();
 
@@ -654,11 +687,8 @@ public class SemanticAnalyzer {
 
         /*
          * Parameters are ordinary variables in the function body's initial
-         * scope.
-         *
-         * Because ParameterSymbol extends VariableSymbol, we declare the exact
-         * ParameterSymbol object directly. This preserves index metadata for
-         * later phases while keeping expression resolution simple.
+         * scope. ParameterSymbol extends VariableSymbol, so declare the exact
+         * ParameterSymbol object.
          */
         for (ParameterSymbol param : symbol.parameters) {
             ctx.declare(param);
@@ -676,10 +706,6 @@ public class SemanticAnalyzer {
                 }
             }
         } else {
-            /*
-             * The grammar requires a block body, but this defensive check keeps
-             * the analyzer robust if manually-created ASTs are passed in tests.
-             */
             ctx.error("Function '" + fn.name + "' is missing a body");
         }
 
@@ -722,9 +748,26 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof VarDeclNode n) {
+            /*
+             * Global variable declarations are pre-registered by analyzeProgram.
+             * Local variable declarations are declared here.
+             */
+            VariableSymbol registered = ctx.varDeclSymbols.get(n);
+
+            if (registered != null) {
+                return new SemanticVarDeclNode(registered);
+            }
+
             SemanticType type = analyzeNormalType(n.type);
-            VariableSymbol sym = new VariableSymbol(n.name, type, n.isHeap);
+
+            VariableSymbol sym = new VariableSymbol(
+                    n.name,
+                    type,
+                    n.isHeap
+            );
+
             ctx.declare(sym);
+
             return new SemanticVarDeclNode(sym);
         }
 
@@ -741,7 +784,9 @@ public class SemanticAnalyzer {
 
         if (node instanceof IfNode n) {
             SemanticExprNode cond = analyzeExpr(n.condition);
+
             SemanticStmtNode thenB = analyzeStmt(n.thenBranch);
+
             SemanticStmtNode elseB = n.elseBranch != null
                     ? analyzeStmt(n.elseBranch)
                     : null;
@@ -791,17 +836,16 @@ public class SemanticAnalyzer {
             return new SemanticExprStmtNode(analyzeExpr(n.expr));
         }
 
-        /*
-         * Function declarations are top-level items and are normally handled by
-         * analyzeProgram(...), not analyzeStmt(...). This fallback helps if a
-         * manually-created AST puts a function in a statement position.
-         */
         if (node instanceof FunctionDeclNode fn) {
-            ctx.error("Function declaration '" + fn.name + "' is only valid as a top-level item");
+            ctx.error("Function declaration '"
+                    + fn.name
+                    + "' is only valid in the global top-level scope");
             return null;
         }
 
-        ctx.error("Unrecognized statement node: " + node.getClass().getSimpleName());
+        ctx.error("Unrecognized statement node: "
+                + node.getClass().getSimpleName());
+
         return null;
     }
 
@@ -827,16 +871,6 @@ public class SemanticAnalyzer {
                 ? analyzeExpr(n.value)
                 : null;
 
-        /*
-         * Do not check here:
-         *
-         *   - return; inside non-void function,
-         *   - return expr; inside void function,
-         *   - return expression compatibility,
-         *   - missing return from non-void function.
-         *
-         * Those are statement/type-checker responsibilities.
-         */
         return new SemanticReturnNode(currentFunction, value);
     }
 
@@ -847,30 +881,6 @@ public class SemanticAnalyzer {
      *   dynArray.uninit();
      *   array.memset(value);
      *   array.memcpy(source);
-     *
-     * Supported receiver types:
-     *
-     *   array<T>:
-     *     - init through call syntax: arr(size)
-     *     - uninit:                  arr.uninit()
-     *     - memset:                  arr.memset(value)
-     *     - memcpy:                  arr.memcpy(source)
-     *
-     *   array<T, N>:
-     *     - memset:                  arr.memset(value)
-     *     - memcpy:                  arr.memcpy(source)
-     *
-     * These operations are intentionally lowered to dedicated semantic
-     * statement nodes instead of ordinary FunctionSymbol calls. They mutate
-     * storage and require storage-backed lvalue receivers.
-     *
-     * Dynamic array initialization supports lvalue targets such as:
-     *
-     *   arr(20);
-     *   deref(p)(20);
-     *
-     * Therefore SemanticArrayInitNode stores the initialized target as a
-     * SemanticExprNode rather than a VariableSymbol.
      */
     private SemanticStmtNode tryLowerIntrinsicExprStmt(ASTNode expr) {
         if (!(expr instanceof CallNode call)) {
@@ -932,10 +942,6 @@ public class SemanticAnalyzer {
                         "uninit receiver"
                 );
 
-                /*
-                 * Only dynamic arrays own dynamic storage that can be uninitialized.
-                 * Static arrays do not support uninit().
-                 */
                 requireDynamicArrayType(receiver, "uninit receiver");
 
                 return new SemanticArrayUninitNode(receiver);
@@ -950,36 +956,16 @@ public class SemanticAnalyzer {
          *   arr(20);
          *   deref(p)(20);
          *
-         * We only lower this form when the callee expression has dynamic array
-         * type:
-         *
-         *   array<T>
-         *
-         * Static arrays, array<T, N>, do not support call-style initialization.
-         *
-         * This preserves general function calls:
-         *
-         *   foo(20);
-         *
-         * If foo is a function, this remains a normal expression statement.
+         * If the callee is a known function name, leave it as an ordinary call.
          */
         if (call.args.size() == 1) {
             if (call.callee instanceof VarNode calleeVar) {
                 VariableSymbol var = ctx.resolve(calleeVar.name);
 
-                /*
-                 * If the name is not a variable but is a known function name,
-                 * definitely leave it as an ordinary function call expression.
-                 */
                 if (var == null && ctx.hasAnyFunctionNamed(calleeVar.name)) {
                     return null;
                 }
 
-                /*
-                 * If the name is neither a variable nor a known function, also
-                 * leave it alone. analyzeCallExpr(...) will produce the more
-                 * appropriate "No matching overload" diagnostic.
-                 */
                 if (var == null) {
                     return null;
                 }
@@ -1015,11 +1001,6 @@ public class SemanticAnalyzer {
             VariableSymbol sym = ctx.resolve(n.name);
 
             if (sym == null) {
-                /*
-                 * A bare function name is not currently a first-class value.
-                 * It only resolves as a function when it appears as the callee
-                 * of a CallNode.
-                 */
                 if (ctx.hasAnyFunctionNamed(n.name)) {
                     ctx.error("Function name '" + n.name + "' cannot be used as a value");
                 } else {
@@ -1071,21 +1052,18 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof MemberAccessNode n) {
-            /*
-             * Generic field/member expressions are not semantically supported
-             * yet. Array intrinsics are handled through CallNode(MemberAccessNode)
-             * in tryLowerIntrinsicExprStmt(...).
-             *
-             * Future struct-field support should produce a real semantic member
-             * access node here.
-             */
             SemanticExprNode target = analyzeExpr(n.target);
+
             ctx.error("Unsupported member access expression '"
                     + n.memberName
                     + "' on type "
                     + target.type.describe());
 
-            return new SemanticIntLiteralNode(FALLBACK_TYPE, BigInteger.ZERO, "0");
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
         }
 
         if (node instanceof GetAddrNode n) {
@@ -1094,7 +1072,10 @@ public class SemanticAnalyzer {
                     "getaddr(...) target"
             );
 
-            return new SemanticGetAddrNode(new SemanticAddrType(target.type), target);
+            return new SemanticGetAddrNode(
+                    new SemanticAddrType(target.type),
+                    target
+            );
         }
 
         if (node instanceof DerefNode n) {
@@ -1108,33 +1089,20 @@ public class SemanticAnalyzer {
                 ctx.error("Cannot dereference non-address type");
             }
 
-            /*
-             * deref(...) is intentionally represented as a dedicated expression
-             * node because it produces an lvalue. A normal function call cannot
-             * represent that property in the current semantic model.
-             */
             return new SemanticDerefNode(refType, expr);
         }
 
-        ctx.error("Unrecognized expression node: " + node.getClass().getSimpleName());
+        ctx.error("Unrecognized expression node: "
+                + node.getClass().getSimpleName());
 
-        return new SemanticIntLiteralNode(FALLBACK_TYPE, BigInteger.ZERO, "0");
+        return new SemanticIntLiteralNode(
+                FALLBACK_TYPE,
+                BigInteger.ZERO,
+                "0"
+        );
     }
 
     private SemanticExprNode analyzeCallExpr(CallNode call) {
-        /*
-        * User-defined global function call:
-        *
-        *   foo()
-        *   foo(1, x)
-        *
-        * Raw AST shape:
-        *
-        *   CallNode(
-        *       callee = VarNode("foo"),
-        *       args = [...]
-        *   )
-        */
         if (call.callee instanceof VarNode calleeVar) {
             List<SemanticExprNode> args = new ArrayList<>();
             List<SemanticType> argTypes = new ArrayList<>();
@@ -1166,10 +1134,6 @@ public class SemanticAnalyzer {
                 );
             }
 
-            /*
-            * A call expression has the selected function's return type, not
-            * the function type itself.
-            */
             return new SemanticFunctionCallNode(
                     fn.returnType(),
                     fn,
@@ -1178,35 +1142,31 @@ public class SemanticAnalyzer {
         }
 
         if (call.callee instanceof MemberAccessNode mac) {
-            ctx.error("Unsupported member call expression '" + mac.memberName + "'");
-            return new SemanticIntLiteralNode(FALLBACK_TYPE, BigInteger.ZERO, "0");
+            ctx.error("Unsupported member call expression '"
+                    + mac.memberName
+                    + "'");
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
         }
 
         ctx.error("Unsupported call expression");
-        return new SemanticIntLiteralNode(FALLBACK_TYPE, BigInteger.ZERO, "0");
+
+        return new SemanticIntLiteralNode(
+                FALLBACK_TYPE,
+                BigInteger.ZERO,
+                "0"
+        );
     }
 
     /**
      * Infers the decorated result type for a binary expression.
      *
-     * For integer-producing operators, including shifts, if exactly one side is
-     * a folded constant and the other side is nonconstant, use the nonconstant
-     * side's type.
-     *
-     * This fixes:
-     *
-     *   uint8_t x;
-     *   uint8_t y;
-     *   y = 1 + x;
-     *
-     * and also means:
-     *
-     *   uint8_t x;
-     *   y = 1 << x;
-     *
-     * decorates the result as uint8_t.
-     *
-     * Legality is still checked later by ExpressionChecker/TypeChecker.
+     * For integer-producing operators, if exactly one side is a folded constant
+     * and the other side is nonconstant, use the nonconstant side's type.
      */
     private SemanticType inferBinaryResultType(
             String op,
@@ -1229,14 +1189,6 @@ public class SemanticAnalyzer {
                 return left.type;
             }
 
-            /*
-             * If both sides are constants, keep the historical fallback behavior.
-             * The folded BigInteger remains fluid and will be checked later in a
-             * contextual position such as assignment.
-             *
-             * If both sides are nonconstant, the checker will require exact type
-             * equality where Franko requires it. Keep left-side mechanical type.
-             */
             return left.type;
         }
 
@@ -1265,15 +1217,6 @@ public class SemanticAnalyzer {
         }
     }
 
-    /**
-     * Stronger than merely calling expr.isLValue().
-     *
-     * Today, Franko's storage-backed lvalues are:
-     *
-     *   - variables,
-     *   - dereferenced addresses,
-     *   - array elements whose target is storage-backed.
-     */
     private boolean isValidStorageBackedLValue(SemanticExprNode expr) {
         if (expr == null) {
             return false;
@@ -1296,9 +1239,7 @@ public class SemanticAnalyzer {
         }
 
         /*
-         * Future semantic lvalue nodes, such as field access, can either be
-         * explicitly added above or trusted here if their isLValue()
-         * implementation is already storage-aware.
+         * Future semantic lvalue nodes, such as field access, can be added here.
          */
         return expr.isLValue();
     }
@@ -1324,21 +1265,9 @@ public class SemanticAnalyzer {
     }
 
     // ============================================================
-    // Types Mapping
+    // Type Mapping
     // ============================================================
 
-    /**
-     * Maps ordinary Franko types.
-     *
-     * Ordinary types are used in:
-     *
-     *   - variable declarations,
-     *   - parameter declarations,
-     *   - array element types,
-     *   - address referenced types.
-     *
-     * void is intentionally not an ordinary type.
-     */
     private SemanticType analyzeNormalType(TypeNode node) {
         if (node instanceof PrimitiveTypeNode p) {
             return new SemanticPrimitiveType(
@@ -1353,14 +1282,6 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof StaticArrayTypeNode s) {
-            /*
-            * Canonicalize static array sizes to decimal spelling so equivalent
-            * literals produce equal semantic types:
-            *
-            *   array<int, 2>
-            *   array<int, 0x2>
-            *   array<int, 0b10>
-            */
             BigInteger canonicalSize = parseIntegerLiteralSafe(s.sizeLiteral);
 
             return new SemanticStaticArrayType(
@@ -1384,21 +1305,12 @@ public class SemanticAnalyzer {
         return FALLBACK_TYPE;
     }
 
-    /**
-     * Maps function return types.
-     *
-     * Unlike ordinary types, a function return type may be void.
-     */
     private SemanticType analyzeReturnType(TypeNode node) {
         if (node instanceof VoidTypeNode) {
             return VOID_TYPE;
         }
 
         if (node == null) {
-            /*
-             * The grammar requires a return type after ->, including void.
-             * This defensive branch handles manually-constructed invalid ASTs.
-             */
             ctx.error("Function declaration is missing a return type");
             return FALLBACK_TYPE;
         }
@@ -1429,7 +1341,7 @@ public class SemanticAnalyzer {
     }
 
     // ============================================================
-    // Constant Folding Logic
+    // Constant Folding
     // ============================================================
 
     private BigInteger parseIntegerLiteralSafe(String val) {
@@ -1535,7 +1447,10 @@ public class SemanticAnalyzer {
     // Formatting Helpers
     // ============================================================
 
-    private String formatCallSignature(String name, List<SemanticType> argTypes) {
+    private String formatCallSignature(
+            String name,
+            List<SemanticType> argTypes
+    ) {
         StringBuilder sb = new StringBuilder();
 
         sb.append(name).append("(");
@@ -1545,7 +1460,8 @@ public class SemanticAnalyzer {
                 sb.append(", ");
             }
 
-            sb.append(argTypes.get(i).describe());
+            SemanticType type = argTypes.get(i);
+            sb.append(type == null ? "<null>" : type.describe());
         }
 
         sb.append(")");
