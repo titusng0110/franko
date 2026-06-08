@@ -175,62 +175,50 @@ public class Cpp14Codegen {
     /**
      * Emits top-level items.
      *
-     * Function declarations are handled specially:
+     * Current Franko global-scope rule:
      *
-     *   1. Emit all function prototypes first.
-     *   2. Emit all top-level items in source order.
+     *   global scope may contain only:
      *
-     * The prototype pass is necessary because Franko allows:
+     *     - global variable declarations,
+     *     - function declarations.
      *
-     *   - forward references,
-     *   - direct recursion,
-     *   - mutual recursion.
+     * Codegen emits in dependency-safe C++ order:
+     *
+     *   1. all global variable declarations,
+     *   2. all function prototypes,
+     *   3. all function definitions.
+     *
+     * This matters because Franko allows functions to reference global variables
+     * declared later in source order:
+     *
+     *   func main() -> int32_t {
+     *       g = 1
+     *       return 0
+     *   }
+     *
+     *   uint32_t g
+     *
+     * The generated C++ must declare g before main's function body.
      */
     private void emitProgram(SemanticProgramNode node) {
+        List<SemanticVarDeclNode> globals = new ArrayList<>();
         List<SemanticFunctionDeclNode> functions = new ArrayList<>();
 
+        /*
+        * Partition top-level items.
+        *
+        * SemanticAnalyzer should already ensure only global variable declarations
+        * and function declarations appear here. The fallback error below is
+        * defensive.
+        */
         for (SemanticASTNode item : node.topLevelItems) {
+            if (item instanceof SemanticVarDeclNode global) {
+                globals.add(global);
+                continue;
+            }
+
             if (item instanceof SemanticFunctionDeclNode fn) {
                 functions.add(fn);
-            }
-        }
-
-        if (!functions.isEmpty()) {
-            for (SemanticFunctionDeclNode fn : functions) {
-                emitFunctionPrototype(fn);
-            }
-
-            emitLine("");
-        }
-
-        for (SemanticASTNode item : node.topLevelItems) {
-            if (item instanceof SemanticFunctionDeclNode fn) {
-                emitFunctionDecl(fn);
-                emitLine("");
-                continue;
-            }
-
-            if (item instanceof SemanticStmtNode stmt) {
-                /*
-                 * With the updated template:
-                 *
-                 *   #include "FrankoRuntime.hpp"
-                 *   __FRANKO_PROGRAM__
-                 *
-                 * users should normally put executable code inside:
-                 *
-                 *   func main() -> int32_t { ... }
-                 *
-                 * This branch is retained for compatibility with existing
-                 * top-level semantic statement tests, but arbitrary C++
-                 * statements at namespace scope will not be valid C++.
-                 */
-                emitStmt(stmt);
-                continue;
-            }
-
-            if (item instanceof SemanticExprNode expr) {
-                emitLine(emitExpr(expr) + ";");
                 continue;
             }
 
@@ -241,9 +229,43 @@ public class Cpp14Codegen {
             }
 
             throw new IllegalStateException(
-                    "Internal compiler error: unsupported top-level item for codegen: "
+                    "Internal compiler error: unsupported global top-level item for codegen: "
                             + item.getClass().getSimpleName()
             );
+        }
+
+        /*
+        * 1. Emit global variables first.
+        */
+        if (!globals.isEmpty()) {
+            for (SemanticVarDeclNode global : globals) {
+                emitVarDecl(global);
+            }
+
+            emitLine("");
+        }
+
+        /*
+        * 2. Emit function prototypes.
+        *
+        * This supports forward references, direct recursion, and mutual recursion.
+        */
+        if (!functions.isEmpty()) {
+            for (SemanticFunctionDeclNode fn : functions) {
+                emitFunctionPrototype(fn);
+            }
+
+            emitLine("");
+        }
+
+        /*
+        * 3. Emit function definitions.
+        *
+        * Definitions are emitted in source order relative to other functions.
+        */
+        for (SemanticFunctionDeclNode fn : functions) {
+            emitFunctionDecl(fn);
+            emitLine("");
         }
     }
 
