@@ -11,63 +11,104 @@ import java.util.Set;
  * ExpressionChecker validates expression-level legality rules on the fully
  * lowered and type-decorated Semantic AST.
  *
- * Important behavior in this version:
+ * The SemanticAnalyzer has already:
  *
- *   - Binary expression result typing may use the nonconstant side when one
- *     side is a fluid constant.
+ *   - resolved variables to VariableSymbol objects,
+ *   - resolved function calls to selected FunctionSymbol overloads,
+ *   - assigned each expression a mechanically inferred SemanticType,
+ *   - folded integer constants into BigInteger constantValue metadata where
+ *     possible.
  *
- *   - Folded integer constants are represented by SemanticExprNode.constantValue.
- *     Therefore an expression like:
+ * ExpressionChecker does not infer expression types. It validates that the
+ * already-lowered expression tree is legal according to Franko expression rules.
  *
- *         1 + 1
+ * ----------------------------------------------------------------------------
+ * IMPORTANT: ARRAY INITIALIZER LISTS
+ * ----------------------------------------------------------------------------
  *
- *     can participate in later contextual checks as a constant value 2.
+ * Array initializer lists are not checked here as special syntax.
  *
- *   - Function call expressions are checked after SemanticAnalyzer has already
- *     performed overload resolution.
+ * They are eliminated by the Desugarer before semantic analysis:
  *
- *   - Function call argument compatibility is revalidated defensively:
+ *   xs = [1, 2, 3]
  *
- *       * constant integer arguments may match primitive integer parameters
- *         if the constant value fits the parameter type;
+ * becomes:
  *
- *       * nonconstant arguments must exactly match the parameter type.
+ *   xs[0] = 1
+ *   xs[1] = 2
+ *   xs[2] = 3
  *
- *   - A void-returning function call is allowed as an expression node because
- *     it may be used as an expression statement:
+ * Therefore, array initializer-list correctness is checked through ordinary
+ * expression and statement rules:
  *
- *         logDone();
+ *   - array access legality,
+ *   - static array constant-index bounds,
+ *   - assignment compatibility,
+ *   - runtime dynamic-array behavior.
  *
- *     But void expressions are rejected in value-producing expression contexts
- *     such as operands, array indexes, array sizes, getaddr targets, deref
- *     operands, and function call arguments.
+ * In particular:
  *
- *   - For shifts:
+ *   - a shorter initializer list for a static array is allowed because it emits
+ *     fewer assignments;
  *
- *         1 << x
+ *   - a longer initializer list for a static array is rejected if it emits a
+ *     constant out-of-bounds static array access;
  *
- *     may be decorated with x's type if x is nonconstant.
+ *   - dynamic array bounds/initialization are not statically enforced here.
  *
- *   - However, RHS shift rules remain strict:
+ * ----------------------------------------------------------------------------
+ * VOID VALUE-CONTEXT RULE
+ * ----------------------------------------------------------------------------
  *
- *         x << y
+ * A void-returning function call may exist as a semantic expression node because
+ * it can be valid as an expression statement:
  *
- *     requires y to be unsigned integer if y is nonconstant.
+ *   logDone();
  *
- *   - Constant fitting is still enforced:
+ * But void expressions are rejected in value-producing expression contexts:
  *
- *         x << 256
+ *   - operands,
+ *   - array indexes,
+ *   - array sizes,
+ *   - getaddr targets,
+ *   - deref operands,
+ *   - function call arguments.
  *
- *     must be rejected if 256 does not fit the required unsigned shift-count
- *     type.
+ * Statement-level value contexts such as assignment RHS, print arguments, and
+ * conditions are also checked by StatementChecker.
  *
- *   - Additional check:
+ * ----------------------------------------------------------------------------
+ * FLUID INTEGER CONSTANTS
+ * ----------------------------------------------------------------------------
  *
- *         999 << uint8Var
+ * Folded integer constants are represented by SemanticExprNode.constantValue.
  *
- *     rejects if 999 does not fit uint8_t, because Option A result typing uses
- *     the nonconstant side as the contextual type when the other side is a
- *     literal/fluid constant.
+ * A folded expression such as:
+ *
+ *   1 + 1
+ *
+ * may be checked later against a concrete contextual type as the BigInteger
+ * value 2.
+ *
+ * Binary expression result typing may use the nonconstant side when one side is
+ * a fluid constant. ExpressionChecker therefore verifies that fluid constants
+ * fit the contextual concrete type where needed.
+ *
+ * ----------------------------------------------------------------------------
+ * FUNCTION CALLS
+ * ----------------------------------------------------------------------------
+ *
+ * Function call expressions are checked after SemanticAnalyzer has already
+ * performed overload resolution.
+ *
+ * Argument compatibility is revalidated defensively:
+ *
+ *   - constant integer arguments may match primitive integer parameters if the
+ *     constant value fits the parameter type;
+ *
+ *   - nonconstant arguments must exactly match the parameter type;
+ *
+ *   - void arguments are never valid.
  *
  * ============================================================================
  */
@@ -87,23 +128,21 @@ public class ExpressionChecker {
     private static final Set<String> BITWISE_OPS =
             Set.of("&", "|", "^");
 
-    private final SemanticAnalyzer.Context ctx;
+    private final DiagnosticBag diagnostics;
     private final TypeChecker types;
 
     public ExpressionChecker(
-            SemanticAnalyzer.Context ctx,
+            DiagnosticBag diagnostics,
             TypeChecker types
     ) {
-        this.ctx = ctx;
+        this.diagnostics = diagnostics;
         this.types = types;
     }
 
     /**
      * Validates a semantic expression node.
      *
-     * This method assumes type inference has already happened. It does not
-     * compute expression types; it only checks whether the already-inferred
-     * expression is legal according to Franko's rules.
+     * This method assumes expression type decoration has already happened.
      */
     public void checkExpr(SemanticExprNode node) {
         if (node == null) {
@@ -149,7 +188,7 @@ public class ExpressionChecker {
             return;
         }
 
-        ctx.error("Unknown semantic expression node: "
+        diagnostics.error("Unknown semantic expression node: "
                 + node.getClass().getSimpleName());
     }
 
@@ -159,16 +198,16 @@ public class ExpressionChecker {
 
     private void visitVarExpr(SemanticVarExprNode node) {
         if (node.symbol == null) {
-            ctx.error("Variable expression has null symbol");
+            diagnostics.error("Variable expression has null symbol");
             return;
         }
 
         if (node.symbol.deleted) {
-            ctx.error("Use of deleted variable '" + node.symbol.name + "'");
+            diagnostics.error("Use of deleted variable '" + node.symbol.name + "'");
         }
 
         if (types.isVoidType(node.type)) {
-            ctx.error("Variable '" + node.symbol.name + "' has invalid void type");
+            diagnostics.error("Variable '" + node.symbol.name + "' has invalid void type");
         }
     }
 
@@ -194,17 +233,16 @@ public class ExpressionChecker {
                 );
 
                 /*
-                 * If the operand is a folded constant, the analyzer already
-                 * folded the negated BigInteger value into this node.
+                 * If the operand is a folded constant, SemanticAnalyzer already
+                 * folded the negated BigInteger into this node.
                  *
-                 * Do not range-check here. The result remains a fluid constant
-                 * until assigned to or otherwise checked against a contextual
-                 * concrete integer type.
+                 * Do not range-check here. The result remains fluid until a
+                 * contextual check assigns it to a concrete integer type.
                  */
             }
 
             default -> {
-                ctx.error("Unknown unary operator '" + node.op + "'");
+                diagnostics.error("Unknown unary operator '" + node.op + "'");
             }
         }
     }
@@ -230,21 +268,9 @@ public class ExpressionChecker {
         if (op.equals("/")
                 && node.right.isConstant()
                 && BigInteger.ZERO.equals(node.right.constantValue)) {
-            ctx.error("Division by zero in compile-time constant expression");
+            diagnostics.error("Division by zero in compile-time constant expression");
         }
 
-        /*
-         * Logical operators:
-         *
-         *   && ||
-         *
-         * Franko rules:
-         *
-         *   - operands must be integer expressions,
-         *   - mixed integer types are allowed,
-         *   - if one side is a constant, it must fit the other side's type,
-         *   - result is uint8_t, already assigned by SemanticAnalyzer.
-         */
         if (LOGICAL_OPS.contains(op)) {
             types.ensureMixedIntegralOperandsWithConstantFit(
                     node.left,
@@ -254,21 +280,11 @@ public class ExpressionChecker {
             return;
         }
 
-        /*
-         * Comparison operators:
-         *
-         *   == != < > <= >=
-         */
         if (COMPARISON_OPS.contains(op)) {
             visitComparison(node, op);
             return;
         }
 
-        /*
-         * Shift operators:
-         *
-         *   << >>
-         */
         if (SHIFT_OPS.contains(op)) {
             types.ensureValidShiftOperands(
                     node.left,
@@ -281,11 +297,6 @@ public class ExpressionChecker {
             return;
         }
 
-        /*
-         * Arithmetic operators:
-         *
-         *   + - * /
-         */
         if (ARITHMETIC_OPS.contains(op)) {
             types.ensureSameIntegralTypeOrFit(
                     node.left,
@@ -295,11 +306,6 @@ public class ExpressionChecker {
             return;
         }
 
-        /*
-         * Bitwise operators:
-         *
-         *   & | ^
-         */
         if (BITWISE_OPS.contains(op)) {
             types.ensureSameIntegralTypeOrFit(
                     node.left,
@@ -309,7 +315,7 @@ public class ExpressionChecker {
             return;
         }
 
-        ctx.error("Unknown binary operator '" + op + "'");
+        diagnostics.error("Unknown binary operator '" + op + "'");
     }
 
     private void visitComparison(
@@ -321,7 +327,7 @@ public class ExpressionChecker {
 
         if (leftAddr && rightAddr) {
             if (!types.sameType(node.left.type, node.right.type)) {
-                ctx.error("Address comparison '" + op
+                diagnostics.error("Address comparison '" + op
                         + "' requires identical address types, got "
                         + node.left.type.describe()
                         + " and "
@@ -331,7 +337,7 @@ public class ExpressionChecker {
         }
 
         if (leftAddr || rightAddr) {
-            ctx.error("Cannot compare address and non-address using '" + op
+            diagnostics.error("Cannot compare address and non-address using '" + op
                     + "', got "
                     + node.left.type.describe()
                     + " and "
@@ -349,19 +355,12 @@ public class ExpressionChecker {
     /**
      * Extra Option-A shift check.
      *
-     * Because SemanticAnalyzer decorates:
+     * If SemanticAnalyzer decorates:
      *
      *   1 << x
      *
-     * using x's type when x is nonconstant, the left fluid constant should also
-     * be required to fit x's concrete primitive type.
-     *
-     * Example:
-     *
-     *   uint8_t x;
-     *
-     *   1 << x;     valid, 1 fits uint8_t
-     *   999 << x;   invalid, 999 does not fit uint8_t
+     * using x's type when x is nonconstant, then the left fluid constant must
+     * also fit x's concrete primitive type.
      */
     private void ensureLeftShiftLiteralFitsRightSideWhenNeeded(
             SemanticBinOpNode node,
@@ -381,8 +380,8 @@ public class ExpressionChecker {
 
         if (!(node.right.type instanceof SemanticPrimitiveType rightPrimitive)) {
             /*
-             * ensureValidShiftOperands should already report that the RHS is not
-             * an integer. Avoid producing a confusing duplicate error here.
+             * ensureValidShiftOperands should already report that RHS is not an
+             * integer. Avoid duplicate/confusing diagnostics here.
              */
             return;
         }
@@ -391,7 +390,7 @@ public class ExpressionChecker {
                 node.left.constantValue,
                 rightPrimitive.kind
         )) {
-            ctx.error("Left constant operand of shift '" + op
+            diagnostics.error("Left constant operand of shift '" + op
                     + "' does not fit contextual type "
                     + node.right.type.describe());
         }
@@ -401,40 +400,9 @@ public class ExpressionChecker {
     // Function Calls
     // ============================================================
 
-    /**
-     * Checks a user-defined function call after overload resolution.
-     *
-     * The SemanticAnalyzer is responsible for selecting exactly one overload.
-     * This checker defensively verifies that the selected function symbol is
-     * internally consistent with the lowered argument expressions.
-     *
-     * Function call argument compatibility:
-     *
-     *   - constant integer arguments may match primitive integer parameters if
-     *     the constant value fits the parameter type;
-     *
-     *   - nonconstant arguments must exactly match the parameter type;
-     *
-     *   - void arguments are never valid;
-     *
-     *   - parameter names are irrelevant.
-     *
-     * Important:
-     *
-     *   This method does not reject void-returning calls globally.
-     *
-     *   A call like:
-     *
-     *       logDone();
-     *
-     *   is valid as an expression statement if logDone returns void.
-     *
-     *   Value contexts such as assignment RHS, return expr, if condition, array
-     *   size, etc. are responsible for rejecting void expressions.
-     */
     private void visitFunctionCall(SemanticFunctionCallNode node) {
         if (node.function == null) {
-            ctx.error("Function call has null resolved function");
+            diagnostics.error("Function call has null resolved function");
             return;
         }
 
@@ -442,7 +410,7 @@ public class ExpressionChecker {
         List<SemanticType> parameterTypes = node.function.parameterTypes();
 
         if (args.size() != parameterTypes.size()) {
-            ctx.error("Function call to '"
+            diagnostics.error("Function call to '"
                     + node.function.signatureString()
                     + "' has wrong arity: expected "
                     + parameterTypes.size()
@@ -481,7 +449,7 @@ public class ExpressionChecker {
          * declared return type.
          */
         if (!types.sameType(node.type, node.function.returnType())) {
-            ctx.error("Function call expression type mismatch for '"
+            diagnostics.error("Function call expression type mismatch for '"
                     + node.function.signatureString()
                     + "': node has "
                     + types.describeSafe(node.type)
@@ -497,7 +465,7 @@ public class ExpressionChecker {
             FunctionSymbol function
     ) {
         if (arg == null) {
-            ctx.error("Argument " + (index + 1)
+            diagnostics.error("Argument " + (index + 1)
                     + " of call to '"
                     + function.signatureString()
                     + "' is null");
@@ -505,7 +473,7 @@ public class ExpressionChecker {
         }
 
         if (parameterType == null) {
-            ctx.error("Parameter " + (index + 1)
+            diagnostics.error("Parameter " + (index + 1)
                     + " of function '"
                     + function.signatureString()
                     + "' has null type");
@@ -513,7 +481,7 @@ public class ExpressionChecker {
         }
 
         if (types.isVoidType(parameterType)) {
-            ctx.error("Parameter " + (index + 1)
+            diagnostics.error("Parameter " + (index + 1)
                     + " of function '"
                     + function.signatureString()
                     + "' has invalid void type");
@@ -523,13 +491,6 @@ public class ExpressionChecker {
         /*
          * Fluid/folded integer constants may be passed to primitive integer
          * parameters if they fit.
-         *
-         * This supports:
-         *
-         *   func f(uint8_t x) -> void {}
-         *   f(1 + 1);
-         *
-         * where the analyzer folds 1 + 1 to constantValue 2.
          */
         if (arg.isConstant()
                 && parameterType instanceof SemanticPrimitiveType primitive) {
@@ -537,7 +498,7 @@ public class ExpressionChecker {
                     arg.constantValue,
                     primitive.kind
             )) {
-                ctx.error("Argument " + (index + 1)
+                diagnostics.error("Argument " + (index + 1)
                         + " of call to '"
                         + function.signatureString()
                         + "' has constant value "
@@ -553,7 +514,7 @@ public class ExpressionChecker {
          * type. This covers primitive variables, address arguments, arrays, etc.
          */
         if (!types.sameType(parameterType, arg.type)) {
-            ctx.error("Argument " + (index + 1)
+            diagnostics.error("Argument " + (index + 1)
                     + " of call to '"
                     + function.signatureString()
                     + "' has incompatible type: expected "
@@ -583,6 +544,72 @@ public class ExpressionChecker {
                 node.index,
                 "Array index"
         );
+
+        ensureStaticArrayIndexInBounds(node);
+    }
+
+    /**
+     * Checks constant indexes into static arrays.
+     *
+     * This is the rule that rejects too-long initializer-list assignments after
+     * desugaring.
+     *
+     * Example:
+     *
+     *   array<int, 3> xs;
+     *   xs = [1, 2, 3, 4];
+     *
+     * desugars to:
+     *
+     *   xs[3] = 4;
+     *
+     * and this method rejects index 3 for static size 3.
+     *
+     * Dynamic arrays are not checked here because their bounds are runtime
+     * properties in current Franko.
+     */
+    private void ensureStaticArrayIndexInBounds(SemanticArrayAccessNode node) {
+        if (!(node.target.type instanceof SemanticStaticArrayType staticArray)) {
+            return;
+        }
+
+        if (node.index == null || !node.index.isConstant()) {
+            return;
+        }
+
+        BigInteger index = node.index.constantValue;
+
+        if (index == null) {
+            return;
+        }
+
+        /*
+         * Negative indexes are already reported by ensureArrayIndexCompatible.
+         */
+        if (index.signum() < 0) {
+            return;
+        }
+
+        BigInteger size;
+
+        try {
+            size = types.parseIntegerLiteral(staticArray.sizeLiteral);
+        } catch (Exception ignored) {
+            /*
+             * DeclarationChecker reports invalid static array size metadata.
+             * Avoid duplicate/confusing diagnostics here.
+             */
+            return;
+        }
+
+        if (index.compareTo(size) >= 0) {
+            diagnostics.error("Static array index "
+                    + index
+                    + " is out of bounds for "
+                    + staticArray.describe()
+                    + " with size "
+                    + size);
+        }
     }
 
     // ============================================================
@@ -593,12 +620,12 @@ public class ExpressionChecker {
         checkExpr(node.target);
 
         if (types.isVoidType(node.target.type)) {
-            ctx.error("Operand of 'getaddr' cannot have void type");
+            diagnostics.error("Operand of 'getaddr' cannot have void type");
             return;
         }
 
         if (!isStorageBackedLValue(node.target)) {
-            ctx.error("Operand of 'getaddr' must be an addressable storage-backed lvalue");
+            diagnostics.error("Operand of 'getaddr' must be an addressable storage-backed lvalue");
         }
     }
 
@@ -616,7 +643,7 @@ public class ExpressionChecker {
 
         if (node.expr.type instanceof SemanticAddrType addr
                 && types.isVoidType(addr.referencedType)) {
-            ctx.error("Cannot dereference addr<void>");
+            diagnostics.error("Cannot dereference addr<void>");
         }
     }
 
@@ -679,7 +706,7 @@ public class ExpressionChecker {
             String message
     ) {
         if (size == null) {
-            ctx.error(message + ": size expression cannot be null");
+            diagnostics.error(message + ": size expression cannot be null");
             return;
         }
 
@@ -691,17 +718,17 @@ public class ExpressionChecker {
 
         if (size.isConstant()) {
             if (size.constantValue == null) {
-                ctx.error(message + ": missing constant size value");
+                diagnostics.error(message + ": missing constant size value");
                 return;
             }
 
             if (size.constantValue.signum() <= 0) {
-                ctx.error(message + ": array size must be greater than zero");
+                diagnostics.error(message + ": array size must be greater than zero");
             } else if (!types.fitsBigIntegerToPrimitive(
                     size.constantValue,
                     SemanticPrimitiveKind.UINT32
             )) {
-                ctx.error(message + ": array size does not fit in uint32_t");
+                diagnostics.error(message + ": array size does not fit in uint32_t");
             }
 
             return;
@@ -709,7 +736,7 @@ public class ExpressionChecker {
 
         if (!(size.type instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT32)) {
-            ctx.error(message + ": expected uint32_t, got "
+            diagnostics.error(message + ": expected uint32_t, got "
                     + types.describeSafe(size.type));
         }
     }
@@ -728,7 +755,7 @@ public class ExpressionChecker {
             String message
     ) {
         if (index == null) {
-            ctx.error(message + ": index expression cannot be null");
+            diagnostics.error(message + ": index expression cannot be null");
             return;
         }
 
@@ -740,12 +767,12 @@ public class ExpressionChecker {
 
         if (index.isConstant()) {
             if (index.constantValue == null) {
-                ctx.error(message + ": missing constant index value");
+                diagnostics.error(message + ": missing constant index value");
                 return;
             }
 
             if (index.constantValue.signum() < 0) {
-                ctx.error(message + ": array index cannot be negative");
+                diagnostics.error(message + ": array index cannot be negative");
                 return;
             }
 
@@ -753,7 +780,7 @@ public class ExpressionChecker {
                     index.constantValue,
                     SemanticPrimitiveKind.UINT32
             )) {
-                ctx.error(message + ": array index does not fit in uint32_t");
+                diagnostics.error(message + ": array index does not fit in uint32_t");
             }
 
             return;
@@ -761,7 +788,7 @@ public class ExpressionChecker {
 
         if (!(index.type instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT32)) {
-            ctx.error(message + ": expected uint32_t, got "
+            diagnostics.error(message + ": expected uint32_t, got "
                     + types.describeSafe(index.type));
         }
     }
@@ -787,12 +814,12 @@ public class ExpressionChecker {
             String where
     ) {
         if (expr == null) {
-            ctx.error(where + " cannot be null");
+            diagnostics.error(where + " cannot be null");
             return false;
         }
 
         if (types.isVoidType(expr.type)) {
-            ctx.error(where + " cannot be void");
+            diagnostics.error(where + " cannot be void");
             return false;
         }
 

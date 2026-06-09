@@ -91,18 +91,18 @@
  * ============================================================================
  */
 public class StatementChecker {
-    private final SemanticAnalyzer.Context ctx;
+    private final DiagnosticBag diagnostics;
     private final DeclarationChecker declarations;
     private final ExpressionChecker expressions;
     private final TypeChecker types;
 
     public StatementChecker(
-            SemanticAnalyzer.Context ctx,
+            DiagnosticBag diagnostics,
             DeclarationChecker declarations,
             ExpressionChecker expressions,
             TypeChecker types
     ) {
-        this.ctx = ctx;
+        this.diagnostics = diagnostics;
         this.declarations = declarations;
         this.expressions = expressions;
         this.types = types;
@@ -178,7 +178,7 @@ public class StatementChecker {
             return;
         }
 
-        ctx.error("Unknown semantic statement node: "
+        diagnostics.error("Unknown semantic statement node: "
                 + node.getClass().getSimpleName());
     }
 
@@ -210,11 +210,11 @@ public class StatementChecker {
         expressions.checkExpr(node.value);
 
         if (!isStorageBackedLValue(node.target)) {
-            ctx.error("Left-hand side of assignment must be an addressable storage-backed lvalue");
+            diagnostics.error("Left-hand side of assignment must be an addressable storage-backed lvalue");
         }
 
         if (isVoidType(node.target.type)) {
-            ctx.error("Left-hand side of assignment cannot have void type");
+            diagnostics.error("Left-hand side of assignment cannot have void type");
             return;
         }
 
@@ -291,7 +291,7 @@ public class StatementChecker {
             expressions.checkExpr(node.value);
         }
 
-        ctx.error("Return statement was checked outside FunctionChecker");
+        diagnostics.error("Return statement was checked outside FunctionChecker");
     }
 
     // ============================================================
@@ -302,17 +302,17 @@ public class StatementChecker {
         VariableSymbol sym = node.symbol;
 
         if (sym == null) {
-            ctx.error("Cannot delete null symbol");
+            diagnostics.error("Cannot delete null symbol");
             return;
         }
 
         if (!sym.isHeap) {
-            ctx.error("Cannot delete non-heap variable '" + sym.name + "'");
+            diagnostics.error("Cannot delete non-heap variable '" + sym.name + "'");
             return;
         }
 
         if (sym.deleted) {
-            ctx.error("Variable '" + sym.name + "' has already been deleted");
+            diagnostics.error("Variable '" + sym.name + "' has already been deleted");
             return;
         }
 
@@ -346,11 +346,11 @@ public class StatementChecker {
         expressions.checkExpr(node.target);
 
         if (!isStorageBackedLValue(node.target)) {
-            ctx.error("Array init target must be a storage-backed lvalue");
+            diagnostics.error("Array init target must be a storage-backed lvalue");
         }
 
         if (!types.isDynamicArrayType(node.target.type)) {
-            ctx.error("Array init requires dynamic array type, got "
+            diagnostics.error("Array init requires dynamic array type, got "
                     + types.describeSafe(node.target.type));
         }
 
@@ -377,11 +377,11 @@ public class StatementChecker {
         expressions.checkExpr(node.receiver);
 
         if (!isStorageBackedLValue(node.receiver)) {
-            ctx.error("uninit() receiver must be a storage-backed lvalue");
+            diagnostics.error("uninit() receiver must be a storage-backed lvalue");
         }
 
         if (!types.isDynamicArrayType(node.receiver.type)) {
-            ctx.error("uninit() receiver must be a dynamic array, got "
+            diagnostics.error("uninit() receiver must be a dynamic array, got "
                     + types.describeSafe(node.receiver.type));
         }
     }
@@ -400,7 +400,7 @@ public class StatementChecker {
         expressions.checkExpr(node.value);
 
         if (!isStorageBackedLValue(node.receiver)) {
-            ctx.error("memset() receiver must be a storage-backed lvalue");
+            diagnostics.error("memset() receiver must be a storage-backed lvalue");
         }
 
         types.ensureArrayType(
@@ -411,7 +411,7 @@ public class StatementChecker {
         SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
 
         if (elementType != null && !types.isMemsetable(elementType)) {
-            ctx.error("memset() receiver element type is not memsetable: "
+            diagnostics.error("memset() receiver element type is not memsetable: "
                     + elementType.describe());
         }
 
@@ -438,11 +438,11 @@ public class StatementChecker {
         expressions.checkExpr(node.source);
 
         if (!isStorageBackedLValue(node.target)) {
-            ctx.error("memcpy() target must be a storage-backed lvalue");
+            diagnostics.error("memcpy() target must be a storage-backed lvalue");
         }
 
         if (!isStorageBackedLValue(node.source)) {
-            ctx.error("memcpy() source must be a storage-backed lvalue");
+            diagnostics.error("memcpy() source must be a storage-backed lvalue");
         }
 
         types.ensureArrayType(
@@ -460,7 +460,7 @@ public class StatementChecker {
 
         if (targetElem != null && sourceElem != null) {
             if (!types.sameType(targetElem, sourceElem)) {
-                ctx.error("memcpy() requires source and target arrays to have identical element types, got "
+                diagnostics.error("memcpy() requires source and target arrays to have identical element types, got "
                         + targetElem.describe()
                         + " and "
                         + sourceElem.describe());
@@ -468,12 +468,12 @@ public class StatementChecker {
         }
 
         if (targetElem != null && !types.isMemcpyable(targetElem)) {
-            ctx.error("memcpy() target array element type is not memcpyable: "
+            diagnostics.error("memcpy() target array element type is not memcpyable: "
                     + targetElem.describe());
         }
 
         if (sourceElem != null && !types.isMemcpyable(sourceElem)) {
-            ctx.error("memcpy() source array element type is not memcpyable: "
+            diagnostics.error("memcpy() source array element type is not memcpyable: "
                     + sourceElem.describe());
         }
     }
@@ -484,7 +484,7 @@ public class StatementChecker {
 
     private void ensureMemsetValueCompatible(SemanticExprNode value) {
         if (value == null) {
-            ctx.error("memset() fill value cannot be null");
+            diagnostics.error("memset() fill value cannot be null");
             return;
         }
 
@@ -499,7 +499,7 @@ public class StatementChecker {
 
         if (!(value.type instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT8)) {
-            ctx.error("memset() fill value must be uint8_t/char, got "
+            diagnostics.error("memset() fill value must be uint8_t/char, got "
                     + types.describeSafe(value.type));
         }
     }
@@ -521,12 +521,12 @@ public class StatementChecker {
             String where
     ) {
         if (expr == null) {
-            ctx.error(where + " cannot be null");
+            diagnostics.error(where + " cannot be null");
             return false;
         }
 
         if (isVoidType(expr.type)) {
-            ctx.error(where + " cannot be void");
+            diagnostics.error(where + " cannot be void");
             return false;
         }
 

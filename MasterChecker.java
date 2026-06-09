@@ -1,5 +1,6 @@
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -42,7 +43,7 @@ import java.util.Set;
  */
 public class MasterChecker {
 
-    private final SemanticAnalyzer.Context ctx;
+    private final DiagnosticBag diagnostics;
 
     private final TypeChecker typeChecker;
     private final ExpressionChecker expressionChecker;
@@ -51,45 +52,51 @@ public class MasterChecker {
     private final FunctionChecker functionChecker;
 
     public MasterChecker() {
-        this.ctx = new SemanticAnalyzer.Context();
+        this(new DiagnosticBag("Master checking failed:"));
+    }
 
-        this.typeChecker = new TypeChecker(ctx);
+    public MasterChecker(DiagnosticBag diagnostics) {
+        this.diagnostics = Objects.requireNonNull(diagnostics);
+
+        /*
+         * Option B:
+         *
+         * The legality-checking phase now uses DiagnosticBag directly.
+         *
+         * These constructors assume the sub-checkers are refactored from:
+         *
+         *   SomeChecker(SymbolTable ctx, ...)
+         *
+         * to:
+         *
+         *   SomeChecker(DiagnosticBag diagnostics, ...)
+         *
+         * If the sub-checkers have not been refactored yet, these lines are
+         * expected to be the compile points that guide the next migration step.
+         */
+        this.typeChecker = new TypeChecker(diagnostics);
 
         this.expressionChecker =
-                new ExpressionChecker(ctx, typeChecker);
+                new ExpressionChecker(diagnostics, typeChecker);
 
         this.declarationChecker =
-                new DeclarationChecker(ctx, expressionChecker, typeChecker);
+                new DeclarationChecker(
+                        diagnostics,
+                        expressionChecker,
+                        typeChecker
+                );
 
         this.statementChecker =
                 new StatementChecker(
-                        ctx,
+                        diagnostics,
                         declarationChecker,
                         expressionChecker,
                         typeChecker
                 );
 
-        /*
-         * Assumed FunctionChecker API:
-         *
-         *   new FunctionChecker(
-         *       ctx,
-         *       declarationChecker,
-         *       statementChecker,
-         *       expressionChecker,
-         *       typeChecker
-         *   )
-         *
-         * and:
-         *
-         *   functionChecker.checkFunction(SemanticFunctionDeclNode fn)
-         *
-         * If your FunctionChecker constructor has a different parameter order,
-         * this is the only line you should need to adjust.
-         */
         this.functionChecker =
                 new FunctionChecker(
-                        ctx,
+                        diagnostics,
                         declarationChecker,
                         statementChecker,
                         expressionChecker,
@@ -108,12 +115,13 @@ public class MasterChecker {
         }
 
         /*
-         * Clear previous error state.
+         * Clear previous checker diagnostics.
          *
-         * The checker context is used only for diagnostics in this phase, not
-         * for semantic-analysis scope management.
+         * DiagnosticBag is now checker-phase-local state. It does not own
+         * scopes, function overload tables, or semantic-analysis registration
+         * metadata.
          */
-        ctx.clear();
+        diagnostics.clear();
 
         /*
          * Reset checker-owned deletion state so this MasterChecker can safely
@@ -123,8 +131,10 @@ public class MasterChecker {
 
         checkNode(node);
 
-        if (ctx.hasErrors()) {
-            throw new SemanticAnalyzer.SemanticException(formatErrors());
+        if (diagnostics.hasErrors()) {
+            throw new SemanticAnalyzer.SemanticException(
+                    diagnostics.formatErrors()
+            );
         }
     }
 
@@ -157,7 +167,7 @@ public class MasterChecker {
             return;
         }
 
-        ctx.error("Unknown SemanticASTNode type passed to MasterChecker: "
+        diagnostics.error("Unknown SemanticASTNode type passed to MasterChecker: "
                 + node.getClass().getSimpleName());
     }
 
@@ -185,26 +195,12 @@ public class MasterChecker {
             }
 
             if (item == null) {
-                ctx.error("Program contains null top-level item");
+                diagnostics.error("Program contains null top-level item");
             } else {
-                ctx.error("Invalid top-level item in program: "
+                diagnostics.error("Invalid top-level item in program: "
                         + item.getClass().getSimpleName());
             }
         }
-    }
-
-    private String formatErrors() {
-        StringBuilder sb = new StringBuilder("Master checking failed:\n");
-
-        for (int i = 0; i < ctx.getErrors().size(); i++) {
-            sb.append("  ")
-                    .append(i + 1)
-                    .append(". ")
-                    .append(ctx.getErrors().get(i))
-                    .append('\n');
-        }
-
-        return sb.toString();
     }
 
     // ============================================================

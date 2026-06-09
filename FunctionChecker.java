@@ -77,20 +77,20 @@ import java.util.Set;
  * checker if desired.
  */
 public class FunctionChecker {
-    private final SemanticAnalyzer.Context ctx;
+    private final DiagnosticBag diagnostics;
     private final DeclarationChecker declarations;
     private final StatementChecker statements;
     private final ExpressionChecker expressions;
     private final TypeChecker types;
 
     public FunctionChecker(
-            SemanticAnalyzer.Context ctx,
+            DiagnosticBag diagnostics,
             DeclarationChecker declarations,
             StatementChecker statements,
             ExpressionChecker expressions,
             TypeChecker types
     ) {
-        this.ctx = Objects.requireNonNull(ctx);
+        this.diagnostics = Objects.requireNonNull(diagnostics);
         this.declarations = Objects.requireNonNull(declarations);
         this.statements = Objects.requireNonNull(statements);
         this.expressions = Objects.requireNonNull(expressions);
@@ -99,12 +99,12 @@ public class FunctionChecker {
 
     public void checkFunction(SemanticFunctionDeclNode node) {
         if (node == null) {
-            ctx.error("Function declaration node cannot be null");
+            diagnostics.error("Function declaration node cannot be null");
             return;
         }
 
         if (node.symbol == null) {
-            ctx.error("Function declaration has null symbol");
+            diagnostics.error("Function declaration has null symbol");
             return;
         }
 
@@ -114,13 +114,13 @@ public class FunctionChecker {
         boolean sawReturn = false;
 
         if (node.body == null) {
-            ctx.error("Function '" + node.symbol.name + "' has null body");
+            diagnostics.error("Function '" + node.symbol.name + "' has null body");
         } else {
             sawReturn = checkFunctionBody(node);
         }
 
         if (!types.isVoidType(node.symbol.returnType()) && !sawReturn) {
-            ctx.error("Non-void function '"
+            diagnostics.error("Non-void function '"
                     + node.symbol.fullSignatureString()
                     + "' must contain a return statement with an expression");
         }
@@ -135,14 +135,14 @@ public class FunctionChecker {
 
         for (VariableSymbol param : node.parameterVariables) {
             if (param == null) {
-                ctx.error("Function '"
+                diagnostics.error("Function '"
                         + node.symbol.name
                         + "' has null parameter symbol");
                 continue;
             }
 
             if (!names.add(param.name)) {
-                ctx.error("Duplicate parameter name '"
+                diagnostics.error("Duplicate parameter name '"
                         + param.name
                         + "' in function '"
                         + node.symbol.name
@@ -243,12 +243,12 @@ public class FunctionChecker {
             String where
     ) {
         if (type == null) {
-            ctx.error(where + " is null");
+            diagnostics.error(where + " is null");
             return;
         }
 
         if (type instanceof SemanticVoidType) {
-            ctx.error(where + " cannot be void");
+            diagnostics.error(where + " cannot be void");
             return;
         }
 
@@ -282,7 +282,7 @@ public class FunctionChecker {
             return;
         }
 
-        ctx.error(where + " has unsupported type "
+        diagnostics.error(where + " has unsupported type "
                 + types.describeSafe(type));
     }
 
@@ -296,7 +296,7 @@ public class FunctionChecker {
             BigInteger size = types.parseIntegerLiteral(literal);
 
             if (size.signum() <= 0) {
-                ctx.error(where
+                diagnostics.error(where
                         + " has invalid static array size "
                         + literal
                         + ": size must be greater than zero");
@@ -307,13 +307,13 @@ public class FunctionChecker {
                     size,
                     SemanticPrimitiveKind.UINT32
             )) {
-                ctx.error(where
+                diagnostics.error(where
                         + " has invalid static array size "
                         + literal
                         + ": size does not fit uint32_t");
             }
         } catch (Exception e) {
-            ctx.error(where
+            diagnostics.error(where
                     + " has invalid static array size literal: "
                     + literal);
         }
@@ -399,7 +399,7 @@ public class FunctionChecker {
         expressions.checkExpr(node.condition);
         
         if (types.isVoidType(node.condition.type)) {
-            ctx.error("if condition cannot be void");
+            diagnostics.error("if condition cannot be void");
             return false;
         }
 
@@ -435,7 +435,7 @@ public class FunctionChecker {
         expressions.checkExpr(node.condition);
 
         if (types.isVoidType(node.condition.type)) {
-            ctx.error("while condition cannot be void");
+            diagnostics.error("while condition cannot be void");
             return false;
         }
 
@@ -461,12 +461,12 @@ public class FunctionChecker {
             FunctionSymbol enclosingFunction
     ) {
         if (node.function == null) {
-            ctx.error("Return statement has null owning function");
+            diagnostics.error("Return statement has null owning function");
             return;
         }
 
         if (node.function != enclosingFunction) {
-            ctx.error("Return statement is attached to function '"
+            diagnostics.error("Return statement is attached to function '"
                     + node.function.fullSignatureString()
                     + "' but appears while checking function '"
                     + enclosingFunction.fullSignatureString()
@@ -499,7 +499,7 @@ public class FunctionChecker {
          */
         expressions.checkExpr(node.value);
 
-        ctx.error("Void function '"
+        diagnostics.error("Void function '"
                 + function.fullSignatureString()
                 + "' must not return a value");
     }
@@ -509,7 +509,7 @@ public class FunctionChecker {
             FunctionSymbol function
     ) {
         if (node.value == null) {
-            ctx.error("Non-void function '"
+            diagnostics.error("Non-void function '"
                     + function.fullSignatureString()
                     + "' must return an expression");
             return;
@@ -518,7 +518,7 @@ public class FunctionChecker {
         expressions.checkExpr(node.value);
 
         if (types.isVoidType(node.value.type)) {
-            ctx.error("Non-void function '"
+            diagnostics.error("Non-void function '"
                     + function.fullSignatureString()
                     + "' cannot return a void expression");
             return;

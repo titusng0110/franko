@@ -4,7 +4,42 @@ import java.util.Objects;
 /**
  * ============================================================================
  * DECLARATION CHECKER
+ * ========================================================================= * * ============================================================================
+ * Current declaration-level rules:
+ *
+ *   - primitive integer types are valid,
+ *
+ *   - dynamic array types are valid if their element type is valid,
+ *
+ *   - static array types are valid if:
+ *       * their element type is valid,
+ *       * their canonical size string is parseable as an integer,
+ *       * their size is greater than zero,
+ *       * their size fits uint32_t,
+ *
+ *   - address types are valid if their referenced type is valid.
+ *
+ * Notes:
+ *
+ *   Static array size expressions are mechanically folded before this checker.
+ *   For example:
+ *
+ *       array<int, 1 + 2>
+ *
+ *   reaches this checker as a SemanticStaticArrayType with canonical size "3".
+ *
+ *   If folding fails, SemanticAnalyzer currently canonicalizes the size to
+ *   "0" as fallback metadata. This checker will then reject it because static
+ *   array size zero is invalid.
+ *
+ *   Static array size zero is rejected because the generated C++ backend uses:
+ *
+ *       T data[N];
+ *
+ *   and zero-length arrays are not standard C++.
+ *
  * ============================================================================
+ *
  *
  * PURPOSE:
  * DeclarationChecker validates declaration-level legality rules over lowered
@@ -14,56 +49,36 @@ import java.util.Objects;
  *
  *   - resolved declaration names into VariableSymbol objects,
  *   - converted parser TypeNode objects into SemanticType objects,
- *   - preserved static array size literals as source-spelled strings.
+ *   - folded static array size expressions into canonical decimal size strings
+ *     where possible.
  *
- * DeclarationChecker is responsible for checking whether declared types are
- * legal Franko variable types.
- *
- * Current declaration-level rules:
- *
- *   - primitive integer types are valid,
- *   - dynamic array types are valid if their element type is valid,
- *   - static array types are valid if:
- *       * their element type is valid,
- *       * their size literal is a valid integer literal,
- *       * their size is greater than zero,
- *       * their size fits uint32_t,
- *   - address types are valid if their referenced type is valid.
- *
- * Notes:
- *
- *   Static array size zero is rejected because the generated C++ backend uses:
- *
- *       T data[N];
- *
- *   and zero-length arrays are not standard C++.
- *
- * ============================================================================
- */
+ * DeclarationChecker is responsible for checking whether declared variable
+ * types are legal Franko variable types.
+*/
 public class DeclarationChecker {
-    private final SemanticAnalyzer.Context ctx;
+    private final DiagnosticBag diagnostics;
     @SuppressWarnings("unused")
     private final ExpressionChecker expressions;
     private final TypeChecker types;
 
     public DeclarationChecker(
-        SemanticAnalyzer.Context ctx,
+        DiagnosticBag diagnostics,
         ExpressionChecker expressions,
         TypeChecker types
     ) {
-        this.ctx = Objects.requireNonNull(ctx);
+        this.diagnostics = Objects.requireNonNull(diagnostics);
         this.expressions = Objects.requireNonNull(expressions);
         this.types = Objects.requireNonNull(types);
     }
 
     public void checkVarDecl(SemanticVarDeclNode node) {
         if (node == null) {
-            ctx.error("Variable declaration node cannot be null");
+            diagnostics.error("Variable declaration node cannot be null");
             return;
         }
 
         if (node.symbol == null) {
-            ctx.error("Variable declaration has null symbol");
+            diagnostics.error("Variable declaration has null symbol");
             return;
         }
 
@@ -78,7 +93,7 @@ public class DeclarationChecker {
         String where
     ) {
         if (type == null) {
-            ctx.error(where + " has null declared type");
+            diagnostics.error(where + " has null declared type");
             return;
         }
 
@@ -117,7 +132,7 @@ public class DeclarationChecker {
          * the current parser does not expose function declarations/variables.
          * Treat unexpected declaration types as invalid for now.
          */
-        ctx.error(where + " has unsupported declared type: "
+        diagnostics.error(where + " has unsupported declared type: "
             + types.describeSafe(type));
     }
 
@@ -125,13 +140,19 @@ public class DeclarationChecker {
         SemanticStaticArrayType staticArray,
         String where
     ) {
+        
+        /*
+        * staticArray.sizeLiteral is a canonical folded decimal string produced by
+        * SemanticAnalyzer, not necessarily the original source spelling.
+        */
+
         String literal = staticArray.sizeLiteral;
 
         try {
             BigInteger size = types.parseIntegerLiteral(literal);
 
             if (size.signum() <= 0) {
-                ctx.error(where + " has invalid static array size "
+                diagnostics.error(where + " has invalid static array size "
                     + literal
                     + ": size must be greater than zero");
                 return;
@@ -141,12 +162,12 @@ public class DeclarationChecker {
                 size,
                 SemanticPrimitiveKind.UINT32
             )) {
-                ctx.error(where + " has invalid static array size "
+                diagnostics.error(where + " has invalid static array size "
                     + literal
                     + ": size does not fit uint32_t");
             }
         } catch (Exception e) {
-            ctx.error(where + " has invalid static array size literal: "
+            diagnostics.error(where + " has invalid static array size literal: "
                 + literal);
         }
     }

@@ -24,14 +24,14 @@ topLevelItem
 //   }
 //
 // returnType may be:
-//   - any ordinary Franko type
+//   - any ordinary Franko type allowed as a function return type semantically
 //   - void
 //
 // void is intentionally NOT part of the normal type rule.
 // This prevents declarations such as:
 //   void x;
 //   array<void> xs;
-//   addr<void> p;
+//   addr<void> p.
 //
 functionDecl
     : FUNC IDENTIFIER LPAREN parameterList? RPAREN ARROW returnType separators* block
@@ -105,15 +105,39 @@ simpleStmt
     ;
 
 // ---------- VARIABLE DECLARATION ----------
-
+//
+// Declaration initializer syntax supports ordinary expression initializers
+// and array initializer-list syntax.
+//
+// Examples:
+//   int32_t x = 1 + 2;
+//   array<int32_t, 3> xs = [1, 2, 3];
+//   array<int32_t> ys = [1, 2, 3];
+//
+// Important:
+//   T x = [ ... ];
+//
+// is declaration sugar for:
+//
+//   T x;
+//   x = [ ... ];
+//
+// The initializer list itself does not allocate, resize, or initialize
+// dynamic array storage. It only lowers to indexed assignments.
+//
 varDecl
     : type IDENTIFIER declSuffix?
     | ALLOC type IDENTIFIER declSuffix?
     ;
 
 declSuffix
-    : ASSIGN expr        # DeclAssignInit
-    | LPAREN expr RPAREN # DeclArrayInit
+    : ASSIGN declInitializer # DeclAssignInit
+    | LPAREN expr RPAREN     # DeclArrayInit
+    ;
+
+declInitializer
+    : arrayLiteral
+    | expr
     ;
 
 // ---------- DELETE ----------
@@ -133,9 +157,31 @@ returnStmt
     ;
 
 // ---------- ASSIGNMENT ----------
-
+//
+// Assignment supports ordinary expression assignment and array initializer-list
+// assignment.
+//
+// Array initializer assignment:
+//
+//   arr = [a, b, c];
+//
+// is not whole-array assignment. It is syntactic sugar for:
+//
+//   arr[0] = a;
+//   arr[1] = b;
+//   arr[2] = c;
+//
+// The initializer list does not allocate, resize, or initialize dynamic arrays.
+// Dynamic arrays must already be initialized before the generated indexed
+// assignments are valid.
+//
 assignStmt
-    : lvalue ASSIGN expr
+    : lvalue ASSIGN assignmentInitializer
+    ;
+
+assignmentInitializer
+    : arrayLiteral
+    | expr
     ;
 
 // ---------- PRINT ----------
@@ -203,6 +249,9 @@ exprStmt
 //   * /
 //   unary (- !)
 //   postfix [] () .
+//
+// Array initializer lists are intentionally NOT expressions.
+// They are assignment/declaration initializer forms only.
 
 expr
     : logicalOrExpr
@@ -266,8 +315,20 @@ unaryExpr
 //   deref(p).field
 //   deref(p).memset(0)
 //   (foo(x)).bar(y)[z]
+//
+// Does NOT support direct postfixing of array initializer lists:
+//   [1,2,3][0]          invalid
+//   [[0,0],[1,1]][0][1] invalid
 postfixExpr
     : primary postfixSuffix*
+    ;
+
+primary
+    : integerLiteral
+    | IDENTIFIER
+    | getAddrExpr
+    | derefExpr
+    | LPAREN expr RPAREN
     ;
 
 postfixSuffix
@@ -329,12 +390,153 @@ memberName
     | ARRAY
     ;
 
-primary
+// ---------- CONSTANT EXPRESSIONS ----------
+//
+// Used for:
+//   - static array size expressions
+//
+// A constExpr is syntactically restricted to expressions that can be
+// computed from the expression alone:
+//
+//   - integer literals
+//   - unary -
+//   - logical !
+//   - supported binary integer operators
+//   - parentheses
+//
+// It intentionally excludes:
+//
+//   - identifiers
+//   - function calls
+//   - array indexing
+//   - member access
+//   - getaddr(...)
+//   - deref(...)
+//   - array initializer lists
+//
+// Semantic checker should still reject invalid constant expressions such as:
+//   1 / 0
+//   1 << -1
+//
+// Semantic checker should also perform arbitrary-precision folding and
+// contextual range checking.
+
+constExpr
+    : constLogicalOrExpr
+    ;
+
+constLogicalOrExpr
+    : constLogicalAndExpr (OROR constLogicalAndExpr)*
+    ;
+
+constLogicalAndExpr
+    : constBitwiseOrExpr (ANDAND constBitwiseOrExpr)*
+    ;
+
+constBitwiseOrExpr
+    : constBitwiseXorExpr (PIPE constBitwiseXorExpr)*
+    ;
+
+constBitwiseXorExpr
+    : constBitwiseAndExpr (CARET constBitwiseAndExpr)*
+    ;
+
+constBitwiseAndExpr
+    : constEqualityExpr (AMP constEqualityExpr)*
+    ;
+
+constEqualityExpr
+    : constRelationalExpr ((EQ | NEQ) constRelationalExpr)*
+    ;
+
+constRelationalExpr
+    : constShiftExpr ((LE | GE | LT | GT) constShiftExpr)*
+    ;
+
+constShiftExpr
+    : constAdditiveExpr ((LT LT | GT GT) constAdditiveExpr)*
+    ;
+
+constAdditiveExpr
+    : constMultiplicativeExpr ((PLUS | MINUS) constMultiplicativeExpr)*
+    ;
+
+constMultiplicativeExpr
+    : constUnaryExpr ((STAR | SLASH) constUnaryExpr)*
+    ;
+
+constUnaryExpr
+    : MINUS constUnaryExpr
+    | BANG constUnaryExpr
+    | constPrimary
+    ;
+
+constPrimary
     : integerLiteral
-    | IDENTIFIER
-    | getAddrExpr
-    | derefExpr
-    | LPAREN expr RPAREN
+    | LPAREN constExpr RPAREN
+    ;
+
+// ---------- ARRAY INITIALIZER LISTS ----------
+//
+// Array initializer lists are not normal expressions.
+//
+// They may appear in assignment initializer contexts:
+//
+//   xs = [1, 2, 3];
+//
+// and declaration initializer contexts:
+//
+//   array<int32_t, 3> xs = [1, 2, 3];
+//
+// Declaration form:
+//
+//   T x = [ ... ];
+//
+// first desugars to:
+//
+//   T x;
+//   x = [ ... ];
+//
+// Then:
+//
+//   x = [a, b, c];
+//
+// desugars to:
+//
+//   x[0] = a;
+//   x[1] = b;
+//   x[2] = c;
+//
+// Nested initializer lists recursively lower to indexed assignments:
+//
+//   matrix = [[1, 2], [3, 4]];
+//
+// becomes:
+//
+//   matrix[0][0] = 1;
+//   matrix[0][1] = 2;
+//   matrix[1][0] = 3;
+//   matrix[1][1] = 4;
+//
+// Scalar elements are ordinary expressions, not constExpr.
+//
+// Invalid expression examples:
+//   [1, 2, 3];
+//   print([1, 2, 3]);
+//   f([1, 2, 3]);
+//   [1, 2, 3][0];
+//
+arrayLiteral
+    : LBRACK arrayLiteralElements? RBRACK
+    ;
+
+arrayLiteralElements
+    : arrayLiteralElement (COMMA arrayLiteralElement)*
+    ;
+
+arrayLiteralElement
+    : arrayLiteral
+    | expr
     ;
 
 getAddrExpr
@@ -354,19 +556,39 @@ integerLiteral
     ;
 
 // ---------- TYPES ----------
-
+//
+// Static array sizes accept constExpr.
+//
+// Examples:
+//   array<int, 10>
+//   array<int, 1 + 1>
+//   array<int, 2 * 5>
+//   array<array<int, 1 + 1>, 2 + 2>
+//
+// Semantic checker should later require that the size expression is:
+//   - a valid compile-time integer constant expression
+//   - positive
+//   - representable as uint32_t
+//
+// Note:
+//   array<int, x>
+//   array<int, f()>
+//   array<int, arr[0]>
+//
+// do not parse as static array types because identifiers, calls, and indexing
+// are not constExpr forms.
 type
-    : INT8_T                                # Int8Type
-    | INT16_T                               # Int16Type
-    | INT32_T                               # Int32Type
-    | INT64_T                               # Int64Type
-    | UINT8_T                               # Uint8Type
-    | UINT16_T                              # Uint16Type
-    | UINT32_T                              # Uint32Type
-    | UINT64_T                              # Uint64Type
-    | ARRAY LT type GT                      # DynamicArrayType
-    | ARRAY LT type COMMA integerLiteral GT # StaticArrayType
-    | ADDR LT type GT                       # AddrType
+    : INT8_T                           # Int8Type
+    | INT16_T                          # Int16Type
+    | INT32_T                          # Int32Type
+    | INT64_T                          # Int64Type
+    | UINT8_T                          # Uint8Type
+    | UINT16_T                         # Uint16Type
+    | UINT32_T                         # Uint32Type
+    | UINT64_T                         # Uint64Type
+    | ARRAY LT type GT                 # DynamicArrayType
+    | ARRAY LT type COMMA constExpr GT # StaticArrayType
+    | ADDR LT type GT                  # AddrType
     ;
 
 // ---------- LEXER ----------
@@ -393,7 +615,7 @@ INT16_T  : 'int16_t' ;
 INT32_T  : 'int32_t' | 'int' ;
 INT64_T  : 'int64_t' ;
 
-UINT8_T  : 'uint8_t' | 'char' ;
+UINT8_T  : 'uint8_t' | 'byte' ;
 UINT16_T : 'uint16_t' ;
 UINT32_T : 'uint32_t' ;
 UINT64_T : 'uint64_t' ;

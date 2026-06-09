@@ -1,6 +1,6 @@
 // ============================================================
 // Franko Iterative Quicksort Showcase: 50 Elements
-// Function-Based Version
+// Function-Based Version With Array Initializer Lists
 // ============================================================
 //
 // Demonstrates:
@@ -16,9 +16,23 @@
 //   - uint32_t indexes
 //   - int32_t values
 //   - swapping array elements
+//   - array initializer-list assignment
 //
 // Arrays are passed by address because Franko arrays are not
 // directly assignable or returnable by value.
+//
+// Array initializer lists are assignment sugar:
+//
+//   target = [a, b, c]
+//
+// lowers to:
+//
+//   target[0] = a
+//   target[1] = b
+//   target[2] = c
+//
+// No allocation or dynamic initialization is performed by the
+// initializer list itself.
 // ============================================================
 
 
@@ -39,62 +53,81 @@ func printArray(addr<array<int32_t, 50>> data, uint32_t n) -> void {
 // ------------------------------------------------------------
 // Initialize unsorted data
 // ------------------------------------------------------------
+//
+// deref(data) has type:
+//
+//   array<int32_t, 50>
+//
+// Therefore:
+//
+//   deref(data) = [...]
+//
+// lowers to:
+//
+//   deref(data)[0] = ...
+//   deref(data)[1] = ...
+//   ...
+//
+// This works because the target is a static array.
+// ------------------------------------------------------------
 
 func initData(addr<array<int32_t, 50>> data) -> void {
-    deref(data)[0] = 42
-    deref(data)[1] = 7
-    deref(data)[2] = 19
-    deref(data)[3] = 3
-    deref(data)[4] = 100
-    deref(data)[5] = 55
-    deref(data)[6] = 1
-    deref(data)[7] = 88
-    deref(data)[8] = 12
-    deref(data)[9] = 33
+    deref(data) = [
+        42,
+        7,
+        19,
+        3,
+        100,
+        55,
+        1,
+        88,
+        12,
+        33,
 
-    deref(data)[10] = 21
-    deref(data)[11] = 5
-    deref(data)[12] = 77
-    deref(data)[13] = 60
-    deref(data)[14] = 2
-    deref(data)[15] = 50
-    deref(data)[16] = 91
-    deref(data)[17] = 14
-    deref(data)[18] = 39
-    deref(data)[19] = 73
+        21,
+        5,
+        77,
+        60,
+        2,
+        50,
+        91,
+        14,
+        39,
+        73,
 
-    deref(data)[20] = 8
-    deref(data)[21] = 65
-    deref(data)[22] = 27
-    deref(data)[23] = 44
-    deref(data)[24] = 6
-    deref(data)[25] = 99
-    deref(data)[26] = 31
-    deref(data)[27] = 58
-    deref(data)[28] = 16
-    deref(data)[29] = 82
+        8,
+        65,
+        27,
+        44,
+        6,
+        99,
+        31,
+        58,
+        16,
+        82,
 
-    deref(data)[30] = 24
-    deref(data)[31] = 70
-    deref(data)[32] = 11
-    deref(data)[33] = 47
-    deref(data)[34] = 35
-    deref(data)[35] = 94
-    deref(data)[36] = 29
-    deref(data)[37] = 63
-    deref(data)[38] = 18
-    deref(data)[39] = 76
+        24,
+        70,
+        11,
+        47,
+        35,
+        94,
+        29,
+        63,
+        18,
+        76,
 
-    deref(data)[40] = 4
-    deref(data)[41] = 53
-    deref(data)[42] = 68
-    deref(data)[43] = 10
-    deref(data)[44] = 97
-    deref(data)[45] = 26
-    deref(data)[46] = 41
-    deref(data)[47] = 80
-    deref(data)[48] = 22
-    deref(data)[49] = 56
+        4,
+        53,
+        68,
+        10,
+        97,
+        26,
+        41,
+        80,
+        22,
+        56
+    ]
 }
 
 

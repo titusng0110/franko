@@ -1,6 +1,6 @@
 // ============================================================
 // Franko BFS Showcase: Castle Escape
-// Function-Based Version
+// Function-Based Version With 2D Array Initializer List
 // ============================================================
 //
 // Cell meanings:
@@ -22,9 +22,10 @@
 //   - non-void function return
 //   - declaration initializer sugar
 //   - nested static arrays
+//   - 2D array initializer-list assignment
 //   - chained indexing: grid[r][c]
 //   - uint32_t indexes
-//   - char as uint8_t-like flag storage
+//   - byte as uint8_t-like flag storage
 //   - logical && and ||
 //   - heap dynamic array initialization sugar
 //   - alloc / del
@@ -32,111 +33,72 @@
 //   - memcpy()
 //   - getaddr() and deref()
 //   - parent-pointer path reconstruction
+//
+// Array initializer lists are assignment sugar:
+//
+//   target = [a, b, c]
+//
+// lowers to:
+//
+//   target[0] = a
+//   target[1] = b
+//   target[2] = c
+//
+// For nested arrays:
+//
+//   matrix = [[1, 2], [3, 4]]
+//
+// lowers to:
+//
+//   matrix[0][0] = 1
+//   matrix[0][1] = 2
+//   matrix[1][0] = 3
+//   matrix[1][1] = 4
+//
+// No allocation or dynamic initialization is performed by the
+// initializer list itself.
 // ============================================================
 
 
 // ------------------------------------------------------------
-// Initialize arrays
+// Initialize arrays and maze
+// ------------------------------------------------------------
+//
+// deref(grid) has type:
+//
+//   array<array<uint32_t, 12>, 12>
+//
+// Therefore:
+//
+//   deref(grid) = [[...], [...], ...]
+//
+// lowers to ordinary grid[r][c] assignments.
 // ------------------------------------------------------------
 
 func initArrays(
     addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<char, 12>, 12>> visited,
-    addr<array<array<char, 12>, 12>> path,
+    addr<array<array<byte, 12>, 12>> visited,
+    addr<array<array<byte, 12>, 12>> path,
     addr<array<array<uint32_t, 12>, 12>> dist
 ) -> void {
-    deref(grid).memset(0)
+    deref(grid) = [
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1],
+        [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+        [1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+        [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 3, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ]
+
     deref(visited).memset(0)
     deref(path).memset(0)
     deref(dist).memset(0)
-}
-
-
-// ------------------------------------------------------------
-// Build outer border walls
-// ------------------------------------------------------------
-
-func buildBorderWalls(
-    addr<array<array<uint32_t, 12>, 12>> grid,
-    uint32_t rows,
-    uint32_t cols
-) -> void {
-    uint32_t i = 0
-
-    while (i < cols) {
-        deref(grid)[0][i] = 1
-        deref(grid)[rows - 1][i] = 1
-
-        deref(grid)[i][0] = 1
-        deref(grid)[i][cols - 1] = 1
-
-        i = i + 1
-    }
-}
-
-
-// ------------------------------------------------------------
-// Build castle walls
-// ------------------------------------------------------------
-//
-// The maze has several barriers with deliberate openings.
-// This version is connected, so BFS can reach the goal.
-// ------------------------------------------------------------
-
-func buildCastleWalls(
-    addr<array<array<uint32_t, 12>, 12>> grid,
-    uint32_t rows,
-    uint32_t cols
-) -> void {
-    uint32_t r = 0
-    uint32_t c = 0
-
-    // Horizontal wall at row 3, opening at column 8
-    c = 1
-    while (c < cols - 1) {
-        if (c != 8) {
-            deref(grid)[3][c] = 1
-        }
-
-        c = c + 1
-    }
-
-    // Horizontal wall at row 6, opening at column 2
-    c = 1
-    while (c < cols - 1) {
-        if (c != 2) {
-            deref(grid)[6][c] = 1
-        }
-
-        c = c + 1
-    }
-
-    // Horizontal wall at row 8, opening at column 9
-    c = 1
-    while (c < cols - 1) {
-        if (c != 9) {
-            deref(grid)[8][c] = 1
-        }
-
-        c = c + 1
-    }
-
-    // Vertical wall at column 5 with multiple openings
-    r = 1
-    while (r < rows - 1) {
-        if ((r != 2) && (r != 5) && (r != 7) && (r != 9)) {
-            deref(grid)[r][5] = 1
-        }
-
-        r = r + 1
-    }
-
-    // Extra blocks that do not disconnect the maze
-    deref(grid)[2][2] = 1
-    deref(grid)[2][3] = 1
-    deref(grid)[5][8] = 1
-    deref(grid)[9][7] = 1
-    deref(grid)[10][7] = 1
 }
 
 
@@ -157,7 +119,7 @@ func buildCastleWalls(
 
 func tryVisit(
     addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<char, 12>, 12>> visited,
+    addr<array<array<byte, 12>, 12>> visited,
     addr<array<array<uint32_t, 12>, 12>> dist,
     addr<array<array<uint32_t, 12>, 12>> parentR,
     addr<array<array<uint32_t, 12>, 12>> parentC,
@@ -199,7 +161,7 @@ func tryVisit(
 
 func runBfs(
     addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<char, 12>, 12>> visited,
+    addr<array<array<byte, 12>, 12>> visited,
     addr<array<array<uint32_t, 12>, 12>> dist,
     addr<array<array<uint32_t, 12>, 12>> parentR,
     addr<array<array<uint32_t, 12>, 12>> parentC,
@@ -210,7 +172,7 @@ func runBfs(
     uint32_t startC,
     uint32_t goalR,
     uint32_t goalC
-) -> char {
+) -> byte {
     uint32_t head = 0
     uint32_t tail = 0
 
@@ -221,7 +183,7 @@ func runBfs(
     uint32_t nr = 0
     uint32_t nc = 0
 
-    char found = 0
+    byte found = 0
 
     // BFS initialization
     deref(visited)[startR][startC] = 1
@@ -346,7 +308,7 @@ func runBfs(
 // ------------------------------------------------------------
 
 func reconstructPath(
-    addr<array<array<char, 12>, 12>> path,
+    addr<array<array<byte, 12>, 12>> path,
     addr<array<array<uint32_t, 12>, 12>> parentR,
     addr<array<array<uint32_t, 12>, 12>> parentC,
     uint32_t startR,
@@ -388,7 +350,7 @@ func reconstructPath(
 
 func printSolvedGrid(
     addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<char, 12>, 12>> path,
+    addr<array<array<byte, 12>, 12>> path,
     addr<array<uint32_t, 12>> line,
     uint32_t rows,
     uint32_t cols,
@@ -447,8 +409,8 @@ func main() -> int32_t {
     // ------------------------------------------------------------
 
     array<array<uint32_t, 12>, 12> grid
-    array<array<char, 12>, 12> visited
-    array<array<char, 12>, 12> path
+    array<array<byte, 12>, 12> visited
+    array<array<byte, 12>, 12> path
     array<array<uint32_t, 12>, 12> dist
 
     array<array<uint32_t, 12>, 12> parentR
@@ -483,7 +445,7 @@ func main() -> int32_t {
     uint32_t goalR = 10
     uint32_t goalC = 10
 
-    char found = 0
+    byte found = 0
 
     addr<uint32_t> answer
 
@@ -505,26 +467,6 @@ func main() -> int32_t {
         getaddr(path),
         getaddr(dist)
     )
-
-    buildBorderWalls(
-        getaddr(grid),
-        rows,
-        cols
-    )
-
-    buildCastleWalls(
-        getaddr(grid),
-        rows,
-        cols
-    )
-
-
-    // ------------------------------------------------------------
-    // Mark start and goal
-    // ------------------------------------------------------------
-
-    grid[startR][startC] = 2
-    grid[goalR][goalC] = 3
 
 
     // ------------------------------------------------------------

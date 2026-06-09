@@ -9,7 +9,7 @@
 //   - uint32_t arithmetic
 //   - declaration initializer sugar
 //   - dynamic arrays
-//   - char as a uint8_t-like flag type
+//   - byte as a uint8_t-like flag type
 //   - arr(size) dynamic initialization
 //   - memset()
 //   - uninit()
@@ -63,13 +63,13 @@ func main() -> int {
     //
     // The array has n + 1 entries so index n is valid.
 
-    array<char> isPrime;
+    array<byte> isPrime;
 
     isPrime(n + 1);
 
 
     // Initially mark every entry as prime.
-    // char behaves like uint8_t in the current semantic model, so
+    // byte behaves like uint8_t in the current semantic model, so
     // 1 fits naturally.
 
     isPrime.memset(1);

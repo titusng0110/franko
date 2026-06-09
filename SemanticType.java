@@ -133,6 +133,17 @@ final class SemanticDynamicArrayType extends SemanticType {
     }
 }
 
+/*
+ * Static array size is stored as canonical folded decimal text.
+ *
+ * Therefore:
+ *
+ *   array<int32_t, 10>
+ *   array<int32_t, 0xA>
+ *   array<int32_t, 5 + 5>
+ *
+ * become the same semantic static array type if all fold to 10.
+ */
 final class SemanticStaticArrayType extends SemanticType {
     final SemanticType elementType;
     final String sizeLiteral; // preserve exact source spelling if desired

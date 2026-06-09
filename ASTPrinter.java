@@ -167,7 +167,7 @@ public class ASTPrinter {
         }
 
         // ============================================================
-        // Expressions
+        // Expressions / Initializer Forms
         // ============================================================
 
         else if (node instanceof VarNode n) {
@@ -176,6 +176,16 @@ public class ASTPrinter {
 
         else if (node instanceof IntNode n) {
             System.out.println(pad + "Int: " + n.value);
+        }
+
+        else if (node instanceof ArrayLiteralNode n) {
+            System.out.println(pad + "ArrayLiteral");
+            System.out.println(pad + "  elements: " + n.elements.size());
+
+            for (int i = 0; i < n.elements.size(); i++) {
+                System.out.println(pad + "  [" + i + "]");
+                print(n.elements.get(i), indent + 2);
+            }
         }
 
         else if (node instanceof UnaryOpNode n) {
@@ -225,17 +235,50 @@ public class ASTPrinter {
 
         else if (node instanceof GetAddrNode n) {
             System.out.println(pad + "GetAddr");
-            print(n.target, indent + 1);
+
+            System.out.println(pad + "  target:");
+            print(n.target, indent + 2);
         }
 
         else if (node instanceof DerefNode n) {
             System.out.println(pad + "Deref");
-            print(n.expr, indent + 1);
+
+            System.out.println(pad + "  expr:");
+            print(n.expr, indent + 2);
         }
 
         // ============================================================
         // Type Nodes, useful if printer is called directly on a TypeNode
         // ============================================================
+
+        else if (node instanceof PrimitiveTypeNode n) {
+            System.out.println(pad + "PrimitiveType: " + typeToString(n));
+        }
+
+        else if (node instanceof VoidTypeNode n) {
+            System.out.println(pad + "VoidType: " + typeToString(n));
+        }
+
+        else if (node instanceof DynamicArrayTypeNode n) {
+            System.out.println(pad + "DynamicArrayType");
+            System.out.println(pad + "  elementType:");
+            print(n.elementType, indent + 2);
+        }
+
+        else if (node instanceof StaticArrayTypeNode n) {
+            System.out.println(pad + "StaticArrayType");
+            System.out.println(pad + "  elementType:");
+            print(n.elementType, indent + 2);
+
+            System.out.println(pad + "  sizeExpr:");
+            print(n.sizeExpr, indent + 2);
+        }
+
+        else if (node instanceof AddrTypeNode n) {
+            System.out.println(pad + "AddrType");
+            System.out.println(pad + "  referencedType:");
+            print(n.referencedType, indent + 2);
+        }
 
         else if (node instanceof TypeNode n) {
             System.out.println(pad + "Type: " + typeToString(n));
@@ -283,7 +326,7 @@ public class ASTPrinter {
             return "array<"
                     + typeToString(t.elementType)
                     + ", "
-                    + t.sizeLiteral
+                    + exprToInlineString(t.sizeExpr)
                     + ">";
         }
 
@@ -292,5 +335,105 @@ public class ASTPrinter {
         }
 
         return "<unknown-type:" + type.getClass().getSimpleName() + ">";
+    }
+
+    /**
+     * Produces a compact one-line rendering of expression-like AST nodes.
+     *
+     * This is mainly used for type strings such as:
+     *
+     *   array<int32_t, 1 + 2>
+     *
+     * Static array sizes are represented as ASTNode sizeExpr now, not as
+     * raw string literals.
+     */
+    private static String exprToInlineString(ASTNode expr) {
+        if (expr == null) {
+            return "<null-expr>";
+        }
+
+        if (expr instanceof IntNode n) {
+            return n.value;
+        }
+
+        if (expr instanceof VarNode n) {
+            return n.name;
+        }
+
+        if (expr instanceof UnaryOpNode n) {
+            return "(" + n.op + exprToInlineString(n.expr) + ")";
+        }
+
+        if (expr instanceof BinOpNode n) {
+            return "("
+                    + exprToInlineString(n.left)
+                    + " "
+                    + n.op
+                    + " "
+                    + exprToInlineString(n.right)
+                    + ")";
+        }
+
+        if (expr instanceof ArrayAccessNode n) {
+            return exprToInlineString(n.target)
+                    + "["
+                    + exprToInlineString(n.index)
+                    + "]";
+        }
+
+        if (expr instanceof MemberAccessNode n) {
+            return exprToInlineString(n.target)
+                    + "."
+                    + n.memberName;
+        }
+
+        if (expr instanceof CallNode n) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append(exprToInlineString(n.callee));
+            sb.append("(");
+
+            for (int i = 0; i < n.args.size(); i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+
+                sb.append(exprToInlineString(n.args.get(i)));
+            }
+
+            sb.append(")");
+            return sb.toString();
+        }
+
+        if (expr instanceof GetAddrNode n) {
+            return "getaddr(" + exprToInlineString(n.target) + ")";
+        }
+
+        if (expr instanceof DerefNode n) {
+            return "deref(" + exprToInlineString(n.expr) + ")";
+        }
+
+        if (expr instanceof ArrayLiteralNode n) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("[");
+
+            for (int i = 0; i < n.elements.size(); i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+
+                sb.append(exprToInlineString(n.elements.get(i)));
+            }
+
+            sb.append("]");
+            return sb.toString();
+        }
+
+        if (expr instanceof TypeNode t) {
+            return typeToString(t);
+        }
+
+        return "<unknown-expr:" + expr.getClass().getSimpleName() + ">";
     }
 }
