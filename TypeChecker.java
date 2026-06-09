@@ -109,10 +109,10 @@ import java.util.Objects;
  * ============================================================================
  */
 public class TypeChecker {
-    private final SemanticAnalyzer.Context ctx;
+    private final DiagnosticBag diagnostics;
 
-    public TypeChecker(SemanticAnalyzer.Context ctx) {
-        this.ctx = Objects.requireNonNull(ctx);
+    public TypeChecker(DiagnosticBag diagnostics) {
+        this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
     // ============================================================
@@ -306,55 +306,55 @@ public class TypeChecker {
 
     public void ensureNotVoid(SemanticType t, String message) {
         if (isVoidType(t)) {
-            ctx.error(message + ", got void");
+            diagnostics.error(message + ", got void");
         }
     }
 
     public void ensureIntegral(SemanticType t, String message) {
         if (!isIntegral(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureSignedIntegral(SemanticType t, String message) {
         if (!isSignedIntegral(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureUnsignedIntegral(SemanticType t, String message) {
         if (!isUnsignedIntegral(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureArrayType(SemanticType t, String message) {
         if (!isArrayType(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureDynamicArrayType(SemanticType t, String message) {
         if (!isDynamicArrayType(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureStaticArrayType(SemanticType t, String message) {
         if (!isStaticArrayType(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureAddressType(SemanticType t, String message) {
         if (!isAddressType(t)) {
-            ctx.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureSameType(SemanticType expected, SemanticType actual, String message) {
         if (!sameType(expected, actual)) {
-            ctx.error(message + ": expected "
+            diagnostics.error(message + ": expected "
                     + describeSafe(expected)
                     + ", got "
                     + describeSafe(actual));
@@ -363,7 +363,7 @@ public class TypeChecker {
 
     public void ensureValidFunctionReturnType(SemanticType type, String message) {
         if (type == null) {
-            ctx.error(message + ": return type is null");
+            diagnostics.error(message + ": return type is null");
             return;
         }
 
@@ -372,13 +372,13 @@ public class TypeChecker {
         }
 
         if (isArrayType(type)) {
-            ctx.error(message + ": arrays cannot be returned directly; use addr<"
+            diagnostics.error(message + ": arrays cannot be returned directly; use addr<"
                     + type.describe()
                     + "> instead");
             return;
         }
 
-        ctx.error(message + ": invalid function return type "
+        diagnostics.error(message + ": invalid function return type "
                 + describeSafe(type));
     }
 
@@ -418,29 +418,29 @@ public class TypeChecker {
             String message
     ) {
         if (targetType == null || expr == null || expr.type == null) {
-            ctx.error(message + ": internal null type");
+            diagnostics.error(message + ": internal null type");
             return;
         }
 
         if (isVoidType(targetType)) {
-            ctx.error(message + ": cannot assign to void type");
+            diagnostics.error(message + ": cannot assign to void type");
             return;
         }
 
         if (isVoidType(expr.type)) {
-            ctx.error(message + ": cannot assign void value");
+            diagnostics.error(message + ": cannot assign void value");
             return;
         }
 
         if (isArrayType(targetType) || isArrayType(expr.type)) {
-            ctx.error(message + ": arrays cannot be directly assigned");
+            diagnostics.error(message + ": arrays cannot be directly assigned");
             return;
         }
 
         if (targetType instanceof SemanticPrimitiveType targetPrimitive) {
             if (expr.isConstant()) {
                 if (!fitsBigIntegerToPrimitive(expr.constantValue, targetPrimitive.kind)) {
-                    ctx.error(message + ": constant value "
+                    diagnostics.error(message + ": constant value "
                             + expr.constantValue
                             + " does not fit in "
                             + targetType.describe());
@@ -449,7 +449,7 @@ public class TypeChecker {
             }
 
             if (!sameType(targetType, expr.type)) {
-                ctx.error(message + ": expected "
+                diagnostics.error(message + ": expected "
                         + targetType.describe()
                         + ", got "
                         + expr.type.describe());
@@ -460,7 +460,7 @@ public class TypeChecker {
 
         if (targetType instanceof SemanticAddrType) {
             if (!sameType(targetType, expr.type)) {
-                ctx.error(message + ": expected "
+                diagnostics.error(message + ": expected "
                         + targetType.describe()
                         + ", got "
                         + expr.type.describe());
@@ -470,7 +470,7 @@ public class TypeChecker {
         }
 
         if (!sameType(targetType, expr.type)) {
-            ctx.error(message + ": expected "
+            diagnostics.error(message + ": expected "
                     + targetType.describe()
                     + ", got "
                     + expr.type.describe());
@@ -505,7 +505,7 @@ public class TypeChecker {
             String op
     ) {
         if (left == null || right == null) {
-            ctx.error("Operands of '" + op + "' cannot be null");
+            diagnostics.error("Operands of '" + op + "' cannot be null");
             return;
         }
 
@@ -542,7 +542,7 @@ public class TypeChecker {
         }
 
         if (!sameType(left.type, right.type)) {
-            ctx.error("Operands of '" + op + "' must have the same integer type, got "
+            diagnostics.error("Operands of '" + op + "' must have the same integer type, got "
                     + left.type.describe()
                     + " and "
                     + right.type.describe());
@@ -579,7 +579,7 @@ public class TypeChecker {
             String op
     ) {
         if (left == null || right == null) {
-            ctx.error("Operands of '" + op + "' cannot be null");
+            diagnostics.error("Operands of '" + op + "' cannot be null");
             return;
         }
 
@@ -641,7 +641,7 @@ public class TypeChecker {
             String op
     ) {
         if (left == null || right == null) {
-            ctx.error("Operands of '" + op + "' cannot be null");
+            diagnostics.error("Operands of '" + op + "' cannot be null");
             return;
         }
 
@@ -669,19 +669,19 @@ public class TypeChecker {
 
         if (right.isConstant()) {
             if (right.constantValue == null) {
-                ctx.error("Right constant for operator '" + op + "' has no constant value");
+                diagnostics.error("Right constant for operator '" + op + "' has no constant value");
                 return;
             }
 
             if (right.constantValue.signum() < 0) {
-                ctx.error("Right operand of '" + op + "' cannot be negative");
+                diagnostics.error("Right operand of '" + op + "' cannot be negative");
                 return;
             }
 
             SemanticPrimitiveKind leftKind = primitiveKindOf(left.type);
 
             if (leftKind == null) {
-                ctx.error("Left operand of '" + op + "' must be a primitive integer, got "
+                diagnostics.error("Left operand of '" + op + "' must be a primitive integer, got "
                         + describeSafe(left.type));
                 return;
             }
@@ -731,7 +731,7 @@ public class TypeChecker {
             String message
     ) {
         if (!(contextType instanceof SemanticPrimitiveType pt)) {
-            ctx.error(message + ": expected primitive integer context, got "
+            diagnostics.error(message + ": expected primitive integer context, got "
                     + describeSafe(contextType));
             return;
         }
@@ -745,17 +745,17 @@ public class TypeChecker {
             String message
     ) {
         if (value == null) {
-            ctx.error(message + ": missing constant value");
+            diagnostics.error(message + ": missing constant value");
             return;
         }
 
         if (kind == null) {
-            ctx.error(message + ": missing primitive kind");
+            diagnostics.error(message + ": missing primitive kind");
             return;
         }
 
         if (!fitsBigIntegerToPrimitive(value, kind)) {
-            ctx.error(message + ": constant value "
+            diagnostics.error(message + ": constant value "
                     + value
                     + " does not fit in "
                     + kind.name());

@@ -67,6 +67,45 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
+    /**
+     * Left-folds constShiftExpr for grammar:
+     *
+     *   constShiftExpr
+     *       : constAdditiveExpr ((LT LT | GT GT) constAdditiveExpr)*
+     *       ;
+     */
+    private ASTNode foldConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
+        ASTNode current = visit(ctx.constAdditiveExpr(0));
+
+        int exprIndex = 1;
+        int childIndex = 1;
+
+        while (childIndex < ctx.getChildCount()) {
+            String first = ctx.getChild(childIndex).getText();
+            String second = ctx.getChild(childIndex + 1).getText();
+
+            String op;
+            if ("<".equals(first) && "<".equals(second)) {
+                op = "<<";
+            } else if (">".equals(first) && ">".equals(second)) {
+                op = ">>";
+            } else {
+                throw new RuntimeException(
+                    "Internal AST visitor error: expected const shift operator token pair, got '"
+                    + first + "' and '" + second + "'"
+                );
+            }
+
+            ASTNode rhs = visit(ctx.constAdditiveExpr(exprIndex));
+            current = new BinOpNode(op, current, rhs);
+
+            exprIndex++;
+            childIndex += 3;
+        }
+
+        return current;
+    }
+
     private ASTNode applyPostfixSuffixes(
         ASTNode base,
         List<FrankoParser.PostfixSuffixContext> suffixes
@@ -282,8 +321,24 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitAssignStmt(FrankoParser.AssignStmtContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        ASTNode value = visit(ctx.expr());
+        ASTNode value = visit(ctx.assignmentInitializer());
+
         return new AssignNode(target, value);
+    }
+
+    @Override
+    public ASTNode visitAssignmentInitializer(
+            FrankoParser.AssignmentInitializerContext ctx
+    ) {
+        if (ctx.arrayLiteral() != null) {
+            return visit(ctx.arrayLiteral());
+        }
+
+        if (ctx.expr() != null) {
+            return visit(ctx.expr());
+        }
+
+        throw new RuntimeException("Unknown assignmentInitializer: " + ctx.getText());
     }
 
     @Override
@@ -362,8 +417,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitStaticArrayType(FrankoParser.StaticArrayTypeContext ctx) {
         TypeNode elementType = (TypeNode) visit(ctx.type());
-        String sizeLiteral = ctx.integerLiteral().getText();
-        return new StaticArrayTypeNode(elementType, sizeLiteral);
+        ASTNode sizeExpr = visit(ctx.constExpr());
+
+        return new StaticArrayTypeNode(elementType, sizeExpr);
     }
 
     @Override
@@ -390,7 +446,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             FrankoParser.DeclAssignInitContext initCtx =
                 (FrankoParser.DeclAssignInitContext) ctx.declSuffix();
 
-            ASTNode init = visit(initCtx.expr());
+            ASTNode init = visit(initCtx.declInitializer());
+
             return new VarDeclInitNode(type, name, isHeap, init);
         }
 
@@ -399,10 +456,24 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                 (FrankoParser.DeclArrayInitContext) ctx.declSuffix();
 
             ASTNode size = visit(initCtx.expr());
+
             return new VarDeclArrayInitNode(type, name, isHeap, size);
         }
 
         throw new RuntimeException("Unknown declSuffix: " + ctx.declSuffix().getText());
+    }
+
+    @Override
+    public ASTNode visitDeclInitializer(FrankoParser.DeclInitializerContext ctx) {
+        if (ctx.arrayLiteral() != null) {
+            return visit(ctx.arrayLiteral());
+        }
+
+        if (ctx.expr() != null) {
+            return visit(ctx.expr());
+        }
+
+        throw new RuntimeException("Unknown declInitializer: " + ctx.getText());
     }
 
     // ============================================================
@@ -504,6 +575,136 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitPostfixExprOnly(FrankoParser.PostfixExprOnlyContext ctx) {
         return visit(ctx.postfixExpr());
+    }
+
+    // ============================================================
+    // Constant expressions
+    // ============================================================
+    //
+    // These use the same AST expression nodes as normal expressions:
+    //
+    //   IntNode
+    //   UnaryOpNode
+    //   BinOpNode
+    //
+    // The grammar has already restricted constExpr so it cannot contain
+    // identifiers, calls, indexing, member access, getaddr, deref, etc.
+    // The semantic checker should still fold and validate the expression.
+
+    @Override
+    public ASTNode visitConstExpr(FrankoParser.ConstExprContext ctx) {
+        return visit(ctx.constLogicalOrExpr());
+    }
+
+    @Override
+    public ASTNode visitConstLogicalOrExpr(FrankoParser.ConstLogicalOrExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstLogicalAndExpr(FrankoParser.ConstLogicalAndExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstBitwiseOrExpr(FrankoParser.ConstBitwiseOrExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstBitwiseXorExpr(FrankoParser.ConstBitwiseXorExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstBitwiseAndExpr(FrankoParser.ConstBitwiseAndExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstEqualityExpr(FrankoParser.ConstEqualityExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstRelationalExpr(FrankoParser.ConstRelationalExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
+        return foldConstShiftExpr(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstAdditiveExpr(FrankoParser.ConstAdditiveExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstMultiplicativeExpr(FrankoParser.ConstMultiplicativeExprContext ctx) {
+        return foldSimpleBinaryRule(ctx);
+    }
+
+    @Override
+    public ASTNode visitConstUnaryExpr(FrankoParser.ConstUnaryExprContext ctx) {
+        if (ctx.MINUS() != null) {
+            return new UnaryOpNode("-", visit(ctx.constUnaryExpr()));
+        }
+
+        if (ctx.BANG() != null) {
+            return new UnaryOpNode("!", visit(ctx.constUnaryExpr()));
+        }
+
+        if (ctx.constPrimary() != null) {
+            return visit(ctx.constPrimary());
+        }
+
+        throw new RuntimeException("Unknown constUnaryExpr: " + ctx.getText());
+    }
+
+    @Override
+    public ASTNode visitConstPrimary(FrankoParser.ConstPrimaryContext ctx) {
+        if (ctx.integerLiteral() != null) {
+            return visit(ctx.integerLiteral());
+        }
+
+        if (ctx.constExpr() != null) {
+            return visit(ctx.constExpr());
+        }
+
+        throw new RuntimeException("Unknown constPrimary: " + ctx.getText());
+    }
+
+    // ============================================================
+    // Array literals
+    // ============================================================
+
+    @Override
+    public ASTNode visitArrayLiteral(FrankoParser.ArrayLiteralContext ctx) {
+        List<ASTNode> elements = new ArrayList<>();
+
+        if (ctx.arrayLiteralElements() != null) {
+            for (FrankoParser.ArrayLiteralElementContext elementCtx
+                    : ctx.arrayLiteralElements().arrayLiteralElement()) {
+                elements.add(visit(elementCtx));
+            }
+        }
+
+        return new ArrayLiteralNode(elements);
+    }
+
+    @Override
+    public ASTNode visitArrayLiteralElement(FrankoParser.ArrayLiteralElementContext ctx) {
+        if (ctx.arrayLiteral() != null) {
+            return visit(ctx.arrayLiteral());
+        }
+
+        if (ctx.expr() != null) {
+            return visit(ctx.expr());
+        }
+
+        throw new RuntimeException("Unknown arrayLiteralElement: " + ctx.getText());
     }
 
     // ============================================================

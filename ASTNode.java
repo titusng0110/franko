@@ -142,7 +142,16 @@ class VarDeclNode extends ASTNode {
     }
 }
 
-// After desugaring, this ASTNode should not exist
+// After desugaring, this ASTNode should not exist.
+//
+// Handles ordinary declaration initializers:
+//
+//   int32_t x = 1 + 2;
+//
+// and array literal declaration initializers:
+//
+//   array<int32_t, 3> xs = [1, 2, 3];
+//
 class VarDeclInitNode extends ASTNode {
     TypeNode type;
     String name;
@@ -157,7 +166,12 @@ class VarDeclInitNode extends ASTNode {
     }
 }
 
-// After desugaring, this ASTNode should not exist
+// After desugaring, this ASTNode should not exist.
+//
+// Existing dynamic array initialization sugar:
+//
+//   array<int32_t> xs(3);
+//
 class VarDeclArrayInitNode extends ASTNode {
     TypeNode type;
     String name;
@@ -209,11 +223,23 @@ class DynamicArrayTypeNode extends TypeNode {
 
 class StaticArrayTypeNode extends TypeNode {
     TypeNode elementType;
-    String sizeLiteral;
 
-    StaticArrayTypeNode(TypeNode elementType, String sizeLiteral) {
+    // Static array sizes are now constExpr, not just integerLiteral.
+    //
+    // Examples:
+    //   array<int32_t, 3>
+    //   array<int32_t, 1 + 2>
+    //   array<int32_t, 1 << 3>
+    //
+    // The semantic checker should fold this expression and check:
+    //   - it is valid at compile time
+    //   - it is positive
+    //   - it fits uint32_t
+    ASTNode sizeExpr;
+
+    StaticArrayTypeNode(TypeNode elementType, ASTNode sizeExpr) {
         this.elementType = elementType;
-        this.sizeLiteral = sizeLiteral;
+        this.sizeExpr = sizeExpr;
     }
 }
 
@@ -242,6 +268,45 @@ class IntNode extends ASTNode {
 
     IntNode(String value) {
         this.value = value;
+    }
+}
+
+// ============================================================
+// Array initializer lists
+// ============================================================
+//
+// ArrayLiteralNode represents initializer-list syntax:
+//
+//   [1, 2, 3]
+//   [[1, 2], [3, 4]]
+//
+// It is not an ordinary expression value.
+//
+// It may appear only in assignment/declaration initializer contexts:
+//
+//   xs = [1, 2, 3];
+//   array<int, 3> xs = [1, 2, 3];
+//
+// Desugaring lowers:
+//
+//   target = [a, b, c];
+//
+// into:
+//
+//   target[0] = a;
+//   target[1] = b;
+//   target[2] = c;
+//
+// Nested initializer lists recursively lower to indexed assignments.
+//
+// The initializer list does not allocate, resize, or initialize dynamic
+// array storage.
+
+class ArrayLiteralNode extends ASTNode {
+    List<ASTNode> elements;
+
+    ArrayLiteralNode(List<ASTNode> elements) {
+        this.elements = elements;
     }
 }
 

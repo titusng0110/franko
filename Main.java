@@ -63,7 +63,6 @@ public class Main {
         FrankoASTVisitor visitor = new FrankoASTVisitor();
         ASTNode rawAst = visitor.visit(tree);
 
-        // Conditional debug print
         if (verbose) {
             System.out.println("==== Raw AST ====");
             ASTPrinter.print(rawAst, 0);
@@ -73,7 +72,6 @@ public class Main {
         Desugarer desugarer = new Desugarer();
         ASTNode ast = desugarer.desugar(rawAst);
 
-        // Conditional debug print
         if (verbose) {
             System.out.println("==== Desugared AST ====");
             ASTPrinter.print(ast, 0);
@@ -90,8 +88,15 @@ public class Main {
 
         // ----- Legality checking -----
         System.out.println("==== Legality Checking ====");
-        MasterChecker masterChecker = new MasterChecker();
+
+        DiagnosticBag checkerDiagnostics =
+                new DiagnosticBag("Master checking failed:");
+
+        MasterChecker masterChecker =
+                new MasterChecker(checkerDiagnostics);
+
         masterChecker.check(semaAST);
+
         System.out.println("All checks passed.");
 
         // ----- Generate C++ body -----
