@@ -118,6 +118,7 @@ public final class ConstExpressionEvaluator {
                 default -> null;
             };
         } catch (ArithmeticException e) {
+            ctx.error("Arithmetic error during constant folding: " + e.getMessage());
             return null;
         }
     }
