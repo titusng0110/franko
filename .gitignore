@@ -3,3 +3,5 @@
 *.out
 *.class
 build/
+.venv/
+__pycache__/
