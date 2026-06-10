@@ -2511,7 +2511,1014 @@ The checker validates intrinsic legality, but it does not fully prove:
 
 ***
 
-# 20. Array Intrinsics
+
+# 20. Arrays
+
+Franko supports two array categories:
+
+```franko
+array<T>      // dynamic array
+array<T, N>   // static array
+```
+
+Examples:
+
+```franko
+array<int32_t> dynamicInts;
+array<uint8_t, 128> staticBytes;
+```
+
+Arrays may be nested:
+
+```franko
+array<array<int32_t>> nestedDynamic;
+array<array<int32_t, 4>, 8> matrix;
+```
+
+Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
+
+However, Franko supports **array initializer lists** as assignment sugar for assigning individual elements into an existing array target. See #21-array-initializer-lists.
+
+***
+
+## 20.1 Static Arrays
+
+A static array has a compile-time size:
+
+```franko
+array<int32_t, 10> xs;
+```
+
+Static array size rules:
+
+* size must be a compile-time integer constant;
+* size must be greater than zero;
+* size must fit `uint32_t`.
+
+Valid:
+
+```franko
+array<int32_t, 1> a;
+array<int32_t, 0x10> b;
+array<int32_t, 0b1000> c;
+array<int32_t, 1 + 2> d;
+```
+
+Invalid:
+
+```franko
+array<int32_t, 0> a;  // invalid
+array<int32_t, -1> b; // invalid
+array<int32_t, 999999999999999999999999999999999> c; // invalid
+```
+
+Invalid because the size is not a compile-time constant:
+
+```franko
+func n() -> int32_t {
+    return 3;
+}
+
+array<int32_t, n()> xs;
+```
+
+Static arrays do not use `arr(size)` initialization.
+
+Invalid:
+
+```franko
+array<int32_t, 10> xs;
+
+xs(10); // invalid: array init is only for dynamic arrays
+```
+
+Static array storage exists immediately after declaration.
+
+Example:
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+
+    xs[0] = 1;
+    xs[1] = 2;
+    xs[2] = 3;
+
+    return 0;
+}
+```
+
+***
+
+## 20.2 Dynamic Arrays
+
+A dynamic array has runtime size:
+
+```franko
+array<int32_t> xs;
+```
+
+Dynamic arrays are initialized using direct-call array initialization syntax:
+
+```franko
+xs(10);
+```
+
+Rules for dynamic array initialization:
+
+* target must be a storage-backed lvalue;
+* target must be a dynamic array;
+* exactly one argument is required;
+* size must be compatible with `uint32_t`;
+* constant sizes must be greater than zero;
+* constant sizes must fit `uint32_t`;
+* nonconstant sizes must have exactly type `uint32_t`.
+
+Valid:
+
+```franko
+array<int32_t> xs;
+
+xs(10);
+```
+
+Valid:
+
+```franko
+array<int32_t> xs;
+uint32_t n;
+
+n = 100;
+xs(n);
+```
+
+Invalid:
+
+```franko
+array<int32_t> xs;
+int32_t n;
+
+xs(n); // invalid: nonconstant size must be uint32_t
+```
+
+Invalid:
+
+```franko
+array<int32_t> xs;
+
+xs(0); // invalid: size must be greater than zero
+```
+
+Dynamic array declaration alone does not allocate element storage:
+
+```franko
+array<int32_t> xs;
+```
+
+The array must be initialized before ordinary indexed use:
+
+```franko
+xs(10);
+xs[0] = 42;
+```
+
+Current limitation: the checker validates intrinsic legality, but it may not fully prove all dynamic array initialization and lifetime properties.
+
+***
+
+## 20.3 Array Access
+
+Array indexing syntax:
+
+```franko
+arr[index]
+```
+
+The target must be an array.
+
+Index rules:
+
+* constant index:
+  * must be nonnegative;
+  * must fit `uint32_t`;
+* nonconstant index:
+  * must have exactly type `uint32_t`.
+
+Valid:
+
+```franko
+array<int32_t> xs;
+xs(10);
+
+xs[0] = 1;
+```
+
+Valid:
+
+```franko
+array<int32_t> xs;
+uint32_t i;
+
+xs(10);
+i = 3;
+
+xs[i] = 42;
+```
+
+Invalid:
+
+```franko
+array<int32_t> xs;
+int32_t i;
+
+xs[i] = 42; // invalid: nonconstant index must be uint32_t
+```
+
+Invalid:
+
+```franko
+array<int32_t> xs;
+
+xs[-1] = 42; // invalid
+```
+
+For static arrays, constant indexes are checked against the known static size when possible.
+
+Invalid:
+
+```franko
+array<int32_t, 3> xs;
+
+xs[3] = 10; // invalid: index 3 is out of bounds
+```
+
+Current limitation: the checker validates index type/range but does not generally prove that a runtime index is within the actual array length.
+
+***
+
+## 20.4 Array Elements as Lvalues
+
+Array elements are storage-backed lvalues when the array target is storage-backed.
+
+Valid:
+
+```franko
+array<int32_t> xs;
+xs(10);
+
+xs[0] = 123;
+```
+
+Array elements may be addressed:
+
+```franko
+addr<int32_t> p;
+
+p = getaddr(xs[0]);
+```
+
+Nested array elements may also be lvalues when each target is storage-backed.
+
+Example:
+
+```franko
+array<array<int32_t, 2>, 2> matrix;
+
+matrix[0][0] = 1;
+matrix[0][1] = 2;
+matrix[1][0] = 3;
+matrix[1][1] = 4;
+```
+
+***
+
+## 20.5 Array Direct Assignment Is Invalid
+
+Arrays cannot be assigned directly as ordinary values.
+
+Invalid:
+
+```franko
+array<int32_t> a;
+array<int32_t> b;
+
+a = b;
+```
+
+Use one of:
+
+```franko
+a.memcpy(b);
+a.memset(0);
+a.uninit();
+```
+
+depending on the intended operation.
+
+However, this rule does not prevent **array initializer assignment**:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3];
+```
+
+This is not whole-array assignment. It is desugared into indexed element assignments:
+
+```franko
+xs[0] = 1;
+xs[1] = 2;
+xs[2] = 3;
+```
+
+See #21-array-initializer-lists.
+
+***
+
+## 20.6 Array Lifetime Limitations
+
+The checker validates intrinsic legality, but it does not fully prove:
+
+* dynamic array initialized before indexing;
+* dynamic array not used after `uninit`;
+* dynamic array not initialized twice;
+* all array accesses are within bounds.
+
+For example, this may not be fully diagnosed in all cases:
+
+```franko
+array<int32_t> xs;
+
+xs[0] = 1; // may not be fully diagnosed as use-before-init
+```
+
+The language rule is still that a dynamic array must be initialized before indexed element use.
+
+***
+
+# 21. Array Initializer Lists
+
+Franko supports **array initializer lists** as array element assignment sugar.
+
+An array initializer list is written with square brackets:
+
+```franko
+[1, 2, 3]
+```
+
+An array initializer list is **not** a standalone array value.
+
+It is **not** a general expression.
+
+It is a compact syntax for assigning listed elements into an existing array target.
+
+The core rule is:
+
+```franko
+target = [a, b, c];
+```
+
+is equivalent to:
+
+```franko
+target[0] = a;
+target[1] = b;
+target[2] = c;
+```
+
+No allocation, resizing, or dynamic array initialization is performed by the initializer list itself.
+
+***
+
+## 21.1 Array Initializer Lists Are Not General Expression Values
+
+Array initializer lists do not have standalone types.
+
+Invalid:
+
+```franko
+[1, 2, 3];
+```
+
+Invalid:
+
+```franko
+print([1, 2, 3]);
+```
+
+Invalid:
+
+```franko
+foo([1, 2, 3]);
+```
+
+Invalid:
+
+```franko
+return [1, 2, 3];
+```
+
+Array initializer lists are only meaningful in assignment-style contexts where there is an explicit array assignment target.
+
+***
+
+## 21.2 Array Initializer Assignment
+
+An array initializer list may appear on the right-hand side of an assignment:
+
+```franko
+arr = [1, 2, 3];
+```
+
+This is not whole-array assignment.
+
+It is recursively desugared into indexed element assignments:
+
+```franko
+arr[0] = 1;
+arr[1] = 2;
+arr[2] = 3;
+```
+
+The normal expression, assignment, indexing, and array-use rules apply to the generated statements.
+
+Example:
+
+```franko
+func foo() -> int32_t {
+    return 10;
+}
+
+func main() -> int32_t {
+    array<int32_t> arr;
+
+    arr(4);
+
+    arr = [1, 1 + 1, foo(), foo()];
+
+    arr.uninit();
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func foo() -> int32_t {
+    return 10;
+}
+
+func main() -> int32_t {
+    array<int32_t> arr;
+
+    arr(4);
+
+    arr[0] = 1;
+    arr[1] = 1 + 1;
+    arr[2] = foo();
+    arr[3] = foo();
+
+    arr.uninit();
+
+    return 0;
+}
+```
+
+Initializer elements are ordinary expressions.
+
+They do not need to be compile-time constants.
+
+***
+
+## 21.3 Declaration Initializer Form
+
+Array initializer lists may also appear in declaration-assignment syntax:
+
+```franko
+array<int32_t, 3> xs = [1, 2, 3];
+```
+
+This is treated as ordinary declaration initializer sugar:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3];
+```
+
+which then lowers to:
+
+```franko
+array<int32_t, 3> xs;
+
+xs[0] = 1;
+xs[1] = 2;
+xs[2] = 3;
+```
+
+For static arrays, this is useful because static array storage exists immediately after declaration.
+
+For dynamic arrays, the initializer list still does **not** initialize storage.
+
+Therefore:
+
+```franko
+array<int32_t> dyn = [1, 2, 3];
+```
+
+desugars conceptually to:
+
+```franko
+array<int32_t> dyn;
+
+dyn[0] = 1;
+dyn[1] = 2;
+dyn[2] = 3;
+```
+
+This is invalid unless the dynamic array has already been initialized by other means.
+
+Since a freshly declared dynamic array is not initialized, users should write:
+
+```franko
+array<int32_t> dyn;
+
+dyn(3);
+
+dyn = [1, 2, 3];
+
+dyn.uninit();
+```
+
+or use declaration-array-init sugar first if available:
+
+```franko
+array<int32_t> dyn(3);
+
+dyn = [1, 2, 3];
+
+dyn.uninit();
+```
+
+The initializer list itself never emits:
+
+```franko
+dyn(3);
+```
+
+***
+
+## 21.4 Static Arrays
+
+For static arrays, initializer lists lower to indexed assignments.
+
+Example:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3];
+```
+
+is equivalent to:
+
+```franko
+array<int32_t, 3> xs;
+
+xs[0] = 1;
+xs[1] = 2;
+xs[2] = 3;
+```
+
+If the initializer list is shorter than the static array length, only the listed elements are assigned.
+
+Valid:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2];
+```
+
+Equivalent to:
+
+```franko
+xs[0] = 1;
+xs[1] = 2;
+```
+
+`xs[2]` is untouched.
+
+If the initializer list is longer than the static array length, the generated indexed assignment is rejected by ordinary static array bounds checking.
+
+Invalid:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3, 4];
+```
+
+Equivalent to:
+
+```franko
+xs[0] = 1;
+xs[1] = 2;
+xs[2] = 3;
+xs[3] = 4;
+```
+
+The checker rejects:
+
+```franko
+xs[3] = 4;
+```
+
+because index `3` is out of bounds for:
+
+```franko
+array<int32_t, 3>
+```
+
+There is no special “initializer length must exactly match static length” rule.
+
+The ordinary generated assignments determine validity.
+
+***
+
+## 21.5 Dynamic Arrays
+
+Array initializer lists do not initialize, allocate, resize, or reallocate dynamic arrays.
+
+Correct:
+
+```franko
+func main() -> int32_t {
+    array<int32_t> dyn;
+
+    dyn(3);
+
+    dyn = [1, 2, 3];
+
+    dyn.uninit();
+
+    return 0;
+}
+```
+
+Equivalent to:
+
+```franko
+func main() -> int32_t {
+    array<int32_t> dyn;
+
+    dyn(3);
+
+    dyn[0] = 1;
+    dyn[1] = 2;
+    dyn[2] = 3;
+
+    dyn.uninit();
+
+    return 0;
+}
+```
+
+Invalid:
+
+```franko
+func main() -> int32_t {
+    array<int32_t> dyn;
+
+    dyn = [1, 2, 3];
+
+    return 0;
+}
+```
+
+because it lowers to:
+
+```franko
+dyn[0] = 1;
+dyn[1] = 2;
+dyn[2] = 3;
+```
+
+without first initializing `dyn`.
+
+Whether an indexed access into a dynamic array is valid is checked by ordinary dynamic array use rules.
+
+***
+
+## 21.6 Element Expressions
+
+Initializer list elements are ordinary expressions.
+
+Valid:
+
+```franko
+func foo() -> int32_t {
+    return 10;
+}
+
+func main() -> int32_t {
+    array<int32_t> xs;
+
+    xs(4);
+
+    xs = [1, 1 + 1, foo(), foo()];
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+The generated assignments are checked normally:
+
+```franko
+xs[0] = 1;
+xs[1] = 1 + 1;
+xs[2] = foo();
+xs[3] = foo();
+```
+
+If an element expression is invalid, or if its value cannot be assigned to the array element type, the ordinary expression or assignment checker rejects the generated assignment.
+
+Example:
+
+```franko
+array<uint8_t, 3> bytes;
+
+bytes = [0, 127, 256];
+```
+
+lowers to:
+
+```franko
+bytes[0] = 0;
+bytes[1] = 127;
+bytes[2] = 256;
+```
+
+The assignment checker rejects:
+
+```franko
+bytes[2] = 256;
+```
+
+because `256` does not fit `uint8_t`.
+
+***
+
+## 21.7 Nested Initializer Lists
+
+Nested initializer lists represent recursive indexed assignment into nested arrays.
+
+Example:
+
+```franko
+array<array<int32_t, 2>, 2> matrix;
+
+matrix = [
+    [1, 2],
+    [3, 4]
+];
+```
+
+is equivalent to:
+
+```franko
+array<array<int32_t, 2>, 2> matrix;
+
+matrix[0][0] = 1;
+matrix[0][1] = 2;
+matrix[1][0] = 3;
+matrix[1][1] = 4;
+```
+
+Initializer list nesting should mirror the array nesting of the target.
+
+For a scalar element array:
+
+```franko
+array<int32_t, 3> xs;
+```
+
+the initializer elements should be scalar expressions:
+
+```franko
+xs = [1, 2, 3];
+```
+
+For a nested array:
+
+```franko
+array<array<int32_t, 2>, 2> matrix;
+```
+
+the initializer elements may themselves be initializer lists:
+
+```franko
+matrix = [
+    [1, 2],
+    [3, 4]
+];
+```
+
+A nested initializer list is only meaningful when the corresponding target element is itself an array.
+
+If the generated indexed assignments are not valid, the checker rejects them.
+
+Invalid:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [[1], [2], [3]];
+```
+
+because `xs[0]`, `xs[1]`, and `xs[2]` are scalar `int32_t` elements, not arrays.
+
+***
+
+## 21.8 Nested Dynamic Arrays
+
+Initializer lists do not allocate nested dynamic arrays.
+
+Correct:
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t>> matrix;
+
+    matrix(2);
+
+    matrix3;
+    matrix3;
+
+    matrix = [
+        [1, 2, 3],
+        [4, 5, 6]
+    ];
+
+    matrix[0].uninit();
+    matrix[1].uninit();
+    matrix.uninit();
+
+    return 0;
+}
+```
+
+Equivalent assignments:
+
+```franko
+matrix[0][0] = 1;
+matrix[0][1] = 2;
+matrix[0][2] = 3;
+
+matrix[1][0] = 4;
+matrix[1][1] = 5;
+matrix[1][2] = 6;
+```
+
+Invalid:
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t>> matrix;
+
+    matrix(2);
+
+    matrix = [
+        [1, 2, 3],
+        [4, 5, 6]
+    ];
+
+    matrix.uninit();
+
+    return 0;
+}
+```
+
+because the outer dynamic array is initialized, but `matrix[0]` and `matrix[1]` are not initialized.
+
+Also invalid:
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t>> matrix;
+
+    matrix = [
+        [1, 2, 3],
+        [4, 5, 6]
+    ];
+
+    return 0;
+}
+```
+
+because neither the outer array nor the inner arrays have been initialized.
+
+The rule is simple:
+
+> Initializer lists assign elements. They never allocate dynamic array storage at any level.
+
+***
+
+## 21.9 Empty Initializer Lists
+
+An empty initializer list emits no assignments.
+
+Example:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [];
+```
+
+is equivalent to:
+
+```franko
+array<int32_t, 3> xs;
+```
+
+No elements are assigned.
+
+For dynamic arrays:
+
+```franko
+array<int32_t> xs;
+
+xs = [];
+```
+
+also emits no assignments and does not initialize `xs`.
+
+This is allowed as a no-op initializer assignment unless another rule rejects it.
+
+***
+
+## 21.10 Array Initializer Lists and Global Scope
+
+Array initializer lists are assignment sugar.
+
+Therefore, they are only valid where the resulting assignment statements are valid.
+
+At global scope, executable statements are not allowed.
+
+Invalid:
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3]; // invalid at global scope
+```
+
+Declaration initializer sugar at global scope is also invalid if it desugars into executable assignments.
+
+Invalid:
+
+```franko
+array<int32_t, 3> xs = [1, 2, 3]; // invalid at global scope for now
+```
+
+Use initialization inside a function body:
+
+```franko
+array<int32_t, 3> xs;
+
+func main() -> int32_t {
+    xs = [1, 2, 3];
+
+    return 0;
+}
+```
+
+***
+
+## 21.11 Summary of Array Initializer Lists
+
+Array initializer lists in Franko are:
+
+* not general expressions;
+* not array values;
+* allowed as assignment initializer syntax;
+* allowed in declaration initializers through ordinary declaration-assignment sugar;
+* lowered to recursive indexed assignments;
+* allowed to contain ordinary expressions;
+* not required to contain compile-time constants;
+* partial when shorter than the target array;
+* rejected for static arrays only when generated indexes are out of bounds;
+* not responsible for allocating, resizing, or initializing dynamic arrays;
+* valid for dynamic arrays only when the target dynamic storage already exists;
+* recursively applicable to nested arrays.
+
+***
+
+# 22. Array Intrinsics
 
 Array operations are written using call syntax but lowered into special semantic nodes.
 
@@ -2560,7 +3567,7 @@ x + y
 
 ***
 
-## 20.1 `target(size)`
+## 22.1 `target(size)`
 
 Dynamic array initialization.
 
@@ -2630,7 +3637,7 @@ arr(0);  // invalid
 
 ***
 
-## 20.2 `target.uninit()`
+## 22.2 `target.uninit()`
 
 Dynamic array uninitialization.
 
@@ -2679,7 +3686,7 @@ arr.uninit(1); // invalid
 
 ***
 
-## 20.3 `target.memset(value)`
+## 22.3 `target.memset(value)`
 
 Fills an array byte-wise.
 
@@ -2750,7 +3757,7 @@ bytes.memset(x); // invalid
 
 ***
 
-## 20.4 Memsetable Element Types
+## 22.4 Memsetable Element Types
 
 Current memsetable types:
 
@@ -2764,10 +3771,10 @@ Current memsetable types:
 Examples:
 
 ```franko
-array<int32_t> a;            // memsetable
-array<array<int32_t, 4>> b;  // memsetable
-array<array<int32_t>> c;     // not memsetable
-array<addr<int32_t>> d;      // not memsetable
+array<int32_t> a;             // memsetable
+array<array<int32_t, 4>> b;   // memsetable
+array<array<int32_t>> c;      // not memsetable
+array<addr<int32_t>> d;       // not memsetable
 ```
 
 A static array element is memsetable only when its own element type is also memsetable.
@@ -2790,7 +3797,7 @@ nestedDynamicArrays.memset(0); // invalid
 
 ***
 
-## 20.5 `target.memcpy(source)`
+## 22.5 `target.memcpy(source)`
 
 Copies array contents byte-wise according to the generated C++ array model.
 
@@ -2898,7 +3905,7 @@ a.memcpy(b, c); // invalid
 
 ***
 
-## 20.6 Memcpyable Element Types
+## 22.6 Memcpyable Element Types
 
 Current memcpyable types:
 
@@ -2912,10 +3919,10 @@ Current memcpyable types:
 Examples:
 
 ```franko
-array<int32_t> a;            // memcpyable
-array<addr<int32_t>> b;      // memcpyable
-array<array<int32_t, 4>> c;  // memcpyable
-array<array<int32_t>> d;     // not memcpyable
+array<int32_t> a;             // memcpyable
+array<addr<int32_t>> b;       // memcpyable
+array<array<int32_t, 4>> c;   // memcpyable
+array<array<int32_t>> d;      // not memcpyable
 ```
 
 A static array element is memcpyable only when its own element type is also memcpyable.
@@ -2940,7 +3947,7 @@ a.memcpy(b); // invalid
 
 ***
 
-# 21. Addresses
+# 23. Addresses
 
 Franko has typed addresses:
 
@@ -2973,7 +3980,7 @@ Addresses are not arithmetic values.
 
 ***
 
-## 21.1 Creating Addresses with `getaddr`
+## 23.1 Creating Addresses with `getaddr`
 
 Syntax:
 
@@ -3045,7 +4052,7 @@ getaddr(x) = p; // invalid
 
 ***
 
-## 21.2 Dereferencing with `deref`
+## 23.2 Dereferencing with `deref`
 
 Syntax:
 
@@ -3098,7 +4105,7 @@ deref(x); // invalid: x is not an address
 
 ***
 
-## 21.3 Nested Addresses
+## 23.3 Nested Addresses
 
 Franko supports addresses to addresses.
 
@@ -3145,7 +4152,7 @@ deref(deref(pp)) = 5;
 
 ***
 
-## 21.4 Address Assignment
+## 23.4 Address Assignment
 
 Address assignment requires exact type equality.
 
@@ -3186,7 +4193,7 @@ Raw integers cannot be converted to addresses.
 
 ***
 
-## 21.5 Address Comparison
+## 23.5 Address Comparison
 
 Addresses may be compared using:
 
@@ -3248,7 +4255,7 @@ Address comparison produces `uint8_t`.
 
 ***
 
-## 21.6 No Address Arithmetic
+## 23.6 No Address Arithmetic
 
 Addresses are not integers.
 
@@ -3278,7 +4285,7 @@ Franko intentionally does not support pointer arithmetic.
 
 ***
 
-## 21.7 Addresses of Arrays
+## 23.7 Addresses of Arrays
 
 Arrays may be addressed.
 
@@ -3300,9 +4307,28 @@ deref(p).memset(0);
 
 is valid if the dereferenced array satisfies the intrinsic rules.
 
+Array initializer assignment through a dereferenced array address is also valid when the dereference produces a storage-backed array lvalue:
+
+```franko
+array<int32_t, 3> xs;
+addr<array<int32_t, 3>> p;
+
+p = getaddr(xs);
+
+deref(p) = [1, 2, 3];
+```
+
+Equivalent to:
+
+```franko
+deref(p)[0] = 1;
+deref(p)[1] = 2;
+deref(p)[2] = 3;
+```
+
 ***
 
-## 21.8 Address Lifetime Limitations
+## 23.8 Address Lifetime Limitations
 
 Address lifetime is not fully tracked.
 
@@ -3322,7 +4348,7 @@ The compiler does not fully track dangling addresses or aliasing through address
 
 ***
 
-# 22. `del` and Delete Checking
+# 24. `del` and Delete Checking
 
 The semantic model distinguishes between heap and non-heap variables.
 
@@ -3380,7 +4406,7 @@ Dynamic array `uninit()` is separate from `del`.
 
 ***
 
-## 22.1 Delete Checking Limitations
+## 24.1 Delete Checking Limitations
 
 Current limitations:
 
@@ -3404,17 +4430,17 @@ The compiler does not perform full ownership, lifetime, alias, or dangling-addre
 
 ***
 
-# 23. Type Equality
+# 25. Type Equality
 
 Franko uses exact semantic type equality in many places.
 
 ***
 
-## 23.1 Primitive Equality
+## 25.1 Primitive Equality
 
 Primitive types are equal only if they have the same kind.
 
-```franko
+```text
 uint8_t  != uint16_t
 int32_t  != uint32_t
 int32_t  == int32_t
@@ -3424,46 +4450,47 @@ The alias `int` canonicalizes to `int32_t`.
 
 ***
 
-## 23.2 Dynamic Array Equality
+## 25.2 Dynamic Array Equality
 
 Dynamic arrays are equal if their element types are equal.
 
-```franko
+```text
 array<int32_t> == array<int32_t>
 array<int32_t> != array<uint8_t>
 ```
 
 ***
 
-## 23.3 Static Array Equality
+## 25.3 Static Array Equality
 
 Static arrays are equal if:
 
 * element types are equal;
 * sizes are numerically equal.
 
-For example, these sizes are considered equal if parsed successfully:
+For example, these sizes are considered equal if parsed and folded successfully:
 
 ```franko
 array<int32_t, 16>
 array<int32_t, 0x10>
 array<int32_t, 0b10000>
+array<int32_t, 8 + 8>
 ```
 
 ***
 
-## 23.4 Address Equality
+## 25.4 Address Equality
 
 Address types are equal if their referenced types are equal.
 
-```franko
+```text
 addr<int32_t> == addr<int32_t>
 addr<int32_t> != addr<uint8_t>
 ```
 
 ***
 
-## 23.5 Function Signature Equality
+## 25.5 Function Signature Equality
 
 Function signatures are equal if they have:
 
@@ -3494,7 +4521,7 @@ f(int32_t)
 
 ***
 
-# 24. Declaration Type Validity
+# 26. Declaration Type Validity
 
 A declared variable type is valid if it is one of:
 
@@ -3539,13 +4566,13 @@ Array return types are invalid.
 
 ***
 
-# 25. Unsupported or Restricted Features
+# 27. Unsupported or Restricted Features
 
 The current Franko implementation intentionally leaves several areas restricted or incomplete.
 
 ***
 
-## 25.1 Function Restrictions
+## 27.1 Function Restrictions
 
 User-defined functions and general function calls are implemented.
 
@@ -3565,7 +4592,7 @@ Current function restrictions:
 
 ***
 
-## 25.2 No General Methods
+## 27.2 No General Methods
 
 Only array intrinsic member calls are recognized.
 
@@ -3588,7 +4615,7 @@ unless implemented later by a future semantic pass.
 
 ***
 
-## 25.3 No Structs or Fields
+## 27.3 No Structs or Fields
 
 There are no user-defined aggregate types beyond arrays.
 
@@ -3596,19 +4623,19 @@ General member access is not currently implemented.
 
 ***
 
-## 25.4 No Floating-Point Types
+## 27.4 No Floating-Point Types
 
 Only integer primitives are supported.
 
 ***
 
-## 25.5 No Separate Boolean Type
+## 27.5 No Separate Boolean Type
 
 Boolean results use `uint8_t`.
 
 ***
 
-## 25.6 No Implicit Numeric Conversions for Nonconstants
+## 27.6 No Implicit Numeric Conversions for Nonconstants
 
 This is invalid:
 
@@ -3623,9 +4650,9 @@ Constants are special and may fit contextually.
 
 ***
 
-## 25.7 Arrays Are Not Assignable
+## 27.7 Arrays Are Not Assignable as Values
 
-Arrays cannot be assigned directly.
+Arrays cannot be assigned directly as ordinary values.
 
 Invalid:
 
@@ -3646,9 +4673,57 @@ a.uninit();
 
 depending on the intended operation.
 
+Array initializer assignment is an exception only in syntax shape, not in value semantics:
+
+```franko
+a = [1, 2, 3];
+```
+
+This does not assign an array value to `a`.
+
+It lowers to:
+
+```franko
+a[0] = 1;
+a[1] = 2;
+a[2] = 3;
+```
+
 ***
 
-## 25.8 No Full Array Lifetime Checking
+## 27.8 Array Initializer Lists Are Not General Values
+
+Array initializer lists are not first-class values.
+
+Invalid:
+
+```franko
+[1, 2, 3];
+```
+
+Invalid:
+
+```franko
+print([1, 2, 3]);
+```
+
+Invalid:
+
+```franko
+foo([1, 2, 3]);
+```
+
+Invalid:
+
+```franko
+return [1, 2, 3];
+```
+
+They are only valid in assignment-style array initialization contexts.
+
+***
+
+## 27.9 No Full Array Lifetime Checking
 
 The checker validates intrinsic legality, but it does not fully prove:
 
@@ -3659,7 +4734,7 @@ The checker validates intrinsic legality, but it does not fully prove:
 
 ***
 
-## 25.9 Delete Checking Is Limited
+## 27.10 Delete Checking Is Limited
 
 Delete checking is currently:
 
@@ -3671,7 +4746,7 @@ It does not fully track dangling addresses or ownership.
 
 ***
 
-## 25.10 Address Lifetime Is Not Fully Tracked
+## 27.11 Address Lifetime Is Not Fully Tracked
 
 This may not be fully diagnosed:
 
@@ -3687,13 +4762,19 @@ deref(p);
 
 ***
 
-## 25.11 Print Checking Is Loose
+## 27.12 Print Checking Is Loose
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set.
 
+Array initializer lists are not expressions and therefore cannot be printed directly:
+
+```franko
+print([1, 2, 3]); // invalid
+```
+
 ***
 
-## 25.12 Unsupported Operators
+## 27.13 Unsupported Operators
 
 The following are not currently implemented:
 
@@ -3705,7 +4786,29 @@ The following are not currently implemented:
 
 ***
 
-## 25.13 Global Scope Is Declaration-Only
+## 27.14 No String Literals Yet
+
+String literals are not currently implemented.
+
+Invalid:
+
+```franko
+print("hello");
+```
+
+Invalid:
+
+```franko
+array<uint8_t, 5> hello;
+
+hello = "hello";
+```
+
+If string literals are added later, they may be specified separately as contextual byte-array initializer forms or as first-class string values, depending on the future language design.
+
+***
+
+## 27.15 Global Scope Is Declaration-Only
 
 Only the following nodes are valid at global scope:
 
@@ -3727,11 +4830,19 @@ del x;
 }
 arr(10);
 arr.memset(0);
+arr = [1, 2, 3];
+```
+
+Declaration initializer sugar at global scope is also invalid if it desugars into executable statements:
+
+```franko
+uint32_t g = 1;                  // invalid at global scope for now
+array<int32_t, 3> xs = [1, 2, 3]; // invalid at global scope for now
 ```
 
 ***
 
-# 26. Runtime and Backend Notes
+# 28. Runtime and Backend Notes
 
 The current compiler targets C++14.
 
@@ -3752,15 +4863,51 @@ Function signatures are registered before function bodies are analyzed so that f
 
 Global variable declarations are also registered before function bodies are analyzed, so functions can reference globals declared later in source order.
 
+Array initializer lists are lowered before ordinary semantic checking.
+
+For example:
+
+```franko
+xs = [1, 2, 3];
+```
+
+is lowered to:
+
+```franko
+xs[0] = 1;
+xs[1] = 2;
+xs[2] = 3;
+```
+
+Nested initializer lists are lowered recursively:
+
+```franko
+matrix = [
+    [1, 2],
+    [3, 4]
+];
+```
+
+is lowered to:
+
+```franko
+matrix[0][0] = 1;
+matrix[0][1] = 2;
+matrix[1][0] = 3;
+matrix[1][1] = 4;
+```
+
+The backend does not need to implement initializer lists as runtime values because they are not values in Franko.
+
 ***
 
-# 27. Examples
+# 29. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
 ***
 
-## 27.1 Basic Integers
+## 29.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -3778,7 +4925,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.2 Using `int` Alias
+## 29.2 Using `int` Alias
 
 ```franko
 func main() -> int {
@@ -3806,13 +4953,13 @@ func main() -> int32_t {
 
 ***
 
-## 27.3 Constants Fitting Smaller Types
+## 29.3 Constants Fitting Smaller Types
 
 ```franko
 func main() -> int32_t {
     uint8_t b;
 
-    b = 255; // valid
+    b = 255;
     // b = 256; // invalid
 
     return 0;
@@ -3821,7 +4968,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.4 Dynamic Array
+## 29.4 Dynamic Array
 
 ```franko
 func main() -> int32_t {
@@ -3843,7 +4990,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.5 Static Array
+## 29.5 Static Array
 
 ```franko
 func main() -> int32_t {
@@ -3858,7 +5005,334 @@ func main() -> int32_t {
 
 ***
 
-## 27.6 Array Copy
+## 29.6 Static Array Initializer Assignment
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+
+    xs = [1, 2, 3];
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+
+    xs[0] = 1;
+    xs[1] = 2;
+    xs[2] = 3;
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    return 0;
+}
+```
+
+***
+
+## 29.7 Static Partial Initializer Assignment
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+
+    xs = [1, 2];
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+
+    xs[0] = 1;
+    xs[1] = 2;
+
+    return 0;
+}
+```
+
+`xs[2]` is untouched.
+
+***
+
+## 29.8 Dynamic Array Initializer Assignment
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+
+    xs(3);
+
+    xs = [10, 20, 30];
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+
+    xs(3);
+
+    xs[0] = 10;
+    xs[1] = 20;
+    xs[2] = 30;
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+***
+
+## 29.9 Runtime Expressions Inside Initializer Lists
+
+```franko
+func getValue() -> int32_t {
+    return 10;
+}
+
+func main() -> int32_t {
+    int32_t x;
+
+    x = 5;
+
+    array<int32_t> xs;
+
+    xs(4);
+
+    xs = [1, x, getValue(), 1 + 2];
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    int32_t x;
+
+    x = 5;
+
+    array<int32_t> xs;
+
+    xs(4);
+
+    xs[0] = 1;
+    xs[1] = x;
+    xs[2] = getValue();
+    xs[3] = 1 + 2;
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+***
+
+## 29.10 Nested Static Arrays
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t, 2>, 2> matrix;
+
+    matrix = [
+        [1, 2],
+        [3, 4]
+    ];
+
+    print(matrix[0][0]);
+    print(matrix[1][1]);
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t, 2>, 2> matrix;
+
+    matrix[0][0] = 1;
+    matrix[0][1] = 2;
+    matrix[1][0] = 3;
+    matrix[1][1] = 4;
+
+    print(matrix[0][0]);
+    print(matrix[1][1]);
+
+    return 0;
+}
+```
+
+***
+
+## 29.11 Nested Dynamic Arrays
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t>> matrix;
+
+    matrix(2);
+
+    matrix3;
+    matrix3;
+
+    matrix = [
+        [1, 2, 3],
+        [4, 5, 6]
+    ];
+
+    matrix[0].uninit();
+    matrix[1].uninit();
+    matrix.uninit();
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    array<array<int32_t>> matrix;
+
+    matrix(2);
+
+    matrix3;
+    matrix3;
+
+    matrix[0][0] = 1;
+    matrix[0][1] = 2;
+    matrix[0][2] = 3;
+
+    matrix[1][0] = 4;
+    matrix[1][1] = 5;
+    matrix[1][2] = 6;
+
+    matrix[0].uninit();
+    matrix[1].uninit();
+    matrix.uninit();
+
+    return 0;
+}
+```
+
+***
+
+## 29.12 Declaration Initializer with Static Array
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs = [1, 2, 3];
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    return 0;
+}
+```
+
+Equivalent to:
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+
+    xs[0] = 1;
+    xs[1] = 2;
+    xs[2] = 3;
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    return 0;
+}
+```
+
+***
+
+## 29.13 Invalid Dynamic Array Declaration Initializer
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs = [1, 2, 3];
+
+    return 0;
+}
+```
+
+Invalid because this desugars to:
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+
+    xs[0] = 1;
+    xs[1] = 2;
+    xs[2] = 3;
+
+    return 0;
+}
+```
+
+without initializing dynamic storage.
+
+Correct:
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+
+    xs(3);
+
+    xs = [1, 2, 3];
+
+    xs.uninit();
+
+    return 0;
+}
+```
+
+***
+
+## 29.14 Array Copy
 
 ```franko
 func main() -> int32_t {
@@ -3870,13 +5344,15 @@ func main() -> int32_t {
     b.memset(0);
     a.memcpy(b);
 
+    a.uninit();
+
     return 0;
 }
 ```
 
 ***
 
-## 27.7 Heap Variable
+## 29.15 Heap Variable
 
 ```franko
 func main() -> int32_t {
@@ -3893,7 +5369,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.8 Allocated Dynamic Array Initialization Sugar
+## 29.16 Allocated Dynamic Array Initialization Sugar
 
 ```franko
 func main() -> int32_t {
@@ -3912,6 +5388,7 @@ Equivalent to:
 ```franko
 func main() -> int32_t {
     alloc array<int> arr;
+
     arr(20);
 
     arr.memset(0);
@@ -3924,7 +5401,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.9 Addresses
+## 29.17 Addresses
 
 ```franko
 func main() -> int32_t {
@@ -3944,7 +5421,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.10 Address of Array Element
+## 29.18 Address of Array Element
 
 ```franko
 func main() -> int32_t {
@@ -3958,13 +5435,15 @@ func main() -> int32_t {
 
     print(deref(p));
 
+    arr.uninit();
+
     return 0;
 }
 ```
 
 ***
 
-## 27.11 Nested Addresses
+## 29.19 Nested Addresses
 
 ```franko
 func main() -> int32_t {
@@ -3987,7 +5466,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.12 Address Comparison
+## 29.20 Address Comparison
 
 ```franko
 func main() -> int32_t {
@@ -4010,7 +5489,7 @@ func main() -> int32_t {
 
 ***
 
-## 27.13 Dynamic Array Through Address
+## 29.21 Dynamic Array Through Address
 
 ```franko
 func main() -> int32_t {
@@ -4031,7 +5510,49 @@ This is valid because `memset` and `uninit` accept storage-backed array lvalues.
 
 ***
 
-## 27.14 Valid Empty-Parameter `main`
+## 29.22 Array Initializer Through Address
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    addr<array<int32_t, 3>> p;
+
+    p = getaddr(xs);
+
+    deref(p) = [1, 2, 3];
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    return 0;
+}
+```
+
+Equivalent core form:
+
+```franko
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    addr<array<int32_t, 3>> p;
+
+    p = getaddr(xs);
+
+    deref(p)[0] = 1;
+    deref(p)[1] = 2;
+    deref(p)[2] = 3;
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+
+    return 0;
+}
+```
+
+***
+
+## 29.23 Valid Empty-Parameter `main`
 
 ```franko
 func main() -> int {
@@ -4043,7 +5564,7 @@ Valid if `int` is the canonical alias for `int32_t`.
 
 ***
 
-## 27.15 Valid `void` Function
+## 29.24 Valid `void` Function
 
 ```franko
 func voidfunc() -> void {
@@ -4054,7 +5575,7 @@ A `void` function does not need to return.
 
 ***
 
-## 27.16 Valid `void` Function with Bare Return
+## 29.25 Valid `void` Function with Bare Return
 
 ```franko
 func logDone() -> void {
@@ -4064,7 +5585,7 @@ func logDone() -> void {
 
 ***
 
-## 27.17 Invalid `void` Function Returning a Value
+## 29.26 Invalid `void` Function Returning a Value
 
 ```franko
 func badVoid() -> void {
@@ -4076,7 +5597,7 @@ Invalid because `void` functions must not return an expression.
 
 ***
 
-## 27.18 Valid Non-`void` Function
+## 29.27 Valid Non-`void` Function
 
 ```franko
 func getValue() -> int32_t {
@@ -4086,7 +5607,7 @@ func getValue() -> int32_t {
 
 ***
 
-## 27.19 Invalid Non-`void` Function with No Return
+## 29.28 Invalid Non-`void` Function with No Return
 
 ```franko
 func getValue() -> int32_t {
@@ -4097,7 +5618,7 @@ Invalid because a non-`void` function must return an expression.
 
 ***
 
-## 27.20 Invalid Non-`void` Function with Bare Return
+## 29.29 Invalid Non-`void` Function with Bare Return
 
 ```franko
 func getValue() -> int32_t {
@@ -4109,7 +5630,7 @@ Invalid because a non-`void` function must return an expression.
 
 ***
 
-## 27.21 Valid Overloads by Parameter Type
+## 29.30 Valid Overloads by Parameter Type
 
 ```franko
 func f(int32_t x) -> int32_t {
@@ -4130,7 +5651,7 @@ f(uint32_t)
 
 ***
 
-## 27.22 Valid Overloads by Parameter Order
+## 29.31 Valid Overloads by Parameter Order
 
 ```franko
 func f(int32_t x, uint32_t y) -> int32_t {
@@ -4151,7 +5672,7 @@ f(uint32_t, int32_t)
 
 ***
 
-## 27.23 Invalid Duplicate with Different Parameter Names
+## 29.32 Invalid Duplicate with Different Parameter Names
 
 ```franko
 func f(int32_t x) -> int32_t {
@@ -4173,7 +5694,7 @@ f(int32_t)
 
 ***
 
-## 27.24 Invalid Duplicate with Different Return Types
+## 29.33 Invalid Duplicate with Different Return Types
 
 ```franko
 func f(int32_t x) -> int32_t {
@@ -4195,7 +5716,7 @@ f(int32_t)
 
 ***
 
-## 27.25 Invalid Duplicate Parameter Names Inside One Function
+## 29.34 Invalid Duplicate Parameter Names Inside One Function
 
 ```franko
 func bad(int32_t x, uint32_t x) -> int32_t {
@@ -4207,7 +5728,7 @@ Invalid because parameters are variables inside the function body, and the same 
 
 ***
 
-## 27.26 Valid Forward Reference
+## 29.35 Valid Forward Reference
 
 ```franko
 func a() -> int32_t {
@@ -4223,7 +5744,7 @@ Valid because function signatures are registered before function bodies are anal
 
 ***
 
-## 27.27 Valid Direct Recursion
+## 29.36 Valid Direct Recursion
 
 ```franko
 func countdown(int32_t x) -> int32_t {
@@ -4237,7 +5758,7 @@ Termination and full return-path legality are separate checker concerns.
 
 ***
 
-## 27.28 Valid Mutual Recursion
+## 29.37 Valid Mutual Recursion
 
 ```franko
 func even(int32_t x) -> int32_t {
@@ -4253,7 +5774,7 @@ Valid at the function-resolution level because both signatures are registered be
 
 ***
 
-## 27.29 Valid Constant Argument Overload Resolution
+## 29.38 Valid Constant Argument Overload Resolution
 
 ```franko
 func f(uint8_t x) -> void {
@@ -4262,13 +5783,14 @@ func f(uint8_t x) -> void {
 
 func main() -> int32_t {
     f(255); // valid: 255 fits uint8_t
+
     return 0;
 }
 ```
 
 ***
 
-## 27.30 Invalid Constant Argument Overload Resolution
+## 29.39 Invalid Constant Argument Overload Resolution
 
 ```franko
 func f(uint8_t x) -> void {
@@ -4277,13 +5799,14 @@ func f(uint8_t x) -> void {
 
 func main() -> int32_t {
     f(256); // invalid: 256 does not fit uint8_t
+
     return 0;
 }
 ```
 
 ***
 
-## 27.31 Ambiguous Constant Argument Overload Resolution
+## 29.40 Ambiguous Constant Argument Overload Resolution
 
 ```franko
 func f(uint8_t x) -> void {
@@ -4294,18 +5817,20 @@ func f(uint32_t x) -> void {
 
 func main() -> int32_t {
     f(1); // invalid: 1 fits both uint8_t and uint32_t
+
     return 0;
 }
 ```
 
 ***
 
-## 27.32 Valid Global Variable Used Before Source Declaration
+## 29.41 Valid Global Variable Used Before Source Declaration
 
 ```franko
 func main() -> int32_t {
     g = 10;
     print(g);
+
     return 0;
 }
 
@@ -4316,7 +5841,7 @@ Valid because global variable declarations are registered before function bodies
 
 ***
 
-## 27.33 Invalid Global Assignment
+## 29.42 Invalid Global Assignment
 
 ```franko
 uint32_t g;
@@ -4326,7 +5851,17 @@ g = 10; // invalid: assignment is not allowed at global scope
 
 ***
 
-## 27.34 Valid Address Return
+## 29.43 Invalid Global Array Initializer Assignment
+
+```franko
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3]; // invalid: assignment is not allowed at global scope
+```
+
+***
+
+## 29.44 Valid Address Return
 
 ```franko
 func getPointer(addr<int32_t> p) -> addr<int32_t> {
@@ -4338,7 +5873,7 @@ Valid because `addr<int32_t>` is assignable.
 
 ***
 
-## 27.35 Valid Address-to-Dynamic-Array Return
+## 29.45 Valid Address-to-Dynamic-Array Return
 
 ```franko
 func getArray(addr<array<int32_t>> p) -> addr<array<int32_t>> {
@@ -4350,7 +5885,7 @@ Valid because the return type is an address type, not an array type.
 
 ***
 
-## 27.36 Valid Address-to-Static-Array Return
+## 29.46 Valid Address-to-Static-Array Return
 
 ```franko
 func getBuffer(
@@ -4364,7 +5899,7 @@ Valid because `addr<array<uint8_t, 128>>` is assignable.
 
 ***
 
-## 27.37 Invalid Dynamic Array Return
+## 29.47 Invalid Dynamic Array Return
 
 ```franko
 func makeArray() -> array<int32_t> {
@@ -4382,7 +5917,7 @@ Use an address-returning design instead.
 
 ***
 
-## 27.38 Invalid Static Array Return
+## 29.48 Invalid Static Array Return
 
 ```franko
 func makeBuffer() -> array<uint8_t, 128> {
@@ -4398,7 +5933,7 @@ Invalid because `array<uint8_t, 128>` is not assignable and therefore cannot be 
 
 ***
 
-## 27.39 Recommended Array-Through-Address Pattern
+## 29.49 Recommended Array-Through-Address Pattern
 
 ```franko
 func fill(addr<array<int32_t>> p) -> void {
@@ -4415,6 +5950,8 @@ func main() -> int32_t {
 
     fill(p);
 
+    arr.uninit();
+
     return 0;
 }
 ```
@@ -4423,7 +5960,7 @@ The function receives an address to the array and mutates the caller-owned array
 
 ***
 
-## 27.40 Recommended Copied-Array Pattern
+## 29.50 Recommended Copied-Array Pattern
 
 If the user wants a separate array result, the program should explicitly create and copy array storage instead of returning an array by value.
 
@@ -4449,6 +5986,9 @@ func main() -> int32_t {
     pb = getaddr(b);
 
     copyInto(pb, pa);
+
+    a.uninit();
+    b.uninit();
 
     return 0;
 }
