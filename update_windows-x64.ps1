@@ -1,7 +1,35 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+trap {
+    [Console]::Error.WriteLine("Error: command failed: $($_.InvocationInfo.Line.Trim())")
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
+
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+function RunNative {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Exe,
+
+        [Parameter(Mandatory = $false)]
+        [string[]] $Argv = @()
+    )
+
+    $display = @()
+    $display += $Exe
+    $display += $Argv
+
+    Write-Host ($display -join " ")
+
+    & $Exe @Argv
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code $LASTEXITCODE`: $($display -join ' ')"
+    }
+}
 
 $ANTLR_JAR = Join-Path $ROOT "lib\antlr-4.13.2-complete.jar"
 
@@ -39,10 +67,6 @@ function Step {
 
     & $Action
 
-    if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
-        throw "Step $script:STEP_NO failed with exit code $LASTEXITCODE"
-    }
-
     Write-Host "[Step $script:STEP_NO] Done."
 }
 
@@ -51,7 +75,7 @@ New-Item -ItemType Directory -Force -Path $GEN_DIR, $CLS_DIR | Out-Null
 Push-Location $ROOT
 
 try {
-    Step "Remove-Item `"$GEN_DIR\*`" `"$CLS_DIR\*`" -Recurse -Force" {
+    Step "Clear generated and class output directories" {
         Get-ChildItem -LiteralPath $GEN_DIR -Force -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force
 
@@ -59,11 +83,20 @@ try {
             Remove-Item -Recurse -Force
     }
 
-    Step "java -Xmx500M -cp `"$ANTLR_CP`" org.antlr.v4.Tool -visitor -o `"$GEN_DIR`" Franko.g4" {
-        & java -Xmx500M -cp $ANTLR_CP org.antlr.v4.Tool -visitor -o $GEN_DIR Franko.g4
+    Step "Generate ANTLR parser/visitor files" {
+        $antlrArgs = @(
+            "-Xmx500M",
+            "-cp", $ANTLR_CP,
+            "org.antlr.v4.Tool",
+            "-visitor",
+            "-o", $GEN_DIR,
+            "Franko.g4"
+        )
+
+        RunNative -Exe "java" -Argv $antlrArgs
     }
 
-    Step "javac --release 25 -Xlint:all,-auxiliaryclass -cp `"$ANTLR_CP;$GEN_DIR`" -d `"$CLS_DIR`" *.java `"$GEN_DIR\*.java`"" {
+    Step "Compile Java compiler classes" {
         $javaFiles = @(
             Get-ChildItem -LiteralPath $ROOT -Filter "*.java" -File
             Get-ChildItem -LiteralPath $GEN_DIR -Filter "*.java" -File
@@ -73,7 +106,18 @@ try {
             throw "No Java source files found to compile."
         }
 
-        & javac -cp "$ANTLR_CP;$GEN_DIR" -d $CLS_DIR @($javaFiles.FullName)
+        $javacArgs = @(
+            "--release", "25",
+            "-Xlint:all,-auxiliaryclass",
+            "-cp", "$ANTLR_CP;$GEN_DIR",
+            "-d", $CLS_DIR
+        )
+
+        foreach ($file in $javaFiles) {
+            $javacArgs += $file.FullName
+        }
+
+        RunNative -Exe "javac" -Argv $javacArgs
     }
 
     Write-Host ""
