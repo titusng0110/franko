@@ -424,18 +424,9 @@ public class Cpp14Codegen {
         String name = emitSymbolName(sym);
 
         if (sym.isHeap) {
-            /*
-             * Use new/delete rather than malloc/free.
-             *
-             * This matters for array wrapper structs because default member
-             * initializers such as:
-             *
-             *   uint32_t length = 0;
-             *   T* data = nullptr;
-             *
-             * are only reliably initialized through construction.
-             */
-            emitLine(cppType + "* " + name + " = new " + cppType + "();");
+            emitLine(cppType + "* " + name + " = static_cast<" + cppType + "*>(je_malloc(sizeof(" + cppType + ")));");
+            emitLine("if (!" + name + ") throw std::bad_alloc();");
+            emitLine("new (" + name + ") " + cppType + ";");
         } else {
             emitLine(cppType + " " + name + ";");
         }
@@ -487,7 +478,8 @@ public class Cpp14Codegen {
             );
         }
 
-        emitLine("delete " + emitSymbolName(sym) + ";");
+        emitLine(emitSymbolName(sym) + "->~" + emitType(sym.type) + "();");
+        emitLine("je_free(" + emitSymbolName(sym) + ");");
         emitLine(emitSymbolName(sym) + " = nullptr;");
     }
 

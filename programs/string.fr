@@ -123,6 +123,6 @@ Line 3"
         print(str[i])
         i = i + 1
     }
-
+    str.uninit()
     return 0
 }
