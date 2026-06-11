@@ -207,7 +207,6 @@ $GppArgs = @(
     "-I$JEMALLOC_INCLUDE",
     $CPP_OUT,
     $JEMALLOC_LIB,
-    "-lwinpthread",
     "-o",
     $BIN_OUT
 )
