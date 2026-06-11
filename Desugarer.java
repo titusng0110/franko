@@ -15,6 +15,41 @@ public class Desugarer {
     }
 
     // ============================================================
+    // String-literal initializer handling
+    // ============================================================
+
+    /**
+     * Converts initializer-like values before ordinary assignment/declaration
+     * lowering.
+     *
+     * String literals lower to ArrayLiteralNode of UTF-8 byte values.
+     *
+     * Example:
+     *
+     *   "a\nb"
+     *
+     * becomes:
+     *
+     *   [97, 10, 98]
+     *
+     * No null terminator is appended.
+     *
+     * The returned ArrayLiteralNode is then handled by the existing
+     * array-initializer lowering in this same desugarer pass.
+     */
+    private ASTNode desugarInitializerValue(ASTNode value) {
+        if (value == null) return null;
+
+        if (value instanceof StringLiteralNode) {
+            return StringLiteralDecoder.toUtf8ByteArrayLiteral(
+                (StringLiteralNode) value
+            );
+        }
+
+        return value;
+    }
+
+    // ============================================================
     // Top-level handling
     // ============================================================
 
@@ -122,6 +157,21 @@ public class Desugarer {
      *   xs[1] = 2;
      *   xs[2] = 3;
      *
+     * String literal declaration sugar:
+     *
+     *   array<byte, 3> c = "a\nb";
+     *
+     * first becomes:
+     *
+     *   array<byte, 3> c = [97, 10, 98];
+     *
+     * then, in the same desugarer pass, becomes:
+     *
+     *   array<byte, 3> c;
+     *   c[0] = 97;
+     *   c[1] = 10;
+     *   c[2] = 98;
+     *
      * For dynamic arrays, no allocation/init is emitted:
      *
      *   array<int32_t> xs = [1, 2, 3];
@@ -217,11 +267,12 @@ public class Desugarer {
         }
 
         ASTNode target = new VarNode(n.name);
+        ASTNode init = desugarInitializerValue(n.init);
 
-        if (n.init instanceof ArrayLiteralNode) {
+        if (init instanceof ArrayLiteralNode) {
             appendArrayInitializerAssignments(
                 target,
-                (ArrayLiteralNode) n.init,
+                (ArrayLiteralNode) init,
                 out
             );
             return;
@@ -229,7 +280,7 @@ public class Desugarer {
 
         out.add(new AssignNode(
             target,
-            desugarExpr(n.init)
+            desugarExpr(init)
         ));
     }
 
@@ -261,11 +312,12 @@ public class Desugarer {
         List<ASTNode> out
     ) {
         ASTNode target = desugarLValue(n.target);
+        ASTNode value = desugarInitializerValue(n.value);
 
-        if (n.value instanceof ArrayLiteralNode) {
+        if (value instanceof ArrayLiteralNode) {
             appendArrayInitializerAssignments(
                 target,
-                (ArrayLiteralNode) n.value,
+                (ArrayLiteralNode) value,
                 out
             );
             return;
@@ -273,7 +325,7 @@ public class Desugarer {
 
         out.add(new AssignNode(
             target,
-            desugarExpr(n.value)
+            desugarExpr(value)
         ));
     }
 
@@ -304,8 +356,9 @@ public class Desugarer {
 
         if (stmt instanceof AssignNode) {
             AssignNode n = (AssignNode) stmt;
+            ASTNode value = desugarInitializerValue(n.value);
 
-            if (n.value instanceof ArrayLiteralNode) {
+            if (value instanceof ArrayLiteralNode) {
                 List<ASTNode> lowered = new ArrayList<>();
                 appendDesugaredAssign(n, lowered);
                 return new BlockNode(lowered);
@@ -313,7 +366,7 @@ public class Desugarer {
 
             return new AssignNode(
                 desugarLValue(n.target),
-                desugarExpr(n.value)
+                desugarExpr(value)
             );
         }
 
@@ -419,6 +472,18 @@ public class Desugarer {
      *   target[1][0] = c;
      *   target[1][1] = d;
      *
+     * String literal elements are first converted to UTF-8 byte array
+     * literals and then recursively lowered:
+     *
+     *   target = ["hi", "ok"];
+     *
+     * becomes:
+     *
+     *   target[0][0] = 104;
+     *   target[0][1] = 105;
+     *   target[1][0] = 111;
+     *   target[1][1] = 107;
+     *
      * This lowering is purely syntactic.
      *
      * It does not:
@@ -436,7 +501,7 @@ public class Desugarer {
         ASTNode loweredTarget = desugarLValue(target);
 
         for (int i = 0; i < literal.elements.size(); i++) {
-            ASTNode element = literal.elements.get(i);
+            ASTNode element = desugarInitializerValue(literal.elements.get(i));
 
             ASTNode indexedTarget = new ArrayAccessNode(
                 cloneLValue(loweredTarget),
@@ -468,6 +533,24 @@ public class Desugarer {
 
         if (expr instanceof IntNode) {
             return expr;
+        }
+
+        /*
+         * String literals are lowered to UTF-8 byte array literals.
+         *
+         * In initializer contexts, that ArrayLiteralNode will be further
+         * lowered to indexed assignments in the same desugar pass.
+         *
+         * In ordinary expression contexts, this returns an ArrayLiteralNode.
+         * If your language does not allow array literals as ordinary
+         * expressions, the later semantic checker should reject those cases,
+         * or you can choose to reject StringLiteralNode here outside
+         * initializer contexts.
+         */
+        if (expr instanceof StringLiteralNode) {
+            return StringLiteralDecoder.toUtf8ByteArrayLiteral(
+                (StringLiteralNode) expr
+            );
         }
 
         if (expr instanceof VarNode) {

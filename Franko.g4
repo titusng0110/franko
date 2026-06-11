@@ -236,7 +236,7 @@ exprStmt
 
 // ---------- EXPRESSIONS ----------
 //
-// Precedence (lowest to highest):
+// Precedence lowest to highest:
 //   ||
 //   &&
 //   |
@@ -325,6 +325,7 @@ postfixExpr
 
 primary
     : integerLiteral
+    | stringLiteral
     | IDENTIFIER
     | getAddrExpr
     | derefExpr
@@ -413,6 +414,7 @@ memberName
 //   - getaddr(...)
 //   - deref(...)
 //   - array initializer lists
+//   - string literals
 //
 // Semantic checker should still reject invalid constant expressions such as:
 //   1 / 0
@@ -547,12 +549,16 @@ derefExpr
     : DEREF LPAREN expr RPAREN
     ;
 
-// ---------- INTEGER LITERALS ----------
+// ---------- LITERALS ----------
 
 integerLiteral
     : INT_LITERAL
     | BIN_LITERAL
     | HEX_LITERAL
+    ;
+
+stringLiteral
+    : STRING_LITERAL
     ;
 
 // ---------- TYPES ----------
@@ -659,6 +665,37 @@ LBRACE : '{' ;
 RBRACE : '}' ;
 
 // Identifiers / literals
+//
+// String literals:
+//   - start with "
+//   - end with "
+//   - may contain raw Unicode characters
+//   - may contain literal tabs
+//   - may contain literal newlines
+//   - may not contain a raw unescaped "
+//   - may not contain a raw unescaped backslash
+//
+// Supported escapes only:
+//   \\
+//   \"
+//   \a
+//   \b
+//   \f
+//   \n
+//   \r
+//   \t
+//   \v
+//
+// No Unicode escape syntax is supported.
+// So \u1234, \xFF, \0, and \q are invalid.
+STRING_LITERAL
+    : '"' (STRING_ESCAPE | ~["\\])* '"'
+    ;
+
+fragment STRING_ESCAPE
+    : '\\' [\\"abfnrtv]
+    ;
+
 IDENTIFIER  : [a-zA-Z_][a-zA-Z0-9_]* ;
 BIN_LITERAL : '0' [bB] [01]+ ;
 HEX_LITERAL : '0' [xX] [0-9a-fA-F]+ ;
