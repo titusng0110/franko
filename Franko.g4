@@ -113,6 +113,7 @@ simpleStmt
 //   int32_t x = 1 + 2;
 //   array<int32_t, 3> xs = [1, 2, 3];
 //   array<int32_t> ys = [1, 2, 3];
+//   ndarray<byte, 12, 12> grid;
 //
 // Important:
 //   T x = [ ... ];
@@ -389,12 +390,14 @@ memberName
     | UINT32_T
     | UINT64_T
     | ARRAY
+    | NDARRAY
     ;
 
 // ---------- CONSTANT EXPRESSIONS ----------
 //
 // Used for:
 //   - static array size expressions
+//   - ndarray dimension expressions
 //
 // A constExpr is syntactically restricted to expressions that can be
 // computed from the expression alone:
@@ -425,6 +428,11 @@ memberName
 
 constExpr
     : constLogicalOrExpr
+    ;
+
+// Used by ndarray<T, N, N, N...>.
+constExprList
+    : constExpr (COMMA constExpr)*
     ;
 
 constLogicalOrExpr
@@ -571,7 +579,33 @@ stringLiteral
 //   array<int, 2 * 5>
 //   array<array<int, 1 + 1>, 2 + 2>
 //
-// Semantic checker should later require that the size expression is:
+// ndarray is syntactic sugar for nested static arrays.
+//
+// Examples:
+//   ndarray<byte, 12>
+//      means:
+//   array<byte, 12>
+//
+//   ndarray<byte, 12, 20>
+//      means:
+//   array<array<byte, 20>, 12>
+//
+//   ndarray<byte, 12, 20, 30>
+//      means:
+//   array<array<array<byte, 30>, 20>, 12>
+//
+// Access order follows the dimension list:
+//
+//   ndarray<byte, R, C> grid
+//   grid[r][c]
+//
+//   ndarray<byte, X, Y, Z> cube
+//   cube[x][y][z]
+//
+// Grammar only parses this form. The AST visitor or desugarer should lower
+// ndarray<T, N, N, ...> to nested StaticArrayTypeNode values.
+//
+// Semantic checker should later require that each size expression is:
 //   - a valid compile-time integer constant expression
 //   - positive
 //   - representable as uint32_t
@@ -580,21 +614,25 @@ stringLiteral
 //   array<int, x>
 //   array<int, f()>
 //   array<int, arr[0]>
+//   ndarray<int, x, 10>
+//   ndarray<int, f(), 10>
+//   ndarray<int, arr[0], 10>
 //
-// do not parse as static array types because identifiers, calls, and indexing
-// are not constExpr forms.
+// do not parse as static array / ndarray types because identifiers, calls,
+// and indexing are not constExpr forms.
 type
-    : INT8_T                           # Int8Type
-    | INT16_T                          # Int16Type
-    | INT32_T                          # Int32Type
-    | INT64_T                          # Int64Type
-    | UINT8_T                          # Uint8Type
-    | UINT16_T                         # Uint16Type
-    | UINT32_T                         # Uint32Type
-    | UINT64_T                         # Uint64Type
-    | ARRAY LT type GT                 # DynamicArrayType
-    | ARRAY LT type COMMA constExpr GT # StaticArrayType
-    | ADDR LT type GT                  # AddrType
+    : INT8_T                                   # Int8Type
+    | INT16_T                                  # Int16Type
+    | INT32_T                                  # Int32Type
+    | INT64_T                                  # Int64Type
+    | UINT8_T                                  # Uint8Type
+    | UINT16_T                                 # Uint16Type
+    | UINT32_T                                 # Uint32Type
+    | UINT64_T                                 # Uint64Type
+    | ARRAY LT type GT                         # DynamicArrayType
+    | ARRAY LT type COMMA constExpr GT         # StaticArrayType
+    | NDARRAY LT type COMMA constExprList GT   # NdArrayType
+    | ADDR LT type GT                          # AddrType
     ;
 
 // ---------- LEXER ----------
@@ -627,6 +665,7 @@ UINT32_T : 'uint32_t' ;
 UINT64_T : 'uint64_t' ;
 
 ARRAY    : 'array' ;
+NDARRAY  : 'ndarray' ;
 
 // Operators / punctuation
 EQ      : '==' ;

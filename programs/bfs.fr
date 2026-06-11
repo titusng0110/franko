@@ -1,6 +1,6 @@
 // ============================================================
 // Franko BFS Showcase: Castle Escape
-// Function-Based Version With 2D Array Initializer List
+// ndarray Version, 12 x 13 Maze
 // ============================================================
 //
 // Cell meanings:
@@ -11,18 +11,13 @@
 //   3 = exit / goal
 //   4 = shortest path
 //
-// The map is 12 x 12.
-// BFS searches from the start cell to the goal cell.
-// Then we reconstruct the shortest path using parent pointers.
-//
 // Demonstrates:
 //
+//   - ndarray<T, R, C> type sugar
 //   - functions
 //   - void functions
 //   - non-void function return
-//   - declaration initializer sugar
-//   - nested static arrays
-//   - 2D array initializer-list assignment
+//   - nested initializer-list assignment
 //   - chained indexing: grid[r][c]
 //   - uint32_t indexes
 //   - byte as uint8_t-like flag storage
@@ -34,66 +29,44 @@
 //   - getaddr() and deref()
 //   - parent-pointer path reconstruction
 //
-// Array initializer lists are assignment sugar:
+// ndarray<uint32_t, 12, 13> means:
 //
-//   target = [a, b, c]
+//   array<array<uint32_t, 13>, 12>
 //
-// lowers to:
+// so:
 //
-//   target[0] = a
-//   target[1] = b
-//   target[2] = c
+//   grid[r][c]
 //
-// For nested arrays:
+// follows the dimension order:
 //
-//   matrix = [[1, 2], [3, 4]]
-//
-// lowers to:
-//
-//   matrix[0][0] = 1
-//   matrix[0][1] = 2
-//   matrix[1][0] = 3
-//   matrix[1][1] = 4
-//
-// No allocation or dynamic initialization is performed by the
-// initializer list itself.
+//   r indexes 12 rows
+//   c indexes 13 columns
 // ============================================================
 
 
 // ------------------------------------------------------------
 // Initialize arrays and maze
 // ------------------------------------------------------------
-//
-// deref(grid) has type:
-//
-//   array<array<uint32_t, 12>, 12>
-//
-// Therefore:
-//
-//   deref(grid) = [[...], [...], ...]
-//
-// lowers to ordinary grid[r][c] assignments.
-// ------------------------------------------------------------
 
 func initArrays(
-    addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<byte, 12>, 12>> visited,
-    addr<array<array<byte, 12>, 12>> path,
-    addr<array<array<uint32_t, 12>, 12>> dist
+    addr<ndarray<uint32_t, 12, 13>> grid,
+    addr<ndarray<byte, 12, 13>> visited,
+    addr<ndarray<byte, 12, 13>> path,
+    addr<ndarray<uint32_t, 12, 13>> dist
 ) -> void {
     deref(grid) = [
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-        [1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1],
-        [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
-        [1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
-        [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 3, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1],
+        [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        [1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1],
+        [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1],
+        [1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1],
+        [1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        [1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1],
+        [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
+        [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 3, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     ]
 
     deref(visited).memset(0)
@@ -105,24 +78,13 @@ func initArrays(
 // ------------------------------------------------------------
 // Try visiting one neighboring cell
 // ------------------------------------------------------------
-//
-// If the target cell is not a wall and has not been visited:
-//
-//   - mark visited
-//   - set distance
-//   - write parent pointer
-//   - enqueue packed position
-//
-// This function exists because the UP/DOWN/LEFT/RIGHT logic is
-// genuinely repeated BFS logic.
-// ------------------------------------------------------------
 
 func tryVisit(
-    addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<byte, 12>, 12>> visited,
-    addr<array<array<uint32_t, 12>, 12>> dist,
-    addr<array<array<uint32_t, 12>, 12>> parentR,
-    addr<array<array<uint32_t, 12>, 12>> parentC,
+    addr<ndarray<uint32_t, 12, 13>> grid,
+    addr<ndarray<byte, 12, 13>> visited,
+    addr<ndarray<uint32_t, 12, 13>> dist,
+    addr<ndarray<uint32_t, 12, 13>> parentR,
+    addr<ndarray<uint32_t, 12, 13>> parentC,
     addr<array<uint32_t>> queue,
     addr<uint32_t> tail,
     uint32_t qCap,
@@ -152,19 +114,13 @@ func tryVisit(
 // ------------------------------------------------------------
 // Run BFS
 // ------------------------------------------------------------
-//
-// Returns:
-//
-//   1 if goal was found
-//   0 otherwise
-// ------------------------------------------------------------
 
 func runBfs(
-    addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<byte, 12>, 12>> visited,
-    addr<array<array<uint32_t, 12>, 12>> dist,
-    addr<array<array<uint32_t, 12>, 12>> parentR,
-    addr<array<array<uint32_t, 12>, 12>> parentC,
+    addr<ndarray<uint32_t, 12, 13>> grid,
+    addr<ndarray<byte, 12, 13>> visited,
+    addr<ndarray<uint32_t, 12, 13>> dist,
+    addr<ndarray<uint32_t, 12, 13>> parentR,
+    addr<ndarray<uint32_t, 12, 13>> parentC,
     addr<array<uint32_t>> queue,
     uint32_t qCap,
     uint32_t cols,
@@ -185,7 +141,6 @@ func runBfs(
 
     byte found = 0
 
-    // BFS initialization
     deref(visited)[startR][startC] = 1
     deref(dist)[startR][startC] = 0
 
@@ -197,8 +152,6 @@ func runBfs(
     }
 
     while ((head != tail) && (found == 0)) {
-
-        // Pop front
         pos = deref(queue)[head]
 
         head = head + 1
@@ -206,18 +159,14 @@ func runBfs(
             head = 0
         }
 
-        // Decode position
         r = pos / cols
         c = pos - r * cols
 
-        // Check whether we reached the goal
         if ((r == goalR) && (c == goalC)) {
             found = 1
         }
 
         if (found == 0) {
-
-            // UP
             nr = r - 1
             nc = c
 
@@ -237,7 +186,6 @@ func runBfs(
                 nc
             )
 
-            // DOWN
             nr = r + 1
             nc = c
 
@@ -257,7 +205,6 @@ func runBfs(
                 nc
             )
 
-            // LEFT
             nr = r
             nc = c - 1
 
@@ -277,7 +224,6 @@ func runBfs(
                 nc
             )
 
-            // RIGHT
             nr = r
             nc = c + 1
 
@@ -308,9 +254,9 @@ func runBfs(
 // ------------------------------------------------------------
 
 func reconstructPath(
-    addr<array<array<byte, 12>, 12>> path,
-    addr<array<array<uint32_t, 12>, 12>> parentR,
-    addr<array<array<uint32_t, 12>, 12>> parentC,
+    addr<ndarray<byte, 12, 13>> path,
+    addr<ndarray<uint32_t, 12, 13>> parentR,
+    addr<ndarray<uint32_t, 12, 13>> parentC,
     uint32_t startR,
     uint32_t startC,
     uint32_t goalR,
@@ -342,16 +288,11 @@ func reconstructPath(
 // ------------------------------------------------------------
 // Print solved grid
 // ------------------------------------------------------------
-//
-// IMPORTANT:
-// Keep each grid row printed as one print(...) call with 12 values.
-// This preserves the original output format.
-// ------------------------------------------------------------
 
 func printSolvedGrid(
-    addr<array<array<uint32_t, 12>, 12>> grid,
-    addr<array<array<byte, 12>, 12>> path,
-    addr<array<uint32_t, 12>> line,
+    addr<ndarray<uint32_t, 12, 13>> grid,
+    addr<ndarray<byte, 12, 13>> path,
+    addr<array<uint32_t, 13>> line,
     uint32_t rows,
     uint32_t cols,
     uint32_t startR,
@@ -364,11 +305,8 @@ func printSolvedGrid(
 
     r = 0
     while (r < rows) {
-
-        // Copy original grid row into temporary row buffer.
         deref(line).memcpy(deref(grid)[r])
 
-        // Overlay path cells.
         c = 0
         while (c < cols) {
             if (deref(path)[r][c] != 0) {
@@ -378,7 +316,6 @@ func printSolvedGrid(
             c = c + 1
         }
 
-        // Restore start and goal markers.
         if (r == startR) {
             deref(line)[startC] = 2
         }
@@ -390,7 +327,8 @@ func printSolvedGrid(
         print(
             deref(line)[0], deref(line)[1], deref(line)[2], deref(line)[3],
             deref(line)[4], deref(line)[5], deref(line)[6], deref(line)[7],
-            deref(line)[8], deref(line)[9], deref(line)[10], deref(line)[11]
+            deref(line)[8], deref(line)[9], deref(line)[10], deref(line)[11],
+            deref(line)[12]
         )
 
         r = r + 1
@@ -403,63 +341,33 @@ func printSolvedGrid(
 // ------------------------------------------------------------
 
 func main() -> int32_t {
+    ndarray<uint32_t, 12, 13> grid
+    ndarray<byte, 12, 13> visited
+    ndarray<byte, 12, 13> path
+    ndarray<uint32_t, 12, 13> dist
 
-    // ------------------------------------------------------------
-    // Grid state
-    // ------------------------------------------------------------
+    ndarray<uint32_t, 12, 13> parentR
+    ndarray<uint32_t, 12, 13> parentC
 
-    array<array<uint32_t, 12>, 12> grid
-    array<array<byte, 12>, 12> visited
-    array<array<byte, 12>, 12> path
-    array<array<uint32_t, 12>, 12> dist
-
-    array<array<uint32_t, 12>, 12> parentR
-    array<array<uint32_t, 12>, 12> parentC
-
-
-    // ------------------------------------------------------------
-    // Temporary output row
-    // ------------------------------------------------------------
-
-    array<uint32_t, 12> line
-
-
-    // ------------------------------------------------------------
-    // BFS queue
-    // ------------------------------------------------------------
+    array<uint32_t, 13> line
 
     alloc array<uint32_t> queue
 
-
-    // ------------------------------------------------------------
-    // Scalar variables
-    // ------------------------------------------------------------
-
     uint32_t rows = 12
-    uint32_t cols = 12
+    uint32_t cols = 13
     uint32_t qCap = 256
 
     uint32_t startR = 1
     uint32_t startC = 1
 
     uint32_t goalR = 10
-    uint32_t goalC = 10
+    uint32_t goalC = 11
 
     byte found = 0
 
     addr<uint32_t> answer
 
-
-    // ------------------------------------------------------------
-    // Initialize heap dynamic queue
-    // ------------------------------------------------------------
-
     queue(qCap)
-
-
-    // ------------------------------------------------------------
-    // Initialize arrays and maze
-    // ------------------------------------------------------------
 
     initArrays(
         getaddr(grid),
@@ -467,11 +375,6 @@ func main() -> int32_t {
         getaddr(path),
         getaddr(dist)
     )
-
-
-    // ------------------------------------------------------------
-    // Run BFS
-    // ------------------------------------------------------------
 
     found = runBfs(
         getaddr(grid),
@@ -488,17 +391,7 @@ func main() -> int32_t {
         goalC
     )
 
-
-    // ------------------------------------------------------------
-    // Queue no longer needed
-    // ------------------------------------------------------------
-
     del queue
-
-
-    // ------------------------------------------------------------
-    // Reconstruct path
-    // ------------------------------------------------------------
 
     if (found != 0) {
         reconstructPath(
@@ -512,23 +405,6 @@ func main() -> int32_t {
         )
     }
 
-
-    // ------------------------------------------------------------
-    // Print result header
-    // ------------------------------------------------------------
-    //
-    // Output format:
-    //
-    //   4001
-    //   shortest distance, or -1 if unreachable
-    //   4002
-    //   solved grid rows
-    //
-    // Path cells are printed as 4.
-    // Start remains 2.
-    // Goal remains 3.
-    // ------------------------------------------------------------
-
     print(4001)
 
     if (found != 0) {
@@ -539,11 +415,6 @@ func main() -> int32_t {
     }
 
     print(4002)
-
-
-    // ------------------------------------------------------------
-    // Print solved grid
-    // ------------------------------------------------------------
 
     printSolvedGrid(
         getaddr(grid),

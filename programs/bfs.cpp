@@ -1,13 +1,13 @@
 #include "FrankoRuntime.hpp"
 
-void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist);
-void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc);
-uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
-void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
-void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<uint32_t, 12>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
+void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist);
+void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc);
+uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
+void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
+void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<uint32_t, 13>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
 int32_t main();
 
-void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist)
+void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist)
 {
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
@@ -21,6 +21,7 @@ void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(2);
     (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
@@ -32,115 +33,125 @@ void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid
     (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(1)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(2)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(3)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(4)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(5)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(6)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(7)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(8)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(9)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(3)]) = static_cast<uint32_t>(0);
     (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(4)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(5)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(6)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(7)]) = static_cast<uint32_t>(1);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(8)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(0);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(3);
-    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(0);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(3);
+    (((*grid)[static_cast<uint32_t>(10)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(2)]) = static_cast<uint32_t>(1);
@@ -153,12 +164,13 @@ void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid
     (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(9)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(10)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(11)]) = static_cast<uint32_t>(1);
+    (((*grid)[static_cast<uint32_t>(11)])[static_cast<uint32_t>(12)]) = static_cast<uint32_t>(1);
     (*visited).memset(static_cast<uint8_t>(0));
     (*path).memset(static_cast<uint8_t>(0));
     (*dist).memset(static_cast<uint8_t>(0));
 }
 
-void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc)
+void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc)
 {
     if (static_cast<uint8_t>((static_cast<uint8_t>(((((*grid)[nr])[nc]) != 1)) && static_cast<uint8_t>(((((*visited)[nr])[nc]) == 0)))))
     {
@@ -175,7 +187,7 @@ void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, 
     }
 }
 
-uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
+uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
 {
     uint32_t head;
     head = static_cast<uint32_t>(0);
@@ -234,7 +246,7 @@ uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid,
     return found;
 }
 
-void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
+void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
 {
     uint32_t r;
     r = static_cast<uint32_t>(0);
@@ -257,7 +269,7 @@ void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* 
     (((*path)[startR])[startC]) = static_cast<uint8_t>(1);
 }
 
-void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12>* path, Franko_Static_Array<uint32_t, 12>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
+void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<uint32_t, 13>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC)
 {
     uint32_t r;
     r = static_cast<uint32_t>(0);
@@ -284,25 +296,25 @@ void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12>*
         {
             ((*line)[goalC]) = static_cast<uint32_t>(3);
         }
-        std::cout << ((*line)[static_cast<uint32_t>(0)]) << ' ' << ((*line)[static_cast<uint32_t>(1)]) << ' ' << ((*line)[static_cast<uint32_t>(2)]) << ' ' << ((*line)[static_cast<uint32_t>(3)]) << ' ' << ((*line)[static_cast<uint32_t>(4)]) << ' ' << ((*line)[static_cast<uint32_t>(5)]) << ' ' << ((*line)[static_cast<uint32_t>(6)]) << ' ' << ((*line)[static_cast<uint32_t>(7)]) << ' ' << ((*line)[static_cast<uint32_t>(8)]) << ' ' << ((*line)[static_cast<uint32_t>(9)]) << ' ' << ((*line)[static_cast<uint32_t>(10)]) << ' ' << ((*line)[static_cast<uint32_t>(11)]) << '\n';
+        std::cout << ((*line)[static_cast<uint32_t>(0)]) << ' ' << ((*line)[static_cast<uint32_t>(1)]) << ' ' << ((*line)[static_cast<uint32_t>(2)]) << ' ' << ((*line)[static_cast<uint32_t>(3)]) << ' ' << ((*line)[static_cast<uint32_t>(4)]) << ' ' << ((*line)[static_cast<uint32_t>(5)]) << ' ' << ((*line)[static_cast<uint32_t>(6)]) << ' ' << ((*line)[static_cast<uint32_t>(7)]) << ' ' << ((*line)[static_cast<uint32_t>(8)]) << ' ' << ((*line)[static_cast<uint32_t>(9)]) << ' ' << ((*line)[static_cast<uint32_t>(10)]) << ' ' << ((*line)[static_cast<uint32_t>(11)]) << ' ' << ((*line)[static_cast<uint32_t>(12)]) << '\n';
         r = static_cast<uint32_t>((r + 1));
     }
 }
 
 int32_t main()
 {
-    Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12> grid;
-    Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12> visited;
-    Franko_Static_Array<Franko_Static_Array<uint8_t, 12>, 12> path;
-    Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12> dist;
-    Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12> parentR;
-    Franko_Static_Array<Franko_Static_Array<uint32_t, 12>, 12> parentC;
-    Franko_Static_Array<uint32_t, 12> line;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12> grid;
+    Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12> visited;
+    Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12> path;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12> dist;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12> parentR;
+    Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12> parentC;
+    Franko_Static_Array<uint32_t, 13> line;
     Franko_Dynamic_Array<uint32_t>* queue = new Franko_Dynamic_Array<uint32_t>();
     uint32_t rows;
     rows = static_cast<uint32_t>(12);
     uint32_t cols;
-    cols = static_cast<uint32_t>(12);
+    cols = static_cast<uint32_t>(13);
     uint32_t qCap;
     qCap = static_cast<uint32_t>(256);
     uint32_t startR;
@@ -312,7 +324,7 @@ int32_t main()
     uint32_t goalR;
     goalR = static_cast<uint32_t>(10);
     uint32_t goalC;
-    goalC = static_cast<uint32_t>(10);
+    goalC = static_cast<uint32_t>(11);
     uint8_t found;
     found = static_cast<uint8_t>(0);
     uint32_t* answer;

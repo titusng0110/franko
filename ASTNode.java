@@ -243,6 +243,38 @@ class StaticArrayTypeNode extends TypeNode {
     }
 }
 
+class NdArrayTypeNode extends TypeNode {
+    TypeNode elementType;
+
+    /*
+     * Dimension expressions in access order.
+     *
+     * Example:
+     *
+     *   ndarray<byte, 12, 20, 30>
+     *
+     * dimensions:
+     *
+     *   [12, 20, 30]
+     *
+     * Later desugaring should lower this to:
+     *
+     *   array<array<array<byte, 30>, 20>, 12>
+     *
+     * so that:
+     *
+     *   arr[i][j][k]
+     *
+     * follows the declared dimension order.
+     */
+    List<ASTNode> dimensions;
+
+    NdArrayTypeNode(TypeNode elementType, List<ASTNode> dimensions) {
+        this.elementType = elementType;
+        this.dimensions = dimensions;
+    }
+}
+
 class AddrTypeNode extends TypeNode {
     TypeNode referencedType;
 
