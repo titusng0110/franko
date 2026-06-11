@@ -1,0 +1,128 @@
+func main() -> int {
+    array<byte> str(200)
+    uint32_t i = 0
+
+    // ============================================================
+    // Test 1:
+    // ASCII plus common escapes:
+    //
+    //   \t  tab       -> 9
+    //   \n  newline   -> 10
+    //   \"  quote     -> 34
+    //
+    // String:
+    //   Hello,    World!
+    //   "Franko"
+    //
+    // Expected byte count: 22
+    // ============================================================
+
+    str.memset(0)
+    str = "Hello,\tWorld!\n\"Franko\""
+
+    print(5001)
+    i = 0
+    while(i < 22) {
+        print(str[i])
+        i = i + 1
+    }
+
+    // ============================================================
+    // Test 2:
+    // Raw Unicode and emoji.
+    //
+    // String:
+    //   你好, Franko 😭😍
+    //
+    // UTF-8 byte count:
+    //   你好      -> 6 bytes
+    //   comma    -> 1 byte
+    //   space    -> 1 byte
+    //   Franko   -> 6 bytes
+    //   space    -> 1 byte
+    //   😭       -> 4 bytes
+    //   😍       -> 4 bytes
+    //
+    // Total: 23 bytes
+    // ============================================================
+
+    str.memset(0)
+    str = "你好, Franko 😭😍"
+
+    print(5002)
+    i = 0
+    while(i < 23) {
+        print(str[i])
+        i = i + 1
+    }
+
+    // ============================================================
+    // Test 3:
+    // Literal multiline string.
+    //
+    // This contains actual newline characters inside the string.
+    //
+    // String:
+    //   Line 1
+    //   Line 2
+    //   Line 3
+    //
+    // Byte count:
+    //   "Line 1" -> 6
+    //   newline  -> 1
+    //   "Line 2" -> 6
+    //   newline  -> 1
+    //   "Line 3" -> 6
+    //
+    // Total: 20 bytes
+    // ============================================================
+
+    str.memset(0)
+    str = "Line 1
+Line 2
+Line 3"
+
+    print(5003)
+    i = 0
+    while(i < 20) {
+        print(str[i])
+        i = i + 1
+    }
+
+    // ============================================================
+    // Test 4:
+    // Backslash and every supported special escape.
+    //
+    // String source:
+    //   A\\B\"C\a\b\f\n\r\t\vZ
+    //
+    // Decoded bytes:
+    //   A   -> 65
+    //   \\  -> 92
+    //   B   -> 66
+    //   \"  -> 34
+    //   C   -> 67
+    //   \a  -> 7
+    //   \b  -> 8
+    //   \f  -> 12
+    //   \n  -> 10
+    //   \r  -> 13
+    //   \t  -> 9
+    //   \v  -> 11
+    //   Z   -> 90
+    //
+    // Total: 13 bytes
+    // ============================================================
+
+    str.memset(0)
+    str = "A\\B\"C\a\b\f\n\r\t\vZ"
+
+    print(5004)
+    i = 0
+    while(i < 13) {
+        print(str[i])
+        i = i + 1
+    }
+
+    return 0
+}

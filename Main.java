@@ -46,7 +46,7 @@ public class Main {
         }
 
         // ----- Lex / parse -----
-        CharStream input = CharStreams.fromFileName(sourceFile);
+        CharStream input = CharStreams.fromFileName(sourceFile, StandardCharsets.UTF_8);
         FrankoLexer lexer = new FrankoLexer(input);
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         FrankoParser parser = new FrankoParser(tokens);

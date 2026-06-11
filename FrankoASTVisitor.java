@@ -723,6 +723,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.integerLiteral());
         }
 
+        if (ctx.stringLiteral() != null) {
+            return visit(ctx.stringLiteral());
+        }
+
         if (ctx.IDENTIFIER() != null) {
             return new VarNode(ctx.IDENTIFIER().getText());
         }
@@ -757,5 +761,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitIntegerLiteral(FrankoParser.IntegerLiteralContext ctx) {
         return new IntNode(ctx.getText());
+    }
+
+    @Override
+    public ASTNode visitStringLiteral(FrankoParser.StringLiteralContext ctx) {
+        return new StringLiteralNode(ctx.STRING_LITERAL().getText());
     }
 }

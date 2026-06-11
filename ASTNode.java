@@ -310,6 +310,21 @@ class ArrayLiteralNode extends ASTNode {
     }
 }
 
+class StringLiteralNode extends ASTNode {
+    String rawText;
+    String rawContent;
+
+    StringLiteralNode(String rawText) {
+        this.rawText = rawText;
+
+        if (rawText.length() >= 2) {
+            this.rawContent = rawText.substring(1, rawText.length() - 1);
+        } else {
+            throw new RuntimeException("Invalid string literal token: " + rawText);
+        }
+    }
+}
+
 // ============================================================
 // Unary / binary expressions
 // ============================================================
