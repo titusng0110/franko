@@ -119,7 +119,11 @@ if (-not (Test-Path -LiteralPath $MAIN_CLASS -PathType Leaf)) {
 $JEMALLOC_DIR = Join-Path $ROOT "third_party\jemalloc\windows-x64"
 $JEMALLOC_INCLUDE = Join-Path $JEMALLOC_DIR "include"
 $JEMALLOC_HEADER = Join-Path $JEMALLOC_INCLUDE "jemalloc\jemalloc.h"
-$JEMALLOC_LIB = Join-Path $JEMALLOC_DIR "lib\libjemalloc.a"
+
+# Windows jemalloc built by MinGW/GNU ar naturally installs this as jemalloc.lib.
+# Although the extension is .lib, it is a GNU static archive in this build,
+# and MinGW g++ can link it when passed by full path.
+$JEMALLOC_LIB = Join-Path $JEMALLOC_DIR "lib\jemalloc.lib"
 
 if (-not (Test-Path -LiteralPath $JEMALLOC_HEADER -PathType Leaf)) {
     throw @"
@@ -137,7 +141,7 @@ Bundled jemalloc static library not found:
   $JEMALLOC_LIB
 
 Expected:
-  third_party\jemalloc\windows-x64\lib\libjemalloc.a
+  third_party\jemalloc\windows-x64\lib\jemalloc.lib
 "@
 }
 
@@ -193,7 +197,10 @@ Write-Host ""
 #
 #   $JEMALLOC_LIB statically links bundled jemalloc.
 #
-#   -lwinpthread is often needed by MinGW-built libraries.
+#   We pass jemalloc.lib by full path. Do not replace this with:
+#       -L... -ljemalloc
+#   unless the archive is renamed to libjemalloc.a, because GCC's -l search
+#   convention may not pick up jemalloc.lib automatically.
 #
 
 $GppArgs = @(
