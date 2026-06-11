@@ -2,10 +2,6 @@ name: Build jemalloc static bundles
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "third_party/src/jemalloc-5.3.1.tar.bz2"
-      - ".github/workflows/build-jemalloc.yml"
 
 permissions:
   contents: read
@@ -260,16 +256,32 @@ jobs:
 
           cd "$BUILD"
 
+          CFLAGS="-O2 -pipe -Wno-cast-function-type -Wno-missing-field-initializers" \
+          CXXFLAGS="-O2 -pipe -Wno-cast-function-type -Wno-missing-field-initializers" \
           ./configure \
             --prefix="$PREFIX" \
             --host=x86_64-w64-mingw32 \
-            --build=x86_64-w64-mingw32 \
             --disable-shared \
             --enable-static \
+            --disable-cxx \
+            --disable-doc \
             --with-jemalloc-prefix=je_
 
-          make -j"$(nproc)"
-          make install
+          echo
+          echo "Running make..."
+          if ! make -j"$(nproc)" > build.log 2>&1; then
+            echo "jemalloc make failed. Last 200 lines:"
+            tail -n 200 build.log
+            exit 1
+          fi
+
+          echo
+          echo "Running make install..."
+          if ! make install > install.log 2>&1; then
+            echo "jemalloc make install failed. Last 200 lines:"
+            tail -n 200 install.log
+            exit 1
+          fi
 
           echo
           echo "Checking expected install outputs..."
