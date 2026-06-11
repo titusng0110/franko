@@ -310,7 +310,9 @@ int32_t main()
     Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12> parentR;
     Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12> parentC;
     Franko_Static_Array<uint32_t, 13> line;
-    Franko_Dynamic_Array<uint32_t>* queue = new Franko_Dynamic_Array<uint32_t>();
+    Franko_Dynamic_Array<uint32_t>* queue = static_cast<Franko_Dynamic_Array<uint32_t>*>(je_malloc(sizeof(Franko_Dynamic_Array<uint32_t>)));
+    if (!queue) throw std::bad_alloc();
+    new (queue) Franko_Dynamic_Array<uint32_t>;
     uint32_t rows;
     rows = static_cast<uint32_t>(12);
     uint32_t cols;
@@ -331,7 +333,8 @@ int32_t main()
     (*queue).init(qCap);
     initArrays((&grid), (&visited), (&path), (&dist));
     found = runBfs((&grid), (&visited), (&dist), (&parentR), (&parentC), (&(*queue)), qCap, cols, startR, startC, goalR, goalC);
-    delete queue;
+    queue->~Franko_Dynamic_Array<uint32_t>();
+    je_free(queue);
     queue = nullptr;
     if (static_cast<uint8_t>((found != 0)))
     {

@@ -118,5 +118,6 @@ int32_t main()
         std::cout << (+((str[i]))) << '\n';
         i = static_cast<uint32_t>((i + 1));
     }
+    str.uninit();
     return static_cast<int32_t>(0);
 }

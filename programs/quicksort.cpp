@@ -164,7 +164,9 @@ uint8_t isSorted(Franko_Static_Array<int32_t, 50>* data, uint32_t n)
 
 int32_t main()
 {
-    Franko_Static_Array<int32_t, 50>* data = new Franko_Static_Array<int32_t, 50>();
+    Franko_Static_Array<int32_t, 50>* data = static_cast<Franko_Static_Array<int32_t, 50>*>(je_malloc(sizeof(Franko_Static_Array<int32_t, 50>)));
+    if (!data) throw std::bad_alloc();
+    new (data) Franko_Static_Array<int32_t, 50>;
     uint32_t n;
     n = static_cast<uint32_t>(50);
     uint8_t sorted;
@@ -178,7 +180,8 @@ int32_t main()
     sorted = isSorted((&(*data)), n);
     std::cout << 2003 << '\n';
     std::cout << (+(sorted)) << '\n';
-    delete data;
+    data->~Franko_Static_Array<int32_t, 50>();
+    je_free(data);
     data = nullptr;
     return static_cast<int32_t>(0);
 }

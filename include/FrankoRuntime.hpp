@@ -1,7 +1,9 @@
-#include <cstdint>
-#include <cstring>
-#include <stdexcept>
+#include <new> // for std::bad_alloc
+#include <cstdint> // for uint32_t
+#include <cstring> // for memcpy and memset
+#include <stdexcept> // for std::runtime_error
 #include <iostream> // for print
+#include <jemalloc/jemalloc.h> // for je_malloc and je_free
 
 
 template <typename T, uint32_t N>
@@ -53,6 +55,14 @@ struct Franko_Dynamic_Array {
     uint32_t length = 0;
     T* data = nullptr;
 
+    ~Franko_Dynamic_Array() {
+        if (data != nullptr) {
+            je_free(data);
+            data = nullptr;
+            length = 0;
+        }
+    }
+
     void init(uint32_t n) {
         if (data != nullptr)
             throw std::runtime_error("Franko_Dynamic_Array already initialized");
@@ -60,18 +70,20 @@ struct Franko_Dynamic_Array {
         if (n == 0)
             throw std::runtime_error("Cannot allocate 0 memory for Franko_Dynamic_Array");
 
-        length = n;
-        data = static_cast<T*>(std::malloc(sizeof(T) * n));
+        T* newData = static_cast<T*>(je_malloc(sizeof(T) * n));
 
-        if (!data)
+        if (!newData)
             throw std::bad_alloc();
+
+        data = newData;
+        length = n;
     }
 
     void uninit() {
         if (data == nullptr)
             throw std::runtime_error("Franko_Dynamic_Array already uninitialized");
 
-        std::free(data);
+        je_free(data);
         data = nullptr;
         length = 0;
     }
