@@ -1,0 +1,331 @@
+name: Build jemalloc static bundles
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "third_party/src/jemalloc-5.3.1.tar.bz2"
+      - ".github/workflows/build-jemalloc.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-unix:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-24.04
+
+          - target: linux-arm64
+            os: ubuntu-24.04-arm
+
+          - target: macos-x86_64
+            os: macos-26-intel
+
+          - target: macos-arm64
+            os: macos-26
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            bzip2 \
+            file
+
+      - name: Show build machine info
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "Runner OS:   ${{ runner.os }}"
+          echo "Target:      ${{ matrix.target }}"
+          echo
+
+          echo "uname -a:"
+          uname -a
+
+          echo
+          echo "Compiler:"
+          if command -v cc >/dev/null 2>&1; then
+            cc --version || true
+          fi
+
+          echo
+          echo "Archive tool:"
+          ar --version || true
+
+      - name: Build jemalloc static bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          VERSION="5.3.1"
+          TARGET="${{ matrix.target }}"
+
+          ROOT="$PWD"
+          SRC="$ROOT/third_party/src/jemalloc-$VERSION.tar.bz2"
+          BUILD="$ROOT/third_party/build/jemalloc-$TARGET"
+          PREFIX="$ROOT/third_party/jemalloc/$TARGET"
+
+          if [[ ! -f "$SRC" ]]; then
+            echo "Error: jemalloc source archive not found:"
+            echo "  $SRC"
+            exit 1
+          fi
+
+          echo "Building jemalloc $VERSION for $TARGET"
+          echo "Source:  $SRC"
+          echo "Build:   $BUILD"
+          echo "Install: $PREFIX"
+          echo
+
+          rm -rf "$BUILD"
+          rm -rf "$PREFIX"
+
+          mkdir -p "$BUILD"
+          mkdir -p "$PREFIX"
+
+          tar -xjf "$SRC" -C "$BUILD" --strip-components=1
+
+          cd "$BUILD"
+
+          ./configure \
+            --prefix="$PREFIX" \
+            --disable-shared \
+            --enable-static \
+            --with-jemalloc-prefix=je_
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            JOBS="$(sysctl -n hw.ncpu)"
+          else
+            JOBS="$(nproc)"
+          fi
+
+          make -j"$JOBS"
+          make install
+
+          echo
+          echo "Checking expected install outputs..."
+
+          if [[ ! -f "$PREFIX/include/jemalloc/jemalloc.h" ]]; then
+            echo "Error: expected jemalloc header missing:"
+            echo "  $PREFIX/include/jemalloc/jemalloc.h"
+            exit 1
+          fi
+
+          if [[ ! -f "$PREFIX/lib/libjemalloc.a" ]]; then
+            echo "Error: expected jemalloc static library missing:"
+            echo "  $PREFIX/lib/libjemalloc.a"
+            exit 1
+          fi
+
+          echo
+          echo "Pruning unnecessary jemalloc install files..."
+
+          rm -rf "$PREFIX/bin"
+          rm -rf "$PREFIX/share"
+          rm -rf "$PREFIX/lib/pkgconfig"
+
+          rm -f "$PREFIX/lib/libjemalloc_pic.a"
+          rm -f "$PREFIX/lib/libjemalloc.so"
+          rm -f "$PREFIX/lib/libjemalloc.so."*
+          rm -f "$PREFIX/lib/libjemalloc.dylib"
+          rm -f "$PREFIX/lib/libjemalloc."*.dylib
+
+          echo
+          echo "Final jemalloc bundle:"
+          find "$PREFIX" -type f | sort
+
+      - name: Verify static archive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          TARGET="${{ matrix.target }}"
+          PREFIX="$PWD/third_party/jemalloc/$TARGET"
+
+          echo "File info:"
+          file "$PREFIX/lib/libjemalloc.a"
+
+          echo
+          echo "Checking for prefixed jemalloc symbols:"
+          nm -g "$PREFIX/lib/libjemalloc.a" | grep "je_malloc" | head || {
+            echo "Warning: could not find je_malloc using nm output"
+          }
+
+      - name: Upload jemalloc artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: jemalloc-${{ matrix.target }}
+          path: third_party/jemalloc/${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 30
+
+  build-windows:
+    name: Build windows-x64
+    runs-on: windows-2022
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            bzip2
+            file
+            tar
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+
+      - name: Show build machine info
+        run: |
+          set -Eeuo pipefail
+
+          echo "Runner OS: Windows"
+          echo "Target:    windows-x64"
+          echo
+
+          echo "uname -a:"
+          uname -a
+
+          echo
+          echo "MSYSTEM:"
+          echo "$MSYSTEM"
+
+          echo
+          echo "gcc:"
+          which gcc
+          gcc -v
+
+          echo
+          echo "ar:"
+          which ar
+          ar --version || true
+
+      - name: Build jemalloc static bundle
+        run: |
+          set -Eeuo pipefail
+
+          VERSION="5.3.1"
+          TARGET="windows-x64"
+
+          ROOT="$PWD"
+          SRC="$ROOT/third_party/src/jemalloc-$VERSION.tar.bz2"
+          BUILD="$ROOT/third_party/build/jemalloc-$TARGET"
+          PREFIX="$ROOT/third_party/jemalloc/$TARGET"
+
+          if [[ ! -f "$SRC" ]]; then
+            echo "Error: jemalloc source archive not found:"
+            echo "  $SRC"
+            exit 1
+          fi
+
+          echo "Building jemalloc $VERSION for $TARGET"
+          echo "Source:  $SRC"
+          echo "Build:   $BUILD"
+          echo "Install: $PREFIX"
+          echo
+
+          rm -rf "$BUILD"
+          rm -rf "$PREFIX"
+
+          mkdir -p "$BUILD"
+          mkdir -p "$PREFIX"
+
+          tar -xjf "$SRC" -C "$BUILD" --strip-components=1
+
+          cd "$BUILD"
+
+          ./configure \
+            --prefix="$PREFIX" \
+            --host=x86_64-w64-mingw32 \
+            --build=x86_64-w64-mingw32 \
+            --disable-shared \
+            --enable-static \
+            --with-jemalloc-prefix=je_
+
+          make -j"$(nproc)"
+          make install
+
+          echo
+          echo "Checking expected install outputs..."
+
+          if [[ ! -f "$PREFIX/include/jemalloc/jemalloc.h" ]]; then
+            echo "Error: expected jemalloc header missing:"
+            echo "  $PREFIX/include/jemalloc/jemalloc.h"
+            exit 1
+          fi
+
+          if [[ ! -f "$PREFIX/lib/libjemalloc.a" ]]; then
+            echo "Error: expected jemalloc static library missing:"
+            echo "  $PREFIX/lib/libjemalloc.a"
+            exit 1
+          fi
+
+          echo
+          echo "Pruning unnecessary jemalloc install files..."
+
+          rm -rf "$PREFIX/bin"
+          rm -rf "$PREFIX/share"
+          rm -rf "$PREFIX/lib/pkgconfig"
+
+          rm -f "$PREFIX/lib/libjemalloc_pic.a"
+          rm -f "$PREFIX/lib/libjemalloc.dll"
+          rm -f "$PREFIX/lib/libjemalloc.dll.a"
+          rm -f "$PREFIX/lib/libjemalloc_s.a"
+          rm -f "$PREFIX/lib/libjemalloc.so"
+          rm -f "$PREFIX/lib/libjemalloc.so."*
+          rm -f "$PREFIX/lib/libjemalloc.dylib"
+          rm -f "$PREFIX/lib/libjemalloc."*.dylib
+
+          echo
+          echo "Final jemalloc bundle:"
+          find "$PREFIX" -type f | sort
+
+      - name: Verify static archive
+        run: |
+          set -Eeuo pipefail
+
+          TARGET="windows-x64"
+          PREFIX="$PWD/third_party/jemalloc/$TARGET"
+
+          echo "File info:"
+          file "$PREFIX/lib/libjemalloc.a"
+
+          echo
+          echo "Checking for prefixed jemalloc symbols:"
+          x86_64-w64-mingw32-nm -g "$PREFIX/lib/libjemalloc.a" | grep "je_malloc" | head || {
+            echo "Warning: could not find je_malloc using nm output"
+          }
+
+      - name: Upload jemalloc artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: jemalloc-windows-x64
+          path: third_party/jemalloc/windows-x64
+          if-no-files-found: error
+          retention-days: 30
