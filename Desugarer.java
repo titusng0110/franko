@@ -756,9 +756,48 @@ public class Desugarer {
         );
     }
 
-    // ============================================================
-    // Type handling
-    // ============================================================
+// ============================================================
+// Type handling
+// ============================================================
+
+    private TypeNode desugarNdArrayType(NdArrayTypeNode n) {
+        if (n == null) return null;
+
+        TypeNode current = desugarType(n.elementType);
+
+        /*
+        * ndarray<T, A, B, C>
+        *
+        * dimensions are stored in access order:
+        *
+        *   [A, B, C]
+        *
+        * Lower from right to left:
+        *
+        *   T
+        *   array<T, C>
+        *   array<array<T, C>, B>
+        *   array<array<array<T, C>, B>, A>
+        *
+        * This gives the intended access order:
+        *
+        *   arr[i][j][k]
+        *
+        * where:
+        *
+        *   i indexes A
+        *   j indexes B
+        *   k indexes C
+        */
+        for (int i = n.dimensions.size() - 1; i >= 0; i--) {
+            current = new StaticArrayTypeNode(
+                current,
+                desugarConstExpr(n.dimensions.get(i))
+            );
+        }
+
+        return current;
+    }
 
     private TypeNode desugarType(TypeNode type) {
         if (type == null) return null;
@@ -786,6 +825,10 @@ public class Desugarer {
                 desugarType(n.elementType),
                 desugarConstExpr(n.sizeExpr)
             );
+        }
+
+        if (type instanceof NdArrayTypeNode) {
+            return desugarNdArrayType((NdArrayTypeNode) type);
         }
 
         if (type instanceof AddrTypeNode) {
