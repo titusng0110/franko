@@ -107,4 +107,4 @@ run g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
 echo
 echo "Successfully compiled to binary output: $BIN_OUT"
 echo
-echo "✅ Compilation finished."
+echo "✅ Compilation finished with statically linked jemalloc."
