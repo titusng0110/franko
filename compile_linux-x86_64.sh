@@ -95,14 +95,23 @@ echo
 run java -cp "$ANTLR_CP:$CLS_DIR:$GEN_DIR" Main "$SRC" -o "$CPP_OUT"
 echo
 
-run g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
-    -I"$ROOT/include" \
-    -I"$JEMALLOC_INCLUDE" \
-    "$CPP_OUT" \
-    "$JEMALLOC_LIB" \
-    -pthread \
-    -ldl \
-    -o "$BIN_OUT"
+run g++ \
+  -O3 \
+  -std=c++14 \
+  -Wall \
+  -Wextra \
+  -Wpedantic \
+  -Wshadow \
+  -I"$ROOT/include" \
+  -I"$JEMALLOC_INCLUDE" \
+  "$CPP_OUT" \
+  "$JEMALLOC_LIB" \
+  -pthread \
+  -ldl \
+  -static-libstdc++ \
+  -static-libgcc \
+  -s \
+  -o "$BIN_OUT"
 
 echo
 echo "Successfully compiled to binary output: $BIN_OUT"

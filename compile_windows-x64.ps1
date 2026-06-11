@@ -214,6 +214,9 @@ $GppArgs = @(
     "-I$JEMALLOC_INCLUDE",
     $CPP_OUT,
     $JEMALLOC_LIB,
+    "-static-libstdc++",
+    "-static-libgcc",
+    "-s",
     "-o",
     $BIN_OUT
 )
