@@ -1,6 +1,6 @@
 // ============================================================
 // Franko Recursive Merge Sort Showcase: 50 Elements
-// Global-Array Version With Array Initializer List
+// Global-Array Version With Array Initializer List + Intrinsics
 // ============================================================
 //
 // Demonstrates:
@@ -9,45 +9,25 @@
 //   - recursive functions
 //   - void and non-void functions
 //   - global variables referenced inside functions
-//   - uint32_t indexes
+//   - uint indexes
 //   - int32_t values
 //   - merge sort using a global helper copy buffer
-//   - copying merged results back into the main array
 //   - array initializer-list assignment
+//   - array.memset(...)
+//   - array.memcpy(addr<array<...>>, dstStart, srcStart, count)
 //
-// Global scope in Franko allows declarations only, so the
-// arrays are declared globally and initialized inside a
-// function body.
+// Global scope in Franko allows declarations only, so the arrays are declared
+// globally and initialized inside a function body.
 //
-// Array initializer lists are assignment sugar:
-//
-//   target = [a, b, c]
-//
-// lowers to:
-//
-//   target[0] = a
-//   target[1] = b
-//   target[2] = c
-//
-// No allocation or dynamic initialization is performed by the
-// initializer list itself.
+// Arrays are not directly assignable, parameter-passable, or returnable by
+// value. When array data must be copied, use array intrinsics with addresses.
 // ============================================================
-
-
-// ------------------------------------------------------------
-// Global arrays
-// ------------------------------------------------------------
 
 array<int32_t, 50> a
 array<int32_t, 50> b
 
-
-// ------------------------------------------------------------
-// Print array contents
-// ------------------------------------------------------------
-
-func printArray(uint32_t n) -> void {
-    uint32_t i = 0
+func printArray(uint n) -> void {
+    uint i = 0
 
     while (i < n) {
         print(a[i])
@@ -55,111 +35,28 @@ func printArray(uint32_t n) -> void {
     }
 }
 
-
-// ------------------------------------------------------------
-// Initialize unsorted data
-// ------------------------------------------------------------
-//
-// a has type:
-//
-//   array<int32_t, 50>
-//
-// Therefore:
-//
-//   a = [...]
-//
-// lowers to:
-//
-//   a[0] = ...
-//   a[1] = ...
-//   ...
-//
-// This works because a is a static array.
-// ------------------------------------------------------------
-
 func initData() -> void {
     a = [
-        42,
-        7,
-        19,
-        3,
-        100,
-        55,
-        1,
-        88,
-        12,
-        33,
-
-        21,
-        5,
-        77,
-        60,
-        2,
-        50,
-        91,
-        14,
-        39,
-        73,
-
-        8,
-        65,
-        27,
-        44,
-        6,
-        99,
-        31,
-        58,
-        16,
-        82,
-
-        24,
-        70,
-        11,
-        47,
-        35,
-        94,
-        29,
-        63,
-        18,
-        76,
-
-        4,
-        53,
-        68,
-        10,
-        97,
-        26,
-        41,
-        80,
-        22,
-        56
+        42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
+        21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
+        8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
+        24, 70, 11, 47, 35, 94, 29, 63, 18, 76,
+        4, 53, 68, 10, 97, 26, 41, 80, 22, 56
     ]
+
+    b.memset(0)
 }
 
-
-// ------------------------------------------------------------
-// Merge two sorted ranges
-// ------------------------------------------------------------
-//
-// Merges:
-//
-//   a[low..mid]
-//   a[mid+1..high]
-//
-// into global helper array b, then copies the merged region
-// back into a.
-// ------------------------------------------------------------
-
-func merge(uint32_t low, uint32_t mid, uint32_t high) -> void {
-    uint32_t i = 0
-    uint32_t j = 0
-    uint32_t k = 0
+func merge(uint low, uint mid, uint high) -> void {
+    uint i = 0
+    uint j = 0
+    uint k = 0
+    uint count = 0
 
     i = low
     j = mid + 1
     k = low
 
-    // Merge while both halves still have elements
     while (i <= mid && j <= high) {
         if (a[i] <= a[j]) {
             b[k] = a[i]
@@ -172,43 +69,24 @@ func merge(uint32_t low, uint32_t mid, uint32_t high) -> void {
         k = k + 1
     }
 
-    // Copy any remaining left-half elements
     while (i <= mid) {
         b[k] = a[i]
         i = i + 1
         k = k + 1
     }
 
-    // Copy any remaining right-half elements
     while (j <= high) {
         b[k] = a[j]
         j = j + 1
         k = k + 1
     }
 
-    // Copy merged result back into a
-    k = low
-    while (k <= high) {
-        a[k] = b[k]
-        k = k + 1
-    }
+    count = high - low + 1
+    a.memcpy(getaddr(b), low, low, count)
 }
 
-
-// ------------------------------------------------------------
-// Recursive merge sort
-// ------------------------------------------------------------
-//
-// Sorts:
-//
-//   a[low..high]
-//
-// Base case:
-//   range of size 0 or 1
-// ------------------------------------------------------------
-
-func mergeSort(uint32_t low, uint32_t high) -> void {
-    uint32_t mid = 0
+func mergeSort(uint low, uint high) -> void {
+    uint mid = 0
 
     if (low < high) {
         mid = low + ((high - low) / 2)
@@ -219,19 +97,8 @@ func mergeSort(uint32_t low, uint32_t high) -> void {
     }
 }
 
-
-// ------------------------------------------------------------
-// Verification pass
-// ------------------------------------------------------------
-//
-// Returns:
-//
-//   1 if sorted
-//   0 otherwise
-// ------------------------------------------------------------
-
-func isSorted(uint32_t n) -> uint8_t {
-    uint32_t k = 1
+func isSorted(uint n) -> uint8_t {
+    uint k = 1
     uint8_t sorted = 1
 
     while (k < n) {
@@ -245,28 +112,20 @@ func isSorted(uint32_t n) -> uint8_t {
     return sorted
 }
 
-
-// ------------------------------------------------------------
-// Main
-// ------------------------------------------------------------
-
 func main() -> int32_t {
-    uint32_t n = 50
+    uint n = 50
     uint8_t sorted = 0
 
     initData()
 
-    // Print unsorted array
     print(3001)
     printArray(n)
 
     mergeSort(0, n - 1)
 
-    // Print sorted array
     print(3002)
     printArray(n)
 
-    // Verify sortedness
     sorted = isSorted(n)
 
     print(3003)

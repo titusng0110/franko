@@ -133,42 +133,46 @@ public class TypeChecker {
      *   - function types must have equal parameter types and return type.
      */
     public boolean sameType(SemanticType a, SemanticType b) {
-        if (a == null || b == null) {
+        if (a == null || b == null || a.getClass() != b.getClass()) {
             return false;
         }
 
-        if (a.getClass() != b.getClass()) {
-            return false;
-        }
-
-        if (a instanceof SemanticVoidType && b instanceof SemanticVoidType) {
+        if (a instanceof SemanticVoidType) {
             return true;
         }
 
-        if (a instanceof SemanticPrimitiveType pa && b instanceof SemanticPrimitiveType pb) {
+        if (a instanceof SemanticPrimitiveType pa
+                && b instanceof SemanticPrimitiveType pb) {
             return pa.kind == pb.kind;
         }
 
-        if (a instanceof SemanticDynamicArrayType da && b instanceof SemanticDynamicArrayType db) {
+        if (a instanceof SemanticDynamicArrayType da
+                && b instanceof SemanticDynamicArrayType db) {
             return sameType(da.elementType, db.elementType);
         }
 
-        if (a instanceof SemanticStaticArrayType sa && b instanceof SemanticStaticArrayType sb) {
+        if (a instanceof SemanticStaticArrayType sa
+                && b instanceof SemanticStaticArrayType sb) {
             return sameType(sa.elementType, sb.elementType)
                     && equalArraySizeLiterals(sa.sizeLiteral, sb.sizeLiteral);
         }
 
-        if (a instanceof SemanticAddrType aa && b instanceof SemanticAddrType ab) {
+        if (a instanceof SemanticAddrType aa
+                && b instanceof SemanticAddrType ab) {
             return sameType(aa.referencedType, ab.referencedType);
         }
 
-        if (a instanceof SemanticFunctionType fa && b instanceof SemanticFunctionType fb) {
+        if (a instanceof SemanticFunctionType fa
+                && b instanceof SemanticFunctionType fb) {
             if (fa.parameterTypes.size() != fb.parameterTypes.size()) {
                 return false;
             }
 
             for (int i = 0; i < fa.parameterTypes.size(); i++) {
-                if (!sameType(fa.parameterTypes.get(i), fb.parameterTypes.get(i))) {
+                if (!sameType(
+                        fa.parameterTypes.get(i),
+                        fb.parameterTypes.get(i)
+                )) {
                     return false;
                 }
             }
@@ -192,33 +196,17 @@ public class TypeChecker {
     }
 
     public boolean isIntegral(SemanticType t) {
-        if (!(t instanceof SemanticPrimitiveType pt)) {
-            return false;
-        }
-
-        return switch (pt.kind) {
-            case INT8, INT16, INT32, INT64,
-                 UINT8, UINT16, UINT32, UINT64 -> true;
-        };
+        return t instanceof SemanticPrimitiveType;
     }
 
     public boolean isSignedIntegral(SemanticType t) {
-        if (!(t instanceof SemanticPrimitiveType pt)) {
-            return false;
-        }
-
-        return isSigned(pt.kind);
+        SemanticPrimitiveKind kind = primitiveKindOf(t);
+        return kind != null && isSigned(kind);
     }
 
     public boolean isUnsignedIntegral(SemanticType t) {
-        if (!(t instanceof SemanticPrimitiveType pt)) {
-            return false;
-        }
-
-        return switch (pt.kind) {
-            case UINT8, UINT16, UINT32, UINT64 -> true;
-            case INT8, INT16, INT32, INT64 -> false;
-        };
+        SemanticPrimitiveKind kind = primitiveKindOf(t);
+        return kind != null && !isSigned(kind);
     }
 
     public boolean isArrayType(SemanticType t) {
@@ -273,11 +261,7 @@ public class TypeChecker {
     }
 
     public SemanticPrimitiveKind primitiveKindOf(SemanticType type) {
-        if (type instanceof SemanticPrimitiveType pt) {
-            return pt.kind;
-        }
-
-        return null;
+        return type instanceof SemanticPrimitiveType pt ? pt.kind : null;
     }
 
     public SemanticType elementTypeOfArray(SemanticType type) {
@@ -293,11 +277,7 @@ public class TypeChecker {
     }
 
     public SemanticType referencedTypeOfAddress(SemanticType type) {
-        if (type instanceof SemanticAddrType a) {
-            return a.referencedType;
-        }
-
-        return null;
+        return type instanceof SemanticAddrType a ? a.referencedType : null;
     }
 
     // ============================================================
@@ -352,7 +332,11 @@ public class TypeChecker {
         }
     }
 
-    public void ensureSameType(SemanticType expected, SemanticType actual, String message) {
+    public void ensureSameType(
+            SemanticType expected,
+            SemanticType actual,
+            String message
+    ) {
         if (!sameType(expected, actual)) {
             diagnostics.error(message + ": expected "
                     + describeSafe(expected)
@@ -361,7 +345,10 @@ public class TypeChecker {
         }
     }
 
-    public void ensureValidFunctionReturnType(SemanticType type, String message) {
+    public void ensureValidFunctionReturnType(
+            SemanticType type,
+            String message
+    ) {
         if (type == null) {
             diagnostics.error(message + ": return type is null");
             return;
@@ -439,26 +426,15 @@ public class TypeChecker {
 
         if (targetType instanceof SemanticPrimitiveType targetPrimitive) {
             if (expr.isConstant()) {
-                if (!fitsBigIntegerToPrimitive(expr.constantValue, targetPrimitive.kind)) {
-                    diagnostics.error(message + ": constant value "
-                            + expr.constantValue
-                            + " does not fit in "
-                            + targetType.describe());
-                }
+                requireAssignableConstant(
+                        expr.constantValue,
+                        targetPrimitive.kind,
+                        targetType,
+                        message
+                );
                 return;
             }
 
-            if (!sameType(targetType, expr.type)) {
-                diagnostics.error(message + ": expected "
-                        + targetType.describe()
-                        + ", got "
-                        + expr.type.describe());
-            }
-
-            return;
-        }
-
-        if (targetType instanceof SemanticAddrType) {
             if (!sameType(targetType, expr.type)) {
                 diagnostics.error(message + ": expected "
                         + targetType.describe()
@@ -474,6 +450,20 @@ public class TypeChecker {
                     + targetType.describe()
                     + ", got "
                     + expr.type.describe());
+        }
+    }
+
+    private void requireAssignableConstant(
+            BigInteger value,
+            SemanticPrimitiveKind kind,
+            SemanticType targetType,
+            String message
+    ) {
+        if (!fitsBigIntegerToPrimitive(value, kind)) {
+            diagnostics.error(message + ": constant value "
+                    + value
+                    + " does not fit in "
+                    + targetType.describe());
         }
     }
 
@@ -504,15 +494,7 @@ public class TypeChecker {
             SemanticExprNode right,
             String op
     ) {
-        if (left == null || right == null) {
-            diagnostics.error("Operands of '" + op + "' cannot be null");
-            return;
-        }
-
-        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
-        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
-
-        if (!isIntegral(left.type) || !isIntegral(right.type)) {
+        if (!ensureIntegralOperands(left, right, op)) {
             return;
         }
 
@@ -578,26 +560,14 @@ public class TypeChecker {
             SemanticExprNode right,
             String op
     ) {
-        if (left == null || right == null) {
-            diagnostics.error("Operands of '" + op + "' cannot be null");
-            return;
-        }
-
-        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
-        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
-
-        if (!isIntegral(left.type) || !isIntegral(right.type)) {
+        if (!ensureIntegralOperands(left, right, op)) {
             return;
         }
 
         boolean leftConst = left.isConstant();
         boolean rightConst = right.isConstant();
 
-        if (leftConst && rightConst) {
-            return;
-        }
-
-        if (leftConst) {
+        if (leftConst && !rightConst) {
             requireConstantFitsType(
                     left.constantValue,
                     right.type,
@@ -606,13 +576,29 @@ public class TypeChecker {
             return;
         }
 
-        if (rightConst) {
+        if (!leftConst && rightConst) {
             requireConstantFitsType(
                     right.constantValue,
                     left.type,
                     "Right constant for operator '" + op + "'"
             );
         }
+    }
+
+    private boolean ensureIntegralOperands(
+            SemanticExprNode left,
+            SemanticExprNode right,
+            String op
+    ) {
+        if (left == null || right == null) {
+            diagnostics.error("Operands of '" + op + "' cannot be null");
+            return false;
+        }
+
+        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
+        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
+
+        return isIntegral(left.type) && isIntegral(right.type);
     }
 
     // ============================================================
@@ -640,15 +626,7 @@ public class TypeChecker {
             SemanticExprNode right,
             String op
     ) {
-        if (left == null || right == null) {
-            diagnostics.error("Operands of '" + op + "' cannot be null");
-            return;
-        }
-
-        ensureIntegral(left.type, "Left operand of '" + op + "' must be an integer");
-        ensureIntegral(right.type, "Right operand of '" + op + "' must be an integer");
-
-        if (!isIntegral(left.type) || !isIntegral(right.type)) {
+        if (!ensureIntegralOperands(left, right, op)) {
             return;
         }
 
@@ -686,11 +664,9 @@ public class TypeChecker {
                 return;
             }
 
-            SemanticPrimitiveKind rhsContextKind = unsignedVariantOf(leftKind);
-
             requireConstantFitsPrimitive(
                     right.constantValue,
-                    rhsContextKind,
+                    unsignedVariantOf(leftKind),
                     "Right constant for operator '" + op + "'"
             );
 
@@ -770,16 +746,14 @@ public class TypeChecker {
             return false;
         }
 
-        int bits = bitWidth(kind);
-        boolean signed = isSigned(kind);
-
         BigInteger two = BigInteger.valueOf(2);
+        int bits = bitWidth(kind);
 
-        BigInteger min = signed
+        BigInteger min = isSigned(kind)
                 ? two.pow(bits - 1).negate()
                 : BigInteger.ZERO;
 
-        BigInteger max = signed
+        BigInteger max = isSigned(kind)
                 ? two.pow(bits - 1).subtract(BigInteger.ONE)
                 : two.pow(bits).subtract(BigInteger.ONE);
 
@@ -832,14 +806,6 @@ public class TypeChecker {
             return true;
         }
 
-        if (t instanceof SemanticAddrType) {
-            return false;
-        }
-
-        if (t instanceof SemanticDynamicArrayType) {
-            return false;
-        }
-
         if (t instanceof SemanticStaticArrayType s) {
             return isMemsetable(s.elementType);
         }
@@ -863,16 +829,9 @@ public class TypeChecker {
             return false;
         }
 
-        if (t instanceof SemanticPrimitiveType) {
+        if (t instanceof SemanticPrimitiveType
+                || t instanceof SemanticAddrType) {
             return true;
-        }
-
-        if (t instanceof SemanticAddrType) {
-            return true;
-        }
-
-        if (t instanceof SemanticDynamicArrayType) {
-            return false;
         }
 
         if (t instanceof SemanticStaticArrayType s) {
@@ -905,11 +864,13 @@ public class TypeChecker {
             s = s.substring(1);
         }
 
-        if (s.toLowerCase().startsWith("0b")) {
+        String lower = s.toLowerCase();
+
+        if (lower.startsWith("0b")) {
             return new BigInteger(s.substring(2), 2);
         }
 
-        if (s.toLowerCase().startsWith("0x")) {
+        if (lower.startsWith("0x")) {
             return new BigInteger(s.substring(2), 16);
         }
 

@@ -1,0 +1,519 @@
+// ============================================================
+// Franko MemorySafetyChecker Torture Test
+// ============================================================
+//
+// Each testcase is a separate function.
+//
+// This file is expected to FAIL memory safety checking.
+// The goal is to verify use-after-free, double-free, maybe-deleted,
+// scope leaks, return leaks, branch merges, loops, and dynamic arrays.
+//
+// Variable names are unique per testcase so diagnostics are easier to map.
+// ============================================================
+
+
+// ------------------------------------------------------------
+// 1. Direct use-after-free
+// ------------------------------------------------------------
+
+func testcase1() -> int32_t {
+    alloc int32_t x1
+
+    del x1
+    print(x1)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 2. Direct double-free
+// ------------------------------------------------------------
+
+func testcase2() -> int32_t {
+    alloc int32_t x2
+
+    del x2
+    del x2
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 3. Maybe use-after-free after branch
+// ------------------------------------------------------------
+
+func testcase3() -> int32_t {
+    alloc int32_t x3
+    int32_t cond3 = 1
+
+    if (cond3 != 0) {
+        del x3
+    }
+
+    print(x3)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 4. Maybe double-free after branch
+// ------------------------------------------------------------
+
+func testcase4() -> int32_t {
+    alloc int32_t x4
+    int32_t cond4 = 1
+
+    if (cond4 != 0) {
+        del x4
+    }
+
+    del x4
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 5. Return branch deletes, fallthrough leaks
+// ------------------------------------------------------------
+
+func testcase5() -> int32_t {
+    alloc int32_t x5
+    int32_t cond5 = 1
+
+    if (cond5 != 0) {
+        del x5
+        return 0
+    }
+
+    print(x5)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 6. Return branch deletes, fallthrough also deletes
+// Expected: should pass individually
+// ------------------------------------------------------------
+
+func testcase6() -> int32_t {
+    alloc int32_t x6
+    int32_t cond6 = 1
+
+    if (cond6 != 0) {
+        del x6
+        return 0
+    }
+
+    print(x6)
+    del x6
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 7. Both branches delete, then use after if
+// ------------------------------------------------------------
+
+func testcase7() -> int32_t {
+    alloc int32_t x7
+    int32_t cond7 = 1
+
+    if (cond7 != 0) {
+        del x7
+    } else {
+        del x7
+    }
+
+    print(x7)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 8. One branch deletes and returns, other branch deletes and continues
+// ------------------------------------------------------------
+
+func testcase8() -> int32_t {
+    alloc int32_t x8
+    int32_t cond8 = 1
+
+    if (cond8 != 0) {
+        del x8
+        return 0
+    } else {
+        del x8
+    }
+
+    print(x8)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 9. One branch deletes and returns, other keeps alive and later deletes
+// Expected: should pass individually
+// ------------------------------------------------------------
+
+func testcase9() -> int32_t {
+    alloc int32_t x9
+    int32_t cond9 = 1
+
+    if (cond9 != 0) {
+        del x9
+        return 0
+    } else {
+        print(x9)
+    }
+
+    del x9
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 10. Nested maybe delete
+// ------------------------------------------------------------
+
+func testcase10() -> int32_t {
+    alloc int32_t x10
+    int32_t a10 = 1
+    int32_t b10 = 1
+
+    if (a10 != 0) {
+        if (b10 != 0) {
+            del x10
+        }
+    }
+
+    print(x10)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 11. Nested return-aware safe path
+// Expected: should pass individually
+// ------------------------------------------------------------
+
+func testcase11() -> int32_t {
+    alloc int32_t x11
+    int32_t a11 = 1
+    int32_t b11 = 1
+
+    if (a11 != 0) {
+        if (b11 != 0) {
+            del x11
+            return 0
+        }
+    }
+
+    print(x11)
+    del x11
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 12. Nested return-aware leak
+// ------------------------------------------------------------
+
+func testcase12() -> int32_t {
+    alloc int32_t x12
+    int32_t a12 = 1
+    int32_t b12 = 1
+
+    if (a12 != 0) {
+        if (b12 != 0) {
+            del x12
+            return 0
+        }
+    }
+
+    print(x12)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 13. Loop double-free probe
+// ------------------------------------------------------------
+
+func testcase13() -> int32_t {
+    alloc int32_t x13
+    uint32_t i13 = 0
+
+    while (i13 < 10) {
+        del x13
+        i13 = i13 + 1
+    }
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 14. Loop internal use-after-free
+// ------------------------------------------------------------
+
+func testcase14() -> int32_t {
+    alloc int32_t x14
+    uint32_t i14 = 0
+
+    while (i14 < 10) {
+        del x14
+        print(x14)
+        i14 = i14 + 1
+    }
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 15. Loop may delete, after loop maybe deleted
+// ------------------------------------------------------------
+
+func testcase15() -> int32_t {
+    alloc int32_t x15
+    uint32_t i15 = 0
+
+    while (i15 < 1) {
+        del x15
+        i15 = i15 + 1
+    }
+
+    print(x15)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 16. Leak at block scope
+// ------------------------------------------------------------
+
+func testcase16() -> int32_t {
+    {
+        alloc int32_t x16
+        print(x16)
+    }
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 17. Proper block cleanup
+// Expected: should pass individually
+// ------------------------------------------------------------
+
+func testcase17() -> int32_t {
+    {
+        alloc int32_t x17
+        print(x17)
+        del x17
+    }
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 18. Branch leak inside block
+// ------------------------------------------------------------
+
+func testcase18() -> int32_t {
+    int32_t cond18 = 1
+
+    {
+        alloc int32_t x18
+
+        if (cond18 != 0) {
+            del x18
+        }
+
+        print(123)
+    }
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 19. Non-heap delete
+// ------------------------------------------------------------
+
+func testcase19() -> int32_t {
+    int32_t x19 = 10
+
+    del x19
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 20. Address use after free
+// ------------------------------------------------------------
+
+func testcase20() -> int32_t {
+    alloc int32_t x20
+    addr<int32_t> p20
+
+    del x20
+
+    p20 = getaddr(x20)
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 21. Deref alias after owner delete
+//
+// Current symbol-based MemorySafetyChecker may not catch this yet,
+// because it does not perform alias analysis.
+// ------------------------------------------------------------
+
+func testcase21() -> int32_t {
+    alloc int32_t x21
+    addr<int32_t> p21
+
+    p21 = getaddr(x21)
+
+    del x21
+
+    print(deref(p21))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 22. Dynamic array use after del
+// ------------------------------------------------------------
+
+func testcase22() -> int32_t {
+    alloc array<int32_t> xs22
+
+    xs22.init(10)
+    del xs22
+
+    xs22.uninit()
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 23. Dynamic array object leak
+//
+// xs23.uninit() frees the dynamic array's internal buffer,
+// but xs23 itself is heap allocated and still needs del xs23.
+// ------------------------------------------------------------
+
+func testcase23() -> int32_t {
+    alloc array<int32_t> xs23
+
+    xs23.init(10)
+    xs23.uninit()
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 24. Dynamic array fully cleaned
+// Expected: should pass individually
+// ------------------------------------------------------------
+
+func testcase24() -> int32_t {
+    alloc array<int32_t> xs24
+
+    xs24.init(10)
+    xs24.uninit()
+    del xs24
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 25. Sneaky branch dynamic array cleanup
+// ------------------------------------------------------------
+
+func testcase25() -> int32_t {
+    alloc array<int32_t> xs25
+    int32_t cond25 = 1
+
+    xs25.init(10)
+
+    if (cond25 != 0) {
+        xs25.uninit()
+        del xs25
+    }
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 26. Compact branch torture test
+// ------------------------------------------------------------
+
+func testcase26() -> int32_t {
+    alloc int32_t x26
+    int32_t a26 = 1
+    int32_t b26 = 1
+
+    if (a26 != 0) {
+        if (b26 != 0) {
+            del x26
+            return 0
+        } else {
+            print(x26)
+        }
+    } else {
+        del x26
+    }
+
+    print(x26)
+    del x26
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// Main
+// ------------------------------------------------------------
+//
+// MemorySafetyChecker checks all function bodies, so the file will fail even
+// if main does not call the failing testcases.
+//
+// If you want to test one case at runtime later, comment out the bad functions
+// or split them into separate files.
+
+func main() -> int32_t {
+    print(9999)
+
+    // testcase6()
+    // testcase9()
+    // testcase11()
+    // testcase17()
+    // testcase24()
+
+    return 0
+}

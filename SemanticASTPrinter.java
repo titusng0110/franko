@@ -17,11 +17,11 @@ import java.math.BigInteger;
  *   - parameter variables,
  *   - return statements,
  *   - function call expressions,
+ *   - array intrinsic call expressions,
  *   - variable symbols,
  *   - expression types,
  *   - folded constant values,
- *   - lvalue flags,
- *   - lowered array intrinsic nodes.
+ *   - lvalue flags.
  *
  * ============================================================================
  */
@@ -157,26 +157,6 @@ public class SemanticASTPrinter {
             return;
         }
 
-        if (node instanceof SemanticArrayInitNode n) {
-            printArrayInit(n, indent);
-            return;
-        }
-
-        if (node instanceof SemanticArrayUninitNode n) {
-            printArrayUninit(n, indent);
-            return;
-        }
-
-        if (node instanceof SemanticArrayMemsetNode n) {
-            printArrayMemset(n, indent);
-            return;
-        }
-
-        if (node instanceof SemanticArrayMemcpyNode n) {
-            printArrayMemcpy(n, indent);
-            return;
-        }
-
         line(indent, "Unknown SemanticStmtNode: "
                 + node.getClass().getSimpleName());
     }
@@ -275,56 +255,6 @@ public class SemanticASTPrinter {
     }
 
     // ============================================================
-    // Array Intrinsics
-    // ============================================================
-
-    private static void printArrayInit(SemanticArrayInitNode node, int indent) {
-        line(indent, "SemanticArrayInitNode");
-
-        line(indent + 1, "target:");
-        printExpr(node.target, indent + 2);
-
-        line(indent + 1, "size:");
-        printExpr(node.size, indent + 2);
-    }
-
-    private static void printArrayUninit(
-            SemanticArrayUninitNode node,
-            int indent
-    ) {
-        line(indent, "SemanticArrayUninitNode");
-
-        line(indent + 1, "receiver:");
-        printExpr(node.receiver, indent + 2);
-    }
-
-    private static void printArrayMemset(
-            SemanticArrayMemsetNode node,
-            int indent
-    ) {
-        line(indent, "SemanticArrayMemsetNode");
-
-        line(indent + 1, "receiver:");
-        printExpr(node.receiver, indent + 2);
-
-        line(indent + 1, "value:");
-        printExpr(node.value, indent + 2);
-    }
-
-    private static void printArrayMemcpy(
-            SemanticArrayMemcpyNode node,
-            int indent
-    ) {
-        line(indent, "SemanticArrayMemcpyNode");
-
-        line(indent + 1, "target:");
-        printExpr(node.target, indent + 2);
-
-        line(indent + 1, "source:");
-        printExpr(node.source, indent + 2);
-    }
-
-    // ============================================================
     // Expressions
     // ============================================================
 
@@ -361,6 +291,11 @@ public class SemanticASTPrinter {
 
         if (node instanceof SemanticFunctionCallNode n) {
             printFunctionCall(n, indent);
+            return;
+        }
+
+        if (node instanceof SemanticArrayIntrinsicCallNode n) {
+            printArrayIntrinsicCall(n, indent);
             return;
         }
 
@@ -456,6 +391,43 @@ public class SemanticASTPrinter {
         }
     }
 
+    private static void printArrayIntrinsicCall(
+            SemanticArrayIntrinsicCallNode node,
+            int indent
+    ) {
+        line(indent, "SemanticArrayIntrinsicCallNode");
+        printExprMetadata(node, indent + 1);
+
+        line(indent + 1, "kind: " + node.kind);
+        line(indent + 1, "runtimeName: " + quote(node.kind.runtimeName));
+        line(indent + 1, "returnsStatus: " + node.returnsStatus());
+        line(indent + 1, "returnsVoid: " + node.returnsVoid());
+        line(indent + 1, "arity: " + node.arity());
+
+        line(indent + 1, "receiver:");
+        printExpr(node.receiver, indent + 2);
+
+        line(indent + 1, "args: " + node.args.size());
+        for (int i = 0; i < node.args.size(); i++) {
+            line(indent + 1, "[" + i + "]");
+            printExpr(node.args.get(i), indent + 2);
+        }
+
+        if (node.kind == SemanticArrayIntrinsicKind.MEMSET) {
+            line(indent + 1, "isFullArrayMemset: "
+                    + node.isFullArrayMemset());
+            line(indent + 1, "isRangedMemset: "
+                    + node.isRangedMemset());
+        }
+
+        if (node.kind == SemanticArrayIntrinsicKind.MEMCPY) {
+            line(indent + 1, "isFullArrayMemcpy: "
+                    + node.isFullArrayMemcpy());
+            line(indent + 1, "isRangedMemcpy: "
+                    + node.isRangedMemcpy());
+        }
+    }
+
     private static void printGetAddr(
             SemanticGetAddrNode node,
             int indent
@@ -507,7 +479,6 @@ public class SemanticASTPrinter {
         line(indent + 1, "name: " + quote(symbol.name));
         line(indent + 1, "type: " + describeType(symbol.type));
         line(indent + 1, "isHeap: " + symbol.isHeap);
-        line(indent + 1, "deleted: " + symbol.deleted);
 
         if (symbol instanceof ParameterSymbol param) {
             line(indent + 1, "index: " + param.index);

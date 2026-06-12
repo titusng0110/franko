@@ -30,12 +30,10 @@ abstract class Symbol {
 
 class VariableSymbol extends Symbol {
     final boolean isHeap;
-    boolean deleted;
 
     VariableSymbol(String name, SemanticType type, boolean isHeap) {
         super(name, type);
         this.isHeap = isHeap;
-        this.deleted = false;
     }
 }
 
