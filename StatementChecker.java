@@ -23,7 +23,6 @@
  *   - void-expression rejection in value-producing statement contexts,
  *   - if/while condition validity,
  *   - print argument validity,
- *   - delete legality,
  *   - recursive traversal through blocks and nested statements.
  *
  * ----------------------------------------------------------------------------
