@@ -1,4 +1,3 @@
-import java.math.BigInteger;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -149,173 +148,42 @@ public class FunctionChecker {
                         + "'");
             }
 
-            /*
-             * Parameters are ordinary local variables inside the function body.
-             * Therefore they use ordinary variable declaration legality.
-             *
-             * This rejects void parameters defensively if they ever appear in
-             * the Semantic AST.
-             */
             declarations.checkVarDecl(new SemanticVarDeclNode(param));
+
+            if (!types.isAssignableValueType(param.type)) {
+                diagnostics.error("Parameter '"
+                        + param.name
+                        + "' in function '"
+                        + node.symbol.name
+                        + "' has invalid parameter type "
+                        + types.describeSafe(param.type)
+                        + ": parameters must have assignable value types");
+            }
         }
     }
-
     private void validateReturnType(FunctionSymbol fn) {
         SemanticType returnType = fn.returnType();
 
-        types.ensureValidFunctionReturnType(
-                returnType,
-                "Function '" + fn.fullSignatureString() + "'"
-        );
-
         if (returnType == null) {
+            diagnostics.error("Function '"
+                    + fn.fullSignatureString()
+                    + "' has null return type");
             return;
         }
 
-        /*
-        * void is specially valid as a function return type.
-        */
-        if (types.isVoidType(returnType)) {
-            return;
-        }
-
-        /*
-        * Primitive integer return types are ordinary assignable values.
-        */
-        if (returnType instanceof SemanticPrimitiveType) {
-            return;
-        }
-
-        /*
-        * addr<T> is valid as a function return type, but T itself must be an
-        * ordinary non-void type. Arrays are allowed behind addresses.
-        *
-        * Examples:
-        *
-        *   addr<int32_t>                  valid
-        *   addr<array<int32_t>>           valid
-        *   addr<array<uint8_t, 128>>      valid
-        *   addr<void>                    invalid
-        */
-        if (returnType instanceof SemanticAddrType address) {
-            validateAddressReferencedReturnType(
-                    address.referencedType,
+        if (!types.isVoidType(returnType)) {
+            declarations.checkDeclaredType(
+                    returnType,
                     "Return type of function '" + fn.fullSignatureString() + "'"
             );
         }
-    }
 
-    /**
-     * A function may return addr<T>, including:
-     *
-     *   addr<array<int32_t>>
-     *   addr<array<uint8_t, 128>>
-     *
-     * But void is not an ordinary referenced type:
-     *
-     *   addr<void>      invalid
-     *
-     * Also validate nested array element types and static array sizes
-     * defensively.
-     */
-    private void validateAddressReferencedReturnType(
-            SemanticType referencedType,
-            String where
-    ) {
-        validateOrdinaryType(
-                referencedType,
-                where + " address referenced type"
-        );
-    }
-
-    /**
-     * Validates ordinary non-void types used inside address return types.
-     *
-     * This intentionally allows arrays here because:
-     *
-     *   addr<array<T>>
-     *   addr<array<T, N>>
-     *
-     * are recommended Franko patterns for array access/return.
-     */
-    private void validateOrdinaryType(
-            SemanticType type,
-            String where
-    ) {
-        if (type == null) {
-            diagnostics.error(where + " is null");
-            return;
-        }
-
-        if (type instanceof SemanticVoidType) {
-            diagnostics.error(where + " cannot be void");
-            return;
-        }
-
-        if (type instanceof SemanticPrimitiveType) {
-            return;
-        }
-
-        if (type instanceof SemanticAddrType address) {
-            validateOrdinaryType(
-                    address.referencedType,
-                    where + " nested address referenced type"
-            );
-            return;
-        }
-
-        if (type instanceof SemanticDynamicArrayType dynamicArray) {
-            validateOrdinaryType(
-                    dynamicArray.elementType,
-                    where + " dynamic array element type"
-            );
-            return;
-        }
-
-        if (type instanceof SemanticStaticArrayType staticArray) {
-            validateStaticArraySize(staticArray, where);
-
-            validateOrdinaryType(
-                    staticArray.elementType,
-                    where + " static array element type"
-            );
-            return;
-        }
-
-        diagnostics.error(where + " has unsupported type "
-                + types.describeSafe(type));
-    }
-
-    private void validateStaticArraySize(
-            SemanticStaticArrayType staticArray,
-            String where
-    ) {
-        String literal = staticArray.sizeLiteral;
-
-        try {
-            BigInteger size = types.parseIntegerLiteral(literal);
-
-            if (size.signum() <= 0) {
-                diagnostics.error(where
-                        + " has invalid static array size "
-                        + literal
-                        + ": size must be greater than zero");
-                return;
-            }
-
-            if (!types.fitsBigIntegerToPrimitive(
-                    size,
-                    SemanticPrimitiveKind.UINT32
-            )) {
-                diagnostics.error(where
-                        + " has invalid static array size "
-                        + literal
-                        + ": size does not fit uint32_t");
-            }
-        } catch (Exception e) {
-            diagnostics.error(where
-                    + " has invalid static array size literal: "
-                    + literal);
+        if (!types.isValidFunctionReturnType(returnType)) {
+            diagnostics.error("Function '"
+                    + fn.fullSignatureString()
+                    + "' has invalid return type "
+                    + types.describeSafe(returnType)
+                    + ": return type must be void or an assignable value type");
         }
     }
 

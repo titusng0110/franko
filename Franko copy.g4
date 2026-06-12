@@ -11,8 +11,86 @@ program
     ;
 
 topLevelItem
-    : functionDecl
-    | statement
+    : structDecl
+    | functionDecl
+    | globalVarDecl
+    ;
+
+// ---------- STRUCTS ----------
+//
+// Simple struct syntax:
+//
+//   struct X {
+//       int32_t num = 0
+//       int64_t longnum = 1 + 2
+//   }
+//
+// Only field declarations are allowed inside a struct.
+// No assignments, no methods, no generics.
+// No alloc fields.
+//
+// Field initializers, if present, must be constExpr.
+//
+// Valid:
+//   struct X {
+//       int32_t a
+//       int64_t b = 123
+//       array<int32_t, 4> xs
+//   }
+//
+// Invalid:
+//   struct X {
+//       alloc int32_t a
+//       int32_t a = f()
+//       a = 1
+//       func f() -> void {}
+//   }
+//
+structDecl
+    : STRUCT IDENTIFIER separators* LBRACE separators* structFieldDecl* RBRACE
+    ;
+
+structFieldDecl
+    : type IDENTIFIER constDeclSuffix? separators+
+    ;
+
+// ---------- GLOBAL VARIABLES ----------
+//
+// Global variables may have optional constexpr-style initialization.
+// No alloc globals.
+//
+// Valid:
+//   int32_t g
+//   int32_t g = 1 + 2
+//   uint64_t mask = 1 << 8
+//   X globalStruct
+//
+// Invalid:
+//   alloc int32_t g
+//   int32_t g = f()
+//   int32_t g = other
+//   int32_t g = arr[0]
+//
+globalVarDecl
+    : type IDENTIFIER constDeclSuffix?
+    ;
+
+// ---------- CONST DECLARATION INITIALIZERS ----------
+//
+// Reusable declaration initializer for places where initialization
+// must be compile-time evaluable.
+//
+// Used by:
+//   - struct field declarations
+//   - global variable declarations
+//
+// This intentionally accepts constExpr, not expr.
+constDeclSuffix
+    : ASSIGN constDeclInitializer
+    ;
+
+constDeclInitializer
+    : constExpr
     ;
 
 // ---------- FUNCTIONS ----------
@@ -106,11 +184,12 @@ simpleStmt
 
 // ---------- VARIABLE DECLARATION ----------
 //
-// Declaration initializer syntax supports ordinary expression initializers
-// and array initializer-list syntax.
+// Local declaration initializer syntax supports ordinary expression
+// initializers and array initializer-list syntax.
 //
 // Examples:
 //   int32_t x = 1 + 2;
+//   int32_t y = f();
 //   array<int32_t, 3> xs = [1, 2, 3];
 //   array<int32_t> ys = [1, 2, 3];
 //   ndarray<byte, 12, 12> grid;
@@ -126,6 +205,8 @@ simpleStmt
 // The initializer list itself does not allocate, resize, or initialize
 // dynamic array storage. It only lowers to indexed assignments.
 //
+// alloc is allowed only for local variable declarations, not globals,
+// and not struct fields.
 varDecl
     : type IDENTIFIER declSuffix?
     | ALLOC type IDENTIFIER declSuffix?
@@ -175,7 +256,6 @@ returnStmt
 // The initializer list does not allocate, resize, or initialize dynamic arrays.
 // Dynamic arrays must already be initialized before the generated indexed
 // assignments are valid.
-//
 assignStmt
     : lvalue ASSIGN assignmentInitializer
     ;
@@ -203,7 +283,7 @@ exprList
 
 // ---------- LVALUES ----------
 //
-// Supports future struct field assignment:
+// Supports:
 //   x
 //   arr[i]
 //   obj.field
@@ -372,6 +452,7 @@ memberName
     | FUNC
     | RETURN
     | VOID
+    | STRUCT
     | ALLOC
     | DEL
     | PRINT
@@ -398,6 +479,8 @@ memberName
 // Used for:
 //   - static array size expressions
 //   - ndarray dimension expressions
+//   - global variable initializers
+//   - struct field default initializers
 //
 // A constExpr is syntactically restricted to expressions that can be
 // computed from the expression alone:
@@ -494,7 +577,7 @@ constPrimary
 //
 //   xs = [1, 2, 3];
 //
-// and declaration initializer contexts:
+// and local declaration initializer contexts:
 //
 //   array<int32_t, 3> xs = [1, 2, 3];
 //
@@ -536,6 +619,9 @@ constPrimary
 //   f([1, 2, 3]);
 //   [1, 2, 3][0];
 //
+// Also invalid as global or struct field initializers:
+//   int32_t g = [1, 2, 3]
+//   struct X { array<int32_t, 3> xs = [1, 2, 3] }
 arrayLiteral
     : LBRACK arrayLiteralElements? RBRACK
     ;
@@ -578,6 +664,20 @@ stringLiteral
 //   array<int, 1 + 1>
 //   array<int, 2 * 5>
 //   array<array<int, 1 + 1>, 2 + 2>
+//
+// Struct names are parsed as IDENTIFIER types:
+//
+//   struct X {
+//       int32_t n
+//   }
+//
+//   X x
+//   array<X, 4> xs
+//   addr<X> p
+//
+// The parser accepts any IDENTIFIER as a possible struct type.
+// Semantic analysis should verify that the identifier actually names
+// a declared struct.
 //
 // ndarray is syntactic sugar for nested static arrays.
 //
@@ -629,6 +729,7 @@ type
     | UINT16_T                                 # Uint16Type
     | UINT32_T                                 # Uint32Type
     | UINT64_T                                 # Uint64Type
+    | IDENTIFIER                               # StructType
     | ARRAY LT type GT                         # DynamicArrayType
     | ARRAY LT type COMMA constExpr GT         # StaticArrayType
     | NDARRAY LT type COMMA constExprList GT   # NdArrayType
@@ -637,10 +738,11 @@ type
 
 // ---------- LEXER ----------
 
-// Function keywords
+// Function / declaration keywords
 FUNC   : 'func' ;
 RETURN : 'return' ;
 VOID   : 'void' ;
+STRUCT : 'struct' ;
 
 // Keywords
 ALLOC   : 'alloc' ;
@@ -661,7 +763,7 @@ INT64_T  : 'int64_t' ;
 
 UINT8_T  : 'uint8_t' | 'byte' ;
 UINT16_T : 'uint16_t' ;
-UINT32_T : 'uint32_t' | 'uint' ;
+UINT32_T : 'uint32_t' ;
 UINT64_T : 'uint64_t' ;
 
 ARRAY    : 'array' ;

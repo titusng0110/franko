@@ -82,13 +82,13 @@ public class DeclarationChecker {
             return;
         }
 
-        validateDeclaredType(
+        checkDeclaredType(
             node.symbol.type,
             "Variable '" + node.symbol.name + "'"
         );
     }
 
-    private void validateDeclaredType(
+    public void checkDeclaredType(
         SemanticType type,
         String where
     ) {
@@ -102,7 +102,7 @@ public class DeclarationChecker {
         }
 
         if (type instanceof SemanticDynamicArrayType dynamicArray) {
-            validateDeclaredType(
+            checkDeclaredType(
                 dynamicArray.elementType,
                 where + " dynamic array element"
             );
@@ -112,7 +112,7 @@ public class DeclarationChecker {
         if (type instanceof SemanticStaticArrayType staticArray) {
             validateStaticArraySize(staticArray, where);
 
-            validateDeclaredType(
+            checkDeclaredType(
                 staticArray.elementType,
                 where + " static array element"
             );
@@ -120,7 +120,7 @@ public class DeclarationChecker {
         }
 
         if (type instanceof SemanticAddrType address) {
-            validateDeclaredType(
+            checkDeclaredType(
                 address.referencedType,
                 where + " address referenced type"
             );

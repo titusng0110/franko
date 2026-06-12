@@ -1,13 +1,13 @@
 #include "FrankoRuntime.hpp"
 
-void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist);
+void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC);
 void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc);
 uint8_t runBfs(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t qCap, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
 void reconstructPath(Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
 void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<uint32_t, 13>* line, uint32_t rows, uint32_t cols, uint32_t startR, uint32_t startC, uint32_t goalR, uint32_t goalC);
 int32_t main();
 
-void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist)
+void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* path, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC)
 {
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(0)]) = static_cast<uint32_t>(1);
     (((*grid)[static_cast<uint32_t>(0)])[static_cast<uint32_t>(1)]) = static_cast<uint32_t>(1);
@@ -168,6 +168,8 @@ void initArrays(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid
     (*visited).memset(static_cast<uint8_t>(0));
     (*path).memset(static_cast<uint8_t>(0));
     (*dist).memset(static_cast<uint8_t>(0));
+    (*parentR).memset(static_cast<uint8_t>(0));
+    (*parentC).memset(static_cast<uint8_t>(0));
 }
 
 void tryVisit(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* grid, Franko_Static_Array<Franko_Static_Array<uint8_t, 13>, 12>* visited, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* dist, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentR, Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>* parentC, Franko_Dynamic_Array<uint32_t>* queue, uint32_t* tail, uint32_t qCap, uint32_t cols, uint32_t r, uint32_t c, uint32_t nr, uint32_t nc)
@@ -275,10 +277,9 @@ void printSolvedGrid(Franko_Static_Array<Franko_Static_Array<uint32_t, 13>, 12>*
     r = static_cast<uint32_t>(0);
     uint32_t c;
     c = static_cast<uint32_t>(0);
-    r = static_cast<uint32_t>(0);
     while (static_cast<uint8_t>((r < rows)))
     {
-        (*line).memcpy(((*grid)[r]));
+        (*line).memcpy((&((*grid)[r])));
         c = static_cast<uint32_t>(0);
         while (static_cast<uint8_t>((c < cols)))
         {
@@ -329,10 +330,20 @@ int32_t main()
     goalC = static_cast<uint32_t>(11);
     uint8_t found;
     found = static_cast<uint8_t>(0);
+    int32_t qStatus;
+    qStatus = static_cast<int32_t>(0);
     uint32_t* answer;
-    (*queue).init(qCap);
-    initArrays((&grid), (&visited), (&path), (&dist));
+    qStatus = (*queue).init_zero(qCap);
+    if (static_cast<uint8_t>((qStatus != 0)))
+    {
+        queue->~Franko_Dynamic_Array<uint32_t>();
+        je_free(queue);
+        queue = nullptr;
+        return static_cast<int32_t>(static_cast<int32_t>((-1)));
+    }
+    initArrays((&grid), (&visited), (&path), (&dist), (&parentR), (&parentC));
     found = runBfs((&grid), (&visited), (&dist), (&parentR), (&parentC), (&(*queue)), qCap, cols, startR, startC, goalR, goalC);
+    (*queue).uninit();
     queue->~Franko_Dynamic_Array<uint32_t>();
     je_free(queue);
     queue = nullptr;

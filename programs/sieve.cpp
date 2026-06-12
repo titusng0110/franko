@@ -7,7 +7,13 @@ int32_t main()
     uint32_t n;
     n = static_cast<uint32_t>(80);
     Franko_Dynamic_Array<uint8_t> isPrime;
-    isPrime.init(static_cast<uint32_t>((n + 1)));
+    int32_t initStatus;
+    initStatus = static_cast<int32_t>(0);
+    initStatus = isPrime.init(static_cast<uint32_t>((n + 1)));
+    if (static_cast<uint8_t>((initStatus != 0)))
+    {
+        return static_cast<int32_t>(static_cast<int32_t>((-1)));
+    }
     isPrime.memset(static_cast<uint8_t>(1));
     (isPrime[static_cast<uint32_t>(0)]) = static_cast<uint8_t>(0);
     if (static_cast<uint8_t>((n >= 1)))

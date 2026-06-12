@@ -73,6 +73,7 @@ void initData()
     (a[static_cast<uint32_t>(47)]) = static_cast<int32_t>(80);
     (a[static_cast<uint32_t>(48)]) = static_cast<int32_t>(22);
     (a[static_cast<uint32_t>(49)]) = static_cast<int32_t>(56);
+    b.memset(static_cast<uint8_t>(0));
 }
 
 void merge(uint32_t low, uint32_t mid, uint32_t high)
@@ -83,6 +84,8 @@ void merge(uint32_t low, uint32_t mid, uint32_t high)
     j = static_cast<uint32_t>(0);
     uint32_t k;
     k = static_cast<uint32_t>(0);
+    uint32_t count;
+    count = static_cast<uint32_t>(0);
     i = low;
     j = static_cast<uint32_t>((mid + 1));
     k = low;
@@ -112,12 +115,8 @@ void merge(uint32_t low, uint32_t mid, uint32_t high)
         j = static_cast<uint32_t>((j + 1));
         k = static_cast<uint32_t>((k + 1));
     }
-    k = low;
-    while (static_cast<uint8_t>((k <= high)))
-    {
-        (a[k]) = (b[k]);
-        k = static_cast<uint32_t>((k + 1));
-    }
+    count = static_cast<uint32_t>((static_cast<uint32_t>((high - low)) + 1));
+    a.memcpy((&b), low, low, count);
 }
 
 void mergeSort(uint32_t low, uint32_t high)

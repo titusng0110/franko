@@ -1,59 +1,24 @@
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
- * ============================================================================
- * ARRAY LOWERER
- * ============================================================================
+ * Lowers Franko array intrinsics into SemanticArrayIntrinsicCallNode.
  *
- * PURPOSE:
- * ArrayLowerer lowers array-specific expression-statement forms that require
- * semantic information.
+ * The lowered node is an expression, not a statement.
  *
- * It recognizes:
+ * This is important because some array intrinsics return int32_t:
  *
- *   - dynamic array initialization:
+ *   xs.init(n)
+ *   xs.init_zero(n)
+ *   xs.resize(n)
  *
- *       arr(size);
- *       deref(p)(size);
+ * while others return void:
  *
- *   - array member intrinsics:
- *
- *       arr.uninit();
- *       arr.memset(value);
- *       arr.memcpy(source);
- *
- * ----------------------------------------------------------------------------
- * WHAT THIS CLASS DOES
- * ----------------------------------------------------------------------------
- *
- * This class performs structural lowering for array intrinsics after expression
- * names and types can be resolved.
- *
- * This is semantic-phase logic because syntax alone cannot always distinguish:
- *
- *   f(x);      // ordinary function call
- *   arr(x);    // dynamic array initialization
- *
- * ----------------------------------------------------------------------------
- * WHAT THIS CLASS DOES NOT DO
- * ----------------------------------------------------------------------------
- *
- * This class does not lower array initializer lists.
- *
- * Array initializer lists are eliminated earlier by Desugarer:
- *
- *   xs = [1, 2, 3];
- *
- * becomes:
- *
- *   xs[0] = 1;
- *   xs[1] = 2;
- *   xs[2] = 3;
- *
- * Therefore ArrayLowerer only handles array intrinsics and dynamic-array
- * init-call syntax.
- *
- * Full legality is still checked later by StatementChecker / ExpressionChecker.
+ *   xs.uninit()
+ *   xs.memset(...)
+ *   xs.memcpy(...)
+ *   xs.memmove(...)
  */
 public final class ArrayLowerer {
 
@@ -68,17 +33,12 @@ public final class ArrayLowerer {
         this.exprAnalyzer = Objects.requireNonNull(exprAnalyzer);
     }
 
-    // ============================================================
-    // Intrinsic Expression-Statement Lowering
-    // ============================================================
-
     /**
-     * Attempts to lower expression-statement forms that are Franko array
-     * intrinsics.
+     * Attempts to lower an array intrinsic call expression.
      *
-     * Returns null if the expression statement is not an array intrinsic.
+     * Returns null if the expression is not an array intrinsic.
      */
-    public SemanticStmtNode tryLowerIntrinsicExprStmt(ASTNode expr) {
+    public SemanticArrayIntrinsicCallNode tryLowerIntrinsicCall(ASTNode expr) {
         if (!(expr instanceof CallNode call)) {
             return null;
         }
@@ -87,95 +47,119 @@ public final class ArrayLowerer {
             return tryLowerMemberIntrinsic(call, mac);
         }
 
-        return tryLowerDynamicArrayInit(call);
+        return tryLowerDynamicArrayInitShorthand(call);
+    }
+
+    /**
+     * Returns true if the given member name is reserved as a built-in
+     * array intrinsic member.
+     *
+     * ExpressionAnalyzer uses this to avoid emitting a second misleading
+     * "unsupported member call" diagnostic after ArrayLowerer has already
+     * diagnosed an invalid array intrinsic call.
+     */
+    public boolean isArrayIntrinsicMemberName(String name) {
+        return switch (name) {
+            case "init",
+                 "init_zero",
+                 "resize",
+                 "uninit",
+                 "memset",
+                 "memcpy",
+                 "memmove" -> true;
+
+            default -> false;
+        };
     }
 
     // ============================================================
     // Member Intrinsics
     // ============================================================
 
-    private SemanticStmtNode tryLowerMemberIntrinsic(
+    private SemanticArrayIntrinsicCallNode tryLowerMemberIntrinsic(
             CallNode call,
             MemberAccessNode mac
     ) {
-        String member = mac.memberName;
+        return switch (mac.memberName) {
+            case "init" ->
+                    lowerDynamicArrayAlloc(
+                            call,
+                            mac,
+                            SemanticArrayIntrinsicKind.INIT
+                    );
 
-        if (member.equals("memset")) {
-            return lowerMemset(call, mac);
-        }
+            case "init_zero" ->
+                    lowerDynamicArrayAlloc(
+                            call,
+                            mac,
+                            SemanticArrayIntrinsicKind.INIT_ZERO
+                    );
 
-        if (member.equals("memcpy")) {
-            return lowerMemcpy(call, mac);
-        }
+            case "resize" ->
+                    lowerDynamicArrayAlloc(
+                            call,
+                            mac,
+                            SemanticArrayIntrinsicKind.RESIZE
+                    );
 
-        if (member.equals("uninit")) {
-            return lowerUninit(call, mac);
-        }
+            case "uninit" ->
+                    lowerUninit(call, mac);
 
-        return null;
+            case "memset" ->
+                    lowerMemset(call, mac);
+
+            case "memcpy" ->
+                    lowerMemcpy(call, mac);
+
+            case "memmove" ->
+                    lowerMemmove(call, mac);
+
+            default -> null;
+        };
     }
 
-    private SemanticStmtNode lowerMemset(
+    // ============================================================
+    // init / init_zero / resize
+    // ============================================================
+
+    private SemanticArrayIntrinsicCallNode lowerDynamicArrayAlloc(
             CallNode call,
-            MemberAccessNode mac
+            MemberAccessNode mac,
+            SemanticArrayIntrinsicKind kind
     ) {
         if (call.args.size() != 1) {
-            ctx.error("Array intrinsic 'memset' expects exactly 1 argument");
+            ctx.error("Array intrinsic '"
+                    + kind.runtimeName
+                    + "' expects exactly 1 argument");
             return null;
         }
 
         SemanticExprNode receiver =
                 exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
-                        "memset receiver"
+                        kind.runtimeName + " receiver"
                 );
 
-        exprAnalyzer.requireArrayType(
+        exprAnalyzer.requireDynamicArrayType(
                 receiver,
-                "memset receiver"
+                kind.runtimeName + " receiver"
         );
 
-        SemanticExprNode value =
+        SemanticExprNode size =
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
-        return new SemanticArrayMemsetNode(receiver, value);
+        return new SemanticArrayIntrinsicCallNode(
+                kind,
+                receiver,
+                List.of(size)
+        );
     }
 
-    private SemanticStmtNode lowerMemcpy(
-            CallNode call,
-            MemberAccessNode mac
-    ) {
-        if (call.args.size() != 1) {
-            ctx.error("Array intrinsic 'memcpy' expects exactly 1 argument");
-            return null;
-        }
+    // ============================================================
+    // uninit
+    // ============================================================
 
-        SemanticExprNode target =
-                exprAnalyzer.analyzeRequiredLValueExpr(
-                        mac.target,
-                        "memcpy target"
-                );
-
-        exprAnalyzer.requireArrayType(
-                target,
-                "memcpy target"
-        );
-
-        SemanticExprNode source =
-                exprAnalyzer.analyzeRequiredLValueExpr(
-                        call.args.get(0),
-                        "memcpy source"
-                );
-
-        exprAnalyzer.requireArrayType(
-                source,
-                "memcpy source"
-        );
-
-        return new SemanticArrayMemcpyNode(target, source);
-    }
-
-    private SemanticStmtNode lowerUninit(
+    private SemanticArrayIntrinsicCallNode lowerUninit(
             CallNode call,
             MemberAccessNode mac
     ) {
@@ -195,48 +179,211 @@ public final class ArrayLowerer {
                 "uninit receiver"
         );
 
-        return new SemanticArrayUninitNode(receiver);
+        return new SemanticArrayIntrinsicCallNode(
+                SemanticArrayIntrinsicKind.UNINIT,
+                receiver,
+                List.of()
+        );
     }
 
     // ============================================================
-    // Dynamic Array Init Call
+    // memset
+    // ============================================================
+
+    private SemanticArrayIntrinsicCallNode lowerMemset(
+            CallNode call,
+            MemberAccessNode mac
+    ) {
+        if (call.args.size() != 1 && call.args.size() != 3) {
+            ctx.error("Array intrinsic 'memset' expects either 1 or 3 arguments");
+            return null;
+        }
+
+        SemanticExprNode receiver =
+                exprAnalyzer.analyzeRequiredLValueExpr(
+                        mac.target,
+                        "memset receiver"
+                );
+
+        exprAnalyzer.requireArrayType(
+                receiver,
+                "memset receiver"
+        );
+
+        List<SemanticExprNode> args = new ArrayList<>();
+
+        SemanticExprNode value =
+                exprAnalyzer.analyzeExpr(call.args.get(0));
+
+        args.add(value);
+
+        if (call.args.size() == 3) {
+            SemanticExprNode start =
+                    exprAnalyzer.analyzeExpr(call.args.get(1));
+
+            SemanticExprNode count =
+                    exprAnalyzer.analyzeExpr(call.args.get(2));
+
+            args.add(start);
+            args.add(count);
+        }
+
+        return new SemanticArrayIntrinsicCallNode(
+                SemanticArrayIntrinsicKind.MEMSET,
+                receiver,
+                args
+        );
+    }
+
+    // ============================================================
+    // memcpy
     // ============================================================
 
     /**
-     * Attempts to lower:
+     * Lowers:
      *
-     *   arr(size);
-     *   deref(p)(size);
+     *   target.memcpy(sourceAddr)
+     *   target.memcpy(sourceAddr, dstStart, srcStart, count)
+     *
+     * The source argument is intentionally analyzed as a normal expression.
+     *
+     * Franko arrays are not passed as values. Therefore memcpy source should be
+     * an address to an array:
+     *
+     *   addr<array<T>>
+     *   addr<array<T, N>>
+     *
+     * Example source-level shape:
+     *
+     *   dst.memcpy(getaddr(src));
+     *
+     * Full validation that sourceAddr is addr<array<...>> belongs in
+     * ExpressionChecker.
+     */
+    private SemanticArrayIntrinsicCallNode lowerMemcpy(
+            CallNode call,
+            MemberAccessNode mac
+    ) {
+        if (call.args.size() != 1 && call.args.size() != 4) {
+            ctx.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments");
+            return null;
+        }
+
+        SemanticExprNode receiver =
+                exprAnalyzer.analyzeRequiredLValueExpr(
+                        mac.target,
+                        "memcpy target"
+                );
+
+        exprAnalyzer.requireArrayType(
+                receiver,
+                "memcpy target"
+        );
+
+        SemanticExprNode sourceAddr =
+                exprAnalyzer.analyzeExpr(call.args.get(0));
+
+        List<SemanticExprNode> args = new ArrayList<>();
+
+        args.add(sourceAddr);
+
+        if (call.args.size() == 4) {
+            SemanticExprNode dstStart =
+                    exprAnalyzer.analyzeExpr(call.args.get(1));
+
+            SemanticExprNode srcStart =
+                    exprAnalyzer.analyzeExpr(call.args.get(2));
+
+            SemanticExprNode count =
+                    exprAnalyzer.analyzeExpr(call.args.get(3));
+
+            args.add(dstStart);
+            args.add(srcStart);
+            args.add(count);
+        }
+
+        return new SemanticArrayIntrinsicCallNode(
+                SemanticArrayIntrinsicKind.MEMCPY,
+                receiver,
+                args
+        );
+    }
+
+    // ============================================================
+    // memmove
+    // ============================================================
+
+    private SemanticArrayIntrinsicCallNode lowerMemmove(
+            CallNode call,
+            MemberAccessNode mac
+    ) {
+        if (call.args.size() != 3) {
+            ctx.error("Array intrinsic 'memmove' expects exactly 3 arguments");
+            return null;
+        }
+
+        SemanticExprNode receiver =
+                exprAnalyzer.analyzeRequiredLValueExpr(
+                        mac.target,
+                        "memmove receiver"
+                );
+
+        exprAnalyzer.requireArrayType(
+                receiver,
+                "memmove receiver"
+        );
+
+        SemanticExprNode dstStart =
+                exprAnalyzer.analyzeExpr(call.args.get(0));
+
+        SemanticExprNode srcStart =
+                exprAnalyzer.analyzeExpr(call.args.get(1));
+
+        SemanticExprNode count =
+                exprAnalyzer.analyzeExpr(call.args.get(2));
+
+        return new SemanticArrayIntrinsicCallNode(
+                SemanticArrayIntrinsicKind.MEMMOVE,
+                receiver,
+                List.of(
+                        dstStart,
+                        srcStart,
+                        count
+                )
+        );
+    }
+
+    // ============================================================
+    // Dynamic Array Init Shorthand
+    // ============================================================
+
+    /**
+     * Lowers:
+     *
+     *   xs(size)
+     *   deref(p)(size)
      *
      * into:
      *
-     *   SemanticArrayInitNode(target, size)
+     *   xs.init(size)
      *
-     * Important ambiguity:
-     *
-     *   printArray(n);
-     *
-     * is also syntactically a one-argument call. If the callee is a known
-     * function name and not a variable, this method leaves it alone so the
-     * normal expression-call path can handle it.
+     * semantically.
      */
-    private SemanticStmtNode tryLowerDynamicArrayInit(CallNode call) {
+    private SemanticArrayIntrinsicCallNode tryLowerDynamicArrayInitShorthand(
+            CallNode call
+    ) {
         if (call.args.size() != 1) {
             return null;
         }
 
         /*
-         * Disambiguate:
+         * Disambiguate ordinary function calls:
          *
-         *   f(x)      ordinary function call
-         *   arr(x)    possible dynamic array initialization
+         *   f(x)
          *
-         * If the callee is a bare identifier and resolves to no variable but
-         * does name a function, do not analyze it as a value.
+         * from dynamic array init shorthand:
          *
-         * Function names are not values. ExpressionAnalyzer would correctly
-         * report that as an error if asked to analyze VarNode("f") as a value.
-         * But during intrinsic probing, that would be a false diagnostic.
+         *   xs(x)
          */
         if (call.callee instanceof VarNode calleeVar) {
             VariableSymbol var = ctx.resolve(calleeVar.name);
@@ -250,21 +397,25 @@ public final class ArrayLowerer {
             }
         }
 
-        SemanticExprNode target =
+        SemanticExprNode receiver =
                 exprAnalyzer.analyzeExpr(call.callee);
 
-        if (!exprAnalyzer.isDynamicArrayType(target.type)) {
+        if (!exprAnalyzer.isDynamicArrayType(receiver.type)) {
             return null;
         }
 
         exprAnalyzer.requireLValue(
-                target,
+                receiver,
                 "array initialization target"
         );
 
         SemanticExprNode size =
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
-        return new SemanticArrayInitNode(target, size);
+        return new SemanticArrayIntrinsicCallNode(
+                SemanticArrayIntrinsicKind.INIT,
+                receiver,
+                List.of(size)
+        );
     }
 }

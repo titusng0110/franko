@@ -31,23 +31,15 @@ abstract class SemanticExprNode extends SemanticASTNode {
 // ============================================================
 
 /**
- * Program node now contains top-level items, not only statements.
+ * Program node contains top-level semantic items.
  *
  * Valid top-level items currently include:
  *
  *   - SemanticFunctionDeclNode
  *   - SemanticStmtNode
  *
- * This matches the raw grammar:
- *
- *   program
- *       : separators* (topLevelItem separators*)* EOF
- *       ;
- *
- *   topLevelItem
- *       : functionDecl
- *       | statement
- *       ;
+ * In practice, SemanticAnalyzer currently permits only global variable
+ * declarations and function declarations at global scope.
  */
 class SemanticProgramNode extends SemanticASTNode {
     public final List<SemanticASTNode> topLevelItems;
@@ -84,8 +76,8 @@ class SemanticExprStmtNode extends SemanticStmtNode {
  *   - builtin flag.
  *
  * Raw AST declaration ownership is analyzer-local bookkeeping, not symbol
- * state. SemanticAnalyzer.Context maps raw FunctionDeclNode objects to their
- * registered FunctionSymbol using IdentityHashMap.
+ * state. SemanticAnalyzer/SymbolTable maps raw FunctionDeclNode objects to
+ * their registered FunctionSymbol.
  *
  * parameterVariables are the function parameters as ordinary local variables
  * declared in the function's initial scope.
@@ -204,69 +196,224 @@ class SemanticReturnNode extends SemanticStmtNode {
 }
 
 // ============================================================
-// Intrinsics
+// Array Intrinsic Calls
 // Lowered from CallNode / MemberAccessNode by SemanticAnalyzer
 // ============================================================
 
 /**
- * Dynamic array initialization:
+ * Built-in array intrinsic kind.
  *
- *     target(size)
+ * These correspond to the Franko runtime array methods:
  *
- * This used to store a direct VariableSymbol. That was too restrictive because
- * it prevented valid storage-backed array lvalues such as:
+ *   Dynamic-array-only, status-returning:
  *
- *     deref(p)(20);
+ *     arr.init(size)       -> INT32
+ *     arr.init_zero(size)  -> INT32
+ *     arr.resize(size)     -> INT32
  *
- * The node now stores the initialized array target as a SemanticExprNode.
+ *   Dynamic-array-only, void-returning:
  *
- * Valid targets are checked later by StatementChecker:
+ *     arr.uninit()         -> void
  *
- *   - target must be a storage-backed lvalue,
- *   - target must have dynamic array type,
- *   - size must be a valid uint32_t-compatible array size.
+ *   Static-or-dynamic-array, void-returning:
+ *
+ *     arr.memset(value)                    -> void
+ *     arr.memset(value, start, count)      -> void
+ *
+ *     dst.memcpy(src)                      -> void
+ *     dst.memcpy(src, dstStart, srcStart, count)
+ *                                          -> void
+ *
+ *     arr.memmove(dstStart, srcStart, count)
+ *                                          -> void
+ *
+ * Legacy shorthand:
+ *
+ *     arr(size)
+ *     deref(p)(size)
+ *
+ * should lower to:
+ *
+ *     SemanticArrayIntrinsicKind.INIT
  */
-class SemanticArrayInitNode extends SemanticStmtNode {
-    public final SemanticExprNode target;
-    public final SemanticExprNode size;
+enum SemanticArrayIntrinsicKind {
+    INIT("init", true),
+    INIT_ZERO("init_zero", true),
+    RESIZE("resize", true),
 
-    public SemanticArrayInitNode(SemanticExprNode target, SemanticExprNode size) {
-        this.target = Objects.requireNonNull(target);
-        this.size = Objects.requireNonNull(size);
+    UNINIT("uninit", false),
+
+    MEMSET("memset", false),
+    MEMCPY("memcpy", false),
+    MEMMOVE("memmove", false);
+
+    public final String runtimeName;
+    public final boolean returnsStatus;
+
+    SemanticArrayIntrinsicKind(String runtimeName, boolean returnsStatus) {
+        this.runtimeName = Objects.requireNonNull(runtimeName);
+        this.returnsStatus = returnsStatus;
+    }
+
+    /**
+     * Returns the semantic return type of this intrinsic.
+     *
+     * Status-returning array intrinsics map to INT32 because the runtime uses:
+     *
+     *   int32_t init(...)
+     *   int32_t init_zero(...)
+     *   int32_t resize(...)
+     *
+     * Void intrinsics map to SemanticVoidType.
+     */
+    public SemanticType returnType() {
+        if (returnsStatus) {
+            return new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
+        }
+
+        return new SemanticVoidType();
+    }
+
+    public boolean returnsVoid() {
+        return !returnsStatus;
     }
 }
 
-class SemanticArrayUninitNode extends SemanticStmtNode {
+/**
+ * Unified semantic array intrinsic call expression.
+ *
+ * This node is intentionally expression-shaped, like SemanticFunctionCallNode.
+ * That is important because some array intrinsics return a value:
+ *
+ *   xs.init(10)       -> INT32
+ *   xs.init_zero(10)  -> INT32
+ *   xs.resize(20)     -> INT32
+ *
+ * while others are void:
+ *
+ *   xs.uninit()       -> void
+ *   xs.memset(...)    -> void
+ *   dst.memcpy(...)   -> void
+ *   xs.memmove(...)   -> void
+ *
+ * This means all of the following can be represented uniformly:
+ *
+ *   xs.init(10);
+ *
+ * as:
+ *
+ *   SemanticExprStmtNode(
+ *       SemanticArrayIntrinsicCallNode(INIT, xs, [10])
+ *   )
+ *
+ * and:
+ *
+ *   status = xs.init(10);
+ *
+ * as:
+ *
+ *   SemanticAssignNode(
+ *       status,
+ *       SemanticArrayIntrinsicCallNode(INIT, xs, [10])
+ *   )
+ *
+ * For void-returning intrinsics, later semantic checkers should reject
+ * value-use contexts:
+ *
+ *   x = xs.memset(0);       // invalid: memset returns void
+ *   return dst.memcpy(src); // invalid unless handled as void return context
+ *
+ * Receiver:
+ *
+ *   The receiver is stored separately from args, like an implicit `this`.
+ *
+ * Examples:
+ *
+ *   xs.init(10)
+ *
+ * lowers to:
+ *
+ *   kind     = INIT
+ *   receiver = xs
+ *   args     = [10]
+ *
+ *   xs.memset(0, 2, 5)
+ *
+ * lowers to:
+ *
+ *   kind     = MEMSET
+ *   receiver = xs
+ *   args     = [0, 2, 5]
+ *
+ *   dst.memcpy(src, 0, 4, 8)
+ *
+ * lowers to:
+ *
+ *   kind     = MEMCPY
+ *   receiver = dst
+ *   args     = [src, 0, 4, 8]
+ */
+class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
+    public final SemanticArrayIntrinsicKind kind;
     public final SemanticExprNode receiver;
+    public final List<SemanticExprNode> args;
 
-    public SemanticArrayUninitNode(SemanticExprNode receiver) {
-        this.receiver = Objects.requireNonNull(receiver);
-    }
-}
-
-class SemanticArrayMemsetNode extends SemanticStmtNode {
-    public final SemanticExprNode receiver;
-    public final SemanticExprNode value;
-
-    public SemanticArrayMemsetNode(
+    public SemanticArrayIntrinsicCallNode(
+            SemanticArrayIntrinsicKind kind,
             SemanticExprNode receiver,
-            SemanticExprNode value
+            List<SemanticExprNode> args
     ) {
+        super(
+                Objects.requireNonNull(kind).returnType(),
+                null
+        );
+
+        this.kind = kind;
         this.receiver = Objects.requireNonNull(receiver);
-        this.value = Objects.requireNonNull(value);
+        this.args = List.copyOf(args);
     }
-}
 
-class SemanticArrayMemcpyNode extends SemanticStmtNode {
-    public final SemanticExprNode target;
-    public final SemanticExprNode source;
+    @Override
+    public boolean isLValue() {
+        return false;
+    }
 
-    public SemanticArrayMemcpyNode(
-            SemanticExprNode target,
-            SemanticExprNode source
-    ) {
-        this.target = Objects.requireNonNull(target);
-        this.source = Objects.requireNonNull(source);
+    public boolean returnsVoid() {
+        return type instanceof SemanticVoidType;
+    }
+
+    public boolean returnsStatus() {
+        return kind.returnsStatus;
+    }
+
+    public int arity() {
+        return args.size();
+    }
+
+    /**
+     * Convenience helpers for overload-shaped intrinsics.
+     *
+     * These do not replace proper checker validation. They are merely useful
+     * for StatementChecker, ExpressionChecker, and codegen.
+     */
+    public boolean isFullArrayMemset() {
+        return kind == SemanticArrayIntrinsicKind.MEMSET
+                && args.size() == 1;
+    }
+
+    public boolean isRangedMemset() {
+        return kind == SemanticArrayIntrinsicKind.MEMSET
+                && args.size() == 3;
+    }
+
+    public boolean isFullArrayMemcpy() {
+        return kind == SemanticArrayIntrinsicKind.MEMCPY
+                && args.size() == 1;
+    }
+
+    public boolean isRangedMemcpy() {
+        return kind == SemanticArrayIntrinsicKind.MEMCPY
+                && args.size() == 4;
     }
 }
 

@@ -108,7 +108,12 @@ import java.util.Set;
  *
  *   - nonconstant arguments must exactly match the parameter type;
  *
- *   - void arguments are never valid.
+ *   - void arguments are never valid;
+ *
+ *   - arrays cannot be passed directly as arguments;
+ *
+ *   - functions that need array access should take addr<array<T>> or
+ *     addr<array<T, N>>, and callers should pass getaddr(array).
  *
  * ============================================================================
  */
@@ -178,6 +183,11 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node instanceof SemanticArrayIntrinsicCallNode n) {
+            visitArrayIntrinsicCall(n);
+            return;
+        }
+
         if (node instanceof SemanticGetAddrNode n) {
             visitGetAddr(n);
             return;
@@ -200,10 +210,6 @@ public class ExpressionChecker {
         if (node.symbol == null) {
             diagnostics.error("Variable expression has null symbol");
             return;
-        }
-
-        if (node.symbol.deleted) {
-            diagnostics.error("Use of deleted variable '" + node.symbol.name + "'");
         }
 
         if (types.isVoidType(node.type)) {
@@ -241,9 +247,7 @@ public class ExpressionChecker {
                  */
             }
 
-            default -> {
-                diagnostics.error("Unknown unary operator '" + node.op + "'");
-            }
+            default -> diagnostics.error("Unknown unary operator '" + node.op + "'");
         }
     }
 
@@ -292,21 +296,32 @@ public class ExpressionChecker {
                     op
             );
 
-            ensureLeftShiftLiteralFitsRightSideWhenNeeded(node, op);
+            /*
+             * Extra Option-A shift check.
+             *
+             * If SemanticAnalyzer decorates:
+             *
+             *   1 << x
+             *
+             * using x's type when x is nonconstant, then the left fluid
+             * constant must also fit x's concrete primitive type.
+             */
+            if (node.left.isConstant()
+                    && !node.right.isConstant()
+                    && node.right.type instanceof SemanticPrimitiveType rightPrimitive
+                    && !types.fitsBigIntegerToPrimitive(
+                            node.left.constantValue,
+                            rightPrimitive.kind
+                    )) {
+                diagnostics.error("Left constant operand of shift '" + op
+                        + "' does not fit contextual type "
+                        + node.right.type.describe());
+            }
 
             return;
         }
 
-        if (ARITHMETIC_OPS.contains(op)) {
-            types.ensureSameIntegralTypeOrFit(
-                    node.left,
-                    node.right,
-                    op
-            );
-            return;
-        }
-
-        if (BITWISE_OPS.contains(op)) {
+        if (ARITHMETIC_OPS.contains(op) || BITWISE_OPS.contains(op)) {
             types.ensureSameIntegralTypeOrFit(
                     node.left,
                     node.right,
@@ -350,50 +365,6 @@ public class ExpressionChecker {
                 node.right,
                 op
         );
-    }
-
-    /**
-     * Extra Option-A shift check.
-     *
-     * If SemanticAnalyzer decorates:
-     *
-     *   1 << x
-     *
-     * using x's type when x is nonconstant, then the left fluid constant must
-     * also fit x's concrete primitive type.
-     */
-    private void ensureLeftShiftLiteralFitsRightSideWhenNeeded(
-            SemanticBinOpNode node,
-            String op
-    ) {
-        if (!SHIFT_OPS.contains(op)) {
-            return;
-        }
-
-        if (!node.left.isConstant()) {
-            return;
-        }
-
-        if (node.right.isConstant()) {
-            return;
-        }
-
-        if (!(node.right.type instanceof SemanticPrimitiveType rightPrimitive)) {
-            /*
-             * ensureValidShiftOperands should already report that RHS is not an
-             * integer. Avoid duplicate/confusing diagnostics here.
-             */
-            return;
-        }
-
-        if (!types.fitsBigIntegerToPrimitive(
-                node.left.constantValue,
-                rightPrimitive.kind
-        )) {
-            diagnostics.error("Left constant operand of shift '" + op
-                    + "' does not fit contextual type "
-                    + node.right.type.describe());
-        }
     }
 
     // ============================================================
@@ -488,6 +459,26 @@ public class ExpressionChecker {
             return;
         }
 
+        if (types.isArrayType(parameterType)) {
+            diagnostics.error("Parameter " + (index + 1)
+                    + " of function '"
+                    + function.signatureString()
+                    + "' has invalid array type "
+                    + parameterType.describe()
+                    + "; use addr<"
+                    + parameterType.describe()
+                    + "> instead");
+            return;
+        }
+
+        if (types.isArrayType(arg.type)) {
+            diagnostics.error("Argument " + (index + 1)
+                    + " of call to '"
+                    + function.signatureString()
+                    + "' passes array value directly; use getaddr(...) and an addr<array<...>> parameter");
+            return;
+        }
+
         /*
          * Fluid/folded integer constants may be passed to primitive integer
          * parameters if they fit.
@@ -511,7 +502,11 @@ public class ExpressionChecker {
 
         /*
          * Nonconstant expressions must exactly match the selected parameter
-         * type. This covers primitive variables, address arguments, arrays, etc.
+         * type. This covers primitive variables, address arguments, etc.
+         *
+         * Arrays are intentionally not included here as value arguments.
+         * Array access through functions should use addr<array<T>> or
+         * addr<array<T, N>>.
          */
         if (!types.sameType(parameterType, arg.type)) {
             diagnostics.error("Argument " + (index + 1)
@@ -521,6 +516,327 @@ public class ExpressionChecker {
                     + types.describeSafe(parameterType)
                     + ", got "
                     + types.describeSafe(arg.type));
+        }
+    }
+
+    // ============================================================
+    // Array Intrinsic Calls
+    // ============================================================
+
+    private void visitArrayIntrinsicCall(SemanticArrayIntrinsicCallNode node) {
+        if (node.kind == null) {
+            diagnostics.error("Array intrinsic call has null kind");
+            return;
+        }
+
+        checkExpr(node.receiver);
+
+        switch (node.kind) {
+            case INIT, INIT_ZERO, RESIZE -> visitArrayAllocIntrinsic(node);
+            case UNINIT -> visitArrayUninitIntrinsic(node);
+            case MEMSET -> visitArrayMemsetIntrinsic(node);
+            case MEMCPY -> visitArrayMemcpyIntrinsic(node);
+            case MEMMOVE -> visitArrayMemmoveIntrinsic(node);
+        }
+    }
+
+    private void visitArrayAllocIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1) {
+            diagnostics.error("Array intrinsic '"
+                    + node.kind.runtimeName
+                    + "' expects exactly 1 argument, got "
+                    + node.args.size());
+            return;
+        }
+
+        if (!isStorageBackedLValue(node.receiver)) {
+            diagnostics.error(node.kind.runtimeName
+                    + "() receiver must be a storage-backed lvalue");
+        }
+
+        if (!types.isDynamicArrayType(node.receiver.type)) {
+            diagnostics.error(node.kind.runtimeName
+                    + "() receiver must be a dynamic array, got "
+                    + types.describeSafe(node.receiver.type));
+        }
+
+        ensureArraySizeCompatible(
+                node.args.get(0),
+                node.kind.runtimeName + "() size"
+        );
+
+        ensureArrayIntrinsicReturnType(
+                node,
+                new SemanticPrimitiveType(SemanticPrimitiveKind.INT32)
+        );
+    }
+
+    private void visitArrayUninitIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 0) {
+            diagnostics.error("Array intrinsic 'uninit' expects exactly 0 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        if (!isStorageBackedLValue(node.receiver)) {
+            diagnostics.error("uninit() receiver must be a storage-backed lvalue");
+        }
+
+        if (!types.isDynamicArrayType(node.receiver.type)) {
+            diagnostics.error("uninit() receiver must be a dynamic array, got "
+                    + types.describeSafe(node.receiver.type));
+        }
+
+        ensureArrayIntrinsicReturnType(
+                node,
+                new SemanticVoidType()
+        );
+    }
+
+    private void visitArrayMemsetIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1 && node.args.size() != 3) {
+            diagnostics.error("Array intrinsic 'memset' expects either 1 or 3 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        if (!isStorageBackedLValue(node.receiver)) {
+            diagnostics.error("memset() receiver must be a storage-backed lvalue");
+        }
+
+        types.ensureArrayType(
+                node.receiver.type,
+                "memset() receiver must be an array"
+        );
+
+        SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
+
+        if (elementType != null && !types.isMemsetable(elementType)) {
+            diagnostics.error("memset() receiver element type is not memsetable: "
+                    + elementType.describe());
+        }
+
+        SemanticExprNode value = node.args.get(0);
+
+        checkExpr(value);
+
+        if (ensureValueExpression(
+                value,
+                "memset() fill value"
+        )) {
+            ensureMemsetValueCompatible(value);
+        }
+
+        if (node.args.size() == 3) {
+            ensureUInt32Compatible(
+                    node.args.get(1),
+                    "memset() start",
+                    true
+            );
+
+            ensureUInt32Compatible(
+                    node.args.get(2),
+                    "memset() count",
+                    true
+            );
+
+            ensureStaticArrayRangeInBounds(
+                    node.receiver.type,
+                    node.args.get(1),
+                    node.args.get(2),
+                    "memset() range"
+            );
+        }
+
+        ensureArrayIntrinsicReturnType(
+                node,
+                new SemanticVoidType()
+        );
+    }
+
+    private void visitArrayMemcpyIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1 && node.args.size() != 4) {
+            diagnostics.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        if (!isStorageBackedLValue(node.receiver)) {
+            diagnostics.error("memcpy() target must be a storage-backed lvalue");
+        }
+
+        types.ensureArrayType(
+                node.receiver.type,
+                "memcpy() target must be an array"
+        );
+
+        SemanticExprNode sourceAddr = node.args.get(0);
+        checkExpr(sourceAddr);
+
+        SemanticType sourceArrayType = null;
+
+        if (ensureValueExpression(
+                sourceAddr,
+                "memcpy() source address"
+        )) {
+            if (!(sourceAddr.type instanceof SemanticAddrType addr)) {
+                diagnostics.error("memcpy() source must be an address to an array, got "
+                        + types.describeSafe(sourceAddr.type));
+            } else if (!types.isArrayType(addr.referencedType)) {
+                diagnostics.error("memcpy() source must be an address to an array, got addr<"
+                        + types.describeSafe(addr.referencedType)
+                        + ">");
+            } else {
+                sourceArrayType = addr.referencedType;
+            }
+        }
+
+        SemanticType targetArrayType = node.receiver.type;
+
+        if (targetArrayType != null && sourceArrayType != null) {
+            SemanticType targetElem = types.elementTypeOfArray(targetArrayType);
+            SemanticType sourceElem = types.elementTypeOfArray(sourceArrayType);
+
+            if (targetElem != null && sourceElem != null
+                    && !types.sameType(targetElem, sourceElem)) {
+                diagnostics.error("memcpy() requires source and target arrays to have identical element types, got "
+                        + targetElem.describe()
+                        + " and "
+                        + sourceElem.describe());
+            }
+
+            if (targetElem != null && !types.isMemcpyable(targetElem)) {
+                diagnostics.error("memcpy() target array element type is not memcpyable: "
+                        + targetElem.describe());
+            }
+
+            if (sourceElem != null && !types.isMemcpyable(sourceElem)) {
+                diagnostics.error("memcpy() source array element type is not memcpyable: "
+                        + sourceElem.describe());
+            }
+        }
+
+        if (node.args.size() == 4) {
+            SemanticExprNode dstStart = node.args.get(1);
+            SemanticExprNode srcStart = node.args.get(2);
+            SemanticExprNode count = node.args.get(3);
+
+            ensureUInt32Compatible(
+                    dstStart,
+                    "memcpy() destination start",
+                    true
+            );
+
+            ensureUInt32Compatible(
+                    srcStart,
+                    "memcpy() source start",
+                    true
+            );
+
+            ensureUInt32Compatible(
+                    count,
+                    "memcpy() count",
+                    true
+            );
+
+            ensureStaticArrayRangeInBounds(
+                    targetArrayType,
+                    dstStart,
+                    count,
+                    "memcpy() destination range"
+            );
+
+            ensureStaticArrayRangeInBounds(
+                    sourceArrayType,
+                    srcStart,
+                    count,
+                    "memcpy() source range"
+            );
+        }
+
+        ensureArrayIntrinsicReturnType(
+                node,
+                new SemanticVoidType()
+        );
+    }
+
+    private void visitArrayMemmoveIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 3) {
+            diagnostics.error("Array intrinsic 'memmove' expects exactly 3 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        if (!isStorageBackedLValue(node.receiver)) {
+            diagnostics.error("memmove() receiver must be a storage-backed lvalue");
+        }
+
+        types.ensureArrayType(
+                node.receiver.type,
+                "memmove() receiver must be an array"
+        );
+
+        SemanticType receiverElem =
+                types.elementTypeOfArray(node.receiver.type);
+
+        if (receiverElem != null && !types.isMemcpyable(receiverElem)) {
+            diagnostics.error("memmove() receiver array element type is not memmoveable: "
+                    + receiverElem.describe());
+        }
+
+        SemanticExprNode dstStart = node.args.get(0);
+        SemanticExprNode srcStart = node.args.get(1);
+        SemanticExprNode count = node.args.get(2);
+
+        ensureUInt32Compatible(
+                dstStart,
+                "memmove() destination start",
+                true
+        );
+
+        ensureUInt32Compatible(
+                srcStart,
+                "memmove() source start",
+                true
+        );
+
+        ensureUInt32Compatible(
+                count,
+                "memmove() count",
+                true
+        );
+
+        ensureStaticArrayRangeInBounds(
+                node.receiver.type,
+                dstStart,
+                count,
+                "memmove() destination range"
+        );
+
+        ensureStaticArrayRangeInBounds(
+                node.receiver.type,
+                srcStart,
+                count,
+                "memmove() source range"
+        );
+
+        ensureArrayIntrinsicReturnType(
+                node,
+                new SemanticVoidType()
+        );
+    }
+
+    private void ensureArrayIntrinsicReturnType(
+            SemanticArrayIntrinsicCallNode node,
+            SemanticType expected
+    ) {
+        if (!types.sameType(node.type, expected)) {
+            diagnostics.error("Array intrinsic '"
+                    + node.kind.runtimeName
+                    + "' expression type mismatch: node has "
+                    + types.describeSafe(node.type)
+                    + ", expected "
+                    + types.describeSafe(expected));
         }
     }
 
@@ -579,14 +895,7 @@ public class ExpressionChecker {
 
         BigInteger index = node.index.constantValue;
 
-        if (index == null) {
-            return;
-        }
-
-        /*
-         * Negative indexes are already reported by ensureArrayIndexCompatible.
-         */
-        if (index.signum() < 0) {
+        if (index == null || index.signum() < 0) {
             return;
         }
 
@@ -705,40 +1014,11 @@ public class ExpressionChecker {
             SemanticExprNode size,
             String message
     ) {
-        if (size == null) {
-            diagnostics.error(message + ": size expression cannot be null");
-            return;
-        }
-
-        checkExpr(size);
-
-        if (!ensureValueExpression(size, message)) {
-            return;
-        }
-
-        if (size.isConstant()) {
-            if (size.constantValue == null) {
-                diagnostics.error(message + ": missing constant size value");
-                return;
-            }
-
-            if (size.constantValue.signum() <= 0) {
-                diagnostics.error(message + ": array size must be greater than zero");
-            } else if (!types.fitsBigIntegerToPrimitive(
-                    size.constantValue,
-                    SemanticPrimitiveKind.UINT32
-            )) {
-                diagnostics.error(message + ": array size does not fit in uint32_t");
-            }
-
-            return;
-        }
-
-        if (!(size.type instanceof SemanticPrimitiveType pt
-                && pt.kind == SemanticPrimitiveKind.UINT32)) {
-            diagnostics.error(message + ": expected uint32_t, got "
-                    + types.describeSafe(size.type));
-        }
+        ensureUInt32Compatible(
+                size,
+                message,
+                false
+        );
     }
 
     /**
@@ -754,42 +1034,135 @@ public class ExpressionChecker {
             SemanticExprNode index,
             String message
     ) {
-        if (index == null) {
-            diagnostics.error(message + ": index expression cannot be null");
+        ensureUInt32Compatible(
+                index,
+                message,
+                true
+        );
+    }
+
+    private void ensureUInt32Compatible(
+            SemanticExprNode expr,
+            String message,
+            boolean allowZero
+    ) {
+        if (expr == null) {
+            diagnostics.error(message + ": expression cannot be null");
             return;
         }
 
-        checkExpr(index);
+        checkExpr(expr);
 
-        if (!ensureValueExpression(index, message)) {
+        if (!ensureValueExpression(expr, message)) {
             return;
         }
 
-        if (index.isConstant()) {
-            if (index.constantValue == null) {
-                diagnostics.error(message + ": missing constant index value");
+        if (expr.isConstant()) {
+            if (expr.constantValue == null) {
+                diagnostics.error(message + ": missing constant value");
                 return;
             }
 
-            if (index.constantValue.signum() < 0) {
-                diagnostics.error(message + ": array index cannot be negative");
+            if (expr.constantValue.signum() < 0) {
+                diagnostics.error(message + ": value cannot be negative");
+                return;
+            }
+
+            if (!allowZero && expr.constantValue.signum() == 0) {
+                diagnostics.error(message + ": value must be greater than zero");
                 return;
             }
 
             if (!types.fitsBigIntegerToPrimitive(
-                    index.constantValue,
+                    expr.constantValue,
                     SemanticPrimitiveKind.UINT32
             )) {
-                diagnostics.error(message + ": array index does not fit in uint32_t");
+                diagnostics.error(message + ": value does not fit in uint32_t");
             }
 
             return;
         }
 
-        if (!(index.type instanceof SemanticPrimitiveType pt
+        if (!(expr.type instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT32)) {
             diagnostics.error(message + ": expected uint32_t, got "
-                    + types.describeSafe(index.type));
+                    + types.describeSafe(expr.type));
+        }
+    }
+
+    private void ensureStaticArrayRangeInBounds(
+            SemanticType arrayType,
+            SemanticExprNode startExpr,
+            SemanticExprNode countExpr,
+            String message
+    ) {
+        if (!(arrayType instanceof SemanticStaticArrayType staticArray)) {
+            return;
+        }
+
+        if (startExpr == null
+                || countExpr == null
+                || !startExpr.isConstant()
+                || !countExpr.isConstant()) {
+            return;
+        }
+
+        BigInteger start = startExpr.constantValue;
+        BigInteger count = countExpr.constantValue;
+
+        if (start == null
+                || count == null
+                || start.signum() < 0
+                || count.signum() < 0) {
+            return;
+        }
+
+        BigInteger size;
+
+        try {
+            size = types.parseIntegerLiteral(staticArray.sizeLiteral);
+        } catch (Exception ignored) {
+            return;
+        }
+
+        BigInteger end = start.add(count);
+
+        if (start.compareTo(size) > 0 || end.compareTo(size) > 0) {
+            diagnostics.error(message
+                    + " is out of bounds for "
+                    + staticArray.describe()
+                    + " with size "
+                    + size
+                    + ": start "
+                    + start
+                    + ", count "
+                    + count);
+        }
+    }
+
+    // ============================================================
+    // Array Intrinsic Argument Helpers
+    // ============================================================
+
+    private void ensureMemsetValueCompatible(SemanticExprNode value) {
+        if (value == null) {
+            diagnostics.error("memset() fill value cannot be null");
+            return;
+        }
+
+        if (value.isConstant()) {
+            types.requireConstantFitsPrimitive(
+                    value.constantValue,
+                    SemanticPrimitiveKind.UINT8,
+                    "memset() fill value"
+            );
+            return;
+        }
+
+        if (!(value.type instanceof SemanticPrimitiveType pt
+                && pt.kind == SemanticPrimitiveKind.UINT8)) {
+            diagnostics.error("memset() fill value must be uint8_t/char, got "
+                    + types.describeSafe(value.type));
         }
     }
 

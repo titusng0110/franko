@@ -102,18 +102,28 @@ import java.util.List;
  *
  *   Franko_Static_Array<T, N>
  *
- * Array intrinsics are lowered by SemanticAnalyzer:
+ * Array intrinsics are lowered by SemanticAnalyzer into expression nodes:
  *
- *   target(size)         -> SemanticArrayInitNode
- *   target.uninit()      -> SemanticArrayUninitNode
- *   target.memset(value) -> SemanticArrayMemsetNode
- *   target.memcpy(src)   -> SemanticArrayMemcpyNode
+ *   target(size)                         -> SemanticArrayIntrinsicCallNode INIT
+ *   target.init(size)                    -> SemanticArrayIntrinsicCallNode INIT
+ *   target.init_zero(size)               -> SemanticArrayIntrinsicCallNode INIT_ZERO
+ *   target.resize(size)                  -> SemanticArrayIntrinsicCallNode RESIZE
+ *   target.uninit()                      -> SemanticArrayIntrinsicCallNode UNINIT
+ *   target.memset(value)                 -> SemanticArrayIntrinsicCallNode MEMSET
+ *   target.memset(value, start, count)   -> SemanticArrayIntrinsicCallNode MEMSET
+ *   target.memcpy(sourceAddr)            -> SemanticArrayIntrinsicCallNode MEMCPY
+ *   target.memcpy(sourceAddr, dstStart, srcStart, count)
+ *                                      -> SemanticArrayIntrinsicCallNode MEMCPY
+ *   target.memmove(dstStart, srcStart, count)
+ *                                      -> SemanticArrayIntrinsicCallNode MEMMOVE
  *
- * SemanticArrayInitNode stores a SemanticExprNode target instead of a direct
- * VariableSymbol, so codegen supports:
+ * Because array intrinsics are expressions, status-returning intrinsics such as
+ * init/init_zero/resize may appear in value contexts after checking:
  *
- *   arr(20);
- *   deref(p)(20);
+ *   status = xs.init(10);
+ *
+ * Void-returning intrinsics are emitted the same way, but MasterChecker rejects
+ * their use in value contexts.
  *
  * ============================================================================
  */
@@ -121,6 +131,12 @@ public class Cpp14Codegen {
 
     private final StringBuilder out = new StringBuilder();
     private int indentLevel = 0;
+
+    private static final SemanticType UINT8_TYPE =
+            new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8);
+
+    private static final SemanticType UINT32_TYPE =
+            new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
 
     /**
      * Generates the Franko program as C++14 source content intended to replace
@@ -205,12 +221,12 @@ public class Cpp14Codegen {
         List<SemanticFunctionDeclNode> functions = new ArrayList<>();
 
         /*
-        * Partition top-level items.
-        *
-        * SemanticAnalyzer should already ensure only global variable declarations
-        * and function declarations appear here. The fallback error below is
-        * defensive.
-        */
+         * Partition top-level items.
+         *
+         * SemanticAnalyzer should already ensure only global variable declarations
+         * and function declarations appear here. The fallback error below is
+         * defensive.
+         */
         for (SemanticASTNode item : node.topLevelItems) {
             if (item instanceof SemanticVarDeclNode global) {
                 globals.add(global);
@@ -235,8 +251,8 @@ public class Cpp14Codegen {
         }
 
         /*
-        * 1. Emit global variables first.
-        */
+         * 1. Emit global variables first.
+         */
         if (!globals.isEmpty()) {
             for (SemanticVarDeclNode global : globals) {
                 emitVarDecl(global);
@@ -246,10 +262,10 @@ public class Cpp14Codegen {
         }
 
         /*
-        * 2. Emit function prototypes.
-        *
-        * This supports forward references, direct recursion, and mutual recursion.
-        */
+         * 2. Emit function prototypes.
+         *
+         * This supports forward references, direct recursion, and mutual recursion.
+         */
         if (!functions.isEmpty()) {
             for (SemanticFunctionDeclNode fn : functions) {
                 emitFunctionPrototype(fn);
@@ -259,10 +275,10 @@ public class Cpp14Codegen {
         }
 
         /*
-        * 3. Emit function definitions.
-        *
-        * Definitions are emitted in source order relative to other functions.
-        */
+         * 3. Emit function definitions.
+         *
+         * Definitions are emitted in source order relative to other functions.
+         */
         for (SemanticFunctionDeclNode fn : functions) {
             emitFunctionDecl(fn);
             emitLine("");
@@ -376,26 +392,6 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticExprStmtNode exprStmt) {
             emitLine(emitExpr(exprStmt.expr) + ";");
-            return;
-        }
-
-        if (node instanceof SemanticArrayInitNode init) {
-            emitArrayInit(init);
-            return;
-        }
-
-        if (node instanceof SemanticArrayUninitNode uninit) {
-            emitArrayUninit(uninit);
-            return;
-        }
-
-        if (node instanceof SemanticArrayMemsetNode memset) {
-            emitArrayMemset(memset);
-            return;
-        }
-
-        if (node instanceof SemanticArrayMemcpyNode memcpy) {
-            emitArrayMemcpy(memcpy);
             return;
         }
 
@@ -519,59 +515,6 @@ public class Cpp14Codegen {
     }
 
     // ============================================================
-    // Array Intrinsics
-    // ============================================================
-
-    /**
-     * Emits:
-     *
-     *   target(size)
-     *
-     * as:
-     *
-     *   target.init(size);
-     */
-    private void emitArrayInit(SemanticArrayInitNode node) {
-        emitLine(
-                emitLValue(node.target)
-                        + ".init("
-                        + emitExprAsType(
-                                node.size,
-                                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
-                        )
-                        + ");"
-        );
-    }
-
-    private void emitArrayUninit(SemanticArrayUninitNode node) {
-        emitLine(
-                emitLValue(node.receiver)
-                        + ".uninit();"
-        );
-    }
-
-    private void emitArrayMemset(SemanticArrayMemsetNode node) {
-        emitLine(
-                emitLValue(node.receiver)
-                        + ".memset("
-                        + emitExprAsType(
-                                node.value,
-                                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8)
-                        )
-                        + ");"
-        );
-    }
-
-    private void emitArrayMemcpy(SemanticArrayMemcpyNode node) {
-        emitLine(
-                emitLValue(node.target)
-                        + ".memcpy("
-                        + emitLValue(node.source)
-                        + ");"
-        );
-    }
-
-    // ============================================================
     // Expressions
     // ============================================================
 
@@ -604,6 +547,10 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticFunctionCallNode call) {
             return emitFunctionCall(call);
+        }
+
+        if (node instanceof SemanticArrayIntrinsicCallNode intrinsic) {
+            return emitArrayIntrinsicCall(intrinsic);
         }
 
         if (node instanceof SemanticGetAddrNode getAddr) {
@@ -655,7 +602,7 @@ public class Cpp14Codegen {
                 + "["
                 + emitExprAsType(
                         node.index,
-                        new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
+                        UINT32_TYPE
                 )
                 + "])";
     }
@@ -708,6 +655,114 @@ public class Cpp14Codegen {
         sb.append(")");
 
         return sb.toString();
+    }
+
+    private String emitArrayIntrinsicCall(SemanticArrayIntrinsicCallNode node) {
+        if (node.kind == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: array intrinsic call has null kind"
+            );
+        }
+
+        validateArrayIntrinsicArityForCodegen(node);
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(emitLValue(node.receiver));
+        sb.append(".");
+        sb.append(node.kind.runtimeName);
+        sb.append("(");
+
+        for (int i = 0; i < node.args.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            sb.append(emitArrayIntrinsicArg(node, i));
+        }
+
+        sb.append(")");
+
+        return sb.toString();
+    }
+
+    private String emitArrayIntrinsicArg(
+            SemanticArrayIntrinsicCallNode node,
+            int index
+    ) {
+        SemanticExprNode arg = node.args.get(index);
+
+        return switch (node.kind) {
+            case INIT, INIT_ZERO, RESIZE ->
+                    emitExprAsType(arg, UINT32_TYPE);
+
+            case UNINIT ->
+                    throw new IllegalStateException(
+                            "Internal compiler error: uninit() should not have arguments"
+                    );
+
+            case MEMSET -> {
+                if (index == 0) {
+                    yield emitExprAsType(arg, UINT8_TYPE);
+                }
+
+                yield emitExprAsType(arg, UINT32_TYPE);
+            }
+
+            case MEMCPY -> {
+                if (index == 0) {
+                    /*
+                     * memcpy source is addr<array<...>>.
+                     *
+                     * Example:
+                     *
+                     *   dst.memcpy(getaddr(src))
+                     *
+                     * emits:
+                     *
+                     *   dst.memcpy((&src))
+                     *
+                     * The runtime expects a pointer to the source array object.
+                     */
+                    yield emitExpr(arg);
+                }
+
+                yield emitExprAsType(arg, UINT32_TYPE);
+            }
+
+            case MEMMOVE ->
+                    emitExprAsType(arg, UINT32_TYPE);
+        };
+    }
+
+    private void validateArrayIntrinsicArityForCodegen(
+            SemanticArrayIntrinsicCallNode node
+    ) {
+        boolean ok = switch (node.kind) {
+            case INIT, INIT_ZERO, RESIZE ->
+                    node.args.size() == 1;
+
+            case UNINIT ->
+                    node.args.isEmpty();
+
+            case MEMSET ->
+                    node.args.size() == 1 || node.args.size() == 3;
+
+            case MEMCPY ->
+                    node.args.size() == 1 || node.args.size() == 4;
+
+            case MEMMOVE ->
+                    node.args.size() == 3;
+        };
+
+        if (!ok) {
+            throw new IllegalStateException(
+                    "Internal compiler error: invalid arity for array intrinsic '"
+                            + node.kind.runtimeName
+                            + "': got "
+                            + node.args.size()
+            );
+        }
     }
 
     private String emitGetAddr(SemanticGetAddrNode node) {
@@ -851,7 +906,8 @@ public class Cpp14Codegen {
      *   - function call arguments,
      *   - array sizes,
      *   - array indexes,
-     *   - memset values.
+     *   - memset values,
+     *   - ranged memset/memcpy/memmove arguments.
      *
      * Primitive casts are emitted explicitly to preserve Franko's contextual
      * constant typing and overload resolution.
@@ -864,36 +920,36 @@ public class Cpp14Codegen {
 
         if (targetType instanceof SemanticPrimitiveType) {
             /*
-            * Constants are fluid in Franko, so keep contextual casts for them.
-            *
-            * Examples:
-            *
-            *   uint8_t x;
-            *   x = 1;
-            *
-            * should emit:
-            *
-            *   x = static_cast<uint8_t>(1);
-            *
-            * Function call arguments also rely on contextual primitive casts to
-            * preserve Franko overload resolution.
-            */
+             * Constants are fluid in Franko, so keep contextual casts for them.
+             *
+             * Examples:
+             *
+             *   uint8_t x;
+             *   x = 1;
+             *
+             * should emit:
+             *
+             *   x = static_cast<uint8_t>(1);
+             *
+             * Function call arguments also rely on contextual primitive casts to
+             * preserve Franko overload resolution.
+             */
             if (expr.isConstant()) {
                 return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
             }
 
             /*
-            * If the expression is already semantically the requested primitive
-            * type, do not wrap it again.
-            *
-            * This avoids:
-            *
-            *   static_cast<uint32_t>(static_cast<uint32_t>((x + 1)))
-            *
-            * because emitBinOp(...) already emitted:
-            *
-            *   static_cast<uint32_t>((x + 1))
-            */
+             * If the expression is already semantically the requested primitive
+             * type, do not wrap it again.
+             *
+             * This avoids:
+             *
+             *   static_cast<uint32_t>(static_cast<uint32_t>((x + 1)))
+             *
+             * because emitBinOp(...) already emitted:
+             *
+             *   static_cast<uint32_t>((x + 1))
+             */
             if (sameSemanticType(expr.type, targetType)) {
                 return raw;
             }
@@ -902,10 +958,10 @@ public class Cpp14Codegen {
         }
 
         /*
-        * Do not cast arrays or addresses unless Franko later defines explicit
-        * conversions for them. Address arguments/returns are already strongly
-        * typed and checked exactly.
-        */
+         * Do not cast arrays or addresses unless Franko later defines explicit
+         * conversions for them. Address arguments/returns are already strongly
+         * typed and checked exactly.
+         */
         return raw;
     }
 
