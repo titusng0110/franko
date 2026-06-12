@@ -19,6 +19,7 @@ import java.util.*;
  *
  *   - resolving variable references to VariableSymbol,
  *   - resolving function calls to FunctionSymbol overloads,
+ *   - resolving array intrinsic calls,
  *   - inferring expression result types,
  *   - attaching constant folding metadata (BigInteger),
  *   - lowering structural constructs:
@@ -68,6 +69,8 @@ public final class ExpressionAnalyzer {
     private final SymbolTable ctx;
     private final ConstExpressionEvaluator constEval;
 
+    private ArrayLowerer arrayLowerer = null;
+
     private static final SemanticType FALLBACK_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
 
@@ -90,6 +93,10 @@ public final class ExpressionAnalyzer {
     ) {
         this.ctx = Objects.requireNonNull(ctx);
         this.constEval = Objects.requireNonNull(constEval);
+    }
+
+    public void setArrayLowerer(ArrayLowerer arrayLowerer) {
+        this.arrayLowerer = Objects.requireNonNull(arrayLowerer);
     }
 
     // ============================================================
@@ -344,6 +351,24 @@ public final class ExpressionAnalyzer {
     // ============================================================
 
     private SemanticExprNode analyzeCallExpr(CallNode call) {
+        if (arrayLowerer != null) {
+            SemanticArrayIntrinsicCallNode intrinsic =
+                    arrayLowerer.tryLowerIntrinsicCall(call);
+
+            if (intrinsic != null) {
+                return intrinsic;
+            }
+
+            if (call.callee instanceof MemberAccessNode mac
+                    && arrayLowerer.isArrayIntrinsicMemberName(mac.memberName)) {
+                return new SemanticIntLiteralNode(
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+        }
+
         if (call.callee instanceof VarNode calleeVar) {
             List<SemanticExprNode> args = new ArrayList<>();
             List<SemanticType> argTypes = new ArrayList<>();

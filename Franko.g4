@@ -661,7 +661,7 @@ INT64_T  : 'int64_t' ;
 
 UINT8_T  : 'uint8_t' | 'byte' ;
 UINT16_T : 'uint16_t' ;
-UINT32_T : 'uint32_t' ;
+UINT32_T : 'uint32_t' | 'uint' ;
 UINT64_T : 'uint64_t' ;
 
 ARRAY    : 'array' ;

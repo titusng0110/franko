@@ -19,19 +19,20 @@
 //   - non-void function return
 //   - nested initializer-list assignment
 //   - chained indexing: grid[r][c]
-//   - uint32_t indexes
+//   - uint indexes
 //   - byte as uint8_t-like flag storage
 //   - logical && and ||
-//   - heap dynamic array initialization sugar
+//   - heap dynamic array initialization with init_zero()
+//   - dynamic array uninit()
 //   - alloc / del
 //   - memset()
-//   - memcpy()
+//   - memcpy(addr<array<...>>)
 //   - getaddr() and deref()
 //   - parent-pointer path reconstruction
 //
-// ndarray<uint32_t, 12, 13> means:
+// ndarray<uint, 12, 13> means:
 //
-//   array<array<uint32_t, 13>, 12>
+//   array<array<uint, 13>, 12>
 //
 // so:
 //
@@ -43,17 +44,7 @@
 //   c indexes 13 columns
 // ============================================================
 
-
-// ------------------------------------------------------------
-// Initialize arrays and maze
-// ------------------------------------------------------------
-
-func initArrays(
-    addr<ndarray<uint32_t, 12, 13>> grid,
-    addr<ndarray<byte, 12, 13>> visited,
-    addr<ndarray<byte, 12, 13>> path,
-    addr<ndarray<uint32_t, 12, 13>> dist
-) -> void {
+func initArrays(addr<ndarray<uint, 12, 13>> grid, addr<ndarray<byte, 12, 13>> visited, addr<ndarray<byte, 12, 13>> path, addr<ndarray<uint, 12, 13>> dist, addr<ndarray<uint, 12, 13>> parentR, addr<ndarray<uint, 12, 13>> parentC) -> void {
     deref(grid) = [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
@@ -72,32 +63,14 @@ func initArrays(
     deref(visited).memset(0)
     deref(path).memset(0)
     deref(dist).memset(0)
+    deref(parentR).memset(0)
+    deref(parentC).memset(0)
 }
 
-
-// ------------------------------------------------------------
-// Try visiting one neighboring cell
-// ------------------------------------------------------------
-
-func tryVisit(
-    addr<ndarray<uint32_t, 12, 13>> grid,
-    addr<ndarray<byte, 12, 13>> visited,
-    addr<ndarray<uint32_t, 12, 13>> dist,
-    addr<ndarray<uint32_t, 12, 13>> parentR,
-    addr<ndarray<uint32_t, 12, 13>> parentC,
-    addr<array<uint32_t>> queue,
-    addr<uint32_t> tail,
-    uint32_t qCap,
-    uint32_t cols,
-    uint32_t r,
-    uint32_t c,
-    uint32_t nr,
-    uint32_t nc
-) -> void {
+func tryVisit(addr<ndarray<uint, 12, 13>> grid, addr<ndarray<byte, 12, 13>> visited, addr<ndarray<uint, 12, 13>> dist, addr<ndarray<uint, 12, 13>> parentR, addr<ndarray<uint, 12, 13>> parentC, addr<array<uint>> queue, addr<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
     if ((deref(grid)[nr][nc] != 1) && (deref(visited)[nr][nc] == 0)) {
         deref(visited)[nr][nc] = 1
         deref(dist)[nr][nc] = deref(dist)[r][c] + 1
-
         deref(parentR)[nr][nc] = r
         deref(parentC)[nr][nc] = c
 
@@ -110,40 +83,18 @@ func tryVisit(
     }
 }
 
-
-// ------------------------------------------------------------
-// Run BFS
-// ------------------------------------------------------------
-
-func runBfs(
-    addr<ndarray<uint32_t, 12, 13>> grid,
-    addr<ndarray<byte, 12, 13>> visited,
-    addr<ndarray<uint32_t, 12, 13>> dist,
-    addr<ndarray<uint32_t, 12, 13>> parentR,
-    addr<ndarray<uint32_t, 12, 13>> parentC,
-    addr<array<uint32_t>> queue,
-    uint32_t qCap,
-    uint32_t cols,
-    uint32_t startR,
-    uint32_t startC,
-    uint32_t goalR,
-    uint32_t goalC
-) -> byte {
-    uint32_t head = 0
-    uint32_t tail = 0
-
-    uint32_t r = 0
-    uint32_t c = 0
-
-    uint32_t pos = 0
-    uint32_t nr = 0
-    uint32_t nc = 0
-
+func runBfs(addr<ndarray<uint, 12, 13>> grid, addr<ndarray<byte, 12, 13>> visited, addr<ndarray<uint, 12, 13>> dist, addr<ndarray<uint, 12, 13>> parentR, addr<ndarray<uint, 12, 13>> parentC, addr<array<uint>> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
+    uint head = 0
+    uint tail = 0
+    uint r = 0
+    uint c = 0
+    uint pos = 0
+    uint nr = 0
+    uint nc = 0
     byte found = 0
 
     deref(visited)[startR][startC] = 1
     deref(dist)[startR][startC] = 0
-
     deref(queue)[tail] = startR * cols + startC
 
     tail = tail + 1
@@ -169,104 +120,30 @@ func runBfs(
         if (found == 0) {
             nr = r - 1
             nc = c
-
-            tryVisit(
-                grid,
-                visited,
-                dist,
-                parentR,
-                parentC,
-                queue,
-                getaddr(tail),
-                qCap,
-                cols,
-                r,
-                c,
-                nr,
-                nc
-            )
+            tryVisit(grid, visited, dist, parentR, parentC, queue, getaddr(tail), qCap, cols, r, c, nr, nc)
 
             nr = r + 1
             nc = c
-
-            tryVisit(
-                grid,
-                visited,
-                dist,
-                parentR,
-                parentC,
-                queue,
-                getaddr(tail),
-                qCap,
-                cols,
-                r,
-                c,
-                nr,
-                nc
-            )
+            tryVisit(grid, visited, dist, parentR, parentC, queue, getaddr(tail), qCap, cols, r, c, nr, nc)
 
             nr = r
             nc = c - 1
-
-            tryVisit(
-                grid,
-                visited,
-                dist,
-                parentR,
-                parentC,
-                queue,
-                getaddr(tail),
-                qCap,
-                cols,
-                r,
-                c,
-                nr,
-                nc
-            )
+            tryVisit(grid, visited, dist, parentR, parentC, queue, getaddr(tail), qCap, cols, r, c, nr, nc)
 
             nr = r
             nc = c + 1
-
-            tryVisit(
-                grid,
-                visited,
-                dist,
-                parentR,
-                parentC,
-                queue,
-                getaddr(tail),
-                qCap,
-                cols,
-                r,
-                c,
-                nr,
-                nc
-            )
+            tryVisit(grid, visited, dist, parentR, parentC, queue, getaddr(tail), qCap, cols, r, c, nr, nc)
         }
     }
 
     return found
 }
 
-
-// ------------------------------------------------------------
-// Reconstruct shortest path
-// ------------------------------------------------------------
-
-func reconstructPath(
-    addr<ndarray<byte, 12, 13>> path,
-    addr<ndarray<uint32_t, 12, 13>> parentR,
-    addr<ndarray<uint32_t, 12, 13>> parentC,
-    uint32_t startR,
-    uint32_t startC,
-    uint32_t goalR,
-    uint32_t goalC
-) -> void {
-    uint32_t r = 0
-    uint32_t c = 0
-
-    uint32_t nr = 0
-    uint32_t nc = 0
+func reconstructPath(addr<ndarray<byte, 12, 13>> path, addr<ndarray<uint, 12, 13>> parentR, addr<ndarray<uint, 12, 13>> parentC, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    uint r = 0
+    uint c = 0
+    uint nr = 0
+    uint nc = 0
 
     r = goalR
     c = goalC
@@ -284,28 +161,12 @@ func reconstructPath(
     deref(path)[startR][startC] = 1
 }
 
+func printSolvedGrid(addr<ndarray<uint, 12, 13>> grid, addr<ndarray<byte, 12, 13>> path, addr<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    uint r = 0
+    uint c = 0
 
-// ------------------------------------------------------------
-// Print solved grid
-// ------------------------------------------------------------
-
-func printSolvedGrid(
-    addr<ndarray<uint32_t, 12, 13>> grid,
-    addr<ndarray<byte, 12, 13>> path,
-    addr<array<uint32_t, 13>> line,
-    uint32_t rows,
-    uint32_t cols,
-    uint32_t startR,
-    uint32_t startC,
-    uint32_t goalR,
-    uint32_t goalC
-) -> void {
-    uint32_t r = 0
-    uint32_t c = 0
-
-    r = 0
     while (r < rows) {
-        deref(line).memcpy(deref(grid)[r])
+        deref(line).memcpy(getaddr(deref(grid)[r]))
 
         c = 0
         while (c < cols) {
@@ -324,85 +185,52 @@ func printSolvedGrid(
             deref(line)[goalC] = 3
         }
 
-        print(
-            deref(line)[0], deref(line)[1], deref(line)[2], deref(line)[3],
-            deref(line)[4], deref(line)[5], deref(line)[6], deref(line)[7],
-            deref(line)[8], deref(line)[9], deref(line)[10], deref(line)[11],
-            deref(line)[12]
-        )
+        print(deref(line)[0], deref(line)[1], deref(line)[2], deref(line)[3], deref(line)[4], deref(line)[5], deref(line)[6], deref(line)[7], deref(line)[8], deref(line)[9], deref(line)[10], deref(line)[11], deref(line)[12])
 
         r = r + 1
     }
 }
 
-
-// ------------------------------------------------------------
-// Main
-// ------------------------------------------------------------
-
 func main() -> int32_t {
-    ndarray<uint32_t, 12, 13> grid
+    ndarray<uint, 12, 13> grid
     ndarray<byte, 12, 13> visited
     ndarray<byte, 12, 13> path
-    ndarray<uint32_t, 12, 13> dist
+    ndarray<uint, 12, 13> dist
+    ndarray<uint, 12, 13> parentR
+    ndarray<uint, 12, 13> parentC
+    array<uint, 13> line
 
-    ndarray<uint32_t, 12, 13> parentR
-    ndarray<uint32_t, 12, 13> parentC
+    alloc array<uint> queue
 
-    array<uint32_t, 13> line
+    uint rows = 12
+    uint cols = 13
+    uint qCap = 256
 
-    alloc array<uint32_t> queue
-
-    uint32_t rows = 12
-    uint32_t cols = 13
-    uint32_t qCap = 256
-
-    uint32_t startR = 1
-    uint32_t startC = 1
-
-    uint32_t goalR = 10
-    uint32_t goalC = 11
+    uint startR = 1
+    uint startC = 1
+    uint goalR = 10
+    uint goalC = 11
 
     byte found = 0
+    int32_t qStatus = 0
+    addr<uint> answer
 
-    addr<uint32_t> answer
+    qStatus = queue.init_zero(qCap)
 
-    queue(qCap)
+    if (qStatus != 0) {
+        del queue
+        return -1
+    }
 
-    initArrays(
-        getaddr(grid),
-        getaddr(visited),
-        getaddr(path),
-        getaddr(dist)
-    )
+    initArrays(getaddr(grid), getaddr(visited), getaddr(path), getaddr(dist), getaddr(parentR), getaddr(parentC))
 
-    found = runBfs(
-        getaddr(grid),
-        getaddr(visited),
-        getaddr(dist),
-        getaddr(parentR),
-        getaddr(parentC),
-        getaddr(queue),
-        qCap,
-        cols,
-        startR,
-        startC,
-        goalR,
-        goalC
-    )
+    found = runBfs(getaddr(grid), getaddr(visited), getaddr(dist), getaddr(parentR), getaddr(parentC), getaddr(queue), qCap, cols, startR, startC, goalR, goalC)
 
+    queue.uninit()
     del queue
 
     if (found != 0) {
-        reconstructPath(
-            getaddr(path),
-            getaddr(parentR),
-            getaddr(parentC),
-            startR,
-            startC,
-            goalR,
-            goalC
-        )
+        reconstructPath(getaddr(path), getaddr(parentR), getaddr(parentC), startR, startC, goalR, goalC)
     }
 
     print(4001)
@@ -416,17 +244,7 @@ func main() -> int32_t {
 
     print(4002)
 
-    printSolvedGrid(
-        getaddr(grid),
-        getaddr(path),
-        getaddr(line),
-        rows,
-        cols,
-        startR,
-        startC,
-        goalR,
-        goalC
-    )
+    printSolvedGrid(getaddr(grid), getaddr(path), getaddr(line), rows, cols, startR, startC, goalR, goalC)
 
     return 0
 }

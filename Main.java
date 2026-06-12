@@ -48,11 +48,11 @@ public class Main {
         // ----- Lex / parse -----
         CharStream input = CharStreams.fromFileName(sourceFile, StandardCharsets.UTF_8);
         FrankoLexer lexer = new FrankoLexer(input);
+
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         FrankoParser parser = new FrankoParser(tokens);
 
         ParseTree tree = parser.program();
-
         if (parser.getNumberOfSyntaxErrors() > 0) {
             throw new RuntimeException(
                 "Parse failed: " + parser.getNumberOfSyntaxErrors() + " syntax error(s)."
@@ -62,7 +62,6 @@ public class Main {
         // ----- Build AST -----
         FrankoASTVisitor visitor = new FrankoASTVisitor();
         ASTNode rawAst = visitor.visit(tree);
-
         if (verbose) {
             System.out.println("==== Raw AST ====");
             ASTPrinter.print(rawAst, 0);
@@ -71,7 +70,6 @@ public class Main {
         // ----- Desugar AST -----
         Desugarer desugarer = new Desugarer();
         ASTNode ast = desugarer.desugar(rawAst);
-
         if (verbose) {
             System.out.println("==== Desugared AST ====");
             ASTPrinter.print(ast, 0);
@@ -80,7 +78,6 @@ public class Main {
         // ----- Semantic analysis -----
         SemanticAnalyzer sema = new SemanticAnalyzer();
         SemanticASTNode semaAST = sema.analyze(ast);
-
         if (verbose) {
             System.out.println("==== Semantic AST ====");
             SemanticASTPrinter.print(semaAST, 0);
@@ -88,14 +85,15 @@ public class Main {
 
         // ----- Legality checking -----
         System.out.println("==== Legality Checking ====");
+        DiagnosticBag legalityDiagnostics = new DiagnosticBag("Legality checking failed:");
+        LegalityChecker legalityChecker = new LegalityChecker(legalityDiagnostics);
+        legalityChecker.check(semaAST);
 
-        DiagnosticBag checkerDiagnostics =
-                new DiagnosticBag("Master checking failed:");
-
-        MasterChecker masterChecker =
-                new MasterChecker(checkerDiagnostics);
-
-        masterChecker.check(semaAST);
+        // ----- Memory safety checking -----
+        System.out.println("==== Memory Safety Checking ====");
+        DiagnosticBag memorySafetyDiagnostics = new DiagnosticBag("Memory safety checking failed:");
+        MemorySafetyChecker memorySafetyChecker = new MemorySafetyChecker(memorySafetyDiagnostics);
+        memorySafetyChecker.check(semaAST);
 
         System.out.println("All checks passed.");
 

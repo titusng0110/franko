@@ -25,7 +25,7 @@ import java.util.*;
  *   - statement lowering,
  *   - parser TypeNode -> SemanticType mapping,
  *   - delegating expression lowering to ExpressionAnalyzer,
- *   - delegating array intrinsic lowering to ArrayLowerer.
+ *   - wiring array intrinsic lowering through ExpressionAnalyzer.
  *
  * It guarantees that:
  *
@@ -91,14 +91,19 @@ import java.util.*;
  *   - expression lowering,
  *   - variable expression resolution,
  *   - function call overload resolution,
+ *   - array intrinsic call lowering,
  *   - constant metadata propagation,
  *   - structural lvalue helpers.
  *
  * ArrayLowerer:
  *   - array intrinsic lowering:
  *       arr(size)
+ *       arr.init(...)
+ *       arr.init_zero(...)
+ *       arr.resize(...)
  *       arr.memset(...)
  *       arr.memcpy(...)
+ *       arr.memmove(...)
  *       arr.uninit()
  *
  * ConstExpressionEvaluator:
@@ -117,7 +122,6 @@ public class SemanticAnalyzer {
 
     private final ConstExpressionEvaluator constEval;
     private final ExpressionAnalyzer exprAnalyzer;
-    private final ArrayLowerer arrayLowerer;
 
     private FunctionSymbol currentFunction = null;
 
@@ -130,7 +134,11 @@ public class SemanticAnalyzer {
     public SemanticAnalyzer() {
         this.constEval = new ConstExpressionEvaluator(symbolTable);
         this.exprAnalyzer = new ExpressionAnalyzer(symbolTable, constEval);
-        this.arrayLowerer = new ArrayLowerer(symbolTable, exprAnalyzer);
+
+        ArrayLowerer arrayLowerer =
+                new ArrayLowerer(symbolTable, exprAnalyzer);
+
+        this.exprAnalyzer.setArrayLowerer(arrayLowerer);
     }
 
     // ============================================================
@@ -566,13 +574,6 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof ExprStmtNode n) {
-            SemanticStmtNode intrinsic =
-                    arrayLowerer.tryLowerIntrinsicExprStmt(n.expr);
-
-            if (intrinsic != null) {
-                return intrinsic;
-            }
-
             return new SemanticExprStmtNode(
                     exprAnalyzer.analyzeExpr(n.expr)
             );
