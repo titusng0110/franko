@@ -1,6 +1,9 @@
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ============================================================================
@@ -173,6 +176,11 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node instanceof SemanticStructDeclNode struct) {
+            emitStructDecl(struct);
+            return;
+        }
+
         if (node instanceof SemanticStmtNode stmt) {
             emitStmt(stmt);
             return;
@@ -196,14 +204,16 @@ public class Cpp14Codegen {
      *
      *   global scope may contain only:
      *
+     *     - struct declarations,
      *     - global variable declarations,
      *     - function declarations.
      *
      * Codegen emits in dependency-safe C++ order:
      *
-     *   1. all global variable declarations,
-     *   2. all function prototypes,
-     *   3. all function definitions.
+     *   1. all struct declarations,
+     *   2. all global variable declarations,
+     *   3. all function prototypes,
+     *   4. all function definitions.
      *
      * This matters because Franko allows functions to reference global variables
      * declared later in source order:
@@ -218,17 +228,23 @@ public class Cpp14Codegen {
      * The generated C++ must declare g before main's function body.
      */
     private void emitProgram(SemanticProgramNode node) {
+        List<SemanticStructDeclNode> structs = new ArrayList<>();
         List<SemanticVarDeclNode> globals = new ArrayList<>();
         List<SemanticFunctionDeclNode> functions = new ArrayList<>();
 
         /*
          * Partition top-level items.
          *
-         * SemanticAnalyzer should already ensure only global variable declarations
-         * and function declarations appear here. The fallback error below is
-         * defensive.
+         * SemanticAnalyzer should already ensure only struct declarations,
+         * global variable declarations, and function declarations appear
+         * here. The fallback error below is defensive.
          */
         for (SemanticASTNode item : node.topLevelItems) {
+            if (item instanceof SemanticStructDeclNode struct) {
+                structs.add(struct);
+                continue;
+            }
+
             if (item instanceof SemanticVarDeclNode global) {
                 globals.add(global);
                 continue;
@@ -252,7 +268,37 @@ public class Cpp14Codegen {
         }
 
         /*
-         * 1. Emit global variables first.
+         * 1. Emit struct declarations first, in by-value dependency order.
+         *
+         * Structs must be emitted before global variables and functions
+         * because they can be referenced in global variable types and
+         * function signatures. A struct used by value inside another struct
+         * must be defined first, so declarations are topologically sorted
+         * over by-value field dependencies. addr fields and dynamic-array
+         * fields are pointer-backed and impose no ordering constraint.
+         */
+        if (!structs.isEmpty()) {
+            /*
+             * Forward-declare every struct so addr<Struct> fields, global
+             * pointer types, and function signatures can name structs defined
+             * later in source order. By-value field dependencies are still
+             * ordered by the topological sort below.
+             */
+            for (SemanticStructDeclNode struct : structs) {
+                emitLine("struct struct_" + struct.symbol.name + ";");
+            }
+
+            emitLine("");
+
+            for (SemanticStructDeclNode struct : orderStructsByValueDependency(structs)) {
+                emitStructDecl(struct);
+            }
+
+            emitLine("");
+        }
+
+        /*
+         * 2. Emit global variables.
          */
         if (!globals.isEmpty()) {
             for (SemanticVarDeclNode global : globals) {
@@ -263,7 +309,7 @@ public class Cpp14Codegen {
         }
 
         /*
-         * 2. Emit function prototypes.
+         * 3. Emit function prototypes.
          *
          * This supports forward references, direct recursion, and mutual recursion.
          */
@@ -276,7 +322,7 @@ public class Cpp14Codegen {
         }
 
         /*
-         * 3. Emit function definitions.
+         * 4. Emit function definitions.
          *
          * Definitions are emitted in source order relative to other functions.
          */
@@ -284,6 +330,170 @@ public class Cpp14Codegen {
             emitFunctionDecl(fn);
             emitLine("");
         }
+    }
+
+    // ============================================================
+    // Struct Declarations
+    // ============================================================
+
+    /**
+     * Emits a C++ struct definition for a Franko struct declaration.
+     *
+     * Fields are emitted in declaration order. A field's folded const
+     * initializer, when present, becomes a C++ non-static data member
+     * initializer (NSDMI):
+     *
+     *   struct X
+     *   {
+     *       int32_t num = 0;
+     *       int64_t longnum = 3;
+     *   };
+     */
+    private void emitStructDecl(SemanticStructDeclNode node) {
+        if (node == null || node.symbol == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: null struct declaration or symbol"
+            );
+        }
+
+        emitLine("struct struct_" + node.symbol.name);
+        emitLine("{");
+        indentLevel++;
+
+        for (FieldSymbol field : node.symbol.fields) {
+            emitStructField(field);
+        }
+
+        indentLevel--;
+        emitLine("};");
+    }
+
+    private void emitStructField(FieldSymbol field) {
+        if (field == null || field.type == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: null struct field or field type"
+            );
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(emitType(field.type));
+        sb.append(" ");
+        sb.append(field.name);
+
+        if (field.foldedDefault != null) {
+            sb.append(" = ");
+            sb.append(emitBigIntegerLiteral(field.foldedDefault));
+        }
+
+        sb.append(";");
+
+        emitLine(sb.toString());
+    }
+
+    /**
+     * Orders struct declarations so that every struct used by value inside
+     * another struct is defined first.
+     *
+     * By-value edges are:
+     *
+     *   - a field whose type is a struct,
+     *   - a field whose type is a static array of structs (recursively).
+     *
+     * addr fields and dynamic-array fields are pointer-backed and impose no
+     * ordering constraint.
+     *
+     * By-value cycles are rejected by DeclarationChecker before codegen, so a
+     * cycle reaching this method is an internal compiler error.
+     */
+    private List<SemanticStructDeclNode> orderStructsByValueDependency(
+            List<SemanticStructDeclNode> structs
+    ) {
+        Map<String, SemanticStructDeclNode> declByName = new LinkedHashMap<>();
+
+        for (SemanticStructDeclNode struct : structs) {
+            declByName.put(struct.symbol.name, struct);
+        }
+
+        LinkedHashSet<String> emitted = new LinkedHashSet<>();
+        LinkedHashSet<String> inProgress = new LinkedHashSet<>();
+        List<SemanticStructDeclNode> ordered = new ArrayList<>();
+
+        for (SemanticStructDeclNode struct : structs) {
+            visitStructDependency(
+                    struct,
+                    declByName,
+                    emitted,
+                    inProgress,
+                    ordered
+            );
+        }
+
+        return ordered;
+    }
+
+    private void visitStructDependency(
+            SemanticStructDeclNode node,
+            Map<String, SemanticStructDeclNode> declByName,
+            LinkedHashSet<String> emitted,
+            LinkedHashSet<String> inProgress,
+            List<SemanticStructDeclNode> ordered
+    ) {
+        String name = node.symbol.name;
+
+        if (emitted.contains(name)) {
+            return;
+        }
+
+        if (!inProgress.add(name)) {
+            throw new IllegalStateException(
+                    "Internal compiler error: by-value struct cycle involving '"
+                            + name
+                            + "' reached codegen; DeclarationChecker should have rejected it"
+            );
+        }
+
+        for (FieldSymbol field : node.symbol.fields) {
+            for (String dependencyName : byValueStructDependencies(field.type)) {
+                SemanticStructDeclNode dependency =
+                        declByName.get(dependencyName);
+
+                if (dependency != null) {
+                    visitStructDependency(
+                            dependency,
+                            declByName,
+                            emitted,
+                            inProgress,
+                            ordered
+                    );
+                }
+            }
+        }
+
+        inProgress.remove(name);
+        emitted.add(name);
+        ordered.add(node);
+    }
+
+    /**
+     * Collects struct names reachable by value from a field type:
+     *
+     *   - direct struct field types,
+     *   - struct element types of static arrays (recursively).
+     */
+    private List<String> byValueStructDependencies(SemanticType type) {
+        List<String> names = new ArrayList<>();
+
+        if (type instanceof SemanticStructType struct) {
+            names.add(struct.structSymbol.name);
+            return names;
+        }
+
+        if (type instanceof SemanticStaticArrayType staticArray) {
+            names.addAll(byValueStructDependencies(staticArray.elementType));
+        }
+
+        return names;
     }
 
     // ============================================================
@@ -420,12 +630,24 @@ public class Cpp14Codegen {
         String cppType = emitType(sym.type);
         String name = emitSymbolName(sym);
 
+        /*
+         * Global variable declarations may carry a folded const initializer.
+         * The initializer is emitted as static initialization; it is null for
+         * ordinary locals and for globals without an initializer.
+         */
+        String initializer = "";
+
+        if (node.foldedConstInitializer != null) {
+            initializer = " = "
+                    + emitBigIntegerLiteral(node.foldedConstInitializer);
+        }
+
         if (sym.isHeap) {
             emitLine(cppType + "* " + name + " = static_cast<" + cppType + "*>(je_malloc(sizeof(" + cppType + ")));");
             emitLine("if (!" + name + ") throw std::bad_alloc();");
             emitLine("new (" + name + ") " + cppType + ";");
         } else {
-            emitLine(cppType + " " + name + ";");
+            emitLine(cppType + " " + name + initializer + ";");
         }
     }
 
@@ -560,6 +782,10 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticDerefNode deref) {
             return emitDeref(deref);
+        }
+
+        if (node instanceof SemanticMemberAccessNode member) {
+            return emitMemberAccess(member);
         }
 
         throw new IllegalStateException(
@@ -875,10 +1101,28 @@ public class Cpp14Codegen {
             return emitDeref(deref);
         }
 
+        if (node instanceof SemanticMemberAccessNode member) {
+            return emitMemberAccess(member);
+        }
+
         throw new IllegalStateException(
                 "Internal compiler error: unsupported lvalue expression for codegen: "
                         + node.getClass().getSimpleName()
         );
+    }
+
+    /**
+     * Emits a struct member access:
+     *
+     *   obj.field          ->  obj.field
+     *   alloc X s; s.field ->  (*s).field
+     *   deref(p).field     ->  (*p).field
+     *
+     * Heap variables lower to (*sym) through emitVarAccess, so heap struct
+     * field access composes without special handling here.
+     */
+    private String emitMemberAccess(SemanticMemberAccessNode node) {
+        return emitExpr(node.target) + "." + node.field.name;
     }
 
     // ============================================================
@@ -910,6 +1154,15 @@ public class Cpp14Codegen {
 
         if (type instanceof SemanticAddrType addr) {
             return emitType(addr.referencedType) + "*";
+        }
+
+        if (type instanceof SemanticStructType struct) {
+            /*
+             * Struct types are emitted with a "struct_" prefix so a struct
+             * name can never collide with a variable or function name in the
+             * generated C++.
+             */
+            return "struct_" + struct.structSymbol.name;
         }
 
         throw new IllegalStateException(
@@ -952,23 +1205,31 @@ public class Cpp14Codegen {
 
     private String emitSymbolName(VariableSymbol symbol) {
         /*
-         * Currently, SemanticAnalyzer rejects duplicate declarations only within
-         * the same lexical scope, and C++ also supports block-local shadowing.
+         * Variables (locals, globals, parameters, heap variables) are emitted
+         * with a "var_" prefix.
          *
-         * Therefore the raw source name is currently sufficient.
+         * Franko keeps variables, functions, and struct names in separate
+         * namespaces, but C++ does not: a raw name such as "X" would collide
+         * with a struct type of the same name in the generated code. The kind
+         * prefixes keep every Franko namespace distinct in C++.
          */
-        return symbol.name;
+        return "var_" + symbol.name;
     }
 
     private String emitFunctionName(FunctionSymbol symbol) {
         /*
-         * Franko supports overloads by parameter type/order.
-         * C++ also supports overloads by parameter type/order.
+         * Functions are emitted with a "func_" prefix for the same
+         * cross-namespace reason as variables.
          *
-         * Because Franko rejects declarations that differ only by return type,
-         * the raw function name can be emitted directly.
+         * Exception: the Franko entry-point function "main" keeps its raw
+         * name, because the generated program's C++ entry point IS the
+         * Franko main function.
          */
-        return symbol.name;
+        if ("main".equals(symbol.name)) {
+            return symbol.name;
+        }
+
+        return "func_" + symbol.name;
     }
 
     // ============================================================

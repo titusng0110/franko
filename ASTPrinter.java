@@ -60,6 +60,52 @@ public class ASTPrinter {
         }
 
         // ============================================================
+        // Struct Declarations
+        // ============================================================
+
+        else if (node instanceof StructDeclNode n) {
+            System.out.println(pad + "StructDecl: " + n.name);
+            System.out.println(pad + "  fields: " + n.fields.size());
+
+            for (int i = 0; i < n.fields.size(); i++) {
+                System.out.println(pad + "  [" + i + "]");
+                print(n.fields.get(i), indent + 2);
+            }
+        }
+
+        else if (node instanceof StructFieldDeclNode n) {
+            System.out.println(
+                    pad + "StructFieldDecl: "
+                            + typeToString(n.type)
+                            + " "
+                            + n.name
+            );
+
+            if (n.constInitializer != null) {
+                System.out.println(pad + "  init:");
+                print(n.constInitializer, indent + 2);
+            }
+        }
+
+        // ============================================================
+        // Global Variable Declarations
+        // ============================================================
+
+        else if (node instanceof GlobalVarDeclNode n) {
+            System.out.println(
+                    pad + "GlobalVarDecl: "
+                            + typeToString(n.type)
+                            + " "
+                            + n.name
+            );
+
+            if (n.constInitializer != null) {
+                System.out.println(pad + "  init:");
+                print(n.constInitializer, indent + 2);
+            }
+        }
+
+        // ============================================================
         // Statements
         // ============================================================
 
@@ -332,6 +378,10 @@ public class ASTPrinter {
 
         if (type instanceof AddrTypeNode t) {
             return "addr<" + typeToString(t.referencedType) + ">";
+        }
+
+        if (type instanceof StructTypeNode t) {
+            return t.name;
         }
 
         return "<unknown-type:" + type.getClass().getSimpleName() + ">";

@@ -99,14 +99,53 @@ class SemanticFunctionDeclNode extends SemanticASTNode {
 }
 
 // ============================================================
+// Struct Declarations
+// ============================================================
+
+/**
+ * Semantic struct declaration.
+ *
+ * The StructSymbol stores the struct name and ordered resolved fields
+ * (FieldSymbol with folded default constants where present).
+ *
+ * Emitted as a C++ struct definition before globals and functions.
+ */
+class SemanticStructDeclNode extends SemanticASTNode {
+    public final StructSymbol symbol;
+
+    public SemanticStructDeclNode(StructSymbol symbol) {
+        this.symbol = Objects.requireNonNull(symbol);
+    }
+}
+
+// ============================================================
 // Declarations
 // ============================================================
 
+/**
+ * Semantic variable declaration.
+ *
+ * For global variables with a const initializer, the analyzer folds the
+ * initializer constExpr into a canonical BigInteger stored here so codegen
+ * can emit static initialization without a new dispatch node class.
+ *
+ * foldedConstInitializer is null for ordinary locals and for globals without
+ * an initializer.
+ */
 class SemanticVarDeclNode extends SemanticStmtNode {
     public final VariableSymbol symbol;
+    public final BigInteger foldedConstInitializer;
 
     public SemanticVarDeclNode(VariableSymbol symbol) {
+        this(symbol, null);
+    }
+
+    public SemanticVarDeclNode(
+            VariableSymbol symbol,
+            BigInteger foldedConstInitializer
+    ) {
         this.symbol = Objects.requireNonNull(symbol);
+        this.foldedConstInitializer = foldedConstInitializer;
     }
 }
 
@@ -515,6 +554,46 @@ class SemanticArrayAccessNode extends SemanticExprNode {
     @Override
     public boolean isLValue() {
         return true;
+    }
+}
+
+/**
+ * Struct member access expression:
+ *
+ *   obj.field
+ *   obj.field = value
+ *
+ * The expression type is the resolved field type.
+ *
+ * The lvalue flag mirrors whether the access can be assigned to. It is true
+ * when the base expression is itself an lvalue:
+ *
+ *   - local variable base (obj.field),
+ *   - deref base (deref(p).field),
+ *   - nested member access (obj.inner.field),
+ *   - array element base, static or dynamic (arr[i].field).
+ *
+ * Array element access yields a reference to storage, so field access through
+ * an element of a storage-backed array is an lvalue. Field access on a
+ * function call result is not an lvalue.
+ */
+class SemanticMemberAccessNode extends SemanticExprNode {
+    public final SemanticExprNode target;
+    public final FieldSymbol field;
+
+    public SemanticMemberAccessNode(
+            SemanticType type,
+            SemanticExprNode target,
+            FieldSymbol field
+    ) {
+        super(type, null);
+        this.target = Objects.requireNonNull(target);
+        this.field = Objects.requireNonNull(field);
+    }
+
+    @Override
+    public boolean isLValue() {
+        return target.isLValue();
     }
 }
 

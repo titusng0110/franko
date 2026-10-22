@@ -141,6 +141,20 @@ public class SemanticAnalyzer {
         this.exprAnalyzer.setArrayLowerer(arrayLowerer);
     }
 
+    /**
+     * Non-fatal warnings collected during semantic analysis.
+     *
+     * Warnings do not fail compilation; the driver prints them after a
+     * successful analyze() call.
+     */
+    public List<String> warnings() {
+        return symbolTable.warnings();
+    }
+
+    public boolean hasWarnings() {
+        return symbolTable.hasWarnings();
+    }
+
     // ============================================================
     // Entry Points
     // ============================================================
@@ -213,7 +227,8 @@ public class SemanticAnalyzer {
         /*
          * Global scope currently allows only:
          *
-         *   - variable declarations,
+         *   - struct declarations,
+         *   - global variable declarations,
          *   - function declarations.
          *
          * Executable statements at global scope are rejected here.
@@ -222,49 +237,118 @@ public class SemanticAnalyzer {
          * statically allocated.
          */
         for (ASTNode item : program.topLevelItems) {
-            if (item instanceof VarDeclNode
+            if (item instanceof StructDeclNode
+                    || item instanceof GlobalVarDeclNode
                     || item instanceof FunctionDeclNode) {
                 continue;
             }
 
             symbolTable.error("Invalid top-level item '"
                     + item.getClass().getSimpleName()
-                    + "': only variable declarations and function declarations are allowed at global scope");
+                    + "': only struct declarations, global variable declarations, and function declarations are allowed at global scope");
         }
 
         /*
          * Phase 1:
-         * Register all global variables before function bodies are analyzed.
+         * Register struct names.
          *
-         * This allows functions to reference globals declared later in source.
+         * A placeholder StructSymbol is registered first so struct field
+         * types can reference the struct itself (e.g. addr<Node> next).
+         * Fields are resolved into the same symbol in phase 2.
          */
         for (ASTNode item : program.topLevelItems) {
-            if (!(item instanceof VarDeclNode n)) {
-                continue;
-            }
-
-            if (n.isHeap) {
-                symbolTable.error(
-                        "alloc is not allowed at global scope; "
-                                + "global variables are statically allocated"
-                );
-            }
-
-            SemanticType type = analyzeNormalType(n.type);
-
-            VariableSymbol sym = new VariableSymbol(
-                    n.name,
-                    type,
-                    n.isHeap
-            );
-
-            if (symbolTable.declare(sym)) {
-                symbolTable.registerVarDeclSymbol(n, sym);
+            if (item instanceof StructDeclNode n) {
+                symbolTable.declareStruct(new StructSymbol(n.name));
             }
         }
 
         /*
          * Phase 2:
+         * Resolve struct field types and fold field defaults.
+         *
+         * Fields are appended in declaration order. The struct symbol was
+         * registered in phase 1, so field types may reference the struct
+         * itself and any struct declared earlier in the program.
+         */
+        for (ASTNode item : program.topLevelItems) {
+            if (!(item instanceof StructDeclNode n)) {
+                continue;
+            }
+
+            StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
+
+            if (structSymbol == null) {
+                continue;
+            }
+
+            Set<String> seenFieldNames = new HashSet<>();
+
+            for (StructFieldDeclNode fieldNode : n.fields) {
+                if (!seenFieldNames.add(fieldNode.name)) {
+                    symbolTable.error("Duplicate field '"
+                            + fieldNode.name
+                            + "' in struct '"
+                            + n.name
+                            + "'");
+                    continue;
+                }
+
+                SemanticType fieldType = analyzeNormalType(fieldNode.type);
+
+                BigInteger fieldDefault = null;
+
+                if (fieldNode.constInitializer != null) {
+                    fieldDefault = exprAnalyzer.analyzeConstExprValue(
+                            fieldNode.constInitializer,
+                            "struct field initializer"
+                    );
+                }
+
+                structSymbol.fields.add(new FieldSymbol(
+                        fieldNode.name,
+                        fieldType,
+                        fieldDefault
+                ));
+            }
+        }
+
+        /*
+         * Phase 3:
+         * Register all global variables before function bodies are analyzed.
+         *
+         * This allows functions to reference globals declared later in source.
+         * Global const initializers are folded here and kept in a local map so
+         * phase 5 can attach them to the lowered SemanticVarDeclNode without
+         * folding twice.
+         */
+        Map<GlobalVarDeclNode, VariableSymbol> globalSymbols =
+                new IdentityHashMap<>();
+        Map<GlobalVarDeclNode, BigInteger> globalInitializers =
+                new IdentityHashMap<>();
+
+        for (ASTNode item : program.topLevelItems) {
+            if (!(item instanceof GlobalVarDeclNode n)) {
+                continue;
+            }
+
+            SemanticType type = analyzeNormalType(n.type);
+
+            VariableSymbol sym = new VariableSymbol(n.name, type, false);
+
+            if (symbolTable.declare(sym)) {
+                globalSymbols.put(n, sym);
+            }
+
+            if (n.constInitializer != null) {
+                globalInitializers.put(n, exprAnalyzer.analyzeConstExprValue(
+                        n.constInitializer,
+                        "global variable initializer"
+                ));
+            }
+        }
+
+        /*
+         * Phase 4:
          * Register all function signatures before analyzing any body.
          *
          * This enables forward references, recursion, and mutual recursion.
@@ -276,22 +360,34 @@ public class SemanticAnalyzer {
         }
 
         /*
-         * Phase 3:
+         * Phase 5:
          * Lower all valid top-level items.
          */
         List<SemanticASTNode> semanticItems = new ArrayList<>();
 
         for (ASTNode item : program.topLevelItems) {
-            if (item instanceof VarDeclNode n) {
-                VariableSymbol sym =
-                        symbolTable.findRegisteredVarDeclSymbol(n);
+            if (item instanceof StructDeclNode n) {
+                StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
+
+                if (structSymbol != null) {
+                    semanticItems.add(new SemanticStructDeclNode(structSymbol));
+                }
+
+                continue;
+            }
+
+            if (item instanceof GlobalVarDeclNode n) {
+                VariableSymbol sym = globalSymbols.get(n);
 
                 /*
                  * Null usually means registration failed due to a duplicate
                  * declaration. The diagnostic has already been recorded.
                  */
                 if (sym != null) {
-                    semanticItems.add(new SemanticVarDeclNode(sym));
+                    semanticItems.add(new SemanticVarDeclNode(
+                            sym,
+                            globalInitializers.get(n)
+                    ));
                 }
 
                 continue;
@@ -305,6 +401,12 @@ public class SemanticAnalyzer {
                 }
             }
         }
+
+        /*
+         * All struct, variable, and function names are registered at this
+         * point, so cross-namespace name clashes can be detected in one pass.
+         */
+        symbolTable.warnStructNameClashes();
 
         return new SemanticProgramNode(semanticItems);
     }
@@ -695,6 +797,19 @@ public class SemanticAnalyzer {
             return new SemanticPrimitiveType(
                     SemanticPrimitiveKind.valueOf(p.kind.name())
             );
+        }
+
+        if (node instanceof StructTypeNode s) {
+            StructSymbol structSymbol = symbolTable.resolveStruct(s.name);
+
+            if (structSymbol == null) {
+                symbolTable.error("Unknown struct type '"
+                        + s.name
+                        + "'");
+                return FALLBACK_TYPE;
+            }
+
+            return new SemanticStructType(structSymbol);
         }
 
         if (node instanceof DynamicArrayTypeNode d) {

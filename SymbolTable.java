@@ -64,6 +64,28 @@ public final class SymbolTable {
             new IdentityHashMap<>();
 
     // ============================================================
+    // Struct State
+    // ============================================================
+
+    /*
+     * Type-name namespace for struct declarations.
+     *
+     * Kept separate from variable scopes and the function overload table:
+     * struct names live in their own namespace, so a struct may share a name
+     * with a variable or a function.
+     */
+    private final Map<String, StructSymbol> structs =
+            new LinkedHashMap<>();
+
+    /*
+     * Every variable name successfully declared through declare(), across all
+     * scopes (globals, locals, parameters). Used only for name-clash warnings;
+     * scopes themselves remain the source of truth for visibility.
+     */
+    private final Set<String> declaredVariableNames =
+            new HashSet<>();
+
+    // ============================================================
     // Diagnostics
     // ============================================================
 
@@ -97,6 +119,8 @@ public final class SymbolTable {
         varDeclSymbols.clear();
         functions.clear();
         functionDeclSymbols.clear();
+        structs.clear();
+        declaredVariableNames.clear();
     }
 
     /**
@@ -107,6 +131,38 @@ public final class SymbolTable {
      */
     public void clearErrors() {
         diagnostics.clear();
+    }
+
+    // ============================================================
+    // Struct Namespace
+    // ============================================================
+
+    /**
+     * Declares a struct by name in the type-name namespace.
+     *
+     * Duplicate struct names are rejected; nominal typing means each
+     * declaration is a distinct type.
+     *
+     * @return true when the struct was registered.
+     */
+    public boolean declareStruct(StructSymbol symbol) {
+        StructSymbol existing = structs.get(symbol.name);
+
+        if (existing != null) {
+            error("Duplicate declaration of struct '" + symbol.name + "'");
+            return false;
+        }
+
+        structs.put(symbol.name, symbol);
+        return true;
+    }
+
+    /**
+     * Resolves a struct name to its declared StructSymbol, or null when the
+     * name does not refer to any declared struct.
+     */
+    public StructSymbol resolveStruct(String name) {
+        return structs.get(name);
     }
 
     public DiagnosticBag diagnostics() {
@@ -134,6 +190,7 @@ public final class SymbolTable {
         }
 
         current.put(sym.name, sym);
+        declaredVariableNames.add(sym.name);
         return true;
     }
 
@@ -239,6 +296,75 @@ public final class SymbolTable {
         }
 
         return List.copyOf(out);
+    }
+
+    // ============================================================
+    // Name-Clash Warnings
+    // ============================================================
+
+    /**
+     * Returns the names of all declared structs.
+     */
+    public Set<String> structNames() {
+        return Set.copyOf(structs.keySet());
+    }
+
+    /**
+     * Records a non-fatal warning.
+     *
+     * Warnings never fail compilation; the driver prints them after a
+     * successful semantic analysis.
+     */
+    public void warning(String msg) {
+        diagnostics.warning(msg);
+    }
+
+    public List<String> warnings() {
+        return diagnostics.getWarnings();
+    }
+
+    public boolean hasWarnings() {
+        return diagnostics.hasWarnings();
+    }
+
+    /**
+     * Warns when a declared variable or function shares its name with a
+     * declared struct.
+     *
+     * Franko keeps struct names in a separate namespace, so this is legal.
+     * The C++ backend emits kind-prefixed names (var_X, func_f, struct_X),
+     * so the generated code is unambiguous, but the shared source name is
+     * usually confusing and worth calling out.
+     *
+     * Called once at the end of program analysis, when struct, variable, and
+     * function names are all registered.
+     */
+    public void warnStructNameClashes() {
+        for (String structName : structs.keySet()) {
+            if (declaredVariableNames.contains(structName)) {
+                warning("Variable '"
+                        + structName
+                        + "' shares its name with struct '"
+                        + structName
+                        + "'; generated C++ uses var_"
+                        + structName
+                        + " for the variable and struct_"
+                        + structName
+                        + " for the struct type");
+            }
+
+            if (functions.containsKey(structName)) {
+                warning("Function '"
+                        + structName
+                        + "' shares its name with struct '"
+                        + structName
+                        + "'; generated C++ uses func_"
+                        + structName
+                        + " for the function and struct_"
+                        + structName
+                        + " for the struct type");
+            }
+        }
     }
 
     private static boolean sameParameterSignature(

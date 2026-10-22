@@ -188,15 +188,41 @@ public final class ExpressionAnalyzer {
         if (node instanceof MemberAccessNode n) {
             SemanticExprNode target = analyzeExpr(n.target);
 
-            ctx.error("Unsupported member access expression '"
-                    + n.memberName
-                    + "' on type "
-                    + target.type.describe());
+            if (!(target.type instanceof SemanticStructType structType)) {
+                ctx.error("Member access '"
+                        + n.memberName
+                        + "' is only valid on struct values, got type "
+                        + target.type.describe());
 
-            return new SemanticIntLiteralNode(
-                    FALLBACK_TYPE,
-                    BigInteger.ZERO,
-                    "0"
+                return new SemanticIntLiteralNode(
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            FieldSymbol field = structType.structSymbol.resolveField(
+                    n.memberName
+            );
+
+            if (field == null) {
+                ctx.error("Struct '"
+                        + structType.structSymbol.name
+                        + "' has no field named '"
+                        + n.memberName
+                        + "'");
+
+                return new SemanticIntLiteralNode(
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            return new SemanticMemberAccessNode(
+                    field.type,
+                    target,
+                    field
             );
         }
 

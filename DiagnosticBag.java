@@ -11,12 +11,16 @@ import java.util.List;
  * DiagnosticBag is a small reusable diagnostics container used by compiler
  * phases that want to collect multiple errors and report them together.
  *
+ * It also accumulates non-fatal warnings. Warnings never fail a phase; they
+ * are surfaced separately by the driver.
+ *
  * It intentionally does not know anything about symbols, scopes, AST nodes,
  * semantic types, or checker state.
  */
 public final class DiagnosticBag {
 
     private final List<String> errors = new ArrayList<>();
+    private final List<String> warnings = new ArrayList<>();
 
     private String header;
 
@@ -42,10 +46,23 @@ public final class DiagnosticBag {
 
     public void clear() {
         errors.clear();
+        warnings.clear();
     }
 
     public void error(String msg) {
         errors.add(msg == null ? "<null diagnostic>" : msg);
+    }
+
+    public void warning(String msg) {
+        warnings.add(msg == null ? "<null warning>" : msg);
+    }
+
+    public List<String> getWarnings() {
+        return List.copyOf(warnings);
+    }
+
+    public boolean hasWarnings() {
+        return !warnings.isEmpty();
     }
 
     public List<String> getErrors() {

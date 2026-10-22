@@ -139,6 +139,11 @@ public class LegalityChecker {
             return;
         }
 
+        if (node instanceof SemanticStructDeclNode struct) {
+            declarationChecker.checkStructDecl(struct);
+            return;
+        }
+
         if (node instanceof SemanticStmtNode stmt) {
             statementChecker.checkStmt(stmt);
             return;
@@ -157,6 +162,11 @@ public class LegalityChecker {
         for (SemanticASTNode item : program.topLevelItems) {
             if (item instanceof SemanticFunctionDeclNode fn) {
                 functionChecker.checkFunction(fn);
+                continue;
+            }
+
+            if (item instanceof SemanticStructDeclNode struct) {
+                declarationChecker.checkStructDecl(struct);
                 continue;
             }
 

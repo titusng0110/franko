@@ -42,13 +42,14 @@ It documents both intended language behavior and important current implementatio
 21. [Array Initializer Lists](21-array-initializer-lists.md)
 22. [String Literals](22-string-literals.md)
 23. [Addresses](23-addresses.md)
-24. [`del` and Delete Checking](24-del-and-delete-checking.md)
-25. [Memory Safety Checking](25-memory-safety-checking.md)
-26. [Type Equality](26-type-equality.md)
-27. [Declaration Type Validity](27-declaration-type-validity.md)
-28. [Unsupported or Restricted Features](28-unsupported-or-restricted-features.md)
-29. [Runtime and Backend Notes](29-runtime-and-backend-notes.md)
-30. [Examples](30-examples.md)
+24. [Structs](24-structs.md)
+25. [`del` and Delete Checking](25-del-and-delete-checking.md)
+26. [Memory Safety Checking](26-memory-safety-checking.md)
+27. [Type Equality](27-type-equality.md)
+28. [Declaration Type Validity](28-declaration-type-validity.md)
+29. [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md)
+30. [Runtime and Backend Notes](30-runtime-and-backend-notes.md)
+31. [Examples](31-examples.md)
 
 ---
 
@@ -57,6 +58,8 @@ It documents both intended language behavior and important current implementatio
 Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
+- structs with named fields (`struct X { int32_t n }`);
+- struct member access using `obj.field` (see [Structs](24-structs.md));
 - dynamic arrays;
 - static arrays;
 - `ndarray<...>` sugar for nested static arrays;
@@ -96,8 +99,6 @@ Franko currently does **not** implement:
 - first-class function values;
 - anonymous functions or lambdas;
 - function pointers;
-- structs/classes;
-- fields;
 - general methods (only the built-in array intrinsics use member-call syntax);
 - generics;
 - imports/modules;
@@ -168,8 +169,11 @@ A Franko program is a sequence of **top-level items**.
 
 Current valid top-level items are:
 
+- struct declarations;
 - global variable declarations;
 - function declarations.
+
+Struct declarations are described in full in [Structs](24-structs.md).
 
 Executable statements are **not** currently allowed in global scope.
 
@@ -189,13 +193,20 @@ Invalid global-scope items include:
 
 Note that some invalid global-scope forms only become visible after desugaring: declaration initializer sugar is invalid because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments).
 
-The `alloc` modifier is not valid at global scope; global variables are always statically allocated. See [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
+The `alloc` modifier is not valid at global scope; global variables are always statically allocated. The same rule applies inside struct bodies: `alloc` is not valid for struct fields. See [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
 
 Execution should be rooted in a user-defined `main` function.
 
 Example:
 
 ```franko
+struct Point {
+    int32_t x
+    int32_t y = 0
+}
+
+int32_t count = 0
+
 func main() -> int32_t {
     return 0;
 }
@@ -380,6 +391,7 @@ Franko has the following semantic type categories:
 
 ```text
 primitive integers
+structs
 dynamic arrays
 static arrays
 typed addresses
@@ -387,6 +399,8 @@ function return-only void
 ```
 
 There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8_t`.
+
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical. See [Type Equality](27-type-equality.md), [Declarations](11-declarations.md), and the complete struct reference in [Structs](24-structs.md).
 
 `void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
 
@@ -470,7 +484,7 @@ There is no unary `+` operator and no `+123` literal form:
 
 There is no documented octal literal syntax. Decimal literals with leading zeros (for example `075`) are currently passed to the C++14 backend verbatim, where they may be interpreted as octal by the C++ compiler; avoid leading zeros in decimal literals.
 
-The backend emits very large decimal literals with a trailing `ULL` suffix so they remain well-formed C++14 (see [Runtime and Backend Notes](29-runtime-and-backend-notes.md)).
+The backend emits very large decimal literals with a trailing `ULL` suffix so they remain well-formed C++14 (see [Runtime and Backend Notes](30-runtime-and-backend-notes.md)).
 
 ---
 
@@ -611,20 +625,47 @@ Local variables must be declared before they are used.
 
 Variable declarations are allowed at global scope.
 
-Declaration initializer sugar is invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
+Global variable declarations may have an optional constant initializer:
+
+```franko
+int32_t g = 1 + 2
+uint64_t mask = 1 << 8
+```
+
+The initializer must be a constant expression (`constExpr`) and is folded at compile time. Only primitive globals can have initializers; struct, array, and addr globals reject `= constExpr` as a type mismatch.
+
+Ordinary declaration initializer sugar remains invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
 
 The `alloc` modifier is not valid at global scope; global variables are always statically allocated.
 
 ## 11.5 Uninitialized Values
 
-A declaration without an initializer default-initializes the variable:
+A **local** declaration without an initializer default-initializes the variable:
 
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
 - heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above.
 
-There is no implicit zero-initialization. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals. Use `init_zero` for zeroed dynamic array storage.
+
+**Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
+
+## 11.6 Struct Fields
+
+Struct fields are declared with the same `type name` syntax as variables, inside a top-level `struct` declaration:
+
+```franko
+struct X {
+    int32_t num = 0
+    array<int32_t, 4> xs
+    addr<Y> next
+}
+```
+
+`alloc` is not valid for struct fields, field defaults must be constant expressions on primitive fields only, and duplicate field names are rejected.
+
+The complete struct reference — field rules, by-value cycles, assignability, member access, globals, and heap structs — is in [Structs](24-structs.md).
 
 ---
 
@@ -656,8 +697,9 @@ Duplicate parameter names inside the same function are invalid.
 
 A parameter type must be a **passable type**:
 
-- a primitive integer type; or
-- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable.
+- a primitive integer type;
+- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable; or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is address-only: pass `addr<X>` and `getaddr(s)` instead. See [Structs](24-structs.md).
 
 Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
 
@@ -724,7 +766,8 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
-- an address type, `addr<T>`.
+- an address type, `addr<T>`; or
+- a struct type whose fields are all assignable value types, recursively (see [Structs](24-structs.md)).
 
 Arrays cannot currently be returned directly.
 
@@ -754,7 +797,7 @@ The `alloc` keyword marks the variable as heap-owned. Heap-owned variables may b
 
 Non-heap variables cannot be deleted.
 
-Heap variables must be deleted before the end of their scope and before returning; leaks, double deletes, and use-after-delete are checked by the memory safety pass. See [Memory Safety Checking](25-memory-safety-checking.md).
+Heap variables must be deleted before the end of their scope and before returning; leaks, double deletes, and use-after-delete are checked by the memory safety pass. See [Memory Safety Checking](26-memory-safety-checking.md).
 
 Heap allocation is not zero-initialized. A heap variable is allocated and default-constructed, so a primitive heap variable starts with an indeterminate value, and a heap dynamic array starts empty (length 0, no element storage). Use `init_zero` for zeroed dynamic array storage. Allocation failure raises `std::bad_alloc`.
 
@@ -787,7 +830,8 @@ Valid assignment targets include:
 
 - variables;
 - array elements;
-- dereferenced addresses.
+- dereferenced addresses;
+- struct field accesses (`obj.field`).
 
 ## 14.1 Primitive Assignment
 
@@ -829,6 +873,39 @@ a[1] = 2;
 a[2] = 3;
 ```
 
+## 14.4 Struct Assignment
+
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields.
+
+Valid:
+
+```franko
+struct X {
+    int32_t n
+    addr<Y> p
+}
+
+X a;
+X b;
+a = b;    // whole-value assignment
+```
+
+Invalid (struct contains a static array field):
+
+```franko
+struct W {
+    array<int32_t, 4> xs
+}
+
+W a;
+W b;
+a = b;    // invalid: struct with non-assignable fields is address-only
+```
+
+Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `deref(p).field`.
+
+See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](24-structs.md) for the full assignability rules.
+
 ---
 
 # 15. Lvalues and Storage-Backed Expressions
@@ -842,11 +919,16 @@ Current storage-backed lvalues are:
 | variable | yes |
 | array element of storage-backed array | yes |
 | `deref(address)` | yes |
+| struct field access whose base is an lvalue (`obj.field`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
 | comparison expression | no |
 | function call result | no |
 | `getaddr(...)` result | no |
+
+Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `deref(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
+
+See [Structs](24-structs.md) for the complete struct reference.
 
 This distinction matters for:
 
@@ -1057,11 +1139,11 @@ The C++14 backend can actually print:
 - integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
 - addresses (printed through `const void*`).
 
-Other value types, such as arrays, are accepted by the checker but have no backend print form, so printing them does not produce compilable C++.
+Other value types, such as arrays and structs, are accepted by the checker but have no backend print form, so printing them does not produce compilable C++. Print individual fields instead: `print(s.x)`.
 
 Array initializer lists and string literals are not expressions and cannot be printed directly.
 
-Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](28-unsupported-or-restricted-features.md).
+Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
 
 ## 18.6 Expression Statements
 
@@ -1377,6 +1459,7 @@ Current memsetable types:
 |---|---|
 | primitive integers | yes |
 | static arrays of memsetable elements | yes |
+| structs whose fields are all memsetable, recursively | yes |
 | dynamic arrays | no |
 | addresses | no |
 
@@ -1434,6 +1517,7 @@ Current memcpyable types:
 | primitive integers | yes |
 | addresses | yes |
 | static arrays of memcpyable elements | yes |
+| structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |
 
 ---
@@ -2024,7 +2108,214 @@ The compiler does not fully track dangling addresses or aliasing through address
 
 ---
 
-# 24. `del` and Delete Checking
+# 24. Structs
+
+A struct is a user-defined aggregate type with named, ordered fields:
+
+```franko
+struct Point {
+    int32_t x
+    int32_t y = 0
+}
+
+Point p;
+p.x = 3;
+p.y = 4;
+print(p.x + p.y);
+```
+
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](27-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](31-examples.md).
+
+## 24.1 Declaring a Struct
+
+Struct declarations are top-level items, alongside global variable declarations and function declarations:
+
+```franko
+struct X {
+    int32_t a
+    int64_t b = 123
+    array<int32_t, 4> xs
+}
+```
+
+Rules:
+
+- `struct` declarations may only appear at global scope; they cannot be declared inside functions.
+- Separators between fields are optional, matching block syntax: a trailing separator before `}` is not required, and `;` and newlines may be mixed freely.
+- Duplicate struct names are rejected. Each struct name denotes exactly one declared type.
+- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes and the generated C++ uses kind-prefixed names, so the generated code is unambiguous (see [Runtime and Backend Notes](30-runtime-and-backend-notes.md)).
+
+A struct body may only contain field declarations. Assignments, statements, nested functions, and nested struct declarations are invalid inside a struct body.
+
+## 24.2 Field Declarations
+
+A field declaration uses the same `type name` syntax as a variable declaration, plus an optional constant default:
+
+```franko
+struct Buffer {
+    array<int32_t> data
+    int32_t size = 0
+}
+```
+
+Rules:
+
+- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, addresses (`addr<T>`), and other declared struct types.
+- `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
+- `alloc` is not valid for struct fields. Allocate dynamic array fields explicitly with the allocation call (`field(n)`, see [Array Intrinsics](20-array-intrinsics.md)).
+- Duplicate field names within a struct are rejected.
+- Fields are kept in declaration order; that order is also the generated field order.
+- Field names are ordinary identifiers; keywords cannot be field names.
+
+## 24.3 Field Default Values
+
+A field may declare a default value with `= constExpr`:
+
+```franko
+struct Counter {
+    int32_t count = 0
+    uint32_t limit = 100
+}
+```
+
+Rules:
+
+- Defaults must be constant expressions (`constExpr`) and are folded at compile time (see [Constant Folding](10-constant-folding.md)).
+- Only primitive fields can have default values. Struct, array, and addr fields reject `= constExpr` as a type mismatch.
+- A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8_t x = 300`).
+
+## 24.4 Using Struct Types
+
+A struct name used in a type position is resolved against the struct namespace:
+
+- Unknown struct names are rejected with an "unknown struct type" error.
+- Field types may reference structs declared anywhere in the program, including structs declared later in the file.
+- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `addr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
+
+## 24.5 By-Value Cycles
+
+A struct may not reach itself by value through its fields. The by-value edges are:
+
+- a field whose type is a struct;
+- a field whose type is a static array of structs (recursively, including `ndarray` sugar).
+
+An infinite by-value chain would have no size, so such cycles are rejected at compile time:
+
+```franko
+struct Node {
+    int32_t v
+    array<Node, 4> kids    // invalid: static array of Node inside Node
+}
+```
+
+Indirection breaks the cycle and is allowed:
+
+```franko
+struct Node {
+    int32_t v
+    addr<Node> next        // valid: address edge
+    array<Node> kids       // valid: dynamic array edge
+}
+```
+
+## 24.6 Assignability and Passing by Value
+
+A type is **assignable** when a value of that type can participate in ordinary assignment with `=`:
+
+- primitive integer types are assignable;
+- address types `addr<T>` are assignable;
+- a struct is assignable if and only if all of its fields are assignable, recursively.
+
+Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **address-only**.
+
+Consequences:
+
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For an address-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through `addr<X>` and `getaddr(s)` instead.
+- **By-value parameters.** A parameter may have an assignable struct type (see [Functions](12-functions.md)); the argument is copied at the call.
+- **By-value returns.** A function may return an assignable struct type.
+- Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
+
+Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (addresses excluded), and `memcpy`-able when every field is `memcpy`-able (addresses included). See [Array Intrinsics](20-array-intrinsics.md).
+
+Structs are not integers: operators, `if`/`while` conditions, and `print` reject whole structs. Operate on fields instead.
+
+## 24.7 Member Access and Field Lvalues
+
+Member access uses dot syntax. Access chains compose with every storage form:
+
+```franko
+s.field               // local struct
+deref(p).field        // through an address
+deref(a.next).field   // another hop through an addr field: deref the link first
+xs[i].field           // element of a static or dynamic array
+```
+
+- `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `deref(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
+- `getaddr(s.field)` is valid and yields `addr<T>` for the field's type `T`.
+- A field may itself be an array, and array intrinsics work on fields:
+  `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getaddr(other))`, `b.data[i]`, and `b.data.uninit()`.
+- Method-like calls on structs (`s.foo()`) are rejected; only the built-in array intrinsics use member-call syntax.
+
+## 24.8 Initialization Semantics
+
+- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](11-declarations.md)).
+- **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar desugars into a declaration plus a whole-value assignment.
+- **Global declarations.** Global structs are statically allocated. Fields with defaults receive their defaults; fields without defaults are zero-initialized in the generated C++ (static storage). This is an implementation characteristic of the current backend; do not rely on it in portable code — give every field an explicit default or assign before use.
+- **Heap declarations.** `alloc X s;` allocates and default-constructs the struct: defaults apply, and dynamic-array fields start empty (length 0, no element storage). See [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
+
+## 24.9 Struct Globals
+
+A struct-typed global is declared like any other global:
+
+```franko
+struct Point {
+    int32_t x = 0
+    int32_t y = 0
+}
+
+Point origin;
+int32_t scale = 2;
+```
+
+- Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch.
+- Struct globals are declared before `main` runs; executable statements remain invalid at global scope (see [Program Structure](03-program-structure.md)).
+
+## 24.10 Heap Structs and Memory Safety
+
+A heap struct is tracked like any other heap variable:
+
+```franko
+alloc X s;
+del s;
+```
+
+- `del s` runs the struct's destructor, which destroys member dynamic arrays, so deleting a heap struct does not leak its member arrays (see [`del` and Delete Checking](25-del-and-delete-checking.md)).
+- Nested dynamic-array fields are not tracked as separate heap objects; see [Memory Safety Checking](26-memory-safety-checking.md) for the exact tracking rules and the `uninit()` element caveat.
+
+## 24.11 Backend Notes
+
+The C++14 backend:
+
+- emits each struct as a C++ `struct struct_X { ... };` definition, preceded by a forward-declaration block (`struct struct_X;`) so addresses may reference structs declared later in source order;
+- orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
+- emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
+- emits member access as `target.field`, with heap variables lowered through `(*sym)`.
+
+## 24.12 Restrictions Summary
+
+- Structs are declared only at top level; no local or nested struct declarations.
+- No methods: only the built-in array intrinsics use member-call syntax.
+- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` accepts only individual fields.
+- No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
+- `alloc` is invalid for fields; field defaults are `constExpr` on primitive fields only.
+- A struct may not reach itself by value (through struct fields or static array elements); `addr<...>` and dynamic-array fields break the cycle.
+- A struct with any non-assignable field is address-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `addr<X>`.
+- Duplicate struct names and duplicate field names are rejected.
+- The complete list of current language restrictions is in [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
+
+---
+
+# 25. `del` and Delete Checking
 
 The semantic model distinguishes between heap and non-heap variables.
 
@@ -2053,9 +2344,9 @@ After deletion, direct use of the variable is invalid.
 
 Dynamic array `uninit()` is separate from `del`. `uninit()` frees a heap or stack dynamic array's element buffer; `del` frees a heap-allocated variable object (and, for a heap dynamic array, also its element buffer through the object destructor).
 
-Checking of double delete, use-after-delete, and leaks is performed by the dedicated memory safety pass. See [Memory Safety Checking](25-memory-safety-checking.md).
+Checking of double delete, use-after-delete, and leaks is performed by the dedicated memory safety pass. See [Memory Safety Checking](26-memory-safety-checking.md).
 
-## 24.1 Delete Checking Limitations
+## 25.1 Delete Checking Limitations
 
 Current limitations:
 
@@ -2069,7 +2360,7 @@ The compiler does not perform full ownership, lifetime, alias, or dangling-addre
 
 ---
 
-# 25. Memory Safety Checking
+# 26. Memory Safety Checking
 
 After legality checking, the compiler runs a dedicated **memory safety pass** (`MemorySafetyChecker`) over heap-owned variables.
 
@@ -2084,7 +2375,7 @@ This pass owns transient memory-state analysis. It checks, per heap variable:
 
 The pass is **intra-procedural**: each function body is analyzed separately with a fresh memory state. Called functions are not analyzed for their effects on the caller's heap variables.
 
-## 25.1 Memory States
+## 26.1 Memory States
 
 For each heap variable the checker tracks one of:
 
@@ -2097,18 +2388,18 @@ For each heap variable the checker tracks one of:
 
 `maybe-deleted` arises when branch paths merge with different deletion outcomes. Uses and deletes of a `maybe-deleted` variable are invalid because one path may be a use-after-free or double-free.
 
-## 25.2 Delete Rules
+## 26.2 Delete Rules
 
 - The `del` operand must be a heap variable. Deleting a non-heap variable is an error.
 - Deleting an already-deleted variable is an error.
 - Deleting a possibly-deleted variable after a branch merge is an error.
 
-## 25.3 Use Rules
+## 26.3 Use Rules
 
 - Using a deleted variable is an error.
 - Using a possibly-deleted variable after a branch merge is an error.
 
-## 25.4 Leak Rules
+## 26.4 Leak Rules
 
 - A heap variable must be deleted before its **scope** exits normally; otherwise it leaks ("missing del").
 - A heap variable must be deleted before **returning** from the enclosing function; live heap variables at a return statement are reported as leaks.
@@ -2117,7 +2408,7 @@ For each heap variable the checker tracks one of:
 
 For heap dynamic arrays, remember that `uninit()` only frees the array's internal buffer. The heap array object itself (`alloc array<T>`) must still be freed with `del`.
 
-## 25.5 Branch Handling
+## 26.5 Branch Handling
 
 `if` / `else` is analyzed by checking each branch from the pre-branch state and merging the states of the continuing paths:
 
@@ -2141,7 +2432,7 @@ del x;             // fine
 
 Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that depth the checker falls back to a conservative path-insensitive merge.
 
-## 25.6 Loop Handling
+## 26.6 Loop Handling
 
 `while` loops are handled with a bounded abstraction:
 
@@ -2151,7 +2442,7 @@ Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that
 
 Loop termination is not proven; the post-loop state is conservative.
 
-## 25.7 Limitations
+## 26.7 Limitations
 
 Current limitations of the memory safety checker:
 
@@ -2169,15 +2460,32 @@ print(deref(p));   // NOT detected by the current checker
 - branch-path sensitivity is capped by the nesting-depth limit described above;
 - it does not model partial heap-layout ownership beyond the single-object `alloc` model.
 
-See also [`del` and Delete Checking](24-del-and-delete-checking.md) and [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
+## 26.8 Structs and Nested Arrays
+
+Memory safety tracking is keyed on heap variables, so a heap struct behaves like any other heap variable:
+
+```franko
+alloc X s;
+del s;    // checked like any other del
+```
+
+Notes on structs with nested dynamic-array fields:
+
+- nested dynamic-array fields are **not** tracked as separate heap objects;
+- when a heap struct variable is deleted (`del s`), the generated C++ runs the struct's destructor, which destroys the member arrays, so `alloc X s; del s;` does not leak the inner arrays;
+- dynamic array **elements** are not destructed: `uninit()` frees the element storage without running element destructors, so inner dynamic arrays inside struct elements are not freed automatically. Free inner arrays explicitly (per element) before `uninit()`, or store only primitive and address fields in structs used as dynamic array elements.
+
+Struct semantics are described in [Structs](24-structs.md).
+
+See also [`del` and Delete Checking](25-del-and-delete-checking.md) and [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
 
 ---
 
-# 26. Type Equality
+# 27. Type Equality
 
 Franko uses exact, structural semantic type equality in many places. Type equality is implemented once (in the semantic type classes) and used consistently by overload resolution, assignment checking, return checking, and diagnostics.
 
-## 26.1 Primitive Equality
+## 27.1 Primitive Equality
 
 Primitive types are equal only if they have the same kind.
 
@@ -2189,7 +2497,7 @@ int32_t  == int32_t
 
 The aliases `int`, `uint`, and `byte` canonicalize to `int32_t`, `uint32_t`, and `uint8_t` respectively.
 
-## 26.2 Dynamic Array Equality
+## 27.2 Dynamic Array Equality
 
 Dynamic arrays are equal if their element types are equal.
 
@@ -2198,7 +2506,7 @@ array<int32_t> == array<int32_t>
 array<int32_t> != array<uint8_t>
 ```
 
-## 26.3 Static Array Equality
+## 27.3 Static Array Equality
 
 Static arrays are equal if:
 
@@ -2213,11 +2521,11 @@ array<int32_t, 5 + 5>  == array<int32_t, 10>
 array<int32_t, 10>     != array<int32_t, 20>
 ```
 
-## 26.4 Address Equality
+## 27.4 Address Equality
 
 Address types are equal if their referenced types are equal.
 
-## 26.5 Function Signature Equality
+## 27.5 Function Signature Equality
 
 Function signatures are equal if they have:
 
@@ -2226,13 +2534,28 @@ Function signatures are equal if they have:
 
 Return type and parameter names are not part of function signature equality.
 
+## 27.6 Struct Equality
+
+Struct types are nominal: two struct declarations are distinct types even when their field layouts are identical.
+
+```text
+struct X { int32_t n }
+struct Y { int32_t n }
+
+X != Y
+X == X
+```
+
+Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](24-structs.md) for the complete struct reference.
+
 ---
 
-# 27. Declaration Type Validity
+# 28. Declaration Type Validity
 
 A declared variable type is valid if it is one of:
 
 - primitive integer type;
+- a declared struct type;
 - dynamic array of a valid non-`void` type;
 - static array of a valid non-`void` type with valid size;
 - address of a valid non-`void` type.
@@ -2240,8 +2563,11 @@ A declared variable type is valid if it is one of:
 Valid:
 
 ```franko
+struct X { int32_t n }
+
 int32_t x;
-array<int32_t> xs;
+X s;
+array<X> xs;
 array<uint8_t, 64> bytes;
 ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
 addr<int32_t> p;
@@ -2254,6 +2580,7 @@ Invalid:
 void x;
 array<void> xs;
 addr<void> p;
+T s;    // invalid when no struct named T is declared
 ```
 
 `ndarray` declarations are valid exactly when their unfolded nested static array type is valid: every dimension must satisfy the static array size rules (see [Arrays](19-arrays.md)).
@@ -2262,17 +2589,18 @@ A function return type has separate rules. It may be:
 
 - `void`;
 - a primitive integer type;
-- an address type.
+- an address type; or
+- a struct whose fields are all assignable value types, recursively.
 
 Array return types are invalid.
 
 ---
 
-# 28. Unsupported or Restricted Features
+# 29. Unsupported or Restricted Features
 
 The current Franko implementation intentionally leaves several areas restricted or incomplete.
 
-## 28.1 Function Restrictions
+## 29.1 Function Restrictions
 
 - function declarations are valid only in global scope;
 - nested functions are not supported;
@@ -2286,7 +2614,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
-## 28.2 No General Methods
+## 29.2 No General Methods
 
 Only the built-in array intrinsics use member-call syntax. All other member calls are rejected, including:
 
@@ -2295,29 +2623,37 @@ x.print();          // unsupported member call: print is a statement keyword
 x.something(1);     // unsupported member call
 ```
 
-## 28.3 No Structs or Fields
+## 29.3 Struct Restrictions
 
-There are no user-defined aggregate types beyond arrays.
+Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
-## 28.4 No Floating-Point Types
+- struct fields cannot use `alloc`;
+- struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and addr fields reject `= constExpr` as a type mismatch);
+- a struct may not reach itself by value through struct fields or static array elements; `addr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is address-only: it can be used only through `addr<X>`;
+- structs have no methods: only the built-in array intrinsics use member-call syntax, and method-like calls such as `s.foo()` are rejected.
+
+The complete struct reference, including the reasoning behind each restriction, is in [Structs](24-structs.md).
+
+## 29.4 No Floating-Point Types
 
 Only integer primitives are supported.
 
-## 28.5 No Separate Boolean Type
+## 29.5 No Separate Boolean Type
 
 Boolean results use `uint8_t`.
 
-## 28.6 No Implicit Numeric Conversions for Nonconstants
+## 29.6 No Implicit Numeric Conversions for Nonconstants
 
 Nonconstant numeric assignments require exact type equality.
 
-## 28.7 Arrays Are Not Assignable as Values
+## 29.7 Arrays Are Not Assignable as Values
 
 Arrays cannot be assigned directly as ordinary values.
 
 Array initializer assignment is an exception only in syntax shape, not in value semantics.
 
-## 28.8 Array Initializer Lists Are Not General Values
+## 29.8 Array Initializer Lists Are Not General Values
 
 Array initializer lists are not first-class values.
 
@@ -2330,25 +2666,25 @@ foo([1, 2, 3]);
 return [1, 2, 3];
 ```
 
-## 28.9 No Full Dynamic Array Lifetime Checking
+## 29.9 No Full Dynamic Array Lifetime Checking
 
 The checker validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
 
-## 28.10 Delete Checking Is Limited
+## 29.10 Delete Checking Is Limited
 
-Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (8); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](25-memory-safety-checking.md) for the full list of rules and limitations.
+Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (8); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](26-memory-safety-checking.md) for the full list of rules and limitations.
 
-## 28.11 Address Lifetime Is Not Fully Tracked
+## 29.11 Address Lifetime Is Not Fully Tracked
 
 The compiler does not fully track dangling addresses or ownership.
 
-## 28.12 Print Checking Is Loose
+## 29.12 Print Checking Is Loose
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set. The backend can print integer primitives and addresses; printing other types (for example arrays) does not produce compilable C++. See [Statements](18-statements.md).
 
 Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
 
-## 28.13 Unsupported Operators
+## 29.13 Unsupported Operators
 
 The following operators do not exist in the grammar; source code using them fails to parse:
 
@@ -2358,7 +2694,7 @@ The following operators do not exist in the grammar; source code using them fail
 +x  // no unary plus operator
 ```
 
-## 28.14 String Literals Are Initializer-Only
+## 29.14 String Literals Are Initializer-Only
 
 String literals are supported as byte-array initializer sugar (see [String Literals](22-string-literals.md)), but they are not general expression values.
 
@@ -2370,17 +2706,17 @@ foo("hello");
 return "hello";
 ```
 
-## 28.15 No `for` Loops, `break`, or `continue`
+## 29.15 No `for` Loops, `break`, or `continue`
 
 Only `if` and `while` control flow is implemented. There are no C-style `for` loops and no `break`/`continue` statements. There is also no `switch`, no `do`/`do-while`, and no `goto`.
 
-## 28.16 Global Scope Is Declaration-Only
+## 29.16 Global Scope Is Declaration-Only
 
-Only variable declaration nodes and function declaration nodes are valid at global scope.
+Only struct declaration nodes, variable declaration nodes, and function declaration nodes are valid at global scope.
 
 Executable statements are invalid at global scope.
 
-## 28.17 No Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
+## 29.17 No Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
 
 The following forms do not exist in the grammar:
 
@@ -2392,11 +2728,11 @@ The following forms do not exist in the grammar:
 
 ---
 
-# 29. Runtime and Backend Notes
+# 30. Runtime and Backend Notes
 
 The current compiler targets C++14.
 
-## 29.1 Pipeline Order
+## 30.1 Pipeline Order
 
 ```text
 Franko source
@@ -2409,7 +2745,7 @@ Franko source
   -> C++14 code generation
 ```
 
-## 29.2 Memory Allocation
+## 30.2 Memory Allocation
 
 The generated code allocates through bundled jemalloc (`je_malloc`, `je_calloc`, `je_realloc`, `je_free`).
 
@@ -2417,7 +2753,7 @@ Heap variables (`alloc T x`) compile to a jemalloc-allocated pointer with placem
 
 Dynamic array element buffers are allocated by the array runtime methods and freed by `uninit()` or by the array object's destructor.
 
-## 29.3 Array Representation
+## 30.3 Array Representation
 
 Some Franko rules mirror the generated C++ representation, especially array behavior.
 
@@ -2434,13 +2770,13 @@ Static array sizes must be greater than zero because generated C++ uses fixed-si
 
 Static and dynamic arrays runtime-check indexes and intrinsics and raise `std::runtime_error` (via the runtime panic helper) on violations such as out-of-bounds access, use of an uninitialized dynamic array, double initialization, or zero-size allocation.
 
-## 29.4 Ordering of Top-Level Analysis
+## 30.4 Ordering of Top-Level Analysis
 
 Function signatures are registered before function bodies are analyzed so that forward references, direct recursion, and mutual recursion can be resolved.
 
 Global variable declarations are also registered before function bodies are analyzed, so functions can reference globals declared later in source order.
 
-## 29.5 Desugaring Before Checking
+## 30.5 Desugaring Before Checking
 
 Array initializer lists are lowered before ordinary semantic checking.
 
@@ -2466,11 +2802,11 @@ String literals are converted to byte array literals in the same pass (see [Stri
 
 The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
 
-## 29.6 Integer Literal Emission
+## 30.6 Integer Literal Emission
 
 Large integer literals are emitted so that they remain well-formed C++14. In particular, an unsuffixed decimal literal whose value exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because decimal literals in C++14 do not fall back to unsigned integer types.
 
-## 29.7 Print Emission
+## 30.7 Print Emission
 
 `print` arguments are emitted as `std::cout` insertions:
 
@@ -2480,13 +2816,37 @@ Large integer literals are emitted so that they remain well-formed C++14. In par
 
 See [Statements](18-statements.md) for which types are meaningfully printable.
 
+## 30.8 Identifier Emission and Name Clashes
+
+Franko keeps struct type names, variable names, and function names in separate namespaces, but C++14 does not. To keep the generated code unambiguous, every declared identifier is emitted with a kind prefix:
+
+| Franko construct | Generated C++ name |
+|---|---|
+| struct type `X` | `struct_X` |
+| variable `x` (local, global, parameter, heap) | `var_x` |
+| function `f` | `func_f` |
+| the entry-point function `main` | `main` (unprefixed: the generated C++ entry point IS the Franko `main`) |
+
+So a declaration `X s;` is emitted as `struct_X var_s;`.
+
+Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
+
+When a variable or function shares its name with a declared struct, the compiler emits a **warning** during semantic analysis (the program still compiles):
+
+```text
+==== Warnings ====
+  - Variable 'X' shares its name with struct 'X'; generated C++ uses var_X for the variable and struct_X for the struct type
+```
+
+Struct definitions are emitted after a forward-declaration block (`struct struct_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
+
 ---
 
-# 30. Examples
+# 31. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-## 30.1 Basic Integers
+## 31.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -2502,7 +2862,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.2 Static Array Initializer Assignment
+## 31.2 Static Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -2536,7 +2896,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.3 Static Partial Initializer Assignment
+## 31.3 Static Partial Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -2550,7 +2910,7 @@ func main() -> int32_t {
 
 `xs[2]` is untouched.
 
-## 30.4 Dynamic Array Initializer Assignment
+## 31.4 Dynamic Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -2570,7 +2930,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.5 Runtime Expressions Inside Initializer Lists
+## 31.5 Runtime Expressions Inside Initializer Lists
 
 ```franko
 func getValue() -> int32_t {
@@ -2594,7 +2954,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.6 Nested Static Arrays
+## 31.6 Nested Static Arrays
 
 ```franko
 func main() -> int32_t {
@@ -2612,7 +2972,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.7 Nested Dynamic Arrays
+## 31.7 Nested Dynamic Arrays
 
 ```franko
 func main() -> int32_t {
@@ -2635,7 +2995,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.8 Declaration Initializer with Static Array
+## 31.8 Declaration Initializer with Static Array
 
 ```franko
 func main() -> int32_t {
@@ -2649,7 +3009,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.9 Dynamic Array Declaration Initializer Without Initialization
+## 31.9 Dynamic Array Declaration Initializer Without Initialization
 
 ```franko
 func main() -> int32_t {
@@ -2677,7 +3037,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.10 Array Initializer Through Address
+## 31.10 Array Initializer Through Address
 
 ```franko
 func main() -> int32_t {
@@ -2717,7 +3077,7 @@ func main() -> int32_t {
 }
 ```
 
-## 30.11 String Literal Assignment
+## 31.11 String Literal Assignment
 
 ```franko
 func main() -> int32_t {
@@ -2740,7 +3100,7 @@ func main() -> int32_t {
 
 See [String Literals](22-string-literals.md).
 
-## 30.12 `ndarray` Grid
+## 31.12 `ndarray` Grid
 
 ```franko
 func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
@@ -2762,7 +3122,7 @@ func main() -> int32_t {
 
 `ndarray<byte, 2, 3>` is sugar for `array<array<byte, 3>, 2>`.
 
-## 30.13 Status-Returning Intrinsics
+## 31.13 Status-Returning Intrinsics
 
 ```franko
 func main() -> int32_t {
@@ -2788,3 +3148,191 @@ func main() -> int32_t {
     return 0;
 }
 ```
+
+## 31.14 Struct Declaration and Field Access
+
+```franko
+struct Point {
+    int32_t x;
+    int32_t y
+}
+
+func main() -> int32_t {
+    Point p;
+
+    p.x = 10;
+    p.y = 20;
+
+    print(p.x);
+    print(p.y);
+
+    return 0;
+}
+```
+
+The separator before `}` is optional.
+
+## 31.15 Struct Field Defaults
+
+Field defaults are constant expressions; only primitive fields can have them.
+
+```franko
+struct Counter {
+    int32_t count = 0;
+    uint32_t limit = 100
+}
+
+func main() -> int32_t {
+    Counter c;
+
+    print(c.count);   // 0
+    print(c.limit);   // 100
+
+    return 0;
+}
+```
+
+## 31.16 Whole-Struct Assignment
+
+A struct is assignable as a whole value only if all of its fields are assignable, recursively.
+
+```franko
+struct Pair {
+    int32_t a;
+    int32_t b
+}
+
+func main() -> int32_t {
+    Pair p;
+    Pair q;
+
+    p.a = 1;
+    p.b = 2;
+
+    q = p;            // whole-value copy
+
+    print(q.a);       // 1
+    print(q.b);       // 2
+
+    return 0;
+}
+```
+
+## 31.17 Structs Passed by Value and by Address
+
+Assignable structs may be passed and returned by value; address-only structs must go through `addr<X>`.
+
+```franko
+struct Point {
+    int32_t x;
+    int32_t y
+}
+
+func dist2(Point p) -> int32_t {
+    return p.x * p.x + p.y * p.y;
+}
+
+func move(addr<Point> p) -> void {
+    deref(p).x = deref(p).x + 1;
+    deref(p).y = deref(p).y + 1;
+}
+
+func main() -> int32_t {
+    Point p;
+
+    p.x = 3;
+    p.y = 4;
+
+    print(dist2(p));   // 25
+
+    move(getaddr(p));
+
+    print(p.x);        // 4
+    print(p.y);        // 5
+
+    return 0;
+}
+```
+
+## 31.18 Structs with Array Fields
+
+An array field makes the struct non-assignable: the struct is address-only and its arrays are managed through the usual intrinsics.
+
+```franko
+struct Buffer {
+    array<int32_t> data;
+    int32_t size = 0
+}
+
+func main() -> int32_t {
+    Buffer b;
+
+    b.data(4);          // allocate the dynamic array field
+    b.data.memset(0);
+    b.size = 4;
+
+    b.data[0] = 10;
+    b.data[1] = 20;
+
+    print(b.data[0]);
+    print(b.size);
+
+    b.data.uninit();
+    return 0;
+}
+```
+
+`alloc` is not allowed in struct fields; allocate dynamic array fields explicitly with `field(n)` as above.
+
+## 31.19 Structs on the Heap
+
+```franko
+struct Node {
+    int32_t value;
+    addr<Node> next
+}
+
+func main() -> int32_t {
+    alloc Node a;
+    alloc Node b;
+
+    a.value = 1;
+    b.value = 2;
+
+    a.next = getaddr(b);
+    print(deref(a.next).value);   // follows the addr field: deref first
+
+    del a;
+    del b;
+    return 0;
+}
+```
+
+`addr<Node>` fields break by-value cycles, so self-referential struct definitions like this are valid.
+
+Franko has no null addresses. An address field that is never assigned is indeterminate, so only follow links that have been explicitly assigned (here `b.next` is never set and is never read).
+
+## 31.20 Struct Globals
+
+Global variable declarations accept constant initializers.
+
+```franko
+struct Point {
+    int32_t x = 0;
+    int32_t y = 0
+}
+
+int32_t scale = 2;
+Point origin;
+
+func main() -> int32_t {
+    origin.x = scale;
+
+    print(origin.x);   // 2
+    print(scale);      // 2
+
+    return 0;
+}
+```
+
+Global declarations are checked before `main` runs; executable statements remain invalid at global scope.

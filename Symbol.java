@@ -1,3 +1,5 @@
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -155,5 +157,70 @@ class FunctionSymbol extends CallableSymbol {
 
     public String fullSignatureString() {
         return signatureString() + " -> " + returnType().describe();
+    }
+}
+
+// ============================================================
+// Struct Symbols
+// ============================================================
+
+/**
+ * FieldSymbol represents one declared field of a struct.
+ *
+ * Field types are resolved SemanticTypes produced by SemanticAnalyzer during
+ * struct field resolution.
+ *
+ * A field's optional initializer is a constExpr that has already been folded
+ * into a canonical BigInteger; it is null when the field has no initializer.
+ */
+class FieldSymbol {
+    final String name;
+    final SemanticType type;
+    final BigInteger foldedDefault; // null if absent
+
+    FieldSymbol(String name, SemanticType type, BigInteger foldedDefault) {
+        this.name = Objects.requireNonNull(name);
+        this.type = Objects.requireNonNull(type);
+        this.foldedDefault = foldedDefault;
+    }
+}
+
+/**
+ * StructSymbol represents a named struct declaration.
+ *
+ * Struct types are nominal: two distinct struct declarations are distinct
+ * types even when their layouts are identical. Duplicate struct names are
+ * rejected by SymbolTable.declareStruct.
+ *
+ * Fields are kept in declaration order.
+ */
+class StructSymbol {
+    final String name;
+    final List<FieldSymbol> fields;
+
+    /**
+     * Placeholder constructor used by SemanticAnalyzer phase 1.
+     *
+     * Fields are appended in declaration order during phase 2, so the field
+     * list is a mutable ArrayList.
+     */
+    StructSymbol(String name) {
+        this.name = Objects.requireNonNull(name);
+        this.fields = new ArrayList<>();
+    }
+
+    StructSymbol(String name, List<FieldSymbol> fields) {
+        this.name = Objects.requireNonNull(name);
+        this.fields = new ArrayList<>(fields);
+    }
+
+    public FieldSymbol resolveField(String fieldName) {
+        for (FieldSymbol field : fields) {
+            if (field.name.equals(fieldName)) {
+                return field;
+            }
+        }
+
+        return null;
     }
 }

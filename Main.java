@@ -83,6 +83,15 @@ public class Main {
             SemanticASTPrinter.print(semaAST, 0);
         }
 
+        // ----- Report non-fatal warnings -----
+        if (sema.hasWarnings()) {
+            System.out.println("==== Warnings ====");
+
+            for (String warning : sema.warnings()) {
+                System.out.println("  - " + warning);
+            }
+        }
+
         // ----- Legality checking -----
         System.out.println("==== Legality Checking ====");
         DiagnosticBag legalityDiagnostics = new DiagnosticBag("Legality checking failed:");

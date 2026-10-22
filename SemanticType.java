@@ -258,6 +258,33 @@ final class SemanticAddrType extends SemanticType {
     }
 }
 
+final class SemanticStructType extends SemanticType {
+    final StructSymbol structSymbol;
+
+    SemanticStructType(StructSymbol structSymbol) {
+        this.structSymbol = Objects.requireNonNull(structSymbol);
+    }
+
+    @Override
+    public String describe() {
+        return structSymbol.name;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof SemanticStructType other)) {
+            return false;
+        }
+
+        return structSymbol == other.structSymbol;
+    }
+
+    @Override
+    public int hashCode() {
+        return System.identityHashCode(structSymbol);
+    }
+}
+
 // ============================================================
 // Function Types
 // ============================================================

@@ -3,6 +3,8 @@
 Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
+- structs with named fields (`struct X { int32_t n }`);
+- struct member access using `obj.field` (see [Structs](24-structs.md));
 - dynamic arrays;
 - static arrays;
 - `ndarray<...>` sugar for nested static arrays;
@@ -42,8 +44,6 @@ Franko currently does **not** implement:
 - first-class function values;
 - anonymous functions or lambdas;
 - function pointers;
-- structs/classes;
-- fields;
 - general methods (only the built-in array intrinsics use member-call syntax);
 - generics;
 - imports/modules;

@@ -198,6 +198,11 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node instanceof SemanticMemberAccessNode n) {
+            visitMemberAccess(n);
+            return;
+        }
+
         diagnostics.error("Unknown semantic expression node: "
                 + node.getClass().getSimpleName());
     }
@@ -956,6 +961,20 @@ public class ExpressionChecker {
         }
     }
 
+    private void visitMemberAccess(SemanticMemberAccessNode node) {
+        if (node.field == null) {
+            diagnostics.error("Member access expression has null field symbol");
+            return;
+        }
+
+        if (node.target == null) {
+            diagnostics.error("Member access expression has null target");
+            return;
+        }
+
+        checkExpr(node.target);
+    }
+
     // ============================================================
     // LValue / Storage Helpers
     // ============================================================
@@ -967,7 +986,8 @@ public class ExpressionChecker {
      *
      *   - variables,
      *   - array elements whose target is storage-backed,
-     *   - dereferenced addresses.
+     *   - dereferenced addresses,
+     *   - struct field accesses whose base is storage-backed.
      */
     private boolean isStorageBackedLValue(SemanticExprNode expr) {
         if (expr == null) {
@@ -990,10 +1010,10 @@ public class ExpressionChecker {
             return isStorageBackedLValue(arrayAccess.target);
         }
 
-        /*
-         * Future lvalue nodes, such as SemanticMemberAccessNode, should be
-         * explicitly added above once their storage semantics are known.
-         */
+        if (expr instanceof SemanticMemberAccessNode memberAccess) {
+            return isStorageBackedLValue(memberAccess.target);
+        }
+
         return false;
     }
 

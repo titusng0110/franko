@@ -300,7 +300,8 @@ public class StatementChecker {
      *
      *   - variables,
      *   - dereferenced addresses,
-     *   - array elements whose target is storage-backed.
+     *   - array elements whose target is storage-backed,
+     *   - struct field accesses whose base is storage-backed.
      *
      * This intentionally rejects synthetic/non-storage lvalues unless their
      * storage semantics are explicitly added here later.
@@ -320,6 +321,10 @@ public class StatementChecker {
 
         if (expr instanceof SemanticArrayAccessNode arrayAccess) {
             return isStorageBackedLValue(arrayAccess.target);
+        }
+
+        if (expr instanceof SemanticMemberAccessNode memberAccess) {
+            return isStorageBackedLValue(memberAccess.target);
         }
 
         return false;

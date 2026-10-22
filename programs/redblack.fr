@@ -1,0 +1,320 @@
+// ============================================================
+// Franko Red-Black Tree Showcase
+// ============================================================
+//
+// A classic CLRS-style red-black tree (insertion with fixup
+// rotations), implemented with structs. The tree lives in a fixed
+// pool of structs and links the nodes with addr<RbNode> fields.
+//
+// Franko has no null addresses, so pool[0] is used as the
+// sentinel NIL node: every empty link points at pool[0], and
+// address equality against the global `nil` variable tests
+// for "no child".
+//
+// Demonstrates:
+//
+//   - struct declarations at global scope
+//   - field defaults on primitive fields (key = 0, red = 0)
+//   - addr<RbNode> fields (left / right / parent) breaking
+//     the by-value cycle so a node can reference itself
+//   - a static array of structs used as the node pool
+//   - struct globals and global addr variables
+//   - global primitives with constant initializers
+//   - member access chains: deref(x).field
+//   - nested member access: deref(deref(x).parent).left
+//   - struct by-value parameters and by-value returns
+//   - whole-struct assignment (RbNode v = nodeCopy(root))
+//   - getaddr() on struct fields (addr<byte> redP = ...)
+//   - address comparison with == and !=
+//   - recursion (walk, count, blackHeight, noRedRed)
+//   - iterative search with while loops
+//   - insert-fixup rotations (rotateLeft / rotateRight)
+//   - structural invariant checks as the test harness
+//
+// ============================================================
+
+struct RbNode {
+    int32_t key = 0
+    byte red = 0
+    addr<RbNode> left
+    addr<RbNode> right
+    addr<RbNode> parent
+}
+
+array<RbNode, 64> pool;
+addr<RbNode> nil;
+addr<RbNode> root;
+uint nextFree = 0
+
+// Set up the sentinel node and the empty tree.
+func initTree() -> void {
+    nil = getaddr(pool[0])
+    deref(nil).left = nil
+    deref(nil).right = nil
+    deref(nil).parent = nil
+    deref(nil).key = 0
+    deref(nil).red = 0
+    root = nil
+    nextFree = 1
+}
+
+// Take the next unused pool slot and shape it into a red node.
+func allocNode(int32_t key) -> addr<RbNode> {
+    addr<RbNode> slot = getaddr(pool[nextFree])
+    nextFree = nextFree + 1
+    deref(slot).key = key
+    deref(slot).red = 1
+    deref(slot).left = nil
+    deref(slot).right = nil
+    deref(slot).parent = nil
+    return slot
+}
+
+// rotLeft: make the right child of x the new parent of x.
+func rotateLeft(addr<RbNode> x) -> void {
+    addr<RbNode> y = deref(x).right
+    deref(x).right = deref(y).left
+    if (deref(y).left != nil) {
+        deref(deref(y).left).parent = x
+    }
+    deref(y).parent = deref(x).parent
+    if (deref(x).parent == nil) {
+        root = y
+    } else {
+        if (x == deref(deref(x).parent).left) {
+            deref(deref(x).parent).left = y
+        } else {
+            deref(deref(x).parent).right = y
+        }
+    }
+    deref(y).left = x
+    deref(x).parent = y
+}
+
+// rotRight: make the left child of x the new parent of x.
+func rotateRight(addr<RbNode> x) -> void {
+    addr<RbNode> y = deref(x).left
+    deref(x).left = deref(y).right
+    if (deref(y).right != nil) {
+        deref(deref(y).right).parent = x
+    }
+    deref(y).parent = deref(x).parent
+    if (deref(x).parent == nil) {
+        root = y
+    } else {
+        if (x == deref(deref(x).parent).right) {
+            deref(deref(x).parent).right = y
+        } else {
+            deref(deref(x).parent).left = y
+        }
+    }
+    deref(y).right = x
+    deref(x).parent = y
+}
+
+// Restore the red-black invariants after inserting node z.
+func insertFixup(addr<RbNode> z) -> void {
+    while (deref(deref(z).parent).red != 0) {
+        if (deref(z).parent == deref(deref(deref(z).parent).parent).left) {
+            addr<RbNode> y = deref(deref(deref(z).parent).parent).right
+            if (deref(y).red != 0) {
+                deref(deref(z).parent).red = 0
+                deref(y).red = 0
+                deref(deref(deref(z).parent).parent).red = 1
+                z = deref(deref(z).parent).parent
+            } else {
+                if (z == deref(deref(z).parent).right) {
+                    z = deref(z).parent
+                    rotateLeft(z)
+                }
+                deref(deref(z).parent).red = 0
+                deref(deref(deref(z).parent).parent).red = 1
+                rotateRight(deref(deref(z).parent).parent)
+            }
+        } else {
+            addr<RbNode> y = deref(deref(deref(z).parent).parent).left
+            if (deref(y).red != 0) {
+                deref(deref(z).parent).red = 0
+                deref(y).red = 0
+                deref(deref(deref(z).parent).parent).red = 1
+                z = deref(deref(z).parent).parent
+            } else {
+                if (z == deref(deref(z).parent).left) {
+                    z = deref(z).parent
+                    rotateRight(z)
+                }
+                deref(deref(z).parent).red = 0
+                deref(deref(deref(z).parent).parent).red = 1
+                rotateLeft(deref(deref(z).parent).parent)
+            }
+        }
+    }
+    deref(root).red = 0
+}
+
+// Standard BST insertion plus red-black fixup.
+func insert(int32_t key) -> void {
+    addr<RbNode> z = allocNode(key)
+    addr<RbNode> y = nil
+    addr<RbNode> x = root
+    while (x != nil) {
+        y = x
+        if (deref(z).key < deref(x).key) {
+            x = deref(x).left
+        } else {
+            x = deref(x).right
+        }
+    }
+    deref(z).parent = y
+    if (y == nil) {
+        root = z
+    } else {
+        if (deref(z).key < deref(y).key) {
+            deref(y).left = z
+        } else {
+            deref(y).right = z
+        }
+    }
+    deref(z).left = nil
+    deref(z).right = nil
+    deref(z).red = 1
+    insertFixup(z)
+}
+
+// Iterative search; returns 1 when key is present.
+func find(addr<RbNode> n, int32_t key) -> byte {
+    while (n != nil) {
+        if (key == deref(n).key) {
+            return 1
+        }
+        if (key < deref(n).key) {
+            n = deref(n).left
+        } else {
+            n = deref(n).right
+        }
+    }
+    return 0
+}
+
+// Smallest key in the tree (follow the left spine).
+func minKey(addr<RbNode> n) -> int32_t {
+    while (deref(n).left != nil) {
+        n = deref(n).left
+    }
+    return deref(n).key
+}
+
+// Number of non-sentinel nodes.
+func count(addr<RbNode> n) -> uint {
+    if (n == nil) {
+        return 0
+    }
+    return count(deref(n).left) + 1 + count(deref(n).right)
+}
+
+// In-order traversal; prints key and red bit for each node.
+func walk(addr<RbNode> n) -> void {
+    if (n == nil) {
+        return
+    }
+    walk(deref(n).left)
+    print(deref(n).key, deref(n).red)
+    walk(deref(n).right)
+}
+
+// Number of black nodes on every root-to-sentinel path,
+// or -1 when two paths of one node disagree (invariant broken).
+func blackHeight(addr<RbNode> n) -> int32_t {
+    if (n == nil) {
+        return 1
+    }
+    int32_t lh = blackHeight(deref(n).left)
+    int32_t rh = blackHeight(deref(n).right)
+    if ((lh != rh) || (lh < 0)) {
+        return -1
+    }
+    if (deref(n).red == 0) {
+        return lh + 1
+    }
+    return lh
+}
+
+// 1 when no red node has a red child, 0 otherwise.
+func noRedRed(addr<RbNode> n) -> byte {
+    if (n == nil) {
+        return 1
+    }
+    if (deref(n).red != 0) {
+        if ((deref(deref(n).left).red != 0) || (deref(deref(n).right).red != 0)) {
+            return 0
+        }
+    }
+    if (noRedRed(deref(n).left) == 0) {
+        return 0
+    }
+    return noRedRed(deref(n).right)
+}
+
+// By-value return: copies a whole struct out of the tree.
+func nodeCopy(addr<RbNode> p) -> RbNode {
+    return deref(p)
+}
+
+// By-value parameter: receives a whole-struct copy.
+func printNode(RbNode n) -> void {
+    print(n.key, n.red)
+}
+
+func main() -> int32_t {
+    initTree()
+
+    print(4301)
+
+    insert(50)
+    insert(25)
+    insert(75)
+    insert(12)
+    insert(37)
+    insert(62)
+    insert(87)
+    insert(6)
+    insert(18)
+    insert(31)
+    insert(43)
+    insert(68)
+    insert(81)
+    insert(93)
+    insert(8)
+    insert(28)
+
+    print(4302)
+
+    print(find(root, 6))
+    print(find(root, 28))
+    print(find(root, 93))
+    print(find(root, 42))
+    print(find(root, 15))
+
+    print(4303)
+
+    walk(root)
+
+    print(4304)
+
+    print(count(root))
+    print(minKey(root))
+    print(blackHeight(root))
+    print(noRedRed(root))
+
+    print(4305)
+
+    RbNode view = nodeCopy(root)
+    print(view.key, view.red)
+
+    printNode(pool[2])
+
+    addr<byte> redP = getaddr(deref(root).red)
+    print(deref(redP))
+
+    return 0
+}

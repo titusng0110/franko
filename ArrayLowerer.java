@@ -44,7 +44,22 @@ public final class ArrayLowerer {
         }
 
         if (call.callee instanceof MemberAccessNode mac) {
-            return tryLowerMemberIntrinsic(call, mac);
+            SemanticArrayIntrinsicCallNode intrinsic =
+                    tryLowerMemberIntrinsic(call, mac);
+
+            if (intrinsic != null) {
+                return intrinsic;
+            }
+
+            /*
+             * Not a named array intrinsic. Fall through to the dynamic-array
+             * init shorthand so member receivers work too:
+             *
+             *   b.data(4)   ->  b.data.init(4)
+             *
+             * Non-array member callees fall out of the shorthand as null and
+             * reach the ordinary member-call diagnostic in ExpressionAnalyzer.
+             */
         }
 
         return tryLowerDynamicArrayInitShorthand(call);

@@ -248,6 +248,11 @@ public final class MemorySafetyChecker {
             return;
         }
 
+        if (expr instanceof SemanticMemberAccessNode n) {
+            collectHeapSymbolsFromExpr(n.target);
+            return;
+        }
+
         if (expr instanceof SemanticFunctionCallNode n) {
             for (SemanticExprNode arg : n.args) {
                 collectHeapSymbolsFromExpr(arg);
@@ -741,6 +746,11 @@ public final class MemorySafetyChecker {
         if (expr instanceof SemanticArrayAccessNode n) {
             checkExpr(n.target);
             checkExpr(n.index);
+            return;
+        }
+
+        if (expr instanceof SemanticMemberAccessNode n) {
+            checkExpr(n.target);
             return;
         }
 

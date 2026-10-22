@@ -81,17 +81,44 @@ Local variables must be declared before they are used.
 
 Variable declarations are allowed at global scope.
 
-Declaration initializer sugar is invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
+Global variable declarations may have an optional constant initializer:
+
+```franko
+int32_t g = 1 + 2
+uint64_t mask = 1 << 8
+```
+
+The initializer must be a constant expression (`constExpr`) and is folded at compile time. Only primitive globals can have initializers; struct, array, and addr globals reject `= constExpr` as a type mismatch.
+
+Ordinary declaration initializer sugar remains invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
 
 The `alloc` modifier is not valid at global scope; global variables are always statically allocated.
 
 ## 11.5 Uninitialized Values
 
-A declaration without an initializer default-initializes the variable:
+A **local** declaration without an initializer default-initializes the variable:
 
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
 - heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above.
 
-There is no implicit zero-initialization. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals. Use `init_zero` for zeroed dynamic array storage.
+
+**Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
+
+## 11.6 Struct Fields
+
+Struct fields are declared with the same `type name` syntax as variables, inside a top-level `struct` declaration:
+
+```franko
+struct X {
+    int32_t num = 0
+    array<int32_t, 4> xs
+    addr<Y> next
+}
+```
+
+`alloc` is not valid for struct fields, field defaults must be constant expressions on primitive fields only, and duplicate field names are rejected.
+
+The complete struct reference — field rules, by-value cycles, assignability, member access, globals, and heap structs — is in [Structs](24-structs.md).
