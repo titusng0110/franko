@@ -224,6 +224,10 @@ public class ASTPrinter {
             System.out.println(pad + "Int: " + n.value);
         }
 
+        else if (node instanceof NullNode) {
+            System.out.println(pad + "Null");
+        }
+
         else if (node instanceof ArrayLiteralNode n) {
             System.out.println(pad + "ArrayLiteral");
             System.out.println(pad + "  elements: " + n.elements.size());
@@ -404,6 +408,10 @@ public class ASTPrinter {
 
         if (expr instanceof IntNode n) {
             return n.value;
+        }
+
+        if (expr instanceof NullNode) {
+            return "null";
         }
 
         if (expr instanceof VarNode n) {

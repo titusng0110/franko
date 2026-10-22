@@ -258,6 +258,41 @@ final class SemanticAddrType extends SemanticType {
     }
 }
 
+// ============================================================
+// Null Type
+// ============================================================
+
+/**
+ * The type of the 'null' literal.
+ *
+ * 'null' is only valid where an address type is expected:
+ *
+ *   addr<int32_t> p = null;
+ *   p == null
+ *   p != null
+ *   p = null
+ *
+ * It is not a value type that can be assigned to primitives, arrays,
+ * or structs, and it is not the same as integer 0.
+ */
+final class SemanticNullType extends SemanticType {
+
+    @Override
+    public String describe() {
+        return "null";
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof SemanticNullType;
+    }
+
+    @Override
+    public int hashCode() {
+        return SemanticNullType.class.hashCode();
+    }
+}
+
 final class SemanticStructType extends SemanticType {
     final StructSymbol structSymbol;
 

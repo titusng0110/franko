@@ -101,9 +101,10 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above.
+- **address variables are the exception: an `addr<T>` declaration is guaranteed null-initialized** (see [Addresses](23-addresses.md));
+- heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above, except that the storage of an `alloc`'d address is also null-initialized.
 
-There is no implicit zero-initialization for locals. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals other than addresses. Use `init_zero` for zeroed dynamic array storage.
 
 **Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
 

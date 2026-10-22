@@ -104,6 +104,14 @@ public class Main {
         MemorySafetyChecker memorySafetyChecker = new MemorySafetyChecker(memorySafetyDiagnostics);
         memorySafetyChecker.check(semaAST);
 
+        if (memorySafetyDiagnostics.hasWarnings()) {
+            System.out.println("==== Memory Safety Warnings ====");
+
+            for (String warning : memorySafetyDiagnostics.getWarnings()) {
+                System.out.println("  - " + warning);
+            }
+        }
+
         System.out.println("All checks passed.");
 
         // ----- Generate C++ body -----

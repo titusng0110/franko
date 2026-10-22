@@ -505,3 +505,10 @@ class DerefNode extends ASTNode {
         this.expr = expr;
     }
 }
+
+// ============================================================
+// Null literal
+// ============================================================
+
+class NullNode extends ASTNode {
+}

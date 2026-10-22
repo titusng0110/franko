@@ -73,7 +73,9 @@ Comparison operators produce `uint8_t`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
-Address comparison is supported only between identical address types.
+Address comparison is supported only between identical address types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
+
+The `null` literal may be compared with an address using `==` and `!=` only. `null` cannot be compared with non-address values, and `0` is not `null`.
 
 ## 16.7 Logical Operators
 

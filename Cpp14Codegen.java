@@ -384,6 +384,13 @@ public class Cpp14Codegen {
         if (field.foldedDefault != null) {
             sb.append(" = ");
             sb.append(emitBigIntegerLiteral(field.foldedDefault));
+        } else if (field.type instanceof SemanticAddrType) {
+            /*
+             * Address fields are guaranteed null-initialized. C++ default
+             * member initializers apply whenever a struct instance is
+             * created without explicit field initialization.
+             */
+            sb.append(" = nullptr");
         }
 
         sb.append(";");
@@ -646,7 +653,25 @@ public class Cpp14Codegen {
             emitLine(cppType + "* " + name + " = static_cast<" + cppType + "*>(je_malloc(sizeof(" + cppType + ")));");
             emitLine("if (!" + name + ") throw std::bad_alloc();");
             emitLine("new (" + name + ") " + cppType + ";");
+
+            if (sym.type instanceof SemanticAddrType) {
+                /*
+                 * Heap storage holding an address is null-initialized so that
+                 * deref of a never-assigned heap address is a well-defined
+                 * null dereference instead of undefined behavior.
+                 */
+                emitLine("*" + name + " = nullptr;");
+            }
         } else {
+            /*
+             * Address declarations are guaranteed null-initialized, unlike
+             * ordinary declarations which are left uninitialized.
+             */
+            if (initializer.isEmpty()
+                    && sym.type instanceof SemanticAddrType) {
+                initializer = " = nullptr";
+            }
+
             emitLine(cppType + " " + name + initializer + ";");
         }
     }
@@ -697,7 +722,18 @@ public class Cpp14Codegen {
             );
         }
 
-        emitLine(emitSymbolName(sym) + "->~" + emitType(sym.type) + "();");
+        /*
+         * Scalars (primitives and addresses) have no destructors in C++14,
+         * and a pseudo-destructor call cannot spell a pointer type. Only
+         * class-type pointees (arrays, structs) need explicit destruction
+         * before the storage is freed.
+         */
+        if (sym.type instanceof SemanticDynamicArrayType
+                || sym.type instanceof SemanticStaticArrayType
+                || sym.type instanceof SemanticStructType) {
+            emitLine(emitSymbolName(sym) + "->~" + emitType(sym.type) + "();");
+        }
+
         emitLine("je_free(" + emitSymbolName(sym) + ");");
         emitLine(emitSymbolName(sym) + " = nullptr;");
     }
@@ -750,6 +786,13 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticIntLiteralNode literal) {
             return emitIntLiteral(literal);
+        }
+
+        if (node instanceof SemanticNullLiteralNode) {
+            /*
+             * Franko null -> C++ nullptr.
+             */
+            return "nullptr";
         }
 
         if (node instanceof SemanticVarExprNode var) {
@@ -1165,6 +1208,17 @@ public class Cpp14Codegen {
             return "struct_" + struct.structSymbol.name;
         }
 
+        if (type instanceof SemanticNullType) {
+            /*
+             * The null type is the type of the null literal only. It is never
+             * a declared variable, field, parameter, or return type, so it
+             * must not reach type emission.
+             */
+            throw new IllegalStateException(
+                    "Internal compiler error: the null type has no C++ representation"
+            );
+        }
+
         throw new IllegalStateException(
                 "Internal compiler error: unsupported semantic type for codegen: "
                         + type.getClass().getSimpleName()
@@ -1343,6 +1397,13 @@ public class Cpp14Codegen {
         if (expr.type instanceof SemanticAddrType) {
             /*
              * Avoid accidental char-pointer string printing for addresses.
+             */
+            return "static_cast<const void*>(" + emitted + ")";
+        }
+
+        if (expr instanceof SemanticNullLiteralNode) {
+            /*
+             * print(null) prints the null address as a pointer value.
              */
             return "static_cast<const void*>(" + emitted + ")";
         }

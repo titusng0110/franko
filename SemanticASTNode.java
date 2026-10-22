@@ -478,6 +478,17 @@ class SemanticIntLiteralNode extends SemanticExprNode {
     }
 }
 
+class SemanticNullLiteralNode extends SemanticExprNode {
+    public SemanticNullLiteralNode(SemanticType type) {
+        super(type, null);
+    }
+
+    @Override
+    public boolean isLValue() {
+        return false;
+    }
+}
+
 class SemanticVarExprNode extends SemanticExprNode {
     public final VariableSymbol symbol;
 

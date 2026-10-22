@@ -1,6 +1,8 @@
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * ============================================================================
@@ -25,11 +27,32 @@ import java.util.Objects;
  *   - heap variables must be deleted before returning from a function,
  *   - deletion state from branches that definitely return does not flow into
  *     following code,
- *   - branch-sensitive analysis is limited to MAX_BRANCH_DEPTH.
+ *   - branch-sensitive analysis is limited to MAX_BRANCH_DEPTH,
+ *   - null is only valid for address types; integer 0 is not null,
+ *   - address declarations are guaranteed null-initialized,
+ *   - dereferencing a NULL address variable is an error,
+ *   - dereferencing a MAYBE_NULL address variable is a warning,
+ *   - only getaddr(...) certifies an address variable as POINTING; an
+ *     assignment from another address variable copies that variable's exact
+ *     state, so POINTING propagates only through certified sources,
+ *   - address state is tracked in a separate matrix from heap memory state,
+ *     path-sensitively up to MAX_BRANCH_DEPTH, with guard refinement for
+ *     'p == null' and 'p != null' conditions,
+ *   - at function entry every tracked address variable is MAYBE_NULL;
+ *     declarations and assignments refine it.
  *
  * This checker is intentionally intra-procedural. It does not try to infer
  * whether called functions delete memory through aliases. In current Franko,
  * del is symbol-based, so memory ownership remains local to the heap variable.
+ *
+ * KNOWN LIMITATION (deferred to a later change):
+ *
+ *   Dereferencing an address whose pointee was freed by del cannot be caught
+ *   at compile time by this checker. del is symbol-based, so an address may
+ *   be copied into another variable (or a parameter) before the pointee is
+ *   deleted; the copy keeps its POINTING state while the pointee is already
+ *   gone. A runtime dangling/null check is planned as a later change and is
+ *   intentionally not part of this checker.
  */
 public final class MemorySafetyChecker {
     private static final int MAX_BRANCH_DEPTH = 8;
@@ -59,6 +82,40 @@ public final class MemorySafetyChecker {
         MAYBE_DELETED
     }
 
+    /*
+     * Address-state matrix for address-typed variables.
+     *
+     * This is a separate matrix from the heap memory-state matrix above.
+     * A symbol can appear in both matrices (heap variables of address type
+     * participate in both).
+     *
+     * POINTING:
+     *   The variable is certified to hold a real storage address on the
+     *   current path.
+     *
+     *   The only expression that certifies POINTING is getaddr(...).
+     *   Assignment from another variable copies that variable's state, so
+     *   POINTING propagates only transitively through certified sources.
+     *
+     * NULL:
+     *   The variable is definitely null on the current path. Address
+     *   declarations are guaranteed null-initialized, so a fresh
+     *   declaration starts here.
+     *
+     * MAYBE_NULL:
+     *   The variable may be null on the current path. This is the entry
+     *   state for function parameters, globals, and values of unknown
+     *   provenance (call results, member/array reads).
+     *
+     * In all three states, dereferencing a NULL or MAYBE_NULL variable is
+     * invalid.
+     */
+    private enum AddressState {
+        POINTING,
+        NULL,
+        MAYBE_NULL
+    }
+
     private final DiagnosticBag diagnostics;
 
     /*
@@ -82,6 +139,25 @@ public final class MemorySafetyChecker {
     private MemoryState[] state = new MemoryState[0];
 
     /*
+     * Address symbol indexing.
+     *
+     * The address matrix is indexed independently of the heap matrix so
+     * that non-heap address variables are fully trackable.
+     */
+    private final IdentityHashMap<VariableSymbol, Integer> addrIndexBySymbol =
+            new IdentityHashMap<>();
+
+    private VariableSymbol[] addrSymbols = new VariableSymbol[0];
+    private int addrCount = 0;
+
+    /*
+     * Active address state.
+     *
+     * addrState[i] is the address state for addrSymbols[i].
+     */
+    private AddressState[] addrState = new AddressState[0];
+
+    /*
      * Preallocated snapshot storage.
      *
      * snapshots[k] is a full copy of state at some control-flow point.
@@ -91,7 +167,42 @@ public final class MemorySafetyChecker {
     private MemoryState[][] snapshots = new MemoryState[0][];
     private int snapshotCount = 0;
 
+    /*
+     * Preallocated address-state snapshot storage.
+     *
+     * addrSnapshots[k] shares slot indices with snapshots[k].
+     */
+    private AddressState[][] addrSnapshots = new AddressState[0][];
+
     private int branchDepth = 0;
+
+    /*
+     * Suppresses null-deref diagnostics while checking code that cannot
+     * execute:
+     *
+     *   - the second abstract while-body pass, where a deref that is invalid
+     *     only because of a state carried across an infeasible extra
+     *     iteration would otherwise produce a false positive (any deref that
+     *     is invalid within a single body execution is already reported in
+     *     the first pass),
+     *
+     *   - bodies of statically infeasible guard paths, where the guard's
+     *     assertion contradicts a definite current state.
+     */
+    private boolean suppressNullDerefChecks = false;
+
+    /*
+     * Address variables that have already produced a maybe-null deref
+     * warning.
+     *
+     * Path-sensitive exploration revisits the same deref site once per path
+     * through ancestor branches, and desugared array initializers duplicate
+     * a single source-level deref into one deref node per element. To keep
+     * the warning volume bounded and useful, each address variable warns at
+     * most once per check.
+     */
+    private final Set<VariableSymbol> warnedMaybeNullVars =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     public MemorySafetyChecker(DiagnosticBag diagnostics) {
         this.diagnostics = Objects.requireNonNull(diagnostics);
@@ -106,6 +217,9 @@ public final class MemorySafetyChecker {
         snapshotCount = 0;
 
         Arrays.fill(state, MemoryState.UNTRACKED);
+        Arrays.fill(addrState, AddressState.MAYBE_NULL);
+
+        warnedMaybeNullVars.clear();
 
         checkNode(node);
 
@@ -125,20 +239,30 @@ public final class MemorySafetyChecker {
         heapSymbols = new VariableSymbol[16];
         heapCount = 0;
 
+        addrIndexBySymbol.clear();
+        addrSymbols = new VariableSymbol[16];
+        addrCount = 0;
+
         collectHeapSymbols(root);
 
         heapSymbols = Arrays.copyOf(heapSymbols, heapCount);
+        addrSymbols = Arrays.copyOf(addrSymbols, addrCount);
 
         state = new MemoryState[heapCount];
         Arrays.fill(state, MemoryState.UNTRACKED);
+
+        addrState = new AddressState[addrCount];
+        Arrays.fill(addrState, AddressState.MAYBE_NULL);
 
         int estimatedSnapshots =
                 Math.max(16, estimateSnapshotDemand(root, 0) + 8);
 
         snapshots = new MemoryState[estimatedSnapshots][heapCount];
+        addrSnapshots = new AddressState[estimatedSnapshots][addrCount];
 
         for (int i = 0; i < snapshots.length; i++) {
             Arrays.fill(snapshots[i], MemoryState.UNTRACKED);
+            Arrays.fill(addrSnapshots[i], AddressState.MAYBE_NULL);
         }
     }
 
@@ -167,7 +291,7 @@ public final class MemorySafetyChecker {
         }
 
         if (node instanceof SemanticVarDeclNode n) {
-            addHeapSymbolIfNeeded(n.symbol);
+            addTrackedSymbolIfNeeded(n.symbol);
             return;
         }
 
@@ -191,7 +315,7 @@ public final class MemorySafetyChecker {
         }
 
         if (node instanceof SemanticDelNode n) {
-            addHeapSymbolIfNeeded(n.symbol);
+            addTrackedSymbolIfNeeded(n.symbol);
             return;
         }
 
@@ -227,7 +351,7 @@ public final class MemorySafetyChecker {
         }
 
         if (expr instanceof SemanticVarExprNode n) {
-            addHeapSymbolIfNeeded(n.symbol);
+            addTrackedSymbolIfNeeded(n.symbol);
             return;
         }
 
@@ -299,6 +423,129 @@ public final class MemorySafetyChecker {
         heapIndexBySymbol.put(symbol, heapCount);
         heapSymbols[heapCount] = symbol;
         heapCount++;
+    }
+
+    /*
+     * Registers a symbol in both tracking matrices when applicable.
+     *
+     * Heap-allocated symbols join the heap memory-state matrix; address-typed
+     * symbols join the address null-state matrix. A symbol may join both.
+     */
+    private void addTrackedSymbolIfNeeded(VariableSymbol symbol) {
+        addHeapSymbolIfNeeded(symbol);
+        addAddressSymbolIfNeeded(symbol);
+    }
+
+    private void addAddressSymbolIfNeeded(VariableSymbol symbol) {
+        if (symbol == null
+                || !(symbol.type instanceof SemanticAddrType)) {
+            return;
+        }
+
+        if (addrIndexBySymbol.containsKey(symbol)) {
+            return;
+        }
+
+        if (addrCount == addrSymbols.length) {
+            addrSymbols = Arrays.copyOf(
+                    addrSymbols,
+                    Math.max(4, addrSymbols.length * 2)
+            );
+        }
+
+        addrIndexBySymbol.put(symbol, addrCount);
+        addrSymbols[addrCount] = symbol;
+        addrCount++;
+    }
+
+    /*
+     * Resolves a SemanticExprNode to the address-matrix index of the plain
+     * address-typed variable it denotes.
+     *
+     * Only plain variable expressions with an address type are tracked.
+     * Other shapes (array elements, struct fields, deref chains, call
+     * results) are not tracked.
+     *
+     * Returns the address-matrix index, or -1 when not trackable.
+     */
+    private int addrIndexOf(SemanticExprNode expr) {
+        if (!(expr instanceof SemanticVarExprNode n)) {
+            return -1;
+        }
+
+        return addrIndexOfSymbol(n.symbol);
+    }
+
+    private int addrIndexOfSymbol(VariableSymbol symbol) {
+        if (symbol == null
+                || !(symbol.type instanceof SemanticAddrType)) {
+            return -1;
+        }
+
+        Integer index = addrIndexBySymbol.get(symbol);
+
+        return index == null ? -1 : index;
+    }
+
+    /*
+     * Human-readable name for diagnostics about an address expression.
+     */
+    private String varNameOf(SemanticExprNode expr) {
+        if (expr instanceof SemanticVarExprNode n
+                && n.symbol != null) {
+            return n.symbol.name;
+        }
+
+        return "<expression>";
+    }
+
+    /*
+     * Resolves the tracked variable symbol denoted by an address expression,
+     * or null when the expression is not a plain variable.
+     */
+    private VariableSymbol symbolOf(SemanticExprNode expr) {
+        if (expr instanceof SemanticVarExprNode n) {
+            return n.symbol;
+        }
+
+        return null;
+    }
+
+    /*
+     * Computes the address state a variable takes when assigned the given
+     * value expression.
+     *
+     *   null literal         -> NULL      (definitely null)
+     *   getaddr(...)         -> POINTING  (the only certification of a
+     *                                         real storage address)
+     *   address variable     -> copy that variable's exact state:
+     *
+     *                             addr<int> b = null;
+     *                             addr<int> a = b;   a: NULL, not MAYBE_NULL
+     *
+     *                         A variable only becomes POINTING when it was
+     *                         itself certified, directly by getaddr or
+     *                         transitively through certified variables.
+     *
+     *   anything else        -> MAYBE_NULL (unknown provenance: call results,
+     *                          parameters, member/array reads, deref chains)
+     */
+    private AddressState addrStateOfValue(SemanticExprNode value) {
+        if (value instanceof SemanticNullLiteralNode) {
+            return AddressState.NULL;
+        }
+
+        if (value instanceof SemanticGetAddrNode) {
+            return AddressState.POINTING;
+        }
+
+        int sourceIndex = addrIndexOf(value);
+
+        if (sourceIndex >= 0) {
+            return addrState[sourceIndex];
+        }
+
+        return AddressState.MAYBE_NULL;
     }
 
     /*
@@ -408,6 +655,14 @@ public final class MemorySafetyChecker {
 
         Arrays.fill(state, MemoryState.UNTRACKED);
 
+        /*
+         * At function entry every address state is unknown: parameters carry
+         * caller values, globals may have been modified by earlier calls.
+         * Local declarations set their own state (NULL for plain address
+         * declarations, POINTING for alloc'd addresses).
+         */
+        Arrays.fill(addrState, AddressState.MAYBE_NULL);
+
         if (node.body != null) {
             boolean definitelyReturns = checkBlock(node.body, true);
 
@@ -448,6 +703,21 @@ public final class MemorySafetyChecker {
         if (node instanceof SemanticAssignNode n) {
             checkExpr(n.target);
             checkExpr(n.value);
+
+            /*
+             * Address null-state propagation.
+             *
+             *   p = null;            -> NULL      (definitely null)
+             *   p = getaddr(x);      -> POINTING  (the only certification)
+             *   p = q;               -> copy q's exact state
+             *   p = <anything else>; -> MAYBE_NULL (unknown provenance)
+             */
+            int targetIndex = addrIndexOf(n.target);
+
+            if (targetIndex >= 0) {
+                addrState[targetIndex] = addrStateOfValue(n.value);
+            }
+
             return false;
         }
 
@@ -492,14 +762,26 @@ public final class MemorySafetyChecker {
         int[] blockHeapIndices = new int[Math.max(1, node.statements.size())];
         int blockHeapCount = 0;
 
+        int[] blockAddrIndices = new int[Math.max(1, node.statements.size())];
+        int blockAddrCount = 0;
+
         for (SemanticStmtNode stmt : node.statements) {
             if (stmt instanceof SemanticVarDeclNode decl
-                    && decl.symbol != null
-                    && decl.symbol.isHeap) {
-                int index = heapIndexOf(decl.symbol);
+                    && decl.symbol != null) {
+                if (decl.symbol.isHeap) {
+                    int index = heapIndexOf(decl.symbol);
 
-                if (index >= 0) {
-                    blockHeapIndices[blockHeapCount++] = index;
+                    if (index >= 0) {
+                        blockHeapIndices[blockHeapCount++] = index;
+                    }
+                }
+
+                if (decl.symbol.type instanceof SemanticAddrType) {
+                    int index = addrIndexOfSymbol(decl.symbol);
+
+                    if (index >= 0) {
+                        blockAddrIndices[blockAddrCount++] = index;
+                    }
                 }
             }
 
@@ -535,6 +817,15 @@ public final class MemorySafetyChecker {
             state[index] = MemoryState.UNTRACKED;
         }
 
+        /*
+         * Address variables declared in this block leave scope at block exit.
+         * Reset them to MAYBE_NULL so later code cannot inherit their
+         * refined state.
+         */
+        for (int i = 0; i < blockAddrCount; i++) {
+            addrState[blockAddrIndices[i]] = AddressState.MAYBE_NULL;
+        }
+
         return false;
     }
 
@@ -550,6 +841,23 @@ public final class MemorySafetyChecker {
                 state[index] = MemoryState.ALIVE;
             }
         }
+
+        /*
+         * Address declarations are guaranteed null-initialized.
+         *
+         *   addr<T> p;             -> p is definitely NULL
+         *   alloc addr<T> p;       -> p points at freshly allocated storage
+         *
+         * An explicit initializer lowers to a separate assignment statement,
+         * which then refines this state.
+         */
+        int addrIndex = addrIndexOfSymbol(node.symbol);
+
+        if (addrIndex >= 0) {
+            addrState[addrIndex] = node.symbol.isHeap
+                    ? AddressState.POINTING
+                    : AddressState.NULL;
+        }
     }
 
     private boolean checkIf(SemanticIfNode node) {
@@ -563,18 +871,51 @@ public final class MemorySafetyChecker {
 
         branchDepth++;
 
-        restore(before);
-        boolean thenReturns = checkStmt(node.thenBranch);
-        int thenState = snapshot();
+        boolean thenFeasible = guardPathFeasible(node.condition, true);
 
         restore(before);
+
+        if (thenFeasible) {
+            refineAddrStatesFromGuard(node.condition, true);
+        }
+
+        suppressNullDerefChecks = !thenFeasible;
+        boolean thenReturns = checkStmt(node.thenBranch);
+        suppressNullDerefChecks = false;
+
+        int thenState = thenFeasible ? snapshot() : -1;
+
+        restore(before);
+
+        boolean elseFeasible = node.elseBranch == null
+                || guardPathFeasible(node.condition, false);
 
         boolean elseReturns = false;
         int elseState = -1;
+        int fallthroughState = -1;
 
         if (node.elseBranch != null) {
+            if (elseFeasible) {
+                refineAddrStatesFromGuard(node.condition, false);
+            }
+
+            suppressNullDerefChecks = !elseFeasible;
             elseReturns = checkStmt(node.elseBranch);
-            elseState = snapshot();
+            suppressNullDerefChecks = false;
+
+            elseState = elseFeasible ? snapshot() : -1;
+        } else if (elseFeasible) {
+            /*
+             * With no else branch, the continuing path is the guard-failing
+             * path. Capture its refined state so the merge below sees the
+             * guard's else-path implications for address variables.
+             *
+             * When the guard-failing path is infeasible (the guard is
+             * statically true), no fall-through snapshot is contributed, so
+             * only the then-branch state flows onward.
+             */
+            refineAddrStatesFromGuard(node.condition, false);
+            fallthroughState = snapshot();
         }
 
         restore(before);
@@ -584,20 +925,24 @@ public final class MemorySafetyChecker {
         mergeAfterIf(
                 before,
                 thenState,
-                thenReturns,
+                thenReturns || !thenFeasible,
                 elseState,
                 elseReturns,
-                node.elseBranch != null
+                node.elseBranch != null,
+                fallthroughState
         );
 
-        return node.elseBranch != null && thenReturns && elseReturns;
+        return node.elseBranch != null
+                && (thenReturns || !thenFeasible)
+                && (elseReturns || !elseFeasible);
     }
 
     /**
      * Fallback when branch nesting exceeds MAX_BRANCH_DEPTH.
      *
      * This remains conservative but stops deeper path splitting. It checks both
-     * branches and merges their continuing effects.
+     * branches and merges their continuing effects. No guard refinement is
+     * applied at the depth cap.
      */
     private boolean checkIfPathInsensitive(SemanticIfNode node) {
         int before = snapshot();
@@ -623,10 +968,128 @@ public final class MemorySafetyChecker {
                 thenReturns,
                 elseState,
                 elseReturns,
-                node.elseBranch != null
+                node.elseBranch != null,
+                before
         );
 
         return node.elseBranch != null && thenReturns && elseReturns;
+    }
+
+    /*
+     * Reports whether a guard path is feasible for tracked address variables.
+     *
+     * The guard-holding path of 'p == null' asserts that p is NULL, and the
+     * guard-failing path asserts that p is POINTING ('p != null' swaps the
+     * two). When the asserted state contradicts the variable's definite
+     * current state, that path cannot execute at runtime.
+     *
+     * Returns false only for such statically infeasible paths; every other
+     * condition shape is treated as feasible.
+     */
+    private boolean guardPathFeasible(
+            SemanticExprNode condition,
+            boolean guardHolds
+    ) {
+        if (!(condition instanceof SemanticBinOpNode bin)) {
+            return true;
+        }
+
+        if (!bin.op.equals("==") && !bin.op.equals("!=")) {
+            return true;
+        }
+
+        SemanticExprNode varSide;
+
+        if (bin.left instanceof SemanticNullLiteralNode) {
+            varSide = bin.right;
+        } else if (bin.right instanceof SemanticNullLiteralNode) {
+            varSide = bin.left;
+        } else {
+            return true;
+        }
+
+        int index = addrIndexOf(varSide);
+
+        if (index < 0) {
+            return true;
+        }
+
+        boolean isEquality = bin.op.equals("==");
+
+        AddressState asserted = (isEquality == guardHolds)
+                ? AddressState.NULL
+                : AddressState.POINTING;
+
+        AddressState current = addrState[index];
+
+        return current == AddressState.MAYBE_NULL
+                || current == asserted;
+    }
+
+    /*
+     * Applies guard refinement for a condition of the form:
+     *
+     *   p == null   /   null == p
+     *   p != null   /   null != p
+     *
+     * where p is a tracked address variable.
+     *
+     * On the path where the guard holds, the asserted state is:
+     *
+     *   p == null holds  ->  p is NULL
+     *   p != null holds  ->  p is POINTING
+     *
+     * and on the path where the guard fails, the opposite state is asserted.
+     *
+     * Refinement intersects the asserted state with the variable's current
+     * state. When the assertion conflicts with a definite current state the
+     * path is infeasible and the current state is kept, which prevents the
+     * infeasible path from polluting later merges:
+     *
+     *   p = getaddr(x);        p: POINTING
+     *   if (p != null) { }     then-path: POINTING (matches)
+     *                          else-path: infeasible, stays POINTING
+     *   deref(p);              still POINTING, no error
+     */
+    private void refineAddrStatesFromGuard(
+            SemanticExprNode condition,
+            boolean guardHolds
+    ) {
+        if (!(condition instanceof SemanticBinOpNode bin)) {
+            return;
+        }
+
+        if (!bin.op.equals("==") && !bin.op.equals("!=")) {
+            return;
+        }
+
+        SemanticExprNode varSide;
+
+        if (bin.left instanceof SemanticNullLiteralNode) {
+            varSide = bin.right;
+        } else if (bin.right instanceof SemanticNullLiteralNode) {
+            varSide = bin.left;
+        } else {
+            return;
+        }
+
+        int index = addrIndexOf(varSide);
+
+        if (index < 0) {
+            return;
+        }
+
+        boolean isEquality = bin.op.equals("==");
+
+        AddressState asserted = (isEquality == guardHolds)
+                ? AddressState.NULL
+                : AddressState.POINTING;
+
+        AddressState current = addrState[index];
+
+        if (current == AddressState.MAYBE_NULL || current == asserted) {
+            addrState[index] = asserted;
+        }
     }
 
     private boolean checkWhile(SemanticWhileNode node) {
@@ -635,24 +1098,58 @@ public final class MemorySafetyChecker {
         int before = snapshot();
 
         /*
-         * Check one body execution for internal memory errors.
+         * Loop-condition guard feasibility: when the guard is statically
+         * false for every tracked variable (for example `while (p != null)`
+         * with p definitely null), the body never executes.
          */
-        boolean bodyReturns = checkStmt(node.body);
-        int afterOneIteration = snapshot();
+        boolean bodyFeasible = guardPathFeasible(node.condition, true);
 
-        /*
-         * Check a second body execution from the post-body state. This catches
-         * simple loop double-frees such as:
-         *
-         *   while (cond) {
-         *       del x
-         *   }
-         *
-         * because the second abstract iteration starts with x deleted.
-         */
-        if (!bodyReturns) {
-            restore(afterOneIteration);
+        boolean bodyReturns = false;
+        int afterOneIteration = -1;
+
+        if (bodyFeasible) {
+            /*
+             * Loop-condition guard refinement: inside the body the condition
+             * holds, so `p != null` certifies p as POINTING for the body.
+             */
+            refineAddrStatesFromGuard(node.condition, true);
+
+            /*
+             * Check one body execution for internal memory errors.
+             */
+            bodyReturns = checkStmt(node.body);
+            afterOneIteration = snapshot();
+
+            /*
+             * Check a second body execution from the post-body state. This
+             * catches simple loop double-frees such as:
+             *
+             *   while (cond) {
+             *       del x
+             *   }
+             *
+             * because the second abstract iteration starts with x deleted.
+             *
+             * Null-deref diagnostics are suppressed in this pass; see the
+             * field comment on suppressNullDerefChecks.
+             */
+            if (!bodyReturns) {
+                restore(afterOneIteration);
+                refineAddrStatesFromGuard(node.condition, true);
+
+                suppressNullDerefChecks = true;
+                checkStmt(node.body);
+                suppressNullDerefChecks = false;
+            }
+        } else {
+            /*
+             * The body never executes. Check it once with null-deref
+             * diagnostics suppressed so unrelated errors still surface, then
+             * discard its state effects.
+             */
+            suppressNullDerefChecks = true;
             checkStmt(node.body);
+            suppressNullDerefChecks = false;
         }
 
         /*
@@ -666,8 +1163,17 @@ public final class MemorySafetyChecker {
          */
         restore(before);
 
-        if (!bodyReturns) {
+        if (bodyFeasible && !bodyReturns) {
             mergeLoopState(before, afterOneIteration);
+        }
+
+        if (!bodyFeasible || !bodyReturns) {
+            /*
+             * Continuing code runs only when the condition failed, so the
+             * guard-failing refinement holds after the loop. For
+             * `while (p != null)`, this proves p is null on loop exit.
+             */
+            refineAddrStatesFromGuard(node.condition, false);
         }
 
         return false;
@@ -712,6 +1218,16 @@ public final class MemorySafetyChecker {
         }
 
         state[index] = MemoryState.DELETED;
+
+        /*
+         * Codegen sets a deleted heap variable to nullptr, so an address-typed
+         * heap variable is definitely null after del.
+         */
+        int addrIndex = addrIndexOfSymbol(symbol);
+
+        if (addrIndex >= 0) {
+            addrState[addrIndex] = AddressState.NULL;
+        }
     }
 
     // ============================================================
@@ -777,6 +1293,47 @@ public final class MemorySafetyChecker {
         }
 
         if (expr instanceof SemanticDerefNode n) {
+            /*
+             * Null dereference checking: a deref of an address variable in
+             * the NULL or MAYBE_NULL state is an error.
+             *
+             * Suppressed during the loop re-check pass; see the field
+             * comment on inLoopRecheckPass.
+             */
+            if (!suppressNullDerefChecks) {
+                int targetIndex = addrIndexOf(n.expr);
+
+                if (targetIndex >= 0) {
+                    AddressState current = addrState[targetIndex];
+                    String varName = varNameOf(n.expr);
+
+                    if (current == AddressState.NULL) {
+                        diagnostics.error("Cannot dereference null variable '"
+                                + varName
+                                + "'");
+                    } else if (current == AddressState.MAYBE_NULL) {
+                        /*
+                         * A maybe-null dereference is a warning, not an
+                         * error. It means the variable is null on some
+                         * continuing path, which is not statically provable
+                         * to be the executing path.
+                         *
+                         * Each variable warns at most once per check; see
+                         * the field comment on warnedMaybeNullVars.
+                         */
+                        VariableSymbol targetSymbol =
+                                symbolOf(n.expr);
+
+                        if (targetSymbol != null
+                                && warnedMaybeNullVars.add(targetSymbol)) {
+                            diagnostics.warning("Deref of possibly null variable '"
+                                    + varName
+                                    + "'");
+                        }
+                    }
+                }
+            }
+
             checkExpr(n.expr);
         }
     }
@@ -884,6 +1441,14 @@ public final class MemorySafetyChecker {
                 heapCount
         );
 
+        System.arraycopy(
+                addrState,
+                0,
+                addrSnapshots[slot],
+                0,
+                addrCount
+        );
+
         return slot;
     }
 
@@ -899,6 +1464,14 @@ public final class MemorySafetyChecker {
                 0,
                 heapCount
         );
+
+        System.arraycopy(
+                addrSnapshots[snapshotSlot],
+                0,
+                addrState,
+                0,
+                addrCount
+        );
     }
 
     private void ensureSnapshotCapacity() {
@@ -910,10 +1483,14 @@ public final class MemorySafetyChecker {
         int newLength = Math.max(16, oldLength * 2);
 
         snapshots = Arrays.copyOf(snapshots, newLength);
+        addrSnapshots = Arrays.copyOf(addrSnapshots, newLength);
 
         for (int i = oldLength; i < newLength; i++) {
             snapshots[i] = new MemoryState[heapCount];
             Arrays.fill(snapshots[i], MemoryState.UNTRACKED);
+
+            addrSnapshots[i] = new AddressState[addrCount];
+            Arrays.fill(addrSnapshots[i], AddressState.MAYBE_NULL);
         }
     }
 
@@ -923,7 +1500,8 @@ public final class MemorySafetyChecker {
             boolean thenReturns,
             int elseState,
             boolean elseReturns,
-            boolean hasElse
+            boolean hasElse,
+            int fallthroughState
     ) {
         for (int i = 0; i < heapCount; i++) {
             boolean hasContinuingPath = false;
@@ -945,11 +1523,11 @@ public final class MemorySafetyChecker {
                             stateFromSnapshot(elseState, i, before)
                     );
                 }
-            } else {
+            } else if (fallthroughState >= 0) {
                 hasContinuingPath = true;
                 merged = mergeStateValue(
                         merged,
-                        stateFromSnapshot(before, i, before)
+                        stateFromSnapshot(fallthroughState, i, before)
                 );
             }
 
@@ -957,6 +1535,41 @@ public final class MemorySafetyChecker {
                 state[i] = merged;
             } else {
                 state[i] = stateFromSnapshot(before, i, before);
+            }
+        }
+
+        for (int i = 0; i < addrCount; i++) {
+            boolean hasContinuingPath = false;
+            AddressState merged = null;
+
+            if (!thenReturns) {
+                hasContinuingPath = true;
+                merged = mergeAddressStateValue(
+                        merged,
+                        addrStateFromSnapshot(thenState, i, before)
+                );
+            }
+
+            if (hasElse) {
+                if (!elseReturns) {
+                    hasContinuingPath = true;
+                    merged = mergeAddressStateValue(
+                            merged,
+                            addrStateFromSnapshot(elseState, i, before)
+                    );
+                }
+            } else if (fallthroughState >= 0) {
+                hasContinuingPath = true;
+                merged = mergeAddressStateValue(
+                        merged,
+                        addrStateFromSnapshot(fallthroughState, i, before)
+                );
+            }
+
+            if (hasContinuingPath && merged != null) {
+                addrState[i] = merged;
+            } else {
+                addrState[i] = addrStateFromSnapshot(before, i, before);
             }
         }
     }
@@ -980,6 +1593,24 @@ public final class MemorySafetyChecker {
 
             state[i] = merged == null
                     ? MemoryState.UNTRACKED
+                    : merged;
+        }
+
+        for (int i = 0; i < addrCount; i++) {
+            AddressState merged = null;
+
+            merged = mergeAddressStateValue(
+                    merged,
+                    addrStateFromSnapshot(before, i, before)
+            );
+
+            merged = mergeAddressStateValue(
+                    merged,
+                    addrStateFromSnapshot(afterOneIteration, i, before)
+            );
+
+            addrState[i] = merged == null
+                    ? AddressState.MAYBE_NULL
                     : merged;
         }
     }
@@ -1014,6 +1645,57 @@ public final class MemorySafetyChecker {
         }
 
         return MemoryState.UNTRACKED;
+    }
+
+    private AddressState addrStateFromSnapshot(
+            int snapshotSlot,
+            int index,
+            int fallbackSlot
+    ) {
+        if (index < 0 || index >= addrCount) {
+            return AddressState.MAYBE_NULL;
+        }
+
+        if (snapshotSlot >= 0
+                && snapshotSlot < snapshotCount
+                && addrSnapshots[snapshotSlot] != null) {
+            AddressState value = addrSnapshots[snapshotSlot][index];
+
+            if (value != null) {
+                return value;
+            }
+        }
+
+        if (fallbackSlot >= 0
+                && fallbackSlot < snapshotCount
+                && addrSnapshots[fallbackSlot] != null) {
+            AddressState fallback = addrSnapshots[fallbackSlot][index];
+
+            if (fallback != null) {
+                return fallback;
+            }
+        }
+
+        return AddressState.MAYBE_NULL;
+    }
+
+    private AddressState mergeAddressStateValue(
+            AddressState left,
+            AddressState right
+    ) {
+        if (right == null) {
+            right = AddressState.MAYBE_NULL;
+        }
+
+        if (left == null) {
+            return right;
+        }
+
+        if (left == right) {
+            return left;
+        }
+
+        return AddressState.MAYBE_NULL;
     }
 
     private MemoryState mergeStateValue(

@@ -645,9 +645,10 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above.
+- **address variables are the exception: an `addr<T>` declaration is guaranteed null-initialized** (see [Addresses](23-addresses.md));
+- heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above, except that the storage of an `alloc`'d address is also null-initialized.
 
-There is no implicit zero-initialization for locals. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals other than addresses. Use `init_zero` for zeroed dynamic array storage.
 
 **Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
 
@@ -1015,7 +1016,9 @@ Comparison operators produce `uint8_t`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
-Address comparison is supported only between identical address types.
+Address comparison is supported only between identical address types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
+
+The `null` literal may be compared with an address using `==` and `!=` only. `null` cannot be compared with non-address values, and `0` is not `null`.
 
 ## 16.7 Logical Operators
 
@@ -2048,18 +2051,16 @@ Raw integers cannot be converted to addresses.
 
 ## 23.5 Address Comparison
 
-Addresses may be compared using:
+Addresses may be compared using only the equality operators:
 
 ```franko
 ==
 !=
-<
->
-<=
->=
 ```
 
 Both operands must have identical address types.
+
+Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
 
 Address comparison produces `uint8_t`.
 
@@ -2100,11 +2101,90 @@ deref(p)[1] = 2;
 deref(p)[2] = 3;
 ```
 
-## 23.8 Address Lifetime Limitations
+## 23.8 The null Literal
+
+`null` is a literal of type `null`. It is valid only where an address is expected:
+
+```franko
+addr<int32_t> p;
+p = null;               // valid
+
+int32_t x = null;       // invalid: null is only valid for address types
+p = 0;                  // invalid: 0 is an integer, not null
+```
+
+`null` and `0` are different values. An address cannot be assigned or compared against the integer `0`; use `null` instead.
+
+`null` may be compared with an address using equality only:
+
+```franko
+if (p == null) {
+    // p is null on this path
+}
+if (p != null) {
+    // p is not null on this path
+}
+```
+
+Comparing `null` with a non-address value is invalid. Relational comparison (`<`, `>`) of `null` is invalid.
+
+`null` may be passed to `addr<T>` parameters and returned from `addr<T>` functions.
+
+`print(null)` prints the null address as a pointer value.
+
+### 23.8.1 Null-Initialized Address Declarations
+
+Address declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
+
+```franko
+addr<int32_t> p;        // p is null here, guaranteed
+print(p == null);       // true
+```
+
+This guarantee also applies to address-typed struct fields and to the heap storage of an `alloc`'d address.
+
+### 23.8.2 Nullness Certification
+
+The compiler tracks whether an address variable is null. The only expression that certifies an address as non-null is `getaddr(...)`:
+
+```franko
+addr<int32_t> p;            // p is null
+deref(p);                   // error: cannot dereference null
+
+p = getaddr(x);             // p is certified non-null
+deref(p);                   // valid
+
+addr<int32_t> q = p;        // q copies p's state: non-null
+addr<int32_t> r = q;        // r copies q's state: non-null
+```
+
+Assignment from another address variable copies that variable's exact state, so a null state propagates through copies and an `getaddr` certification propagates transitively.
+
+Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields an unknown state.
+
+### 23.8.3 Dereferencing and Warnings
+
+Dereferencing a variable that is **definitely null** is an error.
+
+Dereferencing a variable that is **possibly null** (null on some path, for example after a branch merge) is a **warning**, not an error:
+
+```franko
+addr<int32_t> p;
+if (cond != 0) {
+    p = getaddr(x);
+} else {
+    p = null;
+}
+deref(p);                   // warning: possibly null
+```
+
+Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.
+
+## 23.9 Address Lifetime Limitations
 
 Address lifetime is not fully tracked.
 
-The compiler does not fully track dangling addresses or aliasing through addresses.
+The compiler does not fully track dangling addresses or aliasing through addresses. In particular, dereferencing an address whose pointee was freed by `del` cannot be caught at compile time when the address was copied before the delete; a runtime check for this is planned as a later change.
 
 ---
 
@@ -2442,7 +2522,53 @@ Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that
 
 Loop termination is not proven; the post-loop state is conservative.
 
-## 26.7 Limitations
+## 26.7 Address Null-State Tracking
+
+Alongside the heap matrix, the checker tracks a separate null-state matrix for address-typed variables, with three states:
+
+| State | Meaning |
+|---|---|
+| pointing | the variable holds a certified, real storage address |
+| null | the variable is definitely null on the current path |
+| maybe-null | the variable is null on some continuing paths |
+
+Rules:
+
+- an ordinary `addr<T>` declaration is **null-initialized**, so it starts in the null state;
+- an `alloc addr<T>` declaration points at freshly allocated storage and starts in the pointing state;
+- assigning the `null` literal makes the target null;
+- assigning `getaddr(...)` makes the target pointing; this is the **only** certification of a non-null address;
+- assigning another address variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
+- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields an unknown state;
+- at function entry, every tracked address variable is unknown, because parameters and globals carry values the checker cannot see.
+
+Dereference checking:
+
+- `deref(p)` where `p` is **null** is an **error**;
+- `deref(p)` where `p` is **possibly null** is a **warning**.
+
+### 26.7.1 Guard Refinement
+
+Inside `if (p == null)` / `if (p != null)` (either operand order), the checker refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
+
+```franko
+addr<int32_t> p;
+if (p != null) {
+    deref(p);      // valid: p is refined to pointing inside the guard
+}
+deref(p);          // error: p is provably null after the guard fails
+```
+
+When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
+
+Refinement is path-sensitive up to the same nesting-depth limit as the heap matrix (see Section 26.5); beyond the limit, refinement stops and states merge conservatively.
+
+### 26.7.2 Address Null-State Limitations
+
+- unknown states (call results, parameters, field and element reads) are trusted as non-null by dereference checking, matching pre-`null` behavior; a null value may still flow through them;
+- dangling addresses (see the aliasing limitation below) are not detected at compile time; a runtime check is planned as a later change.
+
+## 26.8 Limitations
 
 Current limitations of the memory safety checker:
 
@@ -2460,7 +2586,7 @@ print(deref(p));   // NOT detected by the current checker
 - branch-path sensitivity is capped by the nesting-depth limit described above;
 - it does not model partial heap-layout ownership beyond the single-object `alloc` model.
 
-## 26.8 Structs and Nested Arrays
+## 26.9 Structs and Nested Arrays
 
 Memory safety tracking is keyed on heap variables, so a heap struct behaves like any other heap variable:
 

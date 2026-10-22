@@ -80,7 +80,53 @@ Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that
 
 Loop termination is not proven; the post-loop state is conservative.
 
-## 26.7 Limitations
+## 26.7 Address Null-State Tracking
+
+Alongside the heap matrix, the checker tracks a separate null-state matrix for address-typed variables, with three states:
+
+| State | Meaning |
+|---|---|
+| pointing | the variable holds a certified, real storage address |
+| null | the variable is definitely null on the current path |
+| maybe-null | the variable is null on some continuing paths |
+
+Rules:
+
+- an ordinary `addr<T>` declaration is **null-initialized**, so it starts in the null state;
+- an `alloc addr<T>` declaration points at freshly allocated storage and starts in the pointing state;
+- assigning the `null` literal makes the target null;
+- assigning `getaddr(...)` makes the target pointing; this is the **only** certification of a non-null address;
+- assigning another address variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
+- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields an unknown state;
+- at function entry, every tracked address variable is unknown, because parameters and globals carry values the checker cannot see.
+
+Dereference checking:
+
+- `deref(p)` where `p` is **null** is an **error**;
+- `deref(p)` where `p` is **possibly null** is a **warning**.
+
+### 26.7.1 Guard Refinement
+
+Inside `if (p == null)` / `if (p != null)` (either operand order), the checker refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
+
+```franko
+addr<int32_t> p;
+if (p != null) {
+    deref(p);      // valid: p is refined to pointing inside the guard
+}
+deref(p);          // error: p is provably null after the guard fails
+```
+
+When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
+
+Refinement is path-sensitive up to the same nesting-depth limit as the heap matrix (see Section 26.5); beyond the limit, refinement stops and states merge conservatively.
+
+### 26.7.2 Address Null-State Limitations
+
+- unknown states (call results, parameters, field and element reads) are trusted as non-null by dereference checking, matching pre-`null` behavior; a null value may still flow through them;
+- dangling addresses (see the aliasing limitation below) are not detected at compile time; a runtime check is planned as a later change.
+
+## 26.8 Limitations
 
 Current limitations of the memory safety checker:
 
@@ -98,7 +144,7 @@ print(deref(p));   // NOT detected by the current checker
 - branch-path sensitivity is capped by the nesting-depth limit described above;
 - it does not model partial heap-layout ownership beyond the single-object `alloc` model.
 
-## 26.8 Structs and Nested Arrays
+## 26.9 Structs and Nested Arrays
 
 Memory safety tracking is keyed on heap variables, so a heap struct behaves like any other heap variable:
 
