@@ -29,32 +29,15 @@ The cleaned section ordering is:
 19. Arrays
 20. Array Intrinsics
 21. Array Initializer Lists
-22. Addresses
-23. `del` and Delete Checking
-24. Type Equality
-25. Declaration Type Validity
-26. Unsupported or Restricted Features
-27. Runtime and Backend Notes
-28. Examples
-
-## Important cleanup applied
-
-Your pasted reference accidentally duplicated the Arrays section:
-
-- `# 19. Arrays` appeared as the original Arrays section.
-- `# 20. Arrays` appeared again as a revised Arrays section.
-- `# 22. Array Intrinsics` followed afterward.
-
-This pack fixes that by using this cleaner layout:
-
-- `19-arrays.md`
-- `20-array-intrinsics.md`
-- `21-array-initializer-lists.md`
-- `22-addresses.md`
-- ...
-- `28-examples.md`
-
-So **Examples is Section 28**, not Section 29.
+22. String Literals
+23. Addresses
+24. `del` and Delete Checking
+25. Memory Safety Checking
+26. Type Equality
+27. Declaration Type Validity
+28. Unsupported or Restricted Features
+29. Runtime and Backend Notes
+30. Examples
 
 ## How to rebuild one combined document
 

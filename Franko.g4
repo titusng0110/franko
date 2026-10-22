@@ -188,7 +188,11 @@ assignmentInitializer
 // ---------- PRINT ----------
 //
 // Keeping print as a dedicated statement for now.
-// obj.print() still works as a generic member call expression.
+//
+// `obj.print()` does NOT work: `print` is a lexer keyword, so although a
+// `.print()` member suffix parses syntactically, the semantic analyzer
+// rejects ordinary member calls on non-array receivers. Use the print(...)
+// statement form instead.
 //
 // If you later want global user-defined function print(...),
 // you should consider removing this statement form too and

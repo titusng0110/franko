@@ -68,7 +68,14 @@ public final class ConstExpressionEvaluator {
                 case "+" -> left.add(right);
                 case "-" -> left.subtract(right);
                 case "*" -> left.multiply(right);
-                case "/" -> right.signum() == 0 ? null : left.divide(right);
+                case "/" -> {
+                    if (right.signum() == 0) {
+                        ctx.error("Division by zero in constant expression");
+                        yield null;
+                    }
+
+                    yield left.divide(right);
+                }
 
                 case "&" -> left.and(right);
                 case "|" -> left.or(right);

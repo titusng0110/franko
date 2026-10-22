@@ -5,6 +5,7 @@ Franko is a small statically typed language with:
 - fixed-width signed and unsigned integer types;
 - dynamic arrays;
 - static arrays;
+- `ndarray<...>` sugar for nested static arrays;
 - typed addresses using `addr<T>`;
 - explicit address operations:
   - `getaddr(...)`;
@@ -23,11 +24,16 @@ Franko is a small statically typed language with:
 - `print`;
 - `del`;
 - heap-owned variables using `alloc`;
+- string literals as byte-array initializer sugar;
 - array intrinsics:
-  - `arr(size)`;
+  - `arr(size)` (shorthand for `arr.init(size)`);
+  - `arr.init(size)`;
+  - `arr.init_zero(size)`;
+  - `arr.resize(size)`;
   - `arr.uninit()`;
-  - `arr.memset(value)`;
-  - `arr.memcpy(source)`;
+  - `arr.memset(value)` and `arr.memset(value, start, count)`;
+  - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
+  - `arr.memmove(dstStart, srcStart, count)`;
 - array initializer lists as array element assignment sugar.
 
 Franko currently does **not** implement:
@@ -38,12 +44,12 @@ Franko currently does **not** implement:
 - function pointers;
 - structs/classes;
 - fields;
-- general methods;
+- general methods (only the built-in array intrinsics use member-call syntax);
 - generics;
 - imports/modules;
 - floating-point types;
 - a distinct boolean type;
-- string literals;
+- general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
 - implicit numeric conversions except for fluid integer constants.
 
 Franko currently targets C++14.

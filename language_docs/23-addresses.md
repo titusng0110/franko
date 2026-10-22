@@ -1,4 +1,4 @@
-# 22. Addresses
+# 23. Addresses
 
 Franko has typed addresses:
 
@@ -23,29 +23,29 @@ Addresses are not arithmetic values.
 
 `addr<void>` is invalid because `void` is not an ordinary value type.
 
-## 22.1 Creating Addresses with `getaddr`
+## 23.1 Creating Addresses with `getaddr`
 
 The operand must be a storage-backed lvalue.
 
 If the operand has type `T`, then `getaddr(operand)` has type `addr<T>`.
 
-## 22.2 Dereferencing with `deref`
+## 23.2 Dereferencing with `deref`
 
 If the operand has type `addr<T>`, then `deref(...)` has type `T`.
 
 `deref(...)` is also an lvalue.
 
-## 22.3 Nested Addresses
+## 23.3 Nested Addresses
 
 Franko supports addresses to addresses.
 
-## 22.4 Address Assignment
+## 23.4 Address Assignment
 
 Address assignment requires exact type equality.
 
 Raw integers cannot be converted to addresses.
 
-## 22.5 Address Comparison
+## 23.5 Address Comparison
 
 Addresses may be compared using:
 
@@ -62,11 +62,11 @@ Both operands must have identical address types.
 
 Address comparison produces `uint8_t`.
 
-## 22.6 No Address Arithmetic
+## 23.6 No Address Arithmetic
 
 Addresses are not integers and do not support arithmetic.
 
-## 22.7 Addresses of Arrays
+## 23.7 Addresses of Arrays
 
 Arrays may be addressed.
 
@@ -99,7 +99,7 @@ deref(p)[1] = 2;
 deref(p)[2] = 3;
 ```
 
-## 22.8 Address Lifetime Limitations
+## 23.8 Address Lifetime Limitations
 
 Address lifetime is not fully tracked.
 

@@ -359,8 +359,13 @@ public final class ExpressionAnalyzer {
                 return intrinsic;
             }
 
-            if (call.callee instanceof MemberAccessNode mac
-                    && arrayLowerer.isArrayIntrinsicMemberName(mac.memberName)) {
+            /*
+             * A clear diagnostic was already reported while attempting to lower
+             * this call as an array intrinsic. Stop here instead of falling
+             * through to ordinary overload resolution, which would emit a
+             * second, misleading "no matching overload" error.
+             */
+            if (arrayLowerer.shouldSuppressCallDiagnostic(call)) {
                 return new SemanticIntLiteralNode(
                         FALLBACK_TYPE,
                         BigInteger.ZERO,

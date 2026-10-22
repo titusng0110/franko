@@ -43,6 +43,8 @@ foo([1, 2, 3]);
 return [1, 2, 3];
 ```
 
+String literals are allowed as elements of array initializer lists (see [String Literals](22-string-literals.md)).
+
 Array initializer lists are only meaningful in assignment-style contexts where there is an explicit array assignment target.
 
 ## 21.2 Array Initializer Assignment
@@ -91,11 +93,13 @@ xs[2] = 3;
 
 For dynamic arrays, the initializer list still does **not** initialize storage.
 
-Invalid for a freshly declared dynamic array:
+Using the initializer list on a freshly declared dynamic array without first initializing it:
 
 ```franko
 array<int32_t> dyn = [1, 2, 3];
 ```
+
+is **not rejected at compile time**. The generated indexed assignments then access an uninitialized dynamic array, and the runtime aborts with an "array not initialized" error. Dynamic array initialization is not statically tracked; see [Arrays](19-arrays.md).
 
 Correct:
 
@@ -131,14 +135,14 @@ dyn = [1, 2, 3];
 dyn.uninit();
 ```
 
-Invalid:
+Incorrect:
 
 ```franko
 array<int32_t> dyn;
 dyn = [1, 2, 3];
 ```
 
-because it lowers to indexed assignments without first initializing `dyn`.
+This lowers to indexed assignments without first initializing `dyn`. It is not a compile-time error; the generated code accesses an uninitialized dynamic array and fails at runtime.
 
 ## 21.6 Element Expressions
 
@@ -212,7 +216,7 @@ matrix[1].uninit();
 matrix.uninit();
 ```
 
-Invalid:
+Incorrect:
 
 ```franko
 array<array<int32_t>> matrix;
@@ -225,7 +229,7 @@ matrix = [
 ];
 ```
 
-because the outer dynamic array is initialized, but `matrix[0]` and `matrix[1]` are not initialized.
+because the outer dynamic array is initialized, but `matrix[0]` and `matrix[1]` are not. This is not rejected at compile time; the first generated indexed assignment into the uninitialized inner arrays aborts at runtime.
 
 The rule is simple:
 
@@ -286,5 +290,5 @@ Array initializer lists in Franko are:
 - partial when shorter than the target array;
 - rejected for static arrays only when generated indexes are out of bounds;
 - not responsible for allocating, resizing, or initializing dynamic arrays;
-- valid for dynamic arrays only when the target dynamic storage already exists;
+- intended for dynamic arrays only when the target dynamic storage already exists (this is not enforced at compile time; missing initialization fails at runtime);
 - recursively applicable to nested arrays.

@@ -23,20 +23,28 @@ x = 10;
 
 At global scope, declaration initializer sugar is currently invalid if it desugars into an assignment, because global executable statements are not allowed.
 
-## 5.2 Allocated Dynamic Array Initialization Sugar
+## 5.2 Dynamic Array Call-Init Declaration Sugar
 
 This:
 
 ```franko
-alloc array<int> arr(20);
+array<int> arr(20);
+alloc array<int> arr2(20);
 ```
 
 is desugared to:
 
 ```franko
-alloc array<int> arr;
+array<int> arr;
 arr(20);
 ```
+
+```franko
+alloc array<int> arr2;
+arr2(20);
+```
+
+The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](20-array-intrinsics.md).
 
 ## 5.3 Array Initializer List Desugaring
 
@@ -55,3 +63,37 @@ xs[2] = 3;
 ```
 
 Nested initializer lists are recursively lowered to nested indexed assignments.
+
+## 5.4 String Literal Desugaring
+
+String literals are converted to array initializer lists of UTF-8 byte values before ordinary initializer lowering:
+
+```franko
+s = "ABC";
+```
+
+first becomes:
+
+```franko
+s = [65, 66, 67];
+```
+
+and is then lowered to indexed byte assignments. No null terminator is added.
+
+String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](22-string-literals.md).
+
+## 5.5 `ndarray` Type Desugaring
+
+`ndarray<T, D1, D2, ..., Dn>` is sugar for nested static arrays:
+
+```franko
+ndarray<byte, 12, 20, 30>
+```
+
+desugars to:
+
+```franko
+array<array<array<byte, 30>, 20>, 12>
+```
+
+so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](19-arrays.md).
