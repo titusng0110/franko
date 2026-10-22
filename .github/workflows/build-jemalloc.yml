@@ -22,14 +22,14 @@ jobs:
             os: ubuntu-24.04-arm
 
           - target: macos-x86_64
-            os: macos-26-intel
+            os: macos-15-intel
 
           - target: macos-arm64
-            os: macos-26
+            os: macos-15
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -40,8 +40,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            autoconf \
             bzip2 \
             file
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          brew install autoconf
 
       - name: Show build machine info
         shell: bash
@@ -100,10 +109,14 @@ jobs:
 
           cd "$BUILD"
 
+          # Regenerate configure from configure.ac (mirrors upstream jemalloc CI).
+          autoconf
+
           ./configure \
             --prefix="$PREFIX" \
             --disable-shared \
             --enable-static \
+            --disable-doc \
             --with-jemalloc-prefix=je_
 
           if [[ "${{ runner.os }}" == "macOS" ]]; then
@@ -147,22 +160,78 @@ jobs:
           echo "Final jemalloc bundle:"
           find "$PREFIX" -type f | sort
 
-      - name: Verify static archive
+      - name: Verify prefixed jemalloc symbols
         shell: bash
         run: |
           set -Eeuo pipefail
 
           TARGET="${{ matrix.target }}"
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
+          ARCHIVE="$PREFIX/lib/libjemalloc.a"
 
           echo "File info:"
-          file "$PREFIX/lib/libjemalloc.a"
+          file "$ARCHIVE"
 
           echo
-          echo "Checking for prefixed jemalloc symbols:"
-          nm -g "$PREFIX/lib/libjemalloc.a" | grep "je_malloc" | head || {
-            echo "Warning: could not find je_malloc using nm output"
+          echo "Checking for the je_-prefixed symbols consumed by"
+          echo "FrankoRuntime.hpp and generated Franko code:"
+          for sym in je_malloc je_calloc je_realloc je_free; do
+            # macOS nm prefix symbols with '_'; require a definition (not 'U').
+            if ! nm -g "$ARCHIVE" | awk -v s="$sym" '
+                ($1 != "U") && ($NF == s || $NF == "_" s) { found = 1 }
+                END { exit !found }'; then
+              echo "Error: missing prefixed jemalloc symbol: $sym" >&2
+              exit 1
+            fi
+            echo "OK: $sym"
+          done
+
+      - name: Smoke test (je_malloc/je_realloc/je_calloc/je_free round trip)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          TARGET="${{ matrix.target }}"
+          PREFIX="$PWD/third_party/jemalloc/$TARGET"
+          ARCHIVE="$PREFIX/lib/libjemalloc.a"
+
+          SMOKE="$PWD/jemalloc_smoke_$TARGET.c"
+          BIN="$PWD/jemalloc_smoke_$TARGET"
+
+          cat > "$SMOKE" <<'EOF'
+          #include <jemalloc/jemalloc.h>
+
+          int main(void) {
+              void *p = je_malloc(64);
+              if (!p) return 1;
+
+              void *q = je_realloc(p, 128);
+              if (!q) {
+                  je_free(p);
+                  return 2;
+              }
+              je_free(q);
+
+              p = je_calloc(16, 4);
+              if (!p) return 3;
+              je_free(p);
+
+              return 0;
           }
+          EOF
+
+          # Mirror the link pattern from compile_linux-x86_64.sh:
+          # archive by full path, -pthread, and -ldl (Linux only).
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            cc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -pthread -ldl -o "$BIN"
+          else
+            cc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -pthread -o "$BIN"
+          fi
+
+          "$BIN"
+
+          echo
+          echo "Smoke test passed ($TARGET): je_malloc, je_calloc, je_realloc, je_free"
 
       - name: Upload jemalloc artifact
         uses: actions/upload-artifact@v7
@@ -182,20 +251,23 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Setup MSYS2 UCRT64
+      - name: Setup MSYS2 MINGW64
         uses: msys2/setup-msys2@v2
         with:
-          msystem: UCRT64
+          msystem: MINGW64
           update: true
           install: >-
-            base-devel
+            autotools
             bzip2
             file
+            git
             tar
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-binutils
+          pacboy: >-
+            make:p
+            gcc:p
+            binutils:p
 
       - name: Show build machine info
         run: |
@@ -256,19 +328,22 @@ jobs:
 
           cd "$BUILD"
 
+          # Regenerate configure from configure.ac (mirrors upstream jemalloc CI).
+          autoconf
+
           CFLAGS="-O2 -pipe -Wno-cast-function-type -Wno-missing-field-initializers" \
           CXXFLAGS="-O2 -pipe -Wno-cast-function-type -Wno-missing-field-initializers" \
           ./configure \
             --prefix="$PREFIX" \
-            --host=x86_64-w64-mingw32 \
             --disable-shared \
             --enable-static \
             --disable-cxx \
             --disable-doc \
             --with-jemalloc-prefix=je_
 
-          make -j"$(nproc)"
-          make install
+          # mingw32-make is the "make" command under MSYS2 MINGW64.
+          mingw32-make -j"$(nproc)"
+          mingw32-make install
 
           echo
           echo "Checking expected bundle outputs..."
@@ -306,21 +381,71 @@ jobs:
           echo "Final jemalloc bundle:"
           find "$PREFIX" -type f | sort
 
-      - name: Verify static archive
+      - name: Verify prefixed jemalloc symbols
         run: |
           set -Eeuo pipefail
 
           TARGET="windows-x64"
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
+          ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
           echo "File info:"
-          file "$PREFIX/lib/jemalloc.lib"
+          file "$ARCHIVE"
 
           echo
-          echo "Checking for prefixed jemalloc symbols:"
-          x86_64-w64-mingw32-nm -g "$PREFIX/lib/jemalloc.lib" | grep "je_malloc" | head || {
-          echo "Warning: could not find je_malloc using nm output"
+          echo "Checking for the je_-prefixed symbols consumed by"
+          echo "FrankoRuntime.hpp and generated Franko code:"
+          for sym in je_malloc je_calloc je_realloc je_free; do
+            if ! x86_64-w64-mingw32-nm -g "$ARCHIVE" | awk -v s="$sym" '
+                ($1 != "U") && $NF == s { found = 1 }
+                END { exit !found }'; then
+              echo "Error: missing prefixed jemalloc symbol: $sym" >&2
+              exit 1
+            fi
+            echo "OK: $sym"
+          done
+
+      - name: Smoke test (je_malloc/je_realloc/je_calloc/je_free round trip)
+        run: |
+          set -Eeuo pipefail
+
+          TARGET="windows-x64"
+          PREFIX="$PWD/third_party/jemalloc/$TARGET"
+          ARCHIVE="$PREFIX/lib/jemalloc.lib"
+
+          SMOKE="$PWD/jemalloc_smoke.c"
+          BIN="$PWD/jemalloc_smoke.exe"
+
+          cat > "$SMOKE" <<'EOF'
+          #include <jemalloc/jemalloc.h>
+
+          int main(void) {
+              void *p = je_malloc(64);
+              if (!p) return 1;
+
+              void *q = je_realloc(p, 128);
+              if (!q) {
+                  je_free(p);
+                  return 2;
+              }
+              je_free(q);
+
+              p = je_calloc(16, 4);
+              if (!p) return 3;
+              je_free(p);
+
+              return 0;
           }
+          EOF
+
+          # Mirror compile_windows-x64.ps1: the archive is passed by full
+          # path (GNU ar archive with a .lib extension, built by MinGW).
+          gcc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -o "$BIN"
+
+          "$BIN"
+
+          echo
+          echo "Smoke test passed ($TARGET): je_malloc, je_calloc, je_realloc, je_free"
 
       - name: Upload jemalloc artifact
         uses: actions/upload-artifact@v7
