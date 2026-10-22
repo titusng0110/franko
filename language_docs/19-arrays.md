@@ -58,7 +58,25 @@ array<int32_t, 999999999999999999999999999999999> c;
 
 Static arrays do not use `arr(size)` initialization.
 
-## 19.2 Dynamic Arrays
+## 19.2 `ndarray` Sugar
+
+`ndarray<T, D1, D2, ..., Dn>` is syntactic sugar for nested static arrays:
+
+```franko
+ndarray<byte, 12, 20, 30>
+```
+
+means:
+
+```franko
+array<array<array<byte, 30>, 20>, 12>
+```
+
+Access order follows the dimension list: `arr[i][j][k]` indexes `i` along `12`, `j` along `20`, and `k` along `30`.
+
+Each dimension follows the same static-array size rules above (a positive compile-time integer constant folding to a value that fits `uint32_t`).
+
+## 19.3 Dynamic Arrays
 
 A dynamic array has runtime size:
 
@@ -66,10 +84,12 @@ A dynamic array has runtime size:
 array<int32_t> xs;
 ```
 
-Dynamic arrays are initialized using direct-call array initialization syntax:
+Dynamic arrays are initialized with the array intrinsic `init` (or one of its aliases):
 
 ```franko
-xs(10);
+xs(10);             // shorthand for xs.init(10)
+xs.init(10);        // allocate uninitialized storage
+xs.init_zero(10);   // allocate zeroed storage
 ```
 
 Rules for dynamic array initialization:
@@ -82,11 +102,19 @@ Rules for dynamic array initialization:
 - constant sizes must fit `uint32_t`;
 - nonconstant sizes must have exactly type `uint32_t`.
 
+An initialized dynamic array may be resized with `resize`. See [Array Intrinsics](20-array-intrinsics.md).
+
 Dynamic array declaration alone does not allocate element storage.
 
 The array must be initialized before ordinary indexed use.
 
-## 19.3 Array Access
+The call-initialization form is only valid for dynamic arrays:
+
+```franko
+int32_t x(5);   // invalid: x is not a dynamic array
+```
+
+## 19.4 Array Access
 
 Array indexing syntax:
 
@@ -106,7 +134,7 @@ Index rules:
 
 For static arrays, constant indexes are checked against the known static size when possible.
 
-## 19.4 Array Elements as Lvalues
+## 19.5 Array Elements as Lvalues
 
 Array elements are storage-backed lvalues when the array target is storage-backed.
 
@@ -119,7 +147,7 @@ p = getaddr(xs[0]);
 
 Nested array elements may also be lvalues when each target is storage-backed.
 
-## 19.5 Array Direct Assignment Is Invalid
+## 19.6 Array Direct Assignment Is Invalid
 
 Arrays cannot be assigned directly as ordinary values.
 
@@ -135,14 +163,14 @@ a = b;
 Use one of:
 
 ```franko
-a.memcpy(b);
+a.memcpy(getaddr(b));
 a.memset(0);
 a.uninit();
 ```
 
 Array initializer assignment is not whole-array value assignment.
 
-## 19.6 Array Lifetime Limitations
+## 19.7 Array Lifetime Limitations
 
 The checker validates intrinsic legality, but it does not fully prove:
 

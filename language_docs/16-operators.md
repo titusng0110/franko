@@ -47,6 +47,8 @@ Operands must be integers. Arrays and addresses are invalid.
 
 The modulus operator `%` is not currently implemented.
 
+Division by zero in a compile-time constant expression is an error; see [Constant Folding](10-constant-folding.md).
+
 ## 16.4 Bitwise Operators
 
 Bitwise operators: `&`, `|`, `^`.
@@ -57,7 +59,9 @@ Operands must be integers.
 
 Shift operators: `<<`, `>>`.
 
-The right operand must be an integer. Nonconstant shift counts must have an unsigned integer type.
+The left operand must be an integer.
+
+The right operand must be an integer. Nonconstant shift counts must have an unsigned integer type. Constant shift counts must be nonnegative and must fit the unsigned variant of the left operand's primitive type.
 
 ## 16.6 Comparison Operators
 

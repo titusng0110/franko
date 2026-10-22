@@ -1,3 +1,4 @@
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
@@ -143,10 +144,15 @@ final class SemanticDynamicArrayType extends SemanticType {
  *   array<int32_t, 5 + 5>
  *
  * become the same semantic static array type if all fold to 10.
+ *
+ * Type equality is structural after unfolding the constant size expression:
+ * two static array types are equal iff their element types are equal and
+ * their unfolded sizes are numerically equal. The size text is preserved only
+ * for diagnostics and for C++ code emission.
  */
 final class SemanticStaticArrayType extends SemanticType {
     final SemanticType elementType;
-    final String sizeLiteral; // preserve exact source spelling if desired
+    final String sizeLiteral; // canonical folded decimal size
 
     SemanticStaticArrayType(SemanticType elementType, String sizeLiteral) {
         this.elementType = Objects.requireNonNull(elementType);
@@ -158,35 +164,65 @@ final class SemanticStaticArrayType extends SemanticType {
         return "array<" + elementType.describe() + ", " + sizeLiteral + ">";
     }
 
+    /**
+     * Unfolds the stored size text into a BigInteger, or returns null when the
+     * text is not a plain integer literal (defensive: SemanticAnalyzer always
+     * stores canonical decimal text, which is always parseable).
+     */
+    private static BigInteger unfoldedSize(String literal) {
+        try {
+            String s = literal.trim();
+
+            if (s.startsWith("+")) {
+                s = s.substring(1);
+            }
+
+            String lower = s.toLowerCase();
+
+            if (lower.startsWith("0b")) {
+                return new BigInteger(s.substring(2), 2);
+            }
+
+            if (lower.startsWith("0x")) {
+                return new BigInteger(s.substring(2), 16);
+            }
+
+            return new BigInteger(s, 10);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof SemanticStaticArrayType other)) {
             return false;
         }
 
-        /*
-         * For now, static array type equality uses exact sizeLiteral spelling.
-         *
-         * This means:
-         *
-         *   array<int32_t, 10>
-         *   array<int32_t, 0xA>
-         *
-         * are considered different here.
-         *
-         * If you later canonicalize integer type sizes, replace sizeLiteral
-         * with a parsed/canonical BigInteger size.
-         */
-        return elementType.equals(other.elementType)
-                && sizeLiteral.equals(other.sizeLiteral);
+        if (!elementType.equals(other.elementType)) {
+            return false;
+        }
+
+        BigInteger a = unfoldedSize(sizeLiteral);
+        BigInteger b = unfoldedSize(other.sizeLiteral);
+
+        if (a != null && b != null) {
+            return a.equals(b);
+        }
+
+        return sizeLiteral.equals(other.sizeLiteral);
     }
 
     @Override
     public int hashCode() {
+        BigInteger size = unfoldedSize(sizeLiteral);
+
+        Object sizeKey = size != null ? size : sizeLiteral;
+
         return Objects.hash(
                 SemanticStaticArrayType.class,
                 elementType,
-                sizeLiteral
+                sizeKey
         );
     }
 }

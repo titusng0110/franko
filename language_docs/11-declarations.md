@@ -17,10 +17,18 @@ Array and address declarations:
 array<int> xs;
 array<int32_t> ys;
 array<uint8_t, 128> buffer;
+ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
 
 addr<int> p;
 addr<int32_t> q;
 addr<array<int>> arrayPtr;
+```
+
+Heap declarations use `alloc`:
+
+```franko
+alloc int32_t h;
+alloc array<int32_t> hs;
 ```
 
 Declaration initializers are syntax sugar:
@@ -37,6 +45,25 @@ x = 1;
 ```
 
 The initializer must obey normal assignment rules and is only valid where the resulting assignment is legal.
+
+Dynamic array call-init declaration sugar:
+
+```franko
+array<int32_t> d(10);
+```
+
+is equivalent to:
+
+```franko
+array<int32_t> d;
+d(10);
+```
+
+The call form is only valid for dynamic arrays. Using it on a non-array declaration is an error:
+
+```franko
+int32_t x(5);   // invalid: x is not a dynamic array
+```
 
 ## 11.1 Duplicate Declarations
 

@@ -14,6 +14,8 @@ The `alloc` keyword marks the variable as heap-owned. Heap-owned variables may b
 
 Non-heap variables cannot be deleted.
 
+Heap variables must be deleted before the end of their scope and before returning; leaks, double deletes, and use-after-delete are checked by the memory safety pass. See [Memory Safety Checking](25-memory-safety-checking.md).
+
 ## 13.1 Allocated Dynamic Array Initialization Sugar
 
 ```franko

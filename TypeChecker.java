@@ -133,54 +133,18 @@ public class TypeChecker {
      *   - function types must have equal parameter types and return type.
      */
     public boolean sameType(SemanticType a, SemanticType b) {
-        if (a == null || b == null || a.getClass() != b.getClass()) {
+        if (a == null || b == null) {
             return false;
         }
 
-        if (a instanceof SemanticVoidType) {
-            return true;
-        }
-
-        if (a instanceof SemanticPrimitiveType pa
-                && b instanceof SemanticPrimitiveType pb) {
-            return pa.kind == pb.kind;
-        }
-
-        if (a instanceof SemanticDynamicArrayType da
-                && b instanceof SemanticDynamicArrayType db) {
-            return sameType(da.elementType, db.elementType);
-        }
-
-        if (a instanceof SemanticStaticArrayType sa
-                && b instanceof SemanticStaticArrayType sb) {
-            return sameType(sa.elementType, sb.elementType)
-                    && equalArraySizeLiterals(sa.sizeLiteral, sb.sizeLiteral);
-        }
-
-        if (a instanceof SemanticAddrType aa
-                && b instanceof SemanticAddrType ab) {
-            return sameType(aa.referencedType, ab.referencedType);
-        }
-
-        if (a instanceof SemanticFunctionType fa
-                && b instanceof SemanticFunctionType fb) {
-            if (fa.parameterTypes.size() != fb.parameterTypes.size()) {
-                return false;
-            }
-
-            for (int i = 0; i < fa.parameterTypes.size(); i++) {
-                if (!sameType(
-                        fa.parameterTypes.get(i),
-                        fb.parameterTypes.get(i)
-                )) {
-                    return false;
-                }
-            }
-
-            return sameType(fa.returnType, fb.returnType);
-        }
-
-        return false;
+        /*
+         * Every SemanticType subclass implements structural equals/hashCode,
+         * and SemanticStaticArrayType compares its size numerically after
+         * unfolding the constant size expression. equals is therefore the
+         * single source of truth for type equality, keeping overload
+         * resolution, assignment checking, and diagnostics consistent.
+         */
+        return a.equals(b);
     }
 
     public String describeSafe(SemanticType type) {
@@ -844,14 +808,6 @@ public class TypeChecker {
     // ============================================================
     // Array Size / Literal Utilities
     // ============================================================
-
-    public boolean equalArraySizeLiterals(String a, String b) {
-        try {
-            return parseIntegerLiteral(a).equals(parseIntegerLiteral(b));
-        } catch (Exception e) {
-            return Objects.equals(a, b);
-        }
-    }
 
     public BigInteger parseIntegerLiteral(String val) {
         if (val == null) {

@@ -79,7 +79,7 @@ fi
 # Ensure compiled Java compiler classes exist.
 if [[ ! -d "$CLS_DIR" ]]; then
     echo "Build not found. Running toolchain..."
-    run "$ROOT/update.sh"
+    run "$ROOT/update_linux-x86_64.sh"
 fi
 
 BASENAME="${SRC%.fr}"

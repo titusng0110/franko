@@ -4,10 +4,12 @@ This document describes the Franko language as implemented by the current compil
 
 ```text
 Franko source
+  -> lexer + parser
   -> parser AST
-  -> desugared AST
+  -> Desugarer
   -> SemanticAnalyzer
-  -> MasterChecker
+  -> LegalityChecker (declarations, expressions, statements, functions, types)
+  -> MemorySafetyChecker
   -> C++14 code generation
 ```
 
@@ -38,10 +40,12 @@ It documents both intended language behavior and important current implementatio
 19. [Arrays](19-arrays.md)
 20. [Array Intrinsics](20-array-intrinsics.md)
 21. [Array Initializer Lists](21-array-initializer-lists.md)
-22. [Addresses](22-addresses.md)
-23. [`del` and Delete Checking](23-del-and-delete-checking.md)
-24. [Type Equality](24-type-equality.md)
-25. [Declaration Type Validity](25-declaration-type-validity.md)
-26. [Unsupported or Restricted Features](26-unsupported-or-restricted-features.md)
-27. [Runtime and Backend Notes](27-runtime-and-backend-notes.md)
-28. [Examples](28-examples.md)
+22. [String Literals](22-string-literals.md)
+23. [Addresses](23-addresses.md)
+24. [`del` and Delete Checking](24-del-and-delete-checking.md)
+25. [Memory Safety Checking](25-memory-safety-checking.md)
+26. [Type Equality](26-type-equality.md)
+27. [Declaration Type Validity](27-declaration-type-validity.md)
+28. [Unsupported or Restricted Features](28-unsupported-or-restricted-features.md)
+29. [Runtime and Backend Notes](29-runtime-and-backend-notes.md)
+30. [Examples](30-examples.md)

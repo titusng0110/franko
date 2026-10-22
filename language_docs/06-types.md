@@ -13,3 +13,5 @@ function return-only void
 There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8_t`.
 
 `void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
+
+`ndarray<T, D1, D2, ...>` is not a separate semantic type category. It is syntactic sugar desugared into nested static array types before semantic analysis.

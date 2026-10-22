@@ -1,3 +1,4 @@
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -575,9 +576,37 @@ public class Cpp14Codegen {
          *   0b1010
          *   0xff
          *
-         * Binary literals are valid in C++14.
+         * Binary and hexadecimal literals are valid in C++14 and fall back to
+         * unsigned long long when large.
+         *
+         * An unsuffixed decimal literal whose value exceeds LLONG_MAX is
+         * ill-formed in C++14 because decimal literals do not fall back to
+         * unsigned integer types. Append a ULL suffix so the surrounding
+         * static_cast<T>(...) keeps the generated code well-formed.
          */
-        return node.rawValue;
+        String raw = node.rawValue;
+
+        if (isPlainDecimal(raw)
+                && node.constantValue != null
+                && node.constantValue.compareTo(
+                        BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            return raw + "ULL";
+        }
+
+        return raw;
+    }
+
+    private boolean isPlainDecimal(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return false;
+        }
+
+        if (raw.startsWith("0x") || raw.startsWith("0X")
+                || raw.startsWith("0b") || raw.startsWith("0B")) {
+            return false;
+        }
+
+        return true;
     }
 
     private String emitUnaryOp(SemanticUnaryOpNode node) {

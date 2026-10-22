@@ -18,8 +18,10 @@ Franko supports fixed-width signed and unsigned integer types.
 | Alias | Canonical type |
 |---|---|
 | `int` | `int32_t` |
+| `uint` | `uint32_t` |
+| `byte` | `uint8_t` |
 
-If the parser defines aliases such as `char`, they should be understood as aliases to canonical primitive types. In the current semantic model, `char` behavior corresponds to `uint8_t`.
+No other aliases (such as `char` or `bool`) are currently defined.
 
 ## 7.2 Boolean-Like Values
 

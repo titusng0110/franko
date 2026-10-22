@@ -1,8 +1,8 @@
-# 28. Examples
+# 30. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-## 28.1 Basic Integers
+## 30.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -18,7 +18,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.2 Static Array Initializer Assignment
+## 30.2 Static Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -52,7 +52,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.3 Static Partial Initializer Assignment
+## 30.3 Static Partial Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -66,7 +66,7 @@ func main() -> int32_t {
 
 `xs[2]` is untouched.
 
-## 28.4 Dynamic Array Initializer Assignment
+## 30.4 Dynamic Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -86,7 +86,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.5 Runtime Expressions Inside Initializer Lists
+## 30.5 Runtime Expressions Inside Initializer Lists
 
 ```franko
 func getValue() -> int32_t {
@@ -110,7 +110,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.6 Nested Static Arrays
+## 30.6 Nested Static Arrays
 
 ```franko
 func main() -> int32_t {
@@ -128,7 +128,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.7 Nested Dynamic Arrays
+## 30.7 Nested Dynamic Arrays
 
 ```franko
 func main() -> int32_t {
@@ -151,7 +151,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.8 Declaration Initializer with Static Array
+## 30.8 Declaration Initializer with Static Array
 
 ```franko
 func main() -> int32_t {
@@ -165,7 +165,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.9 Invalid Dynamic Array Declaration Initializer
+## 30.9 Dynamic Array Declaration Initializer Without Initialization
 
 ```franko
 func main() -> int32_t {
@@ -175,7 +175,7 @@ func main() -> int32_t {
 }
 ```
 
-Invalid because this desugars to indexed assignments without initializing dynamic storage.
+This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with an "array not initialized" error.
 
 Correct:
 
@@ -193,7 +193,7 @@ func main() -> int32_t {
 }
 ```
 
-## 28.10 Array Initializer Through Address
+## 30.10 Array Initializer Through Address
 
 ```franko
 func main() -> int32_t {
@@ -229,6 +229,78 @@ func main() -> int32_t {
     print(xs[1]);
     print(xs[2]);
 
+    return 0;
+}
+```
+
+## 30.11 String Literal Assignment
+
+```franko
+func main() -> int32_t {
+    array<byte, 200> str;
+    uint i = 0;
+
+    str(200);
+    str.memset(0);
+    str = "Hello,\tWorld!\n\"Franko\"";
+
+    while (i < 22) {
+        print(str[i]);
+        i = i + 1;
+    }
+
+    str.uninit();
+    return 0;
+}
+```
+
+See [String Literals](22-string-literals.md).
+
+## 30.12 `ndarray` Grid
+
+```franko
+func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
+    deref(grid).memset(0);
+    deref(grid)[0][1] = 7;
+}
+
+func main() -> int32_t {
+    ndarray<byte, 2, 3> grid;
+
+    fill(getaddr(grid));
+
+    print(grid[0][1]);
+    print(grid[1][2]);
+
+    return 0;
+}
+```
+
+`ndarray<byte, 2, 3>` is sugar for `array<array<byte, 3>, 2>`.
+
+## 30.13 Status-Returning Intrinsics
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+    int32_t status = 0;
+
+    status = xs.init_zero(4);
+
+    if (status != 0) {
+        return -1;
+    }
+
+    status = xs.resize(8);
+
+    if (status != 0) {
+        xs.uninit();
+        return -1;
+    }
+
+    print(status);
+
+    xs.uninit();
     return 0;
 }
 ```

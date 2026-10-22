@@ -72,6 +72,37 @@ public final class ArrayLowerer {
         };
     }
 
+    /**
+     * Returns true when a call that could not be lowered to an array intrinsic
+     * should not fall through to ordinary overload resolution, because doing so
+     * would emit a misleading "no matching overload" diagnostic.
+     *
+     * Covers:
+     *
+     *   - reserved array-intrinsic member names on receivers that are not valid
+     *     intrinsic receivers (the lowering already reported the real problem),
+     *
+     *   - argument-list init shorthand applied to a variable that is not a
+     *     dynamic array (tryLowerDynamicArrayInitShorthand reported the real
+     *     problem).
+     */
+    public boolean shouldSuppressCallDiagnostic(CallNode call) {
+        if (call.callee instanceof MemberAccessNode mac) {
+            return isArrayIntrinsicMemberName(mac.memberName);
+        }
+
+        if (call.args.size() == 1
+                && call.callee instanceof VarNode calleeVar) {
+            VariableSymbol var = ctx.resolve(calleeVar.name);
+
+            return var != null
+                    && !ctx.hasAnyFunctionNamed(calleeVar.name)
+                    && !exprAnalyzer.isDynamicArrayType(var.type);
+        }
+
+        return false;
+    }
+
     // ============================================================
     // Member Intrinsics
     // ============================================================
@@ -401,6 +432,19 @@ public final class ArrayLowerer {
                 exprAnalyzer.analyzeExpr(call.callee);
 
         if (!exprAnalyzer.isDynamicArrayType(receiver.type)) {
+            /*
+             * The callee resolved to a variable that is not a dynamic array, so
+             * this cannot be dynamic-array init shorthand. Report a clear
+             * diagnostic here; ExpressionAnalyzer suppresses the misleading
+             * "no matching overload" fallback for this exact case.
+             */
+            if (call.callee instanceof VarNode calleeVar
+                    && ctx.resolve(calleeVar.name) != null
+                    && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
+                ctx.error("'" + calleeVar.name
+                        + "' is not a dynamic array, so it cannot be initialized with an argument list");
+            }
+
             return null;
         }
 
