@@ -114,6 +114,7 @@ Current memsetable types:
 |---|---|
 | primitive integers | yes |
 | static arrays of memsetable elements | yes |
+| structs whose fields are all memsetable, recursively | yes |
 | dynamic arrays | no |
 | addresses | no |
 
@@ -171,4 +172,5 @@ Current memcpyable types:
 | primitive integers | yes |
 | addresses | yes |
 | static arrays of memcpyable elements | yes |
+| structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |

@@ -1,8 +1,9 @@
-# 27. Declaration Type Validity
+# 28. Declaration Type Validity
 
 A declared variable type is valid if it is one of:
 
 - primitive integer type;
+- a declared struct type;
 - dynamic array of a valid non-`void` type;
 - static array of a valid non-`void` type with valid size;
 - address of a valid non-`void` type.
@@ -10,8 +11,11 @@ A declared variable type is valid if it is one of:
 Valid:
 
 ```franko
+struct X { int32_t n }
+
 int32_t x;
-array<int32_t> xs;
+X s;
+array<X> xs;
 array<uint8_t, 64> bytes;
 ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
 addr<int32_t> p;
@@ -24,6 +28,7 @@ Invalid:
 void x;
 array<void> xs;
 addr<void> p;
+T s;    // invalid when no struct named T is declared
 ```
 
 `ndarray` declarations are valid exactly when their unfolded nested static array type is valid: every dimension must satisfy the static array size rules (see [Arrays](19-arrays.md)).
@@ -32,6 +37,7 @@ A function return type has separate rules. It may be:
 
 - `void`;
 - a primitive integer type;
-- an address type.
+- an address type; or
+- a struct whose fields are all assignable value types, recursively.
 
 Array return types are invalid.

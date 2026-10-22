@@ -58,11 +58,11 @@ The C++14 backend can actually print:
 - integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
 - addresses (printed through `const void*`).
 
-Other value types, such as arrays, are accepted by the checker but have no backend print form, so printing them does not produce compilable C++.
+Other value types, such as arrays and structs, are accepted by the checker but have no backend print form, so printing them does not produce compilable C++. Print individual fields instead: `print(s.x)`.
 
 Array initializer lists and string literals are not expressions and cannot be printed directly.
 
-Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](28-unsupported-or-restricted-features.md).
+Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
 
 ## 18.6 Expression Statements
 

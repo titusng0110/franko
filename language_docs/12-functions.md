@@ -26,8 +26,9 @@ Duplicate parameter names inside the same function are invalid.
 
 A parameter type must be a **passable type**:
 
-- a primitive integer type; or
-- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable.
+- a primitive integer type;
+- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable; or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is address-only: pass `addr<X>` and `getaddr(s)` instead. See [Structs](24-structs.md).
 
 Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
 
@@ -94,7 +95,8 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
-- an address type, `addr<T>`.
+- an address type, `addr<T>`; or
+- a struct type whose fields are all assignable value types, recursively (see [Structs](24-structs.md)).
 
 Arrays cannot currently be returned directly.
 

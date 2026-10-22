@@ -80,6 +80,13 @@ public class Desugarer {
      * Appends a desugared top-level item into the output list.
      *
      * Function declarations remain one top-level item.
+     * Struct declarations remain one top-level item with desugared field
+     * types; field const initializers are left untouched.
+     *
+     * Global variable declarations remain one top-level item with a desugared
+     * type; the const initializer is left untouched and must never be
+     * rewritten into assignment statements.
+     *
      * Top-level statement sugar may expand into multiple statements.
      */
     private void appendDesugaredTopLevelItem(ASTNode item, List<ASTNode> out) {
@@ -90,7 +97,39 @@ public class Desugarer {
             return;
         }
 
+        if (item instanceof StructDeclNode) {
+            out.add(desugarStructDecl((StructDeclNode) item));
+            return;
+        }
+
+        if (item instanceof GlobalVarDeclNode) {
+            out.add(desugarGlobalVarDecl((GlobalVarDeclNode) item));
+            return;
+        }
+
         appendDesugaredStmt(item, out);
+    }
+
+    private StructDeclNode desugarStructDecl(StructDeclNode n) {
+        List<StructFieldDeclNode> fields = new ArrayList<>();
+
+        for (StructFieldDeclNode field : n.fields) {
+            fields.add(new StructFieldDeclNode(
+                desugarType(field.type),
+                field.name,
+                field.constInitializer
+            ));
+        }
+
+        return new StructDeclNode(n.name, fields);
+    }
+
+    private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {
+        return new GlobalVarDeclNode(
+            desugarType(n.type),
+            n.name,
+            n.constInitializer
+        );
     }
 
     private FunctionDeclNode desugarFunctionDecl(FunctionDeclNode fn) {
@@ -848,6 +887,10 @@ public class Desugarer {
         }
 
         if (type instanceof VoidTypeNode) {
+            return type;
+        }
+
+        if (type instanceof StructTypeNode) {
             return type;
         }
 

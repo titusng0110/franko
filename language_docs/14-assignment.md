@@ -12,7 +12,8 @@ Valid assignment targets include:
 
 - variables;
 - array elements;
-- dereferenced addresses.
+- dereferenced addresses;
+- struct field accesses (`obj.field`).
 
 ## 14.1 Primitive Assignment
 
@@ -53,3 +54,36 @@ a[0] = 1;
 a[1] = 2;
 a[2] = 3;
 ```
+
+## 14.4 Struct Assignment
+
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields.
+
+Valid:
+
+```franko
+struct X {
+    int32_t n
+    addr<Y> p
+}
+
+X a;
+X b;
+a = b;    // whole-value assignment
+```
+
+Invalid (struct contains a static array field):
+
+```franko
+struct W {
+    array<int32_t, 4> xs
+}
+
+W a;
+W b;
+a = b;    // invalid: struct with non-assignable fields is address-only
+```
+
+Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `deref(p).field`.
+
+See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](24-structs.md) for the full assignability rules.

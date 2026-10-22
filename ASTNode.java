@@ -127,6 +127,57 @@ class ParameterNode extends ASTNode {
 }
 
 // ============================================================
+// Struct declarations
+// ============================================================
+//
+// structDecl produces a StructDeclNode holding ordered field
+// declarations. Field initializers, when present, are raw constExpr
+// ASTs that the semantic analyzer folds into canonical constants.
+
+class StructDeclNode extends ASTNode {
+    String name;
+    List<StructFieldDeclNode> fields;
+
+    StructDeclNode(String name, List<StructFieldDeclNode> fields) {
+        this.name = name;
+        this.fields = fields;
+    }
+}
+
+class StructFieldDeclNode extends ASTNode {
+    TypeNode type;
+    String name;
+    ASTNode constInitializer; // null if absent
+
+    StructFieldDeclNode(TypeNode type, String name, ASTNode constInitializer) {
+        this.type = type;
+        this.name = name;
+        this.constInitializer = constInitializer;
+    }
+}
+
+// ============================================================
+// Global variable declarations
+// ============================================================
+//
+// Distinct from VarDeclNode: the Desugarer keys top-level handling off
+// node classes, and global const initializers must never be rewritten
+// into assignment statements. The initializer is a raw constExpr AST
+// that the semantic analyzer folds into a canonical constant.
+
+class GlobalVarDeclNode extends ASTNode {
+    TypeNode type;
+    String name;
+    ASTNode constInitializer; // null if absent
+
+    GlobalVarDeclNode(TypeNode type, String name, ASTNode constInitializer) {
+        this.type = type;
+        this.name = name;
+        this.constInitializer = constInitializer;
+    }
+}
+
+// ============================================================
 // Declarations
 // ============================================================
 
@@ -280,6 +331,24 @@ class AddrTypeNode extends TypeNode {
 
     AddrTypeNode(TypeNode referencedType) {
         this.referencedType = referencedType;
+    }
+}
+
+// Struct types are parsed as plain identifiers:
+//
+//   struct X { int32_t n }
+//   X x
+//   array<X, 4> xs
+//   addr<X> p
+//
+// The parser accepts any IDENTIFIER as a possible struct type.
+// Semantic analysis must verify that the identifier actually names
+// a declared struct.
+class StructTypeNode extends TypeNode {
+    String name;
+
+    StructTypeNode(String name) {
+        this.name = name;
     }
 }
 

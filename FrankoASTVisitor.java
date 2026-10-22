@@ -186,11 +186,60 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.functionDecl());
         }
 
-        if (ctx.statement() != null) {
-            return visit(ctx.statement());
+        if (ctx.structDecl() != null) {
+            return visit(ctx.structDecl());
+        }
+
+        if (ctx.globalVarDecl() != null) {
+            return visit(ctx.globalVarDecl());
         }
 
         throw new RuntimeException("Unknown topLevelItem: " + ctx.getText());
+    }
+
+    // ============================================================
+    // Struct / global declarations
+    // ============================================================
+
+    @Override
+    public ASTNode visitStructDecl(FrankoParser.StructDeclContext ctx) {
+        String name = ctx.IDENTIFIER().getText();
+
+        List<StructFieldDeclNode> fields = new ArrayList<>();
+
+        for (FrankoParser.StructFieldDeclContext fieldCtx : ctx.structFieldDecl()) {
+            fields.add((StructFieldDeclNode) visit(fieldCtx));
+        }
+
+        return new StructDeclNode(name, fields);
+    }
+
+    @Override
+    public ASTNode visitStructFieldDecl(FrankoParser.StructFieldDeclContext ctx) {
+        TypeNode type = (TypeNode) visit(ctx.type());
+        String name = ctx.IDENTIFIER().getText();
+
+        ASTNode constInitializer = null;
+
+        if (ctx.constDeclSuffix() != null) {
+            constInitializer = visit(ctx.constDeclSuffix().constDeclInitializer());
+        }
+
+        return new StructFieldDeclNode(type, name, constInitializer);
+    }
+
+    @Override
+    public ASTNode visitGlobalVarDecl(FrankoParser.GlobalVarDeclContext ctx) {
+        TypeNode type = (TypeNode) visit(ctx.type());
+        String name = ctx.IDENTIFIER().getText();
+
+        ASTNode constInitializer = null;
+
+        if (ctx.constDeclSuffix() != null) {
+            constInitializer = visit(ctx.constDeclSuffix().constDeclInitializer());
+        }
+
+        return new GlobalVarDeclNode(type, name, constInitializer);
     }
 
     // ============================================================
@@ -439,6 +488,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitAddrType(FrankoParser.AddrTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
         return new AddrTypeNode(referencedType);
+    }
+
+    @Override
+    public ASTNode visitStructType(FrankoParser.StructTypeContext ctx) {
+        return new StructTypeNode(ctx.IDENTIFIER().getText());
     }
 
     // ============================================================

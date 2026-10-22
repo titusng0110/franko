@@ -31,13 +31,14 @@ The cleaned section ordering is:
 21. Array Initializer Lists
 22. String Literals
 23. Addresses
-24. `del` and Delete Checking
-25. Memory Safety Checking
-26. Type Equality
-27. Declaration Type Validity
-28. Unsupported or Restricted Features
-29. Runtime and Backend Notes
-30. Examples
+24. Structs
+25. `del` and Delete Checking
+26. Memory Safety Checking
+27. Type Equality
+28. Declaration Type Validity
+29. Unsupported or Restricted Features
+30. Runtime and Backend Notes
+31. Examples
 
 ## How to rebuild one combined document
 
@@ -54,3 +55,47 @@ Franko_Language_Reference.md
 ```
 
 from the split files in `SUMMARY.md` order.
+
+## Tooling
+
+The doc scripts live in this directory and are meant to run inside a local
+uv-managed virtual environment (git-ignored):
+
+```bash
+uv venv                 # creates .venv/
+uv pip install regex    # used by renumber_sections.py
+```
+
+### Renumbering sections
+
+Section numbers are embedded in filenames (`24-structs.md`), headings
+(`# 24. Structs`, `## 24.1 ...`), cross-links, and the three navigation files
+(`SUMMARY.md`, `00-title-and-toc.md`, `README.md`). Inserting or removing a
+chapter means shifting every later number. `renumber_sections.py` propagates
+that shift in one step:
+
+```bash
+.venv/bin/python renumber_sections.py insert-at 24 -n  # preview (dry run)
+.venv/bin/python renumber_sections.py insert-at 24     # make room at 24
+# ...create/edit the new 24-*.md, then update SUMMARY/TOC/README entries...
+.venv/bin/python renumber_sections.py check            # validate numbering + links
+.venv/bin/python build_reference.py                    # regenerate the combined doc
+```
+
+`insert-at N` shifts every section `>= N` up by one (files, headings, links,
+navigation entries). `remove-at N` shifts every section `> N` down by one and
+prints a reminder to delete the orphaned `N-*.md` by hand. Fenced code blocks
+are never touched, and `Franko_Language_Reference.md` is never edited (always
+regenerate it with `build_reference.py` afterwards).
+
+### Consistency check
+
+```bash
+.venv/bin/python renumber_sections.py check
+```
+
+validates that: every SUMMARY link target exists, section numbers are
+consecutive from 1, each file's `# NN.` heading matches its filename number,
+subsections are sequential (`NN.1`, `NN.2`, ...), the TOC in
+`00-title-and-toc.md` mirrors `SUMMARY.md`, the README order matches, and no
+markdown link is broken.

@@ -1,4 +1,4 @@
-# 25. Memory Safety Checking
+# 26. Memory Safety Checking
 
 After legality checking, the compiler runs a dedicated **memory safety pass** (`MemorySafetyChecker`) over heap-owned variables.
 
@@ -13,7 +13,7 @@ This pass owns transient memory-state analysis. It checks, per heap variable:
 
 The pass is **intra-procedural**: each function body is analyzed separately with a fresh memory state. Called functions are not analyzed for their effects on the caller's heap variables.
 
-## 25.1 Memory States
+## 26.1 Memory States
 
 For each heap variable the checker tracks one of:
 
@@ -26,18 +26,18 @@ For each heap variable the checker tracks one of:
 
 `maybe-deleted` arises when branch paths merge with different deletion outcomes. Uses and deletes of a `maybe-deleted` variable are invalid because one path may be a use-after-free or double-free.
 
-## 25.2 Delete Rules
+## 26.2 Delete Rules
 
 - The `del` operand must be a heap variable. Deleting a non-heap variable is an error.
 - Deleting an already-deleted variable is an error.
 - Deleting a possibly-deleted variable after a branch merge is an error.
 
-## 25.3 Use Rules
+## 26.3 Use Rules
 
 - Using a deleted variable is an error.
 - Using a possibly-deleted variable after a branch merge is an error.
 
-## 25.4 Leak Rules
+## 26.4 Leak Rules
 
 - A heap variable must be deleted before its **scope** exits normally; otherwise it leaks ("missing del").
 - A heap variable must be deleted before **returning** from the enclosing function; live heap variables at a return statement are reported as leaks.
@@ -46,7 +46,7 @@ For each heap variable the checker tracks one of:
 
 For heap dynamic arrays, remember that `uninit()` only frees the array's internal buffer. The heap array object itself (`alloc array<T>`) must still be freed with `del`.
 
-## 25.5 Branch Handling
+## 26.5 Branch Handling
 
 `if` / `else` is analyzed by checking each branch from the pre-branch state and merging the states of the continuing paths:
 
@@ -70,7 +70,7 @@ del x;             // fine
 
 Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that depth the checker falls back to a conservative path-insensitive merge.
 
-## 25.6 Loop Handling
+## 26.6 Loop Handling
 
 `while` loops are handled with a bounded abstraction:
 
@@ -80,7 +80,7 @@ Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that
 
 Loop termination is not proven; the post-loop state is conservative.
 
-## 25.7 Limitations
+## 26.7 Limitations
 
 Current limitations of the memory safety checker:
 
@@ -98,4 +98,21 @@ print(deref(p));   // NOT detected by the current checker
 - branch-path sensitivity is capped by the nesting-depth limit described above;
 - it does not model partial heap-layout ownership beyond the single-object `alloc` model.
 
-See also [`del` and Delete Checking](24-del-and-delete-checking.md) and [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
+## 26.8 Structs and Nested Arrays
+
+Memory safety tracking is keyed on heap variables, so a heap struct behaves like any other heap variable:
+
+```franko
+alloc X s;
+del s;    // checked like any other del
+```
+
+Notes on structs with nested dynamic-array fields:
+
+- nested dynamic-array fields are **not** tracked as separate heap objects;
+- when a heap struct variable is deleted (`del s`), the generated C++ runs the struct's destructor, which destroys the member arrays, so `alloc X s; del s;` does not leak the inner arrays;
+- dynamic array **elements** are not destructed: `uninit()` frees the element storage without running element destructors, so inner dynamic arrays inside struct elements are not freed automatically. Free inner arrays explicitly (per element) before `uninit()`, or store only primitive and address fields in structs used as dynamic array elements.
+
+Struct semantics are described in [Structs](24-structs.md).
+
+See also [`del` and Delete Checking](25-del-and-delete-checking.md) and [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).

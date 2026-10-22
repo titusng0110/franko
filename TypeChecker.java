@@ -1,5 +1,7 @@
 import java.math.BigInteger;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * ============================================================================
@@ -197,7 +199,8 @@ public class TypeChecker {
      * Current assignable value types:
      *
      *   - primitive integer types;
-     *   - address types.
+     *   - address types;
+     *   - struct types whose fields are all assignable value types.
      *
      * Non-assignable:
      *
@@ -207,8 +210,48 @@ public class TypeChecker {
      *   - function types.
      */
     public boolean isAssignableValueType(SemanticType t) {
-        return t instanceof SemanticPrimitiveType
-                || t instanceof SemanticAddrType;
+        return isAssignableValueType(t, new HashSet<>());
+    }
+
+    private boolean isAssignableValueType(
+            SemanticType t,
+            Set<SemanticType> visited
+    ) {
+        if (t == null) {
+            return false;
+        }
+
+        if (t instanceof SemanticPrimitiveType
+                || t instanceof SemanticAddrType) {
+            return true;
+        }
+
+        if (t instanceof SemanticStructType struct) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            /*
+             * The visited set is path-scoped: entries are removed once their
+             * subtree is checked. This keeps diamond-shaped field graphs (the
+             * same struct appearing as two sibling fields) assignable while
+             * still terminating on by-value cycles.
+             */
+            boolean assignable = true;
+
+            for (FieldSymbol field : struct.structSymbol.fields) {
+                if (!isAssignableValueType(field.type, visited)) {
+                    assignable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return assignable;
+        }
+
+        return false;
     }
 
     /**
@@ -216,7 +259,8 @@ public class TypeChecker {
      *
      *   - void;
      *   - primitive integer types;
-     *   - address types.
+     *   - address types;
+     *   - struct types whose fields are all assignable value types.
      *
      * Array return types are invalid because arrays are not assignable.
      */
@@ -385,6 +429,15 @@ public class TypeChecker {
 
         if (isArrayType(targetType) || isArrayType(expr.type)) {
             diagnostics.error(message + ": arrays cannot be directly assigned");
+            return;
+        }
+
+        if (targetType instanceof SemanticStructType
+                && !isAssignableValueType(targetType)) {
+            diagnostics.error(message + ": struct type "
+                    + targetType.describe()
+                    + " contains non-assignable fields and cannot be assigned"
+                    + " as a whole value");
             return;
         }
 
@@ -762,6 +815,10 @@ public class TypeChecker {
      *   - void is not memsetable.
      */
     public boolean isMemsetable(SemanticType t) {
+        return isMemsetable(t, new HashSet<>());
+    }
+
+    private boolean isMemsetable(SemanticType t, Set<SemanticType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
@@ -771,7 +828,30 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isMemsetable(s.elementType);
+            return isMemsetable(s.elementType, visited);
+        }
+
+        if (t instanceof SemanticStructType struct) {
+            /*
+             * Path-scoped visited set: diamonds stay memsetable, by-value
+             * cycles terminate as false instead of recursing forever.
+             */
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean memsetable = true;
+
+            for (FieldSymbol field : struct.structSymbol.fields) {
+                if (!isMemsetable(field.type, visited)) {
+                    memsetable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return memsetable;
         }
 
         return false;
@@ -789,6 +869,10 @@ public class TypeChecker {
      *   - void is not memcpyable.
      */
     public boolean isMemcpyable(SemanticType t) {
+        return isMemcpyable(t, new HashSet<>());
+    }
+
+    private boolean isMemcpyable(SemanticType t, Set<SemanticType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
@@ -799,7 +883,30 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isMemcpyable(s.elementType);
+            return isMemcpyable(s.elementType, visited);
+        }
+
+        if (t instanceof SemanticStructType struct) {
+            /*
+             * Path-scoped visited set: diamonds stay memcpyable, by-value
+             * cycles terminate as false instead of recursing forever.
+             */
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean memcpyable = true;
+
+            for (FieldSymbol field : struct.structSymbol.fields) {
+                if (!isMemcpyable(field.type, visited)) {
+                    memcpyable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return memcpyable;
         }
 
         return false;

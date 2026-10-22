@@ -15,6 +15,8 @@ import java.math.BigInteger;
  *   - function declarations,
  *   - function symbols and signatures,
  *   - parameter variables,
+ *   - struct declarations and struct field symbols,
+ *   - struct member access expressions,
  *   - return statements,
  *   - function call expressions,
  *   - array intrinsic call expressions,
@@ -46,6 +48,11 @@ public class SemanticASTPrinter {
 
         if (node instanceof SemanticFunctionDeclNode n) {
             printFunctionDecl(n, indent);
+            return;
+        }
+
+        if (node instanceof SemanticStructDeclNode n) {
+            printStructDecl(n, indent);
             return;
         }
 
@@ -100,6 +107,53 @@ public class SemanticASTPrinter {
 
         line(indent + 1, "body:");
         printBlock(node.body, indent + 2);
+    }
+
+    // ============================================================
+    // Struct Declarations
+    // ============================================================
+
+    private static void printStructDecl(
+            SemanticStructDeclNode node,
+            int indent
+    ) {
+        line(indent, "SemanticStructDeclNode");
+        printStructSymbol(node.symbol, indent + 1);
+    }
+
+    private static void printStructSymbol(
+            StructSymbol symbol,
+            int indent
+    ) {
+        if (symbol == null) {
+            line(indent, "<null StructSymbol>");
+            return;
+        }
+
+        line(indent, "StructSymbol");
+        line(indent + 1, "name: " + quote(symbol.name));
+        line(indent + 1, "fields: " + symbol.fields.size());
+
+        for (int i = 0; i < symbol.fields.size(); i++) {
+            line(indent + 1, "[" + i + "]");
+            printFieldSymbol(symbol.fields.get(i), indent + 2);
+        }
+    }
+
+    private static void printFieldSymbol(
+            FieldSymbol field,
+            int indent
+    ) {
+        if (field == null) {
+            line(indent, "<null FieldSymbol>");
+            return;
+        }
+
+        line(indent, "FieldSymbol");
+        line(indent + 1, "name: " + quote(field.name));
+        line(indent + 1, "type: " + describeType(field.type));
+        line(indent + 1, "foldedDefault: "
+                + describeConstant(field.foldedDefault));
     }
 
     // ============================================================
@@ -179,6 +233,8 @@ public class SemanticASTPrinter {
     private static void printVarDecl(SemanticVarDeclNode node, int indent) {
         line(indent, "SemanticVarDeclNode");
         printVariableSymbol("symbol", node.symbol, indent + 1);
+        line(indent + 1, "foldedConstInitializer: "
+                + describeConstant(node.foldedConstInitializer));
     }
 
     private static void printAssign(SemanticAssignNode node, int indent) {
@@ -306,6 +362,11 @@ public class SemanticASTPrinter {
 
         if (node instanceof SemanticDerefNode n) {
             printDeref(n, indent);
+            return;
+        }
+
+        if (node instanceof SemanticMemberAccessNode n) {
+            printMemberAccess(n, indent);
             return;
         }
 
@@ -448,6 +509,20 @@ public class SemanticASTPrinter {
 
         line(indent + 1, "expr:");
         printExpr(node.expr, indent + 2);
+    }
+
+    private static void printMemberAccess(
+            SemanticMemberAccessNode node,
+            int indent
+    ) {
+        line(indent, "SemanticMemberAccessNode");
+        printExprMetadata(node, indent + 1);
+
+        line(indent + 1, "field:");
+        printFieldSymbol(node.field, indent + 2);
+
+        line(indent + 1, "target:");
+        printExpr(node.target, indent + 2);
     }
 
     // ============================================================

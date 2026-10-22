@@ -1,0 +1,5 @@
+# Python virtual environment created by `uv venv`
+.venv/
+
+# Python bytecode caches
+__pycache__/
