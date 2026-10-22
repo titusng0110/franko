@@ -389,14 +389,25 @@ jobs:
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
           ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
+          # MSYS2 MINGW64's pacboy binutils do not expose the cross-prefixed
+          # name; fall back to plain nm (from the same binutils package).
+          NM="$(command -v x86_64-w64-mingw32-nm || command -v nm || true)"
+          if [[ -z "$NM" ]]; then
+            echo "Error: no nm binary found on PATH" >&2
+            exit 1
+          fi
+
           echo "File info:"
           file "$ARCHIVE"
+
+          echo
+          echo "nm: $NM"
 
           echo
           echo "Checking for the je_-prefixed symbols consumed by"
           echo "FrankoRuntime.hpp and generated Franko code:"
           for sym in je_malloc je_calloc je_realloc je_free; do
-            if ! x86_64-w64-mingw32-nm -g "$ARCHIVE" | awk -v s="$sym" '
+            if ! "$NM" -g "$ARCHIVE" | awk -v s="$sym" '
                 ($1 != "U") && $NF == s { found = 1 }
                 END { exit !found }'; then
               echo "Error: missing prefixed jemalloc symbol: $sym" >&2
