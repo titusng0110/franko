@@ -253,10 +253,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Setup MSYS2 MINGW64
+      - name: Setup MSYS2 UCRT64
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
             autotools
@@ -341,7 +341,7 @@ jobs:
             --disable-doc \
             --with-jemalloc-prefix=je_
 
-          # mingw32-make is the "make" command under MSYS2 MINGW64.
+          # mingw32-make is the "make" command under MSYS2 UCRT64.
           mingw32-make -j"$(nproc)"
           mingw32-make install
 
@@ -389,8 +389,8 @@ jobs:
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
           ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
-          # MSYS2 MINGW64's pacboy binutils do not expose the cross-prefixed
-          # name; fall back to plain nm (from the same binutils package).
+          # MSYS2's pacboy binutils may not expose the cross-prefixed name;
+          # fall back to plain nm (from the same binutils package).
           NM="$(command -v x86_64-w64-mingw32-nm || command -v nm || true)"
           if [[ -z "$NM" ]]; then
             echo "Error: no nm binary found on PATH" >&2

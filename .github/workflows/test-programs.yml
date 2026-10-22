@@ -66,10 +66,14 @@ jobs:
               -pthread -ldl -static-libstdc++ -static-libgcc \
               -o "$BASE.testbin"
 
-            "$BASE.testbin"
+            "$BASE.testbin" | tee "$BASE.actual"
 
             echo
-            echo "PASS: $SRC ran successfully"
+            echo "Comparing output against $BASE.expected:"
+            diff -u "$BASE.expected" "$BASE.actual"
+
+            echo
+            echo "PASS: $SRC ran successfully, output matches $BASE.expected"
           done
 
   test-windows:
@@ -86,15 +90,15 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      # UCRT64 to match the CRT of the checked-in windows-x64 jemalloc bundle.
-      # If bundles are regenerated with MINGW64 (build-jemalloc.yml), switch
-      # msystem to MINGW64 here as well.
+      # UCRT64, matching build-jemalloc.yml and the checked-in windows-x64
+      # jemalloc bundle (keeps the CRT consistent with the static archive).
       - name: Setup MSYS2 UCRT64
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
           update: true
           install: >-
+            diffutils
             git
           pacboy: >-
             gcc:p
@@ -171,8 +175,17 @@ jobs:
               -static-libstdc++ -static-libgcc \
               -o "$BASE.exe"
 
-            ./"$BASE.exe"
+            ./"$BASE.exe" | tee "$BASE.actual.win"
+
+            # Normalize CRLF: Windows runners check text files out with \r\n,
+            # and UCRT stdout uses the same line endings.
+            tr -d '\r' < "$BASE.actual.win" > "$BASE.actual"
+            tr -d '\r' < "$BASE.expected" > "$BASE.want"
 
             echo
-            echo "PASS: $BASE.exe ran successfully"
+            echo "Comparing output against $BASE.expected:"
+            diff -u "$BASE.want" "$BASE.actual"
+
+            echo
+            echo "PASS: $BASE.exe ran successfully, output matches $BASE.expected"
           done
