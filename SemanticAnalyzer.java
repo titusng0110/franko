@@ -217,6 +217,9 @@ public class SemanticAnalyzer {
          *   - function declarations.
          *
          * Executable statements at global scope are rejected here.
+         *
+         * alloc is not allowed at global scope: global variables are
+         * statically allocated.
          */
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof VarDeclNode
@@ -238,6 +241,13 @@ public class SemanticAnalyzer {
         for (ASTNode item : program.topLevelItems) {
             if (!(item instanceof VarDeclNode n)) {
                 continue;
+            }
+
+            if (n.isHeap) {
+                symbolTable.error(
+                        "alloc is not allowed at global scope; "
+                                + "global variables are statically allocated"
+                );
             }
 
             SemanticType type = analyzeNormalType(n.type);

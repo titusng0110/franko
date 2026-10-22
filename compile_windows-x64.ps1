@@ -33,7 +33,7 @@ function RunNative {
 }
 
 if ($args.Count -lt 1) {
-    Write-Error "Usage: .\compile.ps1 <source.fr>"
+    Write-Error "Usage: .\compile_windows-x64.ps1 <source.fr>"
     exit 1
 }
 
@@ -94,7 +94,7 @@ $MAIN_CLASS = Join-Path $CLS_DIR "Main.class"
 if (-not (Test-Path -LiteralPath $MAIN_CLASS -PathType Leaf)) {
     Write-Host "Build not found. Running toolchain..."
 
-    $UPDATE_SCRIPT = Join-Path $ROOT "update.ps1"
+    $UPDATE_SCRIPT = Join-Path $ROOT "update_windows-x64.ps1"
 
     if (-not (Test-Path -LiteralPath $UPDATE_SCRIPT -PathType Leaf)) {
         throw "Toolchain update script not found: $UPDATE_SCRIPT"

@@ -175,7 +175,7 @@ func main() -> int32_t {
 }
 ```
 
-This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with an "array not initialized" error.
+This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with a "Franko_Dynamic_Array not initialized" error.
 
 Correct:
 
@@ -237,7 +237,7 @@ func main() -> int32_t {
 
 ```franko
 func main() -> int32_t {
-    array<byte, 200> str;
+    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
     uint i = 0;
 
     str(200);

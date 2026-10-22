@@ -79,4 +79,19 @@ Local variables must be declared before they are used.
 
 ## 11.4 Global Variable Declarations
 
-Variable declarations are allowed at global scope. Initializer sugar at global scope is currently invalid if it desugars into executable assignment statements.
+Variable declarations are allowed at global scope.
+
+Declaration initializer sugar is invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
+
+The `alloc` modifier is not valid at global scope; global variables are always statically allocated.
+
+## 11.5 Uninitialized Values
+
+A declaration without an initializer default-initializes the variable:
+
+- primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
+- static array elements start with indeterminate values;
+- dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
+- heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above.
+
+There is no implicit zero-initialization. Use `init_zero` for zeroed dynamic array storage.

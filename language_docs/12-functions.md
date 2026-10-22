@@ -24,7 +24,14 @@ Function parameters are treated as local variables inside the function body.
 
 Duplicate parameter names inside the same function are invalid.
 
-Parameters cannot have type `void`.
+A parameter type must be a **passable type**:
+
+- a primitive integer type; or
+- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable.
+
+Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
+
+`void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
 
 ## 12.4 `void`
 
@@ -53,7 +60,19 @@ For folded integer constants, the constant may match a primitive integer paramet
 
 ## 12.7 Bare Function Names
 
-A bare function name is not a value.
+Variables and functions live in separate namespaces.
+
+A bare function name is not a value. An identifier used as a value resolves to a variable first; if the identifier only matches a function name, it is rejected:
+
+```franko
+func f() -> int32_t {
+    return 1;
+}
+
+f;    // invalid: Function name 'f' cannot be used as a value
+```
+
+In a call position, `name(...)` resolves to a function even when a non-array variable with the same name is in scope. The one exception is a dynamic array variable: `xs(10)` on a dynamic array is array `init` shorthand, not a function call. See [Array Intrinsics](20-array-intrinsics.md).
 
 ## 12.8 Function Call Expressions
 

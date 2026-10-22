@@ -32,6 +32,8 @@ Supported unary operators:
 - logical NOT: `!x`
 - unary minus: `-x`
 
+Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and the generated C++ casts.
+
 Unsupported unary operators:
 
 ```franko
@@ -48,6 +50,8 @@ Operands must be integers. Arrays and addresses are invalid.
 The modulus operator `%` is not currently implemented.
 
 Division by zero in a compile-time constant expression is an error; see [Constant Folding](10-constant-folding.md).
+
+This applies even when only the divisor is constant: any expression with a constant zero divisor, such as `x / 0` where `x` is a nonconstant variable, is rejected at compile time.
 
 ## 16.4 Bitwise Operators
 
@@ -80,3 +84,9 @@ Operands must be integers. Results are `uint8_t` values `0` or `1`.
 ## 16.8 No Address Arithmetic
 
 Addresses are not integers and cannot participate in arithmetic, bitwise, or shift operations.
+
+## 16.9 Result Types
+
+Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants).
+
+Comparisons and logical operators always produce `uint8_t` regardless of operand types.

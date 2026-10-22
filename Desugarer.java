@@ -229,8 +229,10 @@ public class Desugarer {
 
             out.add(new IfNode(
                 desugarExpr(n.condition),
-                desugarStmt(n.thenBranch),
-                n.elseBranch != null ? desugarStmt(n.elseBranch) : null
+                desugarControlledStmt(n.thenBranch),
+                n.elseBranch != null
+                        ? desugarControlledStmt(n.elseBranch)
+                        : null
             ));
 
             return;
@@ -241,7 +243,7 @@ public class Desugarer {
 
             out.add(new WhileNode(
                 desugarExpr(n.condition),
-                desugarStmt(n.body)
+                desugarControlledStmt(n.body)
             ));
 
             return;
@@ -389,8 +391,10 @@ public class Desugarer {
 
             return new IfNode(
                 desugarExpr(n.condition),
-                desugarStmt(n.thenBranch),
-                n.elseBranch != null ? desugarStmt(n.elseBranch) : null
+                desugarControlledStmt(n.thenBranch),
+                n.elseBranch != null
+                        ? desugarControlledStmt(n.elseBranch)
+                        : null
             );
         }
 
@@ -399,7 +403,7 @@ public class Desugarer {
 
             return new WhileNode(
                 desugarExpr(n.condition),
-                desugarStmt(n.body)
+                desugarControlledStmt(n.body)
             );
         }
 
@@ -444,6 +448,36 @@ public class Desugarer {
         throw new RuntimeException(
             "Unsupported statement in desugarer: " + stmt.getClass().getSimpleName()
         );
+    }
+
+    /**
+     * Desugars a controlled statement, i.e. the body of an if/while.
+     *
+     * Single-statement bodies are wrapped in an implicit block so that:
+     *
+     *   - braceless and braced bodies scope identically,
+     *   - declarations inside a braceless body are scoped to that body
+     *     and are not visible after the if/while.
+     *
+     * Example:
+     *
+     *   if (c) int32_t x;
+     *
+     * is desugared to:
+     *
+     *   if (c) { int32_t x; }
+     */
+    private ASTNode desugarControlledStmt(ASTNode stmt) {
+        ASTNode lowered = desugarStmt(stmt);
+
+        if (lowered instanceof BlockNode) {
+            return lowered;
+        }
+
+        List<ASTNode> wrapped = new ArrayList<>();
+        wrapped.add(lowered);
+
+        return new BlockNode(wrapped);
     }
 
     // ============================================================
@@ -500,6 +534,19 @@ public class Desugarer {
     ) {
         ASTNode loweredTarget = desugarLValue(target);
 
+        /*
+         * An empty initializer list emits no indexed assignments.
+         *
+         * The target is still emitted as an expression statement so that it
+         * is resolved and checked as an expression: an undeclared or
+         * otherwise invalid target is still diagnosed even though the
+         * initializer list itself is a no-op.
+         */
+        if (literal.elements.isEmpty()) {
+            out.add(new ExprStmtNode(loweredTarget));
+            return;
+        }
+
         for (int i = 0; i < literal.elements.size(); i++) {
             ASTNode element = desugarInitializerValue(literal.elements.get(i));
 
@@ -536,21 +583,15 @@ public class Desugarer {
         }
 
         /*
-         * String literals are lowered to UTF-8 byte array literals.
+         * String literals are lowered to UTF-8 byte array literals only in
+         * initializer contexts (see desugarInitializerValue).
          *
-         * In initializer contexts, that ArrayLiteralNode will be further
-         * lowered to indexed assignments in the same desugar pass.
-         *
-         * In ordinary expression contexts, this returns an ArrayLiteralNode.
-         * If your language does not allow array literals as ordinary
-         * expressions, the later semantic checker should reject those cases,
-         * or you can choose to reject StringLiteralNode here outside
-         * initializer contexts.
+         * In ordinary expression contexts the literal is preserved unchanged
+         * so that the semantic analyzer can report a proper diagnostic
+         * instead of an internal compiler error.
          */
         if (expr instanceof StringLiteralNode) {
-            return StringLiteralDecoder.toUtf8ByteArrayLiteral(
-                (StringLiteralNode) expr
-            );
+            return expr;
         }
 
         if (expr instanceof VarNode) {

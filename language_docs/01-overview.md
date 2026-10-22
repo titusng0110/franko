@@ -51,5 +51,10 @@ Franko currently does **not** implement:
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
 - implicit numeric conversions except for fluid integer constants.
+- cast syntax;
+- compound assignment operators (`+=` and similar), increment, and decrement operators;
+- a ternary conditional operator;
+- `switch`, `do`/`do-while`, `for`, `break`, and `continue`;
+- multiple declarators in one declaration (`int a, b;`).
 
 Franko currently targets C++14.

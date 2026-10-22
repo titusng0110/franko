@@ -21,13 +21,19 @@ Executable statements are not allowed at global scope.
 
 A block is a sequence of statements enclosed in braces and creates a new lexical scope.
 
+The braces of a function body are an exception: they do not create an additional scope beyond the function's parameter/body scope. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md).
+
 ## 18.2 If Statements
 
 The condition must be an integer expression.
 
+Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `if`. See [Desugaring](05-desugaring.md).
+
 ## 18.3 While Statements
 
 The condition must be an integer expression.
+
+Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `while`. See [Desugaring](05-desugaring.md).
 
 ## 18.4 Return Statements
 

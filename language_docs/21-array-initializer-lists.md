@@ -99,7 +99,7 @@ Using the initializer list on a freshly declared dynamic array without first ini
 array<int32_t> dyn = [1, 2, 3];
 ```
 
-is **not rejected at compile time**. The generated indexed assignments then access an uninitialized dynamic array, and the runtime aborts with an "array not initialized" error. Dynamic array initialization is not statically tracked; see [Arrays](19-arrays.md).
+is **not rejected at compile time**. The generated indexed assignments then access an uninitialized dynamic array, and the runtime aborts with a "Franko_Dynamic_Array not initialized" error. Dynamic array initialization is not statically tracked; see [Arrays](19-arrays.md).
 
 Correct:
 
@@ -257,7 +257,9 @@ xs = [];
 
 also emits no assignments and does not initialize `xs`.
 
-This is allowed as a no-op initializer assignment unless another rule rejects it.
+The assignment target is still resolved and checked even though no indexed
+assignments are generated: the target expression must be a valid, declared
+expression, and an undeclared or otherwise invalid target is still diagnosed.
 
 ## 21.10 Array Initializer Lists and Global Scope
 
@@ -274,7 +276,7 @@ array<int32_t, 3> xs;
 xs = [1, 2, 3];
 ```
 
-Declaration initializer sugar at global scope is also invalid if it desugars into executable assignments.
+Declaration initializer sugar at global scope is also invalid if it desugars into executable statements (assignments, expression-statement calls, or indexed element assignments).
 
 ## 21.11 Summary of Array Initializer Lists
 

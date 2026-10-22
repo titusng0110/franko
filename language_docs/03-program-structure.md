@@ -21,6 +21,11 @@ Invalid global-scope items include:
 - blocks;
 - array intrinsic calls;
 - array initializer assignments.
+- expression statements (bare expressions such as `1 + 2`);
+
+Note that some invalid global-scope forms only become visible after desugaring: declaration initializer sugar is invalid because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments).
+
+The `alloc` modifier is not valid at global scope; global variables are always statically allocated. See [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
 
 Execution should be rooted in a user-defined `main` function.
 

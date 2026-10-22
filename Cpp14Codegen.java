@@ -609,7 +609,43 @@ public class Cpp14Codegen {
         return true;
     }
 
+    /**
+     * Emits a folded BigInteger constant as a well-formed C++14 integer
+     * literal.
+     *
+     * Plain decimal literals whose magnitude exceeds LLONG_MAX get a ULL
+     * suffix so the literal itself remains well-formed C++14; decimal
+     * literals in C++14 do not fall back to unsigned integer types.
+     */
+    private String emitBigIntegerLiteral(BigInteger value) {
+        boolean negative = value.signum() < 0;
+
+        BigInteger magnitude = value.abs();
+        String digits = magnitude.toString();
+
+        boolean needsUllSuffix =
+                magnitude.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0;
+
+        String core = needsUllSuffix ? digits + "ULL" : digits;
+
+        return negative ? "-" + core : core;
+    }
+
     private String emitUnaryOp(SemanticUnaryOpNode node) {
+        /*
+         * Folded constant expressions are emitted as their folded value
+         * directly. This avoids emitting C++ expressions whose evaluation
+         * would be undefined behavior (for example constant shifts such as
+         * 1 << 40), and matches the Franko BigInteger folding semantics.
+         *
+         * No cast to the node's fallback type is emitted here: constants are
+         * fluid in Franko, and value-consuming contexts cast through
+         * emitExprAsType(...), exactly like emitIntLiteral(...).
+         */
+        if (node.isConstant() && node.constantValue != null) {
+            return emitBigIntegerLiteral(node.constantValue);
+        }
+
         String inner = emitExpr(node.expr);
         String raw = "(" + node.op + inner + ")";
 
@@ -617,6 +653,20 @@ public class Cpp14Codegen {
     }
 
     private String emitBinOp(SemanticBinOpNode node) {
+        /*
+         * Folded constant expressions are emitted as their folded value
+         * directly. This avoids emitting C++ expressions whose evaluation
+         * would be undefined behavior (for example constant shifts such as
+         * 1 << 40), and matches the Franko BigInteger folding semantics.
+         *
+         * No cast to the node's fallback type is emitted here: constants are
+         * fluid in Franko, and value-consuming contexts cast through
+         * emitExprAsType(...), exactly like emitIntLiteral(...).
+         */
+        if (node.isConstant() && node.constantValue != null) {
+            return emitBigIntegerLiteral(node.constantValue);
+        }
+
         String left = emitExpr(node.left);
         String right = emitExpr(node.right);
 
