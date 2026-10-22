@@ -81,7 +81,7 @@ s[4] = 69;
 As with other initializer lists:
 
 - the initializer list itself does **not** initialize, allocate, or resize storage;
-- a dynamic array target must already be initialized before string assignment — this requirement is enforced by the runtime, not at compile time (accessing an uninitialized dynamic array aborts with an "array not initialized" error);
+- a dynamic array target must already be initialized before string assignment — this requirement is enforced by the runtime, not at compile time (accessing an uninitialized dynamic array aborts with a "Franko_Dynamic_Array not initialized" error);
 - assignment into a static array that is too small is rejected by ordinary static array bounds checking.
 
 The target may be any array whose element type can hold byte constants `0..255` under normal assignment rules. `array<byte, N>` (or `array<uint8_t, N>`) is the idiomatic target, but wider integer element types also accept each byte value.
@@ -155,7 +155,7 @@ There is no string concatenation operator and no interpolation syntax.
 
 ```franko
 func main() -> int32_t {
-    array<byte, 200> str;
+    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
     uint i = 0;
 
     str(200);

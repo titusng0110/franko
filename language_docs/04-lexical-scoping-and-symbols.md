@@ -4,7 +4,7 @@ Franko uses lexical scope.
 
 Function bodies can resolve names from:
 
-- their parameter scope;
+- the function's parameter and body scope (parameters and body-level declarations share one scope);
 - local block scopes;
 - enclosing block scopes;
 - global variable scope;
@@ -31,3 +31,18 @@ Global variable declarations are registered before function bodies are analyzed.
 ## 4.5 Undeclared Variables
 
 Using an undeclared variable is illegal.
+
+## 4.6 Function Body Scope
+
+The braces of a function body do not create an additional scope. Parameters and the function body's top-level declarations share a single scope.
+
+Therefore a body-level declaration that reuses a parameter name is a duplicate-declaration error:
+
+```franko
+func f(int32_t x) -> int32_t {
+    int32_t x;   // invalid: duplicate declaration of 'x'
+    return x;
+}
+```
+
+Only nested `{ ... }` blocks inside the body create new scopes.

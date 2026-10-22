@@ -105,6 +105,11 @@ Franko currently does **not** implement:
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
 - implicit numeric conversions except for fluid integer constants.
+- cast syntax;
+- compound assignment operators (`+=` and similar), increment, and decrement operators;
+- a ternary conditional operator;
+- `switch`, `do`/`do-while`, `for`, `break`, and `continue`;
+- multiple declarators in one declaration (`int a, b;`).
 
 Franko currently targets C++14.
 
@@ -126,6 +131,34 @@ func main() -> int32_t {
     return 0;
 }
 ```
+
+## Statement Separators
+
+Statements are terminated by a semicolon (`;`) or by one or more newlines. Both forms can be mixed freely, and consecutive separators are allowed.
+
+Example (newline-separated, no semicolons):
+
+```franko
+func main() -> int32_t {
+    int32_t x
+    x = 1
+    print(x)
+    return 0
+}
+```
+
+Newlines inside parentheses `(...)` and brackets `[...]` are ignored, so expressions, argument lists, and initializer lists may span multiple lines. Newlines inside braces `{...}` are not ignored: they remain statement separators.
+
+## Comments
+
+Line comments start with `//` and run to the end of the line:
+
+```franko
+// a whole-line comment
+int32_t x  // a comment may follow code on the same line
+```
+
+There are no block comments.
 
 ---
 
@@ -152,6 +185,11 @@ Invalid global-scope items include:
 - blocks;
 - array intrinsic calls;
 - array initializer assignments.
+- expression statements (bare expressions such as `1 + 2`);
+
+Note that some invalid global-scope forms only become visible after desugaring: declaration initializer sugar is invalid because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments).
+
+The `alloc` modifier is not valid at global scope; global variables are always statically allocated. See [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
 
 Execution should be rooted in a user-defined `main` function.
 
@@ -171,7 +209,7 @@ Franko uses lexical scope.
 
 Function bodies can resolve names from:
 
-- their parameter scope;
+- the function's parameter and body scope (parameters and body-level declarations share one scope);
 - local block scopes;
 - enclosing block scopes;
 - global variable scope;
@@ -198,6 +236,21 @@ Global variable declarations are registered before function bodies are analyzed.
 ## 4.5 Undeclared Variables
 
 Using an undeclared variable is illegal.
+
+## 4.6 Function Body Scope
+
+The braces of a function body do not create an additional scope. Parameters and the function body's top-level declarations share a single scope.
+
+Therefore a body-level declaration that reuses a parameter name is a duplicate-declaration error:
+
+```franko
+func f(int32_t x) -> int32_t {
+    int32_t x;   // invalid: duplicate declaration of 'x'
+    return x;
+}
+```
+
+Only nested `{ ... }` blocks inside the body create new scopes.
 
 ---
 
@@ -300,6 +353,24 @@ array<array<array<byte, 30>, 20>, 12>
 ```
 
 so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](19-arrays.md).
+
+## 5.6 Braceless Control-Flow Bodies
+
+`if` and `while` bodies may be a single statement without braces:
+
+```franko
+if (x) print(x);
+while (i < 10) i = i + 1;
+```
+
+During desugaring, a braceless body is wrapped in an implicit block:
+
+```franko
+if (x) { print(x); }
+while (i < 10) { i = i + 1; }
+```
+
+This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`. See [Statements](18-statements.md).
 
 ---
 
@@ -538,7 +609,22 @@ Local variables must be declared before they are used.
 
 ## 11.4 Global Variable Declarations
 
-Variable declarations are allowed at global scope. Initializer sugar at global scope is currently invalid if it desugars into executable assignment statements.
+Variable declarations are allowed at global scope.
+
+Declaration initializer sugar is invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
+
+The `alloc` modifier is not valid at global scope; global variables are always statically allocated.
+
+## 11.5 Uninitialized Values
+
+A declaration without an initializer default-initializes the variable:
+
+- primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
+- static array elements start with indeterminate values;
+- dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
+- heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above.
+
+There is no implicit zero-initialization. Use `init_zero` for zeroed dynamic array storage.
 
 ---
 
@@ -568,7 +654,14 @@ Function parameters are treated as local variables inside the function body.
 
 Duplicate parameter names inside the same function are invalid.
 
-Parameters cannot have type `void`.
+A parameter type must be a **passable type**:
+
+- a primitive integer type; or
+- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable.
+
+Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
+
+`void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
 
 ## 12.4 `void`
 
@@ -597,7 +690,19 @@ For folded integer constants, the constant may match a primitive integer paramet
 
 ## 12.7 Bare Function Names
 
-A bare function name is not a value.
+Variables and functions live in separate namespaces.
+
+A bare function name is not a value. An identifier used as a value resolves to a variable first; if the identifier only matches a function name, it is rejected:
+
+```franko
+func f() -> int32_t {
+    return 1;
+}
+
+f;    // invalid: Function name 'f' cannot be used as a value
+```
+
+In a call position, `name(...)` resolves to a function even when a non-array variable with the same name is in scope. The one exception is a dynamic array variable: `xs(10)` on a dynamic array is array `init` shorthand, not a function call. See [Array Intrinsics](20-array-intrinsics.md).
 
 ## 12.8 Function Call Expressions
 
@@ -643,9 +748,15 @@ alloc array<int> arr;
 
 The `alloc` keyword marks the variable as heap-owned. Heap-owned variables may be deleted with `del`.
 
+`alloc` is a declaration modifier only. There is no standalone allocation statement, and a variable cannot be re-allocated: redeclaring the same name is a duplicate-declaration error, and after `del x` the name `x` cannot be allocated again in the same scope.
+
+`alloc` is only valid for local declarations inside function bodies and blocks. Global variables are always statically allocated; `alloc` at global scope is a compile-time error.
+
 Non-heap variables cannot be deleted.
 
 Heap variables must be deleted before the end of their scope and before returning; leaks, double deletes, and use-after-delete are checked by the memory safety pass. See [Memory Safety Checking](25-memory-safety-checking.md).
+
+Heap allocation is not zero-initialized. A heap variable is allocated and default-constructed, so a primitive heap variable starts with an indeterminate value, and a heap dynamic array starts empty (length 0, no element storage). Use `init_zero` for zeroed dynamic array storage. Allocation failure raises `std::bad_alloc`.
 
 ## 13.1 Allocated Dynamic Array Initialization Sugar
 
@@ -781,6 +892,8 @@ Supported unary operators:
 - logical NOT: `!x`
 - unary minus: `-x`
 
+Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and the generated C++ casts.
+
 Unsupported unary operators:
 
 ```franko
@@ -797,6 +910,8 @@ Operands must be integers. Arrays and addresses are invalid.
 The modulus operator `%` is not currently implemented.
 
 Division by zero in a compile-time constant expression is an error; see [Constant Folding](10-constant-folding.md).
+
+This applies even when only the divisor is constant: any expression with a constant zero divisor, such as `x / 0` where `x` is a nonconstant variable, is rejected at compile time.
 
 ## 16.4 Bitwise Operators
 
@@ -829,6 +944,12 @@ Operands must be integers. Results are `uint8_t` values `0` or `1`.
 ## 16.8 No Address Arithmetic
 
 Addresses are not integers and cannot participate in arithmetic, bitwise, or shift operations.
+
+## 16.9 Result Types
+
+Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants).
+
+Comparisons and logical operators always produce `uint8_t` regardless of operand types.
 
 ---
 
@@ -899,13 +1020,19 @@ Executable statements are not allowed at global scope.
 
 A block is a sequence of statements enclosed in braces and creates a new lexical scope.
 
+The braces of a function body are an exception: they do not create an additional scope beyond the function's parameter/body scope. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md).
+
 ## 18.2 If Statements
 
 The condition must be an integer expression.
 
+Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `if`. See [Desugaring](05-desugaring.md).
+
 ## 18.3 While Statements
 
 The condition must be an integer expression.
+
+Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `while`. See [Desugaring](05-desugaring.md).
 
 ## 18.4 Return Statements
 
@@ -1412,7 +1539,7 @@ Using the initializer list on a freshly declared dynamic array without first ini
 array<int32_t> dyn = [1, 2, 3];
 ```
 
-is **not rejected at compile time**. The generated indexed assignments then access an uninitialized dynamic array, and the runtime aborts with an "array not initialized" error. Dynamic array initialization is not statically tracked; see [Arrays](19-arrays.md).
+is **not rejected at compile time**. The generated indexed assignments then access an uninitialized dynamic array, and the runtime aborts with a "Franko_Dynamic_Array not initialized" error. Dynamic array initialization is not statically tracked; see [Arrays](19-arrays.md).
 
 Correct:
 
@@ -1570,7 +1697,9 @@ xs = [];
 
 also emits no assignments and does not initialize `xs`.
 
-This is allowed as a no-op initializer assignment unless another rule rejects it.
+The assignment target is still resolved and checked even though no indexed
+assignments are generated: the target expression must be a valid, declared
+expression, and an undeclared or otherwise invalid target is still diagnosed.
 
 ## 21.10 Array Initializer Lists and Global Scope
 
@@ -1587,7 +1716,7 @@ array<int32_t, 3> xs;
 xs = [1, 2, 3];
 ```
 
-Declaration initializer sugar at global scope is also invalid if it desugars into executable assignments.
+Declaration initializer sugar at global scope is also invalid if it desugars into executable statements (assignments, expression-statement calls, or indexed element assignments).
 
 ## 21.11 Summary of Array Initializer Lists
 
@@ -1691,7 +1820,7 @@ s[4] = 69;
 As with other initializer lists:
 
 - the initializer list itself does **not** initialize, allocate, or resize storage;
-- a dynamic array target must already be initialized before string assignment — this requirement is enforced by the runtime, not at compile time (accessing an uninitialized dynamic array aborts with an "array not initialized" error);
+- a dynamic array target must already be initialized before string assignment — this requirement is enforced by the runtime, not at compile time (accessing an uninitialized dynamic array aborts with a "Franko_Dynamic_Array not initialized" error);
 - assignment into a static array that is too small is rejected by ordinary static array bounds checking.
 
 The target may be any array whose element type can hold byte constants `0..255` under normal assignment rules. `array<byte, N>` (or `array<uint8_t, N>`) is the idiomatic target, but wider integer element types also accept each byte value.
@@ -1765,7 +1894,7 @@ There is no string concatenation operator and no interpolation syntax.
 
 ```franko
 func main() -> int32_t {
-    array<byte, 200> str;
+    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
     uint i = 0;
 
     str(200);
@@ -1984,6 +2113,8 @@ For each heap variable the checker tracks one of:
 - A heap variable must be deleted before its **scope** exits normally; otherwise it leaks ("missing del").
 - A heap variable must be deleted before **returning** from the enclosing function; live heap variables at a return statement are reported as leaks.
 
+`alloc` is invalid at global scope, so every heap variable is local to a function or block and is covered by the scope and return leak rules above.
+
 For heap dynamic arrays, remember that `uninit()` only frees the array's internal buffer. The heap array object itself (`alloc array<T>`) must still be freed with `del`.
 
 ## 25.5 Branch Handling
@@ -2151,6 +2282,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - parameter names are not used in overload resolution;
 - return type is not used in overload resolution;
 - arrays cannot be returned by value;
+- arrays cannot be passed as parameters by value; use addr<array<...>> parameters (see [Functions](12-functions.md));
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
@@ -2204,7 +2336,7 @@ The checker validates intrinsic legality, but it does not fully prove dynamic ar
 
 ## 28.10 Delete Checking Is Limited
 
-Delete checking is symbol-based, path-insensitive, and not alias-aware. See [Memory Safety Checking](25-memory-safety-checking.md) for the full list of rules and limitations.
+Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (8); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](25-memory-safety-checking.md) for the full list of rules and limitations.
 
 ## 28.11 Address Lifetime Is Not Fully Tracked
 
@@ -2218,12 +2350,12 @@ Array initializer lists and string literals are not expressions and therefore ca
 
 ## 28.13 Unsupported Operators
 
-The following are not currently implemented:
+The following operators do not exist in the grammar; source code using them fails to parse:
 
 ```franko
-%   // modulus is not implemented
-~x  // bitwise NOT is not implemented
-+x  // unary plus is not implemented as a semantic unary operator
+%   // no modulus operator
+~x  // no bitwise NOT operator
++x  // no unary plus operator
 ```
 
 ## 28.14 String Literals Are Initializer-Only
@@ -2240,13 +2372,23 @@ return "hello";
 
 ## 28.15 No `for` Loops, `break`, or `continue`
 
-Only `if` and `while` control flow is implemented. There are no C-style `for` loops and no `break`/`continue` statements.
+Only `if` and `while` control flow is implemented. There are no C-style `for` loops and no `break`/`continue` statements. There is also no `switch`, no `do`/`do-while`, and no `goto`.
 
 ## 28.16 Global Scope Is Declaration-Only
 
 Only variable declaration nodes and function declaration nodes are valid at global scope.
 
 Executable statements are invalid at global scope.
+
+## 28.17 No Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
+
+The following forms do not exist in the grammar:
+
+- cast syntax (there is no explicit conversion operator; fluid integer constants are the only cross-width mechanism);
+- compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
+- increment and decrement operators (`++`, `--`);
+- the ternary conditional operator (`?:`);
+- multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).
 
 ---
 
@@ -2517,7 +2659,7 @@ func main() -> int32_t {
 }
 ```
 
-This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with an "array not initialized" error.
+This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with a "Franko_Dynamic_Array not initialized" error.
 
 Correct:
 
@@ -2579,7 +2721,7 @@ func main() -> int32_t {
 
 ```franko
 func main() -> int32_t {
-    array<byte, 200> str;
+    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
     uint i = 0;
 
     str(200);

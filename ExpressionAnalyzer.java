@@ -232,6 +232,16 @@ public final class ExpressionAnalyzer {
             );
         }
 
+        if (node instanceof StringLiteralNode) {
+            ctx.error("String literal is not a valid expression; string literals are only allowed as assignment or declaration initializers");
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
         ctx.error("Unrecognized expression node: "
                 + node.getClass().getSimpleName());
 

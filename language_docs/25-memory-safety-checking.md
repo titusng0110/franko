@@ -42,6 +42,8 @@ For each heap variable the checker tracks one of:
 - A heap variable must be deleted before its **scope** exits normally; otherwise it leaks ("missing del").
 - A heap variable must be deleted before **returning** from the enclosing function; live heap variables at a return statement are reported as leaks.
 
+`alloc` is invalid at global scope, so every heap variable is local to a function or block and is covered by the scope and return leak rules above.
+
 For heap dynamic arrays, remember that `uninit()` only frees the array's internal buffer. The heap array object itself (`alloc array<T>`) must still be freed with `del`.
 
 ## 25.5 Branch Handling

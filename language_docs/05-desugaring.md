@@ -97,3 +97,21 @@ array<array<array<byte, 30>, 20>, 12>
 ```
 
 so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](19-arrays.md).
+
+## 5.6 Braceless Control-Flow Bodies
+
+`if` and `while` bodies may be a single statement without braces:
+
+```franko
+if (x) print(x);
+while (i < 10) i = i + 1;
+```
+
+During desugaring, a braceless body is wrapped in an implicit block:
+
+```franko
+if (x) { print(x); }
+while (i < 10) { i = i + 1; }
+```
+
+This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`. See [Statements](18-statements.md).
