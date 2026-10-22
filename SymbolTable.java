@@ -418,6 +418,13 @@ public final class SymbolTable {
         }
 
         /*
+         * A null literal argument applies only to address parameters.
+         */
+        if (arg.type instanceof SemanticNullType) {
+            return parameterType instanceof SemanticAddrType;
+        }
+
+        /*
          * Folded integer constants are fluid during call resolution.
          *
          * A constant argument may match any primitive integer parameter

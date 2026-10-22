@@ -637,6 +637,14 @@ public class Desugarer {
             return expr;
         }
 
+        /*
+         * Null literals are leaf expressions that require no desugaring.
+         * Semantic analysis checks that null is only used in address contexts.
+         */
+        if (expr instanceof NullNode) {
+            return expr;
+        }
+
         if (expr instanceof UnaryOpNode) {
             UnaryOpNode n = (UnaryOpNode) expr;
 

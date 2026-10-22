@@ -325,6 +325,11 @@ public class SemanticASTPrinter {
             return;
         }
 
+        if (node instanceof SemanticNullLiteralNode n) {
+            printNullLiteral(n, indent);
+            return;
+        }
+
         if (node instanceof SemanticVarExprNode n) {
             printVarExpr(n, indent);
             return;
@@ -383,6 +388,14 @@ public class SemanticASTPrinter {
         line(indent, "SemanticIntLiteralNode");
         printExprMetadata(node, indent + 1);
         line(indent + 1, "rawValue: " + quote(node.rawValue));
+    }
+
+    private static void printNullLiteral(
+            SemanticNullLiteralNode node,
+            int indent
+    ) {
+        line(indent, "SemanticNullLiteralNode");
+        printExprMetadata(node, indent + 1);
     }
 
     private static void printVarExpr(

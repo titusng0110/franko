@@ -794,6 +794,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.stringLiteral());
         }
 
+        if (ctx.nullLiteral() != null) {
+            return visit(ctx.nullLiteral());
+        }
+
         if (ctx.IDENTIFIER() != null) {
             return new VarNode(ctx.IDENTIFIER().getText());
         }
@@ -811,6 +815,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         throw new RuntimeException("Unknown primary: " + ctx.getText());
+    }
+
+    @Override
+    public ASTNode visitNullLiteral(FrankoParser.NullLiteralContext ctx) {
+        return new NullNode();
     }
 
     @Override

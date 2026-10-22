@@ -415,6 +415,7 @@ postfixExpr
 primary
     : integerLiteral
     | stringLiteral
+    | nullLiteral
     | IDENTIFIER
     | getAddrExpr
     | derefExpr
@@ -664,6 +665,10 @@ stringLiteral
     : STRING_LITERAL
     ;
 
+nullLiteral
+    : NULL
+    ;
+
 // ---------- TYPES ----------
 //
 // Static array sizes accept constExpr.
@@ -749,6 +754,7 @@ WHILE   : 'while' ;
 ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
 DEREF   : 'deref' ;
+NULL    : 'null' ;
 
 // Primitive / type keywords
 INT8_T   : 'int8_t' ;

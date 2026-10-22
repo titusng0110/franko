@@ -192,6 +192,10 @@ public class TypeChecker {
         return t instanceof SemanticAddrType;
     }
 
+    public boolean isNullType(SemanticType t) {
+        return t instanceof SemanticNullType;
+    }
+
     /**
      * Returns true if a value of this type can participate in ordinary Franko
      * assignment with '='.
@@ -424,6 +428,24 @@ public class TypeChecker {
 
         if (isVoidType(expr.type)) {
             diagnostics.error(message + ": cannot assign void value");
+            return;
+        }
+
+        /*
+         * null is only valid for address targets.
+         *
+         *   addr<int32_t> p;
+         *   p = null;            valid
+         *
+         *   int32_t x;
+         *   x = null;            invalid: 0 is not null
+         */
+        if (expr.type instanceof SemanticNullType) {
+            if (!(targetType instanceof SemanticAddrType)) {
+                diagnostics.error(message
+                        + ": null is only valid for address types, got target "
+                        + targetType.describe());
+            }
             return;
         }
 

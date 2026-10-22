@@ -1,0 +1,138 @@
+// ============================================================
+// Franko null-for-addresses Showcase
+// ============================================================
+//
+// Demonstrates:
+//
+//   - null is only valid for addresses (0 is not null)
+//   - address declarations are guaranteed null-initialized
+//   - getaddr(...) certifies an address as non-null
+//   - assignment from another address copies its exact null state
+//   - guard refinement: deref inside if (p != null) is valid
+//   - loop-guard refinement and provable null after loop exit
+//   - null passed to addr parameters and returned from addr functions
+//   - struct fields of address type default to null
+//   - equality-only address comparison (== and != only)
+//
+// Expected output is in null.expected.
+// ============================================================
+
+struct Box {
+    int32_t v
+    addr<int32_t> link
+}
+
+addr<int32_t> g
+
+func takeAddr(addr<int32_t> q) -> int32_t {
+    if (q != null) {
+        return deref(q)
+    }
+
+    return -1
+}
+
+func makeNull() -> addr<int32_t> {
+    return null
+}
+
+func main() -> int32_t {
+    int32_t x = 0
+
+    print(1)
+
+    // Address declarations are guaranteed null-initialized.
+    addr<int32_t> p
+    print(p == null)
+    print(p != null)
+
+    // getaddr certifies the variable as non-null.
+    p = getaddr(x)
+    print(p != null)
+
+    deref(p) = 42
+    print(deref(p))
+
+    // Copying a certified variable keeps it certified.
+    addr<int32_t> a = p
+    deref(a) = 7
+    print(deref(a))
+
+    // A null declaration, and a copy of it: the copy is null too.
+    addr<int32_t> b = null
+    addr<int32_t> c = b
+    print(c == null)
+
+    // Guard refinement: the deref here is valid on the refined path.
+    if (c != null) {
+        deref(c) = 5
+        print(deref(c))
+    } else {
+        print(111)
+    }
+
+    // Equality-only comparison between two addresses.
+    print(a == p)
+
+    print(2)
+
+    // Loop-guard refinement, and provable null after loop exit.
+    addr<int32_t> w
+    w = getaddr(x)
+    while (w != null) {
+        deref(w) = deref(w) + 1
+        if (deref(w) > 2) {
+            w = null
+        }
+    }
+    print(w == null)
+
+    print(3)
+
+    // Heap address variable: the slot is null-initialized, so it must be
+    // assigned before deref.
+    alloc addr<int32_t> h
+    h = getaddr(x)
+    deref(h) = 99
+    print(deref(h))
+    del h
+
+    // Global address variable is null-initialized.
+    print(g == null)
+    g = getaddr(x)
+    print(g != null)
+
+    print(4)
+
+    // Struct field of address type defaults to null.
+    Box bo
+    print(bo.link == null)
+    bo.link = getaddr(x)
+    print(bo.link != null)
+    deref(bo.link) = 5
+    print(deref(bo.link))
+
+    print(5)
+
+    // addr<addr<int32_t>> null handling.
+    addr<addr<int32_t>> pp
+    print(pp == null)
+    pp = getaddr(p)
+    print(pp != null)
+
+    // Assignment from a certified variable chain stays certified.
+    addr<int32_t> cn
+    cn = g
+    print(cn != null)
+
+    print(6)
+
+    // null across function boundaries.
+    print(takeAddr(null))
+    print(takeAddr(getaddr(x)))
+
+    addr<int32_t> r = makeNull()
+    print(r == null)
+
+    return 0
+}

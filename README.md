@@ -127,10 +127,13 @@ Examples include:
 ```text
 bfs.fr
 mergesort.fr
+null.fr
 quicksort.fr
 sieve.fr
 string.fr
 ```
+
+The `memorytest.fr`, `nulltest.fr`, and `nulllegal.fr` programs are checker torture tests that are expected to fail compilation with diagnostics.
 
 Compile any example the same way:
 

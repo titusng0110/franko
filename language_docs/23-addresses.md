@@ -47,18 +47,16 @@ Raw integers cannot be converted to addresses.
 
 ## 23.5 Address Comparison
 
-Addresses may be compared using:
+Addresses may be compared using only the equality operators:
 
 ```franko
 ==
 !=
-<
->
-<=
->=
 ```
 
 Both operands must have identical address types.
+
+Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
 
 Address comparison produces `uint8_t`.
 
@@ -99,8 +97,87 @@ deref(p)[1] = 2;
 deref(p)[2] = 3;
 ```
 
-## 23.8 Address Lifetime Limitations
+## 23.8 The null Literal
+
+`null` is a literal of type `null`. It is valid only where an address is expected:
+
+```franko
+addr<int32_t> p;
+p = null;               // valid
+
+int32_t x = null;       // invalid: null is only valid for address types
+p = 0;                  // invalid: 0 is an integer, not null
+```
+
+`null` and `0` are different values. An address cannot be assigned or compared against the integer `0`; use `null` instead.
+
+`null` may be compared with an address using equality only:
+
+```franko
+if (p == null) {
+    // p is null on this path
+}
+if (p != null) {
+    // p is not null on this path
+}
+```
+
+Comparing `null` with a non-address value is invalid. Relational comparison (`<`, `>`) of `null` is invalid.
+
+`null` may be passed to `addr<T>` parameters and returned from `addr<T>` functions.
+
+`print(null)` prints the null address as a pointer value.
+
+### 23.8.1 Null-Initialized Address Declarations
+
+Address declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
+
+```franko
+addr<int32_t> p;        // p is null here, guaranteed
+print(p == null);       // true
+```
+
+This guarantee also applies to address-typed struct fields and to the heap storage of an `alloc`'d address.
+
+### 23.8.2 Nullness Certification
+
+The compiler tracks whether an address variable is null. The only expression that certifies an address as non-null is `getaddr(...)`:
+
+```franko
+addr<int32_t> p;            // p is null
+deref(p);                   // error: cannot dereference null
+
+p = getaddr(x);             // p is certified non-null
+deref(p);                   // valid
+
+addr<int32_t> q = p;        // q copies p's state: non-null
+addr<int32_t> r = q;        // r copies q's state: non-null
+```
+
+Assignment from another address variable copies that variable's exact state, so a null state propagates through copies and an `getaddr` certification propagates transitively.
+
+Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields an unknown state.
+
+### 23.8.3 Dereferencing and Warnings
+
+Dereferencing a variable that is **definitely null** is an error.
+
+Dereferencing a variable that is **possibly null** (null on some path, for example after a branch merge) is a **warning**, not an error:
+
+```franko
+addr<int32_t> p;
+if (cond != 0) {
+    p = getaddr(x);
+} else {
+    p = null;
+}
+deref(p);                   // warning: possibly null
+```
+
+Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.
+
+## 23.9 Address Lifetime Limitations
 
 Address lifetime is not fully tracked.
 
-The compiler does not fully track dangling addresses or aliasing through addresses.
+The compiler does not fully track dangling addresses or aliasing through addresses. In particular, dereferencing an address whose pointee was freed by `del` cannot be caught at compile time when the address was copied before the delete; a runtime check for this is planned as a later change.

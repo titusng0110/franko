@@ -1,0 +1,151 @@
+// ============================================================
+// Franko null-for-addresses Torture Test (memory-safety stage)
+// ============================================================
+//
+// This file is expected to FAIL memory safety checking.
+//
+// Each testcase dereferences an address variable that the checker can
+// prove is null. Variable names are unique per testcase so diagnostics
+// are easier to map.
+//
+// Note: dereferencing a POSSIBLY null variable is only a warning and is
+// intentionally not covered here; see language_docs section 26.7.
+// ============================================================
+
+
+// ------------------------------------------------------------
+// 1. Deref of a null-initialized address declaration
+// ------------------------------------------------------------
+
+func testcase1() -> int32_t {
+    int32_t x1 = 0
+    addr<int32_t> p1
+
+    print(deref(p1))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 2. Deref after an explicit null assignment
+// ------------------------------------------------------------
+
+func testcase2() -> int32_t {
+    int32_t x2 = 0
+    addr<int32_t> p2
+
+    p2 = getaddr(x2)
+    p2 = null
+
+    print(deref(p2))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 3. Null state propagates through a copy
+// ------------------------------------------------------------
+
+func testcase3() -> int32_t {
+    addr<int32_t> b3
+    addr<int32_t> a3
+
+    a3 = b3
+
+    print(deref(a3))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 4. Null state propagates through a copy chain
+// ------------------------------------------------------------
+
+func testcase4() -> int32_t {
+    addr<int32_t> b4
+    addr<int32_t> a4
+    addr<int32_t> c4
+
+    a4 = b4
+    c4 = a4
+
+    print(deref(c4))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 5. Deref on the only feasible path after a null guard
+// ------------------------------------------------------------
+
+func testcase5() -> int32_t {
+    int32_t x5 = 0
+    addr<int32_t> p5
+
+    if (p5 == null) {
+        print(1)
+    }
+
+    print(deref(p5))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 6. Deref after a loop whose guard fails on exit
+// ------------------------------------------------------------
+
+func testcase6() -> int32_t {
+    int32_t x6 = 0
+    addr<int32_t> p6
+
+    p6 = getaddr(x6)
+
+    while (p6 != null) {
+        p6 = null
+    }
+
+    print(deref(p6))
+
+    return 0
+}
+
+
+// ------------------------------------------------------------
+// 7. Deref inside a null guard after a branch merge
+// ------------------------------------------------------------
+
+func testcase7() -> int32_t {
+    int32_t x7 = 0
+    addr<int32_t> p7
+
+    if (x7 != 0) {
+        p7 = getaddr(x7)
+    } else {
+        p7 = null
+    }
+
+    if (p7 == null) {
+        print(deref(p7))
+    }
+
+    return 0
+}
+
+
+func main() -> int32_t {
+    testcase1()
+    testcase2()
+    testcase3()
+    testcase4()
+    testcase5()
+    testcase6()
+    testcase7()
+
+    return 0
+}

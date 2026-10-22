@@ -77,6 +77,9 @@ public final class ExpressionAnalyzer {
     private static final SemanticType BOOL_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8);
 
+    private static final SemanticType NULL_TYPE =
+            new SemanticNullType();
+
     private static final Set<String> BOOL_RESULT_OPS = Set.of(
             "==", "!=", "<", ">", "<=", ">=", "&&", "||"
     );
@@ -107,6 +110,10 @@ public final class ExpressionAnalyzer {
         if (node instanceof IntNode n) {
             BigInteger val = constEval.parseIntegerLiteralSafe(n.value);
             return new SemanticIntLiteralNode(FALLBACK_TYPE, val, n.value);
+        }
+
+        if (node instanceof NullNode) {
+            return new SemanticNullLiteralNode(NULL_TYPE);
         }
 
         if (node instanceof VarNode n) {
@@ -245,6 +252,8 @@ public final class ExpressionAnalyzer {
 
             if (expr.type instanceof SemanticAddrType addrT) {
                 refType = addrT.referencedType;
+            } else if (expr.type instanceof SemanticNullType) {
+                ctx.error("Cannot dereference null");
             } else {
                 ctx.error("Cannot dereference non-address type");
             }

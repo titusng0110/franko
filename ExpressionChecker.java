@@ -158,6 +158,15 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node instanceof SemanticNullLiteralNode) {
+            /*
+             * Null is a legal leaf expression. Contextual rules (assignment,
+             * comparison, arguments, returns) enforce that null is only used
+             * where an address type is expected.
+             */
+            return;
+        }
+
         if (node instanceof SemanticVarExprNode n) {
             visitVarExpr(n);
             return;
@@ -344,6 +353,46 @@ public class ExpressionChecker {
     ) {
         boolean leftAddr = types.isAddressType(node.left.type);
         boolean rightAddr = types.isAddressType(node.right.type);
+        boolean leftNull = types.isNullType(node.left.type);
+        boolean rightNull = types.isNullType(node.right.type);
+
+        /*
+         * Addresses and null literals are only comparable with equality
+         * operators ('==' and '!='). Relational operators ('<', '>', '<=',
+         * '>=') are prohibited for addresses and null.
+         */
+        if (op.equals("<") || op.equals(">") || op.equals("<=") || op.equals(">=")) {
+            if (leftAddr || rightAddr) {
+                diagnostics.error("Address comparisons must only use equality operators ('==' or '!='), but got '" + op + "'.");
+                return;
+            }
+
+            if (leftNull || rightNull) {
+                diagnostics.error("Null comparisons must only use equality operators ('==' or '!='), but got '" + op + "'.");
+                return;
+            }
+        }
+
+        /*
+         * Null literals can only be compared with address types using
+         * equality operators. Comparing null with a non-address value is
+         * invalid.
+         */
+        if (leftNull || rightNull) {
+            SemanticExprNode other = leftNull ? node.right : node.left;
+
+            if (types.isNullType(other.type)) {
+                /* Comparing null with null is valid. */
+                return;
+            }
+
+            if (!types.isAddressType(other.type)) {
+                diagnostics.error("Cannot compare null with non-address type '"
+                        + other.type.describe()
+                        + "'");
+            }
+            return;
+        }
 
         if (leftAddr && rightAddr) {
             if (!types.sameType(node.left.type, node.right.type)) {
@@ -481,6 +530,20 @@ public class ExpressionChecker {
                     + " of call to '"
                     + function.signatureString()
                     + "' passes array value directly; use getaddr(...) and an addr<array<...>> parameter");
+            return;
+        }
+
+        /*
+         * null is only valid for address parameters.
+         */
+        if (types.isNullType(arg.type)) {
+            if (!(parameterType instanceof SemanticAddrType)) {
+                diagnostics.error("Argument " + (index + 1)
+                        + " of call to '"
+                        + function.signatureString()
+                        + "' passes null to non-address parameter type "
+                        + types.describeSafe(parameterType));
+            }
             return;
         }
 
@@ -947,6 +1010,11 @@ public class ExpressionChecker {
         checkExpr(node.expr);
 
         if (!ensureValueExpression(node.expr, "Operand of 'deref'")) {
+            return;
+        }
+
+        if (types.isNullType(node.expr.type)) {
+            diagnostics.error("Cannot dereference null");
             return;
         }
 
