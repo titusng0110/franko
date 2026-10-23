@@ -186,7 +186,7 @@ del s;
 
 The C++14 backend:
 
-- emits each struct as a C++ `struct struct_X { ... };` definition, preceded by a forward-declaration block (`struct struct_X;`) so addresses may reference structs declared later in source order;
+- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so addresses may reference structs declared later in source order;
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`, with heap variables lowered through `(*sym)`.

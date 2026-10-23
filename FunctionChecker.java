@@ -113,7 +113,7 @@ public class FunctionChecker {
         boolean sawReturn = false;
 
         if (node.body == null) {
-            diagnostics.error("Function '" + node.symbol.name + "' has null body");
+            diagnostics.error("Function '" + node.symbol.qualifiedName() + "' has null body");
         } else {
             sawReturn = checkFunctionBody(node);
         }
@@ -135,7 +135,7 @@ public class FunctionChecker {
         for (VariableSymbol param : node.parameterVariables) {
             if (param == null) {
                 diagnostics.error("Function '"
-                        + node.symbol.name
+                        + node.symbol.qualifiedName()
                         + "' has null parameter symbol");
                 continue;
             }
@@ -144,7 +144,7 @@ public class FunctionChecker {
                 diagnostics.error("Duplicate parameter name '"
                         + param.name
                         + "' in function '"
-                        + node.symbol.name
+                        + node.symbol.qualifiedName()
                         + "'");
             }
 
@@ -154,7 +154,7 @@ public class FunctionChecker {
                 diagnostics.error("Parameter '"
                         + param.name
                         + "' in function '"
-                        + node.symbol.name
+                        + node.symbol.qualifiedName()
                         + "' has invalid parameter type "
                         + types.describeSafe(param.type)
                         + ": parameters must have assignable value types");

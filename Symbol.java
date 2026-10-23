@@ -1,7 +1,12 @@
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 // ============================================================
 // Base Symbol
@@ -33,9 +38,28 @@ abstract class Symbol {
 class VariableSymbol extends Symbol {
     final boolean isHeap;
 
-    VariableSymbol(String name, SemanticType type, boolean isHeap) {
+    /*
+     * Name of the namespace this variable was declared in, or null for
+     * the global namespace.
+     *
+     * Only namespace-level variables (globals) carry a namespace.
+     * Locals and parameters are function-scoped and always null.
+     */
+    final String namespace;
+
+    VariableSymbol(String namespace, String name, SemanticType type, boolean isHeap) {
         super(name, type);
+        this.namespace = namespace;
         this.isHeap = isHeap;
+    }
+
+    /**
+     * The qualified source name of this symbol, e.g. "util::offset" for
+     * a variable declared in namespace util, or plain "offset" for a
+     * global-namespace variable, local, or parameter.
+     */
+    public String qualifiedName() {
+        return namespace == null ? name : namespace + "::" + name;
     }
 }
 
@@ -49,8 +73,22 @@ class ParameterSymbol extends VariableSymbol {
     final int index;
 
     ParameterSymbol(String name, SemanticType type, int index) {
-        super(name, type, false);
+        super(null, name, type, false);
         this.index = index;
+    }
+}
+
+/**
+ * A namespace-level variable: a global variable declared in the global
+ * namespace (namespace null) or inside a namespace.
+ *
+ * The subclass distinction matters for C++ emission: locals and
+ * parameters are function-scoped and are never namespace-qualified,
+ * while globals may need cross-namespace qualification.
+ */
+class GlobalVariableSymbol extends VariableSymbol {
+    GlobalVariableSymbol(String namespace, String name, SemanticType type) {
+        super(namespace, name, type, false);
     }
 }
 
@@ -101,7 +139,14 @@ class FunctionSymbol extends CallableSymbol {
     final List<ParameterSymbol> parameters;
     final boolean isBuiltin;
 
+    /*
+     * Name of the namespace this function was declared in, or null for
+     * the global namespace.
+     */
+    final String namespace;
+
     FunctionSymbol(
+            String namespace,
             String name,
             List<ParameterSymbol> parameters,
             SemanticType returnType,
@@ -115,6 +160,7 @@ class FunctionSymbol extends CallableSymbol {
                 )
         );
 
+        this.namespace = namespace;
         this.parameters = List.copyOf(parameters);
         this.isBuiltin = isBuiltin;
     }
@@ -138,7 +184,7 @@ class FunctionSymbol extends CallableSymbol {
     public String signatureString() {
         StringBuilder sb = new StringBuilder();
 
-        sb.append(name).append("(");
+        sb.append(qualifiedName()).append("(");
 
         List<SemanticType> parameterTypes = parameterTypes();
 
@@ -157,6 +203,15 @@ class FunctionSymbol extends CallableSymbol {
 
     public String fullSignatureString() {
         return signatureString() + " -> " + returnType().describe();
+    }
+
+    /**
+     * The qualified source name of this function, e.g. "util::doubleIt"
+     * for a function declared in namespace util, or plain "doubleIt"
+     * for a global-namespace function.
+     */
+    public String qualifiedName() {
+        return namespace == null ? name : namespace + "::" + name;
     }
 }
 
@@ -198,20 +253,37 @@ class StructSymbol {
     final String name;
     final List<FieldSymbol> fields;
 
+    /*
+     * Name of the namespace this struct was declared in, or null for
+     * the global namespace.
+     */
+    final String namespace;
+
     /**
      * Placeholder constructor used by SemanticAnalyzer phase 1.
      *
      * Fields are appended in declaration order during phase 2, so the field
      * list is a mutable ArrayList.
      */
-    StructSymbol(String name) {
+    StructSymbol(String namespace, String name) {
+        this.namespace = namespace;
         this.name = Objects.requireNonNull(name);
         this.fields = new ArrayList<>();
     }
 
-    StructSymbol(String name, List<FieldSymbol> fields) {
+    StructSymbol(String namespace, String name, List<FieldSymbol> fields) {
+        this.namespace = namespace;
         this.name = Objects.requireNonNull(name);
         this.fields = new ArrayList<>(fields);
+    }
+
+    /**
+     * The qualified source name of this struct, e.g. "util::Point" for
+     * a struct declared in namespace util, or plain "Point" for a
+     * global-namespace struct.
+     */
+    public String qualifiedName() {
+        return namespace == null ? name : namespace + "::" + name;
     }
 
     public FieldSymbol resolveField(String fieldName) {
@@ -222,5 +294,45 @@ class StructSymbol {
         }
 
         return null;
+    }
+}
+
+// ============================================================
+// Namespace Symbols
+// ============================================================
+
+/**
+ * NamespaceSymbol represents one declared namespace.
+ *
+ * The first declaration creates the symbol; later declarations of the
+ * same namespace (in the same file or in imported files) merge into
+ * it, so each table below accumulates items from every declaration.
+ *
+ * A namespace carries its own struct, function overload, and global
+ * variable tables. Lookup inside a namespace falls back to the global
+ * namespace only after the namespace's own tables miss.
+ */
+class NamespaceSymbol {
+    final String name;
+
+    final Map<String, StructSymbol> structs = new LinkedHashMap<>();
+    final Map<String, List<FunctionSymbol>> functions = new LinkedHashMap<>();
+    final Map<String, VariableSymbol> globalVariables = new LinkedHashMap<>();
+
+    /**
+     * Names of namespace-level variables declared in this namespace.
+     * Used for name-clash warnings within this namespace only.
+     */
+    final Set<String> variableNames = new LinkedHashSet<>();
+
+    /**
+     * Raw FunctionDeclNode -> registered FunctionSymbol for this
+     * namespace, mirroring the global-namespace registration map.
+     */
+    final IdentityHashMap<FunctionDeclNode, FunctionSymbol> functionDeclSymbols =
+            new IdentityHashMap<>();
+
+    NamespaceSymbol(String name) {
+        this.name = Objects.requireNonNull(name);
     }
 }

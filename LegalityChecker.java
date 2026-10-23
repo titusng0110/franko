@@ -134,6 +134,13 @@ public class LegalityChecker {
             return;
         }
 
+        if (node instanceof SemanticNamespaceNode namespace) {
+            for (SemanticASTNode item : namespace.items) {
+                checkNode(item);
+            }
+            return;
+        }
+
         if (node instanceof SemanticFunctionDeclNode fn) {
             functionChecker.checkFunction(fn);
             return;
@@ -160,6 +167,13 @@ public class LegalityChecker {
 
     private void checkProgram(SemanticProgramNode program) {
         for (SemanticASTNode item : program.topLevelItems) {
+            if (item instanceof SemanticNamespaceNode namespace) {
+                for (SemanticASTNode namespaceItem : namespace.items) {
+                    checkNode(namespaceItem);
+                }
+                continue;
+            }
+
             if (item instanceof SemanticFunctionDeclNode fn) {
                 functionChecker.checkFunction(fn);
                 continue;

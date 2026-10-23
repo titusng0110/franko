@@ -1,0 +1,31 @@
+// Namespace feature test: library file.
+//
+// Demonstrates:
+//
+//   - a namespace declared in an imported file,
+//   - qualified struct types (util::Point) in signatures,
+//   - unqualified references inside the namespace resolving to the
+//     namespace's own symbols first (offset, doubleIt),
+//   - unqualified fallback to a global-namespace symbol (sharedSeed).
+//
+// The same namespace is also declared in merge.fr; both declarations
+// merge into one namespace.
+
+namespace util {
+    struct Point {
+        int32_t x = 1
+        int32_t y = 2
+    }
+
+    int32_t offset = 100
+
+    func doubleIt(int32_t v) -> int32_t {
+        // Unqualified: resolves to util::offset and util::doubleIt.
+        return v + v + offset
+    }
+
+    func makePointSum() -> int32_t {
+        Point p
+        return p.x + p.y + offset
+    }
+}

@@ -223,13 +223,30 @@ public class SemanticAnalyzer {
     // Program / Function Handling
     // ============================================================
 
+    /**
+     * One namespace's pending work during program analysis.
+     *
+     * space is null for the global namespace. Multiple declarations of
+     * the same namespace merge into one instance, so its items list
+     * accumulates across declarations in source order.
+     */
+    private static final class NamespaceProgramItems {
+        final NamespaceSymbol space; // null = global namespace
+        final List<ASTNode> items = new ArrayList<>();
+
+        NamespaceProgramItems(NamespaceSymbol space) {
+            this.space = space;
+        }
+    }
+
     private SemanticProgramNode analyzeProgram(ProgramNode program) {
         /*
          * Global scope currently allows only:
          *
          *   - struct declarations,
          *   - global variable declarations,
-         *   - function declarations.
+         *   - function declarations,
+         *   - namespace declarations.
          *
          * Executable statements at global scope are rejected here.
          *
@@ -239,166 +256,273 @@ public class SemanticAnalyzer {
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof StructDeclNode
                     || item instanceof GlobalVarDeclNode
-                    || item instanceof FunctionDeclNode) {
+                    || item instanceof FunctionDeclNode
+                    || item instanceof NamespaceNode) {
                 continue;
             }
 
             symbolTable.error("Invalid top-level item '"
                     + item.getClass().getSimpleName()
-                    + "': only struct declarations, global variable declarations, and function declarations are allowed at global scope");
+                    + "': only struct declarations, global variable declarations, function declarations, and namespace declarations are allowed at global scope");
         }
 
         /*
-         * Phase 1:
-         * Register struct names.
-         *
-         * A placeholder StructSymbol is registered first so struct field
-         * types can reference the struct itself (e.g. addr<Node> next).
-         * Fields are resolved into the same symbol in phase 2.
+         * Collect the global namespace and one item list per declared
+         * namespace. Multiple declarations of the same namespace merge
+         * into one space, in first-declaration order.
          */
-        for (ASTNode item : program.topLevelItems) {
-            if (item instanceof StructDeclNode n) {
-                symbolTable.declareStruct(new StructSymbol(n.name));
-            }
-        }
+        List<NamespaceProgramItems> spaces = new ArrayList<>();
+        Map<String, NamespaceProgramItems> spacesByName = new LinkedHashMap<>();
 
-        /*
-         * Phase 2:
-         * Resolve struct field types and fold field defaults.
-         *
-         * Fields are appended in declaration order. The struct symbol was
-         * registered in phase 1, so field types may reference the struct
-         * itself and any struct declared earlier in the program.
-         */
+        NamespaceProgramItems globalSpace = new NamespaceProgramItems(null);
+        spaces.add(globalSpace);
+
         for (ASTNode item : program.topLevelItems) {
-            if (!(item instanceof StructDeclNode n)) {
+            if (item instanceof NamespaceNode n) {
+                NamespaceSymbol space = symbolTable.declareNamespace(n.name);
+
+                NamespaceProgramItems spaceItems = spacesByName.computeIfAbsent(
+                        n.name,
+                        ignored -> {
+                            NamespaceProgramItems created =
+                                    new NamespaceProgramItems(space);
+                            spaces.add(created);
+                            return created;
+                        }
+                );
+
+                spaceItems.items.addAll(n.items);
                 continue;
             }
 
-            StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
-
-            if (structSymbol == null) {
-                continue;
-            }
-
-            Set<String> seenFieldNames = new HashSet<>();
-
-            for (StructFieldDeclNode fieldNode : n.fields) {
-                if (!seenFieldNames.add(fieldNode.name)) {
-                    symbolTable.error("Duplicate field '"
-                            + fieldNode.name
-                            + "' in struct '"
-                            + n.name
-                            + "'");
-                    continue;
-                }
-
-                SemanticType fieldType = analyzeNormalType(fieldNode.type);
-
-                BigInteger fieldDefault = null;
-
-                if (fieldNode.constInitializer != null) {
-                    fieldDefault = exprAnalyzer.analyzeConstExprValue(
-                            fieldNode.constInitializer,
-                            "struct field initializer"
-                    );
-                }
-
-                structSymbol.fields.add(new FieldSymbol(
-                        fieldNode.name,
-                        fieldType,
-                        fieldDefault
-                ));
-            }
+            globalSpace.items.add(item);
         }
 
         /*
-         * Phase 3:
-         * Register all global variables before function bodies are analyzed.
-         *
-         * This allows functions to reference globals declared later in source.
-         * Global const initializers are folded here and kept in a local map so
-         * phase 5 can attach them to the lowered SemanticVarDeclNode without
-         * folding twice.
+         * Global const initializers are folded in phase 3 and kept in this
+         * map so phase 5 can attach them to the lowered SemanticVarDeclNode
+         * without folding twice. Keys are raw nodes, which are unique
+         * across all namespaces.
          */
         Map<GlobalVarDeclNode, VariableSymbol> globalSymbols =
                 new IdentityHashMap<>();
         Map<GlobalVarDeclNode, BigInteger> globalInitializers =
                 new IdentityHashMap<>();
 
-        for (ASTNode item : program.topLevelItems) {
-            if (!(item instanceof GlobalVarDeclNode n)) {
-                continue;
+        /*
+         * Lowered semantic items by raw node, filled in phase 5. Keys are
+         * unique across all namespaces, so one map serves the whole
+         * program.
+         */
+        Map<ASTNode, SemanticASTNode> loweredByNode = new IdentityHashMap<>();
+
+        /*
+         * Phase 1:
+         * Register struct names, in every namespace.
+         *
+         * A placeholder StructSymbol is registered first so struct field
+         * types can reference the struct itself (e.g. addr<Node> next).
+         * Fields are resolved into the same symbol in phase 2.
+         */
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
+
+            for (ASTNode item : space.items) {
+                if (item instanceof StructDeclNode n) {
+                    symbolTable.declareStruct(
+                            new StructSymbol(currentNamespaceName(), n.name)
+                    );
+                }
             }
+        }
 
-            SemanticType type = analyzeNormalType(n.type);
+        /*
+         * Phase 2:
+         * Resolve struct field types and fold field defaults, in every
+         * namespace.
+         *
+         * Fields are appended in declaration order. The struct symbol was
+         * registered in phase 1, so field types may reference the struct
+         * itself, any struct declared earlier in the same namespace, and
+         * any struct in the global namespace.
+         */
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
 
-            VariableSymbol sym = new VariableSymbol(n.name, type, false);
+            for (ASTNode item : space.items) {
+                if (!(item instanceof StructDeclNode n)) {
+                    continue;
+                }
 
-            if (symbolTable.declare(sym)) {
-                globalSymbols.put(n, sym);
+                StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
+
+                if (structSymbol == null) {
+                    continue;
+                }
+
+                Set<String> seenFieldNames = new HashSet<>();
+
+                for (StructFieldDeclNode fieldNode : n.fields) {
+                    if (!seenFieldNames.add(fieldNode.name)) {
+                        symbolTable.error("Duplicate field '"
+                                + fieldNode.name
+                                + "' in struct '"
+                                + structSymbol.qualifiedName()
+                                + "'");
+                        continue;
+                    }
+
+                    SemanticType fieldType = analyzeNormalType(fieldNode.type);
+
+                    BigInteger fieldDefault = null;
+
+                    if (fieldNode.constInitializer != null) {
+                        fieldDefault = exprAnalyzer.analyzeConstExprValue(
+                                fieldNode.constInitializer,
+                                "struct field initializer"
+                        );
+                    }
+
+                    structSymbol.fields.add(new FieldSymbol(
+                            fieldNode.name,
+                            fieldType,
+                            fieldDefault
+                    ));
+                }
             }
+        }
 
-            if (n.constInitializer != null) {
-                globalInitializers.put(n, exprAnalyzer.analyzeConstExprValue(
-                        n.constInitializer,
-                        "global variable initializer"
-                ));
+        /*
+         * Phase 3:
+         * Register all global variables, in every namespace, before
+         * function bodies are analyzed.
+         *
+         * This allows functions to reference globals declared later in
+         * source and in other namespaces.
+         */
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
+
+            for (ASTNode item : space.items) {
+                if (!(item instanceof GlobalVarDeclNode n)) {
+                    continue;
+                }
+
+                SemanticType type = analyzeNormalType(n.type);
+
+                VariableSymbol sym = new GlobalVariableSymbol(
+                        currentNamespaceName(),
+                        n.name,
+                        type
+                );
+
+                if (symbolTable.declareGlobalVariable(sym)) {
+                    globalSymbols.put(n, sym);
+                }
+
+                if (n.constInitializer != null) {
+                    globalInitializers.put(n, exprAnalyzer.analyzeConstExprValue(
+                            n.constInitializer,
+                            "global variable initializer"
+                    ));
+                }
             }
         }
 
         /*
          * Phase 4:
-         * Register all function signatures before analyzing any body.
+         * Register all function signatures, in every namespace, before
+         * analyzing any body.
          *
-         * This enables forward references, recursion, and mutual recursion.
+         * This enables forward references, recursion, and mutual recursion
+         * across namespaces.
          */
-        for (ASTNode item : program.topLevelItems) {
-            if (item instanceof FunctionDeclNode fn) {
-                registerFunctionSignature(fn);
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
+
+            for (ASTNode item : space.items) {
+                if (item instanceof FunctionDeclNode fn) {
+                    registerFunctionSignature(fn);
+                }
             }
         }
 
         /*
          * Phase 5:
-         * Lower all valid top-level items.
+         * Lower all valid top-level items, in every namespace.
          */
-        List<SemanticASTNode> semanticItems = new ArrayList<>();
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
 
-        for (ASTNode item : program.topLevelItems) {
-            if (item instanceof StructDeclNode n) {
-                StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
+            for (ASTNode item : space.items) {
+                if (item instanceof StructDeclNode n) {
+                    StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
 
-                if (structSymbol != null) {
-                    semanticItems.add(new SemanticStructDeclNode(structSymbol));
+                    if (structSymbol != null) {
+                        loweredByNode.put(
+                                item,
+                                new SemanticStructDeclNode(structSymbol)
+                        );
+                    }
+
+                    continue;
                 }
 
-                continue;
+                if (item instanceof GlobalVarDeclNode n) {
+                    VariableSymbol sym = globalSymbols.get(n);
+
+                    /*
+                     * Null usually means registration failed due to a
+                     * duplicate declaration. The diagnostic has already been
+                     * recorded.
+                     */
+                    if (sym != null) {
+                        loweredByNode.put(item, new SemanticVarDeclNode(
+                                sym,
+                                globalInitializers.get(n)
+                        ));
+                    }
+
+                    continue;
+                }
+
+                if (item instanceof FunctionDeclNode fn) {
+                    SemanticFunctionDeclNode lowered = analyzeFunctionDecl(fn);
+
+                    if (lowered != null) {
+                        loweredByNode.put(item, lowered);
+                    }
+                }
             }
+        }
 
-            if (item instanceof GlobalVarDeclNode n) {
-                VariableSymbol sym = globalSymbols.get(n);
+        symbolTable.setCurrentNamespace(null);
 
-                /*
-                 * Null usually means registration failed due to a duplicate
-                 * declaration. The diagnostic has already been recorded.
-                 */
-                if (sym != null) {
-                    semanticItems.add(new SemanticVarDeclNode(
-                            sym,
-                            globalInitializers.get(n)
+        /*
+         * Assemble the semantic program in source order. A namespace's
+         * merged items are emitted at the position of its first
+         * declaration; later declarations of the same namespace only
+         * contributed items.
+         */
+        List<SemanticASTNode> semanticItems = new ArrayList<>();
+        Set<String> emittedNamespaces = new LinkedHashSet<>();
+
+        for (ASTNode item : program.topLevelItems) {
+            if (item instanceof NamespaceNode n) {
+                if (emittedNamespaces.add(n.name)) {
+                    semanticItems.add(new SemanticNamespaceNode(
+                            n.name,
+                            loweredItemsOf(spacesByName.get(n.name), loweredByNode)
                     ));
                 }
 
                 continue;
             }
 
-            if (item instanceof FunctionDeclNode fn) {
-                SemanticFunctionDeclNode lowered = analyzeFunctionDecl(fn);
+            SemanticASTNode lowered = loweredByNode.get(item);
 
-                if (lowered != null) {
-                    semanticItems.add(lowered);
-                }
+            if (lowered != null) {
+                semanticItems.add(lowered);
             }
         }
 
@@ -412,6 +536,37 @@ public class SemanticAnalyzer {
     }
 
     /**
+     * Lowers one namespace's items in the order they were declared,
+     * across every declaration that contributed to the namespace.
+     */
+    private List<SemanticASTNode> loweredItemsOf(
+            NamespaceProgramItems space,
+            Map<ASTNode, SemanticASTNode> loweredByNode
+    ) {
+        List<SemanticASTNode> out = new ArrayList<>();
+
+        for (ASTNode item : space.items) {
+            SemanticASTNode lowered = loweredByNode.get(item);
+
+            if (lowered != null) {
+                out.add(lowered);
+            }
+        }
+
+        return out;
+    }
+
+    /**
+     * The name of the namespace currently being analyzed, or null for
+     * the global namespace.
+     */
+    private String currentNamespaceName() {
+        NamespaceSymbol space = symbolTable.currentNamespace();
+
+        return space == null ? null : space.name;
+    }
+
+    /**
      * Registers only a function's signature.
      *
      * Function identity is:
@@ -421,6 +576,16 @@ public class SemanticAnalyzer {
      * Return type and parameter names are not part of overload identity.
      */
     private void registerFunctionSignature(FunctionDeclNode fn) {
+        /*
+         * The entry-point function must live in the global namespace: the
+         * generated program's C++ entry point IS the Franko main function.
+         */
+        if ("main".equals(fn.name) && currentNamespaceName() != null) {
+            symbolTable.error("The entry-point function 'main' must be declared in the global namespace, not in namespace '"
+                    + currentNamespaceName()
+                    + "'");
+        }
+
         List<ParameterSymbol> params = new ArrayList<>();
 
         for (int i = 0; i < fn.parameters.size(); i++) {
@@ -434,6 +599,7 @@ public class SemanticAnalyzer {
         }
 
         FunctionSymbol symbol = new FunctionSymbol(
+                currentNamespaceName(),
                 fn.name,
                 params,
                 analyzeReturnType(fn.returnType),
@@ -467,6 +633,7 @@ public class SemanticAnalyzer {
             }
 
             symbol = new FunctionSymbol(
+                    currentNamespaceName(),
                     fn.name,
                     fallbackParams,
                     analyzeReturnType(fn.returnType),
@@ -601,6 +768,7 @@ public class SemanticAnalyzer {
             }
 
             VariableSymbol sym = new VariableSymbol(
+                    null,
                     n.name,
                     analyzeNormalType(n.type),
                     n.isHeap
@@ -662,6 +830,7 @@ public class SemanticAnalyzer {
                         + "'");
 
                 sym = new VariableSymbol(
+                        null,
                         n.name,
                         FALLBACK_TYPE,
                         true
@@ -732,6 +901,7 @@ public class SemanticAnalyzer {
         SemanticType type = analyzeNormalType(n.type);
 
         VariableSymbol sym = new VariableSymbol(
+                null,
                 n.name,
                 type,
                 n.isHeap
@@ -765,6 +935,7 @@ public class SemanticAnalyzer {
             symbolTable.error("return statement is only valid inside a function");
 
             FunctionSymbol fallbackFn = new FunctionSymbol(
+                    null,
                     "<invalid-return-context>",
                     List.of(),
                     VOID_TYPE,
@@ -800,12 +971,9 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof StructTypeNode s) {
-            StructSymbol structSymbol = symbolTable.resolveStruct(s.name);
+            StructSymbol structSymbol = resolveStructTypeSymbol(s);
 
             if (structSymbol == null) {
-                symbolTable.error("Unknown struct type '"
-                        + s.name
-                        + "'");
                 return FALLBACK_TYPE;
             }
 
@@ -870,5 +1038,58 @@ public class SemanticAnalyzer {
         }
 
         return analyzeNormalType(node);
+    }
+
+    /**
+     * Resolves a struct type reference to its StructSymbol.
+     *
+     * Unqualified names use the namespace chain: the namespace currently
+     * being analyzed first, then the global namespace.
+     *
+     * Qualified names resolve strictly inside the named namespace.
+     * More than one namespace segment is rejected while nested
+     * namespaces are unsupported.
+     */
+    private StructSymbol resolveStructTypeSymbol(StructTypeNode s) {
+        if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+            StructSymbol structSymbol = symbolTable.resolveStruct(s.name);
+
+            if (structSymbol == null) {
+                symbolTable.error("Unknown struct type '" + s.name + "'");
+            }
+
+            return structSymbol;
+        }
+
+        if (s.namespaceSegments.size() > 1) {
+            symbolTable.error("Nested namespaces are not supported: '"
+                    + String.join("::", s.namespaceSegments)
+                    + "::"
+                    + s.name
+                    + "'");
+            return null;
+        }
+
+        String namespaceName = s.namespaceSegments.get(0);
+
+        NamespaceSymbol namespace = symbolTable.resolveNamespace(namespaceName);
+
+        if (namespace == null) {
+            symbolTable.error("Unknown namespace '" + namespaceName + "'");
+            return null;
+        }
+
+        StructSymbol structSymbol = symbolTable.resolveStructIn(namespace, s.name);
+
+        if (structSymbol == null) {
+            symbolTable.error("Unknown struct type '"
+                    + namespaceName
+                    + "::"
+                    + s.name
+                    + "'");
+            return null;
+        }
+
+        return structSymbol;
     }
 }

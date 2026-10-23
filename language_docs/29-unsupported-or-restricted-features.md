@@ -74,7 +74,7 @@ The checker validates intrinsic legality, but it does not fully prove dynamic ar
 
 ## 29.10 Delete Checking Is Limited
 
-Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (8); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](26-memory-safety-checking.md) for the full list of rules and limitations.
+Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (10); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](26-memory-safety-checking.md) for the full list of rules and limitations.
 
 ## 29.11 Address Lifetime Is Not Fully Tracked
 

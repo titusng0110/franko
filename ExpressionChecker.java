@@ -227,7 +227,7 @@ public class ExpressionChecker {
         }
 
         if (types.isVoidType(node.type)) {
-            diagnostics.error("Variable '" + node.symbol.name + "' has invalid void type");
+            diagnostics.error("Variable '" + node.symbol.qualifiedName() + "' has invalid void type");
         }
     }
 

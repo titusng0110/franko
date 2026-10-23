@@ -46,6 +46,11 @@ public class SemanticASTPrinter {
             return;
         }
 
+        if (node instanceof SemanticNamespaceNode n) {
+            printNamespace(n, indent);
+            return;
+        }
+
         if (node instanceof SemanticFunctionDeclNode n) {
             printFunctionDecl(n, indent);
             return;
@@ -81,6 +86,17 @@ public class SemanticASTPrinter {
         for (int i = 0; i < node.topLevelItems.size(); i++) {
             line(indent + 1, "[" + i + "]");
             print(node.topLevelItems.get(i), indent + 2);
+        }
+    }
+
+    private static void printNamespace(SemanticNamespaceNode node, int indent) {
+        line(indent, "SemanticNamespaceNode");
+        line(indent + 1, "name: " + node.name);
+        line(indent + 1, "items: " + node.items.size());
+
+        for (int i = 0; i < node.items.size(); i++) {
+            line(indent + 1, "[" + i + "]");
+            print(node.items.get(i), indent + 2);
         }
     }
 
@@ -131,7 +147,7 @@ public class SemanticASTPrinter {
         }
 
         line(indent, "StructSymbol");
-        line(indent + 1, "name: " + quote(symbol.name));
+        line(indent + 1, "name: " + quote(symbol.qualifiedName()));
         line(indent + 1, "fields: " + symbol.fields.size());
 
         for (int i = 0; i < symbol.fields.size(); i++) {
@@ -564,7 +580,7 @@ public class SemanticASTPrinter {
                 : "VariableSymbol";
 
         line(indent, label + ": " + kind);
-        line(indent + 1, "name: " + quote(symbol.name));
+        line(indent + 1, "name: " + quote(symbol.qualifiedName()));
         line(indent + 1, "type: " + describeType(symbol.type));
         line(indent + 1, "isHeap: " + symbol.isHeap);
 
@@ -585,7 +601,7 @@ public class SemanticASTPrinter {
         }
 
         line(indent, "FunctionSymbol");
-        line(indent + 1, "name: " + quote(symbol.name));
+        line(indent + 1, "name: " + quote(symbol.qualifiedName()));
         line(indent + 1, "signature: " + symbol.signatureString());
         line(indent + 1, "fullSignature: " + symbol.fullSignatureString());
         line(indent + 1, "returnType: " + describeType(symbol.returnType()));

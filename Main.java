@@ -4,6 +4,8 @@ import org.antlr.v4.runtime.tree.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 public class Main {
     public static void main(String[] args) throws Exception {
@@ -67,9 +69,28 @@ public class Main {
             ASTPrinter.print(rawAst, 0);
         }
 
+        // ----- Resolve imports -----
+        ImportResolver importResolver = new ImportResolver();
+        ASTNode ast = importResolver.resolve(rawAst, Path.of(sourceFile));
+
+        if (verbose) {
+            System.out.println("==== Imports ====");
+
+            for (Map.Entry<String, List<String>> entry : importResolver.importGraph().entrySet()) {
+                System.out.println("  " + entry.getKey());
+
+                for (String imported : entry.getValue()) {
+                    System.out.println("    -> " + imported);
+                }
+            }
+
+            System.out.println("==== Import-resolved AST ====");
+            ASTPrinter.print(ast, 0);
+        }
+
         // ----- Desugar AST -----
         Desugarer desugarer = new Desugarer();
-        ASTNode ast = desugarer.desugar(rawAst);
+        ast = desugarer.desugar(ast);
         if (verbose) {
             System.out.println("==== Desugared AST ====");
             ASTPrinter.print(ast, 0);

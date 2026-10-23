@@ -92,6 +92,19 @@ public class Desugarer {
     private void appendDesugaredTopLevelItem(ASTNode item, List<ASTNode> out) {
         if (item == null) return;
 
+        /*
+         * Import directives are consumed by the ImportResolver before
+         * desugaring. Reaching this point means the resolver was skipped
+         * or failed to splice a file.
+         */
+        if (item instanceof ImportNode) {
+            throw new RuntimeException(
+                "Internal desugarer error: unresolved ImportNode '"
+                    + ((ImportNode) item).rawPathText
+                    + "' reached desugaring"
+            );
+        }
+
         if (item instanceof FunctionDeclNode) {
             out.add(desugarFunctionDecl((FunctionDeclNode) item));
             return;
@@ -107,7 +120,23 @@ public class Desugarer {
             return;
         }
 
+        if (item instanceof NamespaceNode) {
+            out.add(desugarNamespaceDecl((NamespaceNode) item));
+            return;
+        }
+
         appendDesugaredStmt(item, out);
+    }
+
+    /**
+     * Desugars a namespace declaration.
+     *
+     * The namespace name is untouched; its items are desugared with the
+     * same top-level handling as ordinary program items, since a
+     * namespace body holds exactly the same item kinds as global scope.
+     */
+    private NamespaceNode desugarNamespaceDecl(NamespaceNode n) {
+        return new NamespaceNode(n.name, desugarTopLevelItemList(n.items));
     }
 
     private StructDeclNode desugarStructDecl(StructDeclNode n) {
@@ -718,6 +747,15 @@ public class Desugarer {
         }
 
         /*
+         * Qualified name references (ns::name) are leaf expressions.
+         * The semantic analyzer resolves them against namespace tables;
+         * desugaring never rewrites them.
+         */
+        if (expr instanceof QualifiedNameNode) {
+            return expr;
+        }
+
+        /*
          * Null literals are leaf expressions that require no desugaring.
          * Semantic analysis checks that null is only used in address contexts.
          */
@@ -856,6 +894,14 @@ public class Desugarer {
             return node;
         }
 
+        /*
+         * Qualified name lvalues (ns::g) are leaves; the semantic
+         * analyzer resolves them against namespace tables.
+         */
+        if (node instanceof QualifiedNameNode) {
+            return node;
+        }
+
         if (node instanceof DerefNode) {
             DerefNode n = (DerefNode) node;
 
@@ -893,6 +939,10 @@ public class Desugarer {
         if (node instanceof VarNode) {
             VarNode n = (VarNode) node;
             return new VarNode(n.name);
+        }
+
+        if (node instanceof QualifiedNameNode) {
+            return node;
         }
 
         if (node instanceof DerefNode) {

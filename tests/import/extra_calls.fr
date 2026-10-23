@@ -1,0 +1,10 @@
+// Second import of the import test, using a bare string literal.
+//
+// `import "extra_calls"` has no directory prefix and no extension, so
+// it resolves to ./extra_calls.fr relative to the importing file.
+
+int32_t extraGlobal = 11
+
+func extraHelper() -> int32_t {
+    return 55
+}

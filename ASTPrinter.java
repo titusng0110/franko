@@ -22,6 +22,28 @@ public class ASTPrinter {
             }
         }
 
+        else if (node instanceof ImportNode n) {
+            if (n.isStringLiteral) {
+                System.out.println(pad + "Import: \"" + n.rawPathText + "\"");
+            } else {
+                System.out.println(pad + "Import: " + n.rawPathText);
+            }
+        }
+
+        else if (node instanceof NamespaceNode n) {
+            System.out.println(pad + "Namespace: " + n.name);
+            System.out.println(pad + "  items: " + n.items.size());
+
+            for (int i = 0; i < n.items.size(); i++) {
+                System.out.println(pad + "  [" + i + "]");
+                print(n.items.get(i), indent + 2);
+            }
+        }
+
+        else if (node instanceof QualifiedNameNode n) {
+            System.out.println(pad + "QualifiedName: " + String.join("::", n.segments));
+        }
+
         else if (node instanceof BlockNode n) {
             System.out.println(pad + "Block");
             System.out.println(pad + "  statements: " + n.statements.size());
@@ -409,7 +431,11 @@ public class ASTPrinter {
         }
 
         if (type instanceof StructTypeNode t) {
-            return t.name;
+            if (t.namespaceSegments == null || t.namespaceSegments.isEmpty()) {
+                return t.name;
+            }
+
+            return String.join("::", t.namespaceSegments) + "::" + t.name;
         }
 
         return "<unknown-type:" + type.getClass().getSimpleName() + ">";

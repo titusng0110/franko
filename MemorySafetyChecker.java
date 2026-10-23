@@ -278,6 +278,13 @@ public final class MemorySafetyChecker {
             return;
         }
 
+        if (node instanceof SemanticNamespaceNode n) {
+            for (SemanticASTNode item : n.items) {
+                collectHeapSymbols(item);
+            }
+            return;
+        }
+
         if (node instanceof SemanticFunctionDeclNode n) {
             collectHeapSymbols(n.body);
             return;
@@ -493,7 +500,7 @@ public final class MemorySafetyChecker {
     private String varNameOf(SemanticExprNode expr) {
         if (expr instanceof SemanticVarExprNode n
                 && n.symbol != null) {
-            return n.symbol.name;
+            return n.symbol.qualifiedName();
         }
 
         return "<expression>";
@@ -584,6 +591,16 @@ public final class MemorySafetyChecker {
             return total;
         }
 
+        if (node instanceof SemanticNamespaceNode n) {
+            int total = 0;
+
+            for (SemanticASTNode item : n.items) {
+                total += estimateSnapshotDemand(item, depth);
+            }
+
+            return total;
+        }
+
         if (node instanceof SemanticFunctionDeclNode n) {
             return 1 + estimateSnapshotDemand(n.body, depth);
         }
@@ -628,6 +645,13 @@ public final class MemorySafetyChecker {
 
         if (node instanceof SemanticProgramNode n) {
             for (SemanticASTNode item : n.topLevelItems) {
+                checkNode(item);
+            }
+            return false;
+        }
+
+        if (node instanceof SemanticNamespaceNode n) {
+            for (SemanticASTNode item : n.items) {
                 checkNode(item);
             }
             return false;
@@ -808,7 +832,7 @@ public final class MemorySafetyChecker {
 
             if (isAliveOrMaybeDeleted(index)) {
                 diagnostics.error("Heap variable '"
-                        + symbol.name
+                        + symbol.qualifiedName()
                         + "' may leak at end of "
                         + (functionBody ? "function body" : "scope")
                         + "; missing del");
@@ -1189,7 +1213,7 @@ public final class MemorySafetyChecker {
 
         if (!symbol.isHeap) {
             diagnostics.error("Cannot delete non-heap variable '"
-                    + symbol.name
+                    + symbol.qualifiedName()
                     + "'");
             return;
         }
@@ -1204,14 +1228,14 @@ public final class MemorySafetyChecker {
 
         if (current == MemoryState.DELETED) {
             diagnostics.error("Variable '"
-                    + symbol.name
+                    + symbol.qualifiedName()
                     + "' has already been deleted");
             return;
         }
 
         if (current == MemoryState.MAYBE_DELETED) {
             diagnostics.error("Variable '"
-                    + symbol.name
+                    + symbol.qualifiedName()
                     + "' may have already been deleted");
             state[index] = MemoryState.DELETED;
             return;
@@ -1353,11 +1377,11 @@ public final class MemorySafetyChecker {
 
         if (current == MemoryState.DELETED) {
             diagnostics.error("Use of deleted variable '"
-                    + symbol.name
+                    + symbol.qualifiedName()
                     + "'");
         } else if (current == MemoryState.MAYBE_DELETED) {
             diagnostics.error("Use of possibly deleted variable '"
-                    + symbol.name
+                    + symbol.qualifiedName()
                     + "'");
         }
     }
@@ -1378,13 +1402,13 @@ public final class MemorySafetyChecker {
 
             if (current == MemoryState.ALIVE) {
                 diagnostics.error("Heap variable '"
-                        + symbol.name
+                        + symbol.qualifiedName()
                         + "' leaks at "
                         + where
                         + "; missing del");
             } else if (current == MemoryState.MAYBE_DELETED) {
                 diagnostics.error("Heap variable '"
-                        + symbol.name
+                        + symbol.qualifiedName()
                         + "' may leak at "
                         + where
                         + "; missing del on some path");

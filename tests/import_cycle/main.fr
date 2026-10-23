@@ -1,0 +1,19 @@
+// ============================================================
+// Franko import cycle test
+// ============================================================
+//
+// a.fr imports b.fr and b.fr imports a.fr. Cycles are ignored
+// silently: each file is collected exactly once, so no duplicate
+// declarations are reported.
+//
+// Expected output is in main.expected.
+// ============================================================
+
+import a
+
+func main() -> int32_t {
+    print(aValue())
+    print(bValue())
+
+    return 0
+}

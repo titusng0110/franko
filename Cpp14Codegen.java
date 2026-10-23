@@ -136,6 +136,17 @@ public class Cpp14Codegen {
     private final StringBuilder out = new StringBuilder();
     private int indentLevel = 0;
 
+    /*
+     * Name of the C++ namespace currently being emitted, or null while
+     * emitting at global scope.
+     *
+     * References to symbols from other namespaces are qualified
+     * (ns::name); references to global-namespace symbols from inside a
+     * namespace block are rooted (::name) so they cannot be captured by
+     * same-named symbols in that namespace.
+     */
+    private String currentEmitNamespace = null;
+
     private static final SemanticType UINT8_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8);
 
@@ -168,6 +179,17 @@ public class Cpp14Codegen {
     private void emitNode(SemanticASTNode node) {
         if (node instanceof SemanticProgramNode program) {
             emitProgram(program);
+            return;
+        }
+
+        if (node instanceof SemanticNamespaceNode namespace) {
+            /*
+             * Defensive: emitProgram partitions namespaces before emission,
+             * so a namespace node reaching emitNode directly only happens
+             * for non-program roots. Emit it as one namespace block with
+             * the same item handling as a program.
+             */
+            emitProgram(new SemanticProgramNode(List.of(namespace)));
             return;
         }
 
@@ -228,69 +250,90 @@ public class Cpp14Codegen {
      * The generated C++ must declare g before main's function body.
      */
     private void emitProgram(SemanticProgramNode node) {
-        List<SemanticStructDeclNode> structs = new ArrayList<>();
-        List<SemanticVarDeclNode> globals = new ArrayList<>();
-        List<SemanticFunctionDeclNode> functions = new ArrayList<>();
-
         /*
-         * Partition top-level items.
+         * Partition top-level items by namespace.
          *
          * SemanticAnalyzer should already ensure only struct declarations,
-         * global variable declarations, and function declarations appear
-         * here. The fallback error below is defensive.
+         * global variable declarations, function declarations, and
+         * namespace declarations appear here. The fallback error below is
+         * defensive.
          */
+        List<SemanticStructDeclNode> globalStructs = new ArrayList<>();
+        List<SemanticVarDeclNode> globalGlobals = new ArrayList<>();
+        List<SemanticFunctionDeclNode> globalFunctions = new ArrayList<>();
+
+        Map<String, List<SemanticStructDeclNode>> nsStructs = new LinkedHashMap<>();
+        Map<String, List<SemanticVarDeclNode>> nsGlobals = new LinkedHashMap<>();
+        Map<String, List<SemanticFunctionDeclNode>> nsFunctions = new LinkedHashMap<>();
+
         for (SemanticASTNode item : node.topLevelItems) {
-            if (item instanceof SemanticStructDeclNode struct) {
-                structs.add(struct);
-                continue;
-            }
-
-            if (item instanceof SemanticVarDeclNode global) {
-                globals.add(global);
-                continue;
-            }
-
-            if (item instanceof SemanticFunctionDeclNode fn) {
-                functions.add(fn);
-                continue;
-            }
-
-            if (item == null) {
-                throw new IllegalStateException(
-                        "Internal compiler error: null top-level item in SemanticProgramNode"
+            if (item instanceof SemanticNamespaceNode namespace) {
+                partitionNamespaceItems(
+                        namespace,
+                        nsStructs,
+                        nsGlobals,
+                        nsFunctions
                 );
+                continue;
             }
 
-            throw new IllegalStateException(
-                    "Internal compiler error: unsupported global top-level item for codegen: "
-                            + item.getClass().getSimpleName()
-            );
+            partitionItem(item, globalStructs, globalGlobals, globalFunctions);
         }
 
         /*
-         * 1. Emit struct declarations first, in by-value dependency order.
+         * 1. Forward-declare every struct, grouped by namespace, so
+         *    addr<Struct> fields, global pointer types, and function
+         *    signatures can name structs defined later.
+         */
+        for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+
+            openNamespace(entry.getKey());
+
+            for (SemanticStructDeclNode struct : entry.getValue()) {
+                emitLine("struct " + emitStructName(struct.symbol) + ";");
+            }
+
+            closeNamespace(entry.getKey());
+        }
+
+        if (!globalStructs.isEmpty()) {
+            for (SemanticStructDeclNode struct : globalStructs) {
+                emitLine("struct " + emitStructName(struct.symbol) + ";");
+            }
+        }
+
+        if (anyNonEmpty(nsStructs) || !globalStructs.isEmpty()) {
+            emitLine("");
+        }
+
+        /*
+         * 2. Emit struct definitions in one by-value dependency order
+         *    across all namespaces.
          *
          * Structs must be emitted before global variables and functions
          * because they can be referenced in global variable types and
-         * function signatures. A struct used by value inside another struct
-         * must be defined first, so declarations are topologically sorted
-         * over by-value field dependencies. addr fields and dynamic-array
-         * fields are pointer-backed and impose no ordering constraint.
+         * function signatures. A struct used by value inside another
+         * struct must be defined first, so declarations are topologically
+         * sorted over by-value field dependencies. addr fields and
+         * dynamic-array fields are pointer-backed and impose no ordering
+         * constraint.
+         *
+         * Each definition opens its own namespace block, so one global
+         * dependency order works across namespaces.
          */
-        if (!structs.isEmpty()) {
-            /*
-             * Forward-declare every struct so addr<Struct> fields, global
-             * pointer types, and function signatures can name structs defined
-             * later in source order. By-value field dependencies are still
-             * ordered by the topological sort below.
-             */
-            for (SemanticStructDeclNode struct : structs) {
-                emitLine("struct struct_" + struct.symbol.name + ";");
-            }
+        List<SemanticStructDeclNode> allStructs = new ArrayList<>();
 
-            emitLine("");
+        for (List<SemanticStructDeclNode> structs : nsStructs.values()) {
+            allStructs.addAll(structs);
+        }
 
-            for (SemanticStructDeclNode struct : orderStructsByValueDependency(structs)) {
+        allStructs.addAll(globalStructs);
+
+        if (!allStructs.isEmpty()) {
+            for (SemanticStructDeclNode struct : orderStructsByValueDependency(allStructs)) {
                 emitStructDecl(struct);
             }
 
@@ -298,10 +341,25 @@ public class Cpp14Codegen {
         }
 
         /*
-         * 2. Emit global variables.
+         * 3. Emit global variables, namespace by namespace, then the
+         *    global namespace.
          */
-        if (!globals.isEmpty()) {
-            for (SemanticVarDeclNode global : globals) {
+        if (anyNonEmpty(nsGlobals) || !globalGlobals.isEmpty()) {
+            for (Map.Entry<String, List<SemanticVarDeclNode>> entry : nsGlobals.entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    continue;
+                }
+
+                openNamespace(entry.getKey());
+
+                for (SemanticVarDeclNode global : entry.getValue()) {
+                    emitVarDecl(global);
+                }
+
+                closeNamespace(entry.getKey());
+            }
+
+            for (SemanticVarDeclNode global : globalGlobals) {
                 emitVarDecl(global);
             }
 
@@ -309,12 +367,27 @@ public class Cpp14Codegen {
         }
 
         /*
-         * 3. Emit function prototypes.
+         * 4. Emit function prototypes.
          *
-         * This supports forward references, direct recursion, and mutual recursion.
+         * This supports forward references, direct recursion, and mutual
+         * recursion across namespaces.
          */
-        if (!functions.isEmpty()) {
-            for (SemanticFunctionDeclNode fn : functions) {
+        if (anyNonEmpty(nsFunctions) || !globalFunctions.isEmpty()) {
+            for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    continue;
+                }
+
+                openNamespace(entry.getKey());
+
+                for (SemanticFunctionDeclNode fn : entry.getValue()) {
+                    emitFunctionPrototype(fn);
+                }
+
+                closeNamespace(entry.getKey());
+            }
+
+            for (SemanticFunctionDeclNode fn : globalFunctions) {
                 emitFunctionPrototype(fn);
             }
 
@@ -322,14 +395,113 @@ public class Cpp14Codegen {
         }
 
         /*
-         * 4. Emit function definitions.
+         * 5. Emit function definitions.
          *
-         * Definitions are emitted in source order relative to other functions.
+         * Definitions are emitted in source order relative to other
+         * functions of the same namespace.
          */
-        for (SemanticFunctionDeclNode fn : functions) {
+        for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+
+            openNamespace(entry.getKey());
+
+            for (SemanticFunctionDeclNode fn : entry.getValue()) {
+                emitFunctionDecl(fn);
+                emitLine("");
+            }
+
+            closeNamespace(entry.getKey());
+        }
+
+        for (SemanticFunctionDeclNode fn : globalFunctions) {
             emitFunctionDecl(fn);
             emitLine("");
         }
+    }
+
+    /**
+     * True when any namespace list in the map is non-empty.
+     *
+     * Namespaces are registered in these maps even when they contribute
+     * no items of a given kind, so map emptiness alone would emit empty
+     * namespace blocks.
+     */
+    private static boolean anyNonEmpty(Map<String, ? extends List<?>> byNamespace) {
+        for (List<?> items : byNamespace.values()) {
+            if (!items.isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Partitions one namespace's semantic items into its struct, global
+     * variable, and function lists.
+     */
+    private void partitionNamespaceItems(
+            SemanticNamespaceNode namespace,
+            Map<String, List<SemanticStructDeclNode>> nsStructs,
+            Map<String, List<SemanticVarDeclNode>> nsGlobals,
+            Map<String, List<SemanticFunctionDeclNode>> nsFunctions
+    ) {
+        List<SemanticStructDeclNode> structs = nsStructs.computeIfAbsent(
+                namespace.name,
+                ignored -> new ArrayList<>()
+        );
+
+        List<SemanticVarDeclNode> globals = nsGlobals.computeIfAbsent(
+                namespace.name,
+                ignored -> new ArrayList<>()
+        );
+
+        List<SemanticFunctionDeclNode> functions = nsFunctions.computeIfAbsent(
+                namespace.name,
+                ignored -> new ArrayList<>()
+        );
+
+        for (SemanticASTNode item : namespace.items) {
+            partitionItem(item, structs, globals, functions);
+        }
+    }
+
+    /**
+     * Partitions one semantic item into the given lists.
+     */
+    private void partitionItem(
+            SemanticASTNode item,
+            List<SemanticStructDeclNode> structs,
+            List<SemanticVarDeclNode> globals,
+            List<SemanticFunctionDeclNode> functions
+    ) {
+        if (item instanceof SemanticStructDeclNode struct) {
+            structs.add(struct);
+            return;
+        }
+
+        if (item instanceof SemanticVarDeclNode global) {
+            globals.add(global);
+            return;
+        }
+
+        if (item instanceof SemanticFunctionDeclNode fn) {
+            functions.add(fn);
+            return;
+        }
+
+        if (item == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: null top-level item in SemanticProgramNode"
+            );
+        }
+
+        throw new IllegalStateException(
+                "Internal compiler error: unsupported global top-level item for codegen: "
+                        + item.getClass().getSimpleName()
+        );
     }
 
     // ============================================================
@@ -356,7 +528,14 @@ public class Cpp14Codegen {
             );
         }
 
-        emitLine("struct struct_" + node.symbol.name);
+        /*
+         * A namespace struct is emitted inside its own C++ namespace
+         * block, so struct definitions can be interleaved in one global
+         * by-value dependency order across namespaces.
+         */
+        openNamespace(node.symbol.namespace);
+
+        emitLine("struct " + emitStructName(node.symbol));
         emitLine("{");
         indentLevel++;
 
@@ -366,6 +545,8 @@ public class Cpp14Codegen {
 
         indentLevel--;
         emitLine("};");
+
+        closeNamespace(node.symbol.namespace);
     }
 
     private void emitStructField(FieldSymbol field) {
@@ -416,10 +597,14 @@ public class Cpp14Codegen {
     private List<SemanticStructDeclNode> orderStructsByValueDependency(
             List<SemanticStructDeclNode> structs
     ) {
+        /*
+         * Keyed by qualified name: different namespaces may declare
+         * structs with the same simple name.
+         */
         Map<String, SemanticStructDeclNode> declByName = new LinkedHashMap<>();
 
         for (SemanticStructDeclNode struct : structs) {
-            declByName.put(struct.symbol.name, struct);
+            declByName.put(struct.symbol.qualifiedName(), struct);
         }
 
         LinkedHashSet<String> emitted = new LinkedHashSet<>();
@@ -446,7 +631,7 @@ public class Cpp14Codegen {
             LinkedHashSet<String> inProgress,
             List<SemanticStructDeclNode> ordered
     ) {
-        String name = node.symbol.name;
+        String name = node.symbol.qualifiedName();
 
         if (emitted.contains(name)) {
             return;
@@ -492,7 +677,7 @@ public class Cpp14Codegen {
         List<String> names = new ArrayList<>();
 
         if (type instanceof SemanticStructType struct) {
-            names.add(struct.structSymbol.name);
+            names.add(struct.structSymbol.qualifiedName());
             return names;
         }
 
@@ -1201,11 +1386,11 @@ public class Cpp14Codegen {
 
         if (type instanceof SemanticStructType struct) {
             /*
-             * Struct types are emitted with a "struct_" prefix so a struct
+             * Struct types are emitted with a "STRUCT_" prefix so a struct
              * name can never collide with a variable or function name in the
              * generated C++.
              */
-            return "struct_" + struct.structSymbol.name;
+            return emitStructName(struct.structSymbol);
         }
 
         if (type instanceof SemanticNullType) {
@@ -1260,30 +1445,111 @@ public class Cpp14Codegen {
     private String emitSymbolName(VariableSymbol symbol) {
         /*
          * Variables (locals, globals, parameters, heap variables) are emitted
-         * with a "var_" prefix.
+         * with a "VAR_" prefix.
          *
          * Franko keeps variables, functions, and struct names in separate
          * namespaces, but C++ does not: a raw name such as "X" would collide
          * with a struct type of the same name in the generated code. The kind
          * prefixes keep every Franko namespace distinct in C++.
+         *
+         * Only namespace-level variables (globals) can need cross-namespace
+         * qualification; locals and parameters are function-scoped and are
+         * never qualified.
          */
-        return "var_" + symbol.name;
+        if (symbol instanceof GlobalVariableSymbol global) {
+            return qualify(global.namespace, "VAR_" + symbol.name);
+        }
+
+        return "VAR_" + symbol.name;
     }
 
     private String emitFunctionName(FunctionSymbol symbol) {
         /*
-         * Functions are emitted with a "func_" prefix for the same
+         * Functions are emitted with a "FUNC_" prefix for the same
          * cross-namespace reason as variables.
          *
          * Exception: the Franko entry-point function "main" keeps its raw
          * name, because the generated program's C++ entry point IS the
-         * Franko main function.
+         * Franko main function. main must be declared in the global
+         * namespace; the semantic analyzer rejects a namespaced main.
          */
-        if ("main".equals(symbol.name)) {
+        if ("main".equals(symbol.name) && symbol.namespace == null) {
             return symbol.name;
         }
 
-        return "func_" + symbol.name;
+        return qualify(symbol.namespace, "FUNC_" + symbol.name);
+    }
+
+    /**
+     * Emits a struct type name, qualified when the struct lives in
+     * another namespace than the one currently being emitted.
+     */
+    private String emitStructName(StructSymbol symbol) {
+        return qualify(symbol.namespace, "STRUCT_" + symbol.name);
+    }
+
+    /**
+     * Qualifies a symbol's local C++ name for the emission context.
+     *
+     *   - same namespace as the emission context (or both global):
+     *     the local name is used as-is,
+     *
+     *   - symbol in another namespace: "NS_ns::" + localName,
+     *
+     *   - global-namespace symbol referenced from inside a namespace
+     *     block: "::" + localName, so the reference cannot be captured
+     *     by a same-named symbol in that namespace.
+     */
+    private String qualify(String symbolNamespace, String localName) {
+        if (symbolNamespace == null) {
+            return currentEmitNamespace == null
+                    ? localName
+                    : "::" + localName;
+        }
+
+        if (symbolNamespace.equals(currentEmitNamespace)) {
+            return localName;
+        }
+
+        return "NS_" + symbolNamespace + "::" + localName;
+    }
+
+    /**
+     * Opens a C++ namespace block for emission and switches the
+     * qualification context.
+     *
+     * The emitted C++ namespace is prefixed (NS_name) while
+     * currentEmitNamespace keeps the Franko name, so qualification
+     * comparisons stay in Franko terms.
+     *
+     * Null is a no-op: global-namespace items are emitted at global
+     * scope.
+     */
+    private void openNamespace(String namespaceName) {
+        if (namespaceName == null) {
+            return;
+        }
+
+        emitLine("namespace NS_" + namespaceName);
+        emitLine("{");
+        indentLevel++;
+        currentEmitNamespace = namespaceName;
+    }
+
+    /**
+     * Closes a C++ namespace block opened by openNamespace and restores
+     * the global emission context.
+     *
+     * Null is a no-op, matching openNamespace.
+     */
+    private void closeNamespace(String namespaceName) {
+        if (namespaceName == null) {
+            return;
+        }
+
+        indentLevel--;
+        emitLine("}");
+        currentEmitNamespace = null;
     }
 
     // ============================================================

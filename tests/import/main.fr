@@ -1,0 +1,41 @@
+// ============================================================
+// Franko import feature test
+// ============================================================
+//
+// Exercises:
+//
+//   - importName form:      import lib/util  ->  ./lib/util.fr
+//   - stringLiteral form without prefix or extension:
+//                           import "extra_calls"  ->  ./extra_calls.fr
+//   - symbols from imported files compiled into one global AST
+//   - transitive imports: lib/util.fr imports deep/extra.fr and both
+//     files' symbols are visible here
+//
+// Expected output is in main.expected.
+// ============================================================
+
+import lib/util
+import "extra_calls"
+
+func main() -> int32_t {
+    // Symbols from lib/util.fr.
+    print(offset)
+    print(doubleIt(21))
+    print(makePointSum())
+
+    Point p
+    print(p.x)
+    print(p.y)
+
+    // Symbols from lib/deep/extra.fr (transitively imported).
+    print(helper2())
+    print(deepGlobal)
+
+    // Symbols from extra_calls.fr.
+    print(extraHelper())
+    print(extraGlobal)
+
+    print(deepGlobal + extraGlobal)
+
+    return 0
+}
