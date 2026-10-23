@@ -92,7 +92,9 @@ Franko is a small statically typed language with:
   - `arr.memset(value)` and `arr.memset(value, start, count)`;
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
-- array initializer lists as array element assignment sugar.
+- array initializer lists as array element assignment sugar;
+- imports of other source files (see [Source Files](02-source-files.md));
+- namespaces with `::`-qualified references (see [Program Structure](03-program-structure.md)).
 
 Franko currently does **not** implement:
 
@@ -102,7 +104,7 @@ Franko currently does **not** implement:
 - function pointers;
 - general methods (only the built-in array intrinsics use member-call syntax);
 - generics;
-- imports/modules;
+- nested namespaces;
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
@@ -162,6 +164,69 @@ int32_t x  // a comment may follow code on the same line
 
 There are no block comments.
 
+## Imports
+
+A source file may import other source files with an import directive:
+
+```franko
+import importPath
+```
+
+Imports are top-level items and may appear anywhere at global scope, mixed freely with struct, global variable, and function declarations.
+
+The import path is either a string literal or an import name:
+
+```franko
+import lib/util
+import "util"
+```
+
+Import names may contain digits, ASCII letters, underscores, and `/` as a separator between path segments. A `/` may not be the first or last character, so `import /abc` and `import abc/` are syntax errors. Digits may appear in any position, including the first, so `import 123abc` is a valid import name.
+
+Paths are always resolved relative to the directory of the file that contains the import statement.
+
+### Import Name Form
+
+The import name form resolves to `./<name>.fr`:
+
+```franko
+import lib/abc      // ./lib/abc.fr
+import util         // ./util.fr
+```
+
+### String Literal Form
+
+String literal paths support the same escape sequences as string literals. The path is completed as follows:
+
+- `./` is prepended when the path has no directory prefix. The prefixes `./`, `../`, and `/` all count as directory prefixes and are used as written.
+- `.fr` is appended when the file name has no extension.
+- A present but non-`.fr` extension is rejected.
+
+Examples (relative to the importing file's directory):
+
+| Source | Resolved path |
+|---|---|
+| `import "foo"` | `./foo.fr` |
+| `import "lib/foo"` | `./lib/foo.fr` |
+| `import "lib/foo.fr"` | `./lib/foo.fr` |
+| `import "./lib/foo"` | `./lib/foo.fr` |
+| `import "../shared/foo"` | `../shared/foo.fr` |
+| `import "/abs/foo"` | `/abs/foo.fr` |
+| `import "foo.txt"` | error: must reference a `.fr` file |
+
+Import paths are always written in POSIX form with forward slashes, on every platform. On Windows, a `/`-prefixed path is translated when it reaches the filesystem: `import "/abs/foo"` resolves to `X:\abs\foo.fr`, where `X:` is the drive of the current working directory, and `/` separators in the translated path become `\`.
+
+### How Imports Compile
+
+An import is resolved at compile time:
+
+- the referenced file is parsed like any other source file;
+- all of its top-level items (structs, global variables, functions) are compiled into the same global program as the importing file's items;
+- imports are processed in declaration order, and an import of an already-processed file is skipped silently, so repeated and cyclic imports are safe (each file is compiled exactly once);
+- an imported file's own imports are resolved relative to that file's directory.
+
+Because every symbol lives in one global namespace, duplicate declarations across files are reported like duplicate declarations within one file.
+
 ---
 
 # 3. Program Structure
@@ -172,9 +237,55 @@ Current valid top-level items are:
 
 - struct declarations;
 - global variable declarations;
-- function declarations.
+- function declarations;
+- import directives;
+- namespace declarations.
 
-Struct declarations are described in full in [Structs](24-structs.md).
+Struct declarations are described in full in [Structs](24-structs.md). Import directives are described in full in [Source Files](02-source-files.md).
+
+## Namespaces
+
+A namespace groups struct, global variable, and function declarations under a qualified name:
+
+```franko
+namespace util {
+    struct Point {
+        int32_t x = 1
+        int32_t y = 2
+    }
+
+    int32_t offset = 100
+
+    func doubleIt(int32_t v) -> int32_t {
+        return v + v + offset
+    }
+}
+```
+
+A namespace body may contain only struct declarations, global variable declarations, and function declarations. Imports, executable statements, and nested namespaces are not allowed inside a namespace body.
+
+The same namespace may be declared more than once, in the same file or across imported files; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
+
+### Qualified References
+
+Namespace members are referenced with `::`:
+
+```franko
+util::Point p
+print(util::offset)
+print(util::doubleIt(5))
+util::offset = 5
+```
+
+A qualified name always resolves strictly inside the named namespace; there is no fallback to the global namespace. More than one `::` level (for example `a::b::c`) is rejected while nested namespaces are unsupported.
+
+### Unqualified References
+
+Inside a namespace, an unqualified name resolves in that namespace first, then falls back to the global namespace. Outside any namespace, only the global namespace is visible.
+
+### Entry Point
+
+The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error.
 
 Executable statements are **not** currently allowed in global scope.
 
@@ -2467,7 +2578,7 @@ del s;
 
 The C++14 backend:
 
-- emits each struct as a C++ `struct struct_X { ... };` definition, preceded by a forward-declaration block (`struct struct_X;`) so addresses may reference structs declared later in source order;
+- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so addresses may reference structs declared later in source order;
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`, with heap variables lowered through `(*sym)`.
@@ -2891,7 +3002,7 @@ The checker validates intrinsic legality, but it does not fully prove dynamic ar
 
 ## 29.10 Delete Checking Is Limited
 
-Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (8); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](26-memory-safety-checking.md) for the full list of rules and limitations.
+Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (10); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](26-memory-safety-checking.md) for the full list of rules and limitations.
 
 ## 29.11 Address Lifetime Is Not Fully Tracked
 
@@ -3041,23 +3152,26 @@ Franko keeps struct type names, variable names, and function names in separate n
 
 | Franko construct | Generated C++ name |
 |---|---|
-| struct type `X` | `struct_X` |
-| variable `x` (local, global, parameter, heap) | `var_x` |
-| function `f` | `func_f` |
+| struct type `X` | `STRUCT_X` |
+| variable `x` (local, global, parameter, heap) | `VAR_x` |
+| function `f` | `FUNC_f` |
+| namespace `n` | `NS_n` |
 | the entry-point function `main` | `main` (unprefixed: the generated C++ entry point IS the Franko `main`) |
 
-So a declaration `X s;` is emitted as `struct_X var_s;`.
+So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
 Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
+
+Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes `NS_n::FUNC_f`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
 
 When a variable or function shares its name with a declared struct, the compiler emits a **warning** during semantic analysis (the program still compiles):
 
 ```text
 ==== Warnings ====
-  - Variable 'X' shares its name with struct 'X'; generated C++ uses var_X for the variable and struct_X for the struct type
+  - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
 ```
 
-Struct definitions are emitted after a forward-declaration block (`struct struct_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
+Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
 
 ---
 

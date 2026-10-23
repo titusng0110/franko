@@ -126,10 +126,14 @@ public final class ExpressionAnalyzer {
                     ctx.error("Undeclared variable '" + n.name + "'");
                 }
 
-                sym = new VariableSymbol(n.name, FALLBACK_TYPE, false);
+                sym = new VariableSymbol(null, n.name, FALLBACK_TYPE, false);
             }
 
             return new SemanticVarExprNode(sym.type, sym);
+        }
+
+        if (node instanceof QualifiedNameNode n) {
+            return analyzeQualifiedNameExpr(n);
         }
 
         if (node instanceof UnaryOpNode n) {
@@ -214,7 +218,7 @@ public final class ExpressionAnalyzer {
 
             if (field == null) {
                 ctx.error("Struct '"
-                        + structType.structSymbol.name
+                        + structType.structSymbol.qualifiedName()
                         + "' has no field named '"
                         + n.memberName
                         + "'");
@@ -395,6 +399,67 @@ public final class ExpressionAnalyzer {
     // Call Lowering
     // ============================================================
 
+    /**
+     * Lowers a qualified variable reference:
+     *
+     *   util::offset
+     *
+     * The reference resolves strictly inside the named namespace; there
+     * is no fallback to the global namespace.
+     *
+     * Nested namespaces are unsupported: a segment list longer than two
+     * is rejected here.
+     */
+    private SemanticExprNode analyzeQualifiedNameExpr(QualifiedNameNode q) {
+        if (q.segments.size() > 2) {
+            ctx.error("Nested namespaces are not supported: '"
+                    + String.join("::", q.segments)
+                    + "'");
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        NamespaceSymbol namespace = ctx.resolveNamespace(q.segments.get(0));
+
+        if (namespace == null) {
+            ctx.error("Unknown namespace '" + q.segments.get(0) + "'");
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        String name = q.segments.get(1);
+
+        VariableSymbol sym = ctx.resolveGlobalVarIn(namespace, name);
+
+        if (sym == null) {
+            if (ctx.hasAnyFunctionNamedIn(namespace, name)) {
+                ctx.error("Function name '"
+                        + namespace.name
+                        + "::"
+                        + name
+                        + "' cannot be used as a value");
+            } else {
+                ctx.error("Undeclared variable '"
+                        + namespace.name
+                        + "::"
+                        + name
+                        + "'");
+            }
+
+            sym = new GlobalVariableSymbol(namespace.name, name, FALLBACK_TYPE);
+        }
+
+        return new SemanticVarExprNode(sym.type, sym);
+    }
+
     private SemanticExprNode analyzeCallExpr(CallNode call) {
         if (arrayLowerer != null) {
             SemanticArrayIntrinsicCallNode intrinsic =
@@ -440,7 +505,87 @@ public final class ExpressionAnalyzer {
                         + "'");
 
                 FunctionSymbol fallbackFn = new FunctionSymbol(
+                        null,
                         calleeVar.name,
+                        List.of(),
+                        FALLBACK_TYPE,
+                        false
+                );
+
+                return new SemanticFunctionCallNode(
+                        FALLBACK_TYPE,
+                        fallbackFn,
+                        args
+                );
+            }
+
+            return new SemanticFunctionCallNode(
+                    fn.returnType(),
+                    fn,
+                    args
+            );
+        }
+
+        if (call.callee instanceof QualifiedNameNode calleeQ) {
+            List<SemanticExprNode> args = new ArrayList<>();
+            List<SemanticType> argTypes = new ArrayList<>();
+
+            for (ASTNode arg : call.args) {
+                SemanticExprNode loweredArg = analyzeExpr(arg);
+                args.add(loweredArg);
+                argTypes.add(loweredArg.type);
+            }
+
+            /*
+             * Nested namespaces are unsupported; the reference itself is
+             * invalid regardless of what it names.
+             */
+            if (calleeQ.segments.size() > 2) {
+                ctx.error("Nested namespaces are not supported: '"
+                        + String.join("::", calleeQ.segments)
+                        + "'");
+
+                return new SemanticIntLiteralNode(
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            NamespaceSymbol namespace =
+                    ctx.resolveNamespace(calleeQ.segments.get(0));
+
+            if (namespace == null) {
+                ctx.error("Unknown namespace '"
+                        + calleeQ.segments.get(0)
+                        + "'");
+
+                return new SemanticIntLiteralNode(
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            String calleeName = calleeQ.segments.get(1);
+
+            FunctionSymbol fn = ctx.resolveFunctionIn(
+                    namespace,
+                    calleeName,
+                    args
+            );
+
+            if (fn == null) {
+                ctx.error("No matching overload for function call '"
+                        + formatCallSignature(
+                                namespace.name + "::" + calleeName,
+                                argTypes
+                        )
+                        + "'");
+
+                FunctionSymbol fallbackFn = new FunctionSymbol(
+                        namespace.name,
+                        calleeName,
                         List.of(),
                         FALLBACK_TYPE,
                         false

@@ -1,0 +1,10 @@
+// Second half of the import cycle: imports a.fr, which already
+// imported this file.
+
+import a
+
+int32_t bBase = 40
+
+func bValue() -> int32_t {
+    return bBase + 2
+}

@@ -6,9 +6,55 @@ Current valid top-level items are:
 
 - struct declarations;
 - global variable declarations;
-- function declarations.
+- function declarations;
+- import directives;
+- namespace declarations.
 
-Struct declarations are described in full in [Structs](24-structs.md).
+Struct declarations are described in full in [Structs](24-structs.md). Import directives are described in full in [Source Files](02-source-files.md).
+
+## Namespaces
+
+A namespace groups struct, global variable, and function declarations under a qualified name:
+
+```franko
+namespace util {
+    struct Point {
+        int32_t x = 1
+        int32_t y = 2
+    }
+
+    int32_t offset = 100
+
+    func doubleIt(int32_t v) -> int32_t {
+        return v + v + offset
+    }
+}
+```
+
+A namespace body may contain only struct declarations, global variable declarations, and function declarations. Imports, executable statements, and nested namespaces are not allowed inside a namespace body.
+
+The same namespace may be declared more than once, in the same file or across imported files; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
+
+### Qualified References
+
+Namespace members are referenced with `::`:
+
+```franko
+util::Point p
+print(util::offset)
+print(util::doubleIt(5))
+util::offset = 5
+```
+
+A qualified name always resolves strictly inside the named namespace; there is no fallback to the global namespace. More than one `::` level (for example `a::b::c`) is rejected while nested namespaces are unsupported.
+
+### Unqualified References
+
+Inside a namespace, an unqualified name resolves in that namespace first, then falls back to the global namespace. Outside any namespace, only the global namespace is visible.
+
+### Entry Point
+
+The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error.
 
 Executable statements are **not** currently allowed in global scope.
 

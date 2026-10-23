@@ -2,6 +2,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 // ================= VISITOR =================
 
@@ -194,7 +195,113 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.globalVarDecl());
         }
 
+        if (ctx.importDecl() != null) {
+            return visit(ctx.importDecl());
+        }
+
+        if (ctx.namespaceDecl() != null) {
+            return visit(ctx.namespaceDecl());
+        }
+
         throw new RuntimeException("Unknown topLevelItem: " + ctx.getText());
+    }
+
+    // ============================================================
+    // Namespaces
+    // ============================================================
+
+    @Override
+    public ASTNode visitNamespaceDecl(FrankoParser.NamespaceDeclContext ctx) {
+        String name = ctx.IDENTIFIER().getText();
+
+        List<ASTNode> items = new ArrayList<>();
+
+        for (FrankoParser.NamespaceItemContext itemCtx : ctx.namespaceItem()) {
+            ASTNode node = visit(itemCtx);
+            if (node != null) {
+                items.add(node);
+            }
+        }
+
+        return new NamespaceNode(name, items);
+    }
+
+    @Override
+    public ASTNode visitNamespaceItem(FrankoParser.NamespaceItemContext ctx) {
+        if (ctx.functionDecl() != null) {
+            return visit(ctx.functionDecl());
+        }
+
+        if (ctx.structDecl() != null) {
+            return visit(ctx.structDecl());
+        }
+
+        if (ctx.globalVarDecl() != null) {
+            return visit(ctx.globalVarDecl());
+        }
+
+        throw new RuntimeException("Unknown namespaceItem: " + ctx.getText());
+    }
+
+    // ============================================================
+    // Qualified names
+    // ============================================================
+
+    /**
+     * Builds the ordered segment list of a qualified name:
+     *
+     *   util::Point    -> ["util", "Point"]
+     *   a::b::c        -> ["a", "b", "c"]
+     */
+    private List<String> qualifiedNameSegments(FrankoParser.QualifiedNameContext ctx) {
+        List<String> segments = new ArrayList<>();
+
+        for (TerminalNode identifier : ctx.IDENTIFIER()) {
+            segments.add(identifier.getText());
+        }
+
+        return segments;
+    }
+
+    @Override
+    public ASTNode visitQualifiedStructType(FrankoParser.QualifiedStructTypeContext ctx) {
+        List<String> segments = qualifiedNameSegments(ctx.qualifiedName());
+
+        /*
+         * The last segment is the struct name; everything before it names
+         * the namespace it lives in.
+         */
+        List<String> namespaceSegments =
+                new ArrayList<>(segments.subList(0, segments.size() - 1));
+
+        String name = segments.get(segments.size() - 1);
+
+        return new StructTypeNode(namespaceSegments, name);
+    }
+
+    // ============================================================
+    // Imports
+    // ============================================================
+
+    @Override
+    public ASTNode visitImportDecl(FrankoParser.ImportDeclContext ctx) {
+        FrankoParser.ImportPathContext pathCtx = ctx.importPath();
+
+        if (pathCtx.STRING_LITERAL() != null) {
+            String rawText = pathCtx.STRING_LITERAL().getText();
+
+            /*
+             * rawText still carries the surrounding quotes. Strip them and
+             * decode Franko's supported escape sequences so the resolver
+             * works with the actual path text.
+             */
+            String rawContent = rawText.substring(1, rawText.length() - 1);
+            String decoded = StringLiteralDecoder.decodeRawContent(rawContent);
+
+            return new ImportNode(decoded, true);
+        }
+
+        return new ImportNode(pathCtx.IMPORT_NAME().getText(), false);
     }
 
     // ============================================================
@@ -518,7 +625,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitStructType(FrankoParser.StructTypeContext ctx) {
-        return new StructTypeNode(ctx.IDENTIFIER().getText());
+        return new StructTypeNode(List.of(), ctx.IDENTIFIER().getText());
     }
 
     // ============================================================
@@ -583,6 +690,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitLvalueAtom(FrankoParser.LvalueAtomContext ctx) {
         if (ctx.IDENTIFIER() != null) {
             return new VarNode(ctx.IDENTIFIER().getText());
+        }
+
+        if (ctx.qualifiedName() != null) {
+            return new QualifiedNameNode(
+                    qualifiedNameSegments(ctx.qualifiedName())
+            );
         }
 
         if (ctx.derefExpr() != null) {
@@ -826,6 +939,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.IDENTIFIER() != null) {
             return new VarNode(ctx.IDENTIFIER().getText());
+        }
+
+        if (ctx.qualifiedName() != null) {
+            return new QualifiedNameNode(
+                    qualifiedNameSegments(ctx.qualifiedName())
+            );
         }
 
         if (ctx.getAddrExpr() != null) {

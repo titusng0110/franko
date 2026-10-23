@@ -92,20 +92,23 @@ Franko keeps struct type names, variable names, and function names in separate n
 
 | Franko construct | Generated C++ name |
 |---|---|
-| struct type `X` | `struct_X` |
-| variable `x` (local, global, parameter, heap) | `var_x` |
-| function `f` | `func_f` |
+| struct type `X` | `STRUCT_X` |
+| variable `x` (local, global, parameter, heap) | `VAR_x` |
+| function `f` | `FUNC_f` |
+| namespace `n` | `NS_n` |
 | the entry-point function `main` | `main` (unprefixed: the generated C++ entry point IS the Franko `main`) |
 
-So a declaration `X s;` is emitted as `struct_X var_s;`.
+So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
 Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
+
+Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes `NS_n::FUNC_f`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
 
 When a variable or function shares its name with a declared struct, the compiler emits a **warning** during semantic analysis (the program still compiles):
 
 ```text
 ==== Warnings ====
-  - Variable 'X' shares its name with struct 'X'; generated C++ uses var_X for the variable and struct_X for the struct type
+  - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
 ```
 
-Struct definitions are emitted after a forward-declaration block (`struct struct_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
+Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.

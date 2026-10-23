@@ -1,0 +1,9 @@
+// Right arm of the diamond: imports shared.fr again.
+
+import shared
+
+int32_t rightBase = 3
+
+func rightValue() -> int32_t {
+    return rightBase * sharedValue
+}

@@ -1,0 +1,10 @@
+// Namespace feature test: second declaration of namespace util.
+//
+// Repeating a namespace declaration merges contents, so this function
+// can call util::doubleIt (declared in lib/util.fr) unqualified.
+
+namespace util {
+    func tripleIt(int32_t v) -> int32_t {
+        return doubleIt(v) + v
+    }
+}

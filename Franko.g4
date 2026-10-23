@@ -2,6 +2,22 @@ grammar Franko;
 
 @lexer::members {
     private int groupingDepth = 0;
+
+    // True between the 'import' keyword and its import path token.
+    // Used by the IMPORT_NAME predicate below; reset by every other
+    // emitted token so it can never leak into ordinary code.
+    private boolean expectingImportPath = false;
+
+    @Override
+    public Token emit() {
+        if (_type == IMPORT) {
+            expectingImportPath = true;
+        } else if (_type != WS && _type != NEWLINE && _type != COMMENT) {
+            expectingImportPath = false;
+        }
+
+        return super.emit();
+    }
 }
 
 // ---------- PARSER ----------
@@ -14,6 +30,118 @@ topLevelItem
     : structDecl
     | functionDecl
     | globalVarDecl
+    | importDecl
+    | namespaceDecl
+    ;
+
+// ---------- NAMESPACES ----------
+//
+// Namespace syntax:
+//
+//   namespace util {
+//       struct Point { int32_t x }
+//       int32_t offset = 100
+//       func doubleIt(int32_t v) -> int32_t { ... }
+//   }
+//
+// A namespace body may contain only:
+//
+//   - struct declarations,
+//   - global variable declarations,
+//   - function declarations.
+//
+// Imports, executable statements, and nested namespaces are not
+// allowed inside a namespace body; namespaceItem makes them syntax
+// errors rather than semantic ones.
+//
+// The same namespace may be declared more than once, in the same file
+// or across imported files; its contents merge into one namespace.
+// Duplicate symbols inside the merged namespace are rejected by the
+// semantic analyzer exactly like global duplicates.
+//
+// Members are referenced with the '::' qualifier:
+//
+//   util::Point p
+//   print(util::offset)
+//   print(util::doubleIt(5))
+//
+// Inside namespace util, an unqualified name resolves in util first,
+// then falls back to the global namespace. A qualified name always
+// resolves strictly inside the named namespace.
+//
+// Nested namespaces are not supported yet; the grammar accepts any
+// qualified shape (a::b::c) and the semantic analyzer rejects more
+// than one '::' level, so adding nesting later does not change the
+// grammar.
+namespaceDecl
+    : NAMESPACE IDENTIFIER separators* LBRACE separators* (namespaceItem separators*)* RBRACE
+    ;
+
+namespaceItem
+    : structDecl
+    | functionDecl
+    | globalVarDecl
+    ;
+
+// A qualified name requires at least one '::', so it can never be
+// ambiguous with a plain IDENTIFIER reference.
+qualifiedName
+    : IDENTIFIER (COLONCOLON IDENTIFIER)+
+    ;
+
+// ---------- IMPORTS ----------
+//
+// Import syntax:
+//
+//   import importPath
+//
+// importPath is either:
+//
+//   - a STRING_LITERAL, e.g.:
+//       import "util"
+//       import "lib/util"
+//       import "lib/util.fr"
+//       import "./lib/util"
+//       import "../shared/util"
+//
+//   - an IMPORT_NAME, e.g.:
+//       import util
+//       import lib/util
+//
+// IMPORT_NAME characters are 0-9, A-Z, a-z, and underscore, with '/'
+// permitted only between path segments (not first, not last).
+//
+// The lexer tracks that a path is expected after 'import' (see the
+// expectingImportPath flag and IMPORT_NAME rule). This keeps leading
+// digits part of the path name (import 123abc is one IMPORT_NAME)
+// instead of an INT_LITERAL followed by garbage, and it makes malformed
+// paths such as /abc or abc/ a syntax error at the SLASH token.
+//
+// Path resolution (performed by ImportResolver):
+//
+//   - importName form appends ./ before and .fr after:
+//       import lib/abc   ->  ./lib/abc.fr
+//
+//   - stringLiteral form prepends ./ when no directory prefix
+//     (./, ../, /) is present, appends .fr when the file name has no
+//     extension, and rejects non-.fr extensions.
+//
+// Paths are resolved relative to the directory of the file containing
+// the import statement. Import paths always use the POSIX form with
+// '/' separators; on Windows, a '/'-prefixed string literal path is
+// translated to the current drive when it reaches the filesystem (see
+// ImportResolver).
+//
+// The import statement is a top-level item so it may appear anywhere at
+// global scope, mixed freely with struct, function, and global variable
+// declarations.
+importDecl
+    : IMPORT importPath
+    ;
+
+importPath
+    : STRING_LITERAL
+    | IMPORT_NAME
     ;
 
 // ---------- STRUCTS ----------
@@ -341,6 +469,7 @@ lvalue
 
 lvalueAtom
     : IDENTIFIER
+    | qualifiedName
     | derefExpr
     | LPAREN lvalue RPAREN
     ;
@@ -450,6 +579,7 @@ primary
     | stringLiteral
     | nullLiteral
     | IDENTIFIER
+    | qualifiedName
     | getAddrExpr
     | derefExpr
     | LPAREN expr RPAREN
@@ -764,6 +894,7 @@ type
     | UINT32_T                                 # Uint32Type
     | UINT64_T                                 # Uint64Type
     | IDENTIFIER                               # StructType
+    | qualifiedName                            # QualifiedStructType
     | ARRAY LT type GT                         # DynamicArrayType
     | ARRAY LT type COMMA constExpr GT         # StaticArrayType
     | NDARRAY LT type COMMA constExprList GT   # NdArrayType
@@ -771,6 +902,34 @@ type
     ;
 
 // ---------- LEXER ----------
+
+// ---------- IMPORT PATH NAMES ----------
+//
+// Import path name, e.g.:
+//
+//   import util
+//   import lib/util
+//   import 123abc
+//
+// The predicate gates this rule so it is viable only directly after the
+// 'import' keyword; everywhere else the ordinary identifier and literal
+// rules apply unchanged.
+//
+// Structure:
+//   - one or more name characters, then optionally ('/' segment)*
+//   - '/' may only appear between segments, so /abc and abc/ cannot
+//     lex as a single IMPORT_NAME (they become syntax errors)
+//   - digits are allowed in any position, including first
+//
+// This rule is deliberately placed before every keyword, identifier,
+// and literal rule: while expectingImportPath is true, ties on maximal
+// length (import abc, import 123, import func) must resolve to
+// IMPORT_NAME, and keyword-looking path segments are valid file names.
+// When the predicate is false the rule is never viable, so ordinary
+// code is unaffected.
+IMPORT_NAME
+    : {expectingImportPath}? [0-9A-Za-z_]+ ('/' [0-9A-Za-z_]+)*
+    ;
 
 // Function / declaration keywords
 FUNC   : 'func' ;
@@ -790,6 +949,15 @@ ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
 DEREF   : 'deref' ;
 NULL    : 'null' ;
+
+// 'import' keyword. The emit() override in @lexer::members marks that
+// the next token must be the import path, which activates the
+// IMPORT_NAME rule below.
+IMPORT  : 'import' ;
+
+// Namespaces
+NAMESPACE     : 'namespace' ;
+COLONCOLON    : '::' ;
 
 // Primitive / type keywords
 INT8_T   : 'int8_t' ;

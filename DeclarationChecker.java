@@ -88,7 +88,7 @@ public class DeclarationChecker {
 
         checkDeclaredType(
             node.symbol.type,
-            "Variable '" + node.symbol.name + "'"
+            "Variable '" + node.symbol.qualifiedName() + "'"
         );
 
         if (node.foldedConstInitializer != null) {
@@ -104,7 +104,7 @@ public class DeclarationChecker {
 
         checkDeclaredType(
             new SemanticStructType(node.symbol),
-            "Struct '" + node.symbol.name + "'"
+            "Struct '" + node.symbol.qualifiedName() + "'"
         );
     }
 
@@ -237,7 +237,12 @@ public class DeclarationChecker {
             return;
         }
 
-        String structName = struct.structSymbol.name;
+        /*
+         * Keyed by qualified name: different namespaces may declare
+         * structs with the same simple name, and they are distinct
+         * types with independent field graphs.
+         */
+        String structName = struct.structSymbol.qualifiedName();
 
         StructWalkState state = structWalkStates.getOrDefault(
             structName,
@@ -347,7 +352,7 @@ public class DeclarationChecker {
                     primitive.kind
             )) {
                 diagnostics.error("Variable '"
-                    + node.symbol.name
+                    + node.symbol.qualifiedName()
                     + "' initializer value "
                     + node.foldedConstInitializer
                     + " does not fit in "
@@ -358,7 +363,7 @@ public class DeclarationChecker {
         }
 
         diagnostics.error("Variable '"
-            + node.symbol.name
+            + node.symbol.qualifiedName()
             + "' has an initializer, but only primitive globals can have initializers");
     }
 

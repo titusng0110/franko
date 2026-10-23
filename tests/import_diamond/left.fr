@@ -1,0 +1,9 @@
+// Left arm of the diamond: imports shared.fr.
+
+import shared
+
+int32_t leftBase = 10
+
+func leftValue() -> int32_t {
+    return leftBase + sharedValue
+}

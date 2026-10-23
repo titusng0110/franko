@@ -37,7 +37,9 @@ Franko is a small statically typed language with:
   - `arr.memset(value)` and `arr.memset(value, start, count)`;
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
-- array initializer lists as array element assignment sugar.
+- array initializer lists as array element assignment sugar;
+- imports of other source files (see [Source Files](02-source-files.md));
+- namespaces with `::`-qualified references (see [Program Structure](03-program-structure.md)).
 
 Franko currently does **not** implement:
 
@@ -47,7 +49,7 @@ Franko currently does **not** implement:
 - function pointers;
 - general methods (only the built-in array intrinsics use member-call syntax);
 - generics;
-- imports/modules;
+- nested namespaces;
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));

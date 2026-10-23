@@ -1,0 +1,91 @@
+// ============================================================
+// Franko namespace feature test
+// ============================================================
+//
+// Exercises:
+//
+//   - namespace declarations holding structs, globals, and functions
+//   - qualified struct types:   util::Point
+//   - qualified variables:      util::offset
+//   - qualified calls:          util::doubleIt(5)
+//   - unqualified lookup inside a namespace (own namespace first,
+//     then global fallback)
+//   - merging repeated namespace declarations across imported files
+//   - cross-namespace struct fields by value
+//
+// Expected output is in main.expected.
+// ============================================================
+
+import lib/util
+import merge
+
+// A global-namespace struct used by value inside a namespace struct.
+struct Base {
+    int32_t seed = 9
+}
+
+// Unqualified inside namespace math: math::scale shadows nothing, and
+// Base resolves via the global fallback.
+namespace math {
+    int32_t scale = 3
+
+    struct Scaled {
+        Base base
+        int32_t factor = 2
+    }
+
+    func scaleSeed() -> int32_t {
+        Base b
+        return b.seed + scale
+    }
+}
+
+// A second namespace declaring a struct with the same simple name as
+// util::Point. Same-named structs in different namespaces are distinct
+// types, and a by-value field may reference util::Point.
+namespace other {
+    struct Point {
+        int32_t z = 4
+        util::Point inner
+    }
+}
+
+int32_t sharedSeed = 5
+
+func main() -> int32_t {
+    // Qualified struct type at global scope.
+    util::Point p
+    print(p.x)
+    print(p.y)
+
+    // Qualified variable assignment and references.
+    print(util::offset)
+    util::offset = 7
+    print(util::offset)
+    util::offset = 100
+    print(util::doubleIt(10))
+    print(util::makePointSum())
+
+    // Merged namespace member from merge.fr.
+    print(util::tripleIt(1))
+
+    // Namespace struct used by value at global scope.
+    math::Scaled s
+    print(s.factor)
+    print(s.base.seed)
+
+    // Unqualified fallback inside a namespace: scaleSeed sees
+    // math::scale and global Base.
+    print(math::scaleSeed())
+
+    // Global namespace still works unqualified.
+    print(sharedSeed)
+
+    // Same-named struct in another namespace, with a by-value field
+    // pointing at util::Point.
+    other::Point o
+    print(o.z)
+    print(o.inner.x)
+
+    return 0
+}

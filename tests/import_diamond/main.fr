@@ -1,0 +1,23 @@
+// ============================================================
+// Franko diamond import test
+// ============================================================
+//
+// Both left.fr and right.fr import shared.fr. shared.fr must be
+// compiled exactly once: importing it twice would report its symbols
+// as duplicate declarations.
+//
+// Expected output is in main.expected.
+// ============================================================
+
+import left
+import right
+
+func main() -> int32_t {
+    print(sharedValue)
+    print(leftValue() + rightValue())
+
+    // shared.fr symbols are visible directly in the root program too.
+    print(sharedDouble(5))
+
+    return 0
+}

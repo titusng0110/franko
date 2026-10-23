@@ -43,6 +43,15 @@ public final class ArrayLowerer {
             return null;
         }
 
+        /*
+         * Qualified callees (ns::f) are never array intrinsics and never
+         * dynamic-array init shorthand, so skip straight to ordinary
+         * overload resolution.
+         */
+        if (call.callee instanceof QualifiedNameNode) {
+            return null;
+        }
+
         if (call.callee instanceof MemberAccessNode mac) {
             SemanticArrayIntrinsicCallNode intrinsic =
                     tryLowerMemberIntrinsic(call, mac);

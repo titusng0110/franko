@@ -211,6 +211,92 @@ class GlobalVarDeclNode extends ASTNode {
 }
 
 // ============================================================
+// Imports
+// ============================================================
+//
+// import importPath
+//
+// This node is an import *directive*, not a symbol declaration.
+//
+// It exists only in the raw parser AST. The ImportResolver consumes it
+// before desugaring: it loads and parses the referenced file and
+// splices that file's top-level items into the ProgramNode in place of
+// this node. An ImportNode must therefore never reach the Desugarer.
+//
+// rawPathText holds the path exactly as needed for resolution:
+//
+//   - for an importName path (isStringLiteral == false), the raw
+//     token text, e.g. "lib/abc"
+//
+//   - for a stringLiteral path (isStringLiteral == true), the escape-
+//     decoded literal content without the surrounding quotes, e.g.
+//     "lib/util" for the source text "lib/util"
+//
+// Keeping the original path form (instead of a pre-resolved filename)
+// leaves a clean seam for namespace-qualified imports in a later
+// update.
+class ImportNode extends ASTNode {
+    String rawPathText;
+    boolean isStringLiteral;
+
+    ImportNode(String rawPathText, boolean isStringLiteral) {
+        this.rawPathText = rawPathText;
+        this.isStringLiteral = isStringLiteral;
+    }
+}
+
+// ============================================================
+// Namespaces
+// ============================================================
+//
+// namespace util {
+//     struct Point { ... }
+//     int32_t offset = 100
+//     func doubleIt(...) -> ... { ... }
+// }
+//
+// A namespace groups struct, global variable, and function
+// declarations under a qualified name. The grammar restricts the body
+// to those three item kinds, so imports, executable statements, and
+// nested namespaces never reach the AST.
+//
+// The same namespace may be declared more than once (same file or
+// across imported files); the semantic analyzer merges the contents.
+class NamespaceNode extends ASTNode {
+    String name;
+    List<ASTNode> items;
+
+    NamespaceNode(String name, List<ASTNode> items) {
+        this.name = name;
+        this.items = items;
+    }
+}
+
+// ============================================================
+// Qualified name references
+// ============================================================
+//
+// ns::name
+// a::b::c
+//
+// Produced wherever a qualified name is syntactically valid:
+//
+//   - struct type positions:    addr<util::Point>
+//   - primary expressions:      util::offset
+//   - lvalue positions:         util::offset = 1
+//   - call callees:             util::doubleIt(5)
+//
+// Nested namespaces are not supported yet, so a segment list longer
+// than two is rejected by the semantic analyzer.
+class QualifiedNameNode extends ASTNode {
+    List<String> segments;
+
+    QualifiedNameNode(List<String> segments) {
+        this.segments = segments;
+    }
+}
+
+// ============================================================
 // Declarations
 // ============================================================
 
@@ -378,9 +464,18 @@ class AddrTypeNode extends TypeNode {
 // Semantic analysis must verify that the identifier actually names
 // a declared struct.
 class StructTypeNode extends TypeNode {
+    /*
+     * Namespace the struct type is qualified with, e.g. ["util"] for
+     * util::Point. Empty for an unqualified struct type name.
+     *
+     * More than one segment parses but is rejected by the semantic
+     * analyzer while nested namespaces are unsupported.
+     */
+    List<String> namespaceSegments;
     String name;
 
-    StructTypeNode(String name) {
+    StructTypeNode(List<String> namespaceSegments, String name) {
+        this.namespaceSegments = namespaceSegments;
         this.name = name;
     }
 }

@@ -302,7 +302,12 @@ final class SemanticStructType extends SemanticType {
 
     @Override
     public String describe() {
-        return structSymbol.name;
+        /*
+         * Qualified: structs with the same simple name in different
+         * namespaces are distinct types, and equality fallbacks and
+         * diagnostics that use describe() must keep them apart.
+         */
+        return structSymbol.qualifiedName();
     }
 
     @Override

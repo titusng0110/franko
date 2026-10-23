@@ -49,6 +49,27 @@ class SemanticProgramNode extends SemanticASTNode {
     }
 }
 
+/**
+ * Semantic namespace declaration.
+ *
+ * Groups the lowered semantic items of one namespace. The namespace's
+ * symbols (structs, functions, global variables) carry the namespace
+ * name themselves; this node exists so program walkers can descend
+ * into namespace items.
+ *
+ * Multiple source declarations of the same namespace merge into one
+ * node, holding all items in declaration order.
+ */
+class SemanticNamespaceNode extends SemanticASTNode {
+    public final String name;
+    public final List<SemanticASTNode> items;
+
+    public SemanticNamespaceNode(String name, List<SemanticASTNode> items) {
+        this.name = Objects.requireNonNull(name);
+        this.items = List.copyOf(items);
+    }
+}
+
 class SemanticBlockNode extends SemanticStmtNode {
     public final List<SemanticStmtNode> statements;
 

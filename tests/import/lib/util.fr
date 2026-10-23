@@ -1,0 +1,24 @@
+// Utilities for the import test.
+//
+// Demonstrates the importName form: `import deep/extra` resolves to
+// ./deep/extra.fr relative to this file's directory.
+//
+// A struct, a global variable, and functions exported to the importer.
+
+import deep/extra
+
+struct Point {
+    int32_t x = 1
+    int32_t y = 2
+}
+
+int32_t offset = 100
+
+func doubleIt(int32_t v) -> int32_t {
+    return v + v
+}
+
+func makePointSum() -> int32_t {
+    Point p
+    return p.x + p.y + offset + deepGlobal
+}
