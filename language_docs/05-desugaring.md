@@ -100,11 +100,12 @@ so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along t
 
 ## 5.6 Braceless Control-Flow Bodies
 
-`if` and `while` bodies may be a single statement without braces:
+`if`, `while`, and `for` bodies may be a single statement without braces:
 
 ```franko
 if (x) print(x);
 while (i < 10) i = i + 1;
+for (; i < 10; i = i + 1) print(i);
 ```
 
 During desugaring, a braceless body is wrapped in an implicit block:
@@ -112,6 +113,36 @@ During desugaring, a braceless body is wrapped in an implicit block:
 ```franko
 if (x) { print(x); }
 while (i < 10) { i = i + 1; }
+for (; i < 10; i = i + 1) { print(i); }
 ```
 
-This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`. See [Statements](18-statements.md).
+This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](18-statements.md).
+
+## 5.7 For Loop Desugaring
+
+A `for` loop is lowered to declaration/assignment statements and a `while` loop:
+
+```franko
+for (int32_t i = 0; i < n; i = i + 1) {
+    print(i)
+}
+```
+
+becomes:
+
+```franko
+{
+    int32_t i;
+    i = 0;
+    while (i < n) {
+        print(i);
+        i = i + 1;
+    }
+}
+```
+
+The whole loop becomes a block, so a loop variable declared in `init` is scoped to the loop and is not visible after it.
+
+The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` is appended to the end of the loop body so it runs on every iteration, including the last. Franko has no `break` or `continue`, so this lowering is exact.
+
+The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](18-statements.md).

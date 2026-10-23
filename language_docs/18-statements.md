@@ -7,6 +7,7 @@ Franko supports the following statements inside function bodies and blocks:
 - blocks;
 - `if`;
 - `while`;
+- `for`;
 - `return`;
 - `print`;
 - `del`;
@@ -35,13 +36,68 @@ The condition must be an integer expression.
 
 Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `while`. See [Desugaring](05-desugaring.md).
 
-## 18.4 Return Statements
+## 18.4 For Statements
+
+`for` loops use C-style headers:
+
+```franko
+for (init; condition; update) {
+    body
+}
+```
+
+- `init` and `update` are optional simple statements (declarations, assignments, expression statements, and similar);
+- the condition is required and must be an integer expression.
+
+Valid:
+
+```franko
+for (int32_t i = 0; i < 5; i = i + 1) {
+    print(i)
+}
+
+for (; i < 5; i = i + 1) {
+    print(i)
+}
+
+for (i = 0; i < 5;) {
+    print(i)
+    i = i + 1
+}
+```
+
+The loop is desugared before semantic analysis:
+
+```franko
+for (int32_t i = 0; i < 5; i = i + 1) {
+    print(i)
+}
+```
+
+becomes:
+
+```franko
+{
+    int32_t i;
+    i = 0;
+    while (i < 5) {
+        print(i);
+        i = i + 1;
+    }
+}
+```
+
+The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. There is no `break` or `continue`; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
+
+Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](05-desugaring.md).
+
+## 18.5 Return Statements
 
 A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 18.5 Print Statements
+## 18.6 Print Statements
 
 `print` is a dedicated statement, not a function and not a member method:
 
@@ -64,7 +120,7 @@ Array initializer lists and string literals are not expressions and cannot be pr
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
 
-## 18.6 Expression Statements
+## 18.7 Expression Statements
 
 Function calls are commonly used as expression statements.
 

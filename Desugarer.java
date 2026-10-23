@@ -288,6 +288,11 @@ public class Desugarer {
             return;
         }
 
+        if (stmt instanceof ForNode) {
+            out.add(desugarForStmt((ForNode) stmt));
+            return;
+        }
+
         out.add(desugarStmt(stmt));
     }
 
@@ -446,6 +451,10 @@ public class Desugarer {
             );
         }
 
+        if (stmt instanceof ForNode) {
+            return desugarForStmt((ForNode) stmt);
+        }
+
         if (stmt instanceof ExprStmtNode) {
             ExprStmtNode n = (ExprStmtNode) stmt;
             return new ExprStmtNode(desugarExpr(n.expr));
@@ -490,13 +499,13 @@ public class Desugarer {
     }
 
     /**
-     * Desugars a controlled statement, i.e. the body of an if/while.
+     * Desugars a controlled statement, i.e. the body of an if/while/for.
      *
      * Single-statement bodies are wrapped in an implicit block so that:
      *
      *   - braceless and braced bodies scope identically,
      *   - declarations inside a braceless body are scoped to that body
-     *     and are not visible after the if/while.
+     *     and are not visible after the if/while/for.
      *
      * Example:
      *
@@ -517,6 +526,77 @@ public class Desugarer {
         wrapped.add(lowered);
 
         return new BlockNode(wrapped);
+    }
+
+    /**
+     * Lowers a for loop into an equivalent block + while loop.
+     *
+     *   for (init; condition; update) body
+     *
+     * becomes:
+     *
+     *   {
+     *       init
+     *       while (condition) {
+     *           body
+     *           update
+     *       }
+     *   }
+     *
+     * The wrapping block scopes the loop variable declared by init so it
+     * is not visible after the loop.
+     *
+     * The init and update statements are lowered through the ordinary
+     * statement machinery, so declaration initializer sugar inside the
+     * header expands normally:
+     *
+     *   for (int32_t i = 0; i < n; i = i + 1) { print(i) }
+     *
+     * becomes:
+     *
+     *   {
+     *       int32_t i;
+     *       i = 0;
+     *       while (i < n) {
+     *           print(i)
+     *           i = i + 1;
+     *       }
+     *   }
+     *
+     * The update is appended to the end of the loop body so it runs on
+     * every iteration, including the last. Franko has no break/continue,
+     * so this placement is exact.
+     *
+     * desugarControlledStmt guarantees the body lowers to a BlockNode,
+     * which is required to append the update statements.
+     */
+    private ASTNode desugarForStmt(ForNode n) {
+        List<ASTNode> outer = new ArrayList<>();
+
+        if (n.init != null) {
+            appendDesugaredStmt(n.init, outer);
+        }
+
+        ASTNode loweredBody = desugarControlledStmt(n.body);
+
+        if (!(loweredBody instanceof BlockNode)) {
+            throw new RuntimeException(
+                "Internal desugarer error: for-loop body did not lower to a block"
+            );
+        }
+
+        BlockNode bodyBlock = (BlockNode) loweredBody;
+
+        if (n.update != null) {
+            appendDesugaredStmt(n.update, bodyBlock.statements);
+        }
+
+        outer.add(new WhileNode(
+            desugarExpr(n.condition),
+            bodyBlock
+        ));
+
+        return new BlockNode(outer);
     }
 
     // ============================================================

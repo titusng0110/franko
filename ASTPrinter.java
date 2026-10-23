@@ -187,6 +187,30 @@ public class ASTPrinter {
             print(n.body, indent + 2);
         }
 
+        else if (node instanceof ForNode n) {
+            System.out.println(pad + "For");
+
+            System.out.println(pad + "  init:");
+            if (n.init == null) {
+                System.out.println(pad + "    <none>");
+            } else {
+                print(n.init, indent + 2);
+            }
+
+            System.out.println(pad + "  condition:");
+            print(n.condition, indent + 2);
+
+            System.out.println(pad + "  update:");
+            if (n.update == null) {
+                System.out.println(pad + "    <none>");
+            } else {
+                print(n.update, indent + 2);
+            }
+
+            System.out.println(pad + "  body:");
+            print(n.body, indent + 2);
+        }
+
         else if (node instanceof DelNode n) {
             System.out.println(pad + "Delete: " + n.name);
         }

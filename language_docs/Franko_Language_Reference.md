@@ -77,6 +77,7 @@ Franko is a small statically typed language with:
 - blocks;
 - `if`;
 - `while`;
+- `for`;
 - `return`;
 - `print`;
 - `del`;
@@ -109,7 +110,7 @@ Franko currently does **not** implement:
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
-- `switch`, `do`/`do-while`, `for`, `break`, and `continue`;
+- `switch`, `do`/`do-while`, `break`, and `continue`;
 - multiple declarators in one declaration (`int a, b;`).
 
 Franko currently targets C++14.
@@ -184,6 +185,7 @@ Invalid global-scope items include:
 - function calls;
 - `if`;
 - `while`;
+- `for`;
 - `return`;
 - `del`;
 - blocks;
@@ -367,11 +369,12 @@ so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along t
 
 ## 5.6 Braceless Control-Flow Bodies
 
-`if` and `while` bodies may be a single statement without braces:
+`if`, `while`, and `for` bodies may be a single statement without braces:
 
 ```franko
 if (x) print(x);
 while (i < 10) i = i + 1;
+for (; i < 10; i = i + 1) print(i);
 ```
 
 During desugaring, a braceless body is wrapped in an implicit block:
@@ -379,9 +382,39 @@ During desugaring, a braceless body is wrapped in an implicit block:
 ```franko
 if (x) { print(x); }
 while (i < 10) { i = i + 1; }
+for (; i < 10; i = i + 1) { print(i); }
 ```
 
-This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`. See [Statements](18-statements.md).
+This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](18-statements.md).
+
+## 5.7 For Loop Desugaring
+
+A `for` loop is lowered to declaration/assignment statements and a `while` loop:
+
+```franko
+for (int32_t i = 0; i < n; i = i + 1) {
+    print(i)
+}
+```
+
+becomes:
+
+```franko
+{
+    int32_t i;
+    i = 0;
+    while (i < n) {
+        print(i);
+        i = i + 1;
+    }
+}
+```
+
+The whole loop becomes a block, so a loop variable declared in `init` is scoped to the loop and is not visible after it.
+
+The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` is appended to the end of the loop body so it runs on every iteration, including the last. Franko has no `break` or `continue`, so this lowering is exact.
+
+The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](18-statements.md).
 
 ---
 
@@ -1040,7 +1073,9 @@ Comparisons and logical operators always produce `uint8_t` regardless of operand
 
 # 17. Conditions
 
-`if` and `while` conditions must be integer expressions.
+`if`, `while`, and `for` conditions must be integer expressions.
+
+`for` conditions are checked after desugaring, when the loop has been lowered to a `while` loop. See [Statements](18-statements.md).
 
 Valid:
 
@@ -1091,6 +1126,7 @@ Franko supports the following statements inside function bodies and blocks:
 - blocks;
 - `if`;
 - `while`;
+- `for`;
 - `return`;
 - `print`;
 - `del`;
@@ -1119,13 +1155,68 @@ The condition must be an integer expression.
 
 Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `while`. See [Desugaring](05-desugaring.md).
 
-## 18.4 Return Statements
+## 18.4 For Statements
+
+`for` loops use C-style headers:
+
+```franko
+for (init; condition; update) {
+    body
+}
+```
+
+- `init` and `update` are optional simple statements (declarations, assignments, expression statements, and similar);
+- the condition is required and must be an integer expression.
+
+Valid:
+
+```franko
+for (int32_t i = 0; i < 5; i = i + 1) {
+    print(i)
+}
+
+for (; i < 5; i = i + 1) {
+    print(i)
+}
+
+for (i = 0; i < 5;) {
+    print(i)
+    i = i + 1
+}
+```
+
+The loop is desugared before semantic analysis:
+
+```franko
+for (int32_t i = 0; i < 5; i = i + 1) {
+    print(i)
+}
+```
+
+becomes:
+
+```franko
+{
+    int32_t i;
+    i = 0;
+    while (i < 5) {
+        print(i);
+        i = i + 1;
+    }
+}
+```
+
+The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. There is no `break` or `continue`; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
+
+Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](05-desugaring.md).
+
+## 18.5 Return Statements
 
 A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 18.5 Print Statements
+## 18.6 Print Statements
 
 `print` is a dedicated statement, not a function and not a member method:
 
@@ -1148,7 +1239,7 @@ Array initializer lists and string literals are not expressions and cannot be pr
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
 
-## 18.6 Expression Statements
+## 18.7 Expression Statements
 
 Function calls are commonly used as expression statements.
 
@@ -2510,7 +2601,7 @@ print(1);          // fine
 del x;             // fine
 ```
 
-Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that depth the checker falls back to a conservative path-insensitive merge.
+Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond that depth the checker falls back to a conservative path-insensitive merge.
 
 ## 26.6 Loop Handling
 
@@ -2521,6 +2612,8 @@ Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that
 - the state after the loop merges the "zero iterations" and "one iteration" states, since a loop may execute zero times.
 
 Loop termination is not proven; the post-loop state is conservative.
+
+`for` loops are desugared to blocks and `while` loops before this pass runs, so they receive the same treatment. See [Desugaring](05-desugaring.md).
 
 ## 26.7 Address Null-State Tracking
 
@@ -2832,9 +2925,9 @@ foo("hello");
 return "hello";
 ```
 
-## 29.15 No `for` Loops, `break`, or `continue`
+## 29.15 No `break` or `continue`
 
-Only `if` and `while` control flow is implemented. There are no C-style `for` loops and no `break`/`continue` statements. There is also no `switch`, no `do`/`do-while`, and no `goto`.
+Only `if`, `while`, and `for` control flow is implemented. There is no `break` or `continue` statement, so a `for` loop cannot be exited early and its `update` always runs at the end of every body iteration. There is also no `switch`, no `do`/`do-while`, and no `goto`.
 
 ## 29.16 Global Scope Is Declaration-Only
 

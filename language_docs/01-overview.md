@@ -22,6 +22,7 @@ Franko is a small statically typed language with:
 - blocks;
 - `if`;
 - `while`;
+- `for`;
 - `return`;
 - `print`;
 - `del`;
@@ -54,7 +55,7 @@ Franko currently does **not** implement:
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
-- `switch`, `do`/`do-while`, `for`, `break`, and `continue`;
+- `switch`, `do`/`do-while`, `break`, and `continue`;
 - multiple declarators in one declaration (`int a, b;`).
 
 Franko currently targets C++14.

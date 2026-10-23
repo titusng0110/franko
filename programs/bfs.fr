@@ -20,6 +20,7 @@
 //   - nested initializer-list assignment
 //   - chained indexing: grid[r][c]
 //   - uint indexes
+//   - for loops for counted iteration
 //   - byte as uint8_t-like flag storage
 //   - logical && and ||
 //   - heap dynamic array initialization with init_zero()
@@ -162,19 +163,13 @@ func reconstructPath(addr<ndarray<byte, 12, 13>> path, addr<ndarray<uint, 12, 13
 }
 
 func printSolvedGrid(addr<ndarray<uint, 12, 13>> grid, addr<ndarray<byte, 12, 13>> path, addr<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
-    uint r = 0
-    uint c = 0
-
-    while (r < rows) {
+    for (uint r = 0; r < rows; r = r + 1) {
         deref(line).memcpy(getaddr(deref(grid)[r]))
 
-        c = 0
-        while (c < cols) {
+        for (uint c = 0; c < cols; c = c + 1) {
             if (deref(path)[r][c] != 0) {
                 deref(line)[c] = 4
             }
-
-            c = c + 1
         }
 
         if (r == startR) {
@@ -186,8 +181,6 @@ func printSolvedGrid(addr<ndarray<uint, 12, 13>> grid, addr<ndarray<byte, 12, 13
         }
 
         print(deref(line)[0], deref(line)[1], deref(line)[2], deref(line)[3], deref(line)[4], deref(line)[5], deref(line)[6], deref(line)[7], deref(line)[8], deref(line)[9], deref(line)[10], deref(line)[11], deref(line)[12])
-
-        r = r + 1
     }
 }
 

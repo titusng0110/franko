@@ -1,6 +1,6 @@
 func main() -> int {
     array<byte> str(200)
-    uint32_t i = 0
+    uint32_t i
 
     // ============================================================
     // Test 1:
@@ -21,10 +21,8 @@ func main() -> int {
     str = "Hello,\tWorld!\n\"Franko\""
 
     print(5001)
-    i = 0
-    while(i < 22) {
+    for (i = 0; i < 22; i = i + 1) {
         print(str[i])
-        i = i + 1
     }
 
     // ============================================================
@@ -50,10 +48,8 @@ func main() -> int {
     str = "你好, Franko 😭😍"
 
     print(5002)
-    i = 0
-    while(i < 23) {
+    for (i = 0; i < 23; i = i + 1) {
         print(str[i])
-        i = i + 1
     }
 
     // ============================================================
@@ -83,10 +79,8 @@ Line 2
 Line 3"
 
     print(5003)
-    i = 0
-    while(i < 20) {
+    for (i = 0; i < 20; i = i + 1) {
         print(str[i])
-        i = i + 1
     }
 
     // ============================================================
@@ -118,10 +112,8 @@ Line 3"
     str = "A\\B\"C\a\b\f\n\r\t\vZ"
 
     print(5004)
-    i = 0
-    while(i < 13) {
+    for (i = 0; i < 13; i = i + 1) {
         print(str[i])
-        i = i + 1
     }
     str.uninit()
     return 0

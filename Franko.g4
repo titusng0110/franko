@@ -137,6 +137,7 @@ statement
     : simpleStmt   # SimpleStatement
     | ifStmt       # IfStatement
     | whileStmt    # WhileStatement
+    | forStmt      # ForStatement
     | block        # BlockStatement
     ;
 
@@ -160,6 +161,38 @@ ifStmt
 
 whileStmt
     : WHILE LPAREN expr RPAREN separators* statement
+    ;
+
+// ---------- FOR ----------
+//
+// C-style counted loop:
+//
+//   for (init; condition; update) body
+//
+// Both init and update are optional simple statements:
+//
+//   for (int32_t i = 0; i < n; i = i + 1) { ... }
+//   for (; i < n; i = i + 1) { ... }
+//   for (i = 0; i < n;) { ... }
+//
+// The condition is required.
+//
+// The header is enclosed in parentheses, so the lexer suppresses
+// newlines inside it and SEMI is the only separator.
+//
+// Desugaring lowers this to an init block plus a while loop whose body
+// is followed by the update statements. See the Desugarer.
+//
+forStmt
+    : FOR LPAREN forInit? SEMI expr SEMI forUpdate? RPAREN separators* statement
+    ;
+
+forInit
+    : simpleStmt
+    ;
+
+forUpdate
+    : simpleStmt
     ;
 
 // ---------- SIMPLE STATEMENTS ----------
@@ -468,6 +501,7 @@ memberName
     | IF
     | ELSE
     | WHILE
+    | FOR
     | ADDR
     | GETADDR
     | DEREF
@@ -751,6 +785,7 @@ PRINT   : 'print' ;
 IF      : 'if' ;
 ELSE    : 'else' ;
 WHILE   : 'while' ;
+FOR     : 'for' ;
 ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
 DEREF   : 'deref' ;
