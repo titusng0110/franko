@@ -68,7 +68,7 @@ print(1);          // fine
 del x;             // fine
 ```
 
-Branch-sensitive analysis is limited to a maximum nesting depth (8). Beyond that depth the checker falls back to a conservative path-insensitive merge.
+Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond that depth the checker falls back to a conservative path-insensitive merge.
 
 ## 26.6 Loop Handling
 

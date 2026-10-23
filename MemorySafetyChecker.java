@@ -55,7 +55,7 @@ import java.util.Set;
  *   intentionally not part of this checker.
  */
 public final class MemorySafetyChecker {
-    private static final int MAX_BRANCH_DEPTH = 8;
+    private static final int MAX_BRANCH_DEPTH = 10;
 
     /*
      * Memory states for heap variables.
@@ -255,7 +255,7 @@ public final class MemorySafetyChecker {
         Arrays.fill(addrState, AddressState.MAYBE_NULL);
 
         int estimatedSnapshots =
-                Math.max(16, estimateSnapshotDemand(root, 0) + 8);
+                Math.max(2*MAX_BRANCH_DEPTH, estimateSnapshotDemand(root, 0) + MAX_BRANCH_DEPTH);
 
         snapshots = new MemoryState[estimatedSnapshots][heapCount];
         addrSnapshots = new AddressState[estimatedSnapshots][addrCount];
