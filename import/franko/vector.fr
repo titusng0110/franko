@@ -7,6 +7,13 @@
 //
 // No generics yet: this is a vector of int32_t only.
 //
+// Everything lives in namespace std. From global scope:
+//
+//   std::Vector v
+//   std::vec_init(getaddr(v), 4)
+//   std::vec_push(getaddr(v), 7)
+//   std::vec_uninit(getaddr(v))
+//
 // Storage:
 //
 //   struct Vector {
@@ -17,123 +24,126 @@
 //
 // Ownership:
 //
-//   - declare a local `Vector v` (len/cap default to 0, data empty);
-//   - call vec_init once before use;
-//   - call vec_uninit when done (frees element storage).
+//   - declare a local `std::Vector v` (len/cap default to 0,
+//     data empty);
+//   - call std::vec_init once before use;
+//   - call std::vec_uninit when done (frees element storage).
 //
 // A struct containing a dynamic array is address-only: it cannot be
 // passed or returned by value. Every operation below takes
 // addr<Vector>; call with getaddr(v).
 // ============================================================
 
-struct Vector {
-    array<int32_t> data
-    uint32_t len = 0
-    uint32_t cap = 0
-}
+namespace std {
+    struct Vector {
+        array<int32_t> data
+        uint32_t len = 0
+        uint32_t cap = 0
+    }
 
-// Allocate `capacity` slots. Returns 0 on success, -1 on failure.
-// A zero capacity (or a null vector) is rejected without touching
-// the array.
-func vec_init(addr<Vector> self, uint32_t capacity) -> int32_t {
-    if (self == null) {
-        return -1
-    }
-    if (capacity == 0) {
-        return -1
-    }
-    int32_t st = deref(self).data.init(capacity)
-    if (st != 0) {
-        return -1
-    }
-    deref(self).len = 0
-    deref(self).cap = capacity
-    return 0
-}
-
-// Push one value, growing the storage when full (4 slots first,
-// then doubling). Works even if vec_init was never called.
-// Returns 0 on success, -1 on allocation failure or null vector.
-func vec_push(addr<Vector> self, int32_t value) -> int32_t {
-    if (self == null) {
-        return -1
-    }
-    if (deref(self).len >= deref(self).cap) {
-        uint32_t newCap = 4
-        if (deref(self).cap != 0) {
-            newCap = deref(self).cap * 2
+    // Allocate `capacity` slots. Returns 0 on success, -1 on failure.
+    // A null vector or a zero capacity is rejected without touching
+    // the array.
+    func vec_init(addr<Vector> self, uint32_t capacity) -> int32_t {
+        if (self == null) {
+            return -1
         }
-        int32_t st = 0
-        if (deref(self).cap == 0) {
-            st = deref(self).data.init(newCap)
-        } else {
-            st = deref(self).data.resize(newCap)
+        if (capacity == 0) {
+            return -1
         }
+        int32_t st = deref(self).data.init(capacity)
         if (st != 0) {
             return -1
         }
-        deref(self).cap = newCap
-    }
-    deref(self).data[deref(self).len] = value
-    deref(self).len = deref(self).len + 1
-    return 0
-}
-
-// Pop the top value into `out`. Returns 0 on success, -1 when the
-// vector is empty or an address is null.
-func vec_pop(addr<Vector> self, addr<int32_t> out) -> int32_t {
-    if (self == null) {
-        return -1
-    }
-    if (out == null) {
-        return -1
-    }
-    if (deref(self).len == 0) {
-        return -1
-    }
-    deref(self).len = deref(self).len - 1
-    deref(out) = deref(self).data[deref(self).len]
-    return 0
-}
-
-// Read element `index`. The caller must ensure index < len.
-func vec_get(addr<Vector> self, uint32_t index) -> int32_t {
-    if (self == null) {
+        deref(self).len = 0
+        deref(self).cap = capacity
         return 0
     }
-    return deref(self).data[index]
-}
 
-// Write element `index`. The caller must ensure index < len.
-func vec_set(addr<Vector> self, uint32_t index, int32_t value) -> void {
-    if (self == null) {
-        return
-    }
-    deref(self).data[index] = value
-}
-
-// Number of live elements.
-func vec_len(addr<Vector> self) -> uint32_t {
-    if (self == null) {
+    // Push one value, growing the storage when full (4 slots first,
+    // then doubling). Works even if vec_init was never called.
+    // Returns 0 on success, -1 on allocation failure or null vector.
+    func vec_push(addr<Vector> self, int32_t value) -> int32_t {
+        if (self == null) {
+            return -1
+        }
+        if (deref(self).len >= deref(self).cap) {
+            uint32_t newCap = 4
+            if (deref(self).cap != 0) {
+                newCap = deref(self).cap * 2
+            }
+            int32_t st = 0
+            if (deref(self).cap == 0) {
+                st = deref(self).data.init(newCap)
+            } else {
+                st = deref(self).data.resize(newCap)
+            }
+            if (st != 0) {
+                return -1
+            }
+            deref(self).cap = newCap
+        }
+        deref(self).data[deref(self).len] = value
+        deref(self).len = deref(self).len + 1
         return 0
     }
-    return deref(self).len
-}
 
-// Number of allocated slots.
-func vec_cap(addr<Vector> self) -> uint32_t {
-    if (self == null) {
+    // Pop the top value into `out`. Returns 0 on success, -1 when the
+    // vector is empty or an address is null.
+    func vec_pop(addr<Vector> self, addr<int32_t> out) -> int32_t {
+        if (self == null) {
+            return -1
+        }
+        if (out == null) {
+            return -1
+        }
+        if (deref(self).len == 0) {
+            return -1
+        }
+        deref(self).len = deref(self).len - 1
+        deref(out) = deref(self).data[deref(self).len]
         return 0
     }
-    return deref(self).cap
-}
 
-// Free element storage and reset to empty.
-func vec_uninit(addr<Vector> self) -> void {
-    if (self == null) {
-        return
+    // Read element `index`. The caller must ensure index < len.
+    func vec_get(addr<Vector> self, uint32_t index) -> int32_t {
+        if (self == null) {
+            return 0
+        }
+        return deref(self).data[index]
     }
-    deref(self).data.uninit()
-    deref(self).len = 0
-    deref(self).cap = 0
+
+    // Write element `index`. The caller must ensure index < len.
+    func vec_set(addr<Vector> self, uint32_t index, int32_t value) -> void {
+        if (self == null) {
+            return
+        }
+        deref(self).data[index] = value
+    }
+
+    // Number of live elements.
+    func vec_len(addr<Vector> self) -> uint32_t {
+        if (self == null) {
+            return 0
+        }
+        return deref(self).len
+    }
+
+    // Number of allocated slots.
+    func vec_cap(addr<Vector> self) -> uint32_t {
+        if (self == null) {
+            return 0
+        }
+        return deref(self).cap
+    }
+
+    // Free element storage and reset to empty.
+    func vec_uninit(addr<Vector> self) -> void {
+        if (self == null) {
+            return
+        }
+        deref(self).data.uninit()
+        deref(self).len = 0
+        deref(self).cap = 0
+    }
 }

@@ -153,6 +153,38 @@ Compile any example the same way:
 
 ***
 
+## Testing
+
+### Smoke test (example programs)
+
+Compiles every program in `programs/`, runs it, and compares stdout with the checked-in `.expected` file.
+
+```bash
+./programs/run_programs.sh
+```
+
+```powershell
+.\programs\run_programs.ps1
+```
+
+### Full spec suite
+
+Runs all checker and runtime cases:
+
+- `tests/failure/` programs must be rejected by the compiler;
+- `tests/success/` programs must compile, run, and match `.expected`;
+- `tests/runtime/` programs must compile, then abort at run time.
+
+```bash
+./tests/run_specs_tests.sh
+```
+
+```powershell
+.\tests\run_specs_tests.ps1
+```
+
+***
+
 ## Clean Generated Outputs
 
 Generated files are written next to the source file.
