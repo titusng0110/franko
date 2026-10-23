@@ -1,0 +1,8 @@
+// Failure fixture: imports/import_leading_slash
+// An import name may not begin with '/': `import /abc` is a syntax error
+// (doc 02).
+import /abc
+
+func main() -> int32_t {
+    return 0
+}

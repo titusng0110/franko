@@ -1,0 +1,7 @@
+// Failure fixture: scoping/undeclared_var
+// Referencing an identifier that was never declared is illegal.
+func main() -> int32_t {
+    int32_t y = noSuchVariable
+    print(y)
+    return 0
+}

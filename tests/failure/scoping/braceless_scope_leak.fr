@@ -1,0 +1,9 @@
+// Failure fixture: scoping/braceless_scope_leak
+// A braceless if body is wrapped in an implicit block, so a variable
+// declared inside it is not visible after the if.
+func main() -> int32_t {
+    int32_t cond = 1
+    if (cond) int32_t leaked = 5
+    print(leaked)
+    return 0
+}

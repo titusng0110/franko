@@ -1,0 +1,9 @@
+// Failure fixture: structs/by_value_cycle_direct
+// A struct may not reach itself by value through a struct field; an infinite by-value chain has no size.
+struct Node {
+    Node n
+}
+
+func main() -> int32_t {
+    return 0;
+}

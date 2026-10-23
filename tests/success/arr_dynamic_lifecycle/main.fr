@@ -1,0 +1,32 @@
+// ============================================================
+// SPEC TEST: Dynamic Array Lifecycle
+// ============================================================
+// Covers: init, init_zero (prints elements to prove zeroing),
+// resize to a larger size (old and new positions), and uninit.
+// ============================================================
+
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(4);
+    xs[0] = 10;
+    xs[1] = 11;
+    xs[2] = 12;
+    xs[3] = 13;
+
+    // init_zero allocates zeroed element storage
+    array<int32_t> zs;
+    zs.init_zero(3);
+    print(zs[0], zs[1], zs[2]);
+
+    // resize larger: old positions keep their values
+    xs.resize(6);
+    xs[4] = 14;
+    xs[5] = 15;
+    print(xs[0], xs[1], xs[2], xs[3]);
+    print(xs[4], xs[5]);
+
+    xs.uninit();
+    zs.uninit();
+
+    return 0;
+}

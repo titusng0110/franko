@@ -1,0 +1,8 @@
+// Failure fixture: declarations/global_array_init
+// Only primitive globals may have `= constExpr` initializers; an array-typed
+// global rejects the initializer as a type mismatch.
+array<int32_t, 3> ga = 1 + 2
+
+func main() -> int32_t {
+    return 0
+}

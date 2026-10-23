@@ -1,0 +1,6 @@
+// Failure fixture: init_lists/init_in_print
+// An array initializer list is not an expression, so it cannot be a print argument.
+func main() -> int32_t {
+    print([1, 2, 3]);
+    return 0;
+}

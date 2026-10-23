@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/uninit_on_static
+// uninit is available only on dynamic arrays.
+func main() -> int32_t {
+    array<int32_t, 4> xs;
+    xs.uninit();
+    return 0;
+}

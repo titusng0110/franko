@@ -767,20 +767,27 @@ Local variables must be declared before they are used.
 
 ## 11.4 Global Variable Declarations
 
-Variable declarations are allowed at global scope.
+Variable declarations are allowed at global scope. Global variables are statically allocated; the `alloc` modifier is not valid at global scope.
 
-Global variable declarations may have an optional constant initializer:
+Two different initializer forms exist for declarations, and they follow different rules at global scope.
+
+**Constant initializers.** A global declaration may end with `= constExpr`:
 
 ```franko
 int32_t g = 1 + 2
 uint64_t mask = 1 << 8
 ```
 
-The initializer must be a constant expression (`constExpr`) and is folded at compile time. Only primitive globals can have initializers; struct, array, and addr globals reject `= constExpr` as a type mismatch.
+The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and addr globals reject `= constExpr` as a type mismatch.
 
-Ordinary declaration initializer sugar remains invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, string literals `= "text"`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
-The `alloc` modifier is not valid at global scope; global variables are always statically allocated.
+```franko
+int32_t g = h                     // invalid: the initializer must be constant
+array<int32_t, 3> xs = [1, 2, 3]  // invalid: desugars into indexed assignments
+```
+
+The constant-initializer form above is the only way to initialize a global at its declaration.
 
 ## 11.5 Uninitialized Values
 
@@ -1339,12 +1346,12 @@ print();              // prints a bare newline
 
 The checker validates print arguments as expressions usable where a value is required (in particular, `void` expressions are rejected), but it does not impose a strict printable-type policy.
 
-The C++14 backend can actually print:
+Current print limitation: only integer primitives and addresses are printable. The C++14 backend can print:
 
 - integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
-- addresses (printed through `const void*`).
+- addresses, including the `null` address (printed through `const void*`).
 
-Other value types, such as arrays and structs, are accepted by the checker but have no backend print form, so printing them does not produce compilable C++. Print individual fields instead: `print(s.x)`.
+Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
 Array initializer lists and string literals are not expressions and cannot be printed directly.
 
@@ -2362,7 +2369,7 @@ addr<int32_t> r = q;        // r copies q's state: non-null
 
 Assignment from another address variable copies that variable's exact state, so a null state propagates through copies and an `getaddr` certification propagates transitively.
 
-Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields an unknown state.
+Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
 ### 23.8.3 Dereferencing and Warnings
 
@@ -2519,7 +2526,7 @@ Consequences:
 
 Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (addresses excluded), and `memcpy`-able when every field is `memcpy`-able (addresses included). See [Array Intrinsics](20-array-intrinsics.md).
 
-Structs are not integers: operators, `if`/`while` conditions, and `print` reject whole structs. Operate on fields instead.
+Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](18-statements.md)). Operate on fields instead: `print(s.x)`.
 
 ## 24.7 Member Access and Field Lvalues
 
@@ -2587,7 +2594,7 @@ The C++14 backend:
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - No methods: only the built-in array intrinsics use member-call syntax.
-- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` accepts only individual fields.
+- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` cannot print a whole struct — print individual fields instead.
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - `alloc` is invalid for fields; field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `addr<...>` and dynamic-array fields break the cycle.
@@ -2739,12 +2746,12 @@ Alongside the heap matrix, the checker tracks a separate null-state matrix for a
 Rules:
 
 - an ordinary `addr<T>` declaration is **null-initialized**, so it starts in the null state;
-- an `alloc addr<T>` declaration points at freshly allocated storage and starts in the pointing state;
+- an `alloc addr<T>` declaration is also null-initialized: the heap slot holds null until an explicit assignment (`getaddr(...)`, a certified variable, or `null`) refines it; dereferencing the slot before such an assignment is an error;
 - assigning the `null` literal makes the target null;
 - assigning `getaddr(...)` makes the target pointing; this is the **only** certification of a non-null address;
 - assigning another address variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
-- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields an unknown state;
-- at function entry, every tracked address variable is unknown, because parameters and globals carry values the checker cannot see.
+- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
+- at function entry, every tracked address variable is maybe-null, because parameters and globals carry values the checker cannot see.
 
 Dereference checking:
 
@@ -2769,7 +2776,7 @@ Refinement is path-sensitive up to the same nesting-depth limit as the heap matr
 
 ### 26.7.2 Address Null-State Limitations
 
-- unknown states (call results, parameters, field and element reads) are trusted as non-null by dereference checking, matching pre-`null` behavior; a null value may still flow through them;
+- values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
 - dangling addresses (see the aliasing limitation below) are not detected at compile time; a runtime check is planned as a later change.
 
 ## 26.8 Limitations
@@ -3010,13 +3017,13 @@ The compiler does not fully track dangling addresses or ownership.
 
 ## 29.12 Print Checking Is Loose
 
-The checker validates print arguments as expressions but does not enforce a strict printable-type set. The backend can print integer primitives and addresses; printing other types (for example arrays) does not produce compilable C++. See [Statements](18-statements.md).
+The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and addresses (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](18-statements.md).
 
 Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
 
 ## 29.13 Unsupported Operators
 
-The following operators do not exist in the grammar; source code using them fails to parse:
+The following operators do not exist in the language. The lexer rejects the characters `%` and `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
 
 ```franko
 %   // no modulus operator
@@ -3643,7 +3650,7 @@ func main() -> int32_t {
 
 `addr<Node>` fields break by-value cycles, so self-referential struct definitions like this are valid.
 
-Franko has no null addresses. An address field that is never assigned is indeterminate, so only follow links that have been explicitly assigned (here `b.next` is never set and is never read).
+Address declarations and address-typed struct fields are guaranteed null-initialized (see [Addresses](23-addresses.md)), so `b.next` is `null` here; only follow links that have been explicitly assigned.
 
 ## 31.20 Struct Globals
 

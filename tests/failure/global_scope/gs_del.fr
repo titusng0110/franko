@@ -1,0 +1,10 @@
+// Failure fixture: global_scope/gs_del
+// `del` is an executable statement and is not a valid top-level item,
+// even when its operand is a global variable.
+int32_t x
+
+del x;
+
+func main() -> int32_t {
+    return 0
+}

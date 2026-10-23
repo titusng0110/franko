@@ -1,0 +1,11 @@
+// Failure fixture: functions/void_call_in_value_ctx
+// A void function call is valid only as an expression statement; it cannot be used in a value-producing context.
+
+func v() -> void {
+    return;
+}
+
+func main() -> int32_t {
+    int32_t x = v();
+    return 0;
+}

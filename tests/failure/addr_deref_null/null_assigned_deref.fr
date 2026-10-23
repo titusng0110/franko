@@ -1,0 +1,13 @@
+// Failure fixture: addr_deref_null/null_assigned_deref
+// Dereferencing an address after an explicit null assignment.
+func main() -> int32_t {
+    int32_t x2 = 0
+    addr<int32_t> p2
+
+    p2 = getaddr(x2)
+    p2 = null
+
+    print(deref(p2))
+
+    return 0
+}

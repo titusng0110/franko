@@ -1,0 +1,7 @@
+// Failure fixture: global_scope/gs_return
+// `return` is an executable statement and is not a valid top-level item.
+return 0;
+
+func main() -> int32_t {
+    return 0
+}

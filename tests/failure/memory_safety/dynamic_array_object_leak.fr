@@ -1,0 +1,11 @@
+// Failure fixture: memory_safety/dynamic_array_object_leak
+// uninit() frees only the element buffer; the heap array object still
+// requires del.
+func main() -> int32_t {
+    alloc array<int32_t> xs23
+
+    xs23.init(10)
+    xs23.uninit()
+
+    return 0
+}

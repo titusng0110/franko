@@ -1,0 +1,105 @@
+// ============================================================
+// SPEC TEST: Branch-Aware Memory Safety (return-aware paths)
+// ============================================================
+// Covers: returning branches do not contribute deletion state
+// to the code after the branch; fallthrough cleanup; heap
+// cleanup inside blocks; full heap dynamic array cleanup.
+// ============================================================
+
+// (a) A branch deletes and returns while the fallthrough path
+// deletes the variable before its own final use.
+func caseA() -> int32_t {
+    alloc int32_t x;
+    int32_t cond = 1;
+    x = 5;
+
+    if (cond != 0) {
+        del x;
+        return 5;      // deleted here, but this path exits
+    }
+
+    print(x);          // fine: the returning branch contributes nothing
+    del x;
+    return 6
+}
+
+// (b) One branch deletes and returns; the else branch keeps the
+// variable alive and deletes it later.
+func caseB() -> int32_t {
+    alloc int32_t x;
+    int32_t cond = 0;
+    x = 7;
+
+    if (cond != 0) {
+        del x;
+        return 5;
+    } else {
+        print(x);      // still alive on this path
+    }
+
+    del x;             // fine: only the (alive) else path continues
+    return 6
+}
+
+// (c) Nested return-aware safe path: delete + return deep inside,
+// fallthrough deletes.
+func caseC() -> int32_t {
+    alloc int32_t x;
+    int32_t a = 1;
+    int32_t b = 0;
+    x = 3;
+
+    if (a != 0) {
+        if (b != 0) {
+            del x;
+            return 5;  // deep path exits; contributes no deletion state
+        }
+        print(x);      // x still alive on the continuing path
+    }
+
+    del x;
+    return 6
+}
+
+// (d) Proper cleanup of a heap variable inside a plain block.
+func caseD() -> int32_t {
+    {
+        alloc int32_t x;
+        x = 9;
+        print(x);
+        del x;         // deleted before the block scope exits
+    }
+    return 6
+}
+
+// (e) A heap dynamic array fully cleaned: init, use, uninit, del.
+func caseE() -> int32_t {
+    alloc array<int32_t> xs;
+    xs.init_zero(4);
+    xs[0] = 3;
+    xs[1] = 4;
+    print(xs[0] + xs[1]);
+    xs.uninit();       // frees the element buffer
+    del xs;            // frees the heap array object itself
+    return 6
+}
+
+func main() -> int32_t {
+    int32_t r;
+    r = caseA();
+    print(r);
+    print(101);
+    r = caseB();
+    print(r);
+    print(102);
+    r = caseC();
+    print(r);
+    print(103);
+    r = caseD();
+    print(r);
+    print(104);
+    r = caseE();
+    print(r);
+    print(105);
+    return 0
+}

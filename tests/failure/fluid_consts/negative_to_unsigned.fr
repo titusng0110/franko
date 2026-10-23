@@ -1,0 +1,9 @@
+// Failure fixture: fluid_consts/negative_to_unsigned
+// Negative constant -1 does not fit an unsigned uint8_t context.
+func main() -> int32_t {
+    uint8_t x = -1;
+
+    print(x)
+
+    return 0
+}

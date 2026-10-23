@@ -1,0 +1,17 @@
+// Failure fixture: structs/struct_in_condition
+// Structs are not integers: if/while conditions reject whole structs; conditions require integer expressions.
+struct X {
+    int32_t a
+}
+
+func main() -> int32_t {
+    X s;
+
+    s.a = 1;
+
+    if (s) {
+        print(1);
+    }
+
+    return 0;
+}

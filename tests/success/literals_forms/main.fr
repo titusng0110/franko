@@ -1,0 +1,25 @@
+// ============================================================
+// SPEC TEST: Integer Literal Forms
+// ============================================================
+// Covers: decimal, hexadecimal (0xFF and 0XFF), and binary
+// (0b1010 and 0B1010) literal forms, plus the maximum
+// uint64_t literal.
+// ============================================================
+
+func main() -> int32_t {
+    int32_t dec = 123;
+    int32_t hexLower = 0xFF;
+    int32_t hexUpperPrefix = 0XFF;
+    int32_t binLower = 0b1010;
+    int32_t binUpper = 0B1010;
+    uint64_t maxU64 = 18446744073709551615;
+
+    print(dec);
+    print(hexLower);
+    print(hexUpperPrefix);
+    print(binLower);
+    print(binUpper);
+    print(maxU64);
+
+    return 0;
+}

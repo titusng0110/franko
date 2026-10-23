@@ -1,0 +1,14 @@
+// Failure fixture: unsupported_syntax/bitwise_not_op
+// The bitwise NOT operator '~' does not exist in the language; the lexer
+// must reject it outright (docs: unsupported operators).
+//
+// Regression guard: ANTLR's lexer used to silently DROP unrecognized
+// characters, so `c = ~a + 1` compiled as `c = a + 1` (silent
+// miscompilation). The driver now fails on any lexer error; if this fixture
+// ever goes red again, unrecognized characters are being skipped.
+func main() -> int32_t {
+    int32_t a = 5
+    int32_t c = ~a + 1
+    print(c)
+    return 0
+}

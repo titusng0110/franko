@@ -1,0 +1,9 @@
+// Failure fixture: init_lists/init_global_assign
+// An initializer-list assignment desugars into executable statements, which are invalid at global scope.
+array<int32_t, 3> xs;
+
+xs = [1, 2, 3];
+
+func main() -> int32_t {
+    return 0;
+}

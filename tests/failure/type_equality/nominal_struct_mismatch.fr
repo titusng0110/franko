@@ -1,0 +1,19 @@
+// Failure fixture: type_equality/nominal_struct_mismatch
+// Two structs with identical field layouts are still distinct nominal types
+// (doc 27.6), so assigning an A value to a B variable is a type error.
+
+struct A {
+    int32_t n
+}
+
+struct B {
+    int32_t n
+}
+
+func main() -> int32_t {
+    A a;
+    B b;
+    a.n = 1;
+    b = a;
+    return 0;
+}

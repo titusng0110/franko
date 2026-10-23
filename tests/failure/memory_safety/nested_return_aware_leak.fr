@@ -1,0 +1,19 @@
+// Failure fixture: memory_safety/nested_return_aware_leak
+// A nested returning branch deletes the variable, but the continuing path
+// never deletes it before its use.
+func main() -> int32_t {
+    alloc int32_t x12
+    int32_t a12 = 1
+    int32_t b12 = 1
+
+    if (a12 != 0) {
+        if (b12 != 0) {
+            del x12
+            return 0
+        }
+    }
+
+    print(x12)
+
+    return 0
+}

@@ -1,0 +1,9 @@
+// Failure fixture: structs/field_with_alloc
+// 'alloc' is not valid for struct fields; dynamic-array fields are allocated with the field allocation call instead.
+struct X {
+    alloc int32_t a
+}
+
+func main() -> int32_t {
+    return 0;
+}

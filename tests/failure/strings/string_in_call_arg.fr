@@ -1,0 +1,10 @@
+// Failure fixture: strings/string_in_call_arg
+// A string literal is not an expression, so it cannot be passed as a function call argument.
+func f(int32_t x) -> void {
+    print(x);
+}
+
+func main() -> int32_t {
+    f("hi");
+    return 0;
+}

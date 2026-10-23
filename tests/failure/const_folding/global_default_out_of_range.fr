@@ -1,0 +1,9 @@
+// Failure fixture: const_folding/global_default_out_of_range
+// Global initializer 300 is a folded constant out of range for int8_t.
+int8_t g = 300;
+
+func main() -> int32_t {
+    print(g)
+
+    return 0
+}

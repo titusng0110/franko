@@ -1,0 +1,10 @@
+// Failure fixture: desugaring/for_var_visible_after
+// A for loop is lowered into one wrapping block, so a loop variable
+// declared in the header init is not visible after the loop.
+func main() -> int32_t {
+    for (int32_t i = 0; i < 3; i = i + 1) {
+        print(i);
+    }
+    print(i);
+    return 0;
+}

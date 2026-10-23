@@ -156,7 +156,7 @@ addr<int32_t> r = q;        // r copies q's state: non-null
 
 Assignment from another address variable copies that variable's exact state, so a null state propagates through copies and an `getaddr` certification propagates transitively.
 
-Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields an unknown state.
+Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
 ### 23.8.3 Dereferencing and Warnings
 

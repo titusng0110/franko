@@ -4,6 +4,7 @@ import org.antlr.v4.runtime.tree.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -51,10 +52,26 @@ public class Main {
         CharStream input = CharStreams.fromFileName(sourceFile, StandardCharsets.UTF_8);
         FrankoLexer lexer = new FrankoLexer(input);
 
+        /*
+         * Lexing must be a hard gate. ANTLR's lexer only prints a "token
+         * recognition error" and then silently skips characters that match no
+         * token rule, which would let programs such as `c = a % b` or
+         * `c = ~a + 1` compile into a different (wrong) program. Collect
+         * every lexer error and reject the program if any occurred.
+         */
+        LexErrorCollector lexErrors = new LexErrorCollector();
+        lexer.removeErrorListeners();
+        lexer.addErrorListener(lexErrors);
+
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         FrankoParser parser = new FrankoParser(tokens);
 
         ParseTree tree = parser.program();
+
+        if (!lexErrors.errors.isEmpty()) {
+            throw new RuntimeException(String.join("\n", lexErrors.errors));
+        }
+
         if (parser.getNumberOfSyntaxErrors() > 0) {
             throw new RuntimeException(
                 "Parse failed: " + parser.getNumberOfSyntaxErrors() + " syntax error(s)."
@@ -178,5 +195,45 @@ public class Main {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Collects lexer diagnostics instead of merely printing them.
+     *
+     * ANTLR's lexer reports an unrecognizable character as a "token
+     * recognition error" and then skips it, silently changing the program's
+     * token stream. This listener reformats those errors in the compiler's
+     * diagnostic style so the driver can reject the program.
+     */
+    private static final class LexErrorCollector extends BaseErrorListener {
+        final List<String> errors = new ArrayList<>();
+
+        @Override
+        public void syntaxError(
+                Recognizer<?, ?> recognizer,
+                Object offendingSymbol,
+                int line,
+                int charPositionInLine,
+                String msg,
+                RecognitionException e
+        ) {
+            /*
+             * ANTLR's lexer message has the shape:
+             *
+             *   token recognition error at: '~'
+             *
+             * Extract the offending text between the quotes and reformat it.
+             */
+            String text = msg;
+            String marker = "token recognition error at: '";
+            int start = msg.indexOf(marker);
+
+            if (start >= 0 && msg.endsWith("'") && msg.length() > start + marker.length()) {
+                text = msg.substring(start + marker.length(), msg.length() - 1);
+            }
+
+            errors.add("Lex error: \"" + text + "\" is not a recognizable token. (line "
+                    + line + ", column " + (charPositionInLine + 1) + ")");
+        }
     }
 }

@@ -1,0 +1,7 @@
+// Failure fixture: structs/unknown_struct_type
+// A struct name in a type position is resolved against the struct namespace; unknown struct names are rejected.
+func main() -> int32_t {
+    Missing m;
+
+    return 0;
+}

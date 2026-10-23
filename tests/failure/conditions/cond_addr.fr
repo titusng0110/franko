@@ -1,0 +1,12 @@
+// Failure fixture: conditions/cond_addr
+// if/while/for conditions must be integer expressions; an addr<T> is not
+// a valid condition (compare addresses with == or != instead).
+func main() -> int32_t {
+    addr<int32_t> p;
+
+    if (p) {
+        print(1);
+    }
+
+    return 0
+}

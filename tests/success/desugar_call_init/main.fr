@@ -1,0 +1,32 @@
+// ============================================================
+// SPEC TEST: Desugaring — Dynamic Array Call-Init Declaration
+// ============================================================
+// Covers: 05-desugaring.md 5.2.
+//   array<int32_t> arr(20);        desugars to
+//   array<int32_t> arr; arr(20);
+// and the heap form
+//   alloc array<int32_t> h(5);     desugars to
+//   alloc array<int32_t> h; h(5);
+// The call form is the dynamic-array init intrinsic sugar.
+// ============================================================
+
+func main() -> int32_t {
+    // Stack dynamic array with call-init declaration sugar.
+    array<int32_t> arr(20);
+    arr[0] = 7;
+    arr[19] = 9;
+    print(arr[0]);
+    print(arr[19]);
+    arr.uninit();
+
+    // Heap dynamic array with call-init declaration sugar.
+    alloc array<int32_t> h(5);
+    h[0] = 100;
+    h[4] = 400;
+    print(h[0]);
+    print(h[4]);
+    h.uninit();
+    del h;
+
+    return 0;
+}

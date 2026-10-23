@@ -1,0 +1,17 @@
+// Failure fixture: structs/address_only_param
+// A parameter type must be a passable type; an address-only struct (it contains an array field) cannot be passed by value.
+struct W {
+    array<int32_t, 4> xs
+}
+
+func f(W w) -> int32_t {
+    return 0;
+}
+
+func main() -> int32_t {
+    W s;
+
+    f(s);
+
+    return 0;
+}

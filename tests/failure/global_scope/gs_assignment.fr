@@ -1,0 +1,10 @@
+// Failure fixture: global_scope/gs_assignment
+// Executable statements are not allowed at global scope; a bare
+// assignment is not a valid top-level item.
+int32_t x
+
+x = 1;
+
+func main() -> int32_t {
+    return 0
+}

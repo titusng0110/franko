@@ -109,12 +109,12 @@ print();              // prints a bare newline
 
 The checker validates print arguments as expressions usable where a value is required (in particular, `void` expressions are rejected), but it does not impose a strict printable-type policy.
 
-The C++14 backend can actually print:
+Current print limitation: only integer primitives and addresses are printable. The C++14 backend can print:
 
 - integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
-- addresses (printed through `const void*`).
+- addresses, including the `null` address (printed through `const void*`).
 
-Other value types, such as arrays and structs, are accepted by the checker but have no backend print form, so printing them does not produce compilable C++. Print individual fields instead: `print(s.x)`.
+Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
 Array initializer lists and string literals are not expressions and cannot be printed directly.
 

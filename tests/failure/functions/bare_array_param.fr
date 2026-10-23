@@ -1,0 +1,10 @@
+// Failure fixture: functions/bare_array_param
+// Bare array types are not passable: an array parameter must use addr<array<T>> and getaddr at the call site.
+
+func f(array<int32_t> xs) -> void {
+    return;
+}
+
+func main() -> int32_t {
+    return 0;
+}

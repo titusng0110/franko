@@ -1,0 +1,11 @@
+// Failure fixture: literals/type_alias_bool
+// No 'bool' type alias exists; boolean-like results use uint8_t.
+func main() -> int32_t {
+    bool b;
+
+    b = 1;
+
+    print(b)
+
+    return 0
+}

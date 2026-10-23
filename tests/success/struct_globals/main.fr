@@ -1,0 +1,26 @@
+// ============================================================
+// SPEC TEST: Struct Globals
+// ============================================================
+// Covers: a struct-typed global variable, field defaults applied
+// to globals, and assigning a global struct field in main.
+// ============================================================
+
+struct Conf {
+    int32_t w = 640
+    int32_t h = 480
+    int64_t label
+}
+
+Conf g;
+
+func main() -> int32_t {
+    // Fields with defaults print their defaults.
+    print(g.w, g.h);
+
+    // Assign fields in main.
+    g.w = 800;
+    g.label = 24;
+    print(g.w, g.label);
+
+    return 0;
+}

@@ -1,0 +1,9 @@
+// Failure fixture: addr_compare_null/order_null
+// Null may be compared with an address using equality only.
+func main() -> int32_t {
+    addr<int32_t> p3
+
+    print(p3 < null)
+
+    return 0
+}

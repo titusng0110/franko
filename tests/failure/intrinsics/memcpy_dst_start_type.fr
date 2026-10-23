@@ -1,0 +1,12 @@
+// Failure fixture: intrinsics/memcpy_dst_start_type
+// Ranged memcpy (doc 20.6): nonconstant starts and counts must have
+// exactly type uint32_t; an int32_t start is rejected.
+func main() -> int32_t {
+    array<int32_t, 4> a;
+    array<int32_t, 4> b;
+    a.memset(0);
+    b.memset(0);
+    int32_t s = 0;
+    a.memcpy(getaddr(b), s, 0, 1);
+    return 0;
+}

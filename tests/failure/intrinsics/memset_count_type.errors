@@ -1,0 +1,1 @@
+memset() count: expected uint32_t, got UINT16

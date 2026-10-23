@@ -1,0 +1,8 @@
+// Failure fixture: imports/import_bad_extension
+// A string-literal import path with a present but non-.fr extension is
+// rejected (doc 02): the import must reference a .fr file.
+import "notes.txt"
+
+func main() -> int32_t {
+    return 0
+}

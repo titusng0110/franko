@@ -1,0 +1,16 @@
+// Failure fixture: addr_deref_null/loop_guard_fail_deref
+// Dereferencing after a loop whose guard fails on exit.
+func main() -> int32_t {
+    int32_t x6 = 0
+    addr<int32_t> p6
+
+    p6 = getaddr(x6)
+
+    while (p6 != null) {
+        p6 = null
+    }
+
+    print(deref(p6))
+
+    return 0
+}

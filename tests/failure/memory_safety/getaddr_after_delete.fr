@@ -1,0 +1,12 @@
+// Failure fixture: memory_safety/getaddr_after_delete
+// Taking the address of a deleted heap variable.
+func main() -> int32_t {
+    alloc int32_t x20
+    addr<int32_t> p20
+
+    del x20
+
+    p20 = getaddr(x20)
+
+    return 0
+}

@@ -1,0 +1,9 @@
+// Failure fixture: structs/by_value_cycle_via_static_array
+// A struct may not reach itself by value through a static array of itself; the by-value edge recurses through array elements.
+struct Node {
+    array<Node, 4> kids
+}
+
+func main() -> int32_t {
+    return 0;
+}

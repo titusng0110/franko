@@ -1,0 +1,15 @@
+// Failure fixture: addresses/compare_mismatched_types_eq
+// Address comparison requires identical address types (docs 16.6, 23.5):
+// addr<int32_t> and addr<uint8_t> are different address types, so '=='
+// rejects the comparison.
+func main() -> int32_t {
+    int32_t x = 0
+    uint8_t b = 0
+
+    addr<int32_t> p = getaddr(x)
+    addr<uint8_t> q = getaddr(b)
+
+    print(p == q)
+
+    return 0
+}

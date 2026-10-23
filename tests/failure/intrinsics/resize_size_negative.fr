@@ -1,0 +1,9 @@
+// Failure fixture: intrinsics/resize_size_negative
+// resize (doc 20.2): a constant size cannot be negative.
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(2);
+    xs.resize(-1);
+    xs.uninit();
+    return 0;
+}

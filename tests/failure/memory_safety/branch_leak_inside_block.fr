@@ -1,0 +1,17 @@
+// Failure fixture: memory_safety/branch_leak_inside_block
+// A heap variable is deleted on one branch only and leaks on the merge path.
+func main() -> int32_t {
+    int32_t cond18 = 1
+
+    {
+        alloc int32_t x18
+
+        if (cond18 != 0) {
+            del x18
+        }
+
+        print(123)
+    }
+
+    return 0
+}

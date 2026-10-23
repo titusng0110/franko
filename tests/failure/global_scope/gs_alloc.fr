@@ -1,0 +1,8 @@
+// Failure fixture: global_scope/gs_alloc
+// The alloc modifier is only valid for local declarations inside function
+// bodies and blocks; global variables are always statically allocated.
+alloc int32_t g;
+
+func main() -> int32_t {
+    return 0
+}

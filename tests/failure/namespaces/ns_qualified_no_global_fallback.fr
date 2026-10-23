@@ -1,0 +1,12 @@
+// Failure fixture: namespaces/ns_qualified_no_global_fallback
+// A qualified name resolves strictly inside the named namespace; `n::g`
+// cannot fall back to the global symbol `g`.
+int32_t g = 5
+
+namespace n {
+}
+
+func main() -> int32_t {
+    print(n::g);
+    return 0
+}

@@ -1,0 +1,16 @@
+// Failure fixture: memory_safety/both_branches_delete_then_use
+// Both branches delete the heap variable, then it is used after the merge.
+func main() -> int32_t {
+    alloc int32_t x7
+    int32_t cond7 = 1
+
+    if (cond7 != 0) {
+        del x7
+    } else {
+        del x7
+    }
+
+    print(x7)
+
+    return 0
+}

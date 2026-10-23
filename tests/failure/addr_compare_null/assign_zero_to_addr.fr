@@ -1,0 +1,9 @@
+// Failure fixture: addr_compare_null/assign_zero_to_addr
+// The integer 0 is not null and cannot be assigned to an address.
+func main() -> int32_t {
+    addr<int32_t> p5
+
+    p5 = 0
+
+    return 0
+}

@@ -1,0 +1,9 @@
+// Failure fixture: intrinsics/resize_size_too_large
+// resize (doc 20.2): a constant size must fit uint32_t.
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(2);
+    xs.resize(4294967296);
+    xs.uninit();
+    return 0;
+}

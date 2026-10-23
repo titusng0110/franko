@@ -1,0 +1,50 @@
+// ============================================================
+// SPEC TEST: Addresses — nullness certification via getaddr
+// ============================================================
+// Covers:
+//   - getaddr(x) is the only certification of a non-null address
+//   - certification propagates through a copy (q = p)
+//   - certification propagates transitively (r = q, s = r)
+//   - a null state also propagates through copies
+// ============================================================
+
+func main() -> int32_t {
+    int32_t x = 0
+
+    // getaddr certifies p as pointing, so deref is valid.
+    addr<int32_t> p
+    p = getaddr(x)
+    deref(p) = 5
+    print(deref(p))
+
+    // The certification propagates through a copy.
+    addr<int32_t> q
+    q = p
+    deref(q) = 6
+    print(deref(q))
+    print(x)
+
+    // ... and transitively through a copy of the copy.
+    addr<int32_t> r
+    r = q
+    deref(r) = 7
+    print(deref(r))
+
+    // Declaration-initializer copies carry the state as well.
+    addr<int32_t> s = r
+    deref(s) = 8
+    print(deref(s))
+    print(x)
+
+    // A null state propagates through copies too: b is null, and the
+    // copies of b are null as well (no dereference of them).
+    addr<int32_t> b
+    b = null
+    addr<int32_t> c
+    c = b
+    print(c == null)
+    addr<int32_t> d = c
+    print(d == null)
+
+    return 0
+}

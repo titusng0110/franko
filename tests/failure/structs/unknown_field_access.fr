@@ -1,0 +1,14 @@
+// Failure fixture: structs/unknown_field_access
+// Member access must name a declared field of the struct; 'nope' is not a field of X.
+struct X {
+    int32_t a
+}
+
+func main() -> int32_t {
+    X s;
+
+    s.a = 1;
+    print(s.nope);
+
+    return 0;
+}

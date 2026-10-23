@@ -1,0 +1,8 @@
+// Failure fixture: addresses/addr_arithmetic
+// Addresses are not arithmetic values: p + 1 is invalid.
+func main() -> int32_t {
+    int32_t x = 0
+    addr<int32_t> p = getaddr(x)
+    print(p + 1)
+    return 0
+}

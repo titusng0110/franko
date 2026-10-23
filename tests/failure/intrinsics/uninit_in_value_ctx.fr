@@ -1,0 +1,9 @@
+// Failure fixture: intrinsics/uninit_in_value_ctx
+// uninit returns void; void intrinsics are invalid in value contexts.
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(4);
+    int32_t s = xs.uninit();
+    xs.uninit();
+    return 0;
+}

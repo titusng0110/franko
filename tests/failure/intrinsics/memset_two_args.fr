@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/memset_two_args
+// memset (doc 20.4): the whole-array form takes exactly one argument and
+// the ranged form exactly three; two arguments are rejected.
+func main() -> int32_t {
+    array<int32_t, 4> xs;
+    xs.memset(0, 1);
+    return 0;
+}
