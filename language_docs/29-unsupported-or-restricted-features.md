@@ -108,9 +108,9 @@ foo("hello");
 return "hello";
 ```
 
-## 29.15 No `for` Loops, `break`, or `continue`
+## 29.15 No `break` or `continue`
 
-Only `if` and `while` control flow is implemented. There are no C-style `for` loops and no `break`/`continue` statements. There is also no `switch`, no `do`/`do-while`, and no `goto`.
+Only `if`, `while`, and `for` control flow is implemented. There is no `break` or `continue` statement, so a `for` loop cannot be exited early and its `update` always runs at the end of every body iteration. There is also no `switch`, no `do`/`do-while`, and no `goto`.
 
 ## 29.16 Global Scope Is Declaration-Only
 

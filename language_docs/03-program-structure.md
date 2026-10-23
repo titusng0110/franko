@@ -19,6 +19,7 @@ Invalid global-scope items include:
 - function calls;
 - `if`;
 - `while`;
+- `for`;
 - `return`;
 - `del`;
 - blocks;

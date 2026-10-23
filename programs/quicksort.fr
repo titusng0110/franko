@@ -15,7 +15,8 @@
 //   - array initializer-list assignment
 //   - array.memset(...)
 //   - array.memcpy(addr<array<...>>)
-//   - while-loop-based iterative quicksort
+//   - for loops for counted iteration
+//   - while-loop-based iterative quicksort with an explicit stack
 //   - uint32_t indexes
 //   - int32_t values
 //
@@ -24,11 +25,8 @@
 // ============================================================
 
 func printArray(addr<array<int32_t, 50>> data, uint32_t n) -> void {
-    uint32_t i = 0
-
-    while (i < n) {
+    for (uint32_t i = 0; i < n; i = i + 1) {
         print(deref(data)[i])
-        i = i + 1
     }
 }
 
@@ -61,15 +59,12 @@ func partition(addr<array<int32_t, 50>> data, uint32_t low, uint32_t high) -> ui
 
     pivot = deref(data)[high]
     i = low
-    j = low
 
-    while (j < high) {
+    for (j = low; j < high; j = j + 1) {
         if (deref(data)[j] <= pivot) {
             swap(data, i, j)
             i = i + 1
         }
-
-        j = j + 1
     }
 
     swap(data, i, high)
@@ -122,15 +117,12 @@ func quicksort(addr<array<int32_t, 50>> data, uint32_t n) -> void {
 }
 
 func isSorted(addr<array<int32_t, 50>> data, uint32_t n) -> uint8_t {
-    uint32_t k = 1
     uint8_t sorted = 1
 
-    while (k < n) {
+    for (uint32_t k = 1; k < n; k = k + 1) {
         if (deref(data)[k] < deref(data)[k - 1]) {
             sorted = 0
         }
-
-        k = k + 1
     }
 
     return sorted

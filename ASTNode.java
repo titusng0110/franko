@@ -69,6 +69,39 @@ class WhileNode extends ASTNode {
     }
 }
 
+// After desugaring, this ASTNode should not exist.
+//
+// for (init; condition; update) body
+//
+// init and update are optional simple statements; condition is a
+// required expression.
+//
+// The desugarer lowers this to:
+//
+//   {
+//       init
+//       while (condition) {
+//           body
+//           update
+//       }
+//   }
+//
+// The wrapping block scopes the loop variable declared by init so it is
+// not visible after the loop.
+class ForNode extends ASTNode {
+    ASTNode init;      // simple statement or null
+    ASTNode condition;
+    ASTNode update;    // simple statement or null
+    ASTNode body;
+
+    ForNode(ASTNode init, ASTNode condition, ASTNode update, ASTNode body) {
+        this.init = init;
+        this.condition = condition;
+        this.update = update;
+        this.body = body;
+    }
+}
+
 class DelNode extends ASTNode {
     String name;
 

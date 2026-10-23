@@ -14,7 +14,7 @@
 //   - array.init(size)
 //   - memset()
 //   - uninit()
-//   - while loops
+//   - for loops (including a strided inner loop)
 //   - if statements
 //
 // Output for n = 80:
@@ -65,31 +65,22 @@ func main() -> int32_t {
         isPrime[1] = 0
     }
 
-    uint p = 2
+    uint p
 
-    while (p * p <= n) {
+    for (p = 2; p * p <= n; p = p + 1) {
         if (isPrime[p] != 0) {
-            uint j = p * p
-
-            while (j <= n) {
+            for (uint j = p * p; j <= n; j = j + p) {
                 isPrime[j] = 0
-                j = j + p
             }
         }
-
-        p = p + 1
     }
 
     print(1001)
 
-    uint i = 2
-
-    while (i <= n) {
+    for (uint i = 2; i <= n; i = i + 1) {
         if (isPrime[i] != 0) {
             print(i)
         }
-
-        i = i + 1
     }
 
     print(1002)

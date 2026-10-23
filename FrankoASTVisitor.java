@@ -357,6 +357,32 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
+    public ASTNode visitForStatement(FrankoParser.ForStatementContext ctx) {
+        return visit(ctx.forStmt());
+    }
+
+    @Override
+    public ASTNode visitForStmt(FrankoParser.ForStmtContext ctx) {
+        ASTNode init = null;
+
+        if (ctx.forInit() != null) {
+            init = visit(ctx.forInit().simpleStmt());
+        }
+
+        ASTNode condition = visit(ctx.expr());
+
+        ASTNode update = null;
+
+        if (ctx.forUpdate() != null) {
+            update = visit(ctx.forUpdate().simpleStmt());
+        }
+
+        ASTNode body = visit(ctx.statement());
+
+        return new ForNode(init, condition, update, body);
+    }
+
+    @Override
     public ASTNode visitReturnStmt(FrankoParser.ReturnStmtContext ctx) {
         ASTNode value = null;
 

@@ -80,6 +80,8 @@ Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond tha
 
 Loop termination is not proven; the post-loop state is conservative.
 
+`for` loops are desugared to blocks and `while` loops before this pass runs, so they receive the same treatment. See [Desugaring](05-desugaring.md).
+
 ## 26.7 Address Null-State Tracking
 
 Alongside the heap matrix, the checker tracks a separate null-state matrix for address-typed variables, with three states:

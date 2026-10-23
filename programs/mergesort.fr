@@ -11,6 +11,7 @@
 //   - global variables referenced inside functions
 //   - uint indexes
 //   - int32_t values
+//   - for loops for counted iteration
 //   - merge sort using a global helper copy buffer
 //   - array initializer-list assignment
 //   - array.memset(...)
@@ -27,11 +28,8 @@ array<int32_t, 50> a
 array<int32_t, 50> b
 
 func printArray(uint n) -> void {
-    uint i = 0
-
-    while (i < n) {
+    for (uint i = 0; i < n; i = i + 1) {
         print(a[i])
-        i = i + 1
     }
 }
 
@@ -98,15 +96,12 @@ func mergeSort(uint low, uint high) -> void {
 }
 
 func isSorted(uint n) -> uint8_t {
-    uint k = 1
     uint8_t sorted = 1
 
-    while (k < n) {
+    for (uint k = 1; k < n; k = k + 1) {
         if (a[k] < a[k - 1]) {
             sorted = 0
         }
-
-        k = k + 1
     }
 
     return sorted
