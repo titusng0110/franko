@@ -12,6 +12,8 @@ set -Eeuo pipefail
 #     Optional <case>.errors: every non-empty line (lines starting
 #     with '#' are comments) must appear as a substring of the
 #     compiler output, pinning the expected diagnostics.
+#     Helper files may live deeper (tests/failure/<family>/lib/);
+#     they are imported by a fixture and are not run standalone.
 #
 #   tests/success/<concept>/main.fr
 #     Must compile, run, and produce stdout matching main.expected.
