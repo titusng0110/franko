@@ -79,8 +79,10 @@ jobs:
 
           CP=".:lib/antlr-4.13.2-complete.jar:build/generated:build/classes"
 
-          # Every program in tests/failure/ is a negative test: the Franko
-          # compiler must reject it (non-zero exit code).
+          # Every program in tests/failure/<family>/ is a negative test: the
+          # Franko compiler must reject it (non-zero exit code). Helper files
+          # that live deeper (for example tests/failure/imports/lib/) are
+          # imported by a fixture and are not run standalone.
           for SRC in tests/failure/*/*.fr; do
             echo
             echo "=== $SRC ==="
@@ -262,9 +264,13 @@ jobs:
 
           $CP = ".;lib/antlr-4.13.2-complete.jar;build/generated;build/classes"
 
-          # Every program in tests/failure/ is a negative test: the Franko
-          # compiler must reject it (non-zero exit code).
-          $programs = Get-ChildItem -Path "tests/failure" -Filter "*.fr" -Recurse -File |
+          # Every program in tests/failure/<family>/ is a negative test: the
+          # Franko compiler must reject it (non-zero exit code). Recursion is
+          # capped at one level so helper files that live deeper (for example
+          # tests/failure/imports/lib/, imported by a fixture) are not run as
+          # standalone fixtures — the Linux runner's tests/failure/*/*.fr
+          # glob has the same two-level shape.
+          $programs = Get-ChildItem -Path "tests/failure" -Filter "*.fr" -Recurse -Depth 1 -File |
             Sort-Object Name |
             ForEach-Object { $_.FullName }
 
@@ -293,8 +299,10 @@ jobs:
 
           $CP = ".;lib/antlr-4.13.2-complete.jar;build/generated;build/classes"
 
-          # Every program in tests/runtime/ compiles but aborts at run time.
-          $programs = Get-ChildItem -Path "tests/runtime" -Filter "*.fr" -Recurse -File |
+          # Every program in tests/runtime/<family>/ compiles but aborts at
+          # run time; recursion is capped at one level, matching the runner's
+          # tests/runtime/*/*.fr glob.
+          $programs = Get-ChildItem -Path "tests/runtime" -Filter "*.fr" -Recurse -Depth 1 -File |
             Sort-Object Name |
             ForEach-Object { $_.FullName }
 
