@@ -1,0 +1,12 @@
+// Failure fixture: assignment/array_direct_assign
+// Arrays cannot be assigned directly as ordinary values (docs 14.3, 19.6,
+// 29.7): `a = b` between two arrays is invalid. Use memcpy/memset/uninit
+// or an initializer list instead.
+func main() -> int32_t {
+    array<int32_t> a;
+    array<int32_t> b;
+
+    a = b;
+
+    return 0;
+}

@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/resize_on_static
+// resize (doc 20.2) is available only on dynamic arrays: resizing a static
+// array is invalid.
+func main() -> int32_t {
+    array<int32_t, 4> stat;
+    stat.resize(2);
+    return 0;
+}

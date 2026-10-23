@@ -1,0 +1,9 @@
+// Failure fixture: fluid_consts/int32_overflow
+// Constant 2147483648 does not fit the int32_t context (max 2147483647).
+func main() -> int32_t {
+    int32_t x = 2147483648;
+
+    print(x)
+
+    return 0
+}

@@ -1,0 +1,6 @@
+// Failure fixture: strings/string_in_print
+// A string literal is not an expression, so it cannot be a print argument.
+func main() -> int32_t {
+    print("hi");
+    return 0;
+}

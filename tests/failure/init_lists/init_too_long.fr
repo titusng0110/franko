@@ -1,0 +1,7 @@
+// Failure fixture: init_lists/init_too_long
+// Initializer list longer than the static array: the generated xs[2] = 3 is rejected by static array bounds checking.
+func main() -> int32_t {
+    array<int32_t, 2> xs;
+    xs = [1, 2, 3];
+    return 0;
+}

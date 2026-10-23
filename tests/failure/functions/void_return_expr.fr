@@ -1,0 +1,10 @@
+// Failure fixture: functions/void_return_expr
+// A void function may use bare return only; return with an expression is invalid in a void function.
+
+func v() -> void {
+    return 5;
+}
+
+func main() -> int32_t {
+    return 0;
+}

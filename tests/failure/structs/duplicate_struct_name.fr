@@ -1,0 +1,13 @@
+// Failure fixture: structs/duplicate_struct_name
+// Duplicate struct names are rejected; each struct name denotes exactly one declared type.
+struct X {
+    int32_t a
+}
+
+struct X {
+    int32_t b
+}
+
+func main() -> int32_t {
+    return 0;
+}

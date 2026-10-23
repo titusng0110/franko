@@ -1,0 +1,8 @@
+// Failure fixture: global_scope/gs_decl_init_sugar
+// Declaration initializer sugar with an array initializer list desugars
+// into executable indexed assignments, which are not allowed at global scope.
+array<int32_t, 3> xs = [1, 2, 3];
+
+func main() -> int32_t {
+    return 0
+}

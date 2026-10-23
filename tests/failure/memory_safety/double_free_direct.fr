@@ -1,0 +1,10 @@
+// Failure fixture: memory_safety/double_free_direct
+// Deleting the same heap variable twice.
+func main() -> int32_t {
+    alloc int32_t x2
+
+    del x2
+    del x2
+
+    return 0
+}

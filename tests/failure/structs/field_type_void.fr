@@ -1,0 +1,9 @@
+// Failure fixture: structs/field_type_void
+// 'void' is not a valid field type; it is not an ordinary type.
+struct X {
+    void x
+}
+
+func main() -> int32_t {
+    return 0;
+}

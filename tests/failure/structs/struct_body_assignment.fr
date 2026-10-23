@@ -1,0 +1,10 @@
+// Failure fixture: structs/struct_body_assignment
+// A struct body may only contain field declarations; assignments (statements) are invalid inside a struct body.
+struct X {
+    int32_t a
+    a = 1
+}
+
+func main() -> int32_t {
+    return 0;
+}

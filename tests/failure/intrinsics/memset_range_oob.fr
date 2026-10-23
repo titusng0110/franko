@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/memset_range_oob
+// Constant memset ranges are checked against the static array size.
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    xs.memset(0, 0, 10);
+    return 0;
+}

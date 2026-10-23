@@ -1,0 +1,7 @@
+// Failure fixture: addr_compare_null/null_to_nonaddr
+// Null is valid only where an address is expected.
+func main() -> int32_t {
+    int32_t x6 = null
+
+    return 0
+}

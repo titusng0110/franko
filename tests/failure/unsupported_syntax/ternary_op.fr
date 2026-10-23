@@ -1,0 +1,12 @@
+// Failure fixture: unsupported_syntax/ternary_op
+// The ternary conditional operator `?:` does not exist in the grammar
+// (doc 29.17); use if/else statements instead.
+
+func main() -> int32_t {
+    int32_t a = 3;
+    int32_t b = 4;
+    int32_t c = 0;
+    c = a > 0 ? a : b;
+    print(c);
+    return 0;
+}

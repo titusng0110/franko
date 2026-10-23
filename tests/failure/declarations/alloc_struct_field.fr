@@ -1,0 +1,9 @@
+// Failure fixture: declarations/alloc_struct_field
+// `alloc` is not valid for struct fields; fields are always inline storage.
+struct X {
+    alloc int32_t a
+}
+
+func main() -> int32_t {
+    return 0
+}

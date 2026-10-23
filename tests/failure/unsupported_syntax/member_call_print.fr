@@ -1,0 +1,9 @@
+// Failure fixture: unsupported_syntax/member_call_print
+// Only built-in array intrinsics use member-call syntax; `x.print()` is an
+// unsupported member call because print is a statement keyword (doc 29.2).
+
+func main() -> int32_t {
+    int32_t x = 1;
+    x.print();
+    return 0;
+}

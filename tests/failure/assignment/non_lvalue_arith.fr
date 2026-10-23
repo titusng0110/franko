@@ -1,0 +1,12 @@
+// Failure fixture: assignment/non_lvalue_arith
+// The left-hand side of an assignment must be a storage-backed lvalue
+// (docs 14, 15): an arithmetic expression is not storage-backed, so
+// `a + b = 3` is rejected.
+func main() -> int32_t {
+    int32_t a = 1
+    int32_t b = 2
+
+    a + b = 3
+
+    return 0
+}

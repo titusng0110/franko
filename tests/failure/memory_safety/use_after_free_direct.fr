@@ -1,0 +1,10 @@
+// Failure fixture: memory_safety/use_after_free_direct
+// Use of a heap variable after deletion.
+func main() -> int32_t {
+    alloc int32_t x1
+
+    del x1
+    print(x1)
+
+    return 0
+}

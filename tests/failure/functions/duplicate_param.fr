@@ -1,0 +1,10 @@
+// Failure fixture: functions/duplicate_param
+// Duplicate parameter names inside the same function are invalid.
+
+func f(int32_t a, int32_t a) -> int32_t {
+    return a;
+}
+
+func main() -> int32_t {
+    return 0;
+}

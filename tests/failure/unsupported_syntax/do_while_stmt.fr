@@ -1,0 +1,12 @@
+// Failure fixture: unsupported_syntax/do_while_stmt
+// There is no do-while statement in the grammar; only if, while, and for
+// control flow is implemented (doc 29.15).
+
+func main() -> int32_t {
+    int32_t i = 0;
+    do {
+        i = i + 1;
+    } while (i < 10);
+    print(i);
+    return 0;
+}

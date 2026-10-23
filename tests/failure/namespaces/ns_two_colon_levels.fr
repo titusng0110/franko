@@ -1,0 +1,7 @@
+// Failure fixture: namespaces/ns_two_colon_levels
+// More than one `::` level (a::b::c) is rejected while nested namespaces
+// are unsupported.
+func main() -> int32_t {
+    print(a::b::c);
+    return 0
+}

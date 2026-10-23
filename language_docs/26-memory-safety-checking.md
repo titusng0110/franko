@@ -95,12 +95,12 @@ Alongside the heap matrix, the checker tracks a separate null-state matrix for a
 Rules:
 
 - an ordinary `addr<T>` declaration is **null-initialized**, so it starts in the null state;
-- an `alloc addr<T>` declaration points at freshly allocated storage and starts in the pointing state;
+- an `alloc addr<T>` declaration is also null-initialized: the heap slot holds null until an explicit assignment (`getaddr(...)`, a certified variable, or `null`) refines it; dereferencing the slot before such an assignment is an error;
 - assigning the `null` literal makes the target null;
 - assigning `getaddr(...)` makes the target pointing; this is the **only** certification of a non-null address;
 - assigning another address variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
-- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields an unknown state;
-- at function entry, every tracked address variable is unknown, because parameters and globals carry values the checker cannot see.
+- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
+- at function entry, every tracked address variable is maybe-null, because parameters and globals carry values the checker cannot see.
 
 Dereference checking:
 
@@ -125,7 +125,7 @@ Refinement is path-sensitive up to the same nesting-depth limit as the heap matr
 
 ### 26.7.2 Address Null-State Limitations
 
-- unknown states (call results, parameters, field and element reads) are trusted as non-null by dereference checking, matching pre-`null` behavior; a null value may still flow through them;
+- values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
 - dangling addresses (see the aliasing limitation below) are not detected at compile time; a runtime check is planned as a later change.
 
 ## 26.8 Limitations

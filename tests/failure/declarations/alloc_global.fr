@@ -1,0 +1,8 @@
+// Failure fixture: declarations/alloc_global
+// `alloc` is only valid for local declarations; global variables are always
+// statically allocated, so `alloc` at global scope is an error.
+alloc int32_t g
+
+func main() -> int32_t {
+    return 0
+}

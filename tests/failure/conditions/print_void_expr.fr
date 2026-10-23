@@ -1,0 +1,11 @@
+// Failure fixture: conditions/print_void_expr
+// print arguments are checked as expressions usable where a value is
+// required; void expressions are rejected.
+func voidF() -> void {
+    return
+}
+
+func main() -> int32_t {
+    print(voidF());
+    return 0
+}

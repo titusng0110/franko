@@ -1,0 +1,8 @@
+// Failure fixture: arrays/init_size_zero
+// Constant dynamic array init size must be greater than zero.
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(0);
+    xs.uninit();
+    return 0;
+}

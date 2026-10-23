@@ -1,0 +1,8 @@
+// Failure fixture: decl_type_validity/void_variable
+// `void` is not an ordinary value type, so `void x;` is an invalid variable
+// declaration (doc 28); the grammar's `type` rule does not even accept VOID.
+
+func main() -> int32_t {
+    void x;
+    return 0;
+}

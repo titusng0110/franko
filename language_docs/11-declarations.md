@@ -79,20 +79,27 @@ Local variables must be declared before they are used.
 
 ## 11.4 Global Variable Declarations
 
-Variable declarations are allowed at global scope.
+Variable declarations are allowed at global scope. Global variables are statically allocated; the `alloc` modifier is not valid at global scope.
 
-Global variable declarations may have an optional constant initializer:
+Two different initializer forms exist for declarations, and they follow different rules at global scope.
+
+**Constant initializers.** A global declaration may end with `= constExpr`:
 
 ```franko
 int32_t g = 1 + 2
 uint64_t mask = 1 << 8
 ```
 
-The initializer must be a constant expression (`constExpr`) and is folded at compile time. Only primitive globals can have initializers; struct, array, and addr globals reject `= constExpr` as a type mismatch.
+The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and addr globals reject `= constExpr` as a type mismatch.
 
-Ordinary declaration initializer sugar remains invalid at global scope because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments), and executable statements are not allowed at global scope.
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, string literals `= "text"`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
-The `alloc` modifier is not valid at global scope; global variables are always statically allocated.
+```franko
+int32_t g = h                     // invalid: the initializer must be constant
+array<int32_t, 3> xs = [1, 2, 3]  // invalid: desugars into indexed assignments
+```
+
+The constant-initializer form above is the only way to initialize a global at its declaration.
 
 ## 11.5 Uninitialized Values
 

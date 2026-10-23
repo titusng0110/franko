@@ -1,0 +1,7 @@
+// Failure fixture: conditions/for_missing_condition
+// The for-loop condition is required; only init and update may be omitted.
+func main() -> int32_t {
+    for (int32_t i = 0; ; i = i + 1) {
+    }
+    return 0
+}

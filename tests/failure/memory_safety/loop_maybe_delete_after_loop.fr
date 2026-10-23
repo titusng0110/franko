@@ -1,0 +1,16 @@
+// Failure fixture: memory_safety/loop_maybe_delete_after_loop
+// A loop that may delete the variable; after the loop the state merges
+// zero-iteration (alive) and one-iteration (deleted), so use is invalid.
+func main() -> int32_t {
+    alloc int32_t x15
+    uint32_t i15 = 0
+
+    while (i15 < 1) {
+        del x15
+        i15 = i15 + 1
+    }
+
+    print(x15)
+
+    return 0
+}

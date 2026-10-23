@@ -1,0 +1,28 @@
+// ============================================================
+// SPEC TEST: Print Statements — Addresses and null
+// ============================================================
+// Covers: print is a dedicated statement (doc 18.6); the backend
+// prints addresses through const void* (doc 30.7), so print(null)
+// prints the null address as a pointer value (doc 23.8).
+// A real address prints as a pointer value too; its value is not
+// deterministic across runs, so the expected file matches it by the
+// "0x..." prefix convention supported by the test runner.
+// ============================================================
+
+func main() -> int32_t {
+    int32_t x = 42
+
+    // null prints as the null pointer value.
+    print(null)
+
+    // A certified address prints as a pointer value.
+    addr<int32_t> p
+    p = getaddr(x)
+    print(p)
+
+    // A null address variable prints the same way as the null literal.
+    addr<int32_t> q
+    print(q)
+
+    return 0
+}

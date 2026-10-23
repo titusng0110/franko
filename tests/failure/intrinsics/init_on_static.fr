@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/init_on_static
+// init/init_zero are available only on dynamic arrays.
+func main() -> int32_t {
+    array<int32_t, 4> xs;
+    xs.init(4);
+    return 0;
+}

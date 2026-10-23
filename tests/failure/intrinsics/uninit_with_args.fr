@@ -1,0 +1,9 @@
+// Failure fixture: intrinsics/uninit_with_args
+// uninit takes exactly zero arguments.
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(4);
+    xs.uninit(1);
+    xs.uninit();
+    return 0;
+}

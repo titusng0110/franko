@@ -1,0 +1,13 @@
+// Failure fixture: functions/nested_func
+// Function declarations are valid only at global scope; a func inside another function body is invalid.
+
+func outer() -> void {
+    func inner() -> void {
+        return;
+    }
+    return;
+}
+
+func main() -> int32_t {
+    return 0;
+}

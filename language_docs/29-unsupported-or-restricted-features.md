@@ -82,13 +82,13 @@ The compiler does not fully track dangling addresses or ownership.
 
 ## 29.12 Print Checking Is Loose
 
-The checker validates print arguments as expressions but does not enforce a strict printable-type set. The backend can print integer primitives and addresses; printing other types (for example arrays) does not produce compilable C++. See [Statements](18-statements.md).
+The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and addresses (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](18-statements.md).
 
 Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
 
 ## 29.13 Unsupported Operators
 
-The following operators do not exist in the grammar; source code using them fails to parse:
+The following operators do not exist in the language. The lexer rejects the characters `%` and `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
 
 ```franko
 %   // no modulus operator

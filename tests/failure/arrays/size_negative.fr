@@ -1,0 +1,6 @@
+// Failure fixture: arrays/size_negative
+// Static array size must be greater than zero (negative constant).
+func main() -> int32_t {
+    array<int32_t, -1> b;
+    return 0;
+}

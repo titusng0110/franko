@@ -1,0 +1,10 @@
+// Failure fixture: namespaces/ns_import_inside
+// Namespace bodies allow only struct, global-var, and function declarations;
+// an `import` directive inside a namespace body is a syntax error.
+namespace n {
+    import util
+}
+
+func main() -> int32_t {
+    return 0
+}

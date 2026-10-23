@@ -127,7 +127,7 @@ Consequences:
 
 Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (addresses excluded), and `memcpy`-able when every field is `memcpy`-able (addresses included). See [Array Intrinsics](20-array-intrinsics.md).
 
-Structs are not integers: operators, `if`/`while` conditions, and `print` reject whole structs. Operate on fields instead.
+Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](18-statements.md)). Operate on fields instead: `print(s.x)`.
 
 ## 24.7 Member Access and Field Lvalues
 
@@ -195,7 +195,7 @@ The C++14 backend:
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - No methods: only the built-in array intrinsics use member-call syntax.
-- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` accepts only individual fields.
+- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` cannot print a whole struct — print individual fields instead.
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - `alloc` is invalid for fields; field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `addr<...>` and dynamic-array fields break the cycle.

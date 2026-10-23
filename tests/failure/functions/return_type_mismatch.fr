@@ -1,0 +1,10 @@
+// Failure fixture: functions/return_type_mismatch
+// A returned expression's type must exactly match the declared return type: a uint8_t variable does not match int32_t.
+
+func f(uint8_t u) -> int32_t {
+    return u;
+}
+
+func main() -> int32_t {
+    return 0;
+}

@@ -1,0 +1,53 @@
+// ============================================================
+// SPEC TEST: Memory Management (Heap, Addresses)
+// ============================================================
+// Covers: alloc, del, addr<T>, getaddr, deref, and null literals.
+// ============================================================
+
+func main() -> int32_t {
+    // --- Stack variable ---
+    int32_t stackVar = 42;
+
+    // --- Heap allocation ---
+    alloc int32_t heapVar;
+    heapVar = 100;
+
+    // --- Addresses & dereferencing ---
+    addr<int32_t> p = getaddr(stackVar);
+    int32_t derefVal = deref(p);
+
+    // --- Address to heap variable ---
+    addr<int32_t> heapAddr = getaddr(heapVar);
+    deref(heapAddr) = 200;
+
+    // --- Null address ---
+    addr<int32_t> nullAddr;
+    if (nullAddr == null) {
+        print(1);
+    }
+    nullAddr = getaddr(stackVar);
+    if (nullAddr != null) {
+        print(0);
+    }
+
+    // --- Address of array ---
+    array<int32_t> arr;
+    arr.init(10); // or arr(10)
+    addr<array<int32_t>> arrPtr = getaddr(arr);
+    deref(arrPtr)[0] = 1;
+    int32_t arrVal = deref(arrPtr)[0];
+
+    // --- Address of array with static size ---
+    array<int32_t, 5> staticArr;
+    addr<array<int32_t, 5>> staticArrPtr = getaddr(staticArr);
+    deref(staticArrPtr)[0] = 5;
+
+    // --- Delete heap variables ---
+    del heapVar;
+
+    print(derefVal);
+    print(deref(heapAddr));
+    print(arrVal);
+
+    return 0;
+}

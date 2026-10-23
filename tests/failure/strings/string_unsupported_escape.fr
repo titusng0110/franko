@@ -1,0 +1,7 @@
+// Failure fixture: strings/string_unsupported_escape
+// Unsupported escape \u inside a string literal: only \\ \" \a \b \f \n \r \t \v are accepted, so this fails to lex.
+func main() -> int32_t {
+    array<byte, 8> s;
+    s = "a\u1234b";
+    return 0;
+}

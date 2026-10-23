@@ -1,0 +1,15 @@
+// Failure fixture: memory_safety/branch_dynamic_array_cleanup_leak
+// Cleanup happens on only one branch; the merge path leaks the object.
+func main() -> int32_t {
+    alloc array<int32_t> xs25
+    int32_t cond25 = 1
+
+    xs25.init(10)
+
+    if (cond25 != 0) {
+        xs25.uninit()
+        del xs25
+    }
+
+    return 0
+}

@@ -1,0 +1,8 @@
+// Failure fixture: global_scope/gs_expr_statement
+// Expression statements (bare expressions such as 1 + 2) are executable
+// statements and are not valid top-level items.
+1 + 2;
+
+func main() -> int32_t {
+    return 0
+}

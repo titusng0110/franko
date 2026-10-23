@@ -1,0 +1,9 @@
+// Failure fixture: init_lists/init_in_return
+// An array initializer list is not an expression, so it cannot be a return value.
+func f() -> int32_t {
+    return [1, 2, 3];
+}
+
+func main() -> int32_t {
+    return 0;
+}

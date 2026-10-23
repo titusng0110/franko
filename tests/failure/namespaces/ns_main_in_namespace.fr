@@ -1,0 +1,8 @@
+// Failure fixture: namespaces/ns_main_in_namespace
+// The entry-point function `main` must be declared in the global namespace;
+// a `main` inside a namespace is a compile error.
+namespace app {
+    func main() -> int32_t {
+        return 0
+    }
+}

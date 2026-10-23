@@ -1,0 +1,9 @@
+// Failure fixture: imports/import_dotdot_missing
+// The ../ prefix is used as written, so `import "../missing"` resolves to
+// ../missing.fr relative to this file's directory; that file does not
+// exist, so the import fails to resolve (doc 02).
+import "../missing"
+
+func main() -> int32_t {
+    return 0
+}

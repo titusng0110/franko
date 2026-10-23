@@ -1,0 +1,36 @@
+// ============================================================
+// SPEC TEST: Structs By Value Through Functions
+// ============================================================
+// Covers: an assignable struct (all primitive fields) passed
+// by value (the callee mutates only its copy) and returned by
+// value from a function.
+// ============================================================
+
+struct Pair {
+    int32_t a = 0
+    int32_t b = 0
+}
+
+func bump(Pair p) -> void {
+    p.a = p.a + 100;
+    p.b = p.b + 200;
+}
+
+func makePair(int32_t seed) -> Pair {
+    Pair q;
+    q.a = seed;
+    q.b = seed * 2;
+    return q;
+}
+
+func main() -> int32_t {
+    Pair p;
+    p.a = 1;
+    p.b = 2;
+    bump(p);
+    print(p.a, p.b);
+
+    Pair r = makePair(5);
+    print(r.a, r.b);
+    return 0;
+}

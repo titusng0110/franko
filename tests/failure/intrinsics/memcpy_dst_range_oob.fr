@@ -1,0 +1,12 @@
+// Failure fixture: intrinsics/memcpy_dst_range_oob
+// Ranged memcpy (doc 20.6): for static arrays the constant ranges are
+// checked against the static sizes at compile time; dstStart 3 with
+// count 2 overruns the 4-element destination.
+func main() -> int32_t {
+    array<int32_t, 4> a;
+    array<int32_t, 4> b;
+    a.memset(0);
+    b.memset(0);
+    a.memcpy(getaddr(b), 3, 0, 2);
+    return 0;
+}

@@ -1,0 +1,10 @@
+// Failure fixture: memory_safety/leak_at_block_scope
+// A heap variable is not deleted before its block scope exits.
+func main() -> int32_t {
+    {
+        alloc int32_t x16
+        print(x16)
+    }
+
+    return 0
+}

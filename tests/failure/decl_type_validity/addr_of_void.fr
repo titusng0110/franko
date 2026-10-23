@@ -1,0 +1,8 @@
+// Failure fixture: decl_type_validity/addr_of_void
+// Addresses require a valid non-void referenced type (doc 28, doc 23), so
+// `addr<void> p;` is invalid.
+
+func main() -> int32_t {
+    addr<void> p;
+    return 0;
+}

@@ -1,0 +1,11 @@
+// Failure fixture: intrinsics/memcpy_count_negative
+// Ranged memcpy (doc 20.6): count must be a nonnegative constant fitting
+// uint32_t; a negative constant is rejected.
+func main() -> int32_t {
+    array<int32_t, 4> a;
+    array<int32_t, 4> b;
+    a.memset(0);
+    b.memset(0);
+    a.memcpy(getaddr(b), 0, 0, -3);
+    return 0;
+}

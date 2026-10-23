@@ -1,0 +1,47 @@
+// ============================================================
+// SPEC TEST: Structs Composed with Other Type Constructors
+// ============================================================
+// Covers: struct types used inside the other type constructors:
+// array<Point> (dynamic), array<Point, 4> (static), addr<Point>,
+// and ndarray<Point, 2, 3> sugar; field assignment and access
+// through each storage form.
+// ============================================================
+
+struct Point {
+    int32_t x
+    int32_t y = 0
+}
+
+func main() -> int32_t {
+    // Dynamic array of structs: starts empty, must be initialized.
+    array<Point> dyn;
+    dyn(2);
+    dyn[0].x = 1;
+    dyn[0].y = 2;
+    dyn[1].x = 3;
+    print(dyn[0].x, dyn[0].y, dyn[1].x);
+
+    // Static array of structs.
+    array<Point, 4> grid;
+    grid[0].x = 4;
+    grid[0].y = 5;
+    print(grid[0].x + grid[0].y);
+
+    // Address to a struct, fields assigned through deref(p).
+    Point p;
+    addr<Point> pp;
+    pp = getaddr(p);
+    deref(pp).x = 6;
+    deref(pp).y = 7;
+    print(deref(pp).x + deref(pp).y);
+
+    // Ndarray (nested static arrays) of structs.
+    ndarray<Point, 2, 3> cells;
+    cells[1][2].x = 8;
+    cells[1][2].y = 9;
+    print(cells[1][2].x, cells[1][2].y);
+
+    dyn.uninit();
+
+    return 0;
+}

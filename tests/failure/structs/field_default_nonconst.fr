@@ -1,0 +1,11 @@
+// Failure fixture: structs/field_default_nonconst
+// A field default must be a constant expression; referencing a global variable (or calling a function) is not constExpr syntax.
+int32_t g = 1
+
+struct X {
+    int32_t a = g
+}
+
+func main() -> int32_t {
+    return 0;
+}

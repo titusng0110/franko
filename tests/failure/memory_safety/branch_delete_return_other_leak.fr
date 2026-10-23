@@ -1,0 +1,16 @@
+// Failure fixture: memory_safety/branch_delete_return_other_leak
+// A returning branch deletes the heap variable; the continuing fallthrough
+// path uses it and leaks it.
+func main() -> int32_t {
+    alloc int32_t x5
+    int32_t cond5 = 1
+
+    if (cond5 != 0) {
+        del x5
+        return 0
+    }
+
+    print(x5)
+
+    return 0
+}

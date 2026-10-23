@@ -1,0 +1,9 @@
+// Failure fixture: strings/string_in_return
+// A string literal is not an expression, so it cannot be a return value.
+func f() -> int32_t {
+    return "hi";
+}
+
+func main() -> int32_t {
+    return 0;
+}

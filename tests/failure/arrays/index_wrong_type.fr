@@ -1,0 +1,10 @@
+// Failure fixture: arrays/index_wrong_type
+// Nonconstant array index must have exactly type uint32_t.
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(4);
+    int32_t i = 0;
+    xs[i] = 1;
+    xs.uninit();
+    return 0;
+}

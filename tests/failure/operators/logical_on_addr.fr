@@ -1,0 +1,9 @@
+// Failure fixture: operators/logical_on_addr
+// Logical operators require integer operands; addresses are not integers
+// and cannot be used with && or ||.
+func main() -> int32_t {
+    addr<int32_t> p;
+    addr<int32_t> q;
+    print(p && q);
+    return 0
+}

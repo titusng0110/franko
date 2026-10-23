@@ -1,0 +1,15 @@
+// Failure fixture: addr_deref_null/null_guard_after_deref
+// Dereferencing on the only feasible path after a null guard:
+// p5 is provably null after the guard fails.
+func main() -> int32_t {
+    int32_t x5 = 0
+    addr<int32_t> p5
+
+    if (p5 == null) {
+        print(1)
+    }
+
+    print(deref(p5))
+
+    return 0
+}

@@ -1,0 +1,7 @@
+// Failure fixture: addr_compare_null/null_to_int
+// Null may not be compared with a non-address value.
+func main() -> int32_t {
+    print(null == 5)
+
+    return 0
+}

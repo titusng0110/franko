@@ -1,0 +1,12 @@
+// Failure fixture: addr_deref_null/null_copy_deref
+// Null state propagates through a copy; the copy is dereferenced.
+func main() -> int32_t {
+    addr<int32_t> b3
+    addr<int32_t> a3
+
+    a3 = b3
+
+    print(deref(a3))
+
+    return 0
+}

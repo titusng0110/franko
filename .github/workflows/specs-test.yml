@@ -1,0 +1,250 @@
+name: Spec test
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-linux:
+    name: Compile and run spec programs (Linux x86_64)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Build Franko compiler toolchain
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p build/generated build/classes
+
+          java -Xmx500M -cp ".:lib/antlr-4.13.2-complete.jar" \
+            org.antlr.v4.Tool -visitor -o build/generated Franko.g4
+
+          javac --release 25 -Xlint:all,-auxiliaryclass \
+            -cp ".:lib/antlr-4.13.2-complete.jar:build/generated" \
+            -d build/classes *.java build/generated/*.java
+
+      - name: Run success spec programs
+        run: |
+          set -Eeuo pipefail
+          shopt -s nullglob
+
+          CP=".:lib/antlr-4.13.2-complete.jar:build/generated:build/classes"
+          JEM_INC="third_party/jemalloc/linux-x86_64/include"
+          JEM_LIB="third_party/jemalloc/linux-x86_64/lib/libjemalloc.a"
+
+          # Every program in tests/success/ is a positive test with a
+          # checked-in .expected file.
+          for SRC in tests/success/*/main.fr; do
+            BASE="${SRC%.fr}"
+
+            echo
+            echo "=== $SRC ==="
+            echo
+
+            java -cp "$CP" Main "$SRC" -o "$BASE.cpp"
+
+            g++ \
+              -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
+              -Iinclude -I"$JEM_INC" \
+              "$BASE.cpp" "$JEM_LIB" \
+              -pthread -ldl -static-libstdc++ -static-libgcc \
+              -o "$BASE.testbin"
+
+            "$BASE.testbin" | tee "$BASE.actual"
+
+            echo
+            echo "Comparing output against $BASE.expected:"
+            diff -u "$BASE.expected" "$BASE.actual"
+
+            echo
+            echo "PASS: $SRC ran successfully, output matches $BASE.expected"
+          done
+
+      - name: Run failure spec programs
+        run: |
+          set -Eeuo pipefail
+          shopt -s nullglob
+
+          CP=".:lib/antlr-4.13.2-complete.jar:build/generated:build/classes"
+
+          # Every program in tests/failure/ is a negative test: the Franko
+          # compiler must reject it (non-zero exit code).
+          for SRC in tests/failure/*/*.fr; do
+            echo
+            echo "=== $SRC ==="
+            echo
+
+            if java -cp "$CP" Main "$SRC" -o /dev/null 2>/dev/null; then
+              echo "FAIL: $SRC compiled successfully but was expected to fail."
+              exit 1
+            fi
+
+            echo
+            echo "PASS: $SRC was rejected by the Franko compiler as expected."
+          done
+
+  test-windows:
+    name: Compile and run spec programs (Windows x64)
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # UCRT64, matching build-jemalloc.yml and the checked-in windows-x64
+      # jemalloc bundle (keeps the CRT consistent with the static archive).
+      - name: Setup MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            diffutils
+            git
+          pacboy: >-
+            gcc:p
+
+      - name: Build Franko compiler toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          New-Item -ItemType Directory -Force -Path build/generated, build/classes | Out-Null
+
+          java -Xmx500M -cp ".;lib/antlr-4.13.2-complete.jar" `
+            org.antlr.v4.Tool -visitor -o build/generated Franko.g4
+          if ($LASTEXITCODE -ne 0) { throw "ANTLR codegen failed with exit code $LASTEXITCODE" }
+
+          $sources = @()
+          $sources += (Get-ChildItem -Path . -Filter "*.java" -File | ForEach-Object { $_.FullName })
+          $sources += (Get-ChildItem -Path build/generated -Filter "*.java" -File | ForEach-Object { $_.FullName })
+
+          if ($sources.Count -eq 0) {
+            throw "No Java source files found to compile."
+          }
+
+          javac --release 25 "-Xlint:all,-auxiliaryclass" `
+            -cp ".;lib/antlr-4.13.2-complete.jar;build/generated" `
+            -d build/classes $sources
+          if ($LASTEXITCODE -ne 0) { throw "javac failed with exit code $LASTEXITCODE" }
+
+      - name: Generate C++ with Franko compiler (success programs)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $CP = ".;lib/antlr-4.13.2-complete.jar;build/generated;build/classes"
+
+          # Every program in tests/success/ is a positive test.
+          $programs = Get-ChildItem -Path "tests/success" -Filter "main.fr" -Recurse -File |
+            Sort-Object Name |
+            ForEach-Object { $_.FullName }
+
+          if ($programs.Count -eq 0) {
+            throw "No .fr programs found under tests/success/."
+          }
+
+          foreach ($src in $programs) {
+            $base = $src.Substring(0, $src.Length - 3)
+
+            Write-Host ""
+            Write-Host "=== $src ==="
+            Write-Host ""
+
+            java -cp $CP Main $src -o "$base.cpp"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Franko compiler failed for $src with exit code $LASTEXITCODE"
+            }
+          }
+
+      - name: Compile and run success programs
+        shell: msys2 {0}
+        run: |
+          set -Eeuo pipefail
+          shopt -s nullglob
+
+          # Excluded on Windows:
+          #   string.fr — a CRLF checkout changes the program's output.
+          for BASE in tests/success/*/main.fr; do
+            BASE="${BASE%.fr}"
+
+            if [[ "${BASE##*/}" == "string" ]]; then
+              echo
+              echo "Skipping $BASE on Windows: a CRLF checkout changes the program's output."
+              continue
+            fi
+
+            echo
+            echo "=== $BASE ==="
+            echo
+
+            g++ \
+              -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
+              -Iinclude -I"third_party/jemalloc/windows-x64/include" \
+              "$BASE.cpp" "third_party/jemalloc/windows-x64/lib/jemalloc.lib" \
+              -static-libstdc++ -static-libgcc \
+              -o "$BASE.exe"
+
+            ./"$BASE.exe" | tee "$BASE.actual.win"
+
+            # Normalize CRLF: Windows runners check text files out with \r\n,
+            # and UCRT stdout uses the same line endings.
+            tr -d '\r' < "$BASE.actual.win" > "$BASE.actual"
+            tr -d '\r' < "$BASE.expected" > "$BASE.want"
+
+            echo
+            echo "Comparing output against $BASE.expected:"
+            diff -u "$BASE.want" "$BASE.actual"
+
+            echo
+            echo "PASS: $BASE.exe ran successfully, output matches $BASE.expected"
+          done
+
+      - name: Run failure spec programs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $CP = ".;lib/antlr-4.13.2-complete.jar;build/generated;build/classes"
+
+          # Every program in tests/failure/ is a negative test: the Franko
+          # compiler must reject it (non-zero exit code).
+          $programs = Get-ChildItem -Path "tests/failure" -Filter "*.fr" -Recurse -File |
+            Sort-Object Name |
+            ForEach-Object { $_.FullName }
+
+          if ($programs.Count -eq 0) {
+            throw "No .fr programs found under tests/failure/."
+          }
+
+          foreach ($src in $programs) {
+            Write-Host ""
+            Write-Host "=== $src ==="
+            Write-Host ""
+
+            java -cp $CP Main $src -o "NUL"
+            if ($LASTEXITCODE -eq 0) {
+              throw "$src compiled successfully but was expected to fail."
+            }
+
+            Write-Host ""
+            Write-Host "PASS: $src was rejected by the Franko compiler as expected."
+          }

@@ -1,0 +1,9 @@
+// Failure fixture: fluid_consts/uint8_overflow
+// Constant 256 does not fit the uint8_t context (max 255).
+func main() -> int32_t {
+    uint8_t x = 256;
+
+    print(x)
+
+    return 0
+}

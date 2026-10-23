@@ -683,7 +683,8 @@ public final class MemorySafetyChecker {
          * At function entry every address state is unknown: parameters carry
          * caller values, globals may have been modified by earlier calls.
          * Local declarations set their own state (NULL for plain address
-         * declarations, POINTING for alloc'd addresses).
+         * declarations and for alloc'd addresses, whose heap slot is
+         * null-initialized).
          */
         Arrays.fill(addrState, AddressState.MAYBE_NULL);
 
@@ -867,10 +868,13 @@ public final class MemorySafetyChecker {
         }
 
         /*
-         * Address declarations are guaranteed null-initialized.
+         * Address declarations are guaranteed null-initialized, including the
+         * heap slot of an alloc'd address: the generated C++ null-initializes
+         * the storage, so the slot holds null until an explicit assignment
+         * (getaddr(...), a certified variable, or null) refines it.
          *
          *   addr<T> p;             -> p is definitely NULL
-         *   alloc addr<T> p;       -> p points at freshly allocated storage
+         *   alloc addr<T> p;       -> the heap slot is definitely NULL
          *
          * An explicit initializer lowers to a separate assignment statement,
          * which then refines this state.
@@ -878,9 +882,7 @@ public final class MemorySafetyChecker {
         int addrIndex = addrIndexOfSymbol(node.symbol);
 
         if (addrIndex >= 0) {
-            addrState[addrIndex] = node.symbol.isHeap
-                    ? AddressState.POINTING
-                    : AddressState.NULL;
+            addrState[addrIndex] = AddressState.NULL;
         }
     }
 

@@ -1,0 +1,13 @@
+// Failure fixture: scoping/param_body_duplicate
+// Function body braces do not create an extra scope, so a body-level
+// declaration reusing a parameter name is a duplicate-declaration error.
+func f(int32_t x) -> int32_t {
+    int32_t x
+    x = 2
+    return x
+}
+
+func main() -> int32_t {
+    print(f(1))
+    return 0
+}

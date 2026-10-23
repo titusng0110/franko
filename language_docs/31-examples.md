@@ -466,7 +466,7 @@ func main() -> int32_t {
 
 `addr<Node>` fields break by-value cycles, so self-referential struct definitions like this are valid.
 
-Franko has no null addresses. An address field that is never assigned is indeterminate, so only follow links that have been explicitly assigned (here `b.next` is never set and is never read).
+Address declarations and address-typed struct fields are guaranteed null-initialized (see [Addresses](23-addresses.md)), so `b.next` is `null` here; only follow links that have been explicitly assigned.
 
 ## 31.20 Struct Globals
 

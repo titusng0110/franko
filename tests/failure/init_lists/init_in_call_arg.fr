@@ -1,0 +1,10 @@
+// Failure fixture: init_lists/init_in_call_arg
+// An array initializer list is not an expression, so it cannot be passed as a function call argument.
+func f(int32_t x) -> void {
+    print(x);
+}
+
+func main() -> int32_t {
+    f([1, 2, 3]);
+    return 0;
+}

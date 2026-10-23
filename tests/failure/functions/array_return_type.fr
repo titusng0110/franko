@@ -1,0 +1,11 @@
+// Failure fixture: functions/array_return_type
+// Arrays cannot be returned directly: a function return type may not be an array type.
+
+func f() -> array<int32_t> {
+    array<int32_t> xs;
+    return xs;
+}
+
+func main() -> int32_t {
+    return 0;
+}

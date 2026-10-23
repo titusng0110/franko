@@ -1,0 +1,1 @@
+resize receiver must have dynamic array type, got array<INT32, 4>

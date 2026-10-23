@@ -1,0 +1,15 @@
+// Failure fixture: structs/struct_arithmetic
+// Structs are not integers: operators reject whole structs; arithmetic on a whole struct is invalid.
+struct X {
+    int32_t a
+}
+
+func main() -> int32_t {
+    X s;
+
+    s.a = 1;
+
+    print(s + s);
+
+    return 0;
+}

@@ -1,0 +1,10 @@
+// Runtime fixture: arrays/zero_size_init
+// A nonconstant zero size passes compile-time checking (nonconstant sizes
+// must have exactly type uint32_t) and the array runtime raises a runtime
+// error on zero-size allocation (docs 19.3, 30.3).
+func main() -> int32_t {
+    uint32_t n = 0
+    array<int32_t> xs
+    xs.init(n)
+    return 0
+}
