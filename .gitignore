@@ -7,6 +7,8 @@ build/
 __pycache__/
 .antlr/
 programs/*.cpp
+programs/*.testbin
+programs/*.actual
 
 # Spec test artifacts (success fixtures keep only main.fr + main.expected;
 # failure fixtures keep only their .fr sources).

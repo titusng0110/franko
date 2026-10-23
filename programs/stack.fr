@@ -6,7 +6,9 @@
 //
 //   - importing a library module through the -p search directory:
 //       import "franko/vector"  ->  import/franko/vector.fr
-//   - a struct with a dynamic-array field (struct Vector)
+//   - a struct with a dynamic-array field (std::Vector)
+//   - namespace-qualified types and calls (std::Vector,
+//     std::vec_push, ...)
 //   - addr<Vector> parameters with getaddr at the call site
 //   - init / push (with growth) / get / set / pop / uninit
 //
@@ -17,43 +19,43 @@
 import "franko/vector"
 
 func main() -> int32_t {
-    Vector s
-    int32_t st = vec_init(getaddr(s), 2)
+    std::Vector s
+    int32_t st = std::vec_init(getaddr(s), 2)
     if (st != 0) {
         print(st)
         return 1
     }
 
-    vec_push(getaddr(s), 10)
-    vec_push(getaddr(s), 20)
-    vec_push(getaddr(s), 30)
-    vec_push(getaddr(s), 40)
-    vec_push(getaddr(s), 50)
+    std::vec_push(getaddr(s), 10)
+    std::vec_push(getaddr(s), 20)
+    std::vec_push(getaddr(s), 30)
+    std::vec_push(getaddr(s), 40)
+    std::vec_push(getaddr(s), 50)
 
-    print(vec_len(getaddr(s)))
-    print(vec_cap(getaddr(s)))
+    print(std::vec_len(getaddr(s)))
+    print(std::vec_cap(getaddr(s)))
 
-    uint32_t n = vec_len(getaddr(s))
+    uint32_t n = std::vec_len(getaddr(s))
     for (uint32_t i = 0; i < n; i = i + 1) {
-        print(vec_get(getaddr(s), i))
+        print(std::vec_get(getaddr(s), i))
     }
 
-    vec_set(getaddr(s), 0, 99)
-    print(vec_get(getaddr(s), 0))
+    std::vec_set(getaddr(s), 0, 99)
+    print(std::vec_get(getaddr(s), 0))
 
     int32_t top = 0
-    st = vec_pop(getaddr(s), getaddr(top))
+    st = std::vec_pop(getaddr(s), getaddr(top))
     print(st, top)
-    st = vec_pop(getaddr(s), getaddr(top))
+    st = std::vec_pop(getaddr(s), getaddr(top))
     print(st, top)
 
-    print(vec_len(getaddr(s)))
-    n = vec_len(getaddr(s))
+    print(std::vec_len(getaddr(s)))
+    n = std::vec_len(getaddr(s))
     for (uint32_t i = 0; i < n; i = i + 1) {
-        print(vec_get(getaddr(s), i))
+        print(std::vec_get(getaddr(s), i))
     }
 
-    vec_uninit(getaddr(s))
+    std::vec_uninit(getaddr(s))
 
     return 0
 }
