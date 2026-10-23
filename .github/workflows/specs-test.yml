@@ -283,7 +283,11 @@ jobs:
             Write-Host "=== $src ==="
             Write-Host ""
 
-            java -cp $CP Main $src -o "NUL"
+            # The compiler is expected to reject the program and report the
+            # diagnostics on stderr. Redirect stderr so the expected rejections
+            # do not surface as GitHub error annotations (the Linux step uses
+            # 2>/dev/null for the same reason); stdout stays visible.
+            java -cp $CP Main $src -o "NUL" 2> $null
             if ($LASTEXITCODE -eq 0) {
               throw "$src compiled successfully but was expected to fail."
             }
@@ -291,6 +295,12 @@ jobs:
             Write-Host ""
             Write-Host "PASS: $src was rejected by the Franko compiler as expected."
           }
+
+          # The GitHub Actions pwsh wrapper exits the step with $LASTEXITCODE
+          # when it is set, and the last java above intentionally exits
+          # non-zero (the fixture was rejected). Exit 0 explicitly so the
+          # step is green when every fixture was rejected as expected.
+          exit 0
 
       - name: Generate C++ with Franko compiler (runtime programs)
         shell: pwsh
