@@ -16,8 +16,8 @@
 // Expected output is in main.expected.
 // ============================================================
 
-import lib/util
-import merge
+import "lib/util"
+import "merge"
 
 // A global-namespace struct used by value inside a namespace struct.
 struct Base {

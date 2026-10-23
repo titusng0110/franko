@@ -182,7 +182,9 @@ RunNative -Exe "java" -Argv @(
     "Main",
     $SRC,
     "-o",
-    $CPP_OUT
+    $CPP_OUT,
+    "-p",
+    (Join-Path $ROOT "import")
 )
 
 Write-Host ""

@@ -14,6 +14,7 @@ public class Main {
         String sourceFile = "test.fr";
         String templateFile = "ProgramTemplate.cpp";
         String outputFile = "test.cpp";
+        Path importSearchDir = Path.of("import");
         boolean verbose = false;
 
         // ------------------------------------------------------------
@@ -37,6 +38,13 @@ public class Main {
                         throw new IllegalArgumentException("Missing value after -t");
                     }
                     templateFile = args[++i];
+                    break;
+
+                case "-p":
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Missing value after -p");
+                    }
+                    importSearchDir = Path.of(args[++i]);
                     break;
 
                 case "-v":
@@ -87,7 +95,7 @@ public class Main {
         }
 
         // ----- Resolve imports -----
-        ImportResolver importResolver = new ImportResolver();
+        ImportResolver importResolver = new ImportResolver(importSearchDir);
         ASTNode ast = importResolver.resolve(rawAst, Path.of(sourceFile));
 
         if (verbose) {

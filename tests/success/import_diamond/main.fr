@@ -9,8 +9,8 @@
 // Expected output is in main.expected.
 // ============================================================
 
-import left
-import right
+import "left"
+import "right"
 
 func main() -> int32_t {
     print(sharedValue)

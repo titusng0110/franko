@@ -1,0 +1,9 @@
+// Failure fixture: imports/import_not_found
+// A prefix-free import that exists neither in the -p search directory
+// nor next to this file is rejected, and the diagnostic names both
+// locations that were tried (doc 02).
+import "definitely-missing"
+
+func main() -> int32_t {
+    return 0
+}

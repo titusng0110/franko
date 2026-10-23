@@ -2,8 +2,8 @@
 // Duplicate declarations across imported files are reported like duplicate
 // declarations within one file (doc 02): lib/dup_a.fr and lib/dup_b.fr
 // both declare the symbol 'clash'.
-import lib/dup_a
-import lib/dup_b
+import "lib/dup_a"
+import "lib/dup_b"
 
 func main() -> int32_t {
     return 0

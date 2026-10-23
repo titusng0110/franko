@@ -1,6 +1,6 @@
 // Left arm of the diamond: imports shared.fr.
 
-import shared
+import "shared"
 
 int32_t leftBase = 10
 

@@ -1,0 +1,8 @@
+// Failure fixture: imports/import_bare_name
+// Import paths must be string literals: `import abc` (without quotes) is
+// a syntax error (doc 02).
+import abc
+
+func main() -> int32_t {
+    return 0
+}

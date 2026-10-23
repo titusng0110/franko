@@ -1,7 +1,7 @@
 // Second half of the import cycle: imports a.fr, which already
 // imported this file.
 
-import a
+import "a"
 
 int32_t bBase = 40
 

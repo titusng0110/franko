@@ -35,49 +35,50 @@ import java.util.Set;
  * IMPORT SYNTAX
  * ----------------------------------------------------------------------------
  *
- *   import importPath
- *
- * importPath is either a string literal or an import name:
- *
- *   import util
- *   import lib/util
- *   import "util"
+ *   import "abc"
  *   import "lib/util.fr"
  *   import "../shared/util"
+ *   import "my-lib/foo bar"
+ *
+ * The import path is always a string literal. Hyphens and spaces are
+ * ordinary characters inside the quoted path.
  *
  * ----------------------------------------------------------------------------
  * PATH RESOLUTION
  * ----------------------------------------------------------------------------
  *
- * Paths are always resolved relative to the directory of the file that
- * contains the import statement.
+ * The literal content is escape-decoded, then:
  *
- * importName form:
+ *   - a path with an explicit './', '../', or '/' prefix resolves
+ *     relative to the importing file (or as an absolute path), exactly
+ *     as written;
  *
- *   - './' is prepended and '.fr' is appended:
+ *   - a prefix-free path is looked up in two places, in order:
  *
- *       import lib/abc   ->  ./lib/abc.fr
+ *       1. the import search directory given to the compiler with -p
+ *          (default: ./import, relative to the compiler directory),
+ *       2. the directory of the importing file.
  *
- * stringLiteral form:
+ *     The first location that contains a regular file wins, so a
+ *     module supplied through -p shadows a same-named file next to the
+ *     importing source file.
  *
- *   - './' is prepended when the path has no directory prefix. The
- *     prefixes './', '../', and '/' all count as directory prefixes.
- *
- *   - '.fr' is appended when the file name has no extension.
+ *   - '.fr' is appended when the file name has no extension;
  *
  *   - a non-.fr extension is rejected:
  *
  *       import "foo.txt"   ->  error
  *
- * Examples (relative to the importing file's directory):
+ * Examples (search dir = <compiler>/import):
  *
- *   import lib/abc          ->  ./lib/abc.fr
- *   import "foo"            ->  ./foo.fr
- *   import "lib/foo"        ->  ./lib/foo.fr
- *   import "lib/foo.fr"     ->  ./lib/foo.fr
+ *   import "foo"            ->  <compiler>/import/foo.fr, else ./foo.fr
+ *   import "lib/foo"        ->  <compiler>/import/lib/foo.fr, else ./lib/foo.fr
  *   import "./lib/foo"      ->  ./lib/foo.fr
  *   import "../shared/foo"  ->  ../shared/foo.fr
  *   import "/abs/foo"       ->  /abs/foo.fr
+ *
+ * A missing search directory is not an error; resolution simply falls
+ * through to the importing file's directory.
  *
  * ----------------------------------------------------------------------------
  * WINDOWS ABSOLUTE PATHS
@@ -147,6 +148,18 @@ public class ImportResolver {
      * so import cycles terminate.
      */
     private final Set<String> processedFiles = new LinkedHashSet<>();
+
+    /**
+     * Directory searched first for prefix-free import paths.
+     *
+     * Supplied with the compiler's -p flag; defaults to ./import
+     * relative to the compiler's working directory.
+     */
+    private final Path importSearchDir;
+
+    public ImportResolver(Path importSearchDir) {
+        this.importSearchDir = importSearchDir;
+    }
 
     // ============================================================
     // Entry Point
@@ -241,11 +254,8 @@ public class ImportResolver {
 
         if (!Files.isRegularFile(target)) {
             throw new RuntimeException(
-                    "Import error: cannot read imported file '"
-                            + target
-                            + "' (imported from '"
-                            + importingFile
-                            + "')"
+                    "Import error: cannot read imported file"
+                            + candidateDescription(pathText, target, importingFile)
             );
         }
 
@@ -329,24 +339,17 @@ public class ImportResolver {
      *
      * Returns the path string used for file resolution:
      *
-     *   - importName form: './' + name + '.fr'
+     *   - '.fr' is appended when the file name has no extension;
      *
-     *   - stringLiteral form: './' prepended when no directory prefix is
-     *     present, '.fr' appended when the file name has no extension,
-     *     and an error when the extension is present but not '.fr'.
+     *   - an error is raised when the extension is present but not '.fr'.
+     *
+     * A prefix-free path is kept prefix-free: the resolver decides
+     * whether to try the -p search directory or the importing file's
+     * directory first.
      */
     private String computePathText(ImportNode importNode, Path importingFile) {
         String raw = importNode.rawPathText;
-
-        if (!importNode.isStringLiteral) {
-            return "./" + raw + ".fr";
-        }
-
         String pathText = raw;
-
-        if (!hasDirectoryPrefix(pathText)) {
-            pathText = "./" + pathText;
-        }
 
         /*
          * Extension rules apply to the file name only, so a '.' in a
@@ -387,12 +390,70 @@ public class ImportResolver {
 
     /**
      * True when the path already carries a directory prefix, in which case
-     * './' must not be prepended: './', '../', and '/'.
+     * it resolves relative to the importing file (or as an absolute path)
+     * and the -p search directory is skipped: './', '../', and '/'.
      */
     private static boolean hasDirectoryPrefix(String pathText) {
         return pathText.startsWith("./")
                 || pathText.startsWith("../")
                 || pathText.startsWith("/");
+    }
+
+    /**
+     * Picks the file a completed import path refers to.
+     *
+     * Prefix-free paths are looked up in the -p search directory first;
+     * the first location that holds a regular file wins. Every other
+     * path, and any prefix-free path with no search-directory match,
+     * resolves relative to the importing file's directory.
+     *
+     * The returned path may not exist; the caller reports that as an
+     * import error naming every location that was tried.
+     */
+    private Path resolveTarget(String pathText, Path importingFile) {
+        Path fileRelative = resolveRelativeToImportingFile(pathText, importingFile);
+
+        if (hasDirectoryPrefix(pathText)) {
+            return fileRelative;
+        }
+
+        Path searchCandidate = searchCandidate(pathText);
+
+        if (Files.isRegularFile(searchCandidate)) {
+            return searchCandidate;
+        }
+
+        return fileRelative;
+    }
+
+    /**
+     * Path of a prefix-free import inside the -p search directory.
+     */
+    private Path searchCandidate(String pathText) {
+        return importSearchDir
+                .toAbsolutePath()
+                .normalize()
+                .resolve(pathText)
+                .normalize();
+    }
+
+    /**
+     * Describes the location(s) tried for a missing import, for the
+     * diagnostic message.
+     */
+    private String candidateDescription(
+            String pathText,
+            Path fileRelative,
+            Path importingFile
+    ) {
+        if (hasDirectoryPrefix(pathText)) {
+            return " '" + fileRelative
+                    + "' (imported from '" + importingFile + "')";
+        }
+
+        return " '" + searchCandidate(pathText)
+                + "' or '" + fileRelative
+                + "' (imported from '" + importingFile + "')";
     }
 
     /**
@@ -407,7 +468,7 @@ public class ImportResolver {
      * where the current drive is the drive of the current working
      * directory, and '/' separators become '\'.
      */
-    private static Path resolveTarget(String pathText, Path importingFile) {
+    private static Path resolveRelativeToImportingFile(String pathText, Path importingFile) {
         if (IS_WINDOWS && pathText.startsWith("/")) {
             Path currentDriveRoot = Path.of(System.getProperty("user.dir")).getRoot();
 

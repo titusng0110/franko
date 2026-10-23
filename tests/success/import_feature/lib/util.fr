@@ -1,11 +1,11 @@
 // Utilities for the import test.
 //
-// Demonstrates the importName form: `import deep/extra` resolves to
-// ./deep/extra.fr relative to this file's directory.
+// Demonstrates a transitive relative import: `import "deep/extra"`
+// resolves to ./deep/extra.fr relative to this file's directory.
 //
 // A struct, a global variable, and functions exported to the importer.
 
-import deep/extra
+import "deep/extra"
 
 struct Point {
     int32_t x = 1
