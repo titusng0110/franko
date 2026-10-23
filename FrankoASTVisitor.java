@@ -285,23 +285,17 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitImportDecl(FrankoParser.ImportDeclContext ctx) {
-        FrankoParser.ImportPathContext pathCtx = ctx.importPath();
+        String rawText = ctx.STRING_LITERAL().getText();
 
-        if (pathCtx.STRING_LITERAL() != null) {
-            String rawText = pathCtx.STRING_LITERAL().getText();
+        /*
+         * rawText still carries the surrounding quotes. Strip them and
+         * decode Franko's supported escape sequences so the resolver
+         * works with the actual path text.
+         */
+        String rawContent = rawText.substring(1, rawText.length() - 1);
+        String decoded = StringLiteralDecoder.decodeRawContent(rawContent);
 
-            /*
-             * rawText still carries the surrounding quotes. Strip them and
-             * decode Franko's supported escape sequences so the resolver
-             * works with the actual path text.
-             */
-            String rawContent = rawText.substring(1, rawText.length() - 1);
-            String decoded = StringLiteralDecoder.decodeRawContent(rawContent);
-
-            return new ImportNode(decoded, true);
-        }
-
-        return new ImportNode(pathCtx.IMPORT_NAME().getText(), false);
+        return new ImportNode(decoded);
     }
 
     // ============================================================

@@ -9,7 +9,7 @@
 // Expected output is in main.expected.
 // ============================================================
 
-import a
+import "a"
 
 func main() -> int32_t {
     print(aValue())

@@ -1,0 +1,25 @@
+// ============================================================
+// Franko import search-directory test
+// ============================================================
+//
+// The -p flag (main.flags) points at ./search. Prefix-free imports
+// are looked up there first and fall back to this file's directory.
+//
+//   - "shared"      exists in ./search AND next to this file; the
+//                   search-directory copy must win (sharedValue = 10).
+//   - "my-lib/mod a" has a hyphen and a space in its path and only
+//                   exists in ./search.
+//   - "local"       only exists next to this file, exercising the
+//                   fallback lookup.
+// ============================================================
+
+import "shared"
+import "my-lib/mod a"
+import "local"
+
+func main() -> int32_t {
+    print(sharedValue)
+    print(spaceValue)
+    print(localValue)
+    return 0
+}

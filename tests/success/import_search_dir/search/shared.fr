@@ -1,0 +1,2 @@
+// Search-directory copy: must win over the same-named file next to main.fr.
+int32_t sharedValue = 10

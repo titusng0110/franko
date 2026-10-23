@@ -214,7 +214,7 @@ class GlobalVarDeclNode extends ASTNode {
 // Imports
 // ============================================================
 //
-// import importPath
+// import "abc"
 //
 // This node is an import *directive*, not a symbol declaration.
 //
@@ -223,25 +223,17 @@ class GlobalVarDeclNode extends ASTNode {
 // splices that file's top-level items into the ProgramNode in place of
 // this node. An ImportNode must therefore never reach the Desugarer.
 //
-// rawPathText holds the path exactly as needed for resolution:
-//
-//   - for an importName path (isStringLiteral == false), the raw
-//     token text, e.g. "lib/abc"
-//
-//   - for a stringLiteral path (isStringLiteral == true), the escape-
-//     decoded literal content without the surrounding quotes, e.g.
-//     "lib/util" for the source text "lib/util"
+// rawPathText holds the escape-decoded literal content without the
+// surrounding quotes, e.g. "lib/util" for the source text "lib/util".
 //
 // Keeping the original path form (instead of a pre-resolved filename)
 // leaves a clean seam for namespace-qualified imports in a later
 // update.
 class ImportNode extends ASTNode {
     String rawPathText;
-    boolean isStringLiteral;
 
-    ImportNode(String rawPathText, boolean isStringLiteral) {
+    ImportNode(String rawPathText) {
         this.rawPathText = rawPathText;
-        this.isStringLiteral = isStringLiteral;
     }
 }
 

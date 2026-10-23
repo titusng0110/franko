@@ -1,6 +1,6 @@
 // Deep helper file for the import test.
 //
-// This file is reached from lib/util.fr via `import deep/extra`, so
+// This file is reached from lib/util.fr via `import "deep/extra"`, so
 // the path resolves relative to lib/ (the directory of the file that
 // contains the import statement).
 //

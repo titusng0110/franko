@@ -78,6 +78,32 @@ check_substrings() {
 }
 
 # ------------------------------------------------------------
+# Optional per-case compiler flags.
+#
+# A success fixture may provide main.flags; failure and runtime
+# fixtures may provide <case>.flags. Each non-empty, non-comment
+# line is split on whitespace and appended to the compiler
+# invocation, e.g.:
+#
+#   -p tests/success/import_search_dir/search
+#
+# ------------------------------------------------------------
+read_flags() {
+    local FLAGS_FILE="$1"
+    EXTRA_FLAGS=()
+
+    [[ -f "$FLAGS_FILE" ]] || return 0
+
+    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+        [[ -z "$LINE" ]] && continue
+        [[ "$LINE" == \#* ]] && continue
+        # Word-splitting is intentional: one line may hold several flags.
+        # shellcheck disable=SC2206
+        EXTRA_FLAGS+=($LINE)
+    done < "$FLAGS_FILE"
+}
+
+# ------------------------------------------------------------
 # Failure cases: the compiler must reject the program.
 # ------------------------------------------------------------
 shopt -s nullglob
@@ -86,10 +112,13 @@ for SRC in tests/failure/*/*.fr; do
     OUT_CPP="$NAME.cpp"
     LOG="$NAME.compile.log"
     ERRS="$NAME.errors"
+    FLAGS="$NAME.flags"
 
     echo "=== $SRC ==="
 
-    if java -cp "$CP" Main "$SRC" -o "$OUT_CPP" > "$LOG" 2>&1; then
+    read_flags "$FLAGS"
+
+    if java -cp "$CP" Main "$SRC" -o "$OUT_CPP" ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} > "$LOG" 2>&1; then
         echo "---- compiler output (accepted a failure program): ----"
         cat "$LOG"
         rm -f "$OUT_CPP" "$LOG"
@@ -120,10 +149,13 @@ for SRC in tests/success/*/main.fr; do
     LOG="$NAME.compile.log"
     EXPECTED="$NAME.expected"
     WARN="$NAME.warnings"
+    FLAGS="$NAME.flags"
 
     echo "=== $SRC ==="
 
-    if ! java -cp "$CP" Main "$SRC" -o "$OUT_CPP" > "$LOG" 2>&1; then
+    read_flags "$FLAGS"
+
+    if ! java -cp "$CP" Main "$SRC" -o "$OUT_CPP" ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} > "$LOG" 2>&1; then
         echo "---- compiler output: ----"
         cat "$LOG"
         fail "$SRC (Franko compile failed)"
@@ -174,10 +206,13 @@ for SRC in tests/runtime/*/*.fr; do
     OUT_BIN="$NAME.bin"
     ACTUAL="$NAME.actual"
     LOG="$NAME.compile.log"
+    FLAGS="$NAME.flags"
 
     echo "=== $SRC ==="
 
-    if ! java -cp "$CP" Main "$SRC" -o "$OUT_CPP" > "$LOG" 2>&1; then
+    read_flags "$FLAGS"
+
+    if ! java -cp "$CP" Main "$SRC" -o "$OUT_CPP" ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} > "$LOG" 2>&1; then
         echo "---- compiler output: ----"
         cat "$LOG"
         fail "$SRC (Franko compile failed; runtime cases must compile)"

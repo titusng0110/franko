@@ -23,11 +23,7 @@ public class ASTPrinter {
         }
 
         else if (node instanceof ImportNode n) {
-            if (n.isStringLiteral) {
-                System.out.println(pad + "Import: \"" + n.rawPathText + "\"");
-            } else {
-                System.out.println(pad + "Import: " + n.rawPathText);
-            }
+            System.out.println(pad + "Import: \"" + n.rawPathText + "\"");
         }
 
         else if (node instanceof NamespaceNode n) {

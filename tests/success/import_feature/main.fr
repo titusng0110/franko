@@ -4,9 +4,10 @@
 //
 // Exercises:
 //
-//   - importName form:      import lib/util  ->  ./lib/util.fr
-//   - stringLiteral form without prefix or extension:
-//                           import "extra_calls"  ->  ./extra_calls.fr
+//   - a path with a directory component:
+//                           import "lib/util"  ->  lib/util.fr
+//   - a string literal without prefix or extension:
+//                           import "extra_calls"  ->  extra_calls.fr
 //   - symbols from imported files compiled into one global AST
 //   - transitive imports: lib/util.fr imports deep/extra.fr and both
 //     files' symbols are visible here
@@ -14,7 +15,7 @@
 // Expected output is in main.expected.
 // ============================================================
 
-import lib/util
+import "lib/util"
 import "extra_calls"
 
 func main() -> int32_t {

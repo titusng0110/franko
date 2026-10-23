@@ -169,50 +169,44 @@ There are no block comments.
 A source file may import other source files with an import directive:
 
 ```franko
-import importPath
+import "abc"
 ```
 
 Imports are top-level items and may appear anywhere at global scope, mixed freely with struct, global variable, and function declarations.
 
-The import path is either a string literal or an import name:
-
-```franko
-import lib/util
-import "util"
-```
-
-Import names may contain digits, ASCII letters, underscores, and `/` as a separator between path segments. A `/` may not be the first or last character, so `import /abc` and `import abc/` are syntax errors. Digits may appear in any position, including the first, so `import 123abc` is a valid import name.
-
-Paths are always resolved relative to the directory of the file that contains the import statement.
-
-### Import Name Form
-
-The import name form resolves to `./<name>.fr`:
-
-```franko
-import lib/abc      // ./lib/abc.fr
-import util         // ./util.fr
-```
-
-### String Literal Form
+The import path **must be a string literal**. The bare form `import abc` is a syntax error. Hyphens and spaces are ordinary characters inside the quoted path, so `import "my-lib/foo bar"` names the file `foo bar.fr` in the `my-lib` directory.
 
 String literal paths support the same escape sequences as string literals. The path is completed as follows:
 
-- `./` is prepended when the path has no directory prefix. The prefixes `./`, `../`, and `/` all count as directory prefixes and are used as written.
 - `.fr` is appended when the file name has no extension.
 - A present but non-`.fr` extension is rejected.
 
-Examples (relative to the importing file's directory):
+### Search Directory
 
-| Source | Resolved path |
-|---|---|
-| `import "foo"` | `./foo.fr` |
-| `import "lib/foo"` | `./lib/foo.fr` |
-| `import "lib/foo.fr"` | `./lib/foo.fr` |
-| `import "./lib/foo"` | `./lib/foo.fr` |
-| `import "../shared/foo"` | `../shared/foo.fr` |
-| `import "/abs/foo"` | `/abs/foo.fr` |
-| `import "foo.txt"` | error: must reference a `.fr` file |
+The compiler accepts an import search directory with `-p <dir>`. The default is `import` relative to the compiler's working directory; the bundled compile scripts pass the compiler's own `import` directory explicitly.
+
+A **prefix-free** path (one that does not start with `./`, `../`, or `/`) is looked up in two places, in order:
+
+1. the search directory: `<search-dir>/<path>.fr`
+2. the directory of the file that contains the import statement
+
+The first location that holds a regular file wins, so a module supplied through `-p` shadows a same-named file next to the importing source file. A missing search directory is not an error; resolution simply falls through to the importing file's directory.
+
+Paths with an explicit `./`, `../`, or `/` prefix skip the search directory and resolve relative to the importing file (or as an absolute path).
+
+Examples (search directory `import/`):
+
+| Source | Search first | Fall back to |
+|---|---|---|
+| `import "foo"` | `import/foo.fr` | `<file-dir>/foo.fr` |
+| `import "lib/foo"` | `import/lib/foo.fr` | `<file-dir>/lib/foo.fr` |
+| `import "lib/foo.fr"` | `import/lib/foo.fr` | `<file-dir>/lib/foo.fr` |
+| `import "./lib/foo"` | — | `<file-dir>/lib/foo.fr` |
+| `import "../shared/foo"` | — | `<parent-of-file-dir>/shared/foo.fr` |
+| `import "/abs/foo"` | — | `/abs/foo.fr` |
+| `import "foo.txt"` | error: must reference a `.fr` file | |
+
+A quoted path whose last segment is empty (for example `import "abc/"`) is rejected because it has no file name.
 
 Import paths are always written in POSIX form with forward slashes, on every platform. On Windows, a `/`-prefixed path is translated when it reaches the filesystem: `import "/abs/foo"` resolves to `X:\abs\foo.fr`, where `X:` is the drive of the current working directory, and `/` separators in the translated path become `\`.
 
@@ -223,7 +217,7 @@ An import is resolved at compile time:
 - the referenced file is parsed like any other source file;
 - all of its top-level items (structs, global variables, functions) are compiled into the same global program as the importing file's items;
 - imports are processed in declaration order, and an import of an already-processed file is skipped silently, so repeated and cyclic imports are safe (each file is compiled exactly once);
-- an imported file's own imports are resolved relative to that file's directory.
+- an imported file's own imports are resolved relative to that file's directory (after first consulting the search directory).
 
 Because every symbol lives in one global namespace, duplicate declarations across files are reported like duplicate declarations within one file.
 
