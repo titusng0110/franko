@@ -16,8 +16,12 @@ $ErrorActionPreference = "Stop"
 # whose rendering varies across runs or platforms (such as live
 # addresses) in a .expected file.
 #
-# Generated artifacts (.cpp, .testbin, .actual) are removed after a
+# Generated artifacts (.cpp, .testbin.exe, .actual) are removed after a
 # passing case and kept for inspection after a failure.
+#
+# The test binary uses a .exe extension (rather than extensionless or
+# .testbin) so Windows can execute it directly and Explorer knows how
+# to open it.
 #
 # Requires: java.exe and g++.exe on PATH, plus compiled compiler
 # classes (run .\update_windows-x64.ps1 first).
@@ -90,7 +94,7 @@ foreach ($src in $programs) {
     $base = $src.Substring(0, $src.Length - 3)
     $name = [IO.Path]::GetFileNameWithoutExtension($src)
     $outCpp = "$base.cpp"
-    $outBin = "$base.testbin"
+    $outBin = "$base.testbin.exe"
     $actual = "$base.actual"
     $expected = "$base.expected"
 
@@ -121,9 +125,16 @@ foreach ($src in $programs) {
         continue
     }
 
+    $binSize = (Get-Item -LiteralPath $outBin).Length
+    if ($binSize -eq 0) {
+        Fail-Case "$src (linked binary is empty, 0 bytes)"
+        continue
+    }
+
     & $outBin > $actual 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "---- runtime output: ----"
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        Write-Host "---- runtime output (exit code $exitCode): ----"
         Get-Content -LiteralPath $actual | Write-Host
         Fail-Case "$src (binary exited non-zero)"
         continue
@@ -133,7 +144,8 @@ foreach ($src in $programs) {
     $actualText = [IO.File]::ReadAllText($actual)
     $expectedText = [IO.File]::ReadAllText($expected)
     if (-not (Test-OutputMatch $actualText $expectedText)) {
-        Fail-Case "$src (output mismatch)"
+        $actualBytes = ([IO.File]::ReadAllBytes($actual)).Length
+        Fail-Case "$src (output mismatch, exit=$exitCode, actual bytes=$actualBytes)"
         continue
     }
 

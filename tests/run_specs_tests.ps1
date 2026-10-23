@@ -34,8 +34,11 @@ $ErrorActionPreference = "Stop"
 # in a .expected file; cover those through the runtime category, which
 # is judged by exit status only.
 #
-# Generated artifacts (.cpp, .bin, .actual, compiler logs) are removed
+# Generated artifacts (.cpp, .bin.exe, .actual, compiler logs) are removed
 # after a passing case and kept for inspection after a failure.
+#
+# Test binaries use a .exe extension so Windows can execute them
+# directly and Explorer knows how to open them.
 #
 # Requires: java.exe and g++.exe on PATH, plus compiled compiler
 # classes (run .\update_windows-x64.ps1 first).
@@ -79,12 +82,19 @@ function Pass-Case($message) {
 # Every non-empty, non-comment line of $expectedFile must appear as a
 # literal substring of $observedText (mirrors check_substrings in
 # tests/run_specs_tests.sh).
+#
+# Compiler diagnostics embed filesystem paths, which use '\' on
+# Windows but '/' everywhere else. Both sides are normalized to '/'
+# first, so the checked-in .errors/.warnings files can pin paths in
+# POSIX form on every platform.
 function Test-Substrings($expectedFile, $observedText) {
+    $observed = $observedText -replace '\\', '/'
     foreach ($line in (Get-Content -LiteralPath $expectedFile)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $trimmed = $line.Trim()
         if ($trimmed.StartsWith('#')) { continue }
-        if ($observedText.IndexOf($trimmed, [StringComparison]::Ordinal) -lt 0) {
+        $needle = $trimmed -replace '\\', '/'
+        if ($observed.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) {
             Write-Host "expected text not found in output: $trimmed"
             return $false
         }
@@ -178,7 +188,7 @@ foreach ($src in $successCases) {
     $dir = Split-Path -Parent $src
     $base = Join-Path $dir "main"
     $outCpp = "$base.cpp"
-    $outBin = "$base.bin"
+    $outBin = "$base.bin.exe"
     $actual = "$base.actual"
     $log = "$base.compile.log"
     $expected = "$base.expected"
@@ -214,16 +224,23 @@ foreach ($src in $successCases) {
         continue
     }
 
+    if ((Get-Item -LiteralPath $outBin).Length -eq 0) {
+        Fail-Case "$src (linked binary is empty, 0 bytes)"
+        continue
+    }
+
     & $outBin > $actual 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "---- runtime output: ----"
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        Write-Host "---- runtime output (exit code $exitCode): ----"
         Get-Content -LiteralPath $actual | Write-Host
         Fail-Case "$src (binary exited non-zero)"
         continue
     }
 
     if (-not (Test-OutputMatch ([IO.File]::ReadAllText($actual)) ([IO.File]::ReadAllText($expected)))) {
-        Fail-Case "$src (output mismatch)"
+        $actualBytes = ([IO.File]::ReadAllBytes($actual)).Length
+        Fail-Case "$src (output mismatch, exit=$exitCode, actual bytes=$actualBytes)"
         continue
     }
 
@@ -241,7 +258,7 @@ $runtimeCases = Get-ChildItem -Path "tests/runtime/*/*.fr" -File |
 foreach ($src in $runtimeCases) {
     $base = $src.Substring(0, $src.Length - 3)
     $outCpp = "$base.cpp"
-    $outBin = "$base.bin"
+    $outBin = "$base.bin.exe"
     $actual = "$base.actual"
     $log = "$base.compile.log"
     $extraFlags = Read-ExtraFlags "$base.flags"
@@ -265,6 +282,11 @@ foreach ($src in $runtimeCases) {
         Write-Host "---- g++ output: ----"
         Get-Content -LiteralPath $log | Write-Host
         Fail-Case "$src (C++ compile failed)"
+        continue
+    }
+
+    if ((Get-Item -LiteralPath $outBin).Length -eq 0) {
+        Fail-Case "$src (linked binary is empty, 0 bytes)"
         continue
     }
 
