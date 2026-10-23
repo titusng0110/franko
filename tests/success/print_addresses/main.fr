@@ -1,24 +1,20 @@
 // ============================================================
-// SPEC TEST: Print Statements — Addresses and null
+// SPEC TEST: Print Statements — null Addresses
 // ============================================================
-// Covers: print is a dedicated statement (doc 18.6); the backend
+// Covers: print is a dedicated statement (doc 18.6) and the backend
 // prints addresses through const void* (doc 30.7), so print(null)
 // prints the null address as a pointer value (doc 23.8).
-// A real address prints as a pointer value too; its value is not
-// deterministic across runs, so the expected file matches it by the
-// "0x..." prefix convention supported by the test runner.
+//
+// Only the null address is printed here: a live address's value is
+// not deterministic, so it must never appear in a golden output
+// file. Printing a live address is exercised by
+// tests/runtime/print/print_real_address.fr, which is judged by exit
+// status only.
 // ============================================================
 
 func main() -> int32_t {
-    int32_t x = 42
-
     // null prints as the null pointer value.
     print(null)
-
-    // A certified address prints as a pointer value.
-    addr<int32_t> p
-    p = getaddr(x)
-    print(p)
 
     // A null address variable prints the same way as the null literal.
     addr<int32_t> q
