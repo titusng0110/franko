@@ -24,10 +24,10 @@ set -Eeuo pipefail
 #     array access. Runtime messages are intentionally not pinned:
 #     they may change without breaking the suite.
 #
-# Expected-output lines: in success main.expected a line ending in
-# "..." matches by prefix instead of exactly. Use it for output whose
-# value is not deterministic across runs, such as printed addresses
-# (glibc prints pointers as 0x...).
+# Success golden outputs must be deterministic. Never put values whose
+# rendering varies across runs or platforms (such as live addresses)
+# in a .expected file; cover those through the runtime category, which
+# is judged by exit status only.
 #
 # Generated artifacts (.cpp, .bin, .actual, compiler logs) are removed
 # after a passing case and kept for inspection after a failure.
@@ -73,37 +73,6 @@ check_substrings() {
         fi
     done < "$EXPECTED"
     return 0
-}
-
-# ------------------------------------------------------------
-# Compare ACTUAL against EXPECTED line by line. A line ending in
-# "..." matches by prefix instead of exactly.
-# ------------------------------------------------------------
-match_output() {
-    awk '
-        NR==FNR { exp_line[FNR] = $0; nexp = FNR; next }
-        { act_line[FNR] = $0; nact = FNR }
-        END {
-            if (nexp + 0 != nact + 0) {
-                print "line count mismatch: expected " nexp + 0 ", actual " nact + 0
-                exit 1
-            }
-            for (i = 1; i <= nexp; i++) {
-                e = exp_line[i]
-                a = act_line[i]
-                if (e ~ /\.\.\.$/) {
-                    prefix = substr(e, 1, length(e) - 3)
-                    if (index(a, prefix) != 1) {
-                        print "line " i ": expected prefix [" prefix "], actual [" a "]"
-                        exit 1
-                    }
-                } else if (e != a) {
-                    print "line " i ": expected [" e "], actual [" a "]"
-                    exit 1
-                }
-            }
-        }
-    ' "$1" "$2"
 }
 
 # ------------------------------------------------------------
@@ -185,8 +154,7 @@ for SRC in tests/success/*/main.fr; do
         continue
     fi
 
-    if ! match_output "$EXPECTED" "$ACTUAL"; then
-        diff -u "$EXPECTED" "$ACTUAL" || true
+    if ! diff -u "$EXPECTED" "$ACTUAL"; then
         fail "$SRC (output mismatch)"
         continue
     fi
