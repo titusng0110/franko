@@ -190,7 +190,7 @@ The C++14 backend:
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`, with heap variables lowered through `(*sym)`.
-- emits methods as mangled free functions (`METH_f_OFSTRUCT_X`); see [Methods](25-methods.md).
+- emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](25-methods.md).
 
 ## 24.12 Restrictions Summary
 

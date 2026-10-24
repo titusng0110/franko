@@ -94,8 +94,8 @@ Franko keeps struct type names, variable names, and function names in separate n
 |---|---|
 | struct type `X` | `STRUCT_X` |
 | variable `x` (local, global, parameter, heap) | `VAR_x` |
-| function `f` | `FUNC_f` |
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X` |
+| function `f` | `FUNC_f_HASH_<8hex>` |
+| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | namespace `n` | `NS_n` |
 | the entry-point function `main` | `main` (unprefixed: the generated C++ entry point IS the Franko `main`) |
 
@@ -103,9 +103,11 @@ So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
 Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
 
-Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
+Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `addr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
 
-Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes `NS_n::FUNC_f`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
+Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X_HASH_<8hex>`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
+
+Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes e.g. `NS_n::FUNC_f_HASH_<8hex>`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
 
 When a variable or function shares its name with a declared struct, the compiler emits a **warning** during semantic analysis (the program still compiles):
 

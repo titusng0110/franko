@@ -10,6 +10,20 @@ abstract class SemanticType {
     public abstract String describe();
 
     /**
+     * Canonical type key used for C++ name mangling.
+     *
+     * This spells the type exactly as it is written in source:
+     * primitives as `int8_t`/`uint64_t`, `void` as `void`,
+     * `array<E>` / `array<E,N>` (no space, canonical folded decimal
+     * size), `addr<T>`, and structs by qualified name (`a::b::X`).
+     *
+     * It is independent of describe(), which is diagnostic text and
+     * may drift. Function types have no source spelling as a
+     * parameter or return type and throw here.
+     */
+    public abstract String mangleKey();
+
+    /**
      * Semantic type equality should be structural.
      *
      * Subclasses override equals/hashCode so overload resolution,
@@ -48,6 +62,20 @@ final class SemanticPrimitiveType extends SemanticType {
     @Override
     public String describe() {
         return kind.name();
+    }
+
+    @Override
+    public String mangleKey() {
+        return switch (kind) {
+            case INT8 -> "int8_t";
+            case INT16 -> "int16_t";
+            case INT32 -> "int32_t";
+            case INT64 -> "int64_t";
+            case UINT8 -> "uint8_t";
+            case UINT16 -> "uint16_t";
+            case UINT32 -> "uint32_t";
+            case UINT64 -> "uint64_t";
+        };
     }
 
     @Override
@@ -93,6 +121,11 @@ final class SemanticVoidType extends SemanticType {
     }
 
     @Override
+    public String mangleKey() {
+        return "void";
+    }
+
+    @Override
     public boolean equals(Object obj) {
         return obj instanceof SemanticVoidType;
     }
@@ -117,6 +150,11 @@ final class SemanticDynamicArrayType extends SemanticType {
     @Override
     public String describe() {
         return "array<" + elementType.describe() + ">";
+    }
+
+    @Override
+    public String mangleKey() {
+        return "array<" + elementType.mangleKey() + ">";
     }
 
     @Override
@@ -162,6 +200,13 @@ final class SemanticStaticArrayType extends SemanticType {
     @Override
     public String describe() {
         return "array<" + elementType.describe() + ", " + sizeLiteral + ">";
+    }
+
+    @Override
+    public String mangleKey() {
+        BigInteger canonical = unfoldedSize(sizeLiteral);
+        String sizeKey = canonical != null ? canonical.toString(10) : sizeLiteral.trim();
+        return "array<" + elementType.mangleKey() + "," + sizeKey + ">";
     }
 
     /**
@@ -244,6 +289,11 @@ final class SemanticAddrType extends SemanticType {
     }
 
     @Override
+    public String mangleKey() {
+        return "addr<" + referencedType.mangleKey() + ">";
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof SemanticAddrType other)) {
             return false;
@@ -283,6 +333,13 @@ final class SemanticNullType extends SemanticType {
     }
 
     @Override
+    public String mangleKey() {
+        throw new IllegalStateException(
+                "Internal compiler error: 'null' type has no mangled spelling"
+        );
+    }
+
+    @Override
     public boolean equals(Object obj) {
         return obj instanceof SemanticNullType;
     }
@@ -307,6 +364,11 @@ final class SemanticStructType extends SemanticType {
          * namespaces are distinct types, and equality fallbacks and
          * diagnostics that use describe() must keep them apart.
          */
+        return structSymbol.qualifiedName();
+    }
+
+    @Override
+    public String mangleKey() {
         return structSymbol.qualifiedName();
     }
 
@@ -368,6 +430,39 @@ final class SemanticFunctionType extends SemanticType {
 
         sb.append(") -> ");
         sb.append(returnType.describe());
+
+        return sb.toString();
+    }
+
+    @Override
+    public String mangleKey() {
+        throw new IllegalStateException(
+                "Internal compiler error: function types cannot appear in a mangled signature"
+        );
+    }
+
+    /**
+     * Canonical signature key hashed into emitted C++ names:
+     * declared parameter types in order (including `self` for
+     * methods), then the return type, each spelled via mangleKey().
+     *
+     * Example: `fn(int32_t,addr<std::X>)->void`.
+     */
+    public String signatureKey() {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("fn(");
+
+        for (int i = 0; i < parameterTypes.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+
+            sb.append(parameterTypes.get(i).mangleKey());
+        }
+
+        sb.append(")->");
+        sb.append(returnType.mangleKey());
 
         return sb.toString();
     }

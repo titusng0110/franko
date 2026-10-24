@@ -301,6 +301,8 @@ Inside a namespace, an unqualified name resolves in that namespace first, then f
 
 The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error.
 
+`main` must be declared exactly as `func main() -> int32_t` with no parameters. Any other shape (parameters, a different return type) is a compile error, and `main` cannot be overloaded.
+
 Executable statements are **not** currently allowed in global scope.
 
 Invalid global-scope items include:
@@ -895,6 +897,8 @@ A function signature is determined by:
 Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
+
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `addr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` is the exception: it emits as raw `main` and must be declared exactly as `func main() -> int32_t` with no parameters.
 
 ## 12.6 Function Call Resolution
 
@@ -2613,7 +2617,7 @@ The C++14 backend:
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`, with heap variables lowered through `(*sym)`.
-- emits methods as mangled free functions (`METH_f_OFSTRUCT_X`); see [Methods](25-methods.md).
+- emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](25-methods.md).
 
 ## 24.12 Restrictions Summary
 
@@ -2701,7 +2705,7 @@ Rules:
 A method is invoked with member-call syntax. The compiler prepends `getaddr(receiver)` as the `self` argument:
 
 ```franko
-s.increment()              // -> METH_increment_OFSTRUCT_X((&s))
+s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
 deref(p).increment()       // explicit deref for addr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
@@ -2791,13 +2795,15 @@ Methods emit as free C++ functions with a mangled name:
 
 | Franko construct | Generated C++ name |
 |---|---|
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X` |
+| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | method `self` parameter | `VAR_self` (`STRUCT_X*`) |
 
-- The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as `NS_util::METH_bump_OFSTRUCT_Counter` and is called as `NS_util::METH_bump_OFSTRUCT_X((&VAR_c))` from outside the namespace.
-- `s.method(args)` emits as `METH_method_OFSTRUCT_X((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
+The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `addr<X>`, then the return type); see [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+
+- The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
+- `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
 - Struct definitions emit no members for methods; prototypes emit in the function prototype phase (free functions first, then methods of the same namespace) and definitions emit in the function definition phase.
-- A method named `main` mangles to `METH_main_OFSTRUCT_X` and cannot collide with the entry-point `main`.
+- A method named `main` mangles to `METH_main_OFSTRUCT_X_HASH_<8hex>` and cannot collide with the entry-point `main`.
 
 ## 25.10 Restrictions Summary
 
@@ -3368,8 +3374,8 @@ Franko keeps struct type names, variable names, and function names in separate n
 |---|---|
 | struct type `X` | `STRUCT_X` |
 | variable `x` (local, global, parameter, heap) | `VAR_x` |
-| function `f` | `FUNC_f` |
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X` |
+| function `f` | `FUNC_f_HASH_<8hex>` |
+| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | namespace `n` | `NS_n` |
 | the entry-point function `main` | `main` (unprefixed: the generated C++ entry point IS the Franko `main`) |
 
@@ -3377,9 +3383,11 @@ So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
 Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
 
-Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
+Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `addr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
 
-Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes `NS_n::FUNC_f`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
+Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X_HASH_<8hex>`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
+
+Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes e.g. `NS_n::FUNC_f_HASH_<8hex>`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
 
 When a variable or function shares its name with a declared struct, the compiler emits a **warning** during semantic analysis (the program still compiles):
 

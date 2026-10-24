@@ -1,2 +1,2 @@
 Variable 'Item' shares its name with struct 'Item'; generated C++ uses VAR_Item for the variable and STRUCT_Item for the struct type
-Function 'Item' shares its name with struct 'Item'; generated C++ uses FUNC_Item for the function and STRUCT_Item for the struct type
+Function 'Item' shares its name with struct 'Item'; generated C++ uses FUNC_Item_HASH_d8625720 for the function and STRUCT_Item for the struct type
