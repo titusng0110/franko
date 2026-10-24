@@ -153,13 +153,14 @@ importDecl
 //       int64_t longnum = 1 + 2
 //   }
 //
-// Only field declarations are allowed inside a struct.
-// No assignments, no methods, no generics.
-// No alloc fields.
+// A struct body contains field declarations and method declarations.
+// Methods are function declarations whose first parameter must be
+// literally `addr<X> self`, where X is the enclosing struct (see
+// Methods). No assignments, no generics. No alloc fields.
 //
 // Field initializers, if present, must be constExpr.
 //
-// Separators between fields are optional, matching block syntax:
+// Separators between members are optional, matching block syntax:
 // a trailing separator before '}' is not required.
 //
 // Valid:
@@ -167,6 +168,7 @@ importDecl
 //       int32_t a
 //       int64_t b = 123
 //       array<int32_t, 4> xs
+//       func increment(addr<X> self) -> void { ... }
 //   }
 //
 // Invalid:
@@ -174,11 +176,16 @@ importDecl
 //       alloc int32_t a
 //       int32_t a = f()
 //       a = 1
-//       func f() -> void {}
+//       func bad(int32_t self) -> void {}
 //   }
 //
 structDecl
-    : STRUCT IDENTIFIER separators* LBRACE separators* (structFieldDecl separators*)* RBRACE
+    : STRUCT IDENTIFIER separators* LBRACE separators* (structMember separators*)* RBRACE
+    ;
+
+structMember
+    : structFieldDecl
+    | functionDecl
     ;
 
 structFieldDecl
@@ -251,7 +258,7 @@ parameterList
     ;
 
 parameter
-    : type IDENTIFIER
+    : type (IDENTIFIER | SELF)
     ;
 
 returnType
@@ -389,7 +396,7 @@ declInitializer
 // ---------- DELETE ----------
 
 delStmt
-    : DEL IDENTIFIER
+    : DEL (IDENTIFIER | SELF)
     ;
 
 // ---------- RETURN ----------
@@ -436,7 +443,9 @@ assignmentInitializer
 //
 // `obj.print()` does NOT work: `print` is a lexer keyword, so although a
 // `.print()` member suffix parses syntactically, the semantic analyzer
-// rejects ordinary member calls on non-array receivers. Use the print(...)
+// rejects ordinary member calls on non-struct receivers (and `print` can
+// never be a struct method name a program can declare, since method names
+// are IDENTIFIERs). Use the print(...)
 // statement form instead.
 //
 // If you later want global user-defined function print(...),
@@ -469,6 +478,7 @@ lvalue
 
 lvalueAtom
     : IDENTIFIER
+    | SELF
     | qualifiedName
     | derefExpr
     | LPAREN lvalue RPAREN
@@ -579,6 +589,7 @@ primary
     | stringLiteral
     | nullLiteral
     | IDENTIFIER
+    | SELF
     | qualifiedName
     | getAddrExpr
     | derefExpr
@@ -621,6 +632,7 @@ memberSuffix
 // the IDENTIFIER alternative below.
 memberName
     : IDENTIFIER
+    | SELF
     | FUNC
     | RETURN
     | VOID
@@ -920,6 +932,7 @@ FOR     : 'for' ;
 ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
 DEREF   : 'deref' ;
+SELF    : 'self' ;
 NULL    : 'null' ;
 
 // 'import' keyword. The import path is always a STRING_LITERAL.

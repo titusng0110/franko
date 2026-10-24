@@ -135,6 +135,12 @@ public class SemanticASTPrinter {
     ) {
         line(indent, "SemanticStructDeclNode");
         printStructSymbol(node.symbol, indent + 1);
+        line(indent + 1, "methods: " + node.methods.size());
+
+        for (int i = 0; i < node.methods.size(); i++) {
+            line(indent + 1, "[" + i + "]");
+            printFunctionDecl(node.methods.get(i), indent + 2);
+        }
     }
 
     private static void printStructSymbol(
@@ -600,7 +606,14 @@ public class SemanticASTPrinter {
             return;
         }
 
-        line(indent, "FunctionSymbol");
+        if (symbol instanceof MethodSymbol method) {
+            line(indent, "MethodSymbol");
+            line(indent + 1, "owner: " + quote(method.owner.qualifiedName()));
+            line(indent + 1, "mangledName: " + quote(method.mangledName()));
+        } else {
+            line(indent, "FunctionSymbol");
+        }
+
         line(indent + 1, "name: " + quote(symbol.qualifiedName()));
         line(indent + 1, "signature: " + symbol.signatureString());
         line(indent + 1, "fullSignature: " + symbol.fullSignatureString());

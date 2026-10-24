@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/compound_assign
 // Compound assignment operators such as `+=` do not exist in the grammar;
-// only plain `=` assignment exists (doc 29.17).
+// only plain `=` assignment exists (doc 30.17).
 
 func main() -> int32_t {
     int32_t a = 1;

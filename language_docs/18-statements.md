@@ -87,7 +87,7 @@ becomes:
 }
 ```
 
-The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. There is no `break` or `continue`; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
+The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. There is no `break` or `continue`; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
 Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](05-desugaring.md).
 
@@ -118,7 +118,7 @@ Arrays and structs cannot be printed. They are accepted by the checker, but the 
 
 Array initializer lists and string literals are not expressions and cannot be printed directly.
 
-Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
+Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
 ## 18.7 Expression Statements
 

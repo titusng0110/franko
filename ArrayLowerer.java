@@ -97,6 +97,23 @@ public final class ArrayLowerer {
     }
 
     /**
+     * Peeks at a member-call receiver to decide intrinsic vs method dispatch.
+     *
+     * A struct-typed receiver means the call is a struct method call, even
+     * when the member name coincides with an array intrinsic name. The peek
+     * analyzes the target once; the chosen lowering path re-analyzes it,
+     * so invalid targets may report duplicate diagnostics. Duplicates are
+     * tolerated: invalid programs are rejected either way, and valid
+     * targets produce no diagnostics on re-analysis.
+     */
+    private boolean isStructReceiver(MemberAccessNode mac) {
+        SemanticExprNode target = exprAnalyzer.analyzeExpr(mac.target);
+
+        return target.type instanceof SemanticStructType structType
+                && structType.structSymbol != null;
+    }
+
+    /**
      * Returns true when a call that could not be lowered to an array intrinsic
      * should not fall through to ordinary overload resolution, because doing so
      * would emit a misleading "no matching overload" diagnostic.
@@ -112,7 +129,16 @@ public final class ArrayLowerer {
      */
     public boolean shouldSuppressCallDiagnostic(CallNode call) {
         if (call.callee instanceof MemberAccessNode mac) {
-            return isArrayIntrinsicMemberName(mac.memberName);
+            if (!isArrayIntrinsicMemberName(mac.memberName)) {
+                return false;
+            }
+
+            /*
+             * Struct receivers with intrinsic-coinciding method names fall
+             * through to method resolution, so their diagnostics must not
+             * be suppressed here.
+             */
+            return !isStructReceiver(mac);
         }
 
         if (call.args.size() == 1
@@ -135,6 +161,17 @@ public final class ArrayLowerer {
             CallNode call,
             MemberAccessNode mac
     ) {
+        /*
+         * Type-directed dispatch: a struct-typed receiver is a method call,
+         * never an array intrinsic, even when the member name coincides
+         * with an intrinsic name (e.g. a method named `init`). Return null
+         * silently so method lowering handles it without a spurious
+         * array-receiver diagnostic.
+         */
+        if (isStructReceiver(mac)) {
+            return null;
+        }
+
         return switch (mac.memberName) {
             case "init" ->
                     lowerDynamicArrayAlloc(
@@ -449,6 +486,35 @@ public final class ArrayLowerer {
 
             if (var == null) {
                 return null;
+            }
+        }
+
+        /*
+         * Peek at member-call receivers before analyzing the full callee.
+         *
+         * Analyzing `s.method` as a field access would report "has no field
+         * named 'method'" before method lowering runs, producing a spurious
+         * error alongside the real method resolution. When the receiver is
+         * a struct and the member is not a dynamic-array field, this cannot
+         * be dynamic-array init shorthand, so return early and let method
+         * lowering handle the call without polluting diagnostics.
+         */
+        if (call.callee instanceof MemberAccessNode mac) {
+            SemanticExprNode targetPeek =
+                    exprAnalyzer.analyzeExpr(mac.target);
+
+            if (targetPeek.type instanceof SemanticStructType structType
+                    && structType.structSymbol != null) {
+                FieldSymbol field =
+                        structType.structSymbol.resolveField(mac.memberName);
+
+                if (field == null) {
+                    return null;
+                }
+
+                if (!exprAnalyzer.isDynamicArrayType(field.type)) {
+                    return null;
+                }
             }
         }
 

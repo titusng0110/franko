@@ -1,0 +1,1 @@
+Method 'X.bad' has a 'self' parameter of type X; it must be addr<X>

@@ -532,6 +532,113 @@ public final class SymbolTable {
     }
 
     /**
+     * Declares a method in its owning struct's method table.
+     *
+     * Methods live only on the struct; they are never registered as free
+     * functions, so `increment(...)` is never callable without a receiver.
+     */
+    public void declareMethod(
+            StructSymbol owner,
+            FunctionDeclNode decl,
+            MethodSymbol method
+    ) {
+        if (owner.hasFieldName(method.name)) {
+            error("Method '"
+                    + method.qualifiedName()
+                    + "' conflicts with field '"
+                    + method.name
+                    + "' of struct '"
+                    + owner.qualifiedName()
+                    + "'");
+            return;
+        }
+
+        List<MethodSymbol> overloads = owner.methods.computeIfAbsent(
+                method.name,
+                ignored -> new ArrayList<>()
+        );
+
+        for (MethodSymbol existing : overloads) {
+            if (sameParameterSignature(existing.parameters, method.parameters)) {
+                error("Duplicate declaration of method '"
+                        + method.signatureString()
+                        + "' in struct '"
+                        + owner.qualifiedName()
+                        + "'");
+                return;
+            }
+        }
+
+        overloads.add(method);
+        owner.methodDeclSymbols.put(decl, method);
+    }
+
+    /**
+     * Finds the MethodSymbol registered for a raw method declaration.
+     */
+    public MethodSymbol findRegisteredMethod(
+            StructSymbol owner,
+            FunctionDeclNode decl
+    ) {
+        return owner.methodDeclSymbols.get(decl);
+    }
+
+    /**
+     * Resolves a method call against one struct's method overloads.
+     *
+     * Returns null when no overload applies; reports ambiguity when
+     * folded constants fit multiple overloads.
+     */
+    public MethodSymbol resolveMethod(
+            StructSymbol owner,
+            String name,
+            List<SemanticExprNode> args
+    ) {
+        List<MethodSymbol> overloads = owner.methods.get(name);
+
+        return resolveMethodFromOverloads(owner, name, overloads, args);
+    }
+
+    private MethodSymbol resolveMethodFromOverloads(
+            StructSymbol owner,
+            String name,
+            List<MethodSymbol> overloads,
+            List<SemanticExprNode> args
+    ) {
+        if (overloads == null || overloads.isEmpty()) {
+            return null;
+        }
+
+        List<MethodSymbol> matches = new ArrayList<>();
+
+        for (MethodSymbol m : overloads) {
+            if (isApplicableFunction(m, args)) {
+                matches.add(m);
+            }
+        }
+
+        if (matches.size() == 1) {
+            return matches.get(0);
+        }
+
+        List<SemanticType> argTypes = args.stream()
+                .map(arg -> arg == null ? null : arg.type)
+                .toList();
+
+        if (matches.size() > 1) {
+            error("Ambiguous call to overloaded method '"
+                    + owner.qualifiedName()
+                    + "."
+                    + formatCallSignature(name, argTypes)
+                    + "': argument constants fit multiple overloads");
+
+            return matches.get(0);
+        }
+
+        return null;
+    }
+
+    /**
      * Resolves a function call with the namespace chain.
      *
      * When the namespace currently being analyzed declares any overload

@@ -89,6 +89,13 @@ public class ASTPrinter {
                 System.out.println(pad + "  [" + i + "]");
                 print(n.fields.get(i), indent + 2);
             }
+
+            System.out.println(pad + "  methods: " + n.methods.size());
+
+            for (int i = 0; i < n.methods.size(); i++) {
+                System.out.println(pad + "  [" + i + "]");
+                print(n.methods.get(i), indent + 2);
+            }
         }
 
         else if (node instanceof StructFieldDeclNode n) {

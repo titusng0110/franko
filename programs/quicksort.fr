@@ -1,16 +1,15 @@
 // ============================================================
 // Franko Iterative Quicksort Showcase: 50 Elements
-// Function-Based Version With Array Initializer Lists + Intrinsics
+// Struct + Methods Version With Array Initializer Lists + Intrinsics
 // ============================================================
 //
 // Demonstrates:
 //
-//   - func declarations
-//   - void functions
+//   - structs with a static-array field
+//   - methods with explicit addr<QuickSort> self receivers
+//   - heap structs with alloc / del
+//   - void methods
 //   - non-void return values
-//   - addr<array<T, N>> array passing
-//   - alloced static array
-//   - del
 //   - local static arrays
 //   - array initializer-list assignment
 //   - array.memset(...)
@@ -21,136 +20,147 @@
 //   - int32_t values
 //
 // Arrays are passed by address because Franko arrays are not directly
-// assignable, parameter-passable, or returnable by value.
+// assignable, parameter-passable, or returnable by value. Here the
+// array lives in the struct, so methods reach it as deref(self).data.
 // ============================================================
 
-func printArray(addr<array<int32_t, 50>> data, uint32_t n) -> void {
-    for (uint32_t i = 0; i < n; i = i + 1) {
-        print(deref(data)[i])
-    }
-}
+struct QuickSort {
+    array<int32_t, 50> data
 
-func initData(addr<array<int32_t, 50>> data) -> void {
-    array<int32_t, 50> source
-
-    source = [
-        42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
-        21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
-        8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
-        24, 70, 11, 47, 35, 94, 29, 63, 18, 76,
-        4, 53, 68, 10, 97, 26, 41, 80, 22, 56
-    ]
-
-    deref(data).memcpy(getaddr(source))
-}
-
-func swap(addr<array<int32_t, 50>> data, uint32_t a, uint32_t b) -> void {
-    int32_t temp = 0
-
-    temp = deref(data)[a]
-    deref(data)[a] = deref(data)[b]
-    deref(data)[b] = temp
-}
-
-func partition(addr<array<int32_t, 50>> data, uint32_t low, uint32_t high) -> uint32_t {
-    int32_t pivot = 0
-    uint32_t i = 0
-    uint32_t j = 0
-
-    pivot = deref(data)[high]
-    i = low
-
-    for (j = low; j < high; j = j + 1) {
-        if (deref(data)[j] <= pivot) {
-            swap(data, i, j)
-            i = i + 1
+    func printArray(addr<QuickSort> self, uint32_t n) -> void {
+        for (uint32_t i = 0; i < n; i = i + 1) {
+            print(deref(self).data[i])
         }
-    }
 
-    swap(data, i, high)
-
-    return i
-}
-
-func quicksort(addr<array<int32_t, 50>> data, uint32_t n) -> void {
-    array<uint32_t, 128> stackLow
-    array<uint32_t, 128> stackHigh
-
-    uint32_t top = 0
-    uint32_t low = 0
-    uint32_t high = 0
-    uint32_t pi = 0
-
-    stackLow.memset(0)
-    stackHigh.memset(0)
-
-    if (n <= 1) {
         return
     }
 
-    stackLow[top] = 0
-    stackHigh[top] = n - 1
-    top = top + 1
+    func initData(addr<QuickSort> self) -> void {
+        array<int32_t, 50> source
 
-    while (top != 0) {
-        top = top - 1
+        source = [
+            42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
+            21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
+            8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
+            24, 70, 11, 47, 35, 94, 29, 63, 18, 76,
+            4, 53, 68, 10, 97, 26, 41, 80, 22, 56
+        ]
 
-        low = stackLow[top]
-        high = stackHigh[top]
-
-        if (low < high) {
-            pi = partition(data, low, high)
-
-            if (pi > low) {
-                stackLow[top] = low
-                stackHigh[top] = pi - 1
-                top = top + 1
-            }
-
-            if (pi < high) {
-                stackLow[top] = pi + 1
-                stackHigh[top] = high
-                top = top + 1
-            }
-        }
-    }
-}
-
-func isSorted(addr<array<int32_t, 50>> data, uint32_t n) -> uint8_t {
-    uint8_t sorted = 1
-
-    for (uint32_t k = 1; k < n; k = k + 1) {
-        if (deref(data)[k] < deref(data)[k - 1]) {
-            sorted = 0
-        }
+        deref(self).data.memcpy(getaddr(source))
+        return
     }
 
-    return sorted
+    func swap(addr<QuickSort> self, uint32_t a, uint32_t b) -> void {
+        int32_t temp = 0
+
+        temp = deref(self).data[a]
+        deref(self).data[a] = deref(self).data[b]
+        deref(self).data[b] = temp
+        return
+    }
+
+    func partition(addr<QuickSort> self, uint32_t low, uint32_t high) -> uint32_t {
+        int32_t pivot = 0
+        uint32_t i = 0
+        uint32_t j = 0
+
+        pivot = deref(self).data[high]
+        i = low
+
+        for (j = low; j < high; j = j + 1) {
+            if (deref(self).data[j] <= pivot) {
+                deref(self).swap(i, j)
+                i = i + 1
+            }
+        }
+
+        deref(self).swap(i, high)
+
+        return i
+    }
+
+    func quicksort(addr<QuickSort> self, uint32_t n) -> void {
+        array<uint32_t, 128> stackLow
+        array<uint32_t, 128> stackHigh
+
+        uint32_t top = 0
+        uint32_t low = 0
+        uint32_t high = 0
+        uint32_t pi = 0
+
+        stackLow.memset(0)
+        stackHigh.memset(0)
+
+        if (n <= 1) {
+            return
+        }
+
+        stackLow[top] = 0
+        stackHigh[top] = n - 1
+        top = top + 1
+
+        while (top != 0) {
+            top = top - 1
+
+            low = stackLow[top]
+            high = stackHigh[top]
+
+            if (low < high) {
+                pi = deref(self).partition(low, high)
+
+                if (pi > low) {
+                    stackLow[top] = low
+                    stackHigh[top] = pi - 1
+                    top = top + 1
+                }
+
+                if (pi < high) {
+                    stackLow[top] = pi + 1
+                    stackHigh[top] = high
+                    top = top + 1
+                }
+            }
+        }
+
+        return
+    }
+
+    func isSorted(addr<QuickSort> self, uint32_t n) -> uint8_t {
+        uint8_t sorted = 1
+
+        for (uint32_t k = 1; k < n; k = k + 1) {
+            if (deref(self).data[k] < deref(self).data[k - 1]) {
+                sorted = 0
+            }
+        }
+
+        return sorted
+    }
 }
 
 func main() -> int32_t {
-    alloc array<int32_t, 50> data
+    alloc QuickSort sorter
 
     uint32_t n = 50
     uint8_t sorted = 0
 
-    data.memset(0)
-    initData(getaddr(data))
+    sorter.data.memset(0)
+    sorter.initData()
 
     print(2001)
-    printArray(getaddr(data), n)
+    sorter.printArray(n)
 
-    quicksort(getaddr(data), n)
+    sorter.quicksort(n)
 
     print(2002)
-    printArray(getaddr(data), n)
+    sorter.printArray(n)
 
-    sorted = isSorted(getaddr(data), n)
+    sorted = sorter.isSorted(n)
 
     print(2003)
     print(sorted)
 
-    del data
+    del sorter
 
     return 0
 }

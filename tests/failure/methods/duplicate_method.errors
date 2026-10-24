@@ -1,0 +1,1 @@
+Duplicate declaration of method 'X.foo(addr<X>)' in struct 'X'

@@ -290,6 +290,14 @@ public final class MemorySafetyChecker {
             return;
         }
 
+        if (node instanceof SemanticStructDeclNode n) {
+            for (SemanticFunctionDeclNode method : n.methods) {
+                collectHeapSymbols(method.body);
+            }
+
+            return;
+        }
+
         if (node instanceof SemanticBlockNode n) {
             for (SemanticStmtNode stmt : n.statements) {
                 collectHeapSymbols(stmt);
@@ -605,6 +613,16 @@ public final class MemorySafetyChecker {
             return 1 + estimateSnapshotDemand(n.body, depth);
         }
 
+        if (node instanceof SemanticStructDeclNode n) {
+            int total = 0;
+
+            for (SemanticFunctionDeclNode method : n.methods) {
+                total += 1 + estimateSnapshotDemand(method.body, depth);
+            }
+
+            return total;
+        }
+
         if (node instanceof SemanticBlockNode n) {
             int total = 0;
 
@@ -662,6 +680,14 @@ public final class MemorySafetyChecker {
             return false;
         }
 
+        if (node instanceof SemanticStructDeclNode n) {
+            for (SemanticFunctionDeclNode method : n.methods) {
+                checkFunction(method);
+            }
+
+            return false;
+        }
+
         if (node instanceof SemanticStmtNode n) {
             return checkStmt(n);
         }
@@ -685,8 +711,28 @@ public final class MemorySafetyChecker {
          * Local declarations set their own state (NULL for plain address
          * declarations and for alloc'd addresses, whose heap slot is
          * null-initialized).
+         *
+         * Exception: a method's `self` parameter is synthesized by the
+         * compiler as getaddr(receiver) over a storage-backed lvalue, so
+         * it is definitionally pointing at entry. Seed it as POINTING so
+         * dereferencing `self` without a redundant null guard does not
+         * warn. Later assignments (e.g. `self = other`, `self = null`)
+         * flow normally through assignment propagation.
          */
         Arrays.fill(addrState, AddressState.MAYBE_NULL);
+
+        if (node.symbol instanceof MethodSymbol method
+                && !method.parameters.isEmpty()) {
+            VariableSymbol selfSymbol = method.parameters.get(0);
+
+            if ("self".equals(selfSymbol.name)) {
+                int selfIndex = addrIndexOfSymbol(selfSymbol);
+
+                if (selfIndex >= 0) {
+                    addrState[selfIndex] = AddressState.POINTING;
+                }
+            }
+        }
 
         if (node.body != null) {
             boolean definitelyReturns = checkBlock(node.body, true);

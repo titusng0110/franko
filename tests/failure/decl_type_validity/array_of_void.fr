@@ -1,5 +1,5 @@
 // Failure fixture: decl_type_validity/array_of_void
-// Dynamic arrays require a valid non-void element type (doc 28), so
+// Dynamic arrays require a valid non-void element type (doc 29), so
 // `array<void> xs;` is invalid.
 
 func main() -> int32_t {

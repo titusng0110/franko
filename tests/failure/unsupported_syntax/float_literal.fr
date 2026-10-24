@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/float_literal
 // Franko has no floating-point types or floating-point literals; only
-// integer primitives are supported (doc 29.4), so `3.14` is rejected.
+// integer primitives are supported (doc 30.4), so `3.14` is rejected.
 
 func main() -> int32_t {
     int32_t x = 3.14;

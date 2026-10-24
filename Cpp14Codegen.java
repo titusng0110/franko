@@ -371,9 +371,40 @@ public class Cpp14Codegen {
          *
          * This supports forward references, direct recursion, and mutual
          * recursion across namespaces.
+         *
+         * Methods emit as mangled free functions (METH_..._OFSTRUCT_...)
+         * in the same prototype phase, after free functions of the same
+         * namespace.
          */
-        if (anyNonEmpty(nsFunctions) || !globalFunctions.isEmpty()) {
+        Map<String, List<SemanticFunctionDeclNode>> nsMethods = collectNamespaceMethods(nsStructs);
+        List<SemanticFunctionDeclNode> globalMethods = collectGlobalMethods(globalStructs);
+
+        if (anyNonEmpty(nsFunctions)
+                || anyNonEmpty(nsMethods)
+                || !globalFunctions.isEmpty()
+                || !globalMethods.isEmpty()) {
             for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
+                List<SemanticFunctionDeclNode> combined = new ArrayList<>(entry.getValue());
+                combined.addAll(nsMethods.getOrDefault(entry.getKey(), List.of()));
+
+                if (combined.isEmpty()) {
+                    continue;
+                }
+
+                openNamespace(entry.getKey());
+
+                for (SemanticFunctionDeclNode fn : combined) {
+                    emitFunctionPrototype(fn);
+                }
+
+                closeNamespace(entry.getKey());
+            }
+
+            for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsMethods.entrySet()) {
+                if (nsFunctions.containsKey(entry.getKey())) {
+                    continue;
+                }
+
                 if (entry.getValue().isEmpty()) {
                     continue;
                 }
@@ -391,6 +422,10 @@ public class Cpp14Codegen {
                 emitFunctionPrototype(fn);
             }
 
+            for (SemanticFunctionDeclNode fn : globalMethods) {
+                emitFunctionPrototype(fn);
+            }
+
             emitLine("");
         }
 
@@ -401,6 +436,28 @@ public class Cpp14Codegen {
          * functions of the same namespace.
          */
         for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
+            List<SemanticFunctionDeclNode> combined = new ArrayList<>(entry.getValue());
+            combined.addAll(nsMethods.getOrDefault(entry.getKey(), List.of()));
+
+            if (combined.isEmpty()) {
+                continue;
+            }
+
+            openNamespace(entry.getKey());
+
+            for (SemanticFunctionDeclNode fn : combined) {
+                emitFunctionDecl(fn);
+                emitLine("");
+            }
+
+            closeNamespace(entry.getKey());
+        }
+
+        for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsMethods.entrySet()) {
+            if (nsFunctions.containsKey(entry.getKey())) {
+                continue;
+            }
+
             if (entry.getValue().isEmpty()) {
                 continue;
             }
@@ -419,6 +476,42 @@ public class Cpp14Codegen {
             emitFunctionDecl(fn);
             emitLine("");
         }
+
+        for (SemanticFunctionDeclNode fn : globalMethods) {
+            emitFunctionDecl(fn);
+            emitLine("");
+        }
+    }
+
+    private static List<SemanticFunctionDeclNode> collectGlobalMethods(
+            List<SemanticStructDeclNode> globalStructs
+    ) {
+        List<SemanticFunctionDeclNode> out = new ArrayList<>();
+
+        for (SemanticStructDeclNode struct : globalStructs) {
+            out.addAll(struct.methods);
+        }
+
+        return out;
+    }
+
+    private static Map<String, List<SemanticFunctionDeclNode>> collectNamespaceMethods(
+            Map<String, List<SemanticStructDeclNode>> nsStructs
+    ) {
+        Map<String, List<SemanticFunctionDeclNode>> out = new LinkedHashMap<>();
+
+        for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
+            List<SemanticFunctionDeclNode> methods = out.computeIfAbsent(
+                    entry.getKey(),
+                    ignored -> new ArrayList<>()
+            );
+
+            for (SemanticStructDeclNode struct : entry.getValue()) {
+                methods.addAll(struct.methods);
+            }
+        }
+
+        return out;
     }
 
     /**
@@ -1464,6 +1557,20 @@ public class Cpp14Codegen {
     }
 
     private String emitFunctionName(FunctionSymbol symbol) {
+        /*
+         * Methods are emitted as free C++ functions with a mangled name:
+         *
+         *   METH_<name>_OFSTRUCT_<StructName>
+         *
+         * qualified by the struct's namespace like FUNC_ names.
+         *
+         * The `self` parameter emits as an ordinary `STRUCT_X* VAR_self`
+         * parameter, and calls emit an explicit `(&receiver)` argument.
+         */
+        if (symbol instanceof MethodSymbol method) {
+            return qualify(method.owner.namespace, method.mangledName());
+        }
+
         /*
          * Functions are emitted with a "FUNC_" prefix for the same
          * cross-namespace reason as variables.

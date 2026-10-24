@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/ternary_op
 // The ternary conditional operator `?:` does not exist in the grammar
-// (doc 29.17); use if/else statements instead.
+// (doc 30.17); use if/else statements instead.
 
 func main() -> int32_t {
     int32_t a = 3;

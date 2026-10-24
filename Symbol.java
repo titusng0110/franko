@@ -216,6 +216,62 @@ class FunctionSymbol extends CallableSymbol {
 }
 
 // ============================================================
+// Method Symbols
+// ============================================================
+
+/**
+ * MethodSymbol represents a method declared inside a struct body.
+ *
+ * A method is a function whose first parameter must be literally
+ * `addr<X> self` for the enclosing struct X. The receiver is passed
+ * explicitly as `self`; method calls lower to ordinary function calls
+ * with a synthesized `getaddr(receiver)` first argument.
+ *
+ * Overload identity matches functions: method name + ordered parameter
+ * types. The `self` parameter is always `addr<X>` so it does not affect
+ * resolution between overloads.
+ */
+class MethodSymbol extends FunctionSymbol {
+    final StructSymbol owner;
+
+    MethodSymbol(
+            StructSymbol owner,
+            String name,
+            List<ParameterSymbol> parameters,
+            SemanticType returnType,
+            boolean isBuiltin
+    ) {
+        super(
+                owner == null ? null : owner.namespace,
+                name,
+                parameters,
+                returnType,
+                isBuiltin
+        );
+
+        this.owner = Objects.requireNonNull(owner);
+    }
+
+    /**
+     * The qualified source name of this method, e.g. "X.increment" for a
+     * method declared in struct X, or "util::X.increment" for a method in
+     * a namespaced struct.
+     */
+    @Override
+    public String qualifiedName() {
+        return owner.qualifiedName() + "." + name;
+    }
+
+    /**
+     * The local C++ function name for this method, before namespace
+     * qualification: `METH_<name>_OFSTRUCT_<StructName>`.
+     */
+    public String mangledName() {
+        return "METH_" + name + "_OFSTRUCT_" + owner.name;
+    }
+}
+
+// ============================================================
 // Struct Symbols
 // ============================================================
 
@@ -248,6 +304,10 @@ class FieldSymbol {
  * rejected by SymbolTable.declareStruct.
  *
  * Fields are kept in declaration order.
+ *
+ * Methods are kept in a per-name overload table, mirroring the function
+ * overload tables on NamespaceSymbol. A method may not share its name
+ * with a field of the same struct.
  */
 class StructSymbol {
     final String name;
@@ -258,6 +318,17 @@ class StructSymbol {
      * the global namespace.
      */
     final String namespace;
+
+    /**
+     * Method overloads by method name, in declaration order.
+     */
+    final Map<String, List<MethodSymbol>> methods = new LinkedHashMap<>();
+
+    /**
+     * Raw FunctionDeclNode -> registered MethodSymbol for this struct.
+     */
+    final IdentityHashMap<FunctionDeclNode, MethodSymbol> methodDeclSymbols =
+            new IdentityHashMap<>();
 
     /**
      * Placeholder constructor used by SemanticAnalyzer phase 1.
@@ -294,6 +365,20 @@ class StructSymbol {
         }
 
         return null;
+    }
+
+    public boolean hasFieldName(String fieldName) {
+        return resolveField(fieldName) != null;
+    }
+
+    public boolean hasMethod(String methodName) {
+        List<MethodSymbol> overloads = methods.get(methodName);
+        return overloads != null && !overloads.isEmpty();
+    }
+
+    public List<MethodSymbol> getMethods(String methodName) {
+        List<MethodSymbol> overloads = methods.get(methodName);
+        return overloads == null ? List.of() : List.copyOf(overloads);
     }
 }
 

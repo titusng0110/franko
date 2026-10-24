@@ -110,6 +110,10 @@ public class FunctionChecker {
         validateReturnType(node.symbol);
         validateParameters(node);
 
+        if (node.symbol instanceof MethodSymbol method) {
+            validateMethodSelf(method);
+        }
+
         boolean sawReturn = false;
 
         if (node.body == null) {
@@ -160,6 +164,67 @@ public class FunctionChecker {
                         + ": parameters must have assignable value types");
             }
         }
+    }
+
+    /**
+     * Validates a method's `self` parameter shape.
+     *
+     * The first parameter must be literally `addr<X> self` for the owning
+     * struct X, and only the first parameter may be named `self`.
+     */
+    private void validateMethodSelf(MethodSymbol method) {
+        String display = method.qualifiedName();
+        String ownerName = method.owner.qualifiedName();
+
+        if (method.parameters.isEmpty()) {
+            diagnostics.error("Method '"
+                    + display
+                    + "' must have 'addr<"
+                    + ownerName
+                    + "> self' as its first parameter");
+            return;
+        }
+
+        ParameterSymbol first = method.parameters.get(0);
+
+        if (!"self".equals(first.name)) {
+            diagnostics.error("Method '"
+                    + display
+                    + "' must have 'addr<"
+                    + ownerName
+                    + "> self' as its first parameter");
+        } else if (!isSelfTypeForOwner(first.type, method.owner)) {
+            diagnostics.error("Method '"
+                    + display
+                    + "' has a 'self' parameter of type "
+                    + types.describeSafe(first.type)
+                    + "; it must be addr<"
+                    + ownerName
+                    + ">");
+        }
+
+        for (int i = 1; i < method.parameters.size(); i++) {
+            if ("self".equals(method.parameters.get(i).name)) {
+                diagnostics.error("Only the first parameter of a method may be named 'self'");
+                break;
+            }
+        }
+    }
+
+    private boolean isSelfTypeForOwner(SemanticType type, StructSymbol owner) {
+        if (!(type instanceof SemanticAddrType addr)) {
+            return false;
+        }
+
+        if (!(addr.referencedType instanceof SemanticStructType structType)) {
+            return false;
+        }
+
+        if (structType.structSymbol == null) {
+            return false;
+        }
+
+        return structType.structSymbol.qualifiedName().equals(owner.qualifiedName());
     }
     private void validateReturnType(FunctionSymbol fn) {
         SemanticType returnType = fn.returnType();

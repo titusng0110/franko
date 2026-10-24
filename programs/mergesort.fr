@@ -1,127 +1,136 @@
 // ============================================================
 // Franko Recursive Merge Sort Showcase: 50 Elements
-// Global-Array Version With Array Initializer List + Intrinsics
+// Struct + Methods Version With Array Initializer List + Intrinsics
 // ============================================================
 //
 // Demonstrates:
 //
-//   - global static arrays
-//   - recursive functions
-//   - void and non-void functions
-//   - global variables referenced inside functions
+//   - structs with static-array fields
+//   - methods with explicit addr<MergeSorter> self receivers
+//   - recursive methods
+//   - void and non-void methods
 //   - uint indexes
 //   - int32_t values
 //   - for loops for counted iteration
-//   - merge sort using a global helper copy buffer
+//   - merge sort using a helper copy buffer field
 //   - array initializer-list assignment
 //   - array.memset(...)
 //   - array.memcpy(addr<array<...>>, dstStart, srcStart, count)
 //
-// Global scope in Franko allows declarations only, so the arrays are declared
-// globally and initialized inside a function body.
+// The two working arrays live in the struct, so no globals are
+// needed: the whole sort state is one MergeSorter value.
 //
 // Arrays are not directly assignable, parameter-passable, or returnable by
 // value. When array data must be copied, use array intrinsics with addresses.
 // ============================================================
 
-array<int32_t, 50> a
-array<int32_t, 50> b
+struct MergeSorter {
+    array<int32_t, 50> a
+    array<int32_t, 50> b
 
-func printArray(uint n) -> void {
-    for (uint i = 0; i < n; i = i + 1) {
-        print(a[i])
+    func printArray(addr<MergeSorter> self, uint n) -> void {
+        for (uint i = 0; i < n; i = i + 1) {
+            print(deref(self).a[i])
+        }
+
+        return
     }
-}
 
-func initData() -> void {
-    a = [
-        42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
-        21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
-        8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
-        24, 70, 11, 47, 35, 94, 29, 63, 18, 76,
-        4, 53, 68, 10, 97, 26, 41, 80, 22, 56
-    ]
+    func initData(addr<MergeSorter> self) -> void {
+        deref(self).a = [
+            42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
+            21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
+            8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
+            24, 70, 11, 47, 35, 94, 29, 63, 18, 76,
+            4, 53, 68, 10, 97, 26, 41, 80, 22, 56
+        ]
 
-    b.memset(0)
-}
+        deref(self).b.memset(0)
+        return
+    }
 
-func merge(uint low, uint mid, uint high) -> void {
-    uint i = 0
-    uint j = 0
-    uint k = 0
-    uint count = 0
+    func merge(addr<MergeSorter> self, uint low, uint mid, uint high) -> void {
+        uint i = 0
+        uint j = 0
+        uint k = 0
+        uint count = 0
 
-    i = low
-    j = mid + 1
-    k = low
+        i = low
+        j = mid + 1
+        k = low
 
-    while (i <= mid && j <= high) {
-        if (a[i] <= a[j]) {
-            b[k] = a[i]
+        while (i <= mid && j <= high) {
+            if (deref(self).a[i] <= deref(self).a[j]) {
+                deref(self).b[k] = deref(self).a[i]
+                i = i + 1
+            } else {
+                deref(self).b[k] = deref(self).a[j]
+                j = j + 1
+            }
+
+            k = k + 1
+        }
+
+        while (i <= mid) {
+            deref(self).b[k] = deref(self).a[i]
             i = i + 1
-        } else {
-            b[k] = a[j]
+            k = k + 1
+        }
+
+        while (j <= high) {
+            deref(self).b[k] = deref(self).a[j]
             j = j + 1
+            k = k + 1
         }
 
-        k = k + 1
+        count = high - low + 1
+        deref(self).a.memcpy(getaddr(deref(self).b), low, low, count)
+        return
     }
 
-    while (i <= mid) {
-        b[k] = a[i]
-        i = i + 1
-        k = k + 1
-    }
+    func mergeSort(addr<MergeSorter> self, uint low, uint high) -> void {
+        uint mid = 0
 
-    while (j <= high) {
-        b[k] = a[j]
-        j = j + 1
-        k = k + 1
-    }
+        if (low < high) {
+            mid = low + ((high - low) / 2)
 
-    count = high - low + 1
-    a.memcpy(getaddr(b), low, low, count)
-}
-
-func mergeSort(uint low, uint high) -> void {
-    uint mid = 0
-
-    if (low < high) {
-        mid = low + ((high - low) / 2)
-
-        mergeSort(low, mid)
-        mergeSort(mid + 1, high)
-        merge(low, mid, high)
-    }
-}
-
-func isSorted(uint n) -> uint8_t {
-    uint8_t sorted = 1
-
-    for (uint k = 1; k < n; k = k + 1) {
-        if (a[k] < a[k - 1]) {
-            sorted = 0
+            deref(self).mergeSort(low, mid)
+            deref(self).mergeSort(mid + 1, high)
+            deref(self).merge(low, mid, high)
         }
+
+        return
     }
 
-    return sorted
+    func isSorted(addr<MergeSorter> self, uint n) -> uint8_t {
+        uint8_t sorted = 1
+
+        for (uint k = 1; k < n; k = k + 1) {
+            if (deref(self).a[k] < deref(self).a[k - 1]) {
+                sorted = 0
+            }
+        }
+
+        return sorted
+    }
 }
 
 func main() -> int32_t {
+    MergeSorter sorter
     uint n = 50
     uint8_t sorted = 0
 
-    initData()
+    sorter.initData()
 
     print(3001)
-    printArray(n)
+    sorter.printArray(n)
 
-    mergeSort(0, n - 1)
+    sorter.mergeSort(0, n - 1)
 
     print(3002)
-    printArray(n)
+    sorter.printArray(n)
 
-    sorted = isSorted(n)
+    sorted = sorter.isSorted(n)
 
     print(3003)
     print(sorted)

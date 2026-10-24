@@ -1,4 +1,4 @@
-# 25. `del` and Delete Checking
+# 26. `del` and Delete Checking
 
 The semantic model distinguishes between heap and non-heap variables.
 
@@ -27,9 +27,9 @@ After deletion, direct use of the variable is invalid.
 
 Dynamic array `uninit()` is separate from `del`. `uninit()` frees a heap or stack dynamic array's element buffer; `del` frees a heap-allocated variable object (and, for a heap dynamic array, also its element buffer through the object destructor).
 
-Checking of double delete, use-after-delete, and leaks is performed by the dedicated memory safety pass. See [Memory Safety Checking](26-memory-safety-checking.md).
+Checking of double delete, use-after-delete, and leaks is performed by the dedicated memory safety pass. See [Memory Safety Checking](27-memory-safety-checking.md).
 
-## 25.1 Delete Checking Limitations
+## 26.1 Delete Checking Limitations
 
 Current limitations:
 

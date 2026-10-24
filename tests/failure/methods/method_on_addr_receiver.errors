@@ -1,0 +1,1 @@
+use deref(p).foo(...) for address receivers

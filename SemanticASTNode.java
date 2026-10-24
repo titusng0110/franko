@@ -133,9 +133,18 @@ class SemanticFunctionDeclNode extends SemanticASTNode {
  */
 class SemanticStructDeclNode extends SemanticASTNode {
     public final StructSymbol symbol;
+    public final List<SemanticFunctionDeclNode> methods;
 
     public SemanticStructDeclNode(StructSymbol symbol) {
+        this(symbol, List.of());
+    }
+
+    public SemanticStructDeclNode(
+            StructSymbol symbol,
+            List<SemanticFunctionDeclNode> methods
+    ) {
         this.symbol = Objects.requireNonNull(symbol);
+        this.methods = List.copyOf(methods);
     }
 }
 

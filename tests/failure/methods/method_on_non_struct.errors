@@ -1,0 +1,1 @@
+Method call 'foo' is only valid on struct values, got type INT32

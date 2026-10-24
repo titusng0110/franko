@@ -2,7 +2,7 @@
 // SPEC TEST: Type Equality - Alias Canonicalization
 // ============================================================
 // Covers: `int`/`int32_t`, `byte`/`uint8_t`, and `uint`/`uint32_t`
-// are the same types after alias canonicalization (doc 27.1), so
+// are the same types after alias canonicalization (doc 28.1), so
 // values flow between aliased and canonical spellings in both
 // directions without conversion.
 // ============================================================
