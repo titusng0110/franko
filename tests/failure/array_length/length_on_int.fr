@@ -1,0 +1,8 @@
+// Failure fixture: array_length/length_on_int
+// length() receiver must be an array.
+func main() -> int32_t {
+    int32_t x;
+    x = 1;
+    print(x.length());
+    return 0;
+}

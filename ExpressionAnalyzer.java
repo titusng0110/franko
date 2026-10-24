@@ -297,33 +297,30 @@ public final class ExpressionAnalyzer {
     // Const Expression Helpers
     // ============================================================
 
-    public SemanticExprNode analyzeConstExprNode(
+    /**
+     * Reads a pre-evaluated constant slot.
+     *
+     * Constant-expression slots (static array sizes, global
+     * initializers, struct field defaults) are evaluated by the
+     * desugarer into canonical IntNode literals before semantic
+     * analysis. This only parses the literal; validation (positivity,
+     * range, fit) stays in later checkers.
+     */
+    public BigInteger preEvaluatedConstValue(
             ASTNode expr,
             String roleDescription
     ) {
-        if (expr == null) {
-            return new SemanticIntLiteralNode(
-                    FALLBACK_TYPE,
-                    BigInteger.ZERO,
-                    "0"
-            );
+        if (expr instanceof IntNode n) {
+            BigInteger parsed =
+                    ConstExpressionEvaluator.parseIntegerLiteralPure(n.value);
+
+            if (parsed != null) {
+                return parsed;
+            }
         }
 
-        return analyzeExpr(expr);
-    }
-
-    public BigInteger analyzeConstExprValue(
-            ASTNode expr,
-            String roleDescription
-    ) {
-        SemanticExprNode lowered = analyzeConstExprNode(
-                expr,
-                roleDescription
-        );
-
-        return lowered.constantValue != null
-                ? lowered.constantValue
-                : BigInteger.ZERO;
+        ctx.error("Invalid constant expression for " + roleDescription);
+        return BigInteger.ZERO;
     }
 
     // ============================================================

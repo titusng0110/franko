@@ -122,6 +122,8 @@ If the initializer list is longer than the static array length, the generated in
 
 There is no special “initializer length must exactly match static length” rule. The ordinary generated assignments determine validity.
 
+Exception: when a `?` inferred size is used in any dimension of the declaration, the initializer must fit exactly at every level. A shorter list is a desugaring error (partial fill is not allowed with `?`), sibling lists must have equal length, and an empty list cannot infer a size. See [Desugaring](05-desugaring.md).
+
 ## 21.5 Dynamic Arrays
 
 Array initializer lists do not initialize, allocate, resize, or reallocate dynamic arrays.
@@ -289,7 +291,7 @@ Array initializer lists in Franko are:
 - lowered to recursive indexed assignments;
 - allowed to contain ordinary expressions;
 - not required to contain compile-time constants;
-- partial when shorter than the target array;
+- partial when shorter than the target array (unless `?` inference is used, which requires an exact fit);
 - rejected for static arrays only when generated indexes are out of bounds;
 - not responsible for allocating, resizing, or initializing dynamic arrays;
 - intended for dynamic arrays only when the target dynamic storage already exists (this is not enforced at compile time; missing initialization fails at runtime);

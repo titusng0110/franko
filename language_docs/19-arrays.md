@@ -58,6 +58,15 @@ array<int32_t, 999999999999999999999999999999999> c;
 
 Static arrays do not use `arr(size)` initialization.
 
+The size may be written as `?` to infer it from a declaration initializer (see [Desugaring](05-desugaring.md)):
+
+```franko
+array<int32_t, ?> a = [0, 1, 2, 3];   // ? = 4
+array<byte, ?> s = "hello";           // ? = 5
+```
+
+The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](20-array-intrinsics.md)).
+
 ## 19.2 `ndarray` Sugar
 
 `ndarray<T, D1, D2, ..., Dn>` is syntactic sugar for nested static arrays:
@@ -75,6 +84,13 @@ array<array<array<byte, 30>, 20>, 12>
 Access order follows the dimension list: `arr[i][j][k]` indexes `i` along `12`, `j` along `20`, and `k` along `30`.
 
 Each dimension follows the same static-array size rules above (a positive compile-time integer constant folding to a value that fits `uint32_t`).
+
+Any dimension may be `?` when the `ndarray` is declared with an array-literal initializer; each `?` is inferred independently from the corresponding literal level:
+
+```franko
+ndarray<int32_t, ?, ?> g = [[1, 2, 3], [4, 5, 6]];   // 2 by 3
+ndarray<byte, 2, ?, 3> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
+```
 
 ## 19.3 Dynamic Arrays
 

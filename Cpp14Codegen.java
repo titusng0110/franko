@@ -120,6 +120,15 @@ import java.util.Map;
  *                                      -> SemanticArrayIntrinsicCallNode MEMCPY
  *   target.memmove(dstStart, srcStart, count)
  *                                      -> SemanticArrayIntrinsicCallNode MEMMOVE
+ *   target.length()                    -> SemanticArrayIntrinsicCallNode LENGTH
+ *
+ * Dynamic-array length() calls emit a runtime method call:
+ *
+ *   xs.length()                        -> xs.length()
+ *
+ * Static-array length() calls emit the size as a compile-time constant:
+ *
+ *   ys.length()                        -> static_cast<uint32_t>(3)
  *
  * Because array intrinsics are expressions, status-returning intrinsics such as
  * init/init_zero/resize may appear in value contexts after checking:
@@ -1363,6 +1372,10 @@ public class Cpp14Codegen {
             );
         }
 
+        if (node.kind == SemanticArrayIntrinsicKind.LENGTH) {
+            return emitArrayLengthCall(node);
+        }
+
         validateArrayIntrinsicArityForCodegen(node);
 
         StringBuilder sb = new StringBuilder();
@@ -1383,6 +1396,37 @@ public class Cpp14Codegen {
         sb.append(")");
 
         return sb.toString();
+    }
+
+    /**
+     * Emits a length() intrinsic call.
+     *
+     * Dynamic-array receivers emit a runtime method call:
+     *
+     *   xs.length()
+     *
+     * Static-array receivers emit the size as a compile-time constant:
+     *
+     *   static_cast<uint32_t>(3)
+     */
+    private String emitArrayLengthCall(SemanticArrayIntrinsicCallNode node) {
+        if (!node.args.isEmpty()) {
+            throw new IllegalStateException(
+                    "Internal compiler error: invalid arity for array intrinsic 'length'"
+            );
+        }
+
+        if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
+            return "static_cast<uint32_t>(" + staticArray.sizeLiteral + ")";
+        }
+
+        if (node.receiver.type instanceof SemanticDynamicArrayType) {
+            return emitExpr(node.receiver) + ".length()";
+        }
+
+        throw new IllegalStateException(
+                "Internal compiler error: length() receiver is not an array"
+        );
     }
 
     private String emitArrayIntrinsicArg(
@@ -1431,6 +1475,11 @@ public class Cpp14Codegen {
 
             case MEMMOVE ->
                     emitExprAsType(arg, UINT32_TYPE);
+
+            case LENGTH ->
+                    throw new IllegalStateException(
+                            "Internal compiler error: length() should not have arguments"
+                    );
         };
     }
 
@@ -1452,6 +1501,9 @@ public class Cpp14Codegen {
 
             case MEMMOVE ->
                     node.args.size() == 3;
+
+            case LENGTH ->
+                    node.args.isEmpty();
         };
 
         if (!ok) {

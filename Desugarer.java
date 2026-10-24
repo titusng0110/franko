@@ -1,7 +1,41 @@
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
 public class Desugarer {
+
+    private final DiagnosticBag diagnostics;
+
+    public Desugarer() {
+        this(new DiagnosticBag("Desugaring failed:"));
+    }
+
+    public Desugarer(DiagnosticBag diagnostics) {
+        this.diagnostics = diagnostics == null
+                ? new DiagnosticBag("Desugaring failed:")
+                : diagnostics;
+    }
+
+    public boolean hasErrors() {
+        return diagnostics.hasErrors();
+    }
+
+    public String formatErrors() {
+        return diagnostics.formatErrors();
+    }
+
+    /**
+     * Internal control-flow signal for `?` size inference failures.
+     *
+     * The message is reported as a desugaring diagnostic; the declaration
+     * falls back to a placeholder size so the pipeline can continue
+     * without cascading internal errors.
+     */
+    private static final class InferenceFailure extends RuntimeException {
+        InferenceFailure(String message) {
+            super(message);
+        }
+    }
 
     public ASTNode desugar(ASTNode root) {
         if (root == null) return null;
@@ -146,7 +180,7 @@ public class Desugarer {
             fields.add(new StructFieldDeclNode(
                 desugarType(field.type),
                 field.name,
-                field.constInitializer
+                evalConstExpr(field.constInitializer, "struct field initializer")
             ));
         }
 
@@ -160,10 +194,22 @@ public class Desugarer {
     }
 
     private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {
+        if (usesInferredSize(n.type)) {
+            diagnostics.error("'?' array size is not allowed for global variable '"
+                + n.name
+                + "'; '?' is only allowed in a local declaration with an array-literal or string-literal initializer");
+
+            return new GlobalVarDeclNode(
+                desugarType(replaceInferredSizesWithFallback(n.type)),
+                n.name,
+                evalConstExpr(n.constInitializer, "global variable initializer")
+            );
+        }
+
         return new GlobalVarDeclNode(
             desugarType(n.type),
             n.name,
-            n.constInitializer
+            evalConstExpr(n.constInitializer, "global variable initializer")
         );
     }
 
@@ -335,7 +381,15 @@ public class Desugarer {
         VarDeclInitNode n,
         List<ASTNode> out
     ) {
-        TypeNode loweredType = desugarType(n.type);
+        ASTNode rawInit = n.init == null ? null : desugarInitializerValue(n.init);
+
+        TypeNode loweredType;
+
+        if (usesInferredSize(n.type)) {
+            loweredType = inferStaticSizes(n.type, rawInit, n.name);
+        } else {
+            loweredType = desugarType(n.type);
+        }
 
         out.add(new VarDeclNode(
             loweredType,
@@ -343,17 +397,16 @@ public class Desugarer {
             n.isHeap
         ));
 
-        if (n.init == null) {
+        if (rawInit == null) {
             return;
         }
 
         ASTNode target = new VarNode(n.name);
-        ASTNode init = desugarInitializerValue(n.init);
 
-        if (init instanceof ArrayLiteralNode) {
+        if (rawInit instanceof ArrayLiteralNode) {
             appendArrayInitializerAssignments(
                 target,
-                (ArrayLiteralNode) init,
+                (ArrayLiteralNode) rawInit,
                 out
             );
             return;
@@ -361,7 +414,7 @@ public class Desugarer {
 
         out.add(new AssignNode(
             target,
-            desugarExpr(init)
+            desugarExpr(rawInit)
         ));
     }
 
@@ -369,6 +422,20 @@ public class Desugarer {
         VarDeclArrayInitNode n,
         List<ASTNode> out
     ) {
+        if (usesInferredSize(n.type)) {
+            diagnostics.error("'?' array size for '"
+                + n.name
+                + "' requires an array-literal or string-literal initializer, not a size argument");
+
+            out.add(new VarDeclNode(
+                desugarType(replaceInferredSizesWithFallback(n.type)),
+                n.name,
+                n.isHeap
+            ));
+
+            return;
+        }
+
         out.add(new VarDeclNode(
             desugarType(n.type),
             n.name,
@@ -386,6 +453,341 @@ public class Desugarer {
                 )
             ));
         }
+    }
+
+    // ============================================================
+    // Inferred static array sizes (`?`)
+    // ============================================================
+
+    /**
+     * Returns true when the declared type contains a `?` size marker
+     * anywhere (static sizes, ndarray dimensions, or nested positions).
+     */
+    private boolean usesInferredSize(TypeNode type) {
+        if (type == null) {
+            return false;
+        }
+
+        if (type instanceof StaticArrayTypeNode s) {
+            return s.sizeExpr instanceof InferredSizeNode
+                || usesInferredSize(s.elementType);
+        }
+
+        if (type instanceof NdArrayTypeNode nd) {
+            for (ASTNode dim : nd.dimensions) {
+                if (dim instanceof InferredSizeNode) {
+                    return true;
+                }
+            }
+
+            return usesInferredSize(nd.elementType);
+        }
+
+        if (type instanceof DynamicArrayTypeNode d) {
+            return usesInferredSize(d.elementType);
+        }
+
+        if (type instanceof AddrTypeNode a) {
+            return usesInferredSize(a.referencedType);
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns true when every array level in the type is static.
+     *
+     * `?` inference requires a fully static nest: a dynamic array level
+     * (or an addr level) anywhere in the type rejects inference.
+     */
+    private boolean isFullyStaticArrayNest(TypeNode type) {
+        if (type instanceof StaticArrayTypeNode s) {
+            return isFullyStaticArrayNest(s.elementType);
+        }
+
+        if (type instanceof NdArrayTypeNode nd) {
+            return isFullyStaticArrayNest(nd.elementType);
+        }
+
+        if (type instanceof DynamicArrayTypeNode) {
+            return false;
+        }
+
+        if (type instanceof AddrTypeNode) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Returns true when the type is a static array level (possibly with
+     * `?` markers), i.e. its initializer must be a nested literal.
+     */
+    private boolean isStaticArrayLevel(TypeNode type) {
+        return type instanceof StaticArrayTypeNode
+            || type instanceof NdArrayTypeNode;
+    }
+
+    /**
+     * Resolves `?` markers in a declaration type against an initializer.
+     *
+     * On success returns the type with every marker replaced by an
+     * IntNode count. On failure reports one diagnostic and returns a
+     * fallback type (markers replaced by size 1) so the pipeline can
+     * continue.
+     */
+    private TypeNode inferStaticSizes(TypeNode declared, ASTNode init, String varName) {
+        if (!isFullyStaticArrayNest(declared)) {
+            diagnostics.error("'?' size inference for '"
+                + varName
+                + "' requires a fully static array type");
+
+            return desugarType(replaceInferredSizesWithFallback(declared));
+        }
+
+        ArrayLiteralNode literal = normalizeInitializer(init);
+
+        if (literal == null) {
+            diagnostics.error("'?' array size for '"
+                + varName
+                + "' requires an array-literal or string-literal initializer");
+
+            return desugarType(replaceInferredSizesWithFallback(declared));
+        }
+
+        try {
+            return desugarType(inferLevel(declared, literal, varName));
+        } catch (InferenceFailure f) {
+            diagnostics.error(f.getMessage());
+
+            return desugarType(replaceInferredSizesWithFallback(declared));
+        }
+    }
+
+    /**
+     * Normalizes a declaration initializer into an array literal for
+     * shape analysis: string literals decode to UTF-8 byte lists.
+     *
+     * Returns null when the initializer is not a literal list.
+     */
+    private ArrayLiteralNode normalizeInitializer(ASTNode init) {
+        if (init instanceof ArrayLiteralNode lit) {
+            return lit;
+        }
+
+        if (init instanceof StringLiteralNode s) {
+            return StringLiteralDecoder.toUtf8ByteArrayLiteral(s);
+        }
+
+        return null;
+    }
+
+    /**
+     * Infers one static type level against a literal.
+     *
+     * Rules enforced here (only when `?` is used in the declaration):
+     *
+     *   - a `?` level takes the literal's element count; an empty
+     *     literal cannot infer a size;
+     *   - an explicit level must match the literal's element count
+     *     exactly (no partial fill);
+     *   - when the element type is itself a static level, every element
+     *     must be a nested array or string literal and all siblings
+     *     must have equal length (perfect rectangle).
+     */
+    private TypeNode inferLevel(TypeNode type, ArrayLiteralNode literal, String varName) {
+        if (type instanceof NdArrayTypeNode nd) {
+            TypeNode nested = nd.elementType;
+
+            for (int i = nd.dimensions.size() - 1; i >= 0; i--) {
+                nested = new StaticArrayTypeNode(nested, nd.dimensions.get(i));
+            }
+
+            return inferLevel(nested, literal, varName);
+        }
+
+        if (!(type instanceof StaticArrayTypeNode s)) {
+            throw new InferenceFailure("Internal inference error: expected a static array level for '"
+                + varName
+                + "'");
+        }
+
+        int count = literal.elements.size();
+
+        ASTNode sizeNode;
+
+        if (s.sizeExpr instanceof InferredSizeNode) {
+            if (count == 0) {
+                throw new InferenceFailure("'?' array size for '"
+                    + varName
+                    + "' cannot be inferred from an empty initializer list");
+            }
+
+            sizeNode = new IntNode(Integer.toString(count));
+        } else {
+            BigInteger declared = ConstExpressionEvaluator.tryFold(s.sizeExpr);
+
+            if (declared != null && !declared.equals(BigInteger.valueOf(count))) {
+                throw new InferenceFailure("Initializer for '"
+                    + varName
+                    + "' has "
+                    + count
+                    + " elements but declared size is "
+                    + declared
+                    + " (partial initialization is not allowed when '?' is used)");
+            }
+
+            sizeNode = s.sizeExpr;
+        }
+
+        TypeNode inferredElem = s.elementType;
+
+        if (isStaticArrayLevel(s.elementType)) {
+            List<ArrayLiteralNode> rows = new ArrayList<>();
+
+            for (ASTNode element : literal.elements) {
+                ArrayLiteralNode row = normalizeInitializer(element);
+
+                if (row == null) {
+                    throw new InferenceFailure("'?' array size inference for '"
+                        + varName
+                        + "' requires nested array or string literals");
+                }
+
+                rows.add(row);
+            }
+
+            requireRectangular(rows, varName);
+
+            inferredElem = inferLevel(s.elementType, rows.get(0), varName);
+
+            for (int i = 1; i < rows.size(); i++) {
+                checkLevel(inferredElem, rows.get(i), varName);
+            }
+        }
+
+        return new StaticArrayTypeNode(inferredElem, sizeNode);
+    }
+
+    /**
+     * Verifies a literal against a fully inferred (concrete) static type.
+     *
+     * Every level must match exactly; nested levels must be rectangular.
+     */
+    private void checkLevel(TypeNode concrete, ArrayLiteralNode literal, String varName) {
+        if (concrete instanceof NdArrayTypeNode nd) {
+            TypeNode nested = nd.elementType;
+
+            for (int i = nd.dimensions.size() - 1; i >= 0; i--) {
+                nested = new StaticArrayTypeNode(nested, nd.dimensions.get(i));
+            }
+
+            checkLevel(nested, literal, varName);
+            return;
+        }
+
+        if (!(concrete instanceof StaticArrayTypeNode s)) {
+            return;
+        }
+
+        int count = literal.elements.size();
+        BigInteger expected = ConstExpressionEvaluator.tryFold(s.sizeExpr);
+
+        if (expected != null && !expected.equals(BigInteger.valueOf(count))) {
+            throw new InferenceFailure("Initializer for '"
+                + varName
+                + "' has "
+                + count
+                + " elements but inferred size is "
+                + expected);
+        }
+
+        if (!isStaticArrayLevel(s.elementType)) {
+            return;
+        }
+
+        List<ArrayLiteralNode> rows = new ArrayList<>();
+
+        for (ASTNode element : literal.elements) {
+            ArrayLiteralNode row = normalizeInitializer(element);
+
+            if (row == null) {
+                throw new InferenceFailure("'?' array size inference for '"
+                    + varName
+                    + "' requires nested array or string literals");
+            }
+
+            rows.add(row);
+        }
+
+        requireRectangular(rows, varName);
+
+        for (ArrayLiteralNode row : rows) {
+            checkLevel(s.elementType, row, varName);
+        }
+    }
+
+    private void requireRectangular(List<ArrayLiteralNode> rows, String varName) {
+        if (rows.isEmpty()) {
+            return;
+        }
+
+        int first = rows.get(0).elements.size();
+
+        for (int i = 1; i < rows.size(); i++) {
+            if (rows.get(i).elements.size() != first) {
+                throw new InferenceFailure("'?' array size inference for '"
+                    + varName
+                    + "' requires a rectangular initializer list");
+            }
+        }
+    }
+
+    /**
+     * Rebuilds a type with every `?` marker replaced by size 1.
+     *
+     * Used only for error recovery so the pipeline continues with a
+     * well-formed type after an inference diagnostic.
+     */
+    private TypeNode replaceInferredSizesWithFallback(TypeNode type) {
+        if (type instanceof StaticArrayTypeNode s) {
+            ASTNode size = s.sizeExpr instanceof InferredSizeNode
+                    ? new IntNode("1")
+                    : s.sizeExpr;
+
+            return new StaticArrayTypeNode(
+                replaceInferredSizesWithFallback(s.elementType),
+                size
+            );
+        }
+
+        if (type instanceof NdArrayTypeNode nd) {
+            List<ASTNode> dims = new ArrayList<>();
+
+            for (ASTNode dim : nd.dimensions) {
+                dims.add(dim instanceof InferredSizeNode ? new IntNode("1") : dim);
+            }
+
+            return new NdArrayTypeNode(
+                replaceInferredSizesWithFallback(nd.elementType),
+                dims
+            );
+        }
+
+        if (type instanceof DynamicArrayTypeNode d) {
+            return new DynamicArrayTypeNode(
+                replaceInferredSizesWithFallback(d.elementType)
+            );
+        }
+
+        if (type instanceof AddrTypeNode a) {
+            return new AddrTypeNode(
+                replaceInferredSizesWithFallback(a.referencedType)
+            );
+        }
+
+        return type;
     }
 
     private void appendDesugaredAssign(
@@ -853,40 +1255,32 @@ public class Desugarer {
     // ============================================================
 
     /**
-     * Structurally desugars a constExpr AST.
+     * Evaluates a constExpr slot into a canonical decimal literal.
      *
-     * Used for static array size expressions.
+     * Static array sizes, ndarray dimensions, global initializers,
+     * and struct field defaults are computed here, before semantic
+     * analysis, so later phases only validate the resulting value
+     * (positivity, range, fit) instead of folding it.
+     *
+     * Evaluation failures are reported as desugaring diagnostics and
+     * recover with a placeholder size of 1.
      */
-    private ASTNode desugarConstExpr(ASTNode expr) {
+    private ASTNode evalConstExpr(ASTNode expr, String role) {
         if (expr == null) return null;
 
-        if (expr instanceof IntNode) {
-            return expr;
-        }
-
-        if (expr instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) expr;
-
-            return new UnaryOpNode(
-                n.op,
-                desugarConstExpr(n.expr)
+        try {
+            return new IntNode(
+                ConstExpressionEvaluator.evaluatePure(expr).toString(10)
             );
+        } catch (ConstExpressionEvaluator.UnevaluableConstant e) {
+            if (e.getDiagnostic() != null) {
+                diagnostics.error(e.getDiagnostic());
+            } else {
+                diagnostics.error("Invalid constant expression for " + role);
+            }
+
+            return new IntNode("1");
         }
-
-        if (expr instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) expr;
-
-            return new BinOpNode(
-                n.op,
-                desugarConstExpr(n.left),
-                desugarConstExpr(n.right)
-            );
-        }
-
-        throw new RuntimeException(
-            "Unsupported constant expression in desugarer: "
-            + expr.getClass().getSimpleName()
-        );
     }
 
     // ============================================================
@@ -1014,9 +1408,16 @@ public class Desugarer {
         *   k indexes C
         */
         for (int i = n.dimensions.size() - 1; i >= 0; i--) {
+            ASTNode dim = n.dimensions.get(i);
+
+            if (dim instanceof InferredSizeNode) {
+                diagnostics.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
+                dim = new IntNode("1");
+            }
+
             current = new StaticArrayTypeNode(
                 current,
-                desugarConstExpr(n.dimensions.get(i))
+                evalConstExpr(dim, "static array size")
             );
         }
 
@@ -1049,9 +1450,18 @@ public class Desugarer {
         if (type instanceof StaticArrayTypeNode) {
             StaticArrayTypeNode n = (StaticArrayTypeNode) type;
 
+            if (n.sizeExpr instanceof InferredSizeNode) {
+                diagnostics.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
+
+                return new StaticArrayTypeNode(
+                    desugarType(n.elementType),
+                    new IntNode("1")
+                );
+            }
+
             return new StaticArrayTypeNode(
                 desugarType(n.elementType),
-                desugarConstExpr(n.sizeExpr)
+                evalConstExpr(n.sizeExpr, "static array size")
             );
         }
 

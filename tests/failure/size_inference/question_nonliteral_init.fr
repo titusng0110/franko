@@ -1,0 +1,8 @@
+// Failure fixture: size_inference/question_nonliteral_init
+// `?` requires an array-literal or string-literal initializer.
+func main() -> int32_t {
+    int32_t n;
+    n = 3;
+    array<int32_t, ?> x = n;
+    return 0;
+}

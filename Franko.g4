@@ -667,6 +667,16 @@ memberName
 //   - global variable initializers
 //   - struct field default initializers
 //
+// A static array size (or ndarray dimension) is either an explicit
+// constant expression or an inferred-size marker `?`:
+//
+//   array<int32_t, 10>   explicit size
+//   array<int32_t, ?>    size inferred from a declaration initializer
+//   ndarray<byte, ?, 3>  middle dimension inferred
+//
+// `?` is only meaningful in a declaration with an array-literal or
+// string-literal initializer; the desugarer rejects it everywhere else.
+//
 // A constExpr is syntactically restricted to expressions that can be
 // computed from the expression alone:
 //
@@ -687,15 +697,29 @@ memberName
 //   - array initializer lists
 //   - string literals
 //
-// Semantic checker should still reject invalid constant expressions such as:
+// The desugarer evaluates every constExpr slot into a canonical
+// decimal literal before semantic analysis, and rejects
+// non-computable expressions such as:
 //   1 / 0
 //   1 << -1
 //
-// Semantic checker should also perform arbitrary-precision folding and
-// contextual range checking.
+// Semantic analysis then performs only contextual validation:
+// positivity, uint32_t range, and fit against the declared type.
 
 constExpr
     : constLogicalOrExpr
+    ;
+
+// A single static array size or ndarray dimension: either an explicit
+// constant expression or an inferred-size `?` marker.
+arraySize
+    : constExpr  # ExplicitArraySize
+    | QUESTION   # InferredArraySize
+    ;
+
+// Used by ndarray<T, N, N, N...>, where each N may be `?`.
+arraySizeList
+    : arraySize (COMMA arraySize)*
     ;
 
 // Used by ndarray<T, N, N, N...>.
@@ -883,6 +907,7 @@ nullLiteral
 //
 // Semantic checker should later require that each size expression is:
 //   - a valid compile-time integer constant expression
+//     (or `?`, which the desugarer resolves to a constant before this phase)
 //   - positive
 //   - representable as uint32_t
 //
@@ -895,7 +920,9 @@ nullLiteral
 //   ndarray<int, arr[0], 10>
 //
 // do not parse as static array / ndarray types because identifiers, calls,
-// and indexing are not constExpr forms.
+// and indexing are not constExpr forms. `?` is the only non-constExpr form
+// allowed as a size, and only the desugarer accepts it (in declarations
+// with an array-literal or string-literal initializer).
 type
     : INT8_T                                   # Int8Type
     | INT16_T                                  # Int16Type
@@ -908,8 +935,8 @@ type
     | IDENTIFIER                               # StructType
     | qualifiedName                            # QualifiedStructType
     | ARRAY LT type GT                         # DynamicArrayType
-    | ARRAY LT type COMMA constExpr GT         # StaticArrayType
-    | NDARRAY LT type COMMA constExprList GT   # NdArrayType
+    | ARRAY LT type COMMA arraySize GT        # StaticArrayType
+    | NDARRAY LT type COMMA arraySizeList GT  # NdArrayType
     | ADDR LT type GT                          # AddrType
     ;
 
@@ -979,6 +1006,7 @@ COMMA   : ',' ;
 SEMI    : ';' ;
 LT      : '<' ;
 GT      : '>' ;
+QUESTION: '?' ;
 
 // Grouping with depth tracking
 LPAREN : '(' { groupingDepth++; } ;

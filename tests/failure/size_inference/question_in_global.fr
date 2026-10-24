@@ -1,0 +1,6 @@
+// Failure fixture: size_inference/question_in_global
+// `?` is not allowed for globals.
+array<int32_t, ?> g;
+func main() -> int32_t {
+    return 0;
+}

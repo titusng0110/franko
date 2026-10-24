@@ -1,0 +1,8 @@
+// Failure fixture: size_inference/question_in_field
+// `?` is not allowed in struct field types.
+struct Box {
+    array<int32_t, ?> xs;
+}
+func main() -> int32_t {
+    return 0;
+}

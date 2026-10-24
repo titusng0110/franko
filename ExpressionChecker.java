@@ -626,6 +626,7 @@ public class ExpressionChecker {
             case MEMSET -> visitArrayMemsetIntrinsic(node);
             case MEMCPY -> visitArrayMemcpyIntrinsic(node);
             case MEMMOVE -> visitArrayMemmoveIntrinsic(node);
+            case LENGTH -> visitArrayLengthIntrinsic(node);
         }
     }
 
@@ -912,6 +913,24 @@ public class ExpressionChecker {
         ensureArrayIntrinsicReturnType(
                 node,
                 new SemanticVoidType()
+        );
+    }
+
+    private void visitArrayLengthIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 0) {
+            diagnostics.error("Array intrinsic 'length' expects exactly 0 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        types.ensureArrayType(
+                node.receiver.type,
+                "length() receiver must be an array"
+        );
+
+        ensureArrayIntrinsicReturnType(
+                node,
+                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
         );
     }
 

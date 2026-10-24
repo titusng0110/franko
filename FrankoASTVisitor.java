@@ -625,9 +625,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
+    public ASTNode visitExplicitArraySize(FrankoParser.ExplicitArraySizeContext ctx) {
+        return visit(ctx.constExpr());
+    }
+
+    @Override
+    public ASTNode visitInferredArraySize(FrankoParser.InferredArraySizeContext ctx) {
+        return new InferredSizeNode();
+    }
+
+    @Override
     public ASTNode visitStaticArrayType(FrankoParser.StaticArrayTypeContext ctx) {
         TypeNode elementType = (TypeNode) visit(ctx.type());
-        ASTNode sizeExpr = visit(ctx.constExpr());
+        ASTNode sizeExpr = visit(ctx.arraySize());
 
         return new StaticArrayTypeNode(elementType, sizeExpr);
     }
@@ -638,7 +648,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         List<ASTNode> dimensions = new ArrayList<>();
 
-        for (FrankoParser.ConstExprContext dimCtx : ctx.constExprList().constExpr()) {
+        for (FrankoParser.ArraySizeContext dimCtx : ctx.arraySizeList().arraySize()) {
             dimensions.add(visit(dimCtx));
         }
 

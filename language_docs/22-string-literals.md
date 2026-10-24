@@ -101,6 +101,12 @@ s = "ABCDE";
 
 which then lowers to the per-byte assignments shown above.
 
+The size may be inferred with `?`; it counts UTF-8 bytes (no null terminator is added):
+
+```franko
+array<byte, ?> t = "hello";   // ? = 5
+```
+
 ## 22.5 Strings Inside Array Initializer Lists
 
 String literals may appear as elements of an array initializer list. Each string element becomes a nested byte list:

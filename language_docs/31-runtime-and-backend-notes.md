@@ -8,8 +8,8 @@ The current compiler targets C++14.
 Franko source
   -> lexer + parser
   -> parser AST
-  -> Desugarer
-  -> SemanticAnalyzer
+  -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
+  -> SemanticAnalyzer (validation of evaluated values, no re-folding)
   -> LegalityChecker
   -> MemorySafetyChecker
   -> C++14 code generation
@@ -40,6 +40,8 @@ Static array sizes must be greater than zero because generated C++ uses fixed-si
 
 Static and dynamic arrays runtime-check indexes and intrinsics and raise `std::runtime_error` (via the runtime panic helper) on violations such as out-of-bounds access, use of an uninitialized dynamic array, double initialization, or zero-size allocation.
 
+The dynamic array length is stored in a `count` field with a `length()` accessor returning `uint32_t`. The field was renamed from `length` because C++ does not allow a field and a method with the same name. Reading `length()` on an uninitialized dynamic array returns `0` and never aborts; every other uninitialized access still aborts. Static arrays keep plain contiguous `T data[N]` storage with no length field or method: `staticarr.length()` in Franko source is emitted by the compiler as a constant, never as a runtime call.
+
 ## 31.4 Ordering of Top-Level Analysis
 
 Function signatures are registered before function bodies are analyzed so that forward references, direct recursion, and mutual recursion can be resolved.
@@ -69,6 +71,10 @@ Nested initializer lists are lowered recursively.
 String literals are converted to byte array literals in the same pass (see [String Literals](22-string-literals.md)).
 
 `ndarray` types are lowered to nested static arrays before type analysis.
+
+`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count (strings count as UTF-8 bytes) before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
+
+Every other `constExpr` slot is also evaluated in this pass: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
 
 The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
 

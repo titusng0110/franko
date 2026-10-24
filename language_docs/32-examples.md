@@ -492,3 +492,43 @@ func main() -> int32_t {
 ```
 
 Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
+
+## 32.21 Array `length()`
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(4);
+    print(xs.length());   // 4
+
+    array<int32_t, 3> ys;
+    ys = [10, 20, 30];
+    print(ys.length());   // 3 (compile-time constant)
+
+    for (uint32_t i = 0; i < ys.length(); i = i + 1) {
+        print(ys[i]);     // 10 20 30
+    }
+
+    xs.uninit();
+    print(xs.length());   // 0
+    return 0;
+}
+```
+
+## 32.22 Inferred Static Array Sizes (`?`)
+
+```franko
+func main() -> int32_t {
+    array<int32_t, ?> a = [0, 1, 2, 3];
+    print(a.length());   // 4
+
+    array<byte, ?> s = "hello";
+    print(s.length());   // 5
+
+    array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
+    print(m.length());      // 2
+    print(m[0].length());   // 2
+
+    return 0;
+}
+```
