@@ -311,3 +311,9 @@ if ($script:failed -ne 0) {
 }
 
 Write-Host "All spec tests passed."
+
+# Pin the process exit code explicitly. The runtime section above ends
+# with intentionally crashing binaries, so $LASTEXITCODE is non-zero
+# on the success path; without this, the step host may report the
+# stale code instead of the actual all-tests-passed outcome.
+exit 0

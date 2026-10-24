@@ -163,3 +163,8 @@ if ($failed -ne 0) {
 }
 
 Write-Host "All programs passed."
+
+# Pin the process exit code explicitly so the step host cannot report
+# a stale $LASTEXITCODE from an earlier native invocation instead of
+# the actual all-programs-passed outcome.
+exit 0
