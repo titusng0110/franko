@@ -44,12 +44,22 @@ import java.util.Map;
  *       return 0;
  *   }
  *
- * emits as:
+ * emits as (mangled like every other function):
  *
- *   int32_t main()
+ *   int32_t FUNC_main_HASH_d8625720()
  *   {
  *       return static_cast<int32_t>(0);
  *   }
+ *
+ * The generated C++ entry point is a small wrapper in the program
+ * template that calls the mangled Franko `main`:
+ *
+ *   - `ProgramTemplate.cpp` provides `int main()` and calls the
+ *     no-args Franko `main`;
+ *   - `ProgramTemplateWithRawCArgs.cpp` provides
+ *     `int main(int argc, char** argv)`, converts the raw C arguments
+ *     into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`,
+ *     and calls the args-form Franko `main`.
  *
  * Function prototypes are emitted before function definitions so Franko forward
  * references and mutual recursion compile in C++.
@@ -1701,11 +1711,14 @@ public class Cpp14Codegen {
          * type). Overloads of one name therefore emit distinct C++
          * names without relying on g++ overload resolution.
          *
-         * Exception: the Franko entry-point function "main" keeps its raw
-         * name, because the generated program's C++ entry point IS the
-         * Franko main function. main must be declared in the global
-         * namespace as `func main() -> int32_t` with no parameters; the
-         * semantic analyzer rejects any other shape.
+         * The entry-point function `main` emits its mangled name like
+         * every other function. The generated C++ entry point is a
+         * wrapper in the program template: `ProgramTemplate.cpp`
+         * calls the no-args `main`, and
+         * `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv`
+         * into nested dynamic byte arrays before calling the
+         * args-form `main`. Both `main` shapes therefore keep their
+         * hash suffixes.
          */
         if (symbol instanceof MethodSymbol method) {
             return qualify(method.owner.namespace, method.emittedLocalName());

@@ -16,6 +16,9 @@ $ErrorActionPreference = "Stop"
 # whose rendering varies across runs or platforms (such as live
 # addresses) in a .expected file.
 #
+# A program may provide programs/<name>.args: each line is one
+# command-line argument passed verbatim to the binary.
+#
 # Generated artifacts (.cpp, .testbin.exe, .actual) are removed after a
 # passing case and kept for inspection after a failure.
 #
@@ -82,6 +85,26 @@ function Test-OutputMatch($actualText, $expectedText) {
     return ($shown -eq 0) -and ($a.Count -eq $e.Count)
 }
 
+# Reads a <name>.args file and returns the command-line arguments
+# as an array. Each line is one argument passed verbatim; empty
+# lines pass empty-string arguments. A trailing newline does not
+# add an argument, and an empty or missing file yields no
+# arguments.
+function Read-RunArgs($argsFile) {
+    $runArgs = @()
+    if (Test-Path -LiteralPath $argsFile) {
+        $text = [IO.File]::ReadAllText($argsFile) -replace "`r`n", "`n"
+        if (-not [string]::IsNullOrEmpty($text)) {
+            $parts = $text -split "`n"
+            if ($text.EndsWith("`n")) {
+                $parts = $parts[0..($parts.Count - 2)]
+            }
+            foreach ($p in $parts) { $runArgs += $p }
+        }
+    }
+    return $runArgs
+}
+
 $programs = Get-ChildItem -Path "programs" -Filter "*.fr" -File |
     Sort-Object Name |
     ForEach-Object { $_.FullName }
@@ -97,6 +120,7 @@ foreach ($src in $programs) {
     $outBin = "$base.testbin.exe"
     $actual = "$base.actual"
     $expected = "$base.expected"
+    $runArgs = @(Read-RunArgs "$base.args")
 
     Write-Host ""
     Write-Host "=== $src ==="
@@ -131,7 +155,7 @@ foreach ($src in $programs) {
         continue
     }
 
-    & $outBin > $actual 2>&1
+    & $outBin @runArgs > $actual 2>&1
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         Write-Host "---- runtime output (exit code $exitCode): ----"

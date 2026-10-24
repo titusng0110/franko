@@ -230,15 +230,11 @@ class FunctionSymbol extends CallableSymbol {
     /**
      * The local C++ name actually emitted for this function.
      *
-     * The entry-point function `main` keeps its raw name, because the
-     * generated program's C++ entry point IS the Franko main function.
-     * Every other function emits its mangled name.
+     * Every function emits its mangled name, including the entry-point
+     * `main`: the generated C++ entry point is a small wrapper in the
+     * program template that calls the mangled Franko `main`.
      */
     public String emittedLocalName() {
-        if ("main".equals(name) && namespace == null) {
-            return name;
-        }
-
         return mangledName();
     }
 }
@@ -309,8 +305,7 @@ class MethodSymbol extends FunctionSymbol {
     }
 
     /**
-     * Methods always emit their mangled name, even when named `main`:
-     * only the global entry-point function keeps the raw `main` name.
+     * Methods always emit their mangled name, exactly like functions.
      */
     @Override
     public String emittedLocalName() {

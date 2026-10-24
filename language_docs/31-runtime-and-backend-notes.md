@@ -9,10 +9,11 @@ Franko source
   -> lexer + parser
   -> parser AST
   -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
-  -> SemanticAnalyzer (validation of evaluated values, no re-folding)
+  -> SemanticAnalyzer (validation of evaluated values, no re-folding, entry-point selection)
   -> LegalityChecker
   -> MemorySafetyChecker
   -> C++14 code generation
+  -> program template wrapper (entry-point call + argv conversion)
 ```
 
 ## 31.2 Memory Allocation
@@ -103,7 +104,7 @@ Franko keeps struct type names, variable names, and function names in separate n
 | function `f` | `FUNC_f_HASH_<8hex>` |
 | method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | namespace `n` | `NS_n` |
-| the entry-point function `main` | `main` (unprefixed: the generated C++ entry point IS the Franko `main`) |
+| the entry-point function `main` | `FUNC_main_HASH_<8hex>` like every other function (called by the template wrapper) |
 
 So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
@@ -123,3 +124,19 @@ When a variable or function shares its name with a declared struct, the compiler
 ```
 
 Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
+
+## 31.9 Entry-Point Wrapper and Command-Line Arguments
+
+The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
+
+- `ProgramTemplate.cpp` provides `int main()` and calls the no-args Franko `main` (`FUNC_main_HASH_d8625720`, the hash of `fn()->int32_t`).
+- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_3f161798`, the hash of `fn(addr<array<array<uint8_t>>>)->int32_t`).
+
+The compiler selects the template from the declared entry-point shape; an explicit `-t` template overrides the selection.
+
+The argv conversion follows these rules:
+
+- `args.length()` equals `argc`, with `args[0]` holding the program name;
+- each argument is its raw bytes with **no** NUL terminator appended (consistent with string literals, which also append no terminator);
+- an empty argument is represented as an uninitialized inner array, whose `length()` still returns `0`;
+- after the Franko `main` returns, the wrapper destroys the converted arrays; inner and outer arrays the program already released with `uninit()` are skipped safely.

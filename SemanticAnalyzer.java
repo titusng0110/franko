@@ -118,12 +118,35 @@ public class SemanticAnalyzer {
         }
     }
 
+    /**
+     * The entry-point shape declared by the program's global `main`.
+     *
+     * NONE means no valid global `main` was registered.
+     */
+    public enum EntryKind {
+        NONE,
+        NO_ARGS,
+        ARGS
+    }
+
     private final SymbolTable symbolTable = new SymbolTable();
 
     private final ConstExpressionEvaluator constEval;
     private final ExpressionAnalyzer exprAnalyzer;
 
     private FunctionSymbol currentFunction = null;
+
+    private EntryKind entryKind = EntryKind.NONE;
+    private int globalMainCount = 0;
+
+    /**
+     * The entry-point shape declared by the analyzed program.
+     *
+     * The driver uses this to select the C++ program template.
+     */
+    public EntryKind entryKind() {
+        return entryKind;
+    }
 
     private static final SemanticType FALLBACK_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
@@ -165,6 +188,8 @@ public class SemanticAnalyzer {
     public SemanticASTNode analyze(ASTNode root) {
         symbolTable.clear();
         symbolTable.pushScope();
+        entryKind = EntryKind.NONE;
+        globalMainCount = 0;
 
         SemanticASTNode result;
 
@@ -588,6 +613,16 @@ public class SemanticAnalyzer {
          */
         symbolTable.warnStructNameClashes();
 
+        /*
+         * A program without a global entry-point function has nothing
+         * for the template wrapper to call.
+         */
+        if (globalMainCount == 0) {
+            symbolTable.error(
+                    "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(addr<array<array<byte>>> <name>) -> int32_t'"
+            );
+        }
+
         return new SemanticProgramNode(semanticItems);
     }
 
@@ -732,7 +767,7 @@ public class SemanticAnalyzer {
     private void registerFunctionSignature(FunctionDeclNode fn) {
         /*
          * The entry-point function must live in the global namespace: the
-         * generated program's C++ entry point IS the Franko main function.
+         * template wrapper calls the global mangled `main` directly.
          */
         if ("main".equals(fn.name) && currentNamespaceName() != null) {
             symbolTable.error("The entry-point function 'main' must be declared in the global namespace, not in namespace '"
@@ -768,23 +803,66 @@ public class SemanticAnalyzer {
         );
 
         /*
-         * The entry-point function keeps the raw C++ name `main`, so it
-         * must have exactly the C++ entry-point shape: no parameters and
-         * an int32_t return. Any other shape cannot be a C++ main and
-         * overloading main is forbidden (C++ forbids overloading main).
+         * The entry-point function keeps a mangled C++ name like every
+         * other function; the generated C++ entry point is a small
+         * wrapper in the program template that calls it. Two shapes are
+         * legal in the global namespace:
+         *
+         *   func main() -> int32_t
+         *   func main(addr<array<array<byte>>> <name>) -> int32_t
+         *
+         * The parameter name of the args form is free. Any other shape
+         * cannot be called by a template wrapper, and overloading main
+         * is forbidden (C++ forbids overloading main).
          */
         if ("main".equals(fn.name) && currentNamespaceName() == null) {
             boolean returnsInt32 = symbol.returnType() instanceof SemanticPrimitiveType prim
                     && prim.kind == SemanticPrimitiveKind.INT32;
 
-            if (!params.isEmpty() || !returnsInt32) {
+            boolean noArgs = params.isEmpty();
+            boolean hasArgsShape = params.size() == 1
+                    && isArgsArrayParamType(params.get(0).type);
+
+            globalMainCount++;
+
+            if (globalMainCount > 1) {
                 symbolTable.error(
-                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' with no parameters"
+                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32_t' or 'func main(addr<array<array<byte>>> <name>) -> int32_t', not both"
                 );
+            } else if (!returnsInt32 || (!noArgs && !hasArgsShape)) {
+                symbolTable.error(
+                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' or 'func main(addr<array<array<byte>>> <name>) -> int32_t'"
+                );
+            } else {
+                entryKind = noArgs ? EntryKind.NO_ARGS : EntryKind.ARGS;
             }
         }
 
         symbolTable.declareFunction(fn, symbol);
+    }
+
+    /**
+     * Whether a type is the entry-point args parameter type:
+     * `addr<array<array<byte>>>`.
+     *
+     * `byte` lexes as `uint8_t`, so the check is structural on
+     * UINT8. The parameter name is free and plays no role.
+     */
+    private static boolean isArgsArrayParamType(SemanticType type) {
+        if (!(type instanceof SemanticAddrType addr)) {
+            return false;
+        }
+
+        if (!(addr.referencedType instanceof SemanticDynamicArrayType outer)) {
+            return false;
+        }
+
+        if (!(outer.elementType instanceof SemanticDynamicArrayType inner)) {
+            return false;
+        }
+
+        return inner.elementType instanceof SemanticPrimitiveType prim
+                && prim.kind == SemanticPrimitiveKind.UINT8;
     }
 
     /**

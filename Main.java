@@ -12,7 +12,8 @@ public class Main {
     public static void main(String[] args) throws Exception {
         // Defaults
         String sourceFile = "test.fr";
-        String templateFile = "ProgramTemplate.cpp";
+        String templateFile = null;
+        boolean explicitTemplate = false;
         String outputFile = "test.cpp";
         Path importSearchDir = Path.of("import");
         boolean verbose = false;
@@ -38,6 +39,7 @@ public class Main {
                         throw new IllegalArgumentException("Missing value after -t");
                     }
                     templateFile = args[++i];
+                    explicitTemplate = true;
                     break;
 
                 case "-p":
@@ -167,11 +169,44 @@ public class Main {
         Cpp14Codegen codegen = new Cpp14Codegen();
         String generatedBody = codegen.generate(semaAST);
 
+        // ----- Select template -----
+        if (!explicitTemplate) {
+            templateFile = switch (sema.entryKind()) {
+                case ARGS -> "ProgramTemplateWithRawCArgs.cpp";
+                case NO_ARGS -> "ProgramTemplate.cpp";
+                case NONE -> throw new RuntimeException(
+                    "Internal compiler error: no entry-point function 'main' after successful analysis"
+                );
+            };
+        }
+
         // ----- Load template -----
         String template = Files.readString(Path.of(templateFile), StandardCharsets.UTF_8);
 
         if (!template.contains("__FRANKO_PROGRAM__")) {
             throw new RuntimeException("Template does not contain __FRANKO_PROGRAM__ placeholder.");
+        }
+
+        /*
+         * Sanity check: the wrapper template must call the mangled name
+         * matching the declared entry-point shape. This catches a
+         * template that drifted out of sync with the mangling rules.
+         */
+        if (!explicitTemplate) {
+            String expectedEntryCall = switch (sema.entryKind()) {
+                case ARGS -> "FUNC_main_HASH_3f161798";
+                case NO_ARGS -> "FUNC_main_HASH_d8625720";
+                case NONE -> throw new RuntimeException(
+                    "Internal compiler error: no entry-point function 'main' after successful analysis"
+                );
+            };
+
+            if (!template.contains(expectedEntryCall)) {
+                throw new RuntimeException(
+                    "Template '" + templateFile + "' does not call the expected entry point '"
+                        + expectedEntryCall + "'."
+                );
+            }
         }
 
         // ----- Inject generated code into template -----

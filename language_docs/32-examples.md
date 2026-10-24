@@ -532,3 +532,22 @@ func main() -> int32_t {
     return 0;
 }
 ```
+
+## 32.23 Command-Line Arguments
+
+```franko
+func main(addr<array<array<byte>>> args) -> int32_t {
+    uint32_t n = deref(args).length();
+    print(n - 1);   // user argument count (args[0] is the program name)
+
+    uint32_t i = 1;
+    while (i < n) {
+        print(deref(args)[i].length());   // byte length of argument i
+        i = i + 1;
+    }
+
+    return 0;
+}
+```
+
+Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live address (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).

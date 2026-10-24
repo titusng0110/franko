@@ -75,7 +75,21 @@ Inside a namespace, an unqualified name resolves in that namespace first, then f
 
 The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error.
 
-`main` must be declared exactly as `func main() -> int32_t` with no parameters. Any other shape (parameters, a different return type) is a compile error, and `main` cannot be overloaded.
+`main` must be declared in one of two shapes, and it cannot be overloaded:
+
+```franko
+func main() -> int32_t {
+    return 0;
+}
+
+func main(addr<array<array<byte>>> args) -> int32_t {
+    return 0;
+}
+```
+
+Any other shape (parameters of another type, a different return type) is a compile error.
+
+In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
 
 Executable statements are **not** currently allowed in global scope.
 
