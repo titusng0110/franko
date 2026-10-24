@@ -211,7 +211,6 @@ $GppArgs = @(
     "-Wall",
     "-Wextra",
     "-Wpedantic",
-    "-Wshadow",
     "-I$ROOT\include",
     "-I$JEMALLOC_INCLUDE",
     $CPP_OUT,
