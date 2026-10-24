@@ -131,9 +131,9 @@ public class Desugarer {
     /**
      * Desugars a namespace declaration.
      *
-     * The namespace name is untouched; its items are desugared with the
-     * same top-level handling as ordinary program items, since a
-     * namespace body holds exactly the same item kinds as global scope.
+     * The namespace name (single or path form) is untouched; its items
+     * are desugared with the same top-level handling as ordinary
+     * program items, recursing into nested namespace declarations.
      */
     private NamespaceNode desugarNamespaceDecl(NamespaceNode n) {
         return new NamespaceNode(n.name, desugarTopLevelItemList(n.items));

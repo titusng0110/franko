@@ -1,0 +1,7 @@
+// Failure fixture: namespaces/ns_unknown_nested
+// A qualified reference whose namespace path was never declared is
+// rejected; the diagnostic names the full missing path.
+func main() -> int32_t {
+    print(a::b::c)
+    return 0
+}

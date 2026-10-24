@@ -110,9 +110,11 @@ public final class SymbolTable {
     // ============================================================
 
     /*
-     * Declared namespaces, in first-declaration order.
+     * Declared top-level namespaces, in first-declaration order.
      *
-     * Redeclaring a namespace merges into the existing symbol.
+     * Nested namespaces live in their parent's children map, not
+     * here. Redeclaring a path merges into the existing symbol
+     * chain.
      */
     private final Map<String, NamespaceSymbol> namespaces =
             new LinkedHashMap<>();
@@ -183,34 +185,120 @@ public final class SymbolTable {
     // ============================================================
 
     /**
-     * Returns the namespace with the given name, creating it on first
-     * declaration so later declarations merge into the same symbol.
+     * Returns the namespace with the given full path, creating it (and
+     * any missing intermediate namespaces) on first declaration so
+     * later declarations of the same path merge into the same symbol.
+     *
+     * Both declaration forms funnel through the path: "a::b" from a
+     * path header and "b" nested inside "a" resolve to the same
+     * symbol.
      */
-    public NamespaceSymbol declareNamespace(String name) {
-        NamespaceSymbol existing = namespaces.get(name);
+    public NamespaceSymbol declareNamespace(String path) {
+        List<String> segments = splitNamespacePath(path);
 
-        if (existing != null) {
-            return existing;
+        NamespaceSymbol current = null;
+
+        for (String segment : segments) {
+            if (current == null) {
+                NamespaceSymbol root = namespaces.get(segment);
+
+                if (root == null) {
+                    root = new NamespaceSymbol(segment, null);
+                    namespaces.put(segment, root);
+                }
+
+                current = root;
+            } else {
+                NamespaceSymbol child = current.children.get(segment);
+
+                if (child == null) {
+                    child = new NamespaceSymbol(
+                            current.name + "::" + segment,
+                            current
+                    );
+                    current.children.put(segment, child);
+                }
+
+                current = child;
+            }
         }
 
-        NamespaceSymbol created = new NamespaceSymbol(name);
-        namespaces.put(name, created);
-        return created;
+        return current;
     }
 
     /**
-     * Resolves a namespace by name, or null when no namespace with that
-     * name was declared.
+     * Resolves a namespace by full path, or null when no namespace
+     * with that path was declared.
      */
-    public NamespaceSymbol resolveNamespace(String name) {
-        return namespaces.get(name);
+    public NamespaceSymbol resolveNamespace(String path) {
+        return resolveNamespace(splitNamespacePath(path));
     }
 
     /**
-     * All declared namespaces in first-declaration order.
+     * Resolves a namespace by path segments, or null when no
+     * namespace with that path was declared. An empty segment list
+     * never resolves.
+     */
+    public NamespaceSymbol resolveNamespace(List<String> segments) {
+        if (segments == null || segments.isEmpty()) {
+            return null;
+        }
+
+        NamespaceSymbol current = namespaces.get(segments.get(0));
+
+        for (int i = 1; i < segments.size() && current != null; i++) {
+            current = current.children.get(segments.get(i));
+        }
+
+        return current;
+    }
+
+    /**
+     * Splits a namespace path ("a::b") into its segments.
+     */
+    public static List<String> splitNamespacePath(String path) {
+        if (path == null || path.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Internal error: empty namespace path");
+        }
+
+        String[] parts = path.split("::", -1);
+
+        for (String part : parts) {
+            if (part.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Internal error: malformed namespace path '"
+                                + path
+                                + "'");
+            }
+        }
+
+        return List.of(parts);
+    }
+
+    /**
+     * All declared namespaces in first-declaration order, depth-first:
+     * each namespace is followed by its nested namespaces.
      */
     public Collection<NamespaceSymbol> allNamespaces() {
-        return List.copyOf(namespaces.values());
+        List<NamespaceSymbol> out = new ArrayList<>();
+
+        for (NamespaceSymbol root : namespaces.values()) {
+            collectNamespaceTree(root, out);
+        }
+
+        return List.copyOf(out);
+    }
+
+    private static void collectNamespaceTree(
+            NamespaceSymbol symbol,
+            List<NamespaceSymbol> out
+    ) {
+        out.add(symbol);
+
+        for (NamespaceSymbol child : symbol.children.values()) {
+            collectNamespaceTree(child, out);
+        }
     }
 
     /**
@@ -621,7 +709,7 @@ public final class SymbolTable {
          * namespace-level variables can clash with its structs. Variables
          * and structs in other namespaces are unrelated symbols.
          */
-        for (NamespaceSymbol namespace : namespaces.values()) {
+        for (NamespaceSymbol namespace : allNamespaces()) {
             warnStructNameClashesInSpace(
                     namespace.structs,
                     namespace.functions,
@@ -630,35 +718,71 @@ public final class SymbolTable {
         }
 
         /*
-         * A namespace name shares the global scope with global-namespace
-         * struct, function, and variable names. This is legal (Franko
-         * namespaces are their own name space), but the shared name is
-         * usually confusing and worth calling out.
+         * A namespace name shares its enclosing scope with that
+         * scope's struct, function, and variable names. This is legal
+         * (Franko namespaces are their own name space), but the shared
+         * name is usually confusing and worth calling out. Reported
+         * names are fully qualified, so a clash with the parent scope
+         * reads as "Namespace 'a::b' shares its name with struct
+         * 'a::b'".
          */
-        for (String namespaceName : namespaces.keySet()) {
-            if (structs.containsKey(namespaceName)) {
-                warning("Namespace '"
-                        + namespaceName
-                        + "' shares its name with struct '"
-                        + namespaceName
-                        + "'");
-            }
+        for (NamespaceSymbol namespace : allNamespaces()) {
+            warnNamespaceNameClash(namespace);
+        }
+    }
 
-            if (functions.containsKey(namespaceName)) {
-                warning("Namespace '"
-                        + namespaceName
-                        + "' shares its name with function '"
-                        + namespaceName
-                        + "'");
-            }
+    /**
+     * Warns when a namespace's simple name collides with a struct,
+     * function, or variable name declared in its enclosing scope (the
+     * global namespace for top-level namespaces, the parent namespace
+     * otherwise).
+     */
+    private void warnNamespaceNameClash(NamespaceSymbol namespace) {
+        Map<String, StructSymbol> scopeStructs;
+        Map<String, List<FunctionSymbol>> scopeFunctions;
+        Set<String> scopeVariableNames;
 
-            if (globalNamespaceVariableNames.contains(namespaceName)) {
-                warning("Namespace '"
-                        + namespaceName
-                        + "' shares its name with a variable '"
-                        + namespaceName
-                        + "'");
-            }
+        if (namespace.parent == null) {
+            scopeStructs = structs;
+            scopeFunctions = functions;
+            scopeVariableNames = globalNamespaceVariableNames;
+        } else {
+            scopeStructs = namespace.parent.structs;
+            scopeFunctions = namespace.parent.functions;
+            scopeVariableNames = namespace.parent.variableNames;
+        }
+
+        String simpleName = namespace.simpleName();
+
+        /*
+         * The clash partner's qualified name always equals this
+         * namespace's full path: parent path + "::" + simple name, or
+         * the simple name itself at the top level.
+         */
+        String qualifiedClashName = namespace.name;
+
+        if (scopeStructs.containsKey(simpleName)) {
+            warning("Namespace '"
+                    + qualifiedClashName
+                    + "' shares its name with struct '"
+                    + qualifiedClashName
+                    + "'");
+        }
+
+        if (scopeFunctions.containsKey(simpleName)) {
+            warning("Namespace '"
+                    + qualifiedClashName
+                    + "' shares its name with function '"
+                    + qualifiedClashName
+                    + "'");
+        }
+
+        if (scopeVariableNames.contains(simpleName)) {
+            warning("Namespace '"
+                    + qualifiedClashName
+                    + "' shares its name with a variable '"
+                    + qualifiedClashName
+                    + "'");
         }
     }
 

@@ -403,30 +403,24 @@ public final class ExpressionAnalyzer {
      * Lowers a qualified variable reference:
      *
      *   util::offset
+     *   a::b::limit
      *
-     * The reference resolves strictly inside the named namespace; there
-     * is no fallback to the global namespace.
-     *
-     * Nested namespaces are unsupported: a segment list longer than two
-     * is rejected here.
+     * The reference resolves strictly inside the named namespace path,
+     * starting from the top level; there is no fallback to the global
+     * namespace and no relative resolution through the current
+     * namespace.
      */
     private SemanticExprNode analyzeQualifiedNameExpr(QualifiedNameNode q) {
-        if (q.segments.size() > 2) {
-            ctx.error("Nested namespaces are not supported: '"
-                    + String.join("::", q.segments)
-                    + "'");
+        List<String> namespaceSegments =
+                q.segments.subList(0, q.segments.size() - 1);
+        String name = q.segments.get(q.segments.size() - 1);
+        String qualified = String.join("::", q.segments);
+        String namespacePath = String.join("::", namespaceSegments);
 
-            return new SemanticIntLiteralNode(
-                    FALLBACK_TYPE,
-                    BigInteger.ZERO,
-                    "0"
-            );
-        }
-
-        NamespaceSymbol namespace = ctx.resolveNamespace(q.segments.get(0));
+        NamespaceSymbol namespace = ctx.resolveNamespace(namespaceSegments);
 
         if (namespace == null) {
-            ctx.error("Unknown namespace '" + q.segments.get(0) + "'");
+            ctx.error("Unknown namespace '" + namespacePath + "'");
 
             return new SemanticIntLiteralNode(
                     FALLBACK_TYPE,
@@ -434,23 +428,17 @@ public final class ExpressionAnalyzer {
                     "0"
             );
         }
-
-        String name = q.segments.get(1);
 
         VariableSymbol sym = ctx.resolveGlobalVarIn(namespace, name);
 
         if (sym == null) {
             if (ctx.hasAnyFunctionNamedIn(namespace, name)) {
                 ctx.error("Function name '"
-                        + namespace.name
-                        + "::"
-                        + name
+                        + qualified
                         + "' cannot be used as a value");
             } else {
                 ctx.error("Undeclared variable '"
-                        + namespace.name
-                        + "::"
-                        + name
+                        + qualified
                         + "'");
             }
 
@@ -537,27 +525,22 @@ public final class ExpressionAnalyzer {
             }
 
             /*
-             * Nested namespaces are unsupported; the reference itself is
-             * invalid regardless of what it names.
+             * All but the last segment must name a declared namespace
+             * path, resolved from the top level; the last segment is
+             * the called function.
              */
-            if (calleeQ.segments.size() > 2) {
-                ctx.error("Nested namespaces are not supported: '"
-                        + String.join("::", calleeQ.segments)
-                        + "'");
-
-                return new SemanticIntLiteralNode(
-                        FALLBACK_TYPE,
-                        BigInteger.ZERO,
-                        "0"
-                );
-            }
+            List<String> namespaceSegments = calleeQ.segments.subList(
+                    0, calleeQ.segments.size() - 1);
+            String calleeName =
+                    calleeQ.segments.get(calleeQ.segments.size() - 1);
+            String qualifiedCallee = String.join("::", calleeQ.segments);
 
             NamespaceSymbol namespace =
-                    ctx.resolveNamespace(calleeQ.segments.get(0));
+                    ctx.resolveNamespace(namespaceSegments);
 
             if (namespace == null) {
                 ctx.error("Unknown namespace '"
-                        + calleeQ.segments.get(0)
+                        + String.join("::", namespaceSegments)
                         + "'");
 
                 return new SemanticIntLiteralNode(
@@ -566,8 +549,6 @@ public final class ExpressionAnalyzer {
                         "0"
                 );
             }
-
-            String calleeName = calleeQ.segments.get(1);
 
             FunctionSymbol fn = ctx.resolveFunctionIn(
                     namespace,
@@ -578,7 +559,7 @@ public final class ExpressionAnalyzer {
             if (fn == null) {
                 ctx.error("No matching overload for function call '"
                         + formatCallSignature(
-                                namespace.name + "::" + calleeName,
+                                qualifiedCallee,
                                 argTypes
                         )
                         + "'");

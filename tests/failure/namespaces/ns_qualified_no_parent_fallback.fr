@@ -1,0 +1,15 @@
+// Failure fixture: namespaces/ns_qualified_no_parent_fallback
+// A qualified name resolves strictly inside the named namespace path:
+// `a::w` does not find `w` declared in the nested namespace `a::b`.
+namespace a {
+    int32_t v = 1
+
+    namespace b {
+        int32_t w = 2
+    }
+}
+
+func main() -> int32_t {
+    print(a::w)
+    return 0
+}

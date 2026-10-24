@@ -1,0 +1,14 @@
+// Failure fixture: namespaces/ns_main_in_nested
+// The entry-point function `main` must be declared in the global
+// namespace; a `main` inside a nested namespace is a compile error.
+namespace a {
+    namespace b {
+        func main() -> int32_t {
+            return 0
+        }
+    }
+}
+
+func main() -> int32_t {
+    return 1
+}

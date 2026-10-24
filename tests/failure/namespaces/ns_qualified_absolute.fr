@@ -1,0 +1,19 @@
+// Failure fixture: namespaces/ns_qualified_absolute
+// Qualified names resolve strictly from the top level: `b::c::w`
+// used inside namespace `a` does not resolve relatively to
+// `a::b::c::w`.
+namespace a {
+    namespace b {
+        namespace c {
+            int32_t w = 5
+        }
+    }
+    func read() -> int32_t {
+        return b::c::w
+    }
+}
+
+func main() -> int32_t {
+    print(a::read())
+    return 0
+}

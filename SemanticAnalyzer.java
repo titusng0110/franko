@@ -224,10 +224,10 @@ public class SemanticAnalyzer {
     // ============================================================
 
     /**
-     * One namespace's pending work during program analysis.
+     * One namespace path's pending work during program analysis.
      *
      * space is null for the global namespace. Multiple declarations of
-     * the same namespace merge into one instance, so its items list
+     * the same path merge into one instance, so its items list
      * accumulates across declarations in source order.
      */
     private static final class NamespaceProgramItems {
@@ -268,8 +268,11 @@ public class SemanticAnalyzer {
 
         /*
          * Collect the global namespace and one item list per declared
-         * namespace. Multiple declarations of the same namespace merge
-         * into one space, in first-declaration order.
+         * namespace path. Multiple declarations of the same path merge
+         * into one space, in first-declaration order. Nested namespace
+         * declarations are flattened here: each nested path gets its
+         * own entry keyed by full path, so later phases only ever see
+         * top-level paths.
          */
         List<NamespaceProgramItems> spaces = new ArrayList<>();
         Map<String, NamespaceProgramItems> spacesByName = new LinkedHashMap<>();
@@ -279,19 +282,7 @@ public class SemanticAnalyzer {
 
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof NamespaceNode n) {
-                NamespaceSymbol space = symbolTable.declareNamespace(n.name);
-
-                NamespaceProgramItems spaceItems = spacesByName.computeIfAbsent(
-                        n.name,
-                        ignored -> {
-                            NamespaceProgramItems created =
-                                    new NamespaceProgramItems(space);
-                            spaces.add(created);
-                            return created;
-                        }
-                );
-
-                spaceItems.items.addAll(n.items);
+                collectNamespaceDecl(n, null, spaces, spacesByName);
                 continue;
             }
 
@@ -501,20 +492,23 @@ public class SemanticAnalyzer {
         /*
          * Assemble the semantic program in source order. A namespace's
          * merged items are emitted at the position of its first
-         * declaration; later declarations of the same namespace only
-         * contributed items.
+         * declaration; later declarations of the same path only
+         * contributed items. Nested paths are emitted right after
+         * their outermost declared ancestor.
          */
         List<SemanticASTNode> semanticItems = new ArrayList<>();
         Set<String> emittedNamespaces = new LinkedHashSet<>();
 
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof NamespaceNode n) {
-                if (emittedNamespaces.add(n.name)) {
-                    semanticItems.add(new SemanticNamespaceNode(
-                            n.name,
-                            loweredItemsOf(spacesByName.get(n.name), loweredByNode)
-                    ));
-                }
+                emitNamespacePath(
+                        n.name,
+                        spaces,
+                        spacesByName,
+                        loweredByNode,
+                        semanticItems,
+                        emittedNamespaces
+                );
 
                 continue;
             }
@@ -527,12 +521,129 @@ public class SemanticAnalyzer {
         }
 
         /*
+         * Safety net: every collected path is introduced by some
+         * top-level declaration, so the loop above emits all of them.
+         * Emit any leftovers in discovery order rather than dropping
+         * them silently.
+         */
+        for (NamespaceProgramItems space : spaces) {
+            if (space.space == null) {
+                continue;
+            }
+
+            if (emittedNamespaces.add(space.space.name)) {
+                semanticItems.add(new SemanticNamespaceNode(
+                        space.space.name,
+                        loweredItemsOf(space, loweredByNode)
+                ));
+            }
+        }
+
+        /*
          * All struct, variable, and function names are registered at this
          * point, so cross-namespace name clashes can be detected in one pass.
          */
         symbolTable.warnStructNameClashes();
 
         return new SemanticProgramNode(semanticItems);
+    }
+
+    /**
+     * Collects one namespace declaration (and any namespaces nested
+     * inside it) into the merged per-path item lists.
+     *
+     * parentPath is null for top-level declarations. A path header
+     * ("a::b") is only valid at the top level; a nested declaration
+     * must use a single name, and its full path is the enclosing path
+     * plus that name. A nested path header is rejected here and its
+     * items are skipped.
+     */
+    private void collectNamespaceDecl(
+            NamespaceNode node,
+            String parentPath,
+            List<NamespaceProgramItems> spaces,
+            Map<String, NamespaceProgramItems> spacesByName
+    ) {
+        String fullPath;
+
+        if (parentPath == null) {
+            fullPath = node.name;
+        } else if (node.name.contains("::")) {
+            symbolTable.error("Nested namespace paths are not allowed: '"
+                    + node.name
+                    + "' is declared inside namespace '"
+                    + parentPath
+                    + "'; declare it as '"
+                    + parentPath + "::" + node.name
+                    + "' at the top level instead");
+            return;
+        } else {
+            fullPath = parentPath + "::" + node.name;
+        }
+
+        NamespaceSymbol space = symbolTable.declareNamespace(fullPath);
+
+        NamespaceProgramItems spaceItems = spacesByName.computeIfAbsent(
+                fullPath,
+                ignored -> {
+                    NamespaceProgramItems created =
+                            new NamespaceProgramItems(space);
+                    spaces.add(created);
+                    return created;
+                }
+        );
+
+        for (ASTNode item : node.items) {
+            if (item instanceof NamespaceNode nested) {
+                collectNamespaceDecl(nested, fullPath, spaces, spacesByName);
+                continue;
+            }
+
+            spaceItems.items.add(item);
+        }
+    }
+
+    /**
+     * Emits the merged node for one declared namespace path, followed
+     * by any not-yet-emitted nested paths below it, in
+     * first-discovery order. Merged declarations of the same path
+     * emit once, at the first declaration's position.
+     */
+    private void emitNamespacePath(
+            String path,
+            List<NamespaceProgramItems> spaces,
+            Map<String, NamespaceProgramItems> spacesByName,
+            Map<ASTNode, SemanticASTNode> loweredByNode,
+            List<SemanticASTNode> semanticItems,
+            Set<String> emittedNamespaces
+    ) {
+        NamespaceProgramItems space = spacesByName.get(path);
+
+        if (space != null && emittedNamespaces.add(path)) {
+            semanticItems.add(new SemanticNamespaceNode(
+                    path,
+                    loweredItemsOf(space, loweredByNode)
+            ));
+        }
+
+        String prefix = path + "::";
+
+        for (NamespaceProgramItems nested : spaces) {
+            if (nested.space == null) {
+                continue;
+            }
+
+            if (!nested.space.name.startsWith(prefix)) {
+                continue;
+            }
+
+            if (emittedNamespaces.add(nested.space.name)) {
+                semanticItems.add(new SemanticNamespaceNode(
+                        nested.space.name,
+                        loweredItemsOf(nested, loweredByNode)
+                ));
+            }
+        }
     }
 
     /**
@@ -1044,11 +1155,13 @@ public class SemanticAnalyzer {
      * Resolves a struct type reference to its StructSymbol.
      *
      * Unqualified names use the namespace chain: the namespace currently
-     * being analyzed first, then the global namespace.
+     * being analyzed first, then the global namespace. (Enclosing
+     * namespaces are not searched.)
      *
-     * Qualified names resolve strictly inside the named namespace.
-     * More than one namespace segment is rejected while nested
-     * namespaces are unsupported.
+     * Qualified names resolve strictly inside the named namespace path,
+     * starting from the top level: all but the last segment must name
+     * a declared namespace path, and the last segment names a struct
+     * declared in it.
      */
     private StructSymbol resolveStructTypeSymbol(StructTypeNode s) {
         if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
@@ -1061,21 +1174,18 @@ public class SemanticAnalyzer {
             return structSymbol;
         }
 
-        if (s.namespaceSegments.size() > 1) {
-            symbolTable.error("Nested namespaces are not supported: '"
-                    + String.join("::", s.namespaceSegments)
-                    + "::"
-                    + s.name
-                    + "'");
-            return null;
-        }
+        List<String> namespaceSegments = s.namespaceSegments;
+        String qualified = String.join("::", namespaceSegments)
+                + "::"
+                + s.name;
 
-        String namespaceName = s.namespaceSegments.get(0);
-
-        NamespaceSymbol namespace = symbolTable.resolveNamespace(namespaceName);
+        NamespaceSymbol namespace =
+                symbolTable.resolveNamespace(namespaceSegments);
 
         if (namespace == null) {
-            symbolTable.error("Unknown namespace '" + namespaceName + "'");
+            symbolTable.error("Unknown namespace '"
+                    + String.join("::", namespaceSegments)
+                    + "'");
             return null;
         }
 
@@ -1083,9 +1193,7 @@ public class SemanticAnalyzer {
 
         if (structSymbol == null) {
             symbolTable.error("Unknown struct type '"
-                    + namespaceName
-                    + "::"
-                    + s.name
+                    + qualified
                     + "'");
             return null;
         }

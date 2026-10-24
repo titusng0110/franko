@@ -94,7 +94,7 @@ Franko is a small statically typed language with:
   - `arr.memmove(dstStart, srcStart, count)`;
 - array initializer lists as array element assignment sugar;
 - imports of other source files (see [Source Files](02-source-files.md));
-- namespaces with `::`-qualified references (see [Program Structure](03-program-structure.md)).
+- namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).
 
 Franko currently does **not** implement:
 
@@ -104,7 +104,6 @@ Franko currently does **not** implement:
 - function pointers;
 - general methods (only the built-in array intrinsics use member-call syntax);
 - generics;
-- nested namespaces;
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
@@ -256,9 +255,27 @@ namespace util {
 }
 ```
 
-A namespace body may contain only struct declarations, global variable declarations, and function declarations. Imports, executable statements, and nested namespaces are not allowed inside a namespace body.
+A namespace body may contain only struct declarations, global variable declarations, function declarations, and nested namespace declarations. Imports and executable statements are not allowed inside a namespace body.
 
-The same namespace may be declared more than once, in the same file or across imported files; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
+Nested namespaces may be written in two equivalent forms:
+
+```franko
+namespace a::b {
+    int32_t v = 1
+}
+```
+
+```franko
+namespace a {
+    namespace b {
+        int32_t v = 1
+    }
+}
+```
+
+Both forms declare the same namespace, whose full path is `a::b`. A path header (containing `::`) is only valid at the top level: a namespace declared inside a namespace body must use a single name, and its full path is the enclosing path plus that name.
+
+The same namespace may be declared more than once, in the same file or across imported files, in either form; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
 
 ### Qualified References
 
@@ -269,13 +286,14 @@ util::Point p
 print(util::offset)
 print(util::doubleIt(5))
 util::offset = 5
+print(a::b::helper(x))
 ```
 
-A qualified name always resolves strictly inside the named namespace; there is no fallback to the global namespace. More than one `::` level (for example `a::b::c`) is rejected while nested namespaces are unsupported.
+A qualified name always resolves strictly inside the named namespace path, starting from the top level; there is no fallback to the global namespace, no search of enclosing namespaces, and no relative resolution through the current namespace. `a::w` does not find a symbol declared only in `a::b`, and `a::b::x` requires both `a` and `a::b` to be declared namespaces.
 
 ### Unqualified References
 
-Inside a namespace, an unqualified name resolves in that namespace first, then falls back to the global namespace. Outside any namespace, only the global namespace is visible.
+Inside a namespace, an unqualified name resolves in that namespace first, then falls back to the global namespace. Enclosing namespaces are not searched: code inside `a::b` does not see unqualified names declared in `a` unless they are also visible globally. Outside any namespace, only the global namespace is visible.
 
 ### Entry Point
 
@@ -369,6 +387,14 @@ func f(int32_t x) -> int32_t {
 ```
 
 Only nested `{ ... }` blocks inside the body create new scopes.
+
+## 4.7 Namespace Lookup
+
+Namespaces add two lookup rules on top of lexical scope; see [Program Structure](03-program-structure.md) for the full reference.
+
+Unqualified names used inside a namespace resolve in that namespace first, then fall back to the global namespace. Enclosing namespaces are never searched.
+
+Qualified names (`a::b::x`) resolve strictly inside the named namespace path from the top level, with no fallback. The first segment must name a top-level namespace.
 
 ---
 

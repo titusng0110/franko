@@ -304,16 +304,37 @@ class StructSymbol {
 /**
  * NamespaceSymbol represents one declared namespace.
  *
- * The first declaration creates the symbol; later declarations of the
- * same namespace (in the same file or in imported files) merge into
- * it, so each table below accumulates items from every declaration.
+ * A namespace is identified by its full path: "util" for a
+ * top-level namespace, "a::b" for a namespace b nested inside a.
+ * The first declaration creates the symbol chain; later declarations
+ * of the same path (in the same file or in imported files, in either
+ * the path-header or the nested-block form) merge into it, so each
+ * table below accumulates items from every declaration.
  *
  * A namespace carries its own struct, function overload, and global
  * variable tables. Lookup inside a namespace falls back to the global
- * namespace only after the namespace's own tables miss.
+ * namespace only after the namespace's own tables miss; enclosing
+ * namespaces are not searched.
  */
 class NamespaceSymbol {
+    /**
+     * Full path of this namespace, e.g. "a::b". Top-level namespaces
+     * carry a single segment.
+     */
     final String name;
+
+    /**
+     * Enclosing namespace, or null for a top-level namespace.
+     * Intermediate namespaces are created implicitly by path-header
+     * declarations (namespace a::b creates a when missing); they may
+     * hold no items of their own.
+     */
+    final NamespaceSymbol parent;
+
+    /**
+     * Nested namespaces by single-segment name.
+     */
+    final Map<String, NamespaceSymbol> children = new LinkedHashMap<>();
 
     final Map<String, StructSymbol> structs = new LinkedHashMap<>();
     final Map<String, List<FunctionSymbol>> functions = new LinkedHashMap<>();
@@ -333,6 +354,19 @@ class NamespaceSymbol {
             new IdentityHashMap<>();
 
     NamespaceSymbol(String name) {
+        this(name, null);
+    }
+
+    NamespaceSymbol(String name, NamespaceSymbol parent) {
         this.name = Objects.requireNonNull(name);
+        this.parent = parent;
+    }
+
+    /**
+     * Single-segment name of this namespace, e.g. "b" for "a::b".
+     */
+    String simpleName() {
+        int idx = name.lastIndexOf("::");
+        return idx < 0 ? name : name.substring(idx + 2);
     }
 }
