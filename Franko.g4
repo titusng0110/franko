@@ -32,39 +32,59 @@ topLevelItem
 //
 //   - struct declarations,
 //   - global variable declarations,
-//   - function declarations.
+//   - function declarations,
+//   - nested namespace declarations.
 //
-// Imports, executable statements, and nested namespaces are not
-// allowed inside a namespace body; namespaceItem makes them syntax
+// Imports, executable statements, and statements of any other kind are
+// not allowed inside a namespace body; namespaceItem makes them syntax
 // errors rather than semantic ones.
 //
+// Nested namespaces may be written in two equivalent forms:
+//
+//   namespace a::b {
+//       ...
+//   }
+//
+//   namespace a {
+//       namespace b {
+//           ...
+//       }
+//   }
+//
+// Both forms declare the same namespace, whose full path is "a::b".
+// A path header (containing '::') is only valid at the top level: a
+// namespace declared inside a namespace body must use a single name,
+// and its full path is the enclosing path plus that name. Path headers
+// nested inside a namespace body are rejected by the semantic
+// analyzer.
+//
 // The same namespace may be declared more than once, in the same file
-// or across imported files; its contents merge into one namespace.
-// Duplicate symbols inside the merged namespace are rejected by the
-// semantic analyzer exactly like global duplicates.
+// or across imported files, in either form; its contents merge into
+// one namespace. Duplicate symbols inside the merged namespace are
+// rejected by the semantic analyzer exactly like global duplicates.
 //
 // Members are referenced with the '::' qualifier:
 //
 //   util::Point p
 //   print(util::offset)
 //   print(util::doubleIt(5))
+//   a::b::helper(x)
 //
-// Inside namespace util, an unqualified name resolves in util first,
-// then falls back to the global namespace. A qualified name always
-// resolves strictly inside the named namespace.
-//
-// Nested namespaces are not supported yet; the grammar accepts any
-// qualified shape (a::b::c) and the semantic analyzer rejects more
-// than one '::' level, so adding nesting later does not change the
-// grammar.
+// Inside a namespace, an unqualified name resolves in that namespace
+// first, then falls back to the global namespace; enclosing
+// namespaces are not searched. A qualified name always resolves
+// strictly inside the named namespace path, starting from the top
+// level; there is no fallback to the global namespace and no
+// relative resolution through the current namespace.
 namespaceDecl
-    : NAMESPACE IDENTIFIER separators* LBRACE separators* (namespaceItem separators*)* RBRACE
+    : NAMESPACE IDENTIFIER (COLONCOLON IDENTIFIER)* separators* LBRACE separators* (namespaceItem separators*)* RBRACE
     ;
 
 namespaceItem
     : structDecl
     | functionDecl
     | globalVarDecl
+    | namespaceDecl
     ;
 
 // A qualified name requires at least one '::', so it can never be

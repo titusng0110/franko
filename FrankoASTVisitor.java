@@ -212,7 +212,20 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitNamespaceDecl(FrankoParser.NamespaceDeclContext ctx) {
-        String name = ctx.IDENTIFIER().getText();
+        /*
+         * The header may be a single name ("util") or a path
+         * ("a::b"). Nested-block declarations always carry a single
+         * name; the semantic analyzer prefixes it with the enclosing
+         * path. The raw name is stored joined; path interpretation
+         * happens during program collection.
+         */
+        List<String> segments = new ArrayList<>();
+
+        for (TerminalNode identifier : ctx.IDENTIFIER()) {
+            segments.add(identifier.getText());
+        }
+
+        String name = String.join("::", segments);
 
         List<ASTNode> items = new ArrayList<>();
 
@@ -238,6 +251,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.globalVarDecl() != null) {
             return visit(ctx.globalVarDecl());
+        }
+
+        if (ctx.namespaceDecl() != null) {
+            return visit(ctx.namespaceDecl());
         }
 
         throw new RuntimeException("Unknown namespaceItem: " + ctx.getText());

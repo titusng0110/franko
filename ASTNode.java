@@ -247,13 +247,18 @@ class ImportNode extends ASTNode {
 //     func doubleIt(...) -> ... { ... }
 // }
 //
-// A namespace groups struct, global variable, and function
-// declarations under a qualified name. The grammar restricts the body
-// to those three item kinds, so imports, executable statements, and
-// nested namespaces never reach the AST.
+// A namespace groups struct, global variable, function, and nested
+// namespace declarations under a qualified name.
+//
+// The name may be a single segment ("util") or a full path ("a::b")
+// when the declaration uses the path header form at the top level.
+// Nested NamespaceNodes inside items always carry a single-segment
+// name; the semantic analyzer prefixes it with the enclosing path
+// and rejects path headers nested inside a body.
 //
 // The same namespace may be declared more than once (same file or
-// across imported files); the semantic analyzer merges the contents.
+// across imported files, in either form); the semantic analyzer
+// merges the contents.
 class NamespaceNode extends ASTNode {
     String name;
     List<ASTNode> items;
@@ -277,9 +282,10 @@ class NamespaceNode extends ASTNode {
 //   - primary expressions:      util::offset
 //   - lvalue positions:         util::offset = 1
 //   - call callees:             util::doubleIt(5)
+//   - nested paths:             a::b::helper(1)
 //
-// Nested namespaces are not supported yet, so a segment list longer
-// than two is rejected by the semantic analyzer.
+// The last segment names the referenced symbol; every preceding
+// segment names a namespace along the path from the top level.
 class QualifiedNameNode extends ASTNode {
     List<String> segments;
 
@@ -457,11 +463,9 @@ class AddrTypeNode extends TypeNode {
 // a declared struct.
 class StructTypeNode extends TypeNode {
     /*
-     * Namespace the struct type is qualified with, e.g. ["util"] for
-     * util::Point. Empty for an unqualified struct type name.
-     *
-     * More than one segment parses but is rejected by the semantic
-     * analyzer while nested namespaces are unsupported.
+     * Namespace path the struct type is qualified with, e.g. ["util"]
+     * for util::Point or ["a", "b"] for a::b::Point. Empty for an
+     * unqualified struct type name.
      */
     List<String> namespaceSegments;
     String name;

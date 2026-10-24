@@ -1,0 +1,83 @@
+// ============================================================
+// Franko nested namespace test
+// ============================================================
+//
+// Exercises:
+//
+//   - path-header declarations:      namespace a::b { ... }
+//   - nested-block declarations:     namespace a { namespace b { ... } }
+//   - merging across both forms into one namespace path
+//   - qualified struct types:        a::b::Point
+//   - qualified variables:           a::b::limit, a::tag, m::n::p
+//   - qualified calls:               a::b::add(1), a::c::describe()
+//   - unqualified lookup inside a nested namespace (own namespace
+//     first, then global fallback)
+//   - absolute qualified references from inside a namespace
+//
+// Expected output is in main.expected.
+// ============================================================
+
+namespace a::b {
+    struct Point {
+        int32_t x = 3
+        int32_t y = 4
+    }
+
+    int32_t limit = 100
+
+    func add(int32_t v) -> int32_t {
+        // Unqualified: resolves to a::b::limit.
+        return v + limit
+    }
+}
+
+namespace a {
+    int32_t tag = 7
+
+    namespace b {
+        int32_t extra = 5
+    }
+
+    namespace c {
+        func describe() -> int32_t {
+            // Absolute paths from inside a namespace.
+            return a::tag + a::b::limit
+        }
+    }
+}
+
+// The path-header form and the nested-block form below declare the
+// same namespace; their contents merge into one namespace.
+namespace m::n {
+    int32_t p = 1
+}
+
+namespace m {
+    namespace n {
+        int32_t q = 2
+    }
+}
+
+func main() -> int32_t {
+    // Qualified struct type at global scope.
+    a::b::Point pt
+    print(pt.x)
+    print(pt.y)
+
+    // Qualified variable read and write.
+    print(a::b::limit)
+    a::b::limit = 101
+    print(a::b::limit)
+
+    // Qualified calls, including into a merged-then-nested path.
+    print(a::b::add(1))
+    print(a::b::extra)
+    print(a::tag)
+    print(a::c::describe())
+
+    // Merged namespace members from both declaration forms.
+    print(m::n::p)
+    print(m::n::q)
+
+    return 0
+}

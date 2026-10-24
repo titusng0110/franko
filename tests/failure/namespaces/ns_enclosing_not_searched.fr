@@ -1,0 +1,18 @@
+// Failure fixture: namespaces/ns_enclosing_not_searched
+// Unqualified lookup inside a nested namespace searches that
+// namespace, then the global namespace. Enclosing namespaces are
+// not searched, so `v` declared in `a` is not visible inside `a::b`.
+namespace a {
+    int32_t v = 10
+
+    namespace b {
+        func get() -> int32_t {
+            return v
+        }
+    }
+}
+
+func main() -> int32_t {
+    print(a::b::get())
+    return 0
+}

@@ -1,0 +1,1 @@
+Nested namespace paths are not allowed: 'b::c' is declared inside namespace 'a'

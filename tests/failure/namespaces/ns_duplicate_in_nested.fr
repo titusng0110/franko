@@ -1,0 +1,17 @@
+// Failure fixture: namespaces/ns_duplicate_in_nested
+// The path-header form and the nested-block form declare the same
+// namespace; duplicate symbols across the two forms are rejected
+// exactly like duplicates within one declaration.
+namespace a::b {
+    int32_t x = 1
+}
+
+namespace a {
+    namespace b {
+        int32_t x = 2
+    }
+}
+
+func main() -> int32_t {
+    return 0
+}

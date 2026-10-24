@@ -46,3 +46,11 @@ func f(int32_t x) -> int32_t {
 ```
 
 Only nested `{ ... }` blocks inside the body create new scopes.
+
+## 4.7 Namespace Lookup
+
+Namespaces add two lookup rules on top of lexical scope; see [Program Structure](03-program-structure.md) for the full reference.
+
+Unqualified names used inside a namespace resolve in that namespace first, then fall back to the global namespace. Enclosing namespaces are never searched.
+
+Qualified names (`a::b::x`) resolve strictly inside the named namespace path from the top level, with no fallback. The first segment must name a top-level namespace.

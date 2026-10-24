@@ -137,13 +137,13 @@ public class Cpp14Codegen {
     private int indentLevel = 0;
 
     /*
-     * Name of the C++ namespace currently being emitted, or null while
-     * emitting at global scope.
+     * Full path of the Franko namespace currently being emitted, or
+     * null while emitting at global scope.
      *
      * References to symbols from other namespaces are qualified
-     * (ns::name); references to global-namespace symbols from inside a
-     * namespace block are rooted (::name) so they cannot be captured by
-     * same-named symbols in that namespace.
+     * (NS_a::NS_b::name); references to global-namespace symbols from
+     * inside a namespace block are rooted (::name) so they cannot be
+     * captured by same-named symbols in that namespace.
      */
     private String currentEmitNamespace = null;
 
@@ -1494,7 +1494,7 @@ public class Cpp14Codegen {
      *   - same namespace as the emission context (or both global):
      *     the local name is used as-is,
      *
-     *   - symbol in another namespace: "NS_ns::" + localName,
+     *   - symbol in another namespace: "NS_a::NS_b::" + localName,
      *
      *   - global-namespace symbol referenced from inside a namespace
      *     block: "::" + localName, so the reference cannot be captured
@@ -1511,44 +1511,70 @@ public class Cpp14Codegen {
             return localName;
         }
 
-        return "NS_" + symbolNamespace + "::" + localName;
+        return cppNamespacePrefix(symbolNamespace) + "::" + localName;
     }
 
     /**
-     * Opens a C++ namespace block for emission and switches the
-     * qualification context.
+     * Maps a Franko namespace path ("a::b") to its C++ namespace
+     * prefix ("NS_a::NS_b").
+     */
+    private static String cppNamespacePrefix(String namespacePath) {
+        StringBuilder sb = new StringBuilder();
+
+        for (String segment : SymbolTable.splitNamespacePath(namespacePath)) {
+            if (sb.length() > 0) {
+                sb.append("::");
+            }
+
+            sb.append("NS_").append(segment);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Opens C++ namespace blocks for one Franko namespace path and
+     * switches the qualification context to it.
      *
-     * The emitted C++ namespace is prefixed (NS_name) while
-     * currentEmitNamespace keeps the Franko name, so qualification
+     * Each emitted C++ namespace is prefixed (NS_name) while
+     * currentEmitNamespace keeps the Franko path, so qualification
      * comparisons stay in Franko terms.
      *
      * Null is a no-op: global-namespace items are emitted at global
      * scope.
      */
-    private void openNamespace(String namespaceName) {
-        if (namespaceName == null) {
+    private void openNamespace(String namespacePath) {
+        if (namespacePath == null) {
             return;
         }
 
-        emitLine("namespace NS_" + namespaceName);
-        emitLine("{");
-        indentLevel++;
-        currentEmitNamespace = namespaceName;
+        for (String segment : SymbolTable.splitNamespacePath(namespacePath)) {
+            emitLine("namespace NS_" + segment);
+            emitLine("{");
+            indentLevel++;
+        }
+
+        currentEmitNamespace = namespacePath;
     }
 
     /**
-     * Closes a C++ namespace block opened by openNamespace and restores
-     * the global emission context.
+     * Closes the C++ namespace blocks opened by openNamespace and
+     * restores the global emission context.
      *
      * Null is a no-op, matching openNamespace.
      */
-    private void closeNamespace(String namespaceName) {
-        if (namespaceName == null) {
+    private void closeNamespace(String namespacePath) {
+        if (namespacePath == null) {
             return;
         }
 
-        indentLevel--;
-        emitLine("}");
+        int depth = SymbolTable.splitNamespacePath(namespacePath).size();
+
+        for (int i = 0; i < depth; i++) {
+            indentLevel--;
+            emitLine("}");
+        }
+
         currentEmitNamespace = null;
     }
 

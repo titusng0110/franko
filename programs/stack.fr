@@ -9,6 +9,8 @@
 //   - a struct with a dynamic-array field (std::Vector)
 //   - namespace-qualified types and calls (std::Vector,
 //     std::vec_push, ...)
+//   - a nested namespace (app::stats) declared with the nested-block
+//     form and called with a fully qualified path
 //   - addr<Vector> parameters with getaddr at the call site
 //   - init / push (with growth) / get / set / pop / uninit
 //
@@ -17,6 +19,17 @@
 // ============================================================
 
 import "franko/vector"
+
+// Nested-namespace showcase: the nested-block form below declares the
+// same namespace that `namespace app::stats { ... }` would declare.
+// Members are called with the fully qualified path app::stats::....
+namespace app {
+    namespace stats {
+        func remaining(addr<std::Vector> s) -> uint32_t {
+            return std::vec_len(s)
+        }
+    }
+}
 
 func main() -> int32_t {
     std::Vector s
@@ -49,7 +62,7 @@ func main() -> int32_t {
     st = std::vec_pop(getaddr(s), getaddr(top))
     print(st, top)
 
-    print(std::vec_len(getaddr(s)))
+    print(app::stats::remaining(getaddr(s)))
     n = std::vec_len(getaddr(s))
     for (uint32_t i = 0; i < n; i = i + 1) {
         print(std::vec_get(getaddr(s), i))
