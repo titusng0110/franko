@@ -208,8 +208,9 @@ class StructFieldDeclNode extends ASTNode {
 //
 // Distinct from VarDeclNode: the Desugarer keys top-level handling off
 // node classes, and global const initializers must never be rewritten
-// into assignment statements. The initializer is a raw constExpr AST
-// that the semantic analyzer folds into a canonical constant.
+// into assignment statements. The initializer is a constExpr AST that
+// the desugarer evaluates into a canonical literal before semantic
+// analysis; later phases only validate the resulting value.
 
 class GlobalVarDeclNode extends ASTNode {
     TypeNode type;
@@ -507,6 +508,25 @@ class IntNode extends ASTNode {
     IntNode(String value) {
         this.value = value;
     }
+}
+
+// ============================================================
+// Inferred static array sizes
+// ============================================================
+//
+// InferredSizeNode is a marker for `?` in a static array size or
+// ndarray dimension:
+//
+//   array<int32_t, ?>
+//   ndarray<byte, ?, 3>
+//
+// It is resolved by the desugarer (only in declarations with an
+// array-literal or string-literal initializer) into an IntNode before
+// semantic analysis. Any InferredSizeNode that survives desugaring is
+// a misplaced `?` and is rejected.
+
+class InferredSizeNode extends ASTNode {
+    InferredSizeNode() {}
 }
 
 // ============================================================

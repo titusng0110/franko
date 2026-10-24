@@ -368,7 +368,7 @@ public class SemanticAnalyzer {
                     BigInteger fieldDefault = null;
 
                     if (fieldNode.constInitializer != null) {
-                        fieldDefault = exprAnalyzer.analyzeConstExprValue(
+                        fieldDefault = exprAnalyzer.preEvaluatedConstValue(
                                 fieldNode.constInitializer,
                                 "struct field initializer"
                         );
@@ -440,7 +440,7 @@ public class SemanticAnalyzer {
                 }
 
                 if (n.constInitializer != null) {
-                    globalInitializers.put(n, exprAnalyzer.analyzeConstExprValue(
+                    globalInitializers.put(n, exprAnalyzer.preEvaluatedConstValue(
                             n.constInitializer,
                             "global variable initializer"
                     ));
@@ -1326,18 +1326,27 @@ public class SemanticAnalyzer {
 
         if (node instanceof StaticArrayTypeNode s) {
             /*
-             * Static array size expressions are folded mechanically here so
-             * SemanticStaticArrayType can carry canonical size metadata.
+             * Static array size expressions arrive pre-evaluated: the
+             * desugarer folds every size into a canonical decimal
+             * literal, so this only reads the value.
              *
              * Legality is checked later:
              *
-             *   - foldability,
              *   - positivity,
              *   - uint32_t range,
              *   - other static-size rules.
+             *
+             * A surviving InferredSizeNode means the desugarer missed a `?`
+             * (defensive: inference or the misplaced-`?` diagnostic should
+             * have handled it first).
              */
+            if (s.sizeExpr instanceof InferredSizeNode) {
+                symbolTable.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
+                return FALLBACK_TYPE;
+            }
+
             BigInteger canonicalSize =
-                    exprAnalyzer.analyzeConstExprValue(
+                    exprAnalyzer.preEvaluatedConstValue(
                             s.sizeExpr,
                             "static array size"
                     );

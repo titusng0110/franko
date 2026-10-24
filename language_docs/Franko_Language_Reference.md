@@ -551,6 +551,64 @@ The `init` and `update` parts are optional simple statements. The condition is r
 
 The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](18-statements.md).
 
+## 5.8 Inferred Static Array Sizes (`?`)
+
+A static array size (or `ndarray` dimension) may be written as `?` when the array is declared with an array-literal or string-literal initializer:
+
+```franko
+array<int32_t, ?> a = [0, 1, 2, 3];
+```
+
+During desugaring, each `?` is replaced by the element count of the corresponding initializer level, so the declaration above becomes:
+
+```franko
+array<int32_t, 4> a;
+a[0] = 0;
+a[1] = 1;
+a[2] = 2;
+a[3] = 3;
+```
+
+String literals count UTF-8 bytes (`array<byte, ?> s = "hello"` infers `5`), and nested literals infer level by level:
+
+```franko
+array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
+```
+
+becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear in any dimension, including middle `ndarray` dimensions.
+
+Inference rules:
+
+- `?` is legal only in a local declaration-assignment statement (`T name = literal;`, including `alloc` form) whose initializer is an array literal or a string literal;
+- when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
+- when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
+- an empty initializer list cannot infer a size;
+- without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
+
+Misplaced `?` (parameters, return types, struct fields, globals, addresses, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](19-arrays.md) and [Array Initializer Lists](21-array-initializer-lists.md).
+
+## 5.9 Constant Expression Evaluation
+
+Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
+
+```franko
+array<int32_t, 0x10> xs;   // size becomes 16
+int8_t g = 1 + 2;          // initializer becomes 3 (globals)
+struct S {                 // field default becomes 8
+    int32_t n = 1 << 3
+}
+```
+
+Static array sizes, `ndarray` dimensions, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
+
+Evaluation failures are desugaring diagnostics:
+
+```franko
+array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
+```
+
+Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
+
 ---
 
 # 6. Types
@@ -573,6 +631,8 @@ Structs are nominal types: two distinct struct declarations are distinct types e
 `void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
 
 `ndarray<T, D1, D2, ...>` is not a separate semantic type category. It is syntactic sugar desugared into nested static array types before semantic analysis.
+
+A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal or string-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
 
 ---
 
@@ -681,32 +741,51 @@ Fluid constants also participate in function overload resolution. A folded integ
 
 # 10. Constant Folding
 
-The semantic analyzer folds pure integer constant expressions when safe.
+Franko splits constant handling into evaluation and validation.
+
+**Evaluation** computes the value of a syntactically pure constant expression. This happens before semantic analysis, in the desugarer, for every `constExpr` slot: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults.
 
 Examples:
 
 ```franko
-1 + 2       // folded to 3
-4 * 5       // folded to 20
-10 == 10    // folded to 1
-!0          // folded to 1
-1 << 3      // folded to 8
+1 + 2       // evaluated to 3
+4 * 5       // evaluated to 20
+10 == 10    // evaluated to 1
+!0          // evaluated to 1
+1 << 3      // evaluated to 8
 ```
 
-Folding is conservative.
+`array<int32_t, 0x10>` reaches semantic analysis as `array<int32_t, 16>`; `int8_t g = 1 + 2` reaches it as `int8_t g = 3`.
 
-Constants are folded using arbitrary-precision `BigInteger`, not fixed-width wrapping arithmetic.
+**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32_t` range for array sizes, fit for global and field initializers, primitive-only field defaults.
 
-Integer overflow is not applied during folding. Range checking happens when the value is used in a concrete type context.
-
-Division by zero in a foldable constant expression is rejected during semantic analysis:
+Evaluation failures are reported before semantic analysis:
 
 ```franko
-1 / 0        // invalid: Division by zero in constant expression
-array<int, 10 / 0> bytes;   // invalid for the same reason
+array<int, 10 / 0> bytes;   // invalid: Division by zero in constant expression
 ```
 
-A shift whose constant right operand is negative is not folded; it is rejected later by the operator rules (see [Operators](16-operators.md)).
+Evaluation is conservative.
+
+Constants are evaluated using arbitrary-precision `BigInteger`, not fixed-width wrapping arithmetic.
+
+Integer overflow is not applied during evaluation. Range checking happens when the value is used in a concrete type context:
+
+```franko
+int8_t g = 300;   // evaluated to 300, then rejected: does not fit in INT8
+```
+
+A shift whose constant right operand is negative cannot be evaluated; it is rejected during desugaring as an invalid constant expression. Negative shifts inside ordinary expressions are instead rejected later by the operator rules (see [Operators](16-operators.md)).
+
+Constant expressions inside ordinary code (as opposed to `constExpr` slots) are still folded during semantic analysis, when expressions are lowered. Diagnostics there keep their existing wording:
+
+```franko
+int32_t x = 1 / 0;   // invalid: Division by zero in constant expression
+```
+
+`?` array size inference uses the same evaluator quietly: it only needs the value when one exists, and reports its own inference diagnostics otherwise (see [Desugaring](05-desugaring.md)).
+
+A static array `length()` call is emitted as a compile-time constant, not as a runtime read (see [Array Intrinsics](20-array-intrinsics.md)).
 
 ---
 
@@ -1460,6 +1539,15 @@ array<int32_t, 999999999999999999999999999999999> c;
 
 Static arrays do not use `arr(size)` initialization.
 
+The size may be written as `?` to infer it from a declaration initializer (see [Desugaring](05-desugaring.md)):
+
+```franko
+array<int32_t, ?> a = [0, 1, 2, 3];   // ? = 4
+array<byte, ?> s = "hello";           // ? = 5
+```
+
+The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](20-array-intrinsics.md)).
+
 ## 19.2 `ndarray` Sugar
 
 `ndarray<T, D1, D2, ..., Dn>` is syntactic sugar for nested static arrays:
@@ -1477,6 +1565,13 @@ array<array<array<byte, 30>, 20>, 12>
 Access order follows the dimension list: `arr[i][j][k]` indexes `i` along `12`, `j` along `20`, and `k` along `30`.
 
 Each dimension follows the same static-array size rules above (a positive compile-time integer constant folding to a value that fits `uint32_t`).
+
+Any dimension may be `?` when the `ndarray` is declared with an array-literal initializer; each `?` is inferred independently from the corresponding literal level:
+
+```franko
+ndarray<int32_t, ?, ?> g = [[1, 2, 3], [4, 5, 6]];   // 2 by 3
+ndarray<byte, 2, ?, 3> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
+```
 
 ## 19.3 Dynamic Arrays
 
@@ -1607,8 +1702,9 @@ Void-returning intrinsics are invalid in value contexts.
 | `target.memcpy(source)` | any array | `void` | — |
 | `target.memcpy(source, dstStart, srcStart, count)` | any array | `void` | — |
 | `target.memmove(dstStart, srcStart, count)` | any array | `void` | — |
+| `target.length()` | any array | `uint32_t` | — |
 
-The receiver of an array intrinsic must be a storage-backed array lvalue.
+The receiver of a mutating array intrinsic must be a storage-backed array lvalue.
 
 Examples of storage-backed array targets:
 
@@ -1625,6 +1721,8 @@ getaddr(arr)
 x + y
 1
 ```
+
+`length()` is read-only, so its receiver may be any array-typed expression; it does not need to be a storage-backed lvalue.
 
 ## 20.1 `init`, `init_zero`, and `target(size)`
 
@@ -1760,6 +1858,48 @@ Current memcpyable types:
 | structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |
 
+## 20.9 `length`
+
+Returns the element count of an array as `uint32_t`.
+
+Form:
+
+```franko
+target.length()
+```
+
+Rules:
+
+- takes exactly zero arguments;
+- receiver must have array type (dynamic or static);
+- `length()` is read-only: unlike the mutating intrinsics, the receiver does not need to be a storage-backed lvalue, and calling it never initializes, modifies, or uninitializes the array;
+- a struct method named `length` still dispatches as a method: struct-typed receivers are never treated as array intrinsics.
+
+Dynamic arrays report their runtime length. A dynamic array that has never been initialized, or that has been uninitialized with `uninit()`, reports `0`; `length()` never aborts:
+
+```franko
+array<int32_t> xs;
+print(xs.length());   // 0
+xs.init(4);
+print(xs.length());   // 4
+xs.resize(10);
+print(xs.length());   // 10
+xs.uninit();
+print(xs.length());   // 0
+```
+
+Static arrays report their size as a compile-time constant: `ys.length()` for `array<int32_t, 3> ys` compiles to the constant `3`, with no runtime read.
+
+Nested receivers report the outermost dimension; index first for inner dimensions:
+
+```franko
+array<array<int32_t, 2>, 3> m;
+print(m.length());      // 3
+print(m[0].length());   // 2
+```
+
+`length()` returns a value, so it may be used in any value context: arithmetic, loop bounds, assignments, and `print`.
+
 ---
 
 # 21. Array Initializer Lists
@@ -1885,6 +2025,8 @@ If the initializer list is shorter than the static array length, only the listed
 If the initializer list is longer than the static array length, the generated indexed assignment is rejected by ordinary static array bounds checking.
 
 There is no special “initializer length must exactly match static length” rule. The ordinary generated assignments determine validity.
+
+Exception: when a `?` inferred size is used in any dimension of the declaration, the initializer must fit exactly at every level. A shorter list is a desugaring error (partial fill is not allowed with `?`), sibling lists must have equal length, and an empty list cannot infer a size. See [Desugaring](05-desugaring.md).
 
 ## 21.5 Dynamic Arrays
 
@@ -2053,7 +2195,7 @@ Array initializer lists in Franko are:
 - lowered to recursive indexed assignments;
 - allowed to contain ordinary expressions;
 - not required to contain compile-time constants;
-- partial when shorter than the target array;
+- partial when shorter than the target array (unless `?` inference is used, which requires an exact fit);
 - rejected for static arrays only when generated indexes are out of bounds;
 - not responsible for allocating, resizing, or initializing dynamic arrays;
 - intended for dynamic arrays only when the target dynamic storage already exists (this is not enforced at compile time; missing initialization fails at runtime);
@@ -2163,6 +2305,12 @@ s = "ABCDE";
 ```
 
 which then lowers to the per-byte assignments shown above.
+
+The size may be inferred with `?`; it counts UTF-8 bytes (no null terminator is added):
+
+```franko
+array<byte, ?> t = "hello";   // ? = 5
+```
 
 ## 22.5 Strings Inside Array Initializer Lists
 
@@ -3288,8 +3436,8 @@ The current compiler targets C++14.
 Franko source
   -> lexer + parser
   -> parser AST
-  -> Desugarer
-  -> SemanticAnalyzer
+  -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
+  -> SemanticAnalyzer (validation of evaluated values, no re-folding)
   -> LegalityChecker
   -> MemorySafetyChecker
   -> C++14 code generation
@@ -3320,6 +3468,8 @@ Static array sizes must be greater than zero because generated C++ uses fixed-si
 
 Static and dynamic arrays runtime-check indexes and intrinsics and raise `std::runtime_error` (via the runtime panic helper) on violations such as out-of-bounds access, use of an uninitialized dynamic array, double initialization, or zero-size allocation.
 
+The dynamic array length is stored in a `count` field with a `length()` accessor returning `uint32_t`. The field was renamed from `length` because C++ does not allow a field and a method with the same name. Reading `length()` on an uninitialized dynamic array returns `0` and never aborts; every other uninitialized access still aborts. Static arrays keep plain contiguous `T data[N]` storage with no length field or method: `staticarr.length()` in Franko source is emitted by the compiler as a constant, never as a runtime call.
+
 ## 31.4 Ordering of Top-Level Analysis
 
 Function signatures are registered before function bodies are analyzed so that forward references, direct recursion, and mutual recursion can be resolved.
@@ -3349,6 +3499,10 @@ Nested initializer lists are lowered recursively.
 String literals are converted to byte array literals in the same pass (see [String Literals](22-string-literals.md)).
 
 `ndarray` types are lowered to nested static arrays before type analysis.
+
+`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count (strings count as UTF-8 bytes) before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
+
+Every other `constExpr` slot is also evaluated in this pass: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
 
 The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
 
@@ -3894,3 +4048,43 @@ func main() -> int32_t {
 ```
 
 Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
+
+## 32.21 Array `length()`
+
+```franko
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init(4);
+    print(xs.length());   // 4
+
+    array<int32_t, 3> ys;
+    ys = [10, 20, 30];
+    print(ys.length());   // 3 (compile-time constant)
+
+    for (uint32_t i = 0; i < ys.length(); i = i + 1) {
+        print(ys[i]);     // 10 20 30
+    }
+
+    xs.uninit();
+    print(xs.length());   // 0
+    return 0;
+}
+```
+
+## 32.22 Inferred Static Array Sizes (`?`)
+
+```franko
+func main() -> int32_t {
+    array<int32_t, ?> a = [0, 1, 2, 3];
+    print(a.length());   // 4
+
+    array<byte, ?> s = "hello";
+    print(s.length());   // 5
+
+    array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
+    print(m.length());      // 2
+    print(m[0].length());   // 2
+
+    return 0;
+}
+```

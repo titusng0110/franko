@@ -146,3 +146,61 @@ The whole loop becomes a block, so a loop variable declared in `init` is scoped 
 The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` is appended to the end of the loop body so it runs on every iteration, including the last. Franko has no `break` or `continue`, so this lowering is exact.
 
 The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](18-statements.md).
+
+## 5.8 Inferred Static Array Sizes (`?`)
+
+A static array size (or `ndarray` dimension) may be written as `?` when the array is declared with an array-literal or string-literal initializer:
+
+```franko
+array<int32_t, ?> a = [0, 1, 2, 3];
+```
+
+During desugaring, each `?` is replaced by the element count of the corresponding initializer level, so the declaration above becomes:
+
+```franko
+array<int32_t, 4> a;
+a[0] = 0;
+a[1] = 1;
+a[2] = 2;
+a[3] = 3;
+```
+
+String literals count UTF-8 bytes (`array<byte, ?> s = "hello"` infers `5`), and nested literals infer level by level:
+
+```franko
+array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
+```
+
+becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear in any dimension, including middle `ndarray` dimensions.
+
+Inference rules:
+
+- `?` is legal only in a local declaration-assignment statement (`T name = literal;`, including `alloc` form) whose initializer is an array literal or a string literal;
+- when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
+- when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
+- an empty initializer list cannot infer a size;
+- without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
+
+Misplaced `?` (parameters, return types, struct fields, globals, addresses, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](19-arrays.md) and [Array Initializer Lists](21-array-initializer-lists.md).
+
+## 5.9 Constant Expression Evaluation
+
+Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
+
+```franko
+array<int32_t, 0x10> xs;   // size becomes 16
+int8_t g = 1 + 2;          // initializer becomes 3 (globals)
+struct S {                 // field default becomes 8
+    int32_t n = 1 << 3
+}
+```
+
+Static array sizes, `ndarray` dimensions, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
+
+Evaluation failures are desugaring diagnostics:
+
+```franko
+array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
+```
+
+Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).

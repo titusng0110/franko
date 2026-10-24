@@ -1,0 +1,10 @@
+// Failure fixture: array_length/length_on_addr
+// An address is not an array; deref first.
+func main() -> int32_t {
+    array<int32_t, 3> ys;
+    ys = [1, 2, 3];
+    addr<array<int32_t, 3>> p;
+    p = getaddr(ys);
+    print(p.length());
+    return 0;
+}

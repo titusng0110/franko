@@ -273,6 +273,10 @@ public class ASTPrinter {
             System.out.println(pad + "Int: " + n.value);
         }
 
+        else if (node instanceof InferredSizeNode) {
+            System.out.println(pad + "InferredSize: ?");
+        }
+
         else if (node instanceof NullNode) {
             System.out.println(pad + "Null");
         }
@@ -461,6 +465,10 @@ public class ASTPrinter {
 
         if (expr instanceof IntNode n) {
             return n.value;
+        }
+
+        if (expr instanceof InferredSizeNode) {
+            return "?";
         }
 
         if (expr instanceof NullNode) {

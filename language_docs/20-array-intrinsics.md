@@ -22,8 +22,9 @@ Void-returning intrinsics are invalid in value contexts.
 | `target.memcpy(source)` | any array | `void` | — |
 | `target.memcpy(source, dstStart, srcStart, count)` | any array | `void` | — |
 | `target.memmove(dstStart, srcStart, count)` | any array | `void` | — |
+| `target.length()` | any array | `uint32_t` | — |
 
-The receiver of an array intrinsic must be a storage-backed array lvalue.
+The receiver of a mutating array intrinsic must be a storage-backed array lvalue.
 
 Examples of storage-backed array targets:
 
@@ -40,6 +41,8 @@ getaddr(arr)
 x + y
 1
 ```
+
+`length()` is read-only, so its receiver may be any array-typed expression; it does not need to be a storage-backed lvalue.
 
 ## 20.1 `init`, `init_zero`, and `target(size)`
 
@@ -174,3 +177,45 @@ Current memcpyable types:
 | static arrays of memcpyable elements | yes |
 | structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |
+
+## 20.9 `length`
+
+Returns the element count of an array as `uint32_t`.
+
+Form:
+
+```franko
+target.length()
+```
+
+Rules:
+
+- takes exactly zero arguments;
+- receiver must have array type (dynamic or static);
+- `length()` is read-only: unlike the mutating intrinsics, the receiver does not need to be a storage-backed lvalue, and calling it never initializes, modifies, or uninitializes the array;
+- a struct method named `length` still dispatches as a method: struct-typed receivers are never treated as array intrinsics.
+
+Dynamic arrays report their runtime length. A dynamic array that has never been initialized, or that has been uninitialized with `uninit()`, reports `0`; `length()` never aborts:
+
+```franko
+array<int32_t> xs;
+print(xs.length());   // 0
+xs.init(4);
+print(xs.length());   // 4
+xs.resize(10);
+print(xs.length());   // 10
+xs.uninit();
+print(xs.length());   // 0
+```
+
+Static arrays report their size as a compile-time constant: `ys.length()` for `array<int32_t, 3> ys` compiles to the constant `3`, with no runtime read.
+
+Nested receivers report the outermost dimension; index first for inner dimensions:
+
+```franko
+array<array<int32_t, 2>, 3> m;
+print(m.length());      // 3
+print(m[0].length());   // 2
+```
+
+`length()` returns a value, so it may be used in any value context: arithmetic, loop bounds, assignments, and `print`.

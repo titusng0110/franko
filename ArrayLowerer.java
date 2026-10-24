@@ -19,6 +19,11 @@ import java.util.Objects;
  *   xs.memset(...)
  *   xs.memcpy(...)
  *   xs.memmove(...)
+ *
+ * and length returns uint32_t:
+ *
+ *   xs.length()
+ *   ys.length()
  */
 public final class ArrayLowerer {
 
@@ -90,7 +95,8 @@ public final class ArrayLowerer {
                  "uninit",
                  "memset",
                  "memcpy",
-                 "memmove" -> true;
+                 "memmove",
+                 "length" -> true;
 
             default -> false;
         };
@@ -205,6 +211,9 @@ public final class ArrayLowerer {
 
             case "memmove" ->
                     lowerMemmove(call, mac);
+
+            case "length" ->
+                    lowerLength(call, mac);
 
             default -> null;
         };
@@ -442,6 +451,43 @@ public final class ArrayLowerer {
                         srcStart,
                         count
                 )
+        );
+    }
+
+    // ============================================================
+    // length
+    // ============================================================
+
+    /**
+     * Lowers:
+     *
+     *   target.length()
+     *
+     * The receiver only needs an array type. Unlike the mutating
+     * intrinsics, length is read-only, so a plain expression (not
+     * necessarily a storage-backed lvalue) is accepted.
+     */
+    private SemanticArrayIntrinsicCallNode lowerLength(
+            CallNode call,
+            MemberAccessNode mac
+    ) {
+        if (!call.args.isEmpty()) {
+            ctx.error("Array intrinsic 'length' expects exactly 0 arguments");
+            return null;
+        }
+
+        SemanticExprNode receiver =
+                exprAnalyzer.analyzeExpr(mac.target);
+
+        exprAnalyzer.requireArrayType(
+                receiver,
+                "length() receiver"
+        );
+
+        return new SemanticArrayIntrinsicCallNode(
+                SemanticArrayIntrinsicKind.LENGTH,
+                receiver,
+                List.of()
         );
     }
 

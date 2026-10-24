@@ -1,0 +1,6 @@
+// Failure fixture: size_inference/question_jagged
+// Inference requires a perfect rectangle.
+func main() -> int32_t {
+    array<array<int32_t, ?>, ?> x = [[1, 2], [3]];
+    return 0;
+}

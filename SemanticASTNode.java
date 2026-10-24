@@ -155,9 +155,10 @@ class SemanticStructDeclNode extends SemanticASTNode {
 /**
  * Semantic variable declaration.
  *
- * For global variables with a const initializer, the analyzer folds the
- * initializer constExpr into a canonical BigInteger stored here so codegen
- * can emit static initialization without a new dispatch node class.
+ * For global variables with a const initializer, the desugarer evaluates
+ * the initializer constExpr into a canonical literal; the analyzer reads
+ * the value into a BigInteger stored here so codegen can emit static
+ * initialization without a new dispatch node class.
  *
  * foldedConstInitializer is null for ordinary locals and for globals without
  * an initializer.
@@ -296,6 +297,10 @@ class SemanticReturnNode extends SemanticStmtNode {
  *     arr.memmove(dstStart, srcStart, count)
  *                                          -> void
  *
+ *   Static-or-dynamic-array, value-returning:
+ *
+ *     arr.length()                         -> UINT32
+ *
  * Legacy shorthand:
  *
  *     arr(size)
@@ -314,14 +319,22 @@ enum SemanticArrayIntrinsicKind {
 
     MEMSET("memset", false),
     MEMCPY("memcpy", false),
-    MEMMOVE("memmove", false);
+    MEMMOVE("memmove", false),
+
+    LENGTH("length", false, true);
 
     public final String runtimeName;
     public final boolean returnsStatus;
+    public final boolean returnsLength;
 
     SemanticArrayIntrinsicKind(String runtimeName, boolean returnsStatus) {
+        this(runtimeName, returnsStatus, false);
+    }
+
+    SemanticArrayIntrinsicKind(String runtimeName, boolean returnsStatus, boolean returnsLength) {
         this.runtimeName = Objects.requireNonNull(runtimeName);
         this.returnsStatus = returnsStatus;
+        this.returnsLength = returnsLength;
     }
 
     /**
@@ -333,6 +346,10 @@ enum SemanticArrayIntrinsicKind {
      *   int32_t init_zero(...)
      *   int32_t resize(...)
      *
+     * The length intrinsic maps to UINT32 because the runtime uses:
+     *
+     *   uint32_t length()
+     *
      * Void intrinsics map to SemanticVoidType.
      */
     public SemanticType returnType() {
@@ -340,11 +357,15 @@ enum SemanticArrayIntrinsicKind {
             return new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
         }
 
+        if (returnsLength) {
+            return new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
+        }
+
         return new SemanticVoidType();
     }
 
     public boolean returnsVoid() {
-        return !returnsStatus;
+        return !returnsStatus && !returnsLength;
     }
 }
 

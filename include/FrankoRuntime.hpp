@@ -76,7 +76,7 @@ struct Franko_Static_Array {
         if (other->data == nullptr)
             franko_panic("Franko_Static_Array memcpy from uninitialized dynamic array");
 
-        const uint32_t count = (N < other->length) ? N : other->length;
+        const uint32_t count = (N < other->count) ? N : other->count;
 
         if (count > 0) {
             std::memcpy(data, other->data, sizeof(T) * static_cast<size_t>(count));
@@ -115,13 +115,13 @@ struct Franko_Static_Array {
         if (dstStart > N)
             franko_panic("Franko_Static_Array memcpy destination start out of bounds");
 
-        if (srcStart > other->length)
+        if (srcStart > other->count)
             franko_panic("Franko_Static_Array memcpy source start out of bounds");
 
         if (count > N - dstStart)
             franko_panic("Franko_Static_Array memcpy destination range out of bounds");
 
-        if (count > other->length - srcStart)
+        if (count > other->count - srcStart)
             franko_panic("Franko_Static_Array memcpy source range out of bounds");
 
         if (count > 0) {
@@ -154,14 +154,16 @@ struct Franko_Static_Array {
 
 template <typename T>
 struct Franko_Dynamic_Array {
-    uint32_t length = 0;
+    uint32_t count = 0;
     T* data = nullptr;
+
+    uint32_t length() const { return count; }
 
     ~Franko_Dynamic_Array() {
         if (data != nullptr) {
             je_free(data);
             data = nullptr;
-            length = 0;
+            count = 0;
         }
     }
 
@@ -178,7 +180,7 @@ struct Franko_Dynamic_Array {
             return -1;
 
         data = newData;
-        length = n;
+        count = n;
 
         return 0;
     }
@@ -196,7 +198,7 @@ struct Franko_Dynamic_Array {
             return -1;
 
         data = newData;
-        length = n;
+        count = n;
 
         return 0;
     }
@@ -214,7 +216,7 @@ struct Franko_Dynamic_Array {
             return -1;
 
         data = newData;
-        length = n;
+        count = n;
 
         return 0;
     }
@@ -225,14 +227,14 @@ struct Franko_Dynamic_Array {
 
         je_free(data);
         data = nullptr;
-        length = 0;
+        count = 0;
     }
 
     const T& operator[](uint32_t index) const {
         if (data == nullptr)
             franko_panic("Franko_Dynamic_Array not initialized");
 
-        if (index >= length)
+        if (index >= count)
             franko_panic("Franko_Dynamic_Array index out of bounds");
 
         return data[index];
@@ -242,7 +244,7 @@ struct Franko_Dynamic_Array {
         if (data == nullptr)
             franko_panic("Franko_Dynamic_Array not initialized");
 
-        if (index >= length)
+        if (index >= count)
             franko_panic("Franko_Dynamic_Array index out of bounds");
 
         return data[index];
@@ -252,8 +254,8 @@ struct Franko_Dynamic_Array {
         if (data == nullptr)
             franko_panic("Franko_Dynamic_Array memset on uninitialized array");
 
-        if (length > 0) {
-            std::memset(data, byteValue, sizeof(T) * static_cast<size_t>(length));
+        if (count > 0) {
+            std::memset(data, byteValue, sizeof(T) * static_cast<size_t>(count));
         }
     }
 
@@ -261,10 +263,10 @@ struct Franko_Dynamic_Array {
         if (data == nullptr)
             franko_panic("Franko_Dynamic_Array memset on uninitialized array");
 
-        if (start > length)
+        if (start > this->count)
             franko_panic("Franko_Dynamic_Array memset start out of bounds");
 
-        if (count > length - start)
+        if (count > this->count - start)
             franko_panic("Franko_Dynamic_Array memset range out of bounds");
 
         if (count > 0) {
@@ -282,10 +284,10 @@ struct Franko_Dynamic_Array {
         if (other->data == nullptr)
             franko_panic("Franko_Dynamic_Array memcpy from uninitialized source array");
 
-        const uint32_t count = (length < other->length) ? length : other->length;
+        const uint32_t copyCount = (count < other->count) ? count : other->count;
 
-        if (count > 0) {
-            std::memcpy(data, other->data, sizeof(T) * static_cast<size_t>(count));
+        if (copyCount > 0) {
+            std::memcpy(data, other->data, sizeof(T) * static_cast<size_t>(copyCount));
         }
     }
 
@@ -297,10 +299,10 @@ struct Franko_Dynamic_Array {
         if (other == nullptr)
             franko_panic("Franko_Dynamic_Array memcpy source address is null");
 
-        const uint32_t count = (length < M) ? length : M;
+        const uint32_t copyCount = (count < M) ? count : M;
 
-        if (count > 0) {
-            std::memcpy(data, other->data, sizeof(T) * static_cast<size_t>(count));
+        if (copyCount > 0) {
+            std::memcpy(data, other->data, sizeof(T) * static_cast<size_t>(copyCount));
         }
     }
 
@@ -314,16 +316,16 @@ struct Franko_Dynamic_Array {
         if (other->data == nullptr)
             franko_panic("Franko_Dynamic_Array memcpy from uninitialized source array");
 
-        if (dstStart > length)
+        if (dstStart > this->count)
             franko_panic("Franko_Dynamic_Array memcpy destination start out of bounds");
 
-        if (srcStart > other->length)
+        if (srcStart > other->count)
             franko_panic("Franko_Dynamic_Array memcpy source start out of bounds");
 
-        if (count > length - dstStart)
+        if (count > this->count - dstStart)
             franko_panic("Franko_Dynamic_Array memcpy destination range out of bounds");
 
-        if (count > other->length - srcStart)
+        if (count > other->count - srcStart)
             franko_panic("Franko_Dynamic_Array memcpy source range out of bounds");
 
         if (count > 0) {
@@ -339,13 +341,13 @@ struct Franko_Dynamic_Array {
         if (other == nullptr)
             franko_panic("Franko_Dynamic_Array memcpy source address is null");
 
-        if (dstStart > length)
+        if (dstStart > this->count)
             franko_panic("Franko_Dynamic_Array memcpy destination start out of bounds");
 
         if (srcStart > M)
             franko_panic("Franko_Dynamic_Array memcpy source start out of bounds");
 
-        if (count > length - dstStart)
+        if (count > this->count - dstStart)
             franko_panic("Franko_Dynamic_Array memcpy destination range out of bounds");
 
         if (count > M - srcStart)
@@ -360,16 +362,16 @@ struct Franko_Dynamic_Array {
         if (data == nullptr)
             franko_panic("Franko_Dynamic_Array memmove on uninitialized array");
 
-        if (dstStart > length)
+        if (dstStart > this->count)
             franko_panic("Franko_Dynamic_Array memmove destination start out of bounds");
 
-        if (srcStart > length)
+        if (srcStart > this->count)
             franko_panic("Franko_Dynamic_Array memmove source start out of bounds");
 
-        if (count > length - dstStart)
+        if (count > this->count - dstStart)
             franko_panic("Franko_Dynamic_Array memmove destination range out of bounds");
 
-        if (count > length - srcStart)
+        if (count > this->count - srcStart)
             franko_panic("Franko_Dynamic_Array memmove source range out of bounds");
 
         if (count > 0) {

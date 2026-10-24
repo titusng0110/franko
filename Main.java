@@ -116,6 +116,9 @@ public class Main {
         // ----- Desugar AST -----
         Desugarer desugarer = new Desugarer();
         ast = desugarer.desugar(ast);
+        if (desugarer.hasErrors()) {
+            throw new RuntimeException(desugarer.formatErrors());
+        }
         if (verbose) {
             System.out.println("==== Desugared AST ====");
             ASTPrinter.print(ast, 0);
