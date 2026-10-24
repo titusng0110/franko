@@ -120,7 +120,9 @@ public final class ExpressionAnalyzer {
             VariableSymbol sym = ctx.resolve(n.name);
 
             if (sym == null) {
-                if (ctx.hasAnyFunctionNamed(n.name)) {
+                if ("self".equals(n.name)) {
+                    ctx.error("keyword 'self' is only valid inside a method body");
+                } else if (ctx.hasAnyFunctionNamed(n.name)) {
                     ctx.error("Function name '" + n.name + "' cannot be used as a value");
                 } else {
                     ctx.error("Undeclared variable '" + n.name + "'");
@@ -587,15 +589,7 @@ public final class ExpressionAnalyzer {
         }
 
         if (call.callee instanceof MemberAccessNode mac) {
-            ctx.error("Unsupported member call expression '"
-                    + mac.memberName
-                    + "'");
-
-            return new SemanticIntLiteralNode(
-                    FALLBACK_TYPE,
-                    BigInteger.ZERO,
-                    "0"
-            );
+            return analyzeMethodCallExpr(call, mac);
         }
 
         ctx.error("Unsupported call expression");
@@ -604,6 +598,110 @@ public final class ExpressionAnalyzer {
                 FALLBACK_TYPE,
                 BigInteger.ZERO,
                 "0"
+        );
+    }
+
+    /**
+     * Lowers a struct method call:
+     *
+     *   receiver.name(args...)
+     *
+     * into an ordinary function call to the resolved MethodSymbol with a
+     * synthesized `getaddr(receiver)` first argument for `self`.
+     *
+     * The receiver must be a struct-valued storage-backed lvalue
+     * (a variable, field, array element, or deref(...) chain). Address
+     * receivers require an explicit deref: `deref(p).method(...)`.
+     */
+    private SemanticExprNode analyzeMethodCallExpr(
+            CallNode call,
+            MemberAccessNode mac
+    ) {
+        SemanticExprNode target = analyzeExpr(mac.target);
+
+        if (!(target.type instanceof SemanticStructType structType)
+                || structType.structSymbol == null) {
+            if (target.type instanceof SemanticAddrType) {
+                ctx.error("Method call '"
+                        + mac.memberName
+                        + "' is only valid on struct values, got type "
+                        + target.type.describe()
+                        + "; use deref(p)."
+                        + mac.memberName
+                        + "(...) for address receivers");
+            } else {
+                ctx.error("Method call '"
+                        + mac.memberName
+                        + "' is only valid on struct values, got type "
+                        + target.type.describe());
+            }
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        StructSymbol owner = structType.structSymbol;
+
+        if (!isValidStorageBackedLValue(target)) {
+            ctx.error("Method call receiver must be a storage-backed lvalue: "
+                    + "a variable, field, array element, or deref(...) expression");
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        List<SemanticExprNode> userArgs = new ArrayList<>();
+        List<SemanticType> userArgTypes = new ArrayList<>();
+
+        for (ASTNode arg : call.args) {
+            SemanticExprNode loweredArg = analyzeExpr(arg);
+            userArgs.add(loweredArg);
+            userArgTypes.add(loweredArg.type);
+        }
+
+        SemanticGetAddrNode selfArg = new SemanticGetAddrNode(
+                new SemanticAddrType(target.type),
+                target
+        );
+
+        List<SemanticExprNode> fullArgs = new ArrayList<>();
+        fullArgs.add(selfArg);
+        fullArgs.addAll(userArgs);
+
+        MethodSymbol method = ctx.resolveMethod(owner, mac.memberName, fullArgs);
+
+        if (method == null) {
+            ctx.error("No matching overload for method call '"
+                    + owner.qualifiedName()
+                    + "."
+                    + formatCallSignature(mac.memberName, userArgTypes)
+                    + "'");
+
+            MethodSymbol fallbackFn = new MethodSymbol(
+                    owner,
+                    mac.memberName,
+                    List.of(),
+                    FALLBACK_TYPE,
+                    false
+            );
+
+            return new SemanticFunctionCallNode(
+                    FALLBACK_TYPE,
+                    fallbackFn,
+                    fullArgs
+            );
+        }
+
+        return new SemanticFunctionCallNode(
+                method.returnType(),
+                method,
+                fullArgs
         );
     }
 

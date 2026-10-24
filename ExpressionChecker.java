@@ -434,7 +434,21 @@ public class ExpressionChecker {
         List<SemanticExprNode> args = node.args;
         List<SemanticType> parameterTypes = node.function.parameterTypes();
 
-        if (args.size() != parameterTypes.size()) {
+        boolean isMethod = node.function instanceof MethodSymbol;
+
+        if (isMethod) {
+            int expectedUser = Math.max(0, parameterTypes.size() - 1);
+            int gotUser = Math.max(0, args.size() - 1);
+
+            if (args.size() != parameterTypes.size()) {
+                diagnostics.error("Method call to '"
+                        + node.function.signatureString()
+                        + "' has wrong arity: expected "
+                        + expectedUser
+                        + " argument(s) (excluding self), got "
+                        + gotUser);
+            }
+        } else if (args.size() != parameterTypes.size()) {
             diagnostics.error("Function call to '"
                     + node.function.signatureString()
                     + "' has wrong arity: expected "
@@ -449,11 +463,18 @@ public class ExpressionChecker {
             SemanticExprNode arg = args.get(i);
             SemanticType parameterType = parameterTypes.get(i);
 
+            if (isMethod && i == 0) {
+                checkExpr(arg);
+                continue;
+            }
+
+            int displayIndex = isMethod ? i - 1 : i;
+
             checkExpr(arg);
 
             if (!ensureValueExpression(
                     arg,
-                    "Argument " + (i + 1)
+                    "Argument " + (displayIndex + 1)
                             + " of call to '"
                             + node.function.signatureString()
                             + "'"
@@ -464,7 +485,7 @@ public class ExpressionChecker {
             ensureArgumentCompatibleWithParameter(
                     arg,
                     parameterType,
-                    i,
+                    displayIndex,
                     node.function
             );
         }

@@ -1,0 +1,13 @@
+// Failure fixture: methods/method_as_free_function
+// Methods are never callable as free functions (doc 25.3).
+struct X {
+    int32_t y = 0
+    func foo(addr<X> self) -> void {
+        return
+    }
+}
+func main() -> int32_t {
+    X s
+    foo(getaddr(s))
+    return 0
+}

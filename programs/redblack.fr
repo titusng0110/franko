@@ -1,5 +1,6 @@
 // ============================================================
 // Franko Red-Black Tree Showcase
+// Struct + Methods Version
 // ============================================================
 //
 // A classic CLRS-style red-black tree (insertion with fixup
@@ -14,8 +15,15 @@
 // free nodes through pointers. The pool is a plain global static
 // array, so it needs no del.
 //
+// Rotations and the insertion fixup are struct methods with explicit
+// addr<RbNode> self receivers: deref(x).rotateLeft(). Traversals that
+// must accept a possibly-null node (find, count, walk, blackHeight,
+// noRedRed, minKey, nodeCopy) stay free functions, because a method
+// receiver must be a non-null struct lvalue while these functions
+// take nullable addresses.
+//
 // Maybe-null deref warnings: insertFixup reports two expected warnings
-// ('z' after the case-1 grandparent step and 'aunt' behind the
+// ('self' after the case-1 grandparent step and 'aunt' behind the
 // short-circuit null check). Everywhere else the null guards let the
 // checker refine the state, so the rest of the program is
 // warning-free.
@@ -23,6 +31,7 @@
 // Demonstrates:
 //
 //   - struct declarations at global scope
+//   - struct methods with explicit addr<RbNode> self receivers
 //   - field defaults on primitive fields (key = 0, red = 0)
 //   - addr<RbNode> fields (left / right / parent) breaking
 //     the by-value cycle so a node can reference itself
@@ -40,7 +49,7 @@
 //   - getaddr() on struct fields (addr<byte> redP = ...)
 //   - recursion (walk, count, blackHeight, noRedRed)
 //   - iterative search with while loops
-//   - insert-fixup rotations (rotateLeft / rotateRight)
+//   - insert-fixup rotations as methods (deref(x).rotateLeft())
 //   - structural invariant checks as the test harness
 //
 // ============================================================
@@ -51,118 +60,124 @@ struct RbNode {
     addr<RbNode> left
     addr<RbNode> right
     addr<RbNode> parent
+
+    // rotLeft: make the right child of this node the new parent of it.
+    func rotateLeft(addr<RbNode> self) -> void {
+        if (self == null) {
+            return
+        }
+
+        addr<RbNode> y = deref(self).right
+
+        if (y != null) {
+            deref(self).right = deref(y).left
+            if (deref(y).left != null) {
+                deref(deref(y).left).parent = self
+            }
+            deref(y).parent = deref(self).parent
+            if (deref(self).parent == null) {
+                root = y
+            } else {
+                if (self == deref(deref(self).parent).left) {
+                    deref(deref(self).parent).left = y
+                } else {
+                    deref(deref(self).parent).right = y
+                }
+            }
+            deref(y).left = self
+            deref(self).parent = y
+        }
+
+        return
+    }
+
+    // rotRight: make the left child of this node the new parent of it.
+    func rotateRight(addr<RbNode> self) -> void {
+        if (self == null) {
+            return
+        }
+
+        addr<RbNode> y = deref(self).left
+
+        if (y != null) {
+            deref(self).left = deref(y).right
+            if (deref(y).right != null) {
+                deref(deref(y).right).parent = self
+            }
+            deref(y).parent = deref(self).parent
+            if (deref(self).parent == null) {
+                root = y
+            } else {
+                if (self == deref(deref(self).parent).right) {
+                    deref(deref(self).parent).right = y
+                } else {
+                    deref(deref(self).parent).left = y
+                }
+            }
+            deref(y).right = self
+            deref(self).parent = y
+        }
+
+        return
+    }
+
+    // Restore the red-black invariants after inserting this node.
+    //
+    // The aunt is read once per iteration so case 1 is shared between the
+    // left and right mirrors. An absent aunt counts as black, which is
+    // what the short-circuit null check expresses.
+    func insertFixup(addr<RbNode> self) -> void {
+        if (self == null) {
+            return
+        }
+
+        while ((deref(self).parent != null) && (deref(deref(self).parent).red != 0)) {
+            addr<RbNode> aunt
+
+            if (deref(self).parent == deref(deref(deref(self).parent).parent).left) {
+                aunt = deref(deref(deref(self).parent).parent).right
+            } else {
+                aunt = deref(deref(deref(self).parent).parent).left
+            }
+
+            if ((aunt != null) && (deref(aunt).red != 0)) {
+                // Case 1: red aunt - recolor and move up.
+                deref(deref(self).parent).red = 0
+                deref(aunt).red = 0
+                deref(deref(deref(self).parent).parent).red = 1
+                self = deref(deref(self).parent).parent
+            } else {
+                if (deref(self).parent == deref(deref(deref(self).parent).parent).left) {
+                    if (self == deref(deref(self).parent).right) {
+                        self = deref(self).parent
+                        deref(self).rotateLeft()
+                    }
+                    deref(deref(self).parent).red = 0
+                    deref(deref(deref(self).parent).parent).red = 1
+                    deref(deref(deref(self).parent).parent).rotateRight()
+                } else {
+                    if (self == deref(deref(self).parent).left) {
+                        self = deref(self).parent
+                        deref(self).rotateRight()
+                    }
+                    deref(deref(self).parent).red = 0
+                    deref(deref(deref(self).parent).parent).red = 1
+                    deref(deref(deref(self).parent).parent).rotateLeft()
+                }
+            }
+        }
+
+        if (root != null) {
+            deref(root).red = 0
+        }
+
+        return
+    }
 }
 
 array<RbNode, 64> pool;
 addr<RbNode> root;
 uint nextFree = 0
-
-// rotLeft: make the right child of x the new parent of x.
-func rotateLeft(addr<RbNode> x) -> void {
-    if (x == null) {
-        return
-    }
-
-    addr<RbNode> y = deref(x).right
-
-    if (y != null) {
-        deref(x).right = deref(y).left
-        if (deref(y).left != null) {
-            deref(deref(y).left).parent = x
-        }
-        deref(y).parent = deref(x).parent
-        if (deref(x).parent == null) {
-            root = y
-        } else {
-            if (x == deref(deref(x).parent).left) {
-                deref(deref(x).parent).left = y
-            } else {
-                deref(deref(x).parent).right = y
-            }
-        }
-        deref(y).left = x
-        deref(x).parent = y
-    }
-}
-
-// rotRight: make the left child of x the new parent of x.
-func rotateRight(addr<RbNode> x) -> void {
-    if (x == null) {
-        return
-    }
-
-    addr<RbNode> y = deref(x).left
-
-    if (y != null) {
-        deref(x).left = deref(y).right
-        if (deref(y).right != null) {
-            deref(deref(y).right).parent = x
-        }
-        deref(y).parent = deref(x).parent
-        if (deref(x).parent == null) {
-            root = y
-        } else {
-            if (x == deref(deref(x).parent).right) {
-                deref(deref(x).parent).right = y
-            } else {
-                deref(deref(x).parent).left = y
-            }
-        }
-        deref(y).right = x
-        deref(x).parent = y
-    }
-}
-
-// Restore the red-black invariants after inserting node z.
-//
-// The aunt is read once per iteration so case 1 is shared between the
-// left and right mirrors. An absent aunt counts as black, which is
-// what the short-circuit null check expresses.
-func insertFixup(addr<RbNode> z) -> void {
-    if (z == null) {
-        return
-    }
-
-    while ((deref(z).parent != null) && (deref(deref(z).parent).red != 0)) {
-        addr<RbNode> aunt
-
-        if (deref(z).parent == deref(deref(deref(z).parent).parent).left) {
-            aunt = deref(deref(deref(z).parent).parent).right
-        } else {
-            aunt = deref(deref(deref(z).parent).parent).left
-        }
-
-        if ((aunt != null) && (deref(aunt).red != 0)) {
-            // Case 1: red aunt - recolor and move z up.
-            deref(deref(z).parent).red = 0
-            deref(aunt).red = 0
-            deref(deref(deref(z).parent).parent).red = 1
-            z = deref(deref(z).parent).parent
-        } else {
-            if (deref(z).parent == deref(deref(deref(z).parent).parent).left) {
-                if (z == deref(deref(z).parent).right) {
-                    z = deref(z).parent
-                    rotateLeft(z)
-                }
-                deref(deref(z).parent).red = 0
-                deref(deref(deref(z).parent).parent).red = 1
-                rotateRight(deref(deref(z).parent).parent)
-            } else {
-                if (z == deref(deref(z).parent).left) {
-                    z = deref(z).parent
-                    rotateRight(z)
-                }
-                deref(deref(z).parent).red = 0
-                deref(deref(deref(z).parent).parent).red = 1
-                rotateLeft(deref(deref(z).parent).parent)
-            }
-        }
-    }
-
-    if (root != null) {
-        deref(root).red = 0
-    }
-}
 
 // Standard BST insertion plus red-black fixup.
 //
@@ -201,7 +216,7 @@ func insert(int32_t key) -> void {
         }
     }
 
-    insertFixup(z)
+    deref(z).insertFixup()
 }
 
 // Iterative search; returns 1 when key is present.

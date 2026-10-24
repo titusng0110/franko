@@ -2,7 +2,7 @@
 // SPEC TEST: memcpy Shapes and Ranged memcpy
 // ============================================================
 // Covers: memcpy (doc 20.6) between dynamic and static arrays in
-// every shape combination (doc 30.3); static lengths do not need to
+// every shape combination (doc 31.3); static lengths do not need to
 // match — the whole-array form copies the smaller side; and the
 // ranged form target.memcpy(source, dstStart, srcStart, count)
 // copies an element range between different positions.

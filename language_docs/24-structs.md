@@ -14,7 +14,7 @@ p.y = 4;
 print(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](27-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](31-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](32-examples.md).
 
 ## 24.1 Declaring a Struct
 
@@ -33,9 +33,9 @@ Rules:
 - `struct` declarations may only appear at global scope; they cannot be declared inside functions.
 - Separators between fields are optional, matching block syntax: a trailing separator before `}` is not required, and `;` and newlines may be mixed freely.
 - Duplicate struct names are rejected. Each struct name denotes exactly one declared type.
-- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes and the generated C++ uses kind-prefixed names, so the generated code is unambiguous (see [Runtime and Backend Notes](30-runtime-and-backend-notes.md)).
+- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes and the generated C++ uses kind-prefixed names, so the generated code is unambiguous (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
 
-A struct body may only contain field declarations. Assignments, statements, nested functions, and nested struct declarations are invalid inside a struct body.
+A struct body contains field declarations and method declarations (see [Methods](25-methods.md)). Assignments, statements, nested functions outside methods, and nested struct declarations are invalid inside a struct body.
 
 ## 24.2 Field Declarations
 
@@ -144,7 +144,7 @@ xs[i].field           // element of a static or dynamic array
 - `getaddr(s.field)` is valid and yields `addr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
   `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getaddr(other))`, `b.data[i]`, and `b.data.uninit()`.
-- Method-like calls on structs (`s.foo()`) are rejected; only the built-in array intrinsics use member-call syntax.
+- Struct methods also use member-call syntax (`s.increment()`); see [Methods](25-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
 
 ## 24.8 Initialization Semantics
 
@@ -179,8 +179,8 @@ alloc X s;
 del s;
 ```
 
-- `del s` runs the struct's destructor, which destroys member dynamic arrays, so deleting a heap struct does not leak its member arrays (see [`del` and Delete Checking](25-del-and-delete-checking.md)).
-- Nested dynamic-array fields are not tracked as separate heap objects; see [Memory Safety Checking](26-memory-safety-checking.md) for the exact tracking rules and the `uninit()` element caveat.
+- `del s` runs the struct's destructor, which destroys member dynamic arrays, so deleting a heap struct does not leak its member arrays (see [`del` and Delete Checking](26-del-and-delete-checking.md)).
+- Nested dynamic-array fields are not tracked as separate heap objects; see [Memory Safety Checking](27-memory-safety-checking.md) for the exact tracking rules and the `uninit()` element caveat.
 
 ## 24.11 Backend Notes
 
@@ -190,15 +190,16 @@ The C++14 backend:
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`, with heap variables lowered through `(*sym)`.
+- emits methods as mangled free functions (`METH_f_OFSTRUCT_X`); see [Methods](25-methods.md).
 
 ## 24.12 Restrictions Summary
 
 - Structs are declared only at top level; no local or nested struct declarations.
-- No methods: only the built-in array intrinsics use member-call syntax.
+- Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](25-methods.md)).
 - No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` cannot print a whole struct — print individual fields instead.
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - `alloc` is invalid for fields; field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `addr<...>` and dynamic-array fields break the cycle.
 - A struct with any non-assignable field is address-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `addr<X>`.
 - Duplicate struct names and duplicate field names are rejected.
-- The complete list of current language restrictions is in [Unsupported or Restricted Features](29-unsupported-or-restricted-features.md).
+- The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).

@@ -2,10 +2,10 @@
 // SPEC TEST: Type Equality - Static Array Size Comparison
 // ============================================================
 // Covers: static array sizes compare numerically after unfolding
-// the size expression (doc 27.3): 10 == 0xA == 5 + 5.
+// the size expression (doc 28.3): 10 == 0xA == 5 + 5.
 // The parameter uses addr<array<int32_t, 10>> because bare array
 // parameters are not passable (doc 12.3); address equality is
-// defined by the referenced type's equality (doc 27.4), so the
+// defined by the referenced type's equality (doc 28.4), so the
 // hex and arithmetic size spellings must still match exactly.
 // ============================================================
 

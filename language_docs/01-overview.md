@@ -15,6 +15,7 @@ Franko is a small statically typed language with:
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
+- struct methods with explicit `addr<X> self` receivers (see [Methods](25-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
@@ -47,7 +48,7 @@ Franko currently does **not** implement:
 - first-class function values;
 - anonymous functions or lambdas;
 - function pointers;
-- general methods (only the built-in array intrinsics use member-call syntax);
+- general member calls beyond struct methods and the built-in array intrinsics;
 - generics;
 - floating-point types;
 - a distinct boolean type;

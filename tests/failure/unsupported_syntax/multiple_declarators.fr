@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/multiple_declarators
 // Multiple declarators in one declaration (`int32_t a, b;`) do not exist in
-// the grammar; each variable must be declared separately (doc 29.17).
+// the grammar; each variable must be declared separately (doc 30.17).
 
 func main() -> int32_t {
     int32_t a, b;

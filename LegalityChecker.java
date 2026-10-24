@@ -148,6 +148,11 @@ public class LegalityChecker {
 
         if (node instanceof SemanticStructDeclNode struct) {
             declarationChecker.checkStructDecl(struct);
+
+            for (SemanticFunctionDeclNode method : struct.methods) {
+                functionChecker.checkFunction(method);
+            }
+
             return;
         }
 
@@ -181,6 +186,11 @@ public class LegalityChecker {
 
             if (item instanceof SemanticStructDeclNode struct) {
                 declarationChecker.checkStructDecl(struct);
+
+                for (SemanticFunctionDeclNode method : struct.methods) {
+                    functionChecker.checkFunction(method);
+                }
+
                 continue;
             }
 

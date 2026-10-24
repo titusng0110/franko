@@ -164,16 +164,29 @@ class ParameterNode extends ASTNode {
 // ============================================================
 //
 // structDecl produces a StructDeclNode holding ordered field
-// declarations. Field initializers, when present, are raw constExpr
-// ASTs that the semantic analyzer folds into canonical constants.
+// declarations and ordered method declarations. Field initializers,
+// when present, are raw constExpr ASTs that the semantic analyzer
+// folds into canonical constants. Method declarations are raw
+// FunctionDeclNode objects whose first parameter must be
+// `addr<X> self` for the enclosing struct X.
 
 class StructDeclNode extends ASTNode {
     String name;
     List<StructFieldDeclNode> fields;
+    List<FunctionDeclNode> methods;
 
     StructDeclNode(String name, List<StructFieldDeclNode> fields) {
+        this(name, fields, List.of());
+    }
+
+    StructDeclNode(
+        String name,
+        List<StructFieldDeclNode> fields,
+        List<FunctionDeclNode> methods
+    ) {
         this.name = name;
         this.fields = fields;
+        this.methods = methods;
     }
 }
 

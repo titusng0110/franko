@@ -1,6 +1,6 @@
 // ============================================================
 // Franko Sieve of Eratosthenes Showcase
-// Dynamic Array Version With Array Intrinsics
+// Struct + Methods Version With Array Intrinsics
 // ============================================================
 //
 // Prints all prime numbers <= n.
@@ -8,10 +8,15 @@
 // Demonstrates:
 //
 //   - uint arithmetic
+//   - structs with a dynamic-array field
+//   - methods with explicit addr<Sieve> self receivers
+//   - methods named init/uninit alongside the array intrinsics:
+//     a struct-typed receiver calls the method while an array-typed
+//     receiver calls the intrinsic
 //   - declaration initializer sugar
 //   - dynamic arrays
 //   - byte as a uint8_t-like flag type
-//   - array.init(size)
+//   - array.init(size) via member shorthand
 //   - memset()
 //   - uninit()
 //   - for loops (including a strided inner loop)
@@ -45,47 +50,74 @@
 //   1002
 // ============================================================
 
-func main() -> int32_t {
-    uint n = 80
-
+struct Sieve {
     array<byte> isPrime
-    int initStatus = 0
+    uint n = 0
 
-    initStatus = isPrime(n + 1)
+    func init(addr<Sieve> self, uint limit) -> int32_t {
+        int32_t initStatus = 0
 
-    if (initStatus != 0) {
+        initStatus = deref(self).isPrime(limit + 1)
+
+        if (initStatus != 0) {
+            return -1
+        }
+
+        deref(self).isPrime.memset(1)
+
+        deref(self).isPrime[0] = 0
+
+        if (limit >= 1) {
+            deref(self).isPrime[1] = 0
+        }
+
+        deref(self).n = limit
+        return 0
+    }
+
+    func run(addr<Sieve> self) -> void {
+        uint p = 0
+
+        for (p = 2; p * p <= deref(self).n; p = p + 1) {
+            if (deref(self).isPrime[p] != 0) {
+                for (uint j = p * p; j <= deref(self).n; j = j + p) {
+                    deref(self).isPrime[j] = 0
+                }
+            }
+        }
+
+        return
+    }
+
+    func printResults(addr<Sieve> self) -> void {
+        print(1001)
+
+        for (uint i = 2; i <= deref(self).n; i = i + 1) {
+            if (deref(self).isPrime[i] != 0) {
+                print(i)
+            }
+        }
+
+        print(1002)
+        return
+    }
+
+    func uninit(addr<Sieve> self) -> void {
+        deref(self).isPrime.uninit()
+        return
+    }
+}
+
+func main() -> int32_t {
+    Sieve s
+
+    if (s.init(80) != 0) {
         return -1
     }
 
-    isPrime.memset(1)
-
-    isPrime[0] = 0
-
-    if (n >= 1) {
-        isPrime[1] = 0
-    }
-
-    uint p
-
-    for (p = 2; p * p <= n; p = p + 1) {
-        if (isPrime[p] != 0) {
-            for (uint j = p * p; j <= n; j = j + p) {
-                isPrime[j] = 0
-            }
-        }
-    }
-
-    print(1001)
-
-    for (uint i = 2; i <= n; i = i + 1) {
-        if (isPrime[i] != 0) {
-            print(i)
-        }
-    }
-
-    print(1002)
-
-    isPrime.uninit()
+    s.run()
+    s.printResults()
+    s.uninit()
 
     return 0
 }

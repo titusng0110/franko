@@ -1,5 +1,5 @@
 // Failure fixture: unsupported_syntax/decrement_op
-// The decrement operator `--` does not exist in the grammar (doc 29.17);
+// The decrement operator `--` does not exist in the grammar (doc 30.17);
 // loops must update counters with an explicit assignment.
 
 func main() -> int32_t {

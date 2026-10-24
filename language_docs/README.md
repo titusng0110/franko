@@ -32,13 +32,14 @@ The cleaned section ordering is:
 22. String Literals
 23. Addresses
 24. Structs
-25. `del` and Delete Checking
-26. Memory Safety Checking
-27. Type Equality
-28. Declaration Type Validity
-29. Unsupported or Restricted Features
-30. Runtime and Backend Notes
-31. Examples
+25. Methods
+26. `del` and Delete Checking
+27. Memory Safety Checking
+28. Type Equality
+29. Declaration Type Validity
+30. Unsupported or Restricted Features
+31. Runtime and Backend Notes
+32. Examples
 
 ## How to rebuild one combined document
 

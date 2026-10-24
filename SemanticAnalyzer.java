@@ -384,6 +384,34 @@ public class SemanticAnalyzer {
         }
 
         /*
+         * Phase 2b:
+         * Register method signatures, in every namespace.
+         *
+         * Struct names (phase 1) are registered, so `addr<X> self`
+         * resolves. Fields (phase 2) are resolved first so
+         * method/field name clashes can be detected at registration.
+         */
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
+
+            for (ASTNode item : space.items) {
+                if (!(item instanceof StructDeclNode n)) {
+                    continue;
+                }
+
+                StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
+
+                if (structSymbol == null) {
+                    continue;
+                }
+
+                for (FunctionDeclNode methodNode : n.methods) {
+                    registerMethodSignature(structSymbol, methodNode);
+                }
+            }
+        }
+
+        /*
          * Phase 3:
          * Register all global variables, in every namespace, before
          * function bodies are analyzed.
@@ -450,9 +478,24 @@ public class SemanticAnalyzer {
                     StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
 
                     if (structSymbol != null) {
+                        List<SemanticFunctionDeclNode> loweredMethods =
+                                new ArrayList<>();
+
+                        for (FunctionDeclNode methodNode : n.methods) {
+                            SemanticFunctionDeclNode loweredMethod =
+                                    analyzeMethodDecl(structSymbol, methodNode);
+
+                            if (loweredMethod != null) {
+                                loweredMethods.add(loweredMethod);
+                            }
+                        }
+
                         loweredByNode.put(
                                 item,
-                                new SemanticStructDeclNode(structSymbol)
+                                new SemanticStructDeclNode(
+                                        structSymbol,
+                                        loweredMethods
+                                )
                         );
                     }
 
@@ -709,6 +752,13 @@ public class SemanticAnalyzer {
             ));
         }
 
+        for (ParameterSymbol param : params) {
+            if ("self".equals(param.name)) {
+                symbolTable.error("'self' is only valid as the first parameter of a struct method");
+                break;
+            }
+        }
+
         FunctionSymbol symbol = new FunctionSymbol(
                 currentNamespaceName(),
                 fn.name,
@@ -718,6 +768,90 @@ public class SemanticAnalyzer {
         );
 
         symbolTable.declareFunction(fn, symbol);
+    }
+
+    /**
+     * Registers only a method's signature on its owning struct.
+     *
+     * The first parameter must be literally `addr<X> self` for the
+     * enclosing struct X. Only the first parameter may be named `self`.
+     */
+    private void registerMethodSignature(
+            StructSymbol owner,
+            FunctionDeclNode methodNode
+    ) {
+        List<ParameterSymbol> params = new ArrayList<>();
+
+        for (int i = 0; i < methodNode.parameters.size(); i++) {
+            ParameterNode param = methodNode.parameters.get(i);
+
+            params.add(new ParameterSymbol(
+                    param.name,
+                    analyzeNormalType(param.type),
+                    i
+            ));
+        }
+
+        String display = owner.qualifiedName() + "." + methodNode.name;
+
+        if (params.isEmpty()) {
+            symbolTable.error("Method '"
+                    + display
+                    + "' must have 'addr<"
+                    + owner.qualifiedName()
+                    + "> self' as its first parameter");
+        } else {
+            ParameterSymbol first = params.get(0);
+
+            if (!"self".equals(first.name)) {
+                symbolTable.error("Method '"
+                        + display
+                        + "' must have 'addr<"
+                        + owner.qualifiedName()
+                        + "> self' as its first parameter");
+            } else if (!isSelfTypeForOwner(first.type, owner)) {
+                symbolTable.error("Method '"
+                        + display
+                        + "' has a 'self' parameter of type "
+                        + first.type.describe()
+                        + "; it must be addr<"
+                        + owner.qualifiedName()
+                        + ">");
+            }
+
+            for (int i = 1; i < params.size(); i++) {
+                if ("self".equals(params.get(i).name)) {
+                    symbolTable.error("Only the first parameter of a method may be named 'self'");
+                    break;
+                }
+            }
+        }
+
+        MethodSymbol symbol = new MethodSymbol(
+                owner,
+                methodNode.name,
+                params,
+                analyzeReturnType(methodNode.returnType),
+                false
+        );
+
+        symbolTable.declareMethod(owner, methodNode, symbol);
+    }
+
+    private boolean isSelfTypeForOwner(SemanticType type, StructSymbol owner) {
+        if (!(type instanceof SemanticAddrType addr)) {
+            return false;
+        }
+
+        if (!(addr.referencedType instanceof SemanticStructType structType)) {
+            return false;
+        }
+
+        if (structType.structSymbol == null) {
+            return false;
+        }
+
+        return structType.structSymbol.qualifiedName().equals(owner.qualifiedName());
     }
 
     private SemanticFunctionDeclNode analyzeFunctionDecl(FunctionDeclNode fn) {
@@ -778,6 +912,78 @@ public class SemanticAnalyzer {
             }
         } else {
             symbolTable.error("Function '" + fn.name + "' is missing a body");
+        }
+
+        symbolTable.popScope();
+
+        currentFunction = previousFunction;
+
+        return new SemanticFunctionDeclNode(
+                symbol,
+                parameterVariables,
+                new SemanticBlockNode(bodyStatements)
+        );
+    }
+
+    private SemanticFunctionDeclNode analyzeMethodDecl(
+            StructSymbol owner,
+            FunctionDeclNode methodNode
+    ) {
+        MethodSymbol symbol = symbolTable.findRegisteredMethod(owner, methodNode);
+
+        if (symbol == null) {
+            /*
+             * Signature registration can fail, usually because this method
+             * duplicates an existing overload or conflicts with a field.
+             *
+             * Still build a fallback symbol with the real parameters so the
+             * body can be analyzed and more diagnostics can be collected.
+             */
+            List<ParameterSymbol> fallbackParams = new ArrayList<>();
+
+            for (int i = 0; i < methodNode.parameters.size(); i++) {
+                ParameterNode param = methodNode.parameters.get(i);
+
+                fallbackParams.add(new ParameterSymbol(
+                        param.name,
+                        analyzeNormalType(param.type),
+                        i
+                ));
+            }
+
+            symbol = new MethodSymbol(
+                    owner,
+                    methodNode.name,
+                    fallbackParams,
+                    analyzeReturnType(methodNode.returnType),
+                    false
+            );
+        }
+
+        FunctionSymbol previousFunction = currentFunction;
+        currentFunction = symbol;
+
+        symbolTable.pushScope();
+
+        List<VariableSymbol> parameterVariables = new ArrayList<>();
+
+        for (ParameterSymbol param : symbol.parameters) {
+            symbolTable.declare(param);
+            parameterVariables.add(param);
+        }
+
+        List<SemanticStmtNode> bodyStatements = new ArrayList<>();
+
+        if (methodNode.body != null) {
+            for (ASTNode stmt : methodNode.body.statements) {
+                appendAnalyzedStmt(stmt, bodyStatements);
+            }
+        } else {
+            symbolTable.error("Method '"
+                    + owner.qualifiedName()
+                    + "."
+                    + methodNode.name
+                    + "' is missing a body");
         }
 
         symbolTable.popScope();
@@ -936,9 +1142,13 @@ public class SemanticAnalyzer {
             VariableSymbol sym = symbolTable.resolve(n.name);
 
             if (sym == null) {
-                symbolTable.error("Cannot delete undeclared variable '"
-                        + n.name
-                        + "'");
+                if ("self".equals(n.name)) {
+                    symbolTable.error("keyword 'self' is only valid inside a method body");
+                } else {
+                    symbolTable.error("Cannot delete undeclared variable '"
+                            + n.name
+                            + "'");
+                }
 
                 sym = new VariableSymbol(
                         null,

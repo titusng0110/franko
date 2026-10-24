@@ -18,7 +18,7 @@ The `alloc` keyword marks the variable as heap-owned. Heap-owned variables may b
 
 Non-heap variables cannot be deleted.
 
-Heap variables must be deleted before the end of their scope and before returning; leaks, double deletes, and use-after-delete are checked by the memory safety pass. See [Memory Safety Checking](26-memory-safety-checking.md).
+Heap variables must be deleted before the end of their scope and before returning; leaks, double deletes, and use-after-delete are checked by the memory safety pass. See [Memory Safety Checking](27-memory-safety-checking.md).
 
 Heap allocation is not zero-initialized. A heap variable is allocated and default-constructed, so a primitive heap variable starts with an indeterminate value, and a heap dynamic array starts empty (length 0, no element storage). Use `init_zero` for zeroed dynamic array storage. Allocation failure raises `std::bad_alloc`.
 

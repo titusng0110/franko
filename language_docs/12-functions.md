@@ -103,3 +103,5 @@ Arrays cannot currently be returned directly.
 ## 12.11 Forward References and Recursion
 
 Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
+
+Struct methods follow the same signature, overload, and return rules with an explicit `addr<X> self` first parameter; see [Methods](25-methods.md).

@@ -324,12 +324,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         String name = ctx.IDENTIFIER().getText();
 
         List<StructFieldDeclNode> fields = new ArrayList<>();
+        List<FunctionDeclNode> methods = new ArrayList<>();
 
-        for (FrankoParser.StructFieldDeclContext fieldCtx : ctx.structFieldDecl()) {
-            fields.add((StructFieldDeclNode) visit(fieldCtx));
+        for (FrankoParser.StructMemberContext memberCtx : ctx.structMember()) {
+            if (memberCtx.structFieldDecl() != null) {
+                fields.add((StructFieldDeclNode) visit(memberCtx.structFieldDecl()));
+            } else if (memberCtx.functionDecl() != null) {
+                methods.add((FunctionDeclNode) visit(memberCtx.functionDecl()));
+            } else {
+                throw new RuntimeException("Unknown structMember: " + memberCtx.getText());
+            }
         }
 
-        return new StructDeclNode(name, fields);
+        return new StructDeclNode(name, fields, methods);
     }
 
     @Override
@@ -385,7 +392,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitParameter(FrankoParser.ParameterContext ctx) {
         TypeNode type = (TypeNode) visit(ctx.type());
-        String name = ctx.IDENTIFIER().getText();
+        String name;
+
+        if (ctx.SELF() != null) {
+            name = "self";
+        } else {
+            name = ctx.IDENTIFIER().getText();
+        }
 
         return new ParameterNode(type, name);
     }
@@ -536,6 +549,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitDelStmt(FrankoParser.DelStmtContext ctx) {
+        if (ctx.SELF() != null) {
+            return new DelNode("self");
+        }
+
         return new DelNode(ctx.IDENTIFIER().getText());
     }
 
@@ -701,6 +718,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitLvalueAtom(FrankoParser.LvalueAtomContext ctx) {
         if (ctx.IDENTIFIER() != null) {
             return new VarNode(ctx.IDENTIFIER().getText());
+        }
+
+        if (ctx.SELF() != null) {
+            return new VarNode("self");
         }
 
         if (ctx.qualifiedName() != null) {
@@ -950,6 +971,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.IDENTIFIER() != null) {
             return new VarNode(ctx.IDENTIFIER().getText());
+        }
+
+        if (ctx.SELF() != null) {
+            return new VarNode("self");
         }
 
         if (ctx.qualifiedName() != null) {

@@ -1,8 +1,8 @@
-# 31. Examples
+# 32. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-## 31.1 Basic Integers
+## 32.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -18,7 +18,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.2 Static Array Initializer Assignment
+## 32.2 Static Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -52,7 +52,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.3 Static Partial Initializer Assignment
+## 32.3 Static Partial Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -66,7 +66,7 @@ func main() -> int32_t {
 
 `xs[2]` is untouched.
 
-## 31.4 Dynamic Array Initializer Assignment
+## 32.4 Dynamic Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -86,7 +86,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.5 Runtime Expressions Inside Initializer Lists
+## 32.5 Runtime Expressions Inside Initializer Lists
 
 ```franko
 func getValue() -> int32_t {
@@ -110,7 +110,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.6 Nested Static Arrays
+## 32.6 Nested Static Arrays
 
 ```franko
 func main() -> int32_t {
@@ -128,7 +128,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.7 Nested Dynamic Arrays
+## 32.7 Nested Dynamic Arrays
 
 ```franko
 func main() -> int32_t {
@@ -151,7 +151,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.8 Declaration Initializer with Static Array
+## 32.8 Declaration Initializer with Static Array
 
 ```franko
 func main() -> int32_t {
@@ -165,7 +165,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.9 Dynamic Array Declaration Initializer Without Initialization
+## 32.9 Dynamic Array Declaration Initializer Without Initialization
 
 ```franko
 func main() -> int32_t {
@@ -193,7 +193,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.10 Array Initializer Through Address
+## 32.10 Array Initializer Through Address
 
 ```franko
 func main() -> int32_t {
@@ -233,7 +233,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.11 String Literal Assignment
+## 32.11 String Literal Assignment
 
 ```franko
 func main() -> int32_t {
@@ -256,7 +256,7 @@ func main() -> int32_t {
 
 See [String Literals](22-string-literals.md).
 
-## 31.12 `ndarray` Grid
+## 32.12 `ndarray` Grid
 
 ```franko
 func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
@@ -278,7 +278,7 @@ func main() -> int32_t {
 
 `ndarray<byte, 2, 3>` is sugar for `array<array<byte, 3>, 2>`.
 
-## 31.13 Status-Returning Intrinsics
+## 32.13 Status-Returning Intrinsics
 
 ```franko
 func main() -> int32_t {
@@ -305,7 +305,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.14 Struct Declaration and Field Access
+## 32.14 Struct Declaration and Field Access
 
 ```franko
 struct Point {
@@ -328,7 +328,7 @@ func main() -> int32_t {
 
 The separator before `}` is optional.
 
-## 31.15 Struct Field Defaults
+## 32.15 Struct Field Defaults
 
 Field defaults are constant expressions; only primitive fields can have them.
 
@@ -348,7 +348,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.16 Whole-Struct Assignment
+## 32.16 Whole-Struct Assignment
 
 A struct is assignable as a whole value only if all of its fields are assignable, recursively.
 
@@ -374,7 +374,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.17 Structs Passed by Value and by Address
+## 32.17 Structs Passed by Value and by Address
 
 Assignable structs may be passed and returned by value; address-only structs must go through `addr<X>`.
 
@@ -410,7 +410,7 @@ func main() -> int32_t {
 }
 ```
 
-## 31.18 Structs with Array Fields
+## 32.18 Structs with Array Fields
 
 An array field makes the struct non-assignable: the struct is address-only and its arrays are managed through the usual intrinsics.
 
@@ -440,7 +440,7 @@ func main() -> int32_t {
 
 `alloc` is not allowed in struct fields; allocate dynamic array fields explicitly with `field(n)` as above.
 
-## 31.19 Structs on the Heap
+## 32.19 Structs on the Heap
 
 ```franko
 struct Node {
@@ -468,7 +468,7 @@ func main() -> int32_t {
 
 Address declarations and address-typed struct fields are guaranteed null-initialized (see [Addresses](23-addresses.md)), so `b.next` is `null` here; only follow links that have been explicitly assigned.
 
-## 31.20 Struct Globals
+## 32.20 Struct Globals
 
 Global variable declarations accept constant initializers.
 

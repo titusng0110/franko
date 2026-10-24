@@ -106,6 +106,31 @@ public class DeclarationChecker {
             new SemanticStructType(node.symbol),
             "Struct '" + node.symbol.qualifiedName() + "'"
         );
+
+        for (SemanticFunctionDeclNode methodNode : node.methods) {
+            if (methodNode == null || methodNode.symbol == null) {
+                continue;
+            }
+
+            if (!(methodNode.symbol instanceof MethodSymbol method)) {
+                diagnostics.error("Struct '"
+                        + node.symbol.qualifiedName()
+                        + "' has a non-method function '"
+                        + methodNode.symbol.name
+                        + "'");
+                continue;
+            }
+
+            if (node.symbol.resolveField(method.name) != null) {
+                diagnostics.error("Method '"
+                        + method.qualifiedName()
+                        + "' conflicts with field '"
+                        + method.name
+                        + "' of struct '"
+                        + node.symbol.qualifiedName()
+                        + "'");
+            }
+        }
     }
 
     public void checkDeclaredType(

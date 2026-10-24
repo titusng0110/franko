@@ -1,8 +1,8 @@
-# 27. Type Equality
+# 28. Type Equality
 
 Franko uses exact, structural semantic type equality in many places. Type equality is implemented once (in the semantic type classes) and used consistently by overload resolution, assignment checking, return checking, and diagnostics.
 
-## 27.1 Primitive Equality
+## 28.1 Primitive Equality
 
 Primitive types are equal only if they have the same kind.
 
@@ -14,7 +14,7 @@ int32_t  == int32_t
 
 The aliases `int`, `uint`, and `byte` canonicalize to `int32_t`, `uint32_t`, and `uint8_t` respectively.
 
-## 27.2 Dynamic Array Equality
+## 28.2 Dynamic Array Equality
 
 Dynamic arrays are equal if their element types are equal.
 
@@ -23,7 +23,7 @@ array<int32_t> == array<int32_t>
 array<int32_t> != array<uint8_t>
 ```
 
-## 27.3 Static Array Equality
+## 28.3 Static Array Equality
 
 Static arrays are equal if:
 
@@ -38,11 +38,11 @@ array<int32_t, 5 + 5>  == array<int32_t, 10>
 array<int32_t, 10>     != array<int32_t, 20>
 ```
 
-## 27.4 Address Equality
+## 28.4 Address Equality
 
 Address types are equal if their referenced types are equal.
 
-## 27.5 Function Signature Equality
+## 28.5 Function Signature Equality
 
 Function signatures are equal if they have:
 
@@ -51,7 +51,7 @@ Function signatures are equal if they have:
 
 Return type and parameter names are not part of function signature equality.
 
-## 27.6 Struct Equality
+## 28.6 Struct Equality
 
 Struct types are nominal: two struct declarations are distinct types even when their field layouts are identical.
 

@@ -1,0 +1,11 @@
+// Failure fixture: methods/self_by_value
+// `self` must be addr<X>, not X by value (doc 25.2).
+struct X {
+    int32_t y = 0
+    func bad(X self) -> void {
+        return
+    }
+}
+func main() -> int32_t {
+    return 0
+}

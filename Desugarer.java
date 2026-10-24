@@ -150,7 +150,13 @@ public class Desugarer {
             ));
         }
 
-        return new StructDeclNode(n.name, fields);
+        List<FunctionDeclNode> methods = new ArrayList<>();
+
+        for (FunctionDeclNode method : n.methods) {
+            methods.add(desugarFunctionDecl(method));
+        }
+
+        return new StructDeclNode(n.name, fields, methods);
     }
 
     private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {
