@@ -100,7 +100,7 @@ Rules:
 - assigning `getaddr(...)` makes the target pointing; this is the **only** certification of a non-null address;
 - assigning another address variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked address variable is maybe-null, because parameters and globals carry values the checker cannot see. Exception: a method's `self` parameter enters pointing, since the call synthesizes `getaddr(receiver)` over a storage-backed lvalue.
+- at function entry, every tracked address variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getaddr(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `addr<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live address.
 
 Dereference checking:
 

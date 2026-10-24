@@ -734,6 +734,25 @@ public final class MemorySafetyChecker {
             }
         }
 
+        /*
+         * Exception: the global entry-point `main` in its args form
+         * receives `addr<array<array<byte>>>` from the template wrapper,
+         * which always passes a live address. Seed it as POINTING so
+         * dereferencing the args parameter without a redundant null
+         * guard does not warn. Later assignments flow normally through
+         * assignment propagation.
+         */
+        if (!(node.symbol instanceof MethodSymbol)
+                && "main".equals(node.symbol.name)
+                && node.symbol.namespace == null
+                && node.symbol.parameters.size() == 1) {
+            int argsIndex = addrIndexOfSymbol(node.symbol.parameters.get(0));
+
+            if (argsIndex >= 0) {
+                addrState[argsIndex] = AddressState.POINTING;
+            }
+        }
+
         if (node.body != null) {
             boolean definitelyReturns = checkBlock(node.body, true);
 

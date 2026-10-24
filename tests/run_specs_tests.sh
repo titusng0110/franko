@@ -19,6 +19,9 @@ set -Eeuo pipefail
 #     Must compile, run, and produce stdout matching main.expected.
 #     Optional main.warnings: every non-empty line must appear as a
 #     substring of the compiler output, pinning expected warnings.
+#     Optional main.args: each line is one command-line argument
+#     passed verbatim to the binary (empty lines pass empty-string
+#     arguments; a trailing newline does not add an argument).
 #
 #   tests/runtime/<family>/<case>.fr
 #     Must compile, but the binary must EXIT NON-ZERO when run. Used
@@ -155,6 +158,24 @@ for SRC in tests/success/*/main.fr; do
 
     read_flags "$FLAGS"
 
+    # --------------------------------------------------------
+    # Optional per-case CLI arguments.
+    #
+    # Each line of main.args is one command-line argument passed
+    # verbatim to the binary. Empty lines pass empty-string
+    # arguments; a trailing newline does not add an argument.
+    # Without main.args the binary runs with no arguments.
+    # --------------------------------------------------------
+    ARGS_FILE="$DIR/main.args"
+    RUN_ARGS=()
+
+    if [[ -f "$ARGS_FILE" ]]; then
+        while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+            LINE="${LINE%$'\r'}"
+            RUN_ARGS+=("$LINE")
+        done < "$ARGS_FILE"
+    fi
+
     if ! java -cp "$CP" Main "$SRC" -o "$OUT_CPP" ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} > "$LOG" 2>&1; then
         echo "---- compiler output: ----"
         cat "$LOG"
@@ -181,7 +202,7 @@ for SRC in tests/success/*/main.fr; do
         continue
     fi
 
-    if ! "$OUT_BIN" > "$ACTUAL" 2>&1; then
+    if ! "$OUT_BIN" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} > "$ACTUAL" 2>&1; then
         echo "---- runtime output: ----"
         cat "$ACTUAL"
         fail "$SRC (binary exited non-zero)"

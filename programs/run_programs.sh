@@ -16,6 +16,9 @@ set -Eeuo pipefail
 # whose rendering varies across runs or platforms (such as live
 # addresses) in a .expected file.
 #
+# A program may provide programs/<name>.args: each line is one
+# command-line argument passed verbatim to the binary.
+#
 # Generated artifacts (.cpp, .testbin, .actual) are removed after a
 # passing case and kept for inspection after a failure.
 #
@@ -63,10 +66,24 @@ for SRC in programs/*.fr; do
     OUT_BIN="$BASE.testbin"
     ACTUAL="$BASE.actual"
     EXPECTED="$BASE.expected"
+    ARGS_FILE="$BASE.args"
 
     echo
     echo "=== $SRC ==="
     echo
+
+    # Optional per-program CLI arguments: each line of
+    # programs/<name>.args is one argument passed verbatim to the
+    # binary (empty lines pass empty-string arguments; a trailing
+    # newline does not add an argument).
+    RUN_ARGS=()
+
+    if [[ -f "$ARGS_FILE" ]]; then
+        while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+            LINE="${LINE%$'\r'}"
+            RUN_ARGS+=("$LINE")
+        done < "$ARGS_FILE"
+    fi
 
     if ! java -cp "$CP" Main "$SRC" -o "$OUT_CPP" -p "$IMPORT_DIR"; then
         fail "$SRC (Franko compile failed)"
@@ -83,7 +100,7 @@ for SRC in programs/*.fr; do
         continue
     fi
 
-    if ! "$OUT_BIN" > "$ACTUAL" 2>&1; then
+    if ! "$OUT_BIN" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} > "$ACTUAL" 2>&1; then
         echo "---- runtime output: ----"
         cat "$ACTUAL"
         fail "$SRC (binary exited non-zero)"

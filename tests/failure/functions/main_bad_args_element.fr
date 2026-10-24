@@ -1,0 +1,6 @@
+// Failure fixture: functions/main_bad_args_element
+// The entry-point args must be byte arrays: addr<array<array<int32_t>>> is not a valid main shape.
+
+func main(addr<array<array<int32_t>>> args) -> int32_t {
+    return 0
+}

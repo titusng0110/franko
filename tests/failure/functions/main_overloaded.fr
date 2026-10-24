@@ -1,0 +1,11 @@
+// Failure fixture: functions/main_overloaded
+// The entry-point function `main` cannot be overloaded: the no-args and
+// args shapes cannot both be declared.
+
+func main() -> int32_t {
+    return 0
+}
+
+func main(addr<array<array<byte>>> args) -> int32_t {
+    return 0
+}

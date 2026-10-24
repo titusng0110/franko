@@ -51,7 +51,7 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `addr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` is the exception: it emits as raw `main` and must be declared exactly as `func main() -> int32_t` with no parameters.
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `addr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 

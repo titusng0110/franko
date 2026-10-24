@@ -22,6 +22,9 @@ $ErrorActionPreference = "Stop"
 #     Optional main.warnings: every non-empty line must appear as a
 #     substring of the compiler output, pinning expected warnings.
 #     Optional main.flags: extra compiler flags, same format as above.
+#     Optional main.args: each line is one command-line argument
+#     passed verbatim to the binary (empty lines pass empty-string
+#     arguments; a trailing newline does not add an argument).
 #
 #   tests/runtime/<family>/<case>.fr
 #     Must compile, but the binary must EXIT NON-ZERO when run. Used
@@ -117,6 +120,25 @@ function Read-ExtraFlags($flagsFile) {
     return $flags
 }
 
+# Reads a main.args file and returns the command-line arguments as
+# an array. Each line is one argument passed verbatim; empty lines
+# pass empty-string arguments. A trailing newline does not add an
+# argument, and an empty or missing file yields no arguments.
+function Read-RunArgs($argsFile) {
+    $runArgs = @()
+    if (Test-Path -LiteralPath $argsFile) {
+        $text = [IO.File]::ReadAllText($argsFile) -replace "`r`n", "`n"
+        if (-not [string]::IsNullOrEmpty($text)) {
+            $parts = $text -split "`n"
+            if ($text.EndsWith("`n")) {
+                $parts = $parts[0..($parts.Count - 2)]
+            }
+            foreach ($p in $parts) { $runArgs += $p }
+        }
+    }
+    return $runArgs
+}
+
 # Compares two texts after CRLF normalization. Prints the first
 # differing lines and returns $true when they match.
 function Test-OutputMatch($actualText, $expectedText) {
@@ -194,6 +216,7 @@ foreach ($src in $successCases) {
     $expected = "$base.expected"
     $warn = "$base.warnings"
     $extraFlags = Read-ExtraFlags "$base.flags"
+    $runArgs = @(Read-RunArgs "$base.args")
 
     Write-Host "=== $src ==="
 
@@ -229,7 +252,7 @@ foreach ($src in $successCases) {
         continue
     }
 
-    & $outBin > $actual 2>&1
+    & $outBin @runArgs > $actual 2>&1
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         Write-Host "---- runtime output (exit code $exitCode): ----"
