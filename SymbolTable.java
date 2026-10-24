@@ -787,9 +787,9 @@ public final class SymbolTable {
      * declared struct.
      *
      * Franko keeps struct names in a separate namespace, so this is legal.
-     * The C++ backend emits kind-prefixed names (VAR_X, FUNC_f, STRUCT_X),
-     * so the generated code is unambiguous, but the shared source name is
-     * usually confusing and worth calling out.
+     * The C++ backend emits kind-prefixed names (VAR_X, FUNC_f_HASH_...,
+     * STRUCT_X), so the generated code is unambiguous, but the shared
+     * source name is usually confusing and worth calling out.
      *
      * Called once at the end of program analysis, when struct, variable, and
      * function names are all registered.
@@ -918,12 +918,25 @@ public final class SymbolTable {
             }
 
             if (spaceFunctions.containsKey(structSymbol.name)) {
+                List<FunctionSymbol> clashFunctions =
+                        spaceFunctions.get(structSymbol.name);
+
+                StringBuilder emitted = new StringBuilder();
+
+                for (int i = 0; i < clashFunctions.size(); i++) {
+                    if (i > 0) {
+                        emitted.append(", ");
+                    }
+
+                    emitted.append(clashFunctions.get(i).emittedLocalName());
+                }
+
                 warning("Function '"
                         + structName
                         + "' shares its name with struct '"
                         + structName
-                        + "'; generated C++ uses FUNC_"
-                        + structSymbol.name
+                        + "'; generated C++ uses "
+                        + emitted
                         + " for the function and STRUCT_"
                         + structSymbol.name
                         + " for the struct type");

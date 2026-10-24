@@ -767,6 +767,23 @@ public class SemanticAnalyzer {
                 false
         );
 
+        /*
+         * The entry-point function keeps the raw C++ name `main`, so it
+         * must have exactly the C++ entry-point shape: no parameters and
+         * an int32_t return. Any other shape cannot be a C++ main and
+         * overloading main is forbidden (C++ forbids overloading main).
+         */
+        if ("main".equals(fn.name) && currentNamespaceName() == null) {
+            boolean returnsInt32 = symbol.returnType() instanceof SemanticPrimitiveType prim
+                    && prim.kind == SemanticPrimitiveKind.INT32;
+
+            if (!params.isEmpty() || !returnsInt32) {
+                symbolTable.error(
+                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' with no parameters"
+                );
+            }
+        }
+
         symbolTable.declareFunction(fn, symbol);
     }
 

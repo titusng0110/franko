@@ -213,6 +213,34 @@ class FunctionSymbol extends CallableSymbol {
     public String qualifiedName() {
         return namespace == null ? name : namespace + "::" + name;
     }
+
+    /**
+     * The local C++ function name for this function, before namespace
+     * qualification: `FUNC_<name>_HASH_<8hex>`.
+     *
+     * The hash is the FNV-1a 32-bit hash of the canonical signature
+     * key (declared parameter types in order, then the return type),
+     * so overloads of the same name emit distinct C++ names without
+     * relying on g++ overload resolution.
+     */
+    public String mangledName() {
+        return "FUNC_" + name + "_HASH_" + Mangler.hashHex(functionType().signatureKey());
+    }
+
+    /**
+     * The local C++ name actually emitted for this function.
+     *
+     * The entry-point function `main` keeps its raw name, because the
+     * generated program's C++ entry point IS the Franko main function.
+     * Every other function emits its mangled name.
+     */
+    public String emittedLocalName() {
+        if ("main".equals(name) && namespace == null) {
+            return name;
+        }
+
+        return mangledName();
+    }
 }
 
 // ============================================================
@@ -264,10 +292,29 @@ class MethodSymbol extends FunctionSymbol {
 
     /**
      * The local C++ function name for this method, before namespace
-     * qualification: `METH_<name>_OFSTRUCT_<StructName>`.
+     * qualification: `METH_<name>_OFSTRUCT_<StructName>_HASH_<8hex>`.
+     *
+     * The hash follows the same rule as functions: FNV-1a 32-bit over
+     * the canonical signature key. The implicit `self` parameter
+     * (`addr<X>`) is a declared parameter and participates in the hash.
      */
+    @Override
     public String mangledName() {
-        return "METH_" + name + "_OFSTRUCT_" + owner.name;
+        return "METH_"
+                + name
+                + "_OFSTRUCT_"
+                + owner.name
+                + "_HASH_"
+                + Mangler.hashHex(functionType().signatureKey());
+    }
+
+    /**
+     * Methods always emit their mangled name, even when named `main`:
+     * only the global entry-point function keeps the raw `main` name.
+     */
+    @Override
+    public String emittedLocalName() {
+        return mangledName();
     }
 }
 

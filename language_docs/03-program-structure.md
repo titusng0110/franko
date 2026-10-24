@@ -75,6 +75,8 @@ Inside a namespace, an unqualified name resolves in that namespace first, then f
 
 The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error.
 
+`main` must be declared exactly as `func main() -> int32_t` with no parameters. Any other shape (parameters, a different return type) is a compile error, and `main` cannot be overloaded.
+
 Executable statements are **not** currently allowed in global scope.
 
 Invalid global-scope items include:

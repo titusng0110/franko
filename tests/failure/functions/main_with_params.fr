@@ -1,0 +1,6 @@
+// Failure fixture: functions/main_with_params
+// The entry-point function `main` must take no parameters.
+
+func main(int32_t x) -> int32_t {
+    return x;
+}

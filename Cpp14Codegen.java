@@ -372,12 +372,14 @@ public class Cpp14Codegen {
          * This supports forward references, direct recursion, and mutual
          * recursion across namespaces.
          *
-         * Methods emit as mangled free functions (METH_..._OFSTRUCT_...)
-         * in the same prototype phase, after free functions of the same
-         * namespace.
+         * Methods emit as mangled free functions
+         * (METH_..._OFSTRUCT_..._HASH_...) in the same prototype phase,
+         * after free functions of the same namespace.
          */
         Map<String, List<SemanticFunctionDeclNode>> nsMethods = collectNamespaceMethods(nsStructs);
         List<SemanticFunctionDeclNode> globalMethods = collectGlobalMethods(globalStructs);
+
+        checkEmittedNameCollisions(globalFunctions, globalMethods, nsFunctions, nsMethods);
 
         if (anyNonEmpty(nsFunctions)
                 || anyNonEmpty(nsMethods)
@@ -529,6 +531,77 @@ public class Cpp14Codegen {
         }
 
         return false;
+    }
+
+    /**
+     * Guards against emitted-name collisions between distinct callables.
+     *
+     * Overloads of one name differ in parameter types and therefore in
+     * signature keys, so distinct hash suffixes are expected. If two
+     * distinct declarations ever map to the same fully qualified C++
+     * name, that is a 32-bit hash collision: fail loudly instead of
+     * emitting colliding C++.
+     */
+    private static void checkEmittedNameCollisions(
+            List<SemanticFunctionDeclNode> globalFunctions,
+            List<SemanticFunctionDeclNode> globalMethods,
+            Map<String, List<SemanticFunctionDeclNode>> nsFunctions,
+            Map<String, List<SemanticFunctionDeclNode>> nsMethods
+    ) {
+        Map<String, String> seen = new LinkedHashMap<>();
+
+        List<SemanticFunctionDeclNode> all = new ArrayList<>();
+        all.addAll(globalFunctions);
+        all.addAll(globalMethods);
+
+        for (List<SemanticFunctionDeclNode> fns : nsFunctions.values()) {
+            all.addAll(fns);
+        }
+
+        for (List<SemanticFunctionDeclNode> fns : nsMethods.values()) {
+            all.addAll(fns);
+        }
+
+        for (SemanticFunctionDeclNode fn : all) {
+            if (fn == null || fn.symbol == null) {
+                continue;
+            }
+
+            String qualified = fullyQualifiedEmittedName(fn.symbol);
+            String key = fn.symbol.functionType().signatureKey();
+            String prev = seen.putIfAbsent(qualified, key);
+
+            if (prev != null && !prev.equals(key)) {
+                throw new IllegalStateException(
+                        "Internal compiler error: emitted C++ name collision for '"
+                                + qualified
+                                + "' (distinct signatures hash to the same suffix)"
+                );
+            }
+        }
+    }
+
+    /**
+     * Fully qualified C++ name of a callable, independent of the current
+     * emission context: `NS_a::NS_b::LOCAL` or plain `LOCAL` globally.
+     */
+    private static String fullyQualifiedEmittedName(FunctionSymbol symbol) {
+        String local;
+        String namespace;
+
+        if (symbol instanceof MethodSymbol method) {
+            local = method.emittedLocalName();
+            namespace = method.owner.namespace;
+        } else {
+            local = symbol.emittedLocalName();
+            namespace = symbol.namespace;
+        }
+
+        if (namespace == null) {
+            return local;
+        }
+
+        return cppNamespacePrefix(namespace) + "::" + local;
     }
 
     /**
@@ -1560,31 +1633,33 @@ public class Cpp14Codegen {
         /*
          * Methods are emitted as free C++ functions with a mangled name:
          *
-         *   METH_<name>_OFSTRUCT_<StructName>
+         *   METH_<name>_OFSTRUCT_<StructName>_HASH_<8hex>
          *
          * qualified by the struct's namespace like FUNC_ names.
          *
          * The `self` parameter emits as an ordinary `STRUCT_X* VAR_self`
          * parameter, and calls emit an explicit `(&receiver)` argument.
-         */
-        if (symbol instanceof MethodSymbol method) {
-            return qualify(method.owner.namespace, method.mangledName());
-        }
-
-        /*
-         * Functions are emitted with a "FUNC_" prefix for the same
-         * cross-namespace reason as variables.
+         *
+         * Functions emit as:
+         *
+         *   FUNC_<name>_HASH_<8hex>
+         *
+         * with the 8-hex-digit FNV-1a hash of the canonical signature
+         * key (declared parameter types in order, then the return
+         * type). Overloads of one name therefore emit distinct C++
+         * names without relying on g++ overload resolution.
          *
          * Exception: the Franko entry-point function "main" keeps its raw
          * name, because the generated program's C++ entry point IS the
          * Franko main function. main must be declared in the global
-         * namespace; the semantic analyzer rejects a namespaced main.
+         * namespace as `func main() -> int32_t` with no parameters; the
+         * semantic analyzer rejects any other shape.
          */
-        if ("main".equals(symbol.name) && symbol.namespace == null) {
-            return symbol.name;
+        if (symbol instanceof MethodSymbol method) {
+            return qualify(method.owner.namespace, method.emittedLocalName());
         }
 
-        return qualify(symbol.namespace, "FUNC_" + symbol.name);
+        return qualify(symbol.namespace, symbol.emittedLocalName());
     }
 
     /**

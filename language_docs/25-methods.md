@@ -70,7 +70,7 @@ Rules:
 A method is invoked with member-call syntax. The compiler prepends `getaddr(receiver)` as the `self` argument:
 
 ```franko
-s.increment()              // -> METH_increment_OFSTRUCT_X((&s))
+s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
 deref(p).increment()       // explicit deref for addr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
@@ -160,13 +160,15 @@ Methods emit as free C++ functions with a mangled name:
 
 | Franko construct | Generated C++ name |
 |---|---|
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X` |
+| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | method `self` parameter | `VAR_self` (`STRUCT_X*`) |
 
-- The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as `NS_util::METH_bump_OFSTRUCT_Counter` and is called as `NS_util::METH_bump_OFSTRUCT_X((&VAR_c))` from outside the namespace.
-- `s.method(args)` emits as `METH_method_OFSTRUCT_X((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
+The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `addr<X>`, then the return type); see [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+
+- The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
+- `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
 - Struct definitions emit no members for methods; prototypes emit in the function prototype phase (free functions first, then methods of the same namespace) and definitions emit in the function definition phase.
-- A method named `main` mangles to `METH_main_OFSTRUCT_X` and cannot collide with the entry-point `main`.
+- A method named `main` mangles to `METH_main_OFSTRUCT_X_HASH_<8hex>` and cannot collide with the entry-point `main`.
 
 ## 25.10 Restrictions Summary
 
