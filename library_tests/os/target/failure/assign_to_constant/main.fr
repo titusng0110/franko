@@ -1,0 +1,14 @@
+// ============================================================
+// FAILURE FIXTURE (os/target): assignment to a target constant
+// ============================================================
+// os::IS_* are compile-time constants: references fold to integer
+// literals, so assignment has no storage to write to and is rejected
+// as a non-lvalue. No separate mutability rule is needed.
+// ============================================================
+
+import "franko/os"
+
+func main() -> int32_t {
+    os::IS_LINUX = 1;
+    return 0;
+}

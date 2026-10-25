@@ -267,6 +267,60 @@ public final class ExpressionAnalyzer {
             return new SemanticDerefNode(refType, expr);
         }
 
+        if (node instanceof CastNode n) {
+            SemanticPrimitiveKind targetKind =
+                    SemanticPrimitiveKind.valueOf(n.target.name());
+
+            SemanticType targetType =
+                    new SemanticPrimitiveType(targetKind);
+
+            SemanticExprNode expr = analyzeExpr(n.expr);
+
+            if (expr.type instanceof SemanticVoidType) {
+                ctx.error("Operand of 'cast' cannot have void type");
+                return new SemanticCastExprNode(
+                        targetType,
+                        null,
+                        expr,
+                        false
+                );
+            }
+
+            if (!(expr.type instanceof SemanticPrimitiveType sourcePrimitive)) {
+                ctx.error("Operand of 'cast' must be an integer expression, got "
+                        + expr.type.describe());
+                return new SemanticCastExprNode(
+                        targetType,
+                        null,
+                        expr,
+                        true
+                );
+            }
+
+            /*
+             * Same-type casts are no-ops: return the operand unchanged so
+             * no cast node (and no redundant C++ cast) is emitted.
+             */
+            if (sourcePrimitive.kind == targetKind) {
+                return expr;
+            }
+
+            /*
+             * Constants keep their folded value through the cast so the
+             * later checker can validate the value against the target
+             * range exactly like any other constant in a typed context.
+             */
+            return new SemanticCastExprNode(
+                    targetType,
+                    expr.constantValue,
+                    expr,
+                    !TypeChecker.isValuePreservingIntegerWidening(
+                            sourcePrimitive.kind,
+                            targetKind
+                    )
+            );
+        }
+
         if (node instanceof ArrayLiteralNode) {
             throw new RuntimeException(
                     "ArrayLiteralNode should not reach ExpressionAnalyzer. Desugarer bug."
@@ -442,6 +496,23 @@ public final class ExpressionAnalyzer {
             }
 
             sym = new GlobalVariableSymbol(namespace.name, name, FALLBACK_TYPE);
+        }
+
+        /*
+         * The os::IS_* compile-time target constants fold into integer
+         * literals here. Downstream this means conditions like
+         * `os::IS_WINDOWS == 1` carry a constant value (so the backend
+         * can prune the dead branch), and uses that would mutate or
+         * observe the global (assignment, getaddr) are rejected by the
+         * existing literal checks with no special-casing.
+         */
+        if (sym instanceof GlobalVariableSymbol global
+                && global.compileTimeConstantValue != null) {
+            return new SemanticIntLiteralNode(
+                    sym.type,
+                    global.compileTimeConstantValue,
+                    global.compileTimeConstantValue.toString(10)
+            );
         }
 
         return new SemanticVarExprNode(sym.type, sym);

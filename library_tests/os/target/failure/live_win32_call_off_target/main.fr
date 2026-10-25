@@ -1,0 +1,19 @@
+// ============================================================
+// FAILURE FIXTURE (os/target): live os::win32 call off-target
+// ============================================================
+// The compiler is told to target linux-x86_64, so calling
+// os::win32::GetStdHandle in reachable code must be rejected at
+// Franko-compile time with the target named in the diagnostic.
+//
+// This fails on every host because --target is explicit. A win32 call
+// inside `if (os::IS_WINDOWS == 1) { ... }` is not an error: that
+// branch is pruned before emission and never reaches the check.
+// ============================================================
+
+import "franko/os"
+
+func main() -> int32_t {
+    uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+    print(h);
+    return 0;
+}

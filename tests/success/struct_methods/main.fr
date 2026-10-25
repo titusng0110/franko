@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Struct Methods Core
 // ============================================================
-// Covers: doc 25.1, doc 25.2, doc 25.3, doc 25.5, doc 25.7, doc 25.9
+// Covers: doc 26.1, doc 26.2, doc 26.3, doc 26.5, doc 26.7, doc 26.9
 // Methods with explicit addr<X> self, overloads, calls on variables,
 // fields, array elements, and deref(p) receivers, local shadowing,
 // method-to-method calls, self reassignment, and address-only structs.

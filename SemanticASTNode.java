@@ -726,3 +726,40 @@ class SemanticDerefNode extends SemanticExprNode {
         return true;
     }
 }
+
+/**
+ * Explicit integer conversion: cast&lt;T&gt;(expr).
+ *
+ * The expression type is always the target primitive integer type.
+ * Unlike deref, a cast is never an lvalue.
+ *
+ * The constant value passes through from the operand when the operand
+ * is a folded constant, so ExpressionChecker can validate the value
+ * against the target range exactly like any other constant in a typed
+ * context, and codegen can emit the folded literal directly.
+ *
+ * The checked flag is decided once by ExpressionAnalyzer: false when
+ * the conversion is the identity or value-preserving (plain
+ * static_cast), true when it can lose data (runtime-checked
+ * franko_safe_cast).
+ */
+class SemanticCastExprNode extends SemanticExprNode {
+    public final SemanticExprNode expr;
+    public final boolean checked;
+
+    public SemanticCastExprNode(
+            SemanticType type,
+            BigInteger constantValue,
+            SemanticExprNode expr,
+            boolean checked
+    ) {
+        super(type, constantValue);
+        this.expr = Objects.requireNonNull(expr);
+        this.checked = checked;
+    }
+
+    @Override
+    public boolean isLValue() {
+        return false;
+    }
+}

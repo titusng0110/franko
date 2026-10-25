@@ -1,0 +1,33 @@
+// ============================================================
+// LIBRARY TEST (os/target): portable target-selected I/O
+// ============================================================
+// Covers: selecting between os::win32 and os::posix intrinsics with
+// the os::IS_WINDOWS compile-time constant.
+//
+// The condition folds at Franko-compile time, so the branch that does
+// not match the target is pruned before code generation: the spliced
+// ffi.cpp bridge never contains the wrong target's blocks (whose
+// bodies are #error on the wrong target), and the program writes
+// "hello" to stdout through whichever API matches the target.
+//
+// Both branches are still fully type-checked and memory-safety
+// checked; pruning only affects what is emitted.
+// ============================================================
+
+import "franko/os"
+
+func main() -> int32_t {
+    array<byte> msg;
+    msg.init(5);
+    msg = "hello";
+
+    if (os::IS_WINDOWS == 1) {
+        uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+        os::win32::WriteFile(h, getaddr(msg), 5, null);
+    } else {
+        os::posix::write(os::posix::STDOUT_FILENO, getaddr(msg), 5);
+    }
+
+    msg.uninit();
+    return 0;
+}

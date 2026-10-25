@@ -1,0 +1,1 @@
+FFI error: 'os::win32::GetStdHandle' is only available when targeting windows (target: linux-x86_64)

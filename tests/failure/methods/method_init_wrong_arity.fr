@@ -1,5 +1,5 @@
 // Failure fixture: methods/method_init_wrong_arity
-// Intrinsic-named methods resolve by method overloads (doc 25.3).
+// Intrinsic-named methods resolve by method overloads (doc 26.3).
 struct X {
     int32_t y = 0
     func init(addr<X> self, int32_t v) -> void {

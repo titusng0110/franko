@@ -17,6 +17,7 @@ public class Main {
         String outputFile = "test.cpp";
         Path importSearchDir = Path.of("import");
         boolean verbose = false;
+        String targetSpec = null;
 
         // ------------------------------------------------------------
         // Parse CLI arguments
@@ -51,6 +52,13 @@ public class Main {
 
                 case "-v":
                     verbose = true;
+                    break;
+
+                case "--target":
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Missing value after --target");
+                    }
+                    targetSpec = args[++i];
                     break;
 
                 default:
@@ -100,6 +108,29 @@ public class Main {
         ImportResolver importResolver = new ImportResolver(importSearchDir);
         ASTNode ast = importResolver.resolve(rawAst, Path.of(sourceFile));
 
+        // ----- Compilation target -----
+        TargetInfo target = targetSpec == null
+                ? TargetInfo.detectHost()
+                : TargetInfo.parse(targetSpec);
+
+        boolean osModuleImported =
+                importResolver.importedBuiltinModules().contains("franko/os");
+
+        if (verbose) {
+            System.out.println("Target: " + target.canonical());
+        }
+
+        /*
+         * Rewrite the os::IS_* placeholder initializers in os.fr to the
+         * target's 0/1 values before desugaring, so the folded
+         * initializers and the emitted C++ globals carry the target.
+         * Only the canonical "franko/os" import activates this; a
+         * user-defined `os` namespace without that import is untouched.
+         */
+        if (osModuleImported) {
+            OsFfi.applyTargetConstants(ast, target);
+        }
+
         if (verbose) {
             System.out.println("==== Imports ====");
 
@@ -128,6 +159,11 @@ public class Main {
 
         // ----- Semantic analysis -----
         SemanticAnalyzer sema = new SemanticAnalyzer();
+
+        if (osModuleImported) {
+            sema.setTarget(target);
+        }
+
         SemanticASTNode semaAST = sema.analyze(ast);
         if (verbose) {
             System.out.println("==== Semantic AST ====");
@@ -168,7 +204,7 @@ public class Main {
         // ----- OS FFI bridge -----
         String osFfiBridgeText = null;
 
-        if (importResolver.importedBuiltinModules().contains("franko/os")) {
+        if (osModuleImported) {
             Path osModuleFile = importResolver.frankoOsModuleFile();
 
             if (osModuleFile == null) {
@@ -204,7 +240,7 @@ public class Main {
         }
 
         // ----- Generate C++ body -----
-        Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText);
+        Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText, target);
         String generatedBody = codegen.generate(semaAST);
 
         // ----- Select template -----

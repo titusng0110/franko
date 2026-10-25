@@ -1,6 +1,8 @@
 // Failure fixture: type_equality/narrow_int64_to_int32
-// One-way widening is value-preserving only (doc 14.1): narrowing a
-// nonconstant int64_t variable to int32_t is still rejected.
+// There are no implicit numeric conversions (doc 31.6): assigning a
+// nonconstant int64_t variable to int32_t is rejected. Narrow
+// explicitly with cast<int32_t>(big), which throws at run time when
+// the value does not fit.
 
 func main() -> int32_t {
     int64_t big = 5;

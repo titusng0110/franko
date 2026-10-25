@@ -1,7 +1,7 @@
 // Runtime fixture: arrays/dynamic_index_oob
 // A nonconstant out-of-bounds index passes compile-time checking (only
 // constant indexes are bounds-checked statically) and the array runtime
-// raises a runtime error (docs 19.4, 19.7, 30.3).
+// raises a runtime error (docs 20.4, 20.7, 31.3).
 func main() -> int32_t {
     array<int32_t> xs
     xs.init(2)

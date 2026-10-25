@@ -19,6 +19,11 @@ $ErrorActionPreference = "Stop"
 # A program may provide programs/<name>.args: each line is one
 # command-line argument passed verbatim to the binary.
 #
+# A program may provide programs/<name>.stdin: bytes fed to the binary
+# on stdin (carriage returns are stripped, so CRLF checkouts behave
+# like LF ones). This is what lets interactive-style programs that
+# read stdin run deterministically under the smoke test.
+#
 # Generated artifacts (.cpp, .testbin.exe, .actual) are removed after a
 # passing case and kept for inspection after a failure.
 #
@@ -105,6 +110,17 @@ function Read-RunArgs($argsFile) {
     return $runArgs
 }
 
+# Reads a <name>.stdin file and returns its bytes with carriage
+# returns stripped (so CRLF checkouts behave like LF ones), or $null
+# when the file does not exist. Piping the returned [byte[]] to a
+# native binary feeds it unmodified: unlike strings, bytes pass
+# through to native stdin with no added newline and no re-encoding.
+function Read-StdInBytes($stdinFile) {
+    if (-not (Test-Path -LiteralPath $stdinFile)) { return $null }
+    $raw = [IO.File]::ReadAllBytes($stdinFile)
+    return [byte[]]@($raw | Where-Object { $_ -ne 13 })
+}
+
 $programs = Get-ChildItem -Path "programs" -Filter "*.fr" -File |
     Sort-Object Name |
     ForEach-Object { $_.FullName }
@@ -121,6 +137,7 @@ foreach ($src in $programs) {
     $actual = "$base.actual"
     $expected = "$base.expected"
     $runArgs = @(Read-RunArgs "$base.args")
+    $stdinBytes = Read-StdInBytes "$base.stdin"
 
     Write-Host ""
     Write-Host "=== $src ==="
@@ -139,7 +156,7 @@ foreach ($src in $programs) {
         continue
     }
 
-    & g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow `
+    & g++ -O3 -std=c++14 -Wall -Wextra -Wpedantic `
         "-I$ROOT\include" "-I$JEM_INC" `
         $outCpp $JEM_LIB `
         -static-libstdc++ -static-libgcc `
@@ -155,7 +172,11 @@ foreach ($src in $programs) {
         continue
     }
 
-    & $outBin @runArgs > $actual 2>&1
+    if ($null -eq $stdinBytes) {
+        & $outBin @runArgs > $actual 2>&1
+    } else {
+        $stdinBytes | & $outBin @runArgs > $actual 2>&1
+    }
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         Write-Host "---- runtime output (exit code $exitCode): ----"

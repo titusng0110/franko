@@ -42,7 +42,10 @@ $ErrorActionPreference = "Stop"
 #
 #   A suite directory named exactly `win32` runs on Windows only and
 #   is skipped everywhere else (the os win32 File API bridge is a
-#   compile-time #error off Windows). Every other suite runs on all
+#   compile-time #error off Windows). A suite directory named exactly
+#   `posix` runs on non-Windows platforms only and is skipped on
+#   Windows (the os posix bridge is a compile-time #error on Windows;
+#   there is no _read/_write fallback). Every other suite runs on all
 #   platforms.
 #
 # Success golden outputs must be deterministic. Never put values whose
@@ -113,6 +116,12 @@ function Test-IsWindows {
 
 function Test-IsWin32Suite($path) {
     return ($path -replace '\\', '/') -match '/win32/'
+}
+
+# True when a case directory belongs to a POSIX-only suite (the os
+# posix bridge is a compile-time #error on Windows).
+function Test-IsPosixSuite($path) {
+    return ($path -replace '\\', '/') -match '/posix/'
 }
 
 # Every non-empty, non-comment line of $expectedFile must appear as a
@@ -240,6 +249,11 @@ foreach ($src in $failureCases) {
         continue
     }
 
+    if ((Test-IsPosixSuite $src) -and (Test-IsWindows)) {
+        Skip-Case "$src (posix suite does not run on Windows)"
+        continue
+    }
+
     java -cp $CP Main $src -o "$base.cpp" -p $IMPORT_DIR @extraFlags > $log 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "---- compiler output (accepted a failure program): ----"
@@ -284,6 +298,11 @@ foreach ($src in $successCases) {
 
     if ((Test-IsWin32Suite $src) -and -not (Test-IsWindows)) {
         Skip-Case "$src (windows-only suite)"
+        continue
+    }
+
+    if ((Test-IsPosixSuite $src) -and (Test-IsWindows)) {
+        Skip-Case "$src (posix suite does not run on Windows)"
         continue
     }
 
@@ -359,6 +378,11 @@ foreach ($src in $runtimeCases) {
 
     if ((Test-IsWin32Suite $src) -and -not (Test-IsWindows)) {
         Skip-Case "$src (windows-only suite)"
+        continue
+    }
+
+    if ((Test-IsPosixSuite $src) -and (Test-IsWindows)) {
+        Skip-Case "$src (posix suite does not run on Windows)"
         continue
     }
 

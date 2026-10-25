@@ -1,5 +1,5 @@
 // Failure fixture: methods/unknown_method_call
-// Unknown methods are rejected (doc 25.3).
+// Unknown methods are rejected (doc 26.3).
 struct X {
     int32_t a
 }

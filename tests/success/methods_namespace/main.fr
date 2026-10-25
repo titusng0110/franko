@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Methods In Namespaces
 // ============================================================
-// Covers: doc 25.9
+// Covers: doc 26.9
 // Struct methods declared in a namespace, called from global scope,
 // with qualified struct types in method signatures and callers.
 // ============================================================

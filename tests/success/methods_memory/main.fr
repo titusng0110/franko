@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Methods Memory Lifecycle
 // ============================================================
-// Covers: doc 25.8, doc 27.4
+// Covers: doc 26.8, doc 28.4
 // Dynamic-array fields managed through methods, on stack and heap
 // structs, with setup/teardown pairing checked by memory safety.
 // ============================================================

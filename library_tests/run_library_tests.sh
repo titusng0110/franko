@@ -42,7 +42,10 @@ set -Eeuo pipefail
 #
 #   A suite directory named exactly `win32` runs on Windows only and
 #   is skipped everywhere else (the os win32 File API bridge is a
-#   compile-time #error off Windows). Every other suite runs on all
+#   compile-time #error off Windows). A suite directory named exactly
+#   `posix` runs on non-Windows platforms only and is skipped on
+#   Windows (the os posix bridge is a compile-time #error on Windows;
+#   there is no _read/_write fallback). Every other suite runs on all
 #   platforms.
 #
 # Success golden outputs must be deterministic. Never put values whose
@@ -107,6 +110,12 @@ is_windows() {
 # True when a case directory belongs to a Windows-only suite.
 is_win32_suite() {
     [[ "$1" == */win32/* ]]
+}
+
+# True when a case directory belongs to a POSIX-only suite (the os
+# posix bridge is a compile-time #error on Windows).
+is_posix_suite() {
+    [[ "$1" == */posix/* ]]
 }
 
 # ------------------------------------------------------------
@@ -185,6 +194,11 @@ for SRC in library_tests/*/*/failure/*/main.fr; do
         continue
     fi
 
+    if is_posix_suite "$SRC" && is_windows; then
+        skip "$SRC (posix suite does not run on Windows)"
+        continue
+    fi
+
     read_flags "$FLAGS"
 
     if java -cp "$CP" Main "$SRC" -o "$OUT_CPP" -p "$IMPORT_DIR" ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} > "$LOG" 2>&1; then
@@ -224,6 +238,11 @@ for SRC in library_tests/*/*/success/*/main.fr; do
 
     if is_win32_suite "$SRC" && ! is_windows; then
         skip "$SRC (windows-only suite)"
+        continue
+    fi
+
+    if is_posix_suite "$SRC" && is_windows; then
+        skip "$SRC (posix suite does not run on Windows)"
         continue
     fi
 
@@ -298,6 +317,11 @@ for SRC in library_tests/*/*/runtime/*/main.fr; do
 
     if is_win32_suite "$SRC" && ! is_windows; then
         skip "$SRC (windows-only suite)"
+        continue
+    fi
+
+    if is_posix_suite "$SRC" && is_windows; then
+        skip "$SRC (posix suite does not run on Windows)"
         continue
     fi
 

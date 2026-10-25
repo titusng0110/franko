@@ -1,0 +1,9 @@
+// Failure fixture: cast/non_integer_operand
+// The operand of cast<T> must be an integer expression: addresses,
+// arrays, structs, null, and void are rejected.
+func main() -> int32_t {
+    addr<int32_t> p = null;
+    int32_t x = cast<int32_t>(p);
+    print(x);
+    return 0;
+}

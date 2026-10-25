@@ -4,7 +4,7 @@ Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
 - structs with named fields (`struct X { int32_t n }`);
-- struct member access using `obj.field` (see [Structs](24-structs.md));
+- struct member access using `obj.field` (see [Structs](25-structs.md));
 - dynamic arrays;
 - static arrays;
 - `ndarray<...>` sugar for nested static arrays;
@@ -15,7 +15,7 @@ Franko is a small statically typed language with:
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
-- struct methods with explicit `addr<X> self` receivers (see [Methods](25-methods.md));
+- struct methods with explicit `addr<X> self` receivers (see [Methods](26-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
@@ -52,8 +52,8 @@ Franko currently does **not** implement:
 - generics;
 - floating-point types;
 - a distinct boolean type;
-- general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
-- implicit numeric conversions except for fluid integer constants and one-way widening assignments.
+- general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
+- implicit numeric conversions except for fluid integer constants (explicit width changes use the cast<T>(expr) intrinsic).
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;

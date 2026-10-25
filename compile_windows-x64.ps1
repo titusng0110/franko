@@ -184,7 +184,9 @@ RunNative -Exe "java" -Argv @(
     "-o",
     $CPP_OUT,
     "-p",
-    (Join-Path $ROOT "import")
+    (Join-Path $ROOT "import"),
+    "--target",
+    "windows-x86_64"
 )
 
 Write-Host ""

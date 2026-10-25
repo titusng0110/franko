@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Nested Dynamic Array Construction
 // ============================================================
-// Covers: doc 20.1 — init and init_zero default-construct nested
+// Covers: doc 21.1 — init and init_zero default-construct nested
 // dynamic array elements into the uninitialized Franko state
 // (length 0), ready for init with no explicit placement;
 // resize constructs grown elements and destroys dropped ones;

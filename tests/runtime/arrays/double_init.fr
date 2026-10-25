@@ -1,6 +1,6 @@
 // Runtime fixture: arrays/double_init
 // Initializing a dynamic array twice is not fully proven at compile time
-// (doc 19.7); the array runtime raises a runtime error (doc 31.3).
+// (doc 20.7); the array runtime raises a runtime error (doc 32.3).
 func main() -> int32_t {
     array<int32_t> xs
     xs.init(4)

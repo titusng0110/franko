@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Declaration Type Validity
 // ============================================================
-// Covers: every valid declared variable type form from doc 29:
+// Covers: every valid declared variable type form from doc 30:
 // struct variable, dynamic array of struct, static array,
 // ndarray (nested static array sugar), addr<T>, and
 // addr<array<T>>. Each variable is assigned and read.

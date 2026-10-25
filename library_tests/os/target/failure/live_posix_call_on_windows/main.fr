@@ -1,0 +1,25 @@
+// ============================================================
+// FAILURE FIXTURE (os/target): live os::posix call on Windows
+// ============================================================
+// The compiler is told to target windows-x86_64, so calling
+// os::posix::write in reachable code must be rejected at
+// Franko-compile time with the target named in the diagnostic.
+//
+// This is the mirror image of live_win32_call_off_target: the posix
+// bridge blocks are #error on Windows (no _read/_write fallback), so
+// the compiler rejects the call first. Fails on every host because
+// --target is explicit. A posix call inside
+// `if (os::IS_WINDOWS == 1) { ... } else { ... }` is not an error:
+// the else branch is pruned before emission on a Windows target.
+// ============================================================
+
+import "franko/os"
+
+func main() -> int32_t {
+    array<byte> msg;
+    msg.init(5);
+    msg = "hello";
+    os::posix::write(os::posix::STDOUT_FILENO, getaddr(msg), 5);
+    msg.uninit();
+    return 0;
+}

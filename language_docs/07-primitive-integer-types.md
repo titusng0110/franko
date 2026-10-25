@@ -23,15 +23,7 @@ Franko supports fixed-width signed and unsigned integer types.
 
 No other aliases (such as `char` or `bool`) are currently defined.
 
-## 7.2 One-Way Widening
-
-In assignment positions, an integer variable of a narrower type may be
-assigned to a wider target when the conversion is value-preserving
-(same-signedness widening, or unsigned-to-signed widening). See
-[Assignment](14-assignment.md) for the exact rule. Call arguments,
-returns, and operator operands still require exact type equality.
-
-## 7.3 Boolean-Like Values
+## 7.2 Boolean-Like Values
 
 Franko currently does not have a separate `bool` type.
 

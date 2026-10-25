@@ -417,6 +417,10 @@ public final class MemorySafetyChecker {
         if (expr instanceof SemanticDerefNode n) {
             collectHeapSymbolsFromExpr(n.expr);
         }
+
+        if (expr instanceof SemanticCastExprNode n) {
+            collectHeapSymbolsFromExpr(n.expr);
+        }
     }
 
     private void addHeapSymbolIfNeeded(VariableSymbol symbol) {
@@ -1425,6 +1429,10 @@ public final class MemorySafetyChecker {
                 }
             }
 
+            checkExpr(n.expr);
+        }
+
+        if (expr instanceof SemanticCastExprNode n) {
             checkExpr(n.expr);
         }
     }

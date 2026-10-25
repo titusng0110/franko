@@ -2,9 +2,9 @@
 // SPEC TEST: Struct Field Forward References
 // ============================================================
 // Covers: field types may reference structs declared anywhere in the
-// program, including structs declared later in the file (doc 24.4);
+// program, including structs declared later in the file (doc 25.4);
 // the backend forward-declares every struct and orders definitions
-// topologically over by-value field dependencies (doc 24.11), so both
+// topologically over by-value field dependencies (doc 25.11), so both
 // a by-value field of a later struct and an addr field of a later
 // struct compile and work.
 // ============================================================

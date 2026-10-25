@@ -106,5 +106,5 @@ Importing certain modules through their canonical specifier (currently
 only `import "franko/os"`) additionally activates compiler FFI
 behavior: declared functions are given C++ definitions from a bridge
 file instead of their Franko bodies. See [Foreign Function
-Interface](32-foreign-function-interface.md) for the activation rule,
+Interface](33-foreign-function-interface.md) for the activation rule,
 the bridge layout, and the verification checks.

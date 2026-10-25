@@ -1,7 +1,7 @@
 // Failure fixture: functions/return_no_widening
-// One-way widening applies to assignment only (doc 14.1): returning a
-// nonconstant int32_t variable from an int64_t function is still
-// rejected. Widen into a local first.
+// There are no implicit numeric conversions (doc 31.6): returning a
+// nonconstant int32_t variable from an int64_t function is rejected.
+// Convert explicitly with cast<int64_t>(x) first.
 
 func f(int32_t x) -> int64_t {
     return x;

@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/memcpy_dst_range_oob
-// Ranged memcpy (doc 20.6): for static arrays the constant ranges are
+// Ranged memcpy (doc 21.6): for static arrays the constant ranges are
 // checked against the static sizes at compile time; dstStart 3 with
 // count 2 overruns the 4-element destination.
 func main() -> int32_t {

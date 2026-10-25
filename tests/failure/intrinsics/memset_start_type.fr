@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/memset_start_type
-// memset (doc 20.4): nonconstant starts must have exactly type uint32_t;
+// memset (doc 21.4): nonconstant starts must have exactly type uint32_t;
 // an int32_t start is rejected.
 func main() -> int32_t {
     array<int32_t, 4> xs;

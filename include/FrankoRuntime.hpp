@@ -3,14 +3,94 @@
 #include <cstddef>   // for size_t
 #include <cstdint>   // for uint8_t, uint32_t, int32_t
 #include <cstring>   // for std::memcpy, std::memset, std::memmove
+#include <limits>    // for std::numeric_limits (franko_safe_cast bounds)
 #include <new>       // for placement new
 #include <stdexcept> // for std::runtime_error
-#include <type_traits> // for std::is_trivially_default_constructible, std::is_trivially_destructible
+#include <type_traits> // for std::is_integral, std::is_signed, std::make_unsigned
 #include <iostream>  // for std::cout
 #include <jemalloc/jemalloc.h> // for je_malloc, je_calloc, je_realloc, je_free
 
 [[noreturn]] inline void franko_panic(const char* message) {
     throw std::runtime_error(message);
+}
+
+// ============================================================
+// franko_safe_cast<To>(v): runtime-checked integer conversion
+// ============================================================
+//
+// Emitted for Franko cast<T>(expr) conversions that can lose data
+// (narrowing, signedness changes, ...). Value-preserving conversions
+// compile to a plain static_cast instead and never reach this.
+//
+// Throws via franko_panic when v lies outside To's range; otherwise
+// returns static_cast<To>(v).
+//
+// The range test dispatches on the signedness combination so no
+// branch ever compares signed and unsigned values (warning-clean
+// under -Wall -Wextra -Wpedantic -Wshadow).
+template <typename To, typename From,
+        bool FromSigned = std::is_signed<From>::value,
+        bool ToSigned = std::is_signed<To>::value>
+struct franko_cast_range;
+
+// Signed source, signed target: direct comparison promotes safely.
+template <typename To, typename From>
+struct franko_cast_range<To, From, true, true> {
+    static bool below_min(From v) { return v < std::numeric_limits<To>::min(); }
+    static bool above_max(From v) { return v > std::numeric_limits<To>::max(); }
+};
+
+// Unsigned source, unsigned target: v >= 0 == min(To), so only the
+// upper bound can fail. Both sides unsigned: no sign warnings.
+template <typename To, typename From>
+struct franko_cast_range<To, From, false, false> {
+    static bool below_min(From) { return false; }
+    static bool above_max(From v) { return v > std::numeric_limits<To>::max(); }
+};
+
+// Signed source, unsigned target: negatives always fail; the upper
+// bound compares non-negative values as unsigned.
+template <typename To, typename From>
+struct franko_cast_range<To, From, true, false> {
+    static bool below_min(From v) { return v < 0; }
+    static bool above_max(From v) {
+        if (v < 0) {
+            return false;
+        }
+
+        typedef typename std::make_unsigned<From>::type unsigned_from;
+        return static_cast<unsigned_from>(v) > std::numeric_limits<To>::max();
+    }
+};
+
+// Unsigned source, signed target: v >= 0 can never fall below
+// min(To); the upper bound compares as unsigned against max(To).
+template <typename To, typename From>
+struct franko_cast_range<To, From, false, true> {
+    static bool below_min(From) { return false; }
+    static bool above_max(From v) {
+        typedef typename std::make_unsigned<To>::type unsigned_to;
+        return v > static_cast<unsigned_to>(std::numeric_limits<To>::max());
+    }
+};
+
+template <typename To, typename From>
+To franko_safe_cast(From v) {
+    static_assert(std::is_integral<To>::value,
+            "franko_safe_cast requires an integral target type");
+    static_assert(std::is_integral<From>::value,
+            "franko_safe_cast requires an integral source type");
+    static_assert(!std::is_same<To, bool>::value,
+            "franko_safe_cast does not support bool");
+    static_assert(!std::is_same<From, bool>::value,
+            "franko_safe_cast does not support bool");
+
+    if (franko_cast_range<To, From>::below_min(v)
+            || franko_cast_range<To, From>::above_max(v)) {
+        franko_panic("franko_safe_cast: value out of range for target type");
+    }
+
+    return static_cast<To>(v);
 }
 
 template <typename T, uint32_t N>

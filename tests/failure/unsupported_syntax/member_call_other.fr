@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/member_call_other
 // Only struct methods and built-in array intrinsics use member-call syntax;
-// `x.something(1)` on a non-struct receiver is rejected (doc 30.2).
+// `x.something(1)` on a non-struct receiver is rejected (doc 31.2).
 
 func main() -> int32_t {
     int32_t x = 1;

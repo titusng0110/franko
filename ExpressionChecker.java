@@ -207,6 +207,11 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node instanceof SemanticCastExprNode n) {
+            visitCast(n);
+            return;
+        }
+
         if (node instanceof SemanticMemberAccessNode n) {
             visitMemberAccess(n);
             return;
@@ -323,7 +328,7 @@ public class ExpressionChecker {
             if (node.left.isConstant()
                     && !node.right.isConstant()
                     && node.right.type instanceof SemanticPrimitiveType rightPrimitive
-                    && !types.fitsBigIntegerToPrimitive(
+                    && !TypeChecker.fitsBigIntegerToPrimitive(
                             node.left.constantValue,
                             rightPrimitive.kind
                     )) {
@@ -574,7 +579,7 @@ public class ExpressionChecker {
          */
         if (arg.isConstant()
                 && parameterType instanceof SemanticPrimitiveType primitive) {
-            if (!types.fitsBigIntegerToPrimitive(
+            if (!TypeChecker.fitsBigIntegerToPrimitive(
                     arg.constantValue,
                     primitive.kind
             )) {
@@ -1069,6 +1074,39 @@ public class ExpressionChecker {
         }
     }
 
+    private void visitCast(SemanticCastExprNode node) {
+        checkExpr(node.expr);
+
+        if (!ensureValueExpression(node.expr, "Operand of 'cast'")) {
+            return;
+        }
+
+        if (!(node.type instanceof SemanticPrimitiveType targetPrimitive)) {
+            diagnostics.error("Cast target must be a primitive integer type");
+            return;
+        }
+
+        if (!(node.expr.type instanceof SemanticPrimitiveType)) {
+            diagnostics.error("Operand of 'cast' must be an integer expression, got "
+                    + types.describeSafe(node.expr.type));
+            return;
+        }
+
+        /*
+         * Folded constants are validated against the target range here,
+         * exactly like constants in any other typed context: an
+         * out-of-range constant cast is a compile error, never a silent
+         * wraparound.
+         */
+        if (node.isConstant()) {
+            types.requireConstantFitsPrimitive(
+                    node.constantValue,
+                    targetPrimitive.kind,
+                    "Cast to " + targetPrimitive.kind.name()
+            );
+        }
+    }
+
     private void visitMemberAccess(SemanticMemberAccessNode node) {
         if (node.field == null) {
             diagnostics.error("Member access expression has null field symbol");
@@ -1201,7 +1239,7 @@ public class ExpressionChecker {
                 return;
             }
 
-            if (!types.fitsBigIntegerToPrimitive(
+            if (!TypeChecker.fitsBigIntegerToPrimitive(
                     expr.constantValue,
                     SemanticPrimitiveKind.UINT32
             )) {

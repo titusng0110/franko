@@ -1,5 +1,5 @@
 // Failure fixture: methods/self_as_struct_name
-// `self` cannot name a struct (doc 25.6).
+// `self` cannot name a struct (doc 26.6).
 struct self {
     int32_t y = 0
 }

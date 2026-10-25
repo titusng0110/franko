@@ -350,6 +350,13 @@ public class ASTPrinter {
             print(n.expr, indent + 2);
         }
 
+        else if (node instanceof CastNode n) {
+            System.out.println(pad + "Cast<" + primitiveKindSpelling(n.target) + ">");
+
+            System.out.println(pad + "  expr:");
+            print(n.expr, indent + 2);
+        }
+
         // ============================================================
         // Type Nodes, useful if printer is called directly on a TypeNode
         // ============================================================
@@ -448,6 +455,23 @@ public class ASTPrinter {
         return "<unknown-type:" + type.getClass().getSimpleName() + ">";
     }
 
+    private static String primitiveKindSpelling(PrimitiveKind kind) {
+        if (kind == null) {
+            return "<null-kind>";
+        }
+
+        return switch (kind) {
+            case INT8 -> "int8_t";
+            case INT16 -> "int16_t";
+            case INT32 -> "int32_t";
+            case INT64 -> "int64_t";
+            case UINT8 -> "uint8_t";
+            case UINT16 -> "uint16_t";
+            case UINT32 -> "uint32_t";
+            case UINT64 -> "uint64_t";
+        };
+    }
+
     /**
      * Produces a compact one-line rendering of expression-like AST nodes.
      *
@@ -530,6 +554,10 @@ public class ASTPrinter {
 
         if (expr instanceof DerefNode n) {
             return "deref(" + exprToInlineString(n.expr) + ")";
+        }
+
+        if (expr instanceof CastNode n) {
+            return "cast<" + primitiveKindSpelling(n.target) + ">(" + exprToInlineString(n.expr) + ")";
         }
 
         if (expr instanceof ArrayLiteralNode n) {

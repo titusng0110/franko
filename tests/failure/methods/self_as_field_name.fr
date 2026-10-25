@@ -1,5 +1,5 @@
 // Failure fixture: methods/self_as_field_name
-// `self` cannot name a struct field (doc 25.6).
+// `self` cannot name a struct field (doc 26.6).
 struct X {
     int32_t self = 0
     func foo(addr<X> self) -> void {

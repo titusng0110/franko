@@ -2,7 +2,7 @@
 // SPEC TEST: Maybe-Null Dereference Warning
 // ============================================================
 // Covers: dereferencing a possibly-null variable is a warning, not an
-// error (docs 23.8.3, 26.7). The variable below is pointing on one
+// error (docs 24.8.3, 27.7). The variable below is pointing on one
 // branch path and null on the other, so after the merge an unguarded
 // deref compiles with a "Deref of possibly null variable" warning;
 // the run still dereferences only a certified address, so the binary

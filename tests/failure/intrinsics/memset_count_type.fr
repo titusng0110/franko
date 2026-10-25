@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/memset_count_type
-// memset (doc 20.4): nonconstant counts must have exactly type uint32_t;
+// memset (doc 21.4): nonconstant counts must have exactly type uint32_t;
 // a uint16_t count is rejected.
 func main() -> int32_t {
     array<int32_t, 4> xs;

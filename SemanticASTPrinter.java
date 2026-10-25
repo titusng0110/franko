@@ -392,6 +392,11 @@ public class SemanticASTPrinter {
             return;
         }
 
+        if (node instanceof SemanticCastExprNode n) {
+            printCast(n, indent);
+            return;
+        }
+
         if (node instanceof SemanticMemberAccessNode n) {
             printMemberAccess(n, indent);
             return;
@@ -540,6 +545,18 @@ public class SemanticASTPrinter {
             int indent
     ) {
         line(indent, "SemanticDerefNode");
+        printExprMetadata(node, indent + 1);
+
+        line(indent + 1, "expr:");
+        printExpr(node.expr, indent + 2);
+    }
+
+    private static void printCast(
+            SemanticCastExprNode node,
+            int indent
+    ) {
+        line(indent, "SemanticCastExprNode"
+                + (node.checked ? " [checked]" : " [static]"));
         printExprMetadata(node, indent + 1);
 
         line(indent + 1, "expr:");

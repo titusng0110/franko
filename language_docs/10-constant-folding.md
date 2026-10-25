@@ -34,7 +34,7 @@ Integer overflow is not applied during evaluation. Range checking happens when t
 int8_t g = 300;   // evaluated to 300, then rejected: does not fit in INT8
 ```
 
-A shift whose constant right operand is negative cannot be evaluated; it is rejected during desugaring as an invalid constant expression. Negative shifts inside ordinary expressions are instead rejected later by the operator rules (see [Operators](16-operators.md)).
+A shift whose constant right operand is negative cannot be evaluated; it is rejected during desugaring as an invalid constant expression. Negative shifts inside ordinary expressions are instead rejected later by the operator rules (see [Operators](17-operators.md)).
 
 Constant expressions inside ordinary code (as opposed to `constExpr` slots) are still folded during semantic analysis, when expressions are lowered. Diagnostics there keep their existing wording:
 
@@ -44,4 +44,4 @@ int32_t x = 1 / 0;   // invalid: Division by zero in constant expression
 
 `?` array size inference uses the same evaluator quietly: it only needs the value when one exists, and reports its own inference diagnostics otherwise (see [Desugaring](05-desugaring.md)).
 
-A static array `length()` call is emitted as a compile-time constant, not as a runtime read (see [Array Intrinsics](20-array-intrinsics.md)).
+A static array `length()` call is emitted as a compile-time constant, not as a runtime read (see [Array Intrinsics](21-array-intrinsics.md)).

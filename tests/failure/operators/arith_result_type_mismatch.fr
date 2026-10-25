@@ -1,5 +1,5 @@
 // Failure fixture: operators/arith_result_type_mismatch
-// Operator result types are exact (docs 16.9, 27.1, 29.6): an arithmetic
+// Operator result types are exact (docs 17.9, 28.1, 30.6): an arithmetic
 // expression with a nonconstant uint32_t operand takes the nonconstant
 // operand's type, so `u + 1` is uint32_t and does not assign to int32_t.
 func main() -> int32_t {

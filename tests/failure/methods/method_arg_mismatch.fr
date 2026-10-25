@@ -1,5 +1,5 @@
 // Failure fixture: methods/method_arg_mismatch
-// Calling a method with an incompatible argument type is rejected (doc 25.3).
+// Calling a method with an incompatible argument type is rejected (doc 26.3).
 struct X {
     int32_t y = 0
     func foo(addr<X> self, int32_t a) -> void {

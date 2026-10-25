@@ -1,5 +1,5 @@
 // Failure fixture: methods/method_field_clash
-// A method may not share its name with a field (doc 25.4).
+// A method may not share its name with a field (doc 26.4).
 struct X {
     int32_t foo = 0
     func foo(addr<X> self) -> void {

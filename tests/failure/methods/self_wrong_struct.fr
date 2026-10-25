@@ -1,5 +1,5 @@
 // Failure fixture: methods/self_wrong_struct
-// `self` must be addr<X> for the enclosing struct X (doc 25.2).
+// `self` must be addr<X> for the enclosing struct X (doc 26.2).
 struct X {
     int32_t y = 0
     func bad(addr<X> self) -> void {

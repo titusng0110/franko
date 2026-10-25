@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/unary_plus_op
 // The unary plus operator `+x` does not exist in the grammar; only `!x` and
-// unary minus are supported unary operators (docs 16.2, 29.13).
+// unary minus are supported unary operators (docs 17.2, 30.13).
 
 func main() -> int32_t {
     int32_t a = 7;

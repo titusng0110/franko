@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/memcpy_count_oob
-// Ranged memcpy (doc 20.6): for static arrays the constant ranges are
+// Ranged memcpy (doc 21.6): for static arrays the constant ranges are
 // checked against the static sizes at compile time; a count past the
 // array size overruns both the destination and the source here.
 func main() -> int32_t {

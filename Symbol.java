@@ -87,6 +87,16 @@ class ParameterSymbol extends VariableSymbol {
  * while globals may need cross-namespace qualification.
  */
 class GlobalVariableSymbol extends VariableSymbol {
+    /*
+     * Compile-time constant value for the os::IS_* target constants
+     * (namespace "os" only, stamped by SemanticAnalyzer from TargetInfo).
+     *
+     * Null for every ordinary global. Non-null means references to this
+     * global fold into integer literals during expression lowering, so
+     * the global is never read at runtime.
+     */
+    BigInteger compileTimeConstantValue = null;
+
     GlobalVariableSymbol(String namespace, String name, SemanticType type) {
         super(namespace, name, type, false);
     }

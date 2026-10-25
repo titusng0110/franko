@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/modulus_op
 // The modulus operator `%` does not exist in the grammar and is not
-// implemented; source using it must be rejected (docs 16.3, 29.13).
+// implemented; source using it must be rejected (docs 17.3, 30.13).
 
 func main() -> int32_t {
     int32_t a = 7;

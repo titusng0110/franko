@@ -404,10 +404,10 @@ public class TypeChecker {
      *   3. Primitive integer targets accept:
      *
      *      - nonconstant expressions of exactly the same primitive type;
-     *      - nonconstant expressions of a narrower primitive integer type
-     *        when one-way widening is allowed and the conversion is
-     *        value-preserving (see isValuePreservingIntegerWidening);
      *      - constant BigInteger expressions if the value fits the target type.
+     *
+     *      Moving between integer widths is never implicit: use the
+     *      explicit cast&lt;T&gt;(expr) intrinsic.
      *
      *   4. Address targets require exact same address type.
      *
@@ -418,23 +418,6 @@ public class TypeChecker {
             SemanticType targetType,
             SemanticExprNode expr,
             String message
-    ) {
-        ensureAssignable(targetType, expr, message, false);
-    }
-
-    /**
-     * Assignment legality with an optional one-way integer widening rule.
-     *
-     * Callers pass allowIntegerWidening=true only for plain assignment
-     * positions (variable assignment, which also covers declaration
-     * initializers after desugaring). Call arguments, returns, and operator
-     * operands keep exact type equality.
-     */
-    public void ensureAssignable(
-            SemanticType targetType,
-            SemanticExprNode expr,
-            String message,
-            boolean allowIntegerWidening
     ) {
         if (targetType == null || expr == null || expr.type == null) {
             diagnostics.error(message + ": internal null type");
@@ -494,23 +477,12 @@ public class TypeChecker {
                 return;
             }
 
-            if (sameType(targetType, expr.type)) {
-                return;
+            if (!sameType(targetType, expr.type)) {
+                diagnostics.error(message + ": expected "
+                        + targetType.describe()
+                        + ", got "
+                        + expr.type.describe());
             }
-
-            if (allowIntegerWidening
-                    && expr.type instanceof SemanticPrimitiveType sourcePrimitive
-                    && isValuePreservingIntegerWidening(
-                            sourcePrimitive.kind,
-                            targetPrimitive.kind
-                    )) {
-                return;
-            }
-
-            diagnostics.error(message + ": expected "
-                    + targetType.describe()
-                    + ", got "
-                    + expr.type.describe());
 
             return;
         }
@@ -808,7 +780,7 @@ public class TypeChecker {
         }
     }
 
-    public boolean fitsBigIntegerToPrimitive(
+    public static boolean fitsBigIntegerToPrimitive(
             BigInteger value,
             SemanticPrimitiveKind kind
     ) {
@@ -831,7 +803,7 @@ public class TypeChecker {
                 && value.compareTo(max) <= 0;
     }
 
-    public int bitWidth(SemanticPrimitiveKind kind) {
+    public static int bitWidth(SemanticPrimitiveKind kind) {
         return switch (kind) {
             case INT8, UINT8 -> 8;
             case INT16, UINT16 -> 16;
@@ -840,7 +812,7 @@ public class TypeChecker {
         };
     }
 
-    public boolean isSigned(SemanticPrimitiveKind kind) {
+    public static boolean isSigned(SemanticPrimitiveKind kind) {
         return switch (kind) {
             case INT8, INT16, INT32, INT64 -> true;
             case UINT8, UINT16, UINT32, UINT64 -> false;
@@ -850,6 +822,12 @@ public class TypeChecker {
     /**
      * One-way integer widening: true when every value of the source type is
      * representable in the target type.
+     *
+     * This is the shared predicate behind cast&lt;T&gt; code selection:
+     * ExpressionAnalyzer uses it to decide whether a cast compiles to a
+     * plain static_cast (true) or a runtime-checked franko_safe_cast
+     * (false). It is static so analysis phases without a TypeChecker
+     * instance can use it.
      *
      * Allowed:
      *
@@ -867,7 +845,7 @@ public class TypeChecker {
      * Same-kind pairs return false here; exact equality is handled by
      * sameType at the call site.
      */
-    public boolean isValuePreservingIntegerWidening(
+    public static boolean isValuePreservingIntegerWidening(
             SemanticPrimitiveKind from,
             SemanticPrimitiveKind to
     ) {
@@ -886,7 +864,7 @@ public class TypeChecker {
         return !isSigned(from) && isSigned(to);
     }
 
-    public boolean isUnsigned(SemanticPrimitiveKind kind) {
+    public static boolean isUnsigned(SemanticPrimitiveKind kind) {
         return !isSigned(kind);
     }
 

@@ -1001,6 +1001,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.derefExpr());
         }
 
+        if (ctx.castExpr() != null) {
+            return visit(ctx.castExpr());
+        }
+
         if (ctx.expr() != null) {
             return visit(ctx.expr());
         }
@@ -1023,6 +1027,37 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitDerefExpr(FrankoParser.DerefExprContext ctx) {
         ASTNode expr = visit(ctx.expr());
         return new DerefNode(expr);
+    }
+
+    @Override
+    public ASTNode visitCastExpr(FrankoParser.CastExprContext ctx) {
+        FrankoParser.PrimitiveTypeContext target = ctx.primitiveType();
+
+        PrimitiveKind kind;
+
+        if (target.INT8_T() != null) {
+            kind = PrimitiveKind.INT8;
+        } else if (target.INT16_T() != null) {
+            kind = PrimitiveKind.INT16;
+        } else if (target.INT32_T() != null) {
+            kind = PrimitiveKind.INT32;
+        } else if (target.INT64_T() != null) {
+            kind = PrimitiveKind.INT64;
+        } else if (target.UINT8_T() != null) {
+            kind = PrimitiveKind.UINT8;
+        } else if (target.UINT16_T() != null) {
+            kind = PrimitiveKind.UINT16;
+        } else if (target.UINT32_T() != null) {
+            kind = PrimitiveKind.UINT32;
+        } else if (target.UINT64_T() != null) {
+            kind = PrimitiveKind.UINT64;
+        } else {
+            throw new RuntimeException(
+                    "Internal compiler error: cast target is not a primitive integer type"
+            );
+        }
+
+        return new CastNode(kind, visit(ctx.expr()));
     }
 
     @Override

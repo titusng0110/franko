@@ -1,4 +1,25 @@
 namespace os {
+    // Compile-time target constants. The compiler rewrites these
+    // initializers to the compilation target's 0/1 values (from
+    // --target, or auto-detected from the host) and folds every
+    // reference into an integer literal, so they can select code by
+    // target:
+    //
+    //   if os::IS_WINDOWS == 1 {
+    //       os::win32::WriteFile(...)
+    //   } else {
+    //       os::posix::write(...)
+    //   }
+    //
+    // The dead branch is pruned before emission: a win32 call inside
+    // `if os::IS_WINDOWS == 1` compiles cleanly on Linux, while a live
+    // win32 call on a non-Windows target is a Franko-compile error.
+    byte IS_LINUX = 0
+    byte IS_WINDOWS = 0
+    byte IS_MACOS = 0
+    byte IS_X86_64 = 0
+    byte IS_ARM64 = 0
+    
     namespace posix {
         int32_t STDIN_FILENO = 0
         int32_t STDOUT_FILENO = 1

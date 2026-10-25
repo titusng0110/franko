@@ -136,6 +136,26 @@ public class SemanticAnalyzer {
 
     private FunctionSymbol currentFunction = null;
 
+    /*
+     * Compilation target for the os::IS_* target constants, or null when
+     * the program does not import "franko/os".
+     *
+     * The driver sets this only for programs importing the os module, so
+     * a user-defined `os` namespace without that import keeps ordinary
+     * mutable globals.
+     */
+    private TargetInfo target = null;
+
+    /**
+     * Sets the compilation target for os::IS_* stamping.
+     *
+     * Call only when the program imports "franko/os" through its
+     * canonical specifier.
+     */
+    public void setTarget(TargetInfo target) {
+        this.target = target;
+    }
+
     private EntryKind entryKind = EntryKind.NONE;
     private int globalMainCount = 0;
 
@@ -454,11 +474,33 @@ public class SemanticAnalyzer {
 
                 SemanticType type = analyzeNormalType(n.type);
 
-                VariableSymbol sym = new GlobalVariableSymbol(
+                GlobalVariableSymbol sym = new GlobalVariableSymbol(
                         currentNamespaceName(),
                         n.name,
                         type
                 );
+
+                /*
+                 * Stamp the os::IS_* compile-time target constants so
+                 * every reference folds into an integer literal during
+                 * expression lowering. A non-byte declaration is an os.fr
+                 * drift error, mirroring the intrinsic signature checks.
+                 */
+                if (target != null
+                        && OsFfi.isTargetConstantName(
+                                currentNamespaceName(), n.name)) {
+                    if (!new SemanticPrimitiveType(
+                            SemanticPrimitiveKind.UINT8).equals(type)) {
+                        symbolTable.error("FFI error: 'os::"
+                                + n.name
+                                + "' must be declared as 'byte' in"
+                                + " import/franko/os.fr: os.fr drifted out"
+                                + " of sync with the compiler");
+                    } else {
+                        sym.compileTimeConstantValue =
+                                target.constantFor(n.name);
+                    }
+                }
 
                 if (symbolTable.declareGlobalVariable(sym)) {
                     globalSymbols.put(n, sym);

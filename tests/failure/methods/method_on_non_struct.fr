@@ -1,5 +1,5 @@
 // Failure fixture: methods/method_on_non_struct
-// Method calls require a struct receiver (doc 25.3).
+// Method calls require a struct receiver (doc 26.3).
 func main() -> int32_t {
     int32_t x = 1
     x.foo()

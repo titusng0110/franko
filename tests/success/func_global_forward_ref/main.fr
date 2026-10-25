@@ -3,7 +3,7 @@
 // ============================================================
 // Covers: function signatures and global variable declarations are
 // registered before function bodies are analyzed (docs 4.4, 12.11,
-// 30.4), so main can read a global variable and call a function
+// 31.4), so main can read a global variable and call a function
 // declared later in the source file.
 // ============================================================
 

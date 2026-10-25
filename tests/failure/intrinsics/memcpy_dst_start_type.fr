@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/memcpy_dst_start_type
-// Ranged memcpy (doc 20.6): nonconstant starts and counts must have
+// Ranged memcpy (doc 21.6): nonconstant starts and counts must have
 // exactly type uint32_t; an int32_t start is rejected.
 func main() -> int32_t {
     array<int32_t, 4> a;

@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Initializer Lists on Nested Dynamic Arrays
 // ============================================================
-// Covers: doc 21.8 (and example 31.7) — initializer lists assign
+// Covers: doc 22.8 (and example 32.7) — initializer lists assign
 // elements but never allocate dynamic array storage at any level;
 // the outer and inner dynamic arrays are initialized explicitly
 // first, the nested list lowers to indexed assignments, and uninit

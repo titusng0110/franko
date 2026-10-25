@@ -1,0 +1,25 @@
+// ============================================================
+// LIBRARY TEST (os/target): os::IS_* constants are compile-time 0/1
+// ============================================================
+// Covers: import "franko/os" target constants IS_LINUX, IS_WINDOWS,
+// IS_MACOS, IS_X86_64, and IS_ARM64.
+//
+// The compiler stamps exactly one of the three OS constants and
+// exactly one of the two arch constants to 1 for the compilation
+// target, and the rest to 0. Summing each group therefore yields 1 on
+// every target, which keeps this fixture's expected stdout portable
+// across the platforms the suite runs on.
+//
+// The references are compile-time constants: they fold to integer
+// literals during expression lowering, so the sums fold to 1 as well.
+// ============================================================
+
+import "franko/os"
+
+func main() -> int32_t {
+    int32_t osSum = os::IS_LINUX + os::IS_WINDOWS + os::IS_MACOS;
+    int32_t archSum = os::IS_X86_64 + os::IS_ARM64;
+    print(osSum);
+    print(archSum);
+    return 0;
+}

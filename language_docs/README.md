@@ -23,24 +23,25 @@ The cleaned section ordering is:
 13. Heap Variables and `alloc`
 14. Assignment
 15. Lvalues and Storage-Backed Expressions
-16. Operators
-17. Conditions
-18. Statements
-19. Arrays
-20. Array Intrinsics
-21. Array Initializer Lists
-22. String Literals
-23. Addresses
-24. Structs
-25. Methods
-26. `del` and Delete Checking
-27. Memory Safety Checking
-28. Type Equality
-29. Declaration Type Validity
-30. Unsupported or Restricted Features
-31. Runtime and Backend Notes
-32. Foreign Function Interface
-33. Examples
+16. Casts
+17. Operators
+18. Conditions
+19. Statements
+20. Arrays
+21. Array Intrinsics
+22. Array Initializer Lists
+23. String Literals
+24. Addresses
+25. Structs
+26. Methods
+27. `del` and Delete Checking
+28. Memory Safety Checking
+29. Type Equality
+30. Declaration Type Validity
+31. Unsupported or Restricted Features
+32. Runtime and Backend Notes
+33. Foreign Function Interface
+34. Examples
 
 ## How to rebuild one combined document
 
@@ -70,7 +71,7 @@ uv pip install regex    # used by renumber_sections.py
 
 ### Renumbering sections
 
-Section numbers are embedded in filenames (`24-structs.md`), headings
+Section numbers are embedded in filenames (`25-structs.md`), headings
 (`# 24. Structs`, `## 24.1 ...`), cross-links, and the three navigation files
 (`SUMMARY.md`, `00-title-and-toc.md`, `README.md`). Inserting or removing a
 chapter means shifting every later number. `renumber_sections.py` propagates

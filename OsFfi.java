@@ -1,3 +1,4 @@
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -42,6 +43,10 @@ import java.util.Set;
  *   os::win32::GetStdHandle(uint32_t) -> uint64_t
  *   os::win32::ReadFile(uint64_t, addr<array<byte>>, uint32_t, addr<uint32_t>) -> int32_t
  *   os::win32::WriteFile(uint64_t, addr<array<byte>>, uint32_t, addr<uint32_t>) -> int32_t
+ *
+ * Current target constants (namespace os, all byte):
+ *
+ *   IS_LINUX, IS_WINDOWS, IS_MACOS, IS_X86_64, IS_ARM64
  */
 final class OsFfi {
 
@@ -52,6 +57,25 @@ final class OsFfi {
         WIN32_READFILE,
         WIN32_WRITEFILE
     }
+
+    static final String OS_NAMESPACE = "os";
+
+    /**
+     * The os::IS_* compile-time target constants declared in os.fr.
+     *
+     * These start life as zero-initialized placeholder globals. When the
+     * program imports "franko/os", applyTargetConstants rewrites their
+     * initializers to the compilation target's 0/1 values, and
+     * SemanticAnalyzer stamps the matching symbols so every reference
+     * folds into an integer literal.
+     */
+    static final List<String> TARGET_CONSTANT_NAMES = List.of(
+            "IS_LINUX",
+            "IS_WINDOWS",
+            "IS_MACOS",
+            "IS_X86_64",
+            "IS_ARM64"
+    );
 
     static final String POSIX_NAMESPACE = "os::posix";
     static final String WIN32_NAMESPACE = "os::win32";
@@ -194,6 +218,157 @@ final class OsFfi {
                 + fn.fullSignatureString()
                 + "': only read/write in os::posix and GetStdHandle/ReadFile/WriteFile"
                 + " in os::win32 are FFI intrinsics bridged by import/franko/os.ffi.cpp";
+    }
+
+    // ============================================================
+    // Target Constants
+    // ============================================================
+
+    /**
+     * Whether a variable is one of the os::IS_* compile-time constants.
+     */
+    static boolean isTargetConstantName(String namespacePath, String name) {
+        return OS_NAMESPACE.equals(namespacePath)
+                && TARGET_CONSTANT_NAMES.contains(name);
+    }
+
+    /**
+     * Rewrites the os::IS_* placeholder initializers in place to the
+     * compilation target's 0/1 values.
+     *
+     * Must run on the import-resolved AST before desugaring, so the
+     * desugarer folds the rewritten initializers and the backend emits
+     * the constants as statically-initialized C++ globals.
+     *
+     * Only the top-level `os` namespace is touched. Every one of the five
+     * constants must be present and declared as `byte`; anything else is
+     * an "os.fr drifted out of sync with the compiler" error, mirroring
+     * the intrinsic drift errors below.
+     *
+     * Call only when the program imports "franko/os" through its
+     * canonical specifier: a user-defined `os` namespace in a program
+     * without that import is left alone.
+     */
+    static void applyTargetConstants(ASTNode program, TargetInfo target) {
+        if (!(program instanceof ProgramNode root)) {
+            return;
+        }
+
+        Set<String> found = new LinkedHashSet<>();
+        applyTargetConstantsInItems(root.topLevelItems, null, target, found);
+
+        List<String> missing = new ArrayList<>();
+
+        for (String name : TARGET_CONSTANT_NAMES) {
+            if (!found.contains(name)) {
+                missing.add(OS_NAMESPACE + "::" + name);
+            }
+        }
+
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException(
+                    "FFI error: os.fr is missing target constant(s) "
+                            + String.join(", ", missing)
+                            + ": os.fr drifted out of sync with the compiler"
+                            + " (namespace os must declare byte IS_LINUX,"
+                            + " IS_WINDOWS, IS_MACOS, IS_X86_64, and IS_ARM64)"
+            );
+        }
+    }
+
+    private static void applyTargetConstantsInItems(
+            List<ASTNode> items,
+            String parentPath,
+            TargetInfo target,
+            Set<String> found
+    ) {
+        for (ASTNode item : items) {
+            if (item instanceof NamespaceNode namespace) {
+                String fullPath = parentPath == null
+                        ? namespace.name
+                        : parentPath + "::" + namespace.name;
+                applyTargetConstantsInItems(
+                        namespace.items,
+                        fullPath,
+                        target,
+                        found
+                );
+                continue;
+            }
+
+            if (item instanceof GlobalVarDeclNode global
+                    && isTargetConstantName(parentPath, global.name)) {
+                if (!(global.type instanceof PrimitiveTypeNode primitive)
+                        || primitive.kind != PrimitiveKind.UINT8) {
+                    throw new IllegalStateException(
+                            "FFI error: '"
+                                    + OS_NAMESPACE + "::" + global.name
+                                    + "' must be declared as 'byte' in"
+                                    + " import/franko/os.fr: os.fr drifted out"
+                                    + " of sync with the compiler"
+                    );
+                }
+
+                global.constInitializer = new IntNode(
+                        target.constantFor(global.name).toString(10)
+                );
+                found.add(global.name);
+            }
+        }
+    }
+
+    /**
+     * Rejects a live call to an intrinsic that cannot run on the target.
+     *
+     * Each intrinsic surface is restricted to the targets its bridge
+     * blocks support: the win32 blocks are #error off Windows, the posix
+     * blocks are #error on Windows (there is no _read/_write fallback).
+     * Must be checked at a point where constant-dead branches have
+     * already been pruned, so a call inside a target guard such as
+     * `if os::IS_WINDOWS == 1` never reaches this check when the guard
+     * selects the other target.
+     */
+    static void checkTargetAllowed(Kind kind, TargetInfo target) {
+        if (target == null) {
+            return;
+        }
+
+        switch (kind) {
+            case POSIX_READ, POSIX_WRITE -> {
+                if (target.isWindows()) {
+                    throw new IllegalStateException(
+                            "FFI error: '"
+                                    + ffiQualifiedName(kind)
+                                    + "' is only available when targeting"
+                                    + " linux or macos (target: "
+                                    + target.canonical()
+                                    + ")"
+                    );
+                }
+            }
+            case WIN32_GETSTDHANDLE, WIN32_READFILE, WIN32_WRITEFILE -> {
+                if (!target.isWindows()) {
+                    throw new IllegalStateException(
+                            "FFI error: '"
+                                    + ffiQualifiedName(kind)
+                                    + "' is only available when targeting"
+                                    + " windows (target: "
+                                    + target.canonical()
+                                    + ")"
+                    );
+                }
+            }
+        }
+    }
+
+    private static String ffiQualifiedName(Kind kind) {
+        return switch (kind) {
+            case POSIX_READ -> "os::posix::read";
+            case POSIX_WRITE -> "os::posix::write";
+            case WIN32_GETSTDHANDLE -> "os::win32::GetStdHandle";
+            case WIN32_READFILE -> "os::win32::ReadFile";
+            case WIN32_WRITEFILE -> "os::win32::WriteFile";
+        };
     }
 
     // ============================================================

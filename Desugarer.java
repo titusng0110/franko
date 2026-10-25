@@ -1239,6 +1239,15 @@ public class Desugarer {
             );
         }
 
+        if (expr instanceof CastNode) {
+            CastNode n = (CastNode) expr;
+
+            return new CastNode(
+                n.target,
+                desugarExpr(n.expr)
+            );
+        }
+
         if (expr instanceof ArrayLiteralNode) {
             throw new RuntimeException(
                 "ArrayLiteralNode cannot be desugared as an ordinary expression"

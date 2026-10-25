@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Methods Named Like Array Intrinsics
 // ============================================================
-// Covers: doc 25.2, doc 25.3
+// Covers: doc 26.2, doc 26.3
 // Array-typed receivers dispatch to array intrinsics while
 // struct-typed receivers dispatch to methods, even when the method
 // name coincides with an intrinsic name.

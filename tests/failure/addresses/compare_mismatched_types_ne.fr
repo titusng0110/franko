@@ -1,5 +1,5 @@
 // Failure fixture: addresses/compare_mismatched_types_ne
-// Address comparison requires identical address types (docs 16.6, 23.5):
+// Address comparison requires identical address types (docs 17.6, 24.5):
 // addr<int32_t> and addr<uint8_t> are different address types, so '!='
 // rejects the comparison.
 func main() -> int32_t {

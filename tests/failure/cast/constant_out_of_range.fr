@@ -1,0 +1,8 @@
+// Failure fixture: cast/constant_out_of_range
+// Folded constant casts are validated at compile time: an
+// out-of-range constant value is an error, never a silent wraparound.
+func main() -> int32_t {
+    uint8_t c = cast<uint8_t>(300);
+    print(c);
+    return 0;
+}

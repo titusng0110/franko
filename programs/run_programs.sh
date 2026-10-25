@@ -19,6 +19,11 @@ set -Eeuo pipefail
 # A program may provide programs/<name>.args: each line is one
 # command-line argument passed verbatim to the binary.
 #
+# A program may provide programs/<name>.stdin: bytes fed to the binary
+# on stdin (carriage returns are stripped, so CRLF checkouts behave
+# like LF ones). This is what lets interactive-style programs that
+# read stdin run deterministically under the smoke test.
+#
 # Generated artifacts (.cpp, .testbin, .actual) are removed after a
 # passing case and kept for inspection after a failure.
 #
@@ -67,6 +72,7 @@ for SRC in programs/*.fr; do
     ACTUAL="$BASE.actual"
     EXPECTED="$BASE.expected"
     ARGS_FILE="$BASE.args"
+    STDIN_FILE="$BASE.stdin"
 
     echo
     echo "=== $SRC ==="
@@ -91,7 +97,7 @@ for SRC in programs/*.fr; do
     fi
 
     if ! g++ \
-        -O3 -std=c++14 -Wall -Wextra -Wpedantic -Wshadow \
+        -O3 -std=c++14 -Wall -Wextra -Wpedantic \
         -Iinclude -I"$JEM_INC" \
         "$OUT_CPP" "$JEM_LIB" \
         -pthread -ldl -static-libstdc++ -static-libgcc \
@@ -100,7 +106,18 @@ for SRC in programs/*.fr; do
         continue
     fi
 
-    if ! "$OUT_BIN" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} > "$ACTUAL" 2>&1; then
+    # Optional piped stdin: bytes from programs/<name>.stdin feed the
+    # binary when the file exists. With `set -o pipefail` the pipeline
+    # status is the binary's exit status.
+    if [[ -f "$STDIN_FILE" ]]; then
+        RUN_OK=0
+        tr -d '\r' < "$STDIN_FILE" | "$OUT_BIN" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} > "$ACTUAL" 2>&1 || RUN_OK=$?
+    else
+        RUN_OK=0
+        "$OUT_BIN" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"} > "$ACTUAL" 2>&1 || RUN_OK=$?
+    fi
+
+    if [[ "$RUN_OK" -ne 0 ]]; then
         echo "---- runtime output: ----"
         cat "$ACTUAL"
         fail "$SRC (binary exited non-zero)"

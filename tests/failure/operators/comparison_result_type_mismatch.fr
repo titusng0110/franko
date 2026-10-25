@@ -1,12 +1,10 @@
 // Failure fixture: operators/comparison_result_type_mismatch
-// Comparisons always produce uint8_t (docs 16.6, 16.9). A comparison
-// result widens to int32_t under the one-way widening rule (doc 14.1),
-// but a nonconstant int32_t never narrows back to uint8_t: widening is
-// value-preserving only, so the final assignment is still rejected.
+// Comparisons always produce uint8_t (docs 17.6, 17.9), and there are no
+// implicit numeric conversions for nonconstants (doc 31.6), so a
+// comparison result does not assign to int32_t.
 func main() -> int32_t {
     uint8_t cmp = 1 < 2
     int32_t y = cmp
-    uint8_t z = y
-    print(z)
+    print(y)
     return 0
 }

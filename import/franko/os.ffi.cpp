@@ -35,12 +35,17 @@
 //
 // Platform notes:
 //
-//   - os::posix::read/write map to ::read/::write on POSIX and to
-//     _read/_write from <io.h> on Windows, so the posix surface works on
-//     both targets. The buffer bound is checked against the array length
-//     first: count > length aborts via franko_panic, so the FFI cannot
-//     corrupt memory. A null or uninitialized buffer returns the stub
-//     failure value (-1) instead of crashing.
+//   - os::posix::read/write map to ::read/::write and are POSIX-only.
+//     On Windows the block is a #error, mirroring the win32 blocks
+//     below: there is no _read/_write fallback. The Franko compiler
+//     likewise rejects a live posix call when the target is Windows,
+//     so portable programs must guard it with os::IS_WINDOWS (the
+//     untaken branch is pruned before splicing, which is why such
+//     programs still compile on both targets). The buffer bound is
+//     checked against the array length first: count > length aborts
+//     via franko_panic, so the FFI cannot corrupt memory. A null or
+//     uninitialized buffer returns the stub failure value (-1) instead
+//     of crashing.
 //   - os::win32::* are the Win32 File API (fileapi.h: ReadFile/WriteFile;
 //     processenv.h: GetStdHandle; both arrive via <windows.h>, which is the
 //     only portable way to include them). lpOverlapped is dropped: the
@@ -57,7 +62,6 @@
 #    define NOMINMAX
 #  endif
 #  include <windows.h>
-#  include <io.h>
 #else
 #  include <unistd.h>
 #endif
@@ -75,7 +79,7 @@ int64_t FUNC_read_HASH_10a3784c(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* V
         franko_panic("os::posix::read: count exceeds buffer length");
     }
 #ifdef _WIN32
-    return static_cast<int64_t>(_read(VAR_fd, VAR_buf->data, static_cast<unsigned int>(VAR_count)));
+#error "os::posix::read is only available when compiling for a non-Windows target (linux, macos)"
 #else
     return static_cast<int64_t>(::read(VAR_fd, VAR_buf->data, static_cast<size_t>(VAR_count)));
 #endif
@@ -96,7 +100,7 @@ int64_t FUNC_write_HASH_10a3784c(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* 
         franko_panic("os::posix::write: count exceeds buffer length");
     }
 #ifdef _WIN32
-    return static_cast<int64_t>(_write(VAR_fd, VAR_buf->data, static_cast<unsigned int>(VAR_count)));
+#error "os::posix::write is only available when compiling for a non-Windows target (linux, macos)"
 #else
     return static_cast<int64_t>(::write(VAR_fd, VAR_buf->data, static_cast<size_t>(VAR_count)));
 #endif

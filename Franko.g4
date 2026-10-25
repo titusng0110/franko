@@ -593,6 +593,7 @@ primary
     | qualifiedName
     | getAddrExpr
     | derefExpr
+    | castExpr
     | LPAREN expr RPAREN
     ;
 
@@ -853,6 +854,24 @@ derefExpr
     : DEREF LPAREN expr RPAREN
     ;
 
+// Explicit integer conversion. The target must be one of the eight
+// primitive integer types; arrays, addresses, structs, and void are
+// rejected here at parse time.
+castExpr
+    : CAST LT primitiveType GT LPAREN expr RPAREN
+    ;
+
+primitiveType
+    : INT8_T
+    | INT16_T
+    | INT32_T
+    | INT64_T
+    | UINT8_T
+    | UINT16_T
+    | UINT32_T
+    | UINT64_T
+    ;
+
 // ---------- LITERALS ----------
 
 integerLiteral
@@ -959,6 +978,7 @@ FOR     : 'for' ;
 ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
 DEREF   : 'deref' ;
+CAST    : 'cast' ;
 SELF    : 'self' ;
 NULL    : 'null' ;
 

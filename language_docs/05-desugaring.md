@@ -44,7 +44,7 @@ alloc array<int> arr2;
 arr2(20);
 ```
 
-The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](20-array-intrinsics.md).
+The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](21-array-intrinsics.md).
 
 ## 5.3 Array Initializer List Desugaring
 
@@ -80,7 +80,7 @@ s = [65, 66, 67];
 
 and is then lowered to indexed byte assignments. No null terminator is added.
 
-String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](22-string-literals.md).
+String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](23-string-literals.md).
 
 ## 5.5 `ndarray` Type Desugaring
 
@@ -96,7 +96,7 @@ desugars to:
 array<array<array<byte, 30>, 20>, 12>
 ```
 
-so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](19-arrays.md).
+so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](20-arrays.md).
 
 ## 5.6 Braceless Control-Flow Bodies
 
@@ -116,7 +116,7 @@ while (i < 10) { i = i + 1; }
 for (; i < 10; i = i + 1) { print(i); }
 ```
 
-This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](18-statements.md).
+This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
 
 ## 5.7 For Loop Desugaring
 
@@ -145,7 +145,7 @@ The whole loop becomes a block, so a loop variable declared in `init` is scoped 
 
 The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` is appended to the end of the loop body so it runs on every iteration, including the last. Franko has no `break` or `continue`, so this lowering is exact.
 
-The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](18-statements.md).
+The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](19-statements.md).
 
 ## 5.8 Inferred Static Array Sizes (`?`)
 
@@ -181,7 +181,7 @@ Inference rules:
 - an empty initializer list cannot infer a size;
 - without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
 
-Misplaced `?` (parameters, return types, struct fields, globals, addresses, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](19-arrays.md) and [Array Initializer Lists](21-array-initializer-lists.md).
+Misplaced `?` (parameters, return types, struct fields, globals, addresses, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
 
 ## 5.9 Constant Expression Evaluation
 

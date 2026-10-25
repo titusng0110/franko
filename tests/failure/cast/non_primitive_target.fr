@@ -1,0 +1,10 @@
+// Failure fixture: cast/non_primitive_target
+// The cast target must be one of the eight primitive integer types.
+// Addresses, arrays, structs, and void are rejected at parse time by
+// the primitiveType rule.
+func main() -> int32_t {
+    int32_t x = 5;
+    int32_t y = cast<addr<int32_t>>(x);
+    print(y);
+    return 0;
+}

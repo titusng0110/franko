@@ -92,7 +92,7 @@ echo "Generated C++: $CPP_OUT"
 echo "Binary output: $BIN_OUT"
 echo
 
-run java -cp "$ANTLR_CP:$CLS_DIR:$GEN_DIR" Main "$SRC" -o "$CPP_OUT" -p "$ROOT/import"
+run java -cp "$ANTLR_CP:$CLS_DIR:$GEN_DIR" Main "$SRC" -o "$CPP_OUT" -p "$ROOT/import" --target linux-x86_64
 echo
 
 run g++ \

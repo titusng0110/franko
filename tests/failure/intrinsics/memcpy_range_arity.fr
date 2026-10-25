@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/memcpy_range_arity
-// The ranged memcpy form (doc 20.6) takes exactly four arguments
+// The ranged memcpy form (doc 21.6) takes exactly four arguments
 // (source, dstStart, srcStart, count); three arguments are rejected.
 func main() -> int32_t {
     array<int32_t, 4> a;

@@ -1,5 +1,5 @@
 // Failure fixture: intrinsics/resize_arity_two
-// resize (doc 20.2) takes exactly one argument; two arguments are rejected.
+// resize (doc 21.2) takes exactly one argument; two arguments are rejected.
 func main() -> int32_t {
     array<int32_t> xs;
     xs.resize(1, 2);

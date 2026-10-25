@@ -28,7 +28,7 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable; or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is address-only: pass `addr<X>` and `getaddr(s)` instead. See [Structs](24-structs.md).
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is address-only: pass `addr<X>` and `getaddr(s)` instead. See [Structs](25-structs.md).
 
 Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
 
@@ -58,9 +58,8 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the parameter type.
-One-way integer widening does not apply to call arguments: a narrower
-variable never converts to a wider parameter implicitly (see
-[Assignment](14-assignment.md)). Widen into a local first.
+There are no implicit conversions: pass cast<T>(x) explicitly to move a
+value across integer widths (see [Casts](16-casts.md)).
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
 
@@ -78,7 +77,7 @@ func f() -> int32_t {
 f;    // invalid: Function name 'f' cannot be used as a value
 ```
 
-In a call position, `name(...)` resolves to a function even when a non-array variable with the same name is in scope. The one exception is a dynamic array variable: `xs(10)` on a dynamic array is array `init` shorthand, not a function call. See [Array Intrinsics](20-array-intrinsics.md).
+In a call position, `name(...)` resolves to a function even when a non-array variable with the same name is in scope. The one exception is a dynamic array variable: `xs(10)` on a dynamic array is array `init` shorthand, not a function call. See [Array Intrinsics](21-array-intrinsics.md).
 
 ## 12.8 Function Call Expressions
 
@@ -101,7 +100,7 @@ A function return type must be either:
 - `void`;
 - a primitive integer type;
 - an address type, `addr<T>`; or
-- a struct type whose fields are all assignable value types, recursively (see [Structs](24-structs.md)).
+- a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)).
 
 Arrays cannot currently be returned directly.
 
@@ -109,4 +108,4 @@ Arrays cannot currently be returned directly.
 
 Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
 
-Struct methods follow the same signature, overload, and return rules with an explicit `addr<X> self` first parameter; see [Methods](25-methods.md).
+Struct methods follow the same signature, overload, and return rules with an explicit `addr<X> self` first parameter; see [Methods](26-methods.md).

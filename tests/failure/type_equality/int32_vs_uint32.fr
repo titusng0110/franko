@@ -1,7 +1,7 @@
 // Failure fixture: type_equality/int32_vs_uint32
 // Assigning a nonconstant int32_t variable to a uint32_t variable violates
-// exact primitive type equality (int32_t != uint32_t, doc 28.1); signedness
-// differences are not implicit conversions (doc 30.6).
+// exact primitive type equality (int32_t != uint32_t, doc 29.1); signedness
+// differences are not implicit conversions (doc 31.6).
 
 func main() -> int32_t {
     int32_t a = 5;

@@ -1,5 +1,5 @@
 // Failure fixture: structs/field_default_out_of_range
-// A folded field default must fit the field's primitive type (doc 24.3):
+// A folded field default must fit the field's primitive type (doc 25.3):
 // int8_t x = 300 is out of range.
 struct X {
     int8_t x = 300

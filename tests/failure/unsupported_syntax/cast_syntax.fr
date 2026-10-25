@@ -1,7 +1,8 @@
 // Failure fixture: unsupported_syntax/cast_syntax
-// Cast syntax `(int32_t)x` does not exist in the grammar; there is no
-// explicit conversion operator, and fluid integer constants are the only
-// cross-width mechanism (doc 30.17).
+// C-style cast syntax `(int32_t)x` does not exist in the grammar.
+// Explicit conversions use the cast<T>(expr) intrinsic (doc 17);
+// fluid integer constants still convert implicitly when they fit
+// (doc 31.17).
 
 func main() -> int32_t {
     int32_t x = 65;

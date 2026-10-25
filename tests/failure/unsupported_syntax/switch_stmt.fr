@@ -1,6 +1,6 @@
 // Failure fixture: unsupported_syntax/switch_stmt
 // There is no switch statement in the grammar; only if, while, and for
-// control flow is implemented (doc 30.15).
+// control flow is implemented (doc 31.15).
 
 func main() -> int32_t {
     int32_t x = 2;

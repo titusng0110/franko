@@ -1,7 +1,7 @@
 // ============================================================
 // SPEC TEST: Array Elements as Addressable Lvalues
 // ============================================================
-// Covers: array elements are storage-backed lvalues (docs 15, 19.5),
+// Covers: array elements are storage-backed lvalues (docs 15, 20.5),
 // so getaddr(xs[0]) is valid and yields addr<T> for the element type;
 // nested array elements are addressable when each hop is
 // storage-backed; dynamic array elements are addressable too, and the

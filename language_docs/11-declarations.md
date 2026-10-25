@@ -108,7 +108,7 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **address variables are the exception: an `addr<T>` declaration is guaranteed null-initialized** (see [Addresses](23-addresses.md));
+- **address variables are the exception: an `addr<T>` declaration is guaranteed null-initialized** (see [Addresses](24-addresses.md));
 - heap variables (`alloc`) are allocated and default-constructed, so they follow the same rules as above, except that the storage of an `alloc`'d address is also null-initialized.
 
 There is no implicit zero-initialization for locals other than addresses. Use `init_zero` for zeroed dynamic array storage.
@@ -129,4 +129,4 @@ struct X {
 
 `alloc` is not valid for struct fields, field defaults must be constant expressions on primitive fields only, and duplicate field names are rejected.
 
-The complete struct reference — field rules, by-value cycles, assignability, member access, globals, and heap structs — is in [Structs](24-structs.md).
+The complete struct reference — field rules, by-value cycles, assignability, member access, globals, and heap structs — is in [Structs](25-structs.md).

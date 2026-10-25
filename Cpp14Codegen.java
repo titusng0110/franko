@@ -168,6 +168,18 @@ public class Cpp14Codegen {
     private final String osFfiBridgeText;
 
     /*
+     * Compilation target for the os::IS_* constants, or null when the
+     * program does not import "franko/os".
+     *
+     * The target drives two backend behaviors: constant-dead `if`
+     * branches are pruned before emission (so wrong-target intrinsic
+     * calls inside them are never emitted or bridged), and live calls
+     * to intrinsics unavailable on the target are rejected here instead
+     * of failing later at the C++ stage.
+     */
+    private final TargetInfo target;
+
+    /*
      * Intrinsic kinds actually called by the program, in first-call order.
      * Populated during emission (emitFunctionCall) and consumed by
      * generate() after the whole program is emitted.
@@ -179,7 +191,12 @@ public class Cpp14Codegen {
     }
 
     public Cpp14Codegen(String osFfiBridgeText) {
+        this(osFfiBridgeText, null);
+    }
+
+    public Cpp14Codegen(String osFfiBridgeText, TargetInfo target) {
         this.osFfiBridgeText = osFfiBridgeText;
+        this.target = target;
     }
 
     /*
@@ -1100,6 +1117,28 @@ public class Cpp14Codegen {
     }
 
     private void emitIf(SemanticIfNode node) {
+        /*
+         * Constant-dead branches are pruned before emission: a condition
+         * that folded (e.g. `os::IS_WINDOWS == 1`) emits only the taken
+         * branch. Besides the smaller output, this keeps calls inside
+         * the dead branch out of usedOsFfiKinds, so the bridge never
+         * splices a wrong-target intrinsic block (whose ffi.cpp body is
+         * a compile-time #error on this target).
+         *
+         * Both branches are still fully checked by the earlier legality
+         * and memory-safety passes; pruning only affects emission.
+         */
+        if (node.condition.isConstant()
+                && node.condition.constantValue != null) {
+            if (!node.condition.constantValue.equals(BigInteger.ZERO)) {
+                emitStmt(node.thenBranch);
+            } else if (node.elseBranch != null) {
+                emitStmt(node.elseBranch);
+            }
+
+            return;
+        }
+
         emitLine("if (" + emitExpr(node.condition) + ")");
         emitControlledStmt(node.thenBranch);
 
@@ -1239,6 +1278,10 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticDerefNode deref) {
             return emitDeref(deref);
+        }
+
+        if (node instanceof SemanticCastExprNode cast) {
+            return emitCast(cast);
         }
 
         if (node instanceof SemanticMemberAccessNode member) {
@@ -1387,6 +1430,13 @@ public class Cpp14Codegen {
             OsFfi.Kind ffiKind = OsFfi.kindOf(fn);
 
             if (ffiKind != null) {
+                /*
+                 * Reject live calls to intrinsics unavailable on the
+                 * target. Constant-dead branches were pruned before any
+                 * call is emitted, so this only fires for calls the
+                 * program can actually reach.
+                 */
+                OsFfi.checkTargetAllowed(ffiKind, target);
                 usedOsFfiKinds.add(ffiKind);
             }
         }
@@ -1595,6 +1645,37 @@ public class Cpp14Codegen {
          * Franko deref(p) -> C++ (*p)
          */
         return "(*" + emitExpr(node.expr) + ")";
+    }
+
+    private String emitCast(SemanticCastExprNode node) {
+        /*
+         * Folded constant casts emit their validated value directly,
+         * exactly like other folded constant expressions: the checker
+         * has already rejected out-of-range values, so no runtime
+         * check is needed.
+         */
+        if (node.isConstant() && node.constantValue != null) {
+            return emitBigIntegerLiteral(node.constantValue);
+        }
+
+        String raw = emitExpr(node.expr);
+
+        if (!node.checked) {
+            /*
+             * Identity and value-preserving widening: plain static_cast.
+             *
+             * The identity case cannot normally reach here (the analyzer
+             * returns same-type operands unchanged), but a static_cast is
+             * still correct if it ever does.
+             */
+            return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
+        }
+
+        /*
+         * Narrowing and signedness-changing casts: runtime-checked
+         * franko_safe_cast, which throws on out-of-range values.
+         */
+        return "franko_safe_cast<" + emitType(node.type) + ">(" + raw + ")";
     }
 
     // ============================================================

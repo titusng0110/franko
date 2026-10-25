@@ -347,7 +347,7 @@ public class DeclarationChecker {
         String where
     ) {
         if (field.type instanceof SemanticPrimitiveType primitive) {
-            if (!types.fitsBigIntegerToPrimitive(
+            if (!TypeChecker.fitsBigIntegerToPrimitive(
                     field.foldedDefault,
                     primitive.kind
             )) {
@@ -372,7 +372,7 @@ public class DeclarationChecker {
      */
     private void validateGlobalConstInitializer(SemanticVarDeclNode node) {
         if (node.symbol.type instanceof SemanticPrimitiveType primitive) {
-            if (!types.fitsBigIntegerToPrimitive(
+            if (!TypeChecker.fitsBigIntegerToPrimitive(
                     node.foldedConstInitializer,
                     primitive.kind
             )) {
@@ -414,7 +414,7 @@ public class DeclarationChecker {
                 return;
             }
 
-            if (!types.fitsBigIntegerToPrimitive(
+            if (!TypeChecker.fitsBigIntegerToPrimitive(
                 size,
                 SemanticPrimitiveKind.UINT32
             )) {

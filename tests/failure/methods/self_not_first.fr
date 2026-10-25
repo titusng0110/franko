@@ -1,5 +1,5 @@
 // Failure fixture: methods/self_not_first
-// `self` must be the first parameter (doc 25.2).
+// `self` must be the first parameter (doc 26.2).
 struct X {
     int32_t y = 0
     func bad(int32_t v, addr<X> self) -> void {

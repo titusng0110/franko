@@ -663,6 +663,16 @@ class DerefNode extends ASTNode {
     }
 }
 
+class CastNode extends ASTNode {
+    PrimitiveKind target;
+    ASTNode expr;
+
+    CastNode(PrimitiveKind target, ASTNode expr) {
+        this.target = target;
+        this.expr = expr;
+    }
+}
+
 // ============================================================
 // Null literal
 // ============================================================
