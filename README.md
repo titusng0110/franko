@@ -183,6 +183,27 @@ Runs all checker and runtime cases:
 .\tests\run_specs_tests.ps1
 ```
 
+### Library tests
+
+Tests the importable standard-library modules in `library_tests/`
+(`tests/` covers the language itself and never imports library modules):
+
+- `library_tests/<module>/<suite>/success/` programs must compile, run, and match `.expected`;
+- `library_tests/<module>/<suite>/failure/` programs must be rejected by the compiler;
+- `library_tests/<module>/<suite>/runtime/` programs must compile, then abort at run time.
+
+Suites named `win32` run on Windows only and are skipped elsewhere.
+Optional `main.args` feeds command-line arguments and `main.stdin`
+feeds stdin to the test binary.
+
+```bash
+./library_tests/run_library_tests.sh
+```
+
+```powershell
+.\library_tests\run_library_tests.ps1
+```
+
 ***
 
 ## Clean Generated Outputs

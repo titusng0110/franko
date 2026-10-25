@@ -1,0 +1,31 @@
+// ============================================================
+// LIBRARY TEST (os/posix): read from stdin
+// ============================================================
+// Covers: os::posix::read(fd, addr<array<byte>>, count) with stdin
+// fed from main.stdin ("ABC\n"). Reads up to 8 bytes, prints the
+// count and the first three bytes, then writes those three bytes
+// back to stdout and prints that count.
+//
+// Raw fd writes bypass the std::cout buffer that print uses, so the
+// echoed "ABC" reaches the output before the buffered print lines:
+// stdout is exactly "ABC4\n65\n66\n67\n3\n" on every platform.
+// ============================================================
+
+import "franko/os"
+
+func main() -> int32_t {
+    array<byte> buf;
+    buf.init(8);
+    buf.memset(0);
+    int64_t n = os::posix::read(os::posix::STDIN_FILENO, getaddr(buf), 8);
+    print(n);
+    uint32_t i = 0;
+    while (i < 3) {
+        print(buf[i]);
+        i = i + 1;
+    }
+    int64_t m = os::posix::write(1, getaddr(buf), 3);
+    print(m);
+    buf.uninit();
+    return 0;
+}

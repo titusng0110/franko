@@ -1,0 +1,66 @@
+// ============================================================
+// SPEC TEST: One-Way Integer Widening
+// ============================================================
+// Covers: value-preserving widening in assignment and declaration
+// initializer positions (doc 14.1):
+//
+//   - strictly wider, same signedness (uint8->uint16->uint32->uint64,
+//     int8->int16->int32->int64);
+//   - unsigned to signed of strictly greater width
+//     (uint8->int16, uint16->int32, uint32->int64).
+//
+// Calls, returns, and operators keep exact type equality.
+// ============================================================
+
+func main() -> int32_t {
+    // Same-signedness widening, assignment form.
+    uint8_t a = 200;
+    uint16_t b;
+    b = a;
+    print(b);
+    uint16_t c = 300;
+    uint32_t d;
+    d = c;
+    print(d);
+    uint32_t e = 70000;
+    uint64_t f;
+    f = e;
+    print(f);
+
+    int8_t g = -100;
+    int16_t h;
+    h = g;
+    print(h);
+    int16_t i = -20000;
+    int32_t j;
+    j = i;
+    print(j);
+    int32_t k = -2000000000;
+    int64_t l;
+    l = k;
+    print(l);
+
+    // Unsigned-to-signed widening.
+    uint8_t m = 250;
+    int16_t n;
+    n = m;
+    print(n);
+    uint16_t o = 60000;
+    int32_t p;
+    p = o;
+    print(p);
+    uint32_t q = 3000000000;
+    int64_t r;
+    r = q;
+    print(r);
+
+    // Declaration initializer form (desugars to assignment).
+    uint16_t s = a;
+    print(s);
+    int64_t t = k;
+    print(t);
+    int32_t u = o;
+    print(u);
+
+    return 0;
+}

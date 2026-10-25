@@ -165,8 +165,46 @@ public class Main {
 
         System.out.println("All checks passed.");
 
+        // ----- OS FFI bridge -----
+        String osFfiBridgeText = null;
+
+        if (importResolver.importedBuiltinModules().contains("franko/os")) {
+            Path osModuleFile = importResolver.frankoOsModuleFile();
+
+            if (osModuleFile == null) {
+                throw new RuntimeException(
+                    "Internal compiler error: 'franko/os' was imported but its module file was not recorded"
+                );
+            }
+
+            Path ffiBridgeFile = osModuleFile
+                    .toAbsolutePath()
+                    .getParent()
+                    .resolve("os.ffi.cpp")
+                    .normalize();
+
+            if (!Files.isRegularFile(ffiBridgeFile)) {
+                throw new RuntimeException(
+                    "FFI error: 'franko/os' was imported but the FFI bridge file is missing: '"
+                            + ffiBridgeFile
+                            + "' (expected next to the resolved os.fr module)"
+                );
+            }
+
+            osFfiBridgeText = Files.readString(ffiBridgeFile, StandardCharsets.UTF_8);
+
+            /*
+             * Sanity check, mirroring the entry-point template check below:
+             * every os intrinsic declared in the program must have its
+             * mangled definition present in ffi.cpp. This catches a bridge
+             * that drifted out of sync with os.fr at Franko-compile time
+             * instead of C++ link time.
+             */
+            OsFfi.verifyBridge(semaAST, osFfiBridgeText);
+        }
+
         // ----- Generate C++ body -----
-        Cpp14Codegen codegen = new Cpp14Codegen();
+        Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText);
         String generatedBody = codegen.generate(semaAST);
 
         // ----- Select template -----

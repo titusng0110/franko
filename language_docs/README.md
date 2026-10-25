@@ -39,7 +39,8 @@ The cleaned section ordering is:
 29. Declaration Type Validity
 30. Unsupported or Restricted Features
 31. Runtime and Backend Notes
-32. Examples
+32. Foreign Function Interface
+33. Examples
 
 ## How to rebuild one combined document
 

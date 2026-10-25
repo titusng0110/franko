@@ -45,9 +45,12 @@ Only integer primitives are supported.
 
 Boolean results use `uint8_t`.
 
-## 30.6 No Implicit Numeric Conversions for Nonconstants
+## 30.6 No Implicit Numeric Conversions for Nonconstants (Except Widening Assignments)
 
-Nonconstant numeric assignments require exact type equality.
+Nonconstant numeric call arguments, returns, and operator operands
+require exact type equality. The only exception is one-way
+value-preserving integer widening in assignment positions (see
+[Assignment](14-assignment.md)).
 
 ## 30.7 Arrays Are Not Assignable as Values
 
@@ -122,7 +125,7 @@ Executable statements are invalid at global scope.
 
 The following forms do not exist in the grammar:
 
-- cast syntax (there is no explicit conversion operator; fluid integer constants are the only cross-width mechanism);
+- cast syntax (there is no explicit conversion operator; fluid integer constants and one-way widening assignments are the only cross-width mechanisms);
 - compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
 - increment and decrement operators (`++`, `--`);
 - the ternary conditional operator (`?:`);

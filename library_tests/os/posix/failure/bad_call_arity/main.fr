@@ -1,0 +1,13 @@
+// Failure fixture: os/posix/bad_call_arity
+// os::posix::write takes exactly (int32_t, addr<array<byte>>, uint64_t);
+// calling it with two arguments matches no overload.
+import "franko/os"
+
+func main() -> int32_t {
+    array<byte> msg;
+    msg.init(5);
+    msg = "hello";
+    os::posix::write(1, getaddr(msg));
+    msg.uninit();
+    return 0;
+}

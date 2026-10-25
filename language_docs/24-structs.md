@@ -14,7 +14,7 @@ p.y = 4;
 print(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](32-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](33-examples.md).
 
 ## 24.1 Declaring a Struct
 

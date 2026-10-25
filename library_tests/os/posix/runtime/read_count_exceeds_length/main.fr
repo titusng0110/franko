@@ -1,0 +1,15 @@
+// Runtime fixture: os/posix/read_count_exceeds_length
+// A read count larger than the buffer length aborts via franko_panic
+// before the syscall runs (so this never blocks on stdin); the binary
+// must exit non-zero. Also covers splicing the posix.read bridge block.
+import "franko/os"
+
+func main() -> int32_t {
+    array<byte> buf;
+    buf.init(4);
+    buf.memset(0);
+    int64_t n = os::posix::read(0, getaddr(buf), 99);
+    print(n);
+    buf.uninit();
+    return 0;
+}

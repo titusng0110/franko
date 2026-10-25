@@ -181,7 +181,8 @@ public class StatementChecker {
         types.ensureAssignable(
                 node.target.type,
                 node.value,
-                "Invalid assignment"
+                "Invalid assignment",
+                true
         );
     }
 

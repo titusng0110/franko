@@ -50,4 +50,5 @@ It documents both intended language behavior and important current implementatio
 29. [Declaration Type Validity](29-declaration-type-validity.md)
 30. [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md)
 31. [Runtime and Backend Notes](31-runtime-and-backend-notes.md)
-32. [Examples](32-examples.md)
+32. [Foreign Function Interface](32-foreign-function-interface.md)
+33. [Examples](33-examples.md)

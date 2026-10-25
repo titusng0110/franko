@@ -99,3 +99,12 @@ An import is resolved at compile time:
 - an imported file's own imports are resolved relative to that file's directory (after first consulting the search directory).
 
 Because every symbol lives in one global namespace, duplicate declarations across files are reported like duplicate declarations within one file.
+
+### Built-in Modules
+
+Importing certain modules through their canonical specifier (currently
+only `import "franko/os"`) additionally activates compiler FFI
+behavior: declared functions are given C++ definitions from a bridge
+file instead of their Franko bodies. See [Foreign Function
+Interface](32-foreign-function-interface.md) for the activation rule,
+the bridge layout, and the verification checks.

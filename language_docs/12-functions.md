@@ -58,6 +58,9 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the parameter type.
+One-way integer widening does not apply to call arguments: a narrower
+variable never converts to a wider parameter implicitly (see
+[Assignment](14-assignment.md)). Widen into a local first.
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
 

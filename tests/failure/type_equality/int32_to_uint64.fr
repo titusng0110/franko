@@ -1,0 +1,11 @@
+// Failure fixture: type_equality/int32_to_uint64
+// One-way widening never goes signed-to-unsigned (doc 14.1): a
+// nonconstant int32_t variable does not assign to uint64_t even though
+// the target is wider.
+
+func main() -> int32_t {
+    int32_t a = -5;
+    uint64_t b;
+    b = a;
+    return 0;
+}

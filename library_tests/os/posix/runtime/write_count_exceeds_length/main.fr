@@ -1,0 +1,14 @@
+// Runtime fixture: os/posix/write_count_exceeds_length
+// A count larger than the buffer length aborts via franko_panic;
+// the binary must exit non-zero.
+import "franko/os"
+
+func main() -> int32_t {
+    array<byte> msg;
+    msg.init(2);
+    msg = "hi";
+    int64_t n = os::posix::write(1, getaddr(msg), 99);
+    print(n);
+    msg.uninit();
+    return 0;
+}

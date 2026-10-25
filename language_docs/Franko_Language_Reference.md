@@ -50,7 +50,8 @@ It documents both intended language behavior and important current implementatio
 29. [Declaration Type Validity](29-declaration-type-validity.md)
 30. [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md)
 31. [Runtime and Backend Notes](31-runtime-and-backend-notes.md)
-32. [Examples](32-examples.md)
+32. [Foreign Function Interface](32-foreign-function-interface.md)
+33. [Examples](33-examples.md)
 
 ---
 
@@ -109,7 +110,7 @@ Franko currently does **not** implement:
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
-- implicit numeric conversions except for fluid integer constants.
+- implicit numeric conversions except for fluid integer constants and one-way widening assignments.
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
@@ -221,6 +222,15 @@ An import is resolved at compile time:
 - an imported file's own imports are resolved relative to that file's directory (after first consulting the search directory).
 
 Because every symbol lives in one global namespace, duplicate declarations across files are reported like duplicate declarations within one file.
+
+### Built-in Modules
+
+Importing certain modules through their canonical specifier (currently
+only `import "franko/os"`) additionally activates compiler FFI
+behavior: declared functions are given C++ definitions from a bridge
+file instead of their Franko bodies. See [Foreign Function
+Interface](32-foreign-function-interface.md) for the activation rule,
+the bridge layout, and the verification checks.
 
 ---
 
@@ -675,7 +685,15 @@ Franko supports fixed-width signed and unsigned integer types.
 
 No other aliases (such as `char` or `bool`) are currently defined.
 
-## 7.2 Boolean-Like Values
+## 7.2 One-Way Widening
+
+In assignment positions, an integer variable of a narrower type may be
+assigned to a wider target when the conversion is value-preserving
+(same-signedness widening, or unsigned-to-signed widening). See
+[Assignment](14-assignment.md) for the exact rule. Call arguments,
+returns, and operator operands still require exact type equality.
+
+## 7.3 Boolean-Like Values
 
 Franko currently does not have a separate `bool` type.
 
@@ -998,6 +1016,9 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the parameter type.
+One-way integer widening does not apply to call arguments: a narrower
+variable never converts to a wider parameter implicitly (see
+[Assignment](14-assignment.md)). Widen into a local first.
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
 
@@ -1110,8 +1131,58 @@ Valid assignment targets include:
 
 A primitive integer variable may be assigned:
 
-1. a nonconstant expression of exactly the same primitive type; or
-2. a constant expression that fits the target type.
+1. a nonconstant expression of exactly the same primitive type;
+2. a nonconstant expression of a narrower primitive integer type when the
+   conversion is value-preserving (one-way widening, see below); or
+3. a constant expression that fits the target type.
+
+### 14.1.1 One-Way Integer Widening
+
+In assignment positions only (plain assignment, which also covers
+declaration initializers after desugaring), a nonconstant integer source
+converts to a primitive integer target when every value of the source
+type is representable in the target type:
+
+- strictly wider, same signedness:
+  `uint8_t -> uint16_t -> uint32_t -> uint64_t` and
+  `int8_t -> int16_t -> int32_t -> int64_t`;
+- unsigned to signed of strictly greater width:
+  `uint8_t -> int16_t`, `uint16_t -> int32_t`, `uint32_t -> int64_t`.
+
+Everything else stays an error: narrowing, same-width signedness
+changes (`uint8_t -> int8_t`, `uint64_t -> int64_t`), and
+signed-to-unsigned (`int32_t -> uint64_t`).
+
+```franko
+uint8_t a = 200;
+uint16_t b;
+b = a;          // valid: widening
+uint16_t c = a; // valid: declaration initializers desugar to assignment
+
+int64_t big = 5;
+int32_t small;
+small = big;    // invalid: narrowing
+```
+
+Widening never applies to function call arguments, return statements,
+or operator operands, which keep exact type equality (see
+[Functions](12-functions.md)). Franko has no cast syntax, so a value
+that must cross widths on the way into a call is widened into a
+temporary first:
+
+```franko
+func f(int64_t x) -> int64_t {
+    return x;
+}
+
+func main() -> int32_t {
+    int32_t v = 5;
+    int64_t w = v;
+    int64_t r = f(w);
+    print(r);
+    return 0;
+}
+```
 
 ## 14.2 Address Assignment
 
@@ -2607,7 +2678,7 @@ p.y = 4;
 print(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](32-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](33-examples.md).
 
 ## 24.1 Declaring a Struct
 
@@ -3264,6 +3335,19 @@ X == X
 
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](24-structs.md) for the complete struct reference.
 
+## 28.7 One-Way Integer Widening (Assignment Only)
+
+Type equality itself is unchanged: `uint8_t != uint16_t` as types. But
+assignment positions accept a value-preserving widening conversion as
+described in [Assignment](14-assignment.md): a nonconstant integer
+expression may be assigned to a strictly wider same-signedness target,
+or from an unsigned source to a strictly wider signed target.
+
+Widening is not a type relation used anywhere else: overload
+resolution, call argument checking, return checking, and operator
+checking all still require exact primitive type equality (or a fitting
+constant).
+
 ---
 
 # 29. Declaration Type Validity
@@ -3359,9 +3443,12 @@ Only integer primitives are supported.
 
 Boolean results use `uint8_t`.
 
-## 30.6 No Implicit Numeric Conversions for Nonconstants
+## 30.6 No Implicit Numeric Conversions for Nonconstants (Except Widening Assignments)
 
-Nonconstant numeric assignments require exact type equality.
+Nonconstant numeric call arguments, returns, and operator operands
+require exact type equality. The only exception is one-way
+value-preserving integer widening in assignment positions (see
+[Assignment](14-assignment.md)).
 
 ## 30.7 Arrays Are Not Assignable as Values
 
@@ -3436,7 +3523,7 @@ Executable statements are invalid at global scope.
 
 The following forms do not exist in the grammar:
 
-- cast syntax (there is no explicit conversion operator; fluid integer constants are the only cross-width mechanism);
+- cast syntax (there is no explicit conversion operator; fluid integer constants and one-way widening assignments are the only cross-width mechanisms);
 - compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
 - increment and decrement operators (`++`, `--`);
 - the ternary conditional operator (`?:`);
@@ -3600,11 +3687,131 @@ The argv conversion follows these rules:
 
 ---
 
-# 32. Examples
+# 32. Foreign Function Interface
+
+Franko has no general native-call syntax. Operating-system access goes
+through FFI intrinsics: functions that are *declared* in Franko and
+*defined* in C++ by a bridge file the compiler splices into the
+generated program. The currently available FFI module is `franko/os`;
+its API is documented separately in `library_docs/os.md`. This chapter
+describes the mechanics: how the compiler detects the module, where
+the C++ lives, and which mistakes fail loudly instead of miscompiling.
+
+## 32.1 Activation
+
+FFI behavior switches on only when the program imports the module
+through its canonical specifier:
+
+```franko
+import "franko/os"
+```
+
+`import "franko/os.fr"` normalizes to the same path text and activates
+the bridge identically. Any other path that happens to reach the same
+file (for example a `./` or `../` relative import) keeps it an
+ordinary Franko file: the stub bodies compile as written and no bridge
+is loaded. See [Source Files](02-source-files.md) for the general
+import path rules.
+
+## 32.2 Declaration File
+
+`import/franko/os.fr` declares the module API with stub bodies only.
+Every compiler phase between import resolution and code generation
+runs unchanged: the declarations parse, desugar, type-check, and pass
+legality and memory safety checking exactly like user-written Franko,
+and calls resolve through the ordinary overload rules. The stubs
+return failure values (`-1` for posix calls, `0` for win32 calls), so
+if the bridge ever fails to attach, the program reports failure
+instead of silently succeeding.
+
+## 32.3 Bridge File
+
+The real definitions live in `import/franko/os.ffi.cpp`, next to the
+module. A `.cpp` file can sit there safely because imports only allow
+`.fr` files: the bridge can never be picked up as a module itself.
+
+The file is split into marker-delimited splice units:
+
+```text
+// @@franko-ffi:common               platform includes (windows.h / unistd.h)
+// @@franko-ffi:posix.read            os::posix::read definition
+// @@franko-ffi:posix.write           os::posix::write definition
+// @@franko-ffi:win32.GetStdHandle    os::win32::GetStdHandle definition
+// @@franko-ffi:win32.ReadFile        os::win32::ReadFile definition
+// @@franko-ffi:win32.WriteFile       os::win32::WriteFile definition
+```
+
+Each unit ends with `// @@franko-ffi:end`. Every intrinsic block
+defines its function under the exact mangled C++ name the backend
+emits for the Franko declaration (see [Runtime and Backend
+Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
+same trick the program templates use to call the mangled `main`.
+
+```text
+FUNC_read_HASH_10a3784c            os::posix::read
+FUNC_write_HASH_10a3784c           os::posix::write
+FUNC_GetStdHandle_HASH_493245c2    os::win32::GetStdHandle
+FUNC_ReadFile_HASH_5775278d        os::win32::ReadFile
+FUNC_WriteFile_HASH_5775278d       os::win32::WriteFile
+```
+
+Signatures must match the prototypes codegen emits for the `os.fr`
+declarations, including the `NS_os::NS_posix` / `NS_os::NS_win32`
+namespace nesting. The bridge is spliced after the program template's
+`#include "FrankoRuntime.hpp"`, so `Franko_Dynamic_Array`,
+`franko_panic`, and the fixed-width integer types are available.
+
+## 32.4 Splicing
+
+Codegen emits prototypes for every intrinsic (they act as forward
+declarations) but never emits the stub bodies; the bridge provides the
+only definitions. After emission, the compiler prepends the `common`
+block plus one block per intrinsic the program actually calls.
+Merely importing `franko/os` without calling anything adds zero C++
+to the output, and an unused intrinsic leaves only its harmless
+prototype behind.
+
+## 32.5 Verification
+
+Three mistakes fail at Franko-compile time instead of C++ link time:
+
+- a missing bridge file (`os.ffi.cpp` next to the resolved `os.fr`)
+  is an import-time error naming the expected path;
+- every intrinsic declared in the program must have its mangled
+  definition present in `ffi.cpp`, checked the same way the driver
+  checks the program template's entry-point call. If `os.fr`
+  signatures change without updating the bridge, compilation stops
+  here, naming the drifted symbol;
+- a known intrinsic name with anything but the exact intrinsic
+  signature is an `os.fr`/`ffi.cpp` drift error, and any other
+  function declared in `os::posix` or `os::win32` is an unsupported-
+  function error. Stubs in those namespaces must never compile
+  silently.
+
+## 32.6 Runtime Contract
+
+The bridge checks `count` against the buffer's array length before
+every transfer: `count` beyond the end aborts via `franko_panic`,
+consistent with Franko's other bounds checks, so the FFI cannot
+corrupt memory. A null or uninitialized buffer returns the stub
+failure value instead of crashing. The win32 blocks compile to a
+`#error` off Windows, so a win32 call built for the wrong target
+fails with a clear message at the C++ stage.
+
+## 32.7 Namespace Ownership
+
+The ownership rule in 32.5 applies only while the module is active.
+Without `import "franko/os"`, `os::posix` and `os::win32` are
+ordinary namespaces anyone may extend; the compiler owns them only
+for programs that import the module through its canonical specifier.
+
+---
+
+# 33. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-## 32.1 Basic Integers
+## 33.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -3620,7 +3827,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.2 Static Array Initializer Assignment
+## 33.2 Static Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -3654,7 +3861,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.3 Static Partial Initializer Assignment
+## 33.3 Static Partial Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -3668,7 +3875,7 @@ func main() -> int32_t {
 
 `xs[2]` is untouched.
 
-## 32.4 Dynamic Array Initializer Assignment
+## 33.4 Dynamic Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -3688,7 +3895,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.5 Runtime Expressions Inside Initializer Lists
+## 33.5 Runtime Expressions Inside Initializer Lists
 
 ```franko
 func getValue() -> int32_t {
@@ -3712,7 +3919,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.6 Nested Static Arrays
+## 33.6 Nested Static Arrays
 
 ```franko
 func main() -> int32_t {
@@ -3730,7 +3937,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.7 Nested Dynamic Arrays
+## 33.7 Nested Dynamic Arrays
 
 ```franko
 func main() -> int32_t {
@@ -3753,7 +3960,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.8 Declaration Initializer with Static Array
+## 33.8 Declaration Initializer with Static Array
 
 ```franko
 func main() -> int32_t {
@@ -3767,7 +3974,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.9 Dynamic Array Declaration Initializer Without Initialization
+## 33.9 Dynamic Array Declaration Initializer Without Initialization
 
 ```franko
 func main() -> int32_t {
@@ -3795,7 +4002,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.10 Array Initializer Through Address
+## 33.10 Array Initializer Through Address
 
 ```franko
 func main() -> int32_t {
@@ -3835,7 +4042,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.11 String Literal Assignment
+## 33.11 String Literal Assignment
 
 ```franko
 func main() -> int32_t {
@@ -3858,7 +4065,7 @@ func main() -> int32_t {
 
 See [String Literals](22-string-literals.md).
 
-## 32.12 `ndarray` Grid
+## 33.12 `ndarray` Grid
 
 ```franko
 func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
@@ -3880,7 +4087,7 @@ func main() -> int32_t {
 
 `ndarray<byte, 2, 3>` is sugar for `array<array<byte, 3>, 2>`.
 
-## 32.13 Status-Returning Intrinsics
+## 33.13 Status-Returning Intrinsics
 
 ```franko
 func main() -> int32_t {
@@ -3907,7 +4114,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.14 Struct Declaration and Field Access
+## 33.14 Struct Declaration and Field Access
 
 ```franko
 struct Point {
@@ -3930,7 +4137,7 @@ func main() -> int32_t {
 
 The separator before `}` is optional.
 
-## 32.15 Struct Field Defaults
+## 33.15 Struct Field Defaults
 
 Field defaults are constant expressions; only primitive fields can have them.
 
@@ -3950,7 +4157,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.16 Whole-Struct Assignment
+## 33.16 Whole-Struct Assignment
 
 A struct is assignable as a whole value only if all of its fields are assignable, recursively.
 
@@ -3976,7 +4183,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.17 Structs Passed by Value and by Address
+## 33.17 Structs Passed by Value and by Address
 
 Assignable structs may be passed and returned by value; address-only structs must go through `addr<X>`.
 
@@ -4012,7 +4219,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.18 Structs with Array Fields
+## 33.18 Structs with Array Fields
 
 An array field makes the struct non-assignable: the struct is address-only and its arrays are managed through the usual intrinsics.
 
@@ -4042,7 +4249,7 @@ func main() -> int32_t {
 
 `alloc` is not allowed in struct fields; allocate dynamic array fields explicitly with `field(n)` as above.
 
-## 32.19 Structs on the Heap
+## 33.19 Structs on the Heap
 
 ```franko
 struct Node {
@@ -4070,7 +4277,7 @@ func main() -> int32_t {
 
 Address declarations and address-typed struct fields are guaranteed null-initialized (see [Addresses](23-addresses.md)), so `b.next` is `null` here; only follow links that have been explicitly assigned.
 
-## 32.20 Struct Globals
+## 33.20 Struct Globals
 
 Global variable declarations accept constant initializers.
 
@@ -4095,7 +4302,7 @@ func main() -> int32_t {
 
 Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
 
-## 32.21 Array `length()`
+## 33.21 Array `length()`
 
 ```franko
 func main() -> int32_t {
@@ -4117,7 +4324,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.22 Inferred Static Array Sizes (`?`)
+## 33.22 Inferred Static Array Sizes (`?`)
 
 ```franko
 func main() -> int32_t {
@@ -4135,7 +4342,7 @@ func main() -> int32_t {
 }
 ```
 
-## 32.23 Command-Line Arguments
+## 33.23 Command-Line Arguments
 
 ```franko
 func main(addr<array<array<byte>>> args) -> int32_t {

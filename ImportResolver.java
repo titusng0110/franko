@@ -157,6 +157,25 @@ public class ImportResolver {
      */
     private final Path importSearchDir;
 
+    /**
+     * Built-in module specifiers imported by the program, e.g. "franko/os".
+     *
+     * A specifier is recorded when its normalized import path text matches
+     * the built-in module file ("franko/os" and "franko/os.fr" both
+     * normalize to "franko/os.fr"). Only the canonical specifier form
+     * activates compiler built-in behavior; importing the same file through
+     * a relative path keeps it an ordinary Franko file.
+     */
+    private final Set<String> importedBuiltinModules = new LinkedHashSet<>();
+
+    /**
+     * Resolved file of the `import "franko/os"` module, or null when the
+     * program does not import it through the canonical specifier.
+     *
+     * The FFI bridge (ffi.cpp) is located relative to this file.
+     */
+    private Path frankoOsModuleFile = null;
+
     public ImportResolver(Path importSearchDir) {
         this.importSearchDir = importSearchDir;
     }
@@ -202,6 +221,22 @@ public class ImportResolver {
      */
     public Map<String, List<String>> importGraph() {
         return importGraph;
+    }
+
+    /**
+     * Built-in module specifiers imported through their canonical path
+     * text (currently only "franko/os").
+     */
+    public Set<String> importedBuiltinModules() {
+        return new LinkedHashSet<>(importedBuiltinModules);
+    }
+
+    /**
+     * Resolved file of the `import "franko/os"` module, or null when it
+     * was not imported through the canonical specifier.
+     */
+    public Path frankoOsModuleFile() {
+        return frankoOsModuleFile;
     }
 
     // ============================================================
@@ -257,6 +292,20 @@ public class ImportResolver {
                     "Import error: cannot read imported file"
                             + candidateDescription(pathText, target, importingFile)
             );
+        }
+
+        /*
+         * Built-in module detection: the normalized path text "franko/os.fr"
+         * covers both `import "franko/os"` and `import "franko/os.fr"`.
+         * Recorded after the existence check so a missing module still
+         * reports the ordinary import error below instead.
+         */
+        if (pathText.equals("franko/os.fr")) {
+            importedBuiltinModules.add("franko/os");
+
+            if (frankoOsModuleFile == null) {
+                frankoOsModuleFile = target;
+            }
         }
 
         collectFile(target, out);

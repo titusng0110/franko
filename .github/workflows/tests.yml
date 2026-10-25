@@ -45,6 +45,11 @@ jobs:
           set -Eeuo pipefail
           ./tests/run_specs_tests.sh
 
+      - name: Library tests (library_tests/)
+        run: |
+          set -Eeuo pipefail
+          ./library_tests/run_library_tests.sh
+
   test-windows:
     name: Programs smoke + spec suite (Windows x64)
     runs-on: windows-2022
@@ -129,3 +134,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           .\tests\run_specs_tests.ps1
+
+      - name: Library tests (library_tests/)
+        run: |
+          $ErrorActionPreference = "Stop"
+          .\library_tests\run_library_tests.ps1

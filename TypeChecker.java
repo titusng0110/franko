@@ -404,6 +404,9 @@ public class TypeChecker {
      *   3. Primitive integer targets accept:
      *
      *      - nonconstant expressions of exactly the same primitive type;
+     *      - nonconstant expressions of a narrower primitive integer type
+     *        when one-way widening is allowed and the conversion is
+     *        value-preserving (see isValuePreservingIntegerWidening);
      *      - constant BigInteger expressions if the value fits the target type.
      *
      *   4. Address targets require exact same address type.
@@ -415,6 +418,23 @@ public class TypeChecker {
             SemanticType targetType,
             SemanticExprNode expr,
             String message
+    ) {
+        ensureAssignable(targetType, expr, message, false);
+    }
+
+    /**
+     * Assignment legality with an optional one-way integer widening rule.
+     *
+     * Callers pass allowIntegerWidening=true only for plain assignment
+     * positions (variable assignment, which also covers declaration
+     * initializers after desugaring). Call arguments, returns, and operator
+     * operands keep exact type equality.
+     */
+    public void ensureAssignable(
+            SemanticType targetType,
+            SemanticExprNode expr,
+            String message,
+            boolean allowIntegerWidening
     ) {
         if (targetType == null || expr == null || expr.type == null) {
             diagnostics.error(message + ": internal null type");
@@ -474,12 +494,23 @@ public class TypeChecker {
                 return;
             }
 
-            if (!sameType(targetType, expr.type)) {
-                diagnostics.error(message + ": expected "
-                        + targetType.describe()
-                        + ", got "
-                        + expr.type.describe());
+            if (sameType(targetType, expr.type)) {
+                return;
             }
+
+            if (allowIntegerWidening
+                    && expr.type instanceof SemanticPrimitiveType sourcePrimitive
+                    && isValuePreservingIntegerWidening(
+                            sourcePrimitive.kind,
+                            targetPrimitive.kind
+                    )) {
+                return;
+            }
+
+            diagnostics.error(message + ": expected "
+                    + targetType.describe()
+                    + ", got "
+                    + expr.type.describe());
 
             return;
         }
@@ -814,6 +845,45 @@ public class TypeChecker {
             case INT8, INT16, INT32, INT64 -> true;
             case UINT8, UINT16, UINT32, UINT64 -> false;
         };
+    }
+
+    /**
+     * One-way integer widening: true when every value of the source type is
+     * representable in the target type.
+     *
+     * Allowed:
+     *
+     *   - strictly wider, same signedness:
+     *     uint8_t -> uint16_t -> uint32_t -> uint64_t,
+     *     int8_t -> int16_t -> int32_t -> int64_t;
+     *   - unsigned to signed of strictly greater width:
+     *     uint8_t -> int16_t, uint16_t -> int32_t, uint32_t -> int64_t.
+     *
+     * Rejected (same-width, narrowing, or signed-to-unsigned):
+     *
+     *   uint8_t -> int8_t, int32_t -> uint32_t, int32_t -> uint64_t,
+     *   uint64_t -> int64_t, any narrowing.
+     *
+     * Same-kind pairs return false here; exact equality is handled by
+     * sameType at the call site.
+     */
+    public boolean isValuePreservingIntegerWidening(
+            SemanticPrimitiveKind from,
+            SemanticPrimitiveKind to
+    ) {
+        if (from == null || to == null || from == to) {
+            return false;
+        }
+
+        if (bitWidth(to) <= bitWidth(from)) {
+            return false;
+        }
+
+        if (isSigned(from) == isSigned(to)) {
+            return true;
+        }
+
+        return !isSigned(from) && isSigned(to);
     }
 
     public boolean isUnsigned(SemanticPrimitiveKind kind) {

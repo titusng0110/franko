@@ -1,0 +1,16 @@
+// Failure fixture: functions/arg_no_widening
+// One-way widening applies to assignment only (doc 14.1): passing a
+// nonconstant int32_t variable to an int64_t parameter is still rejected.
+// Widen into a local first.
+
+func f(int64_t x) -> int64_t {
+    return x;
+}
+
+func caller(int32_t v) -> int64_t {
+    return f(v);
+}
+
+func main() -> int32_t {
+    return 0;
+}

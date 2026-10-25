@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * ============================================================================
@@ -156,6 +157,32 @@ public class Cpp14Codegen {
     private int indentLevel = 0;
 
     /*
+     * Raw text of import/franko/os.ffi.cpp, or null when the program did
+     * not import "franko/os" through the canonical specifier.
+     *
+     * When active, os::posix / os::win32 intrinsic stub bodies from os.fr
+     * are not emitted (the bridge provides the only definitions), calls to
+     * intrinsics are recorded in usedOsFfiKinds, and generate() prepends
+     * the common block plus one block per used intrinsic.
+     */
+    private final String osFfiBridgeText;
+
+    /*
+     * Intrinsic kinds actually called by the program, in first-call order.
+     * Populated during emission (emitFunctionCall) and consumed by
+     * generate() after the whole program is emitted.
+     */
+    private final Set<OsFfi.Kind> usedOsFfiKinds = new LinkedHashSet<>();
+
+    public Cpp14Codegen() {
+        this(null);
+    }
+
+    public Cpp14Codegen(String osFfiBridgeText) {
+        this.osFfiBridgeText = osFfiBridgeText;
+    }
+
+    /*
      * Full path of the Franko namespace currently being emitted, or
      * null while emitting at global scope.
      *
@@ -185,10 +212,17 @@ public class Cpp14Codegen {
 
         out.setLength(0);
         indentLevel = 0;
+        usedOsFfiKinds.clear();
 
         emitNode(root);
 
-        return out.toString();
+        String body = out.toString();
+
+        if (osFfiBridgeText != null && !usedOsFfiKinds.isEmpty()) {
+            return OsFfi.buildBridge(osFfiBridgeText, usedOsFfiKinds) + body;
+        }
+
+        return body;
     }
 
     // ============================================================
@@ -882,6 +916,16 @@ public class Cpp14Codegen {
     }
 
     private void emitFunctionDecl(SemanticFunctionDeclNode node) {
+        /*
+         * os FFI intrinsics are defined by the ffi.cpp bridge, not by the
+         * stub bodies from os.fr. Prototypes are still emitted (they act as
+         * forward declarations); only the stub definition is skipped.
+         * kindOf also rejects any unknown function in the os namespaces.
+         */
+        if (osFfiBridgeText != null && OsFfi.kindOf(node.symbol) != null) {
+            return;
+        }
+
         emitLine(emitFunctionHeader(node));
 
         if (node.body == null) {
@@ -1332,6 +1376,19 @@ public class Cpp14Codegen {
             throw new IllegalStateException(
                     "Internal compiler error: function call has null resolved function"
             );
+        }
+
+        /*
+         * Record os FFI intrinsic calls so generate() splices exactly the
+         * bridge blocks the program uses. kindOf cannot throw here: the
+         * declaration already passed through emitFunctionDecl.
+         */
+        if (osFfiBridgeText != null) {
+            OsFfi.Kind ffiKind = OsFfi.kindOf(fn);
+
+            if (ffiKind != null) {
+                usedOsFfiKinds.add(ffiKind);
+            }
         }
 
         StringBuilder sb = new StringBuilder();

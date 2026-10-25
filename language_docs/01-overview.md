@@ -53,7 +53,7 @@ Franko currently does **not** implement:
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](22-string-literals.md));
-- implicit numeric conversions except for fluid integer constants.
+- implicit numeric conversions except for fluid integer constants and one-way widening assignments.
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;

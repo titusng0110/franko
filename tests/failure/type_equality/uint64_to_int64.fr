@@ -1,0 +1,11 @@
+// Failure fixture: type_equality/uint64_to_int64
+// One-way widening requires a strictly wider target (doc 14.1):
+// uint64_t to int64_t is the same width, so a nonconstant uint64_t
+// variable does not assign to int64_t.
+
+func main() -> int32_t {
+    uint64_t big = 5;
+    int64_t signedTarget;
+    signedTarget = big;
+    return 0;
+}

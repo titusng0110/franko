@@ -64,3 +64,16 @@ X == X
 ```
 
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](24-structs.md) for the complete struct reference.
+
+## 28.7 One-Way Integer Widening (Assignment Only)
+
+Type equality itself is unchanged: `uint8_t != uint16_t` as types. But
+assignment positions accept a value-preserving widening conversion as
+described in [Assignment](14-assignment.md): a nonconstant integer
+expression may be assigned to a strictly wider same-signedness target,
+or from an unsigned source to a strictly wider signed target.
+
+Widening is not a type relation used anywhere else: overload
+resolution, call argument checking, return checking, and operator
+checking all still require exact primitive type equality (or a fitting
+constant).
