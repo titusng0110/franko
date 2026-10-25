@@ -3,7 +3,9 @@
 #include <cstddef>   // for size_t
 #include <cstdint>   // for uint8_t, uint32_t, int32_t
 #include <cstring>   // for std::memcpy, std::memset, std::memmove
+#include <new>       // for placement new
 #include <stdexcept> // for std::runtime_error
+#include <type_traits> // for std::is_trivially_default_constructible, std::is_trivially_destructible
 #include <iostream>  // for std::cout
 #include <jemalloc/jemalloc.h> // for je_malloc, je_calloc, je_realloc, je_free
 
@@ -161,6 +163,7 @@ struct Franko_Dynamic_Array {
 
     ~Franko_Dynamic_Array() {
         if (data != nullptr) {
+            destroy_elements(data, count);
             je_free(data);
             data = nullptr;
             count = 0;
@@ -178,6 +181,12 @@ struct Franko_Dynamic_Array {
 
         if (!newData)
             return -1;
+
+        // Default-construct elements that need construction. Trivially
+        // constructible element types keep raw uninitialized storage.
+        // Runs before publishing data/count, since element construction
+        // for runtime types is non-throwing.
+        construct_elements(newData, n);
 
         data = newData;
         count = n;
@@ -197,6 +206,10 @@ struct Franko_Dynamic_Array {
         if (!newData)
             return -1;
 
+        // Default-construct over the zeroed bytes so members with default
+        // member initializers get their defaults while the rest stay 0.
+        construct_elements(newData, n);
+
         data = newData;
         count = n;
 
@@ -210,10 +223,20 @@ struct Franko_Dynamic_Array {
         if (n == 0)
             franko_panic("Cannot allocate 0 memory for Franko_Dynamic_Array");
 
+        const uint32_t oldCount = count;
+
         T* newData = static_cast<T*>(je_realloc(data, sizeof(T) * static_cast<size_t>(n)));
 
         if (!newData)
             return -1;
+
+        // je_realloc byte-moves existing elements, which is fine for the
+        // runtime's trivially-relocatable element types. Only the changed
+        // tail needs lifetime handling.
+        if (n > oldCount)
+            construct_elements(newData + oldCount, n - oldCount);
+        else if (n < oldCount)
+            destroy_elements(newData + n, oldCount - n);
 
         data = newData;
         count = n;
@@ -225,6 +248,7 @@ struct Franko_Dynamic_Array {
         if (data == nullptr)
             franko_panic("Franko_Dynamic_Array already uninitialized");
 
+        destroy_elements(data, count);
         je_free(data);
         data = nullptr;
         count = 0;
@@ -376,6 +400,21 @@ struct Franko_Dynamic_Array {
 
         if (count > 0) {
             std::memmove(data + dstStart, data + srcStart, sizeof(T) * static_cast<size_t>(count));
+        }
+    }
+
+private:
+    static void construct_elements(T* p, uint32_t n) {
+        if (!std::is_trivially_default_constructible<T>::value) {
+            for (uint32_t i = 0; i < n; ++i)
+                new (p + i) T();
+        }
+    }
+
+    static void destroy_elements(T* p, uint32_t n) {
+        if (!std::is_trivially_destructible<T>::value) {
+            for (uint32_t i = 0; i < n; ++i)
+                (p + i)->~T();
         }
     }
 };

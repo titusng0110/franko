@@ -24,6 +24,8 @@ Heap variables (`alloc T x`) compile to a jemalloc-allocated pointer with placem
 
 Dynamic array element buffers are allocated by the array runtime methods and freed by `uninit()` or by the array object's destructor.
 
+Element construction follows the C++ type of the elements: buffers for trivially default-constructible element types keep raw storage, while any other element type is default-constructed (placement new) when the buffer is allocated. `uninit()` and the array destructor destroy constructed elements before freeing the buffer. Trivially destructible element types skip destruction entirely.
+
 ## 31.3 Array Representation
 
 Some Franko rules mirror the generated C++ representation, especially array behavior.
@@ -42,6 +44,15 @@ Static array sizes must be greater than zero because generated C++ uses fixed-si
 Static and dynamic arrays runtime-check indexes and intrinsics and raise `std::runtime_error` (via the runtime panic helper) on violations such as out-of-bounds access, use of an uninitialized dynamic array, double initialization, or zero-size allocation.
 
 The dynamic array length is stored in a `count` field with a `length()` accessor returning `uint32_t`. The field was renamed from `length` because C++ does not allow a field and a method with the same name. Reading `length()` on an uninitialized dynamic array returns `0` and never aborts; every other uninitialized access still aborts. Static arrays keep plain contiguous `T data[N]` storage with no length field or method: `staticarr.length()` in Franko source is emitted by the compiler as a constant, never as a runtime call.
+
+Zero length and uninitialized coincide exactly: `init(0)` and `resize(0)` abort, and `uninit()` restores `data == nullptr, count == 0`, so `length() == 0` holds exactly when the array is uninitialized — there is no initialized empty array.
+
+Element lifetime in the dynamic array runtime:
+
+- `init(n)` and `init_zero(n)` default-construct all `n` elements when the element type needs construction; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
+- `resize(n)` default-constructs the grown tail when growing and destroys the dropped tail when shrinking; trivial element types skip both.
+- `uninit()` and the array destructor destroy all `count` elements before freeing the buffer; trivially destructible element types skip destruction.
+- `je_realloc` byte-moves the existing elements on `resize`, which is fine for the runtime's trivially-relocatable element types.
 
 ## 31.4 Ordering of Top-Level Analysis
 
@@ -138,5 +149,5 @@ The argv conversion follows these rules:
 
 - `args.length()` equals `argc`, with `args[0]` holding the program name;
 - each argument is its raw bytes with **no** NUL terminator appended (consistent with string literals, which also append no terminator);
-- an empty argument is represented as an uninitialized inner array, whose `length()` still returns `0`;
-- after the Franko `main` returns, the wrapper destroys the converted arrays; inner and outer arrays the program already released with `uninit()` are skipped safely.
+- each inner array is default-constructed by the runtime `init` into the uninitialized Franko state (`length()` `0`), so an empty argument simply stays uninitialized;
+- after the Franko `main` returns, the outer array's destructor destroys the converted inner arrays and frees both levels; inner and outer arrays the program already released with `uninit()` are skipped safely.

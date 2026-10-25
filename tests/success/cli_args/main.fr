@@ -6,7 +6,8 @@
 //
 // The template wrapper converts raw argc/argv into nested dynamic
 // byte arrays (full argv with no NUL terminator), and the args
-// parameter needs no null guard.
+// parameter needs no null guard. Inner arrays start in the
+// uninitialized state, so even empty arguments report length 0.
 //
 // Run with main.args as the command-line arguments; argv[0] (the
 // binary path, which varies by machine) is skipped by counting

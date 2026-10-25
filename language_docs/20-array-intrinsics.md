@@ -60,9 +60,11 @@ Rules:
 
 `init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage. `target(size)` is shorthand for `target.init(size)`.
 
+Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
+
 ## 20.2 `resize`
 
-Resizes an already-initialized dynamic array.
+Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements; shrinking destroys the dropped tail elements. Trivial element types skip both.
 
 Rules:
 
@@ -76,7 +78,7 @@ Rules:
 
 ## 20.3 `uninit`
 
-Frees a dynamic array's element storage and resets it to the uninitialized state.
+Frees a dynamic array's element storage and resets it to the uninitialized state. Constructed elements are destroyed before the buffer is freed; trivially destructible element types skip destruction.
 
 Rules:
 

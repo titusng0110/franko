@@ -124,6 +124,8 @@ Dynamic array declaration alone does not allocate element storage.
 
 The array must be initialized before ordinary indexed use.
 
+An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays), `init` and `init_zero` default-construct every element into the uninitialized state, so inner arrays are immediately ready for `init` without further setup.
+
 The call-initialization form is only valid for dynamic arrays:
 
 ```franko

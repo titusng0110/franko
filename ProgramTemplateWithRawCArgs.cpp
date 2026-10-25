@@ -1,7 +1,5 @@
 #include "FrankoRuntime.hpp"
 
-#include <new>
-
 __FRANKO_PROGRAM__
 
 int main(int argc, char** argv)
@@ -13,7 +11,6 @@ int main(int argc, char** argv)
 
         for (int i = 0; i < argc; ++i) {
             const uint32_t idx = static_cast<uint32_t>(i);
-            new (frankoArgs.data + idx) Franko_Dynamic_Array<uint8_t>();
             const char* raw = (argv[i] != nullptr) ? argv[i] : "";
             const size_t len = std::strlen(raw);
 
@@ -24,11 +21,5 @@ int main(int argc, char** argv)
         }
     }
 
-    const int32_t rc = FUNC_main_HASH_3f161798(&frankoArgs);
-
-    for (uint32_t i = 0; i < frankoArgs.count; ++i) {
-        frankoArgs.data[i].~Franko_Dynamic_Array<uint8_t>();
-    }
-
-    return rc;
+    return FUNC_main_HASH_3f161798(&frankoArgs);
 }
