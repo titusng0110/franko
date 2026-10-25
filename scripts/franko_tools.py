@@ -32,6 +32,26 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+def _force_utf8_stdio() -> None:
+    """Write our own output as UTF-8 whatever the host locale says.
+
+    Windows still gives pipes and files the locale code page (cp1252 on
+    GitHub-hosted runners), which cannot encode "✅" - or any non-ASCII
+    byte a test program emits - and would crash a run with
+    UnicodeEncodeError. Replacement characters absorb anything unencodable
+    instead of raising, and CI logs are UTF-8 anyway.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            # Already closed, or a redirect target without reconfigure.
+            pass
+
+
+_force_utf8_stdio()
+
 # ------------------------------------------------------------
 # Repository layout
 # ------------------------------------------------------------
@@ -178,7 +198,9 @@ def link_flags() -> list[str]:
 # ------------------------------------------------------------
 
 # Probe the usual MSYS2 install locations when the tool is not on PATH, so
-# CI and local Windows checkouts do not need a separate PATH-fixup step.
+# local Windows checkouts do not need a manual PATH fixup. CI exports the
+# action's real install directory through GITHUB_PATH instead (see
+# .github/workflows/tests.yml), which is why PATH comes first.
 _WINDOWS_TOOL_DIRS = (
     Path(r"C:\msys64\ucrt64\bin"),
     Path(r"C:\msys2\ucrt64\bin"),
@@ -386,8 +408,15 @@ def ensure_toolchain() -> None:
 # ------------------------------------------------------------
 
 def read_text(path: Path) -> str:
-    """Read a text file with universal newlines (CRLF and lone CR become LF)."""
-    with path.open("r", encoding="utf-8", errors="replace", newline=None) as handle:
+    """Read a text file with universal newlines (CRLF and lone CR become LF).
+
+    utf-8-sig also swallows a byte-order mark, so a fixture saved by a
+    Windows editor reads the same as one saved on Linux (PowerShell's
+    ReadAllText stripped BOMs the same way).
+    """
+    with path.open(
+        "r", encoding="utf-8-sig", errors="replace", newline=None
+    ) as handle:
         return handle.read()
 
 

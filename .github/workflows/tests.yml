@@ -41,18 +41,33 @@ jobs:
 
       # UCRT64, matching build-jemalloc.yml and the checked-in windows-x64
       # jemalloc bundle (keeps the CRT consistent with the static archive).
-      # The runners locate g++.exe on PATH first and then fall back to the
-      # usual C:\msys64\ucrt64\bin locations, and they prepend that
-      # directory to PATH for every child process, so no PATH fixup step is
-      # needed here.
       - name: Setup MSYS2 UCRT64
         if: runner.os == 'Windows'
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
           update: true
           pacboy: >-
             gcc:p
+
+      # The action installs MSYS2 wherever it decides (see its
+      # msys2-location output), so export that exact ucrt64\bin directory
+      # instead of guessing: the runners then find g++.exe through PATH,
+      # and it is also where libwinpthread-1.dll lives for the test
+      # binaries. The runners still probe the usual C:\msys64 locations as
+      # a fallback for local Windows checkouts.
+      - name: Add MSYS2 g++ to PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bin = "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $bin "g++.exe"))) {
+            throw "g++.exe not found under $bin"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+          Write-Host "Added $bin to PATH"
 
       - name: Build Franko compiler toolchain
         run: uv run python update_toolchain.py
