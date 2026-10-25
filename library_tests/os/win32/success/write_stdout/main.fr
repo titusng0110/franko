@@ -4,7 +4,7 @@
 // Windows-only: the library runner skips the win32 suite on
 // non-Windows platforms. Run on Windows with:
 //
-//   .\library_tests\run_library_tests.ps1
+//   uv run python library_tests/run_library_tests.py
 //
 // Covers: import "franko/os", os::win32::STD_OUTPUT_HANDLE,
 // os::win32::GetStdHandle(nStdHandle) -> uint64_t (HANDLE widened),

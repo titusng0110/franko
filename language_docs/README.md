@@ -69,6 +69,13 @@ uv venv                 # creates .venv/
 uv pip install regex    # used by renumber_sections.py
 ```
 
+Alternatively, the repository root declares `regex` in `pyproject.toml`,
+so no local venv is needed — from the repository root:
+
+```bash
+uv run python language_docs/renumber_sections.py check
+```
+
 ### Renumbering sections
 
 Section numbers are embedded in filenames (`25-structs.md`), headings

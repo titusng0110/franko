@@ -36,7 +36,9 @@ Rules:
     with build_reference.py),
   * .venv/ and hidden files are ignored.
 
-Uses the `regex` module from the language_docs uv venv (see README.md).
+Uses the `regex` module (declared in the repository's pyproject.toml, so
+`uv run python language_docs/renumber_sections.py <args>` works from the
+repository root with no extra setup).
 """
 
 import argparse
@@ -48,10 +50,11 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit(
         "error: the 'regex' package is required.\n"
-        "Set up the venv first (see README.md):\n"
-        "  uv venv\n"
-        "  uv pip install regex\n"
-        "then run this script with .venv/bin/python."
+        "Easiest: run it through uv from the repository root, where\n"
+        "`regex` is declared in pyproject.toml:\n"
+        "  uv run python language_docs/renumber_sections.py ...\n"
+        "Or install it into the current interpreter:\n"
+        "  uv pip install regex"
     )
 
 ROOT = Path(__file__).resolve().parent

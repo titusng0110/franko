@@ -5,3 +5,29 @@
 # every .fr file on every platform; this takes precedence over
 # core.autocrlf.
 *.fr text eol=lf
+
+# Everything the build/test tooling touches is pinned to LF as well, so
+# no platform can produce different bytes for the scripts, the CI config
+# or the golden files. The Python runners additionally normalise newlines
+# when they read fixtures and compare output, so a stray CRLF can never
+# fail a test.
+*.py text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.java text eol=lf
+*.g4 text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.h text eol=lf
+
+# Test fixtures and golden files.
+*.expected text eol=lf
+*.errors text eol=lf
+*.warnings text eol=lf
+*.args text eol=lf
+*.stdin text eol=lf
+*.flags text eol=lf

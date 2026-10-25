@@ -1,0 +1,17 @@
+[project]
+name = "franko-tools"
+version = "0.0.0"
+description = "Cross-platform build and test scripts for the Franko compiler."
+readme = "README.md"
+requires-python = ">=3.13"
+# The build/test scripts themselves are stdlib-only. `regex` is a real
+# dependency of the language doc tools (language_docs/renumber_sections.py)
+# and is declared here so `uv run` keeps it installed.
+dependencies = [
+    "regex",
+]
+
+[tool.uv]
+# Virtual project: nothing to build or install, only an interpreter and the
+# declared dependencies are needed.
+package = false

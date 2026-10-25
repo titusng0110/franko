@@ -211,8 +211,7 @@ func main() -> int32_t {
 ## Tests
 
 Module tests live in `library_tests/os/` (run with
-`library_tests/run_library_tests.sh` or
-`library_tests/run_library_tests.ps1`):
+`uv run python library_tests/run_library_tests.py`):
 
 ```text
 library_tests/os/posix/success/   // read/write behavior goldens

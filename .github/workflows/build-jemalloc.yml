@@ -220,7 +220,7 @@ jobs:
           }
           EOF
 
-          # Mirror the link pattern from compile_linux-x86_64.sh:
+          # Mirror the link pattern from compile.py (franko_tools.link_flags):
           # archive by full path, -pthread, and -ldl (Linux only).
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             cc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -pthread -ldl -o "$BIN"
@@ -449,8 +449,8 @@ jobs:
           }
           EOF
 
-          # Mirror compile_windows-x64.ps1: the archive is passed by full
-          # path (GNU ar archive with a .lib extension, built by MinGW).
+          # Mirror compile.py: the archive is passed by full path
+          # (GNU ar archive with a .lib extension, built by MinGW).
           gcc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -o "$BIN"
 
           "$BIN"
