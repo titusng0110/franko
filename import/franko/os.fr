@@ -5,7 +5,7 @@ namespace os {
     // reference into an integer literal, so they can select code by
     // target:
     //
-    //   if os::IS_WINDOWS == 1 {
+    //   if (os::IS_WINDOWS == 1) {
     //       os::win32::WriteFile(...)
     //   } else {
     //       os::posix::write(...)

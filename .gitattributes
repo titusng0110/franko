@@ -1,0 +1,7 @@
+# Franko sources are UTF-8 text whose string literals may span raw
+# newlines (programs/string.fr, tests/success/string_escapes). A CRLF
+# checkout would inject \r bytes into the decoded string data, which
+# changes byte counts and breaks those programs/tests. Force LF for
+# every .fr file on every platform; this takes precedence over
+# core.autocrlf.
+*.fr text eol=lf
