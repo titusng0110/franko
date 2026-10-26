@@ -89,7 +89,7 @@ func main(addr<array<array<byte>>> args) -> int32_t {
 
 Any other shape (parameters of another type, a different return type) is a compile error.
 
-In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Runtime and Backend Notes](32-runtime-and-backend-notes.md)).
+In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
 
 Executable statements are **not** currently allowed in global scope.
 
@@ -102,15 +102,12 @@ Invalid global-scope items include:
 - `while`;
 - `for`;
 - `return`;
-- `del`;
 - blocks;
 - array intrinsic calls;
 - array initializer assignments.
 - expression statements (bare expressions such as `1 + 2`);
 
 Note that some invalid global-scope forms only become visible after desugaring: declaration initializer sugar is invalid because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments).
-
-The `alloc` modifier is not valid at global scope; global variables are always statically allocated. The same rule applies inside struct bodies: `alloc` is not valid for struct fields. See [Heap Variables and `alloc`](13-heap-variables-and-alloc.md).
 
 Execution should be rooted in a user-defined `main` function.
 

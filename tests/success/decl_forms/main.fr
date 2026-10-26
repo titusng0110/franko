@@ -3,7 +3,7 @@
 // ============================================================
 // Covers: primitive declarations (int, int32_t, uint8_t, uint32_t),
 // dynamic and static array declarations, addr<T> declarations with
-// getaddr/deref, call-init sugar, and alloc heap declarations.
+// getaddr/deref, and call-init sugar.
 // ============================================================
 
 func main() -> int32_t {
@@ -37,10 +37,6 @@ func main() -> int32_t {
     p = getaddr(y)
     deref(p) = 99
 
-    // Heap-owned primitive.
-    alloc int32_t h
-    h = 1234
-
     print(x)
     print(y)
     print(b)
@@ -50,9 +46,6 @@ func main() -> int32_t {
     print(buffer[0])
     print(buffer[127])
     print(deref(p))
-    print(h)
-
-    del h
 
     return 0
 }

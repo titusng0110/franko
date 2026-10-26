@@ -102,14 +102,6 @@ class ForNode extends ASTNode {
     }
 }
 
-class DelNode extends ASTNode {
-    String name;
-
-    DelNode(String name) {
-        this.name = name;
-    }
-}
-
 class PrintNode extends ASTNode {
     List<ASTNode> args;
 
@@ -315,12 +307,10 @@ class QualifiedNameNode extends ASTNode {
 class VarDeclNode extends ASTNode {
     TypeNode type;
     String name;
-    boolean isHeap;
 
-    VarDeclNode(TypeNode type, String name, boolean isHeap) {
+    VarDeclNode(TypeNode type, String name) {
         this.type = type;
         this.name = name;
-        this.isHeap = isHeap;
     }
 }
 
@@ -337,13 +327,11 @@ class VarDeclNode extends ASTNode {
 class VarDeclInitNode extends ASTNode {
     TypeNode type;
     String name;
-    boolean isHeap;
     ASTNode init;
 
-    VarDeclInitNode(TypeNode type, String name, boolean isHeap, ASTNode init) {
+    VarDeclInitNode(TypeNode type, String name, ASTNode init) {
         this.type = type;
         this.name = name;
-        this.isHeap = isHeap;
         this.init = init;
     }
 }
@@ -357,13 +345,11 @@ class VarDeclInitNode extends ASTNode {
 class VarDeclArrayInitNode extends ASTNode {
     TypeNode type;
     String name;
-    boolean isHeap;
     ASTNode size;
 
-    VarDeclArrayInitNode(TypeNode type, String name, boolean isHeap, ASTNode size) {
+    VarDeclArrayInitNode(TypeNode type, String name, ASTNode size) {
         this.type = type;
         this.name = name;
-        this.isHeap = isHeap;
         this.size = size;
     }
 }

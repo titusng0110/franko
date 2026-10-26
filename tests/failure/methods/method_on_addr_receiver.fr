@@ -8,9 +8,8 @@ struct X {
 }
 func main() -> int32_t {
     X s
-    alloc addr<X> p
+    addr<X> p
     p = getaddr(s)
     p.foo()
-    del p
     return 0
 }

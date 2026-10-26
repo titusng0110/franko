@@ -145,7 +145,6 @@ public class ASTPrinter {
                             + typeToString(n.type)
                             + " "
                             + n.name
-                            + (n.isHeap ? " (heap)" : "")
             );
         }
 
@@ -155,7 +154,6 @@ public class ASTPrinter {
                             + typeToString(n.type)
                             + " "
                             + n.name
-                            + (n.isHeap ? " (heap)" : "")
             );
 
             System.out.println(pad + "  init:");
@@ -168,7 +166,6 @@ public class ASTPrinter {
                             + typeToString(n.type)
                             + " "
                             + n.name
-                            + (n.isHeap ? " (heap)" : "")
             );
 
             System.out.println(pad + "  size:");
@@ -234,10 +231,6 @@ public class ASTPrinter {
 
             System.out.println(pad + "  body:");
             print(n.body, indent + 2);
-        }
-
-        else if (node instanceof DelNode n) {
-            System.out.println(pad + "Delete: " + n.name);
         }
 
         else if (node instanceof PrintNode n) {

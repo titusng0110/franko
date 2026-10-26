@@ -1,4 +1,4 @@
-# 30. Declaration Type Validity
+# 29. Declaration Type Validity
 
 A declared variable type is valid if it is one of:
 

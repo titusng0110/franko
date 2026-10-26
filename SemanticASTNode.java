@@ -220,14 +220,6 @@ class SemanticWhileNode extends SemanticStmtNode {
     }
 }
 
-class SemanticDelNode extends SemanticStmtNode {
-    public final VariableSymbol symbol;
-
-    public SemanticDelNode(VariableSymbol symbol) {
-        this.symbol = Objects.requireNonNull(symbol);
-    }
-}
-
 class SemanticPrintNode extends SemanticStmtNode {
     public final List<SemanticExprNode> args;
 

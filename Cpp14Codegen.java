@@ -1024,11 +1024,6 @@ public class Cpp14Codegen {
             return;
         }
 
-        if (node instanceof SemanticDelNode del) {
-            emitDel(del);
-            return;
-        }
-
         if (node instanceof SemanticPrintNode print) {
             emitPrint(print);
             return;
@@ -1080,31 +1075,16 @@ public class Cpp14Codegen {
                     + emitBigIntegerLiteral(node.foldedConstInitializer);
         }
 
-        if (sym.isHeap) {
-            emitLine(cppType + "* " + name + " = static_cast<" + cppType + "*>(je_malloc(sizeof(" + cppType + ")));");
-            emitLine("if (!" + name + ") throw std::bad_alloc();");
-            emitLine("new (" + name + ") " + cppType + ";");
-
-            if (sym.type instanceof SemanticAddrType) {
-                /*
-                 * Heap storage holding an address is null-initialized so that
-                 * deref of a never-assigned heap address is a well-defined
-                 * null dereference instead of undefined behavior.
-                 */
-                emitLine("*" + name + " = nullptr;");
-            }
-        } else {
-            /*
-             * Address declarations are guaranteed null-initialized, unlike
-             * ordinary declarations which are left uninitialized.
-             */
-            if (initializer.isEmpty()
-                    && sym.type instanceof SemanticAddrType) {
-                initializer = " = nullptr";
-            }
-
-            emitLine(cppType + " " + name + initializer + ";");
+        /*
+         * Address declarations are guaranteed null-initialized, unlike
+         * ordinary declarations which are left uninitialized.
+         */
+        if (initializer.isEmpty()
+                && sym.type instanceof SemanticAddrType) {
+            initializer = " = nullptr";
         }
+
+        emitLine(cppType + " " + name + initializer + ";");
     }
 
     private void emitAssign(SemanticAssignNode node) {
@@ -1162,33 +1142,6 @@ public class Cpp14Codegen {
         indentLevel++;
         emitStmt(node);
         indentLevel--;
-    }
-
-    private void emitDel(SemanticDelNode node) {
-        VariableSymbol sym = node.symbol;
-
-        if (!sym.isHeap) {
-            throw new IllegalStateException(
-                    "Internal compiler error: non-heap del reached codegen for variable '"
-                            + sym.name
-                            + "'. MasterChecker should have rejected this."
-            );
-        }
-
-        /*
-         * Scalars (primitives and addresses) have no destructors in C++14,
-         * and a pseudo-destructor call cannot spell a pointer type. Only
-         * class-type pointees (arrays, structs) need explicit destruction
-         * before the storage is freed.
-         */
-        if (sym.type instanceof SemanticDynamicArrayType
-                || sym.type instanceof SemanticStaticArrayType
-                || sym.type instanceof SemanticStructType) {
-            emitLine(emitSymbolName(sym) + "->~" + emitType(sym.type) + "();");
-        }
-
-        emitLine("je_free(" + emitSymbolName(sym) + ");");
-        emitLine(emitSymbolName(sym) + " = nullptr;");
     }
 
     private void emitPrint(SemanticPrintNode node) {
@@ -1249,7 +1202,7 @@ public class Cpp14Codegen {
         }
 
         if (node instanceof SemanticVarExprNode var) {
-            return emitVarAccess(var.symbol);
+            return emitSymbolName(var.symbol);
         }
 
         if (node instanceof SemanticUnaryOpNode unary) {
@@ -1684,7 +1637,7 @@ public class Cpp14Codegen {
 
     private String emitLValue(SemanticExprNode node) {
         if (node instanceof SemanticVarExprNode var) {
-            return emitVarAccess(var.symbol);
+            return emitSymbolName(var.symbol);
         }
 
         if (node instanceof SemanticArrayAccessNode access) {
@@ -1708,12 +1661,8 @@ public class Cpp14Codegen {
     /**
      * Emits a struct member access:
      *
-     *   obj.field          ->  obj.field
-     *   alloc X s; s.field ->  (*s).field
-     *   deref(p).field     ->  (*p).field
-     *
-     * Heap variables lower to (*sym) through emitVarAccess, so heap struct
-     * field access composes without special handling here.
+     *   obj.field       ->  obj.field
+     *   deref(p).field  ->  (*p).field
      */
     private String emitMemberAccess(SemanticMemberAccessNode node) {
         return emitExpr(node.target) + "." + node.field.name;
@@ -1794,24 +1743,10 @@ public class Cpp14Codegen {
     // Symbol / Name Emission
     // ============================================================
 
-    private String emitVarAccess(VariableSymbol symbol) {
-        if (symbol == null) {
-            throw new IllegalStateException(
-                    "Internal compiler error: null symbol in codegen"
-            );
-        }
-
-        if (symbol.isHeap) {
-            return "(*" + emitSymbolName(symbol) + ")";
-        }
-
-        return emitSymbolName(symbol);
-    }
-
     private String emitSymbolName(VariableSymbol symbol) {
         /*
-         * Variables (locals, globals, parameters, heap variables) are emitted
-         * with a "VAR_" prefix.
+         * Variables (locals, globals, parameters) are emitted with a
+         * "VAR_" prefix.
          *
          * Franko keeps variables, functions, and struct names in separate
          * namespaces, but C++ does not: a raw name such as "X" would collide
@@ -1822,6 +1757,12 @@ public class Cpp14Codegen {
          * qualification; locals and parameters are function-scoped and are
          * never qualified.
          */
+        if (symbol == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: null symbol in codegen"
+            );
+        }
+
         if (symbol instanceof GlobalVariableSymbol global) {
             return qualify(global.namespace, "VAR_" + symbol.name);
         }

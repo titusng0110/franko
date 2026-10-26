@@ -26,8 +26,6 @@ Franko is a small statically typed language with:
 - `for`;
 - `return`;
 - `print`;
-- `del`;
-- heap-owned variables using `alloc`;
 - string literals as byte-array initializer sugar;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);

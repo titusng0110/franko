@@ -1,9 +1,9 @@
 // ============================================================
 // SPEC TEST: Methods Memory Lifecycle
 // ============================================================
-// Covers: doc 26.8, doc 28.4
-// Dynamic-array fields managed through methods, on stack and heap
-// structs, with setup/teardown pairing checked by memory safety.
+// Covers: doc 26.8
+// Dynamic-array fields managed through methods, with setup/teardown
+// pairing checked by address null-state checking.
 // ============================================================
 
 struct Buf {
@@ -31,11 +31,5 @@ func main() -> int32_t {
     b.set(2, 33)
     print(b.get(0), b.get(1), b.get(2))
     b.teardown()
-    alloc Buf h
-    h.setup(2)
-    h.set(1, 99)
-    print(h.get(0), h.get(1))
-    h.teardown()
-    del h
     return 0
 }

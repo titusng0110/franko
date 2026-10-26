@@ -213,11 +213,6 @@ public class SemanticASTPrinter {
             return;
         }
 
-        if (node instanceof SemanticDelNode n) {
-            printDel(n, indent);
-            return;
-        }
-
         if (node instanceof SemanticPrintNode n) {
             printPrint(n, indent);
             return;
@@ -294,11 +289,6 @@ public class SemanticASTPrinter {
 
         line(indent + 1, "body:");
         printStmt(node.body, indent + 2);
-    }
-
-    private static void printDel(SemanticDelNode node, int indent) {
-        line(indent, "SemanticDelNode");
-        printVariableSymbol("symbol", node.symbol, indent + 1);
     }
 
     private static void printPrint(SemanticPrintNode node, int indent) {
@@ -605,7 +595,6 @@ public class SemanticASTPrinter {
         line(indent, label + ": " + kind);
         line(indent + 1, "name: " + quote(symbol.qualifiedName()));
         line(indent + 1, "type: " + describeType(symbol.type));
-        line(indent + 1, "isHeap: " + symbol.isHeap);
 
         if (symbol instanceof ParameterSymbol param) {
             line(indent + 1, "index: " + param.index);

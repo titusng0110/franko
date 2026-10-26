@@ -443,7 +443,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitSimpleStmt(FrankoParser.SimpleStmtContext ctx) {
         if (ctx.varDecl() != null) return visit(ctx.varDecl());
-        if (ctx.delStmt() != null) return visit(ctx.delStmt());
         if (ctx.returnStmt() != null) return visit(ctx.returnStmt());
         if (ctx.assignStmt() != null) return visit(ctx.assignStmt());
         if (ctx.printStmt() != null) return visit(ctx.printStmt());
@@ -545,15 +544,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         throw new RuntimeException("Unknown assignmentInitializer: " + ctx.getText());
-    }
-
-    @Override
-    public ASTNode visitDelStmt(FrankoParser.DelStmtContext ctx) {
-        if (ctx.SELF() != null) {
-            return new DelNode("self");
-        }
-
-        return new DelNode(ctx.IDENTIFIER().getText());
     }
 
     @Override
@@ -674,10 +664,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitVarDecl(FrankoParser.VarDeclContext ctx) {
         TypeNode type = (TypeNode) visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();
-        boolean isHeap = ctx.ALLOC() != null;
 
         if (ctx.declSuffix() == null) {
-            return new VarDeclNode(type, name, isHeap);
+            return new VarDeclNode(type, name);
         }
 
         if (ctx.declSuffix() instanceof FrankoParser.DeclAssignInitContext) {
@@ -686,7 +675,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
             ASTNode init = visit(initCtx.declInitializer());
 
-            return new VarDeclInitNode(type, name, isHeap, init);
+            return new VarDeclInitNode(type, name, init);
         }
 
         if (ctx.declSuffix() instanceof FrankoParser.DeclArrayInitContext) {
@@ -695,7 +684,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
             ASTNode size = visit(initCtx.expr());
 
-            return new VarDeclArrayInitNode(type, name, isHeap, size);
+            return new VarDeclArrayInitNode(type, name, size);
         }
 
         throw new RuntimeException("Unknown declSuffix: " + ctx.declSuffix().getText());

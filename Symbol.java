@@ -36,8 +36,6 @@ abstract class Symbol {
 // ============================================================
 
 class VariableSymbol extends Symbol {
-    final boolean isHeap;
-
     /*
      * Name of the namespace this variable was declared in, or null for
      * the global namespace.
@@ -47,10 +45,9 @@ class VariableSymbol extends Symbol {
      */
     final String namespace;
 
-    VariableSymbol(String namespace, String name, SemanticType type, boolean isHeap) {
+    VariableSymbol(String namespace, String name, SemanticType type) {
         super(name, type);
         this.namespace = namespace;
-        this.isHeap = isHeap;
     }
 
     /**
@@ -73,7 +70,7 @@ class ParameterSymbol extends VariableSymbol {
     final int index;
 
     ParameterSymbol(String name, SemanticType type, int index) {
-        super(null, name, type, false);
+        super(null, name, type);
         this.index = index;
     }
 }
@@ -98,7 +95,7 @@ class GlobalVariableSymbol extends VariableSymbol {
     BigInteger compileTimeConstantValue = null;
 
     GlobalVariableSymbol(String namespace, String name, SemanticType type) {
-        super(namespace, name, type, false);
+        super(namespace, name, type);
     }
 }
 

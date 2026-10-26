@@ -393,8 +393,7 @@ public class Desugarer {
 
         out.add(new VarDeclNode(
             loweredType,
-            n.name,
-            n.isHeap
+            n.name
         ));
 
         if (rawInit == null) {
@@ -429,8 +428,7 @@ public class Desugarer {
 
             out.add(new VarDeclNode(
                 desugarType(replaceInferredSizesWithFallback(n.type)),
-                n.name,
-                n.isHeap
+                n.name
             ));
 
             return;
@@ -438,8 +436,7 @@ public class Desugarer {
 
         out.add(new VarDeclNode(
             desugarType(n.type),
-            n.name,
-            n.isHeap
+            n.name
         ));
 
         if (n.size != null) {
@@ -916,17 +913,12 @@ public class Desugarer {
             );
         }
 
-        if (stmt instanceof DelNode) {
-            return stmt;
-        }
-
         if (stmt instanceof VarDeclNode) {
             VarDeclNode n = (VarDeclNode) stmt;
 
             return new VarDeclNode(
                 desugarType(n.type),
-                n.name,
-                n.isHeap
+                n.name
             );
         }
 

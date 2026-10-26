@@ -1,8 +1,8 @@
-# 32. Runtime and Backend Notes
+# 31. Runtime and Backend Notes
 
 The current compiler targets C++14.
 
-## 32.1 Pipeline Order
+## 31.1 Pipeline Order
 
 ```text
 Franko source
@@ -11,22 +11,20 @@ Franko source
   -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
   -> SemanticAnalyzer (validation of evaluated values, no re-folding, entry-point selection)
   -> LegalityChecker
-  -> MemorySafetyChecker
+  -> AddressNullStateChecker
   -> C++14 code generation
   -> program template wrapper (entry-point call + argv conversion)
 ```
 
-## 32.2 Memory Allocation
+## 31.2 Memory Allocation
 
 The generated code allocates through bundled jemalloc (`je_malloc`, `je_calloc`, `je_realloc`, `je_free`).
-
-Heap variables (`alloc T x`) compile to a jemalloc-allocated pointer with placement construction, and `del x` compiles to the object destructor plus `je_free`.
 
 Dynamic array element buffers are allocated by the array runtime methods and freed by `uninit()` or by the array object's destructor.
 
 Element construction follows the C++ type of the elements: buffers for trivially default-constructible element types keep raw storage, while any other element type is default-constructed (placement new) when the buffer is allocated. `uninit()` and the array destructor destroy constructed elements before freeing the buffer. Trivially destructible element types skip destruction entirely.
 
-## 32.3 Array Representation
+## 31.3 Array Representation
 
 Some Franko rules mirror the generated C++ representation, especially array behavior.
 
@@ -54,13 +52,13 @@ Element lifetime in the dynamic array runtime:
 - `uninit()` and the array destructor destroy all `count` elements before freeing the buffer; trivially destructible element types skip destruction.
 - `je_realloc` byte-moves the existing elements on `resize`, which is fine for the runtime's trivially-relocatable element types.
 
-## 32.4 Ordering of Top-Level Analysis
+## 31.4 Ordering of Top-Level Analysis
 
 Function signatures are registered before function bodies are analyzed so that forward references, direct recursion, and mutual recursion can be resolved.
 
 Global variable declarations are also registered before function bodies are analyzed, so functions can reference globals declared later in source order.
 
-## 32.5 Desugaring Before Checking
+## 31.5 Desugaring Before Checking
 
 Array initializer lists are lowered before ordinary semantic checking.
 
@@ -90,11 +88,11 @@ Every other `constExpr` slot is also evaluated in this pass: static array sizes,
 
 The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
 
-## 32.6 Integer Literal Emission
+## 31.6 Integer Literal Emission
 
 Large integer literals are emitted so that they remain well-formed C++14. In particular, an unsuffixed decimal literal whose value exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because decimal literals in C++14 do not fall back to unsigned integer types.
 
-## 32.7 Print Emission
+## 31.7 Print Emission
 
 `print` arguments are emitted as `std::cout` insertions:
 
@@ -104,14 +102,14 @@ Large integer literals are emitted so that they remain well-formed C++14. In par
 
 See [Statements](19-statements.md) for which types are meaningfully printable.
 
-## 32.8 Identifier Emission and Name Clashes
+## 31.8 Identifier Emission and Name Clashes
 
 Franko keeps struct type names, variable names, and function names in separate namespaces, but C++14 does not. To keep the generated code unambiguous, every declared identifier is emitted with a kind prefix:
 
 | Franko construct | Generated C++ name |
 |---|---|
 | struct type `X` | `STRUCT_X` |
-| variable `x` (local, global, parameter, heap) | `VAR_x` |
+| variable `x` (local, global, parameter) | `VAR_x` |
 | function `f` | `FUNC_f_HASH_<8hex>` |
 | method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | namespace `n` | `NS_n` |
@@ -136,7 +134,7 @@ When a variable or function shares its name with a declared struct, the compiler
 
 Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
 
-## 32.9 Entry-Point Wrapper and Command-Line Arguments
+## 31.9 Entry-Point Wrapper and Command-Line Arguments
 
 The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
 

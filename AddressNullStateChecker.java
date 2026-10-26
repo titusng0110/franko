@@ -6,28 +6,19 @@ import java.util.Set;
 
 /**
  * ============================================================================
- * MEMORY SAFETY CHECKER
+ * ADDRESS NULL-STATE CHECKER
  * ============================================================================
  *
  * PURPOSE:
- * MemorySafetyChecker validates Franko heap-memory lifetime rules over the
- * fully lowered, legality-checked Semantic AST.
+ * AddressNullStateChecker validates Franko address rules over the fully
+ * lowered, legality-checked Semantic AST.
  *
- * This pass owns transient memory-state analysis. VariableSymbol must not store
- * deleted/free/use-after-free state.
+ * It tracks one fact per address-typed variable: whether the variable is
+ * definitely null, definitely pointing, or possibly null on the current
+ * execution path.
  *
  * Rules checked:
  *
- *   - del target must be heap-allocated,
- *   - double free is invalid,
- *   - possible double free after branch merges is invalid,
- *   - use after free is invalid,
- *   - possible use after free after branch merges is invalid,
- *   - heap variables must be deleted before leaving their scope,
- *   - heap variables must be deleted before returning from a function,
- *   - deletion state from branches that definitely return does not flow into
- *     following code,
- *   - branch-sensitive analysis is limited to MAX_BRANCH_DEPTH,
  *   - null is only valid for address types; integer 0 is not null,
  *   - address declarations are guaranteed null-initialized,
  *   - dereferencing a NULL address variable is an error,
@@ -35,59 +26,18 @@ import java.util.Set;
  *   - only getaddr(...) certifies an address variable as POINTING; an
  *     assignment from another address variable copies that variable's exact
  *     state, so POINTING propagates only through certified sources,
- *   - address state is tracked in a separate matrix from heap memory state,
- *     path-sensitively up to MAX_BRANCH_DEPTH, with guard refinement for
- *     'p == null' and 'p != null' conditions,
+ *   - address state is tracked path-sensitively up to MAX_BRANCH_DEPTH,
+ *     with guard refinement for 'p == null' and 'p != null' conditions,
  *   - at function entry every tracked address variable is MAYBE_NULL;
  *     declarations and assignments refine it.
  *
- * This checker is intentionally intra-procedural. It does not try to infer
- * whether called functions delete memory through aliases. In current Franko,
- * del is symbol-based, so memory ownership remains local to the heap variable.
- *
- * KNOWN LIMITATION (deferred to a later change):
- *
- *   Dereferencing an address whose pointee was freed by del cannot be caught
- *   at compile time by this checker. del is symbol-based, so an address may
- *   be copied into another variable (or a parameter) before the pointee is
- *   deleted; the copy keeps its POINTING state while the pointee is already
- *   gone. A runtime dangling/null check is planned as a later change and is
- *   intentionally not part of this checker.
+ * This checker is intentionally intra-procedural.
  */
-public final class MemorySafetyChecker {
+public final class AddressNullStateChecker {
     private static final int MAX_BRANCH_DEPTH = 10;
 
     /*
-     * Memory states for heap variables.
-     *
-     * UNTRACKED:
-     *   Internal state used for heap variables that exist in the Semantic AST
-     *   but are not currently live in the current function/block traversal.
-     *
-     * ALIVE:
-     *   The heap variable is allocated and not deleted on the current path.
-     *
-     * DELETED:
-     *   The heap variable is definitely deleted on the current path.
-     *
-     * MAYBE_DELETED:
-     *   The heap variable is deleted on some continuing paths and alive on
-     *   others. Uses and deletes are therefore unsafe because one path may be
-     *   use-after-free or double-free.
-     */
-    private enum MemoryState {
-        UNTRACKED,
-        ALIVE,
-        DELETED,
-        MAYBE_DELETED
-    }
-
-    /*
      * Address-state matrix for address-typed variables.
-     *
-     * This is a separate matrix from the heap memory-state matrix above.
-     * A symbol can appear in both matrices (heap variables of address type
-     * participate in both).
      *
      * POINTING:
      *   The variable is certified to hold a real storage address on the
@@ -121,28 +71,9 @@ public final class MemorySafetyChecker {
     /*
      * Symbol indexing.
      *
-     * The checker uses arrays for active memory state and snapshots. A small
+     * The checker uses arrays for active state and snapshots. A small
      * identity map is used only to translate a VariableSymbol identity into a
      * stable array index.
-     */
-    private final IdentityHashMap<VariableSymbol, Integer> heapIndexBySymbol =
-            new IdentityHashMap<>();
-
-    private VariableSymbol[] heapSymbols = new VariableSymbol[0];
-    private int heapCount = 0;
-
-    /*
-     * Active memory state.
-     *
-     * state[i] is the memory state for heapSymbols[i].
-     */
-    private MemoryState[] state = new MemoryState[0];
-
-    /*
-     * Address symbol indexing.
-     *
-     * The address matrix is indexed independently of the heap matrix so
-     * that non-heap address variables are fully trackable.
      */
     private final IdentityHashMap<VariableSymbol, Integer> addrIndexBySymbol =
             new IdentityHashMap<>();
@@ -160,31 +91,19 @@ public final class MemorySafetyChecker {
     /*
      * Preallocated snapshot storage.
      *
-     * snapshots[k] is a full copy of state at some control-flow point.
-     * Snapshot capacity is estimated from the number of if/else structures,
-     * nested branch depth, loops, and functions.
-     */
-    private MemoryState[][] snapshots = new MemoryState[0][];
-    private int snapshotCount = 0;
-
-    /*
-     * Preallocated address-state snapshot storage.
-     *
-     * addrSnapshots[k] shares slot indices with snapshots[k].
+     * addrSnapshots[k] is a full copy of addrState at some control-flow
+     * point. Snapshot capacity is estimated from the number of if/else
+     * structures, nested branch depth, loops, and functions.
      */
     private AddressState[][] addrSnapshots = new AddressState[0][];
+
+    private int snapshotCount = 0;
 
     private int branchDepth = 0;
 
     /*
      * Suppresses null-deref diagnostics while checking code that cannot
      * execute:
-     *
-     *   - the second abstract while-body pass, where a deref that is invalid
-     *     only because of a state carried across an infeasible extra
-     *     iteration would otherwise produce a false positive (any deref that
-     *     is invalid within a single body execution is already reported in
-     *     the first pass),
      *
      *   - bodies of statically infeasible guard paths, where the guard's
      *     assertion contradicts a definite current state.
@@ -204,7 +123,7 @@ public final class MemorySafetyChecker {
     private final Set<VariableSymbol> warnedMaybeNullVars =
             Collections.newSetFromMap(new IdentityHashMap<>());
 
-    public MemorySafetyChecker(DiagnosticBag diagnostics) {
+    public AddressNullStateChecker(DiagnosticBag diagnostics) {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
@@ -216,7 +135,6 @@ public final class MemorySafetyChecker {
         branchDepth = 0;
         snapshotCount = 0;
 
-        Arrays.fill(state, MemoryState.UNTRACKED);
         Arrays.fill(addrState, AddressState.MAYBE_NULL);
 
         warnedMaybeNullVars.clear();
@@ -235,21 +153,13 @@ public final class MemorySafetyChecker {
     // ============================================================
 
     private void prepareAnalysis(SemanticASTNode root) {
-        heapIndexBySymbol.clear();
-        heapSymbols = new VariableSymbol[16];
-        heapCount = 0;
-
         addrIndexBySymbol.clear();
         addrSymbols = new VariableSymbol[16];
         addrCount = 0;
 
-        collectHeapSymbols(root);
+        collectSymbols(root);
 
-        heapSymbols = Arrays.copyOf(heapSymbols, heapCount);
         addrSymbols = Arrays.copyOf(addrSymbols, addrCount);
-
-        state = new MemoryState[heapCount];
-        Arrays.fill(state, MemoryState.UNTRACKED);
 
         addrState = new AddressState[addrCount];
         Arrays.fill(addrState, AddressState.MAYBE_NULL);
@@ -257,42 +167,40 @@ public final class MemorySafetyChecker {
         int estimatedSnapshots =
                 Math.max(2*MAX_BRANCH_DEPTH, estimateSnapshotDemand(root, 0) + MAX_BRANCH_DEPTH);
 
-        snapshots = new MemoryState[estimatedSnapshots][heapCount];
         addrSnapshots = new AddressState[estimatedSnapshots][addrCount];
 
-        for (int i = 0; i < snapshots.length; i++) {
-            Arrays.fill(snapshots[i], MemoryState.UNTRACKED);
+        for (int i = 0; i < addrSnapshots.length; i++) {
             Arrays.fill(addrSnapshots[i], AddressState.MAYBE_NULL);
         }
     }
 
-    private void collectHeapSymbols(SemanticASTNode node) {
+    private void collectSymbols(SemanticASTNode node) {
         if (node == null) {
             return;
         }
 
         if (node instanceof SemanticProgramNode n) {
             for (SemanticASTNode item : n.topLevelItems) {
-                collectHeapSymbols(item);
+                collectSymbols(item);
             }
             return;
         }
 
         if (node instanceof SemanticNamespaceNode n) {
             for (SemanticASTNode item : n.items) {
-                collectHeapSymbols(item);
+                collectSymbols(item);
             }
             return;
         }
 
         if (node instanceof SemanticFunctionDeclNode n) {
-            collectHeapSymbols(n.body);
+            collectSymbols(n.body);
             return;
         }
 
         if (node instanceof SemanticStructDeclNode n) {
             for (SemanticFunctionDeclNode method : n.methods) {
-                collectHeapSymbols(method.body);
+                collectSymbols(method.body);
             }
 
             return;
@@ -300,63 +208,58 @@ public final class MemorySafetyChecker {
 
         if (node instanceof SemanticBlockNode n) {
             for (SemanticStmtNode stmt : n.statements) {
-                collectHeapSymbols(stmt);
+                collectSymbols(stmt);
             }
             return;
         }
 
         if (node instanceof SemanticVarDeclNode n) {
-            addTrackedSymbolIfNeeded(n.symbol);
+            addAddressSymbolIfNeeded(n.symbol);
             return;
         }
 
         if (node instanceof SemanticAssignNode n) {
-            collectHeapSymbolsFromExpr(n.target);
-            collectHeapSymbolsFromExpr(n.value);
+            collectSymbolsFromExpr(n.target);
+            collectSymbolsFromExpr(n.value);
             return;
         }
 
         if (node instanceof SemanticIfNode n) {
-            collectHeapSymbolsFromExpr(n.condition);
-            collectHeapSymbols(n.thenBranch);
-            collectHeapSymbols(n.elseBranch);
+            collectSymbolsFromExpr(n.condition);
+            collectSymbols(n.thenBranch);
+            collectSymbols(n.elseBranch);
             return;
         }
 
         if (node instanceof SemanticWhileNode n) {
-            collectHeapSymbolsFromExpr(n.condition);
-            collectHeapSymbols(n.body);
-            return;
-        }
-
-        if (node instanceof SemanticDelNode n) {
-            addTrackedSymbolIfNeeded(n.symbol);
+            collectSymbolsFromExpr(n.condition);
+            collectSymbols(n.body);
             return;
         }
 
         if (node instanceof SemanticPrintNode n) {
             for (SemanticExprNode arg : n.args) {
-                collectHeapSymbolsFromExpr(arg);
+                collectSymbolsFromExpr(arg);
             }
             return;
         }
 
         if (node instanceof SemanticReturnNode n) {
-            collectHeapSymbolsFromExpr(n.value);
+            collectSymbolsFromExpr(n.value);
             return;
         }
 
         if (node instanceof SemanticExprStmtNode n) {
-            collectHeapSymbolsFromExpr(n.expr);
+            collectSymbolsFromExpr(n.expr);
             return;
         }
 
         if (node instanceof SemanticExprNode expr) {
-            collectHeapSymbolsFromExpr(expr);
+            collectSymbolsFromExpr(expr);
         }
     }
 
-    private void collectHeapSymbolsFromExpr(SemanticExprNode expr) {
+    private void collectSymbolsFromExpr(SemanticExprNode expr) {
         if (expr == null) {
             return;
         }
@@ -366,93 +269,61 @@ public final class MemorySafetyChecker {
         }
 
         if (expr instanceof SemanticVarExprNode n) {
-            addTrackedSymbolIfNeeded(n.symbol);
+            addAddressSymbolIfNeeded(n.symbol);
             return;
         }
 
         if (expr instanceof SemanticUnaryOpNode n) {
-            collectHeapSymbolsFromExpr(n.expr);
+            collectSymbolsFromExpr(n.expr);
             return;
         }
 
         if (expr instanceof SemanticBinOpNode n) {
-            collectHeapSymbolsFromExpr(n.left);
-            collectHeapSymbolsFromExpr(n.right);
+            collectSymbolsFromExpr(n.left);
+            collectSymbolsFromExpr(n.right);
             return;
         }
 
         if (expr instanceof SemanticArrayAccessNode n) {
-            collectHeapSymbolsFromExpr(n.target);
-            collectHeapSymbolsFromExpr(n.index);
+            collectSymbolsFromExpr(n.target);
+            collectSymbolsFromExpr(n.index);
             return;
         }
 
         if (expr instanceof SemanticMemberAccessNode n) {
-            collectHeapSymbolsFromExpr(n.target);
+            collectSymbolsFromExpr(n.target);
             return;
         }
 
         if (expr instanceof SemanticFunctionCallNode n) {
             for (SemanticExprNode arg : n.args) {
-                collectHeapSymbolsFromExpr(arg);
+                collectSymbolsFromExpr(arg);
             }
             return;
         }
 
         if (expr instanceof SemanticArrayIntrinsicCallNode n) {
-            collectHeapSymbolsFromExpr(n.receiver);
+            collectSymbolsFromExpr(n.receiver);
 
             for (SemanticExprNode arg : n.args) {
-                collectHeapSymbolsFromExpr(arg);
+                collectSymbolsFromExpr(arg);
             }
 
             return;
         }
 
         if (expr instanceof SemanticGetAddrNode n) {
-            collectHeapSymbolsFromExpr(n.target);
+            collectSymbolsFromExpr(n.target);
             return;
         }
 
         if (expr instanceof SemanticDerefNode n) {
-            collectHeapSymbolsFromExpr(n.expr);
+            collectSymbolsFromExpr(n.expr);
         }
 
         if (expr instanceof SemanticCastExprNode n) {
-            collectHeapSymbolsFromExpr(n.expr);
+            collectSymbolsFromExpr(n.expr);
         }
-    }
-
-    private void addHeapSymbolIfNeeded(VariableSymbol symbol) {
-        if (symbol == null || !symbol.isHeap) {
-            return;
-        }
-
-        if (heapIndexBySymbol.containsKey(symbol)) {
-            return;
-        }
-
-        if (heapCount == heapSymbols.length) {
-            heapSymbols = Arrays.copyOf(
-                    heapSymbols,
-                    Math.max(4, heapSymbols.length * 2)
-            );
-        }
-
-        heapIndexBySymbol.put(symbol, heapCount);
-        heapSymbols[heapCount] = symbol;
-        heapCount++;
-    }
-
-    /*
-     * Registers a symbol in both tracking matrices when applicable.
-     *
-     * Heap-allocated symbols join the heap memory-state matrix; address-typed
-     * symbols join the address null-state matrix. A symbol may join both.
-     */
-    private void addTrackedSymbolIfNeeded(VariableSymbol symbol) {
-        addHeapSymbolIfNeeded(symbol);
-        addAddressSymbolIfNeeded(symbol);
     }
 
     private void addAddressSymbolIfNeeded(VariableSymbol symbol) {
@@ -707,14 +578,11 @@ public final class MemorySafetyChecker {
     private void checkFunction(SemanticFunctionDeclNode node) {
         int beforeFunction = snapshot();
 
-        Arrays.fill(state, MemoryState.UNTRACKED);
-
         /*
          * At function entry every address state is unknown: parameters carry
          * caller values, globals may have been modified by earlier calls.
-         * Local declarations set their own state (NULL for plain address
-         * declarations and for alloc'd addresses, whose heap slot is
-         * null-initialized).
+         * Local declarations set their own state (NULL for address
+         * declarations).
          *
          * Exception: a method's `self` parameter is synthesized by the
          * compiler as getaddr(receiver) over a storage-backed lvalue, so
@@ -758,19 +626,7 @@ public final class MemorySafetyChecker {
         }
 
         if (node.body != null) {
-            boolean definitelyReturns = checkBlock(node.body, true);
-
-            /*
-             * If the function can fall through normally, checkBlock(..., true)
-             * already reports leaks for function-scope heap variables at the
-             * end of the body.
-             *
-             * If the function definitely returns, return checking reports live
-             * heap variables at each return path.
-             */
-            if (!definitelyReturns) {
-                // Nothing extra needed. checkBlock handled normal body exit.
-            }
+            checkBlock(node.body);
         }
 
         restore(beforeFunction);
@@ -786,7 +642,7 @@ public final class MemorySafetyChecker {
         }
 
         if (node instanceof SemanticBlockNode n) {
-            return checkBlock(n, false);
+            return checkBlock(n);
         }
 
         if (node instanceof SemanticVarDeclNode n) {
@@ -823,11 +679,6 @@ public final class MemorySafetyChecker {
             return checkWhile(n);
         }
 
-        if (node instanceof SemanticDelNode n) {
-            checkDel(n);
-            return false;
-        }
-
         if (node instanceof SemanticPrintNode n) {
             for (SemanticExprNode arg : n.args) {
                 checkExpr(arg);
@@ -837,7 +688,6 @@ public final class MemorySafetyChecker {
 
         if (node instanceof SemanticReturnNode n) {
             checkExpr(n.value);
-            reportLiveHeapVariables("return statement");
             return true;
         }
 
@@ -849,33 +699,18 @@ public final class MemorySafetyChecker {
         return false;
     }
 
-    private boolean checkBlock(
-            SemanticBlockNode node,
-            boolean functionBody
-    ) {
-        int[] blockHeapIndices = new int[Math.max(1, node.statements.size())];
-        int blockHeapCount = 0;
-
+    private boolean checkBlock(SemanticBlockNode node) {
         int[] blockAddrIndices = new int[Math.max(1, node.statements.size())];
         int blockAddrCount = 0;
 
         for (SemanticStmtNode stmt : node.statements) {
             if (stmt instanceof SemanticVarDeclNode decl
-                    && decl.symbol != null) {
-                if (decl.symbol.isHeap) {
-                    int index = heapIndexOf(decl.symbol);
+                    && decl.symbol != null
+                    && decl.symbol.type instanceof SemanticAddrType) {
+                int index = addrIndexOfSymbol(decl.symbol);
 
-                    if (index >= 0) {
-                        blockHeapIndices[blockHeapCount++] = index;
-                    }
-                }
-
-                if (decl.symbol.type instanceof SemanticAddrType) {
-                    int index = addrIndexOfSymbol(decl.symbol);
-
-                    if (index >= 0) {
-                        blockAddrIndices[blockAddrCount++] = index;
-                    }
+                if (index >= 0) {
+                    blockAddrIndices[blockAddrCount++] = index;
                 }
             }
 
@@ -884,31 +719,6 @@ public final class MemorySafetyChecker {
             if (returned) {
                 return true;
             }
-        }
-
-        /*
-         * Normal block exit.
-         *
-         * Heap variables declared in this block must be deleted before the block
-         * exits normally, otherwise their pointer variable goes out of scope and
-         * the heap object leaks.
-         *
-         * For function bodies, this also catches heap variables that remain live
-         * at normal function fallthrough.
-         */
-        for (int i = 0; i < blockHeapCount; i++) {
-            int index = blockHeapIndices[i];
-            VariableSymbol symbol = heapSymbols[index];
-
-            if (isAliveOrMaybeDeleted(index)) {
-                diagnostics.error("Heap variable '"
-                        + symbol.qualifiedName()
-                        + "' may leak at end of "
-                        + (functionBody ? "function body" : "scope")
-                        + "; missing del");
-            }
-
-            state[index] = MemoryState.UNTRACKED;
         }
 
         /*
@@ -928,22 +738,13 @@ public final class MemorySafetyChecker {
             return;
         }
 
-        if (node.symbol.isHeap) {
-            int index = heapIndexOf(node.symbol);
-
-            if (index >= 0) {
-                state[index] = MemoryState.ALIVE;
-            }
-        }
-
         /*
-         * Address declarations are guaranteed null-initialized, including the
-         * heap slot of an alloc'd address: the generated C++ null-initializes
-         * the storage, so the slot holds null until an explicit assignment
-         * (getaddr(...), a certified variable, or null) refines it.
+         * Address declarations are guaranteed null-initialized: the
+         * generated C++ null-initializes the storage, so the variable holds
+         * null until an explicit assignment (getaddr(...), a certified
+         * variable, or null) refines it.
          *
          *   addr<T> p;             -> p is definitely NULL
-         *   alloc addr<T> p;       -> the heap slot is definitely NULL
          *
          * An explicit initializer lowers to a separate assignment statement,
          * which then refines this state.
@@ -1209,33 +1010,8 @@ public final class MemorySafetyChecker {
              */
             refineAddrStatesFromGuard(node.condition, true);
 
-            /*
-             * Check one body execution for internal memory errors.
-             */
             bodyReturns = checkStmt(node.body);
             afterOneIteration = snapshot();
-
-            /*
-             * Check a second body execution from the post-body state. This
-             * catches simple loop double-frees such as:
-             *
-             *   while (cond) {
-             *       del x
-             *   }
-             *
-             * because the second abstract iteration starts with x deleted.
-             *
-             * Null-deref diagnostics are suppressed in this pass; see the
-             * field comment on suppressNullDerefChecks.
-             */
-            if (!bodyReturns) {
-                restore(afterOneIteration);
-                refineAddrStatesFromGuard(node.condition, true);
-
-                suppressNullDerefChecks = true;
-                checkStmt(node.body);
-                suppressNullDerefChecks = false;
-            }
         } else {
             /*
              * The body never executes. Check it once with null-deref
@@ -1274,57 +1050,6 @@ public final class MemorySafetyChecker {
         return false;
     }
 
-    private void checkDel(SemanticDelNode node) {
-        VariableSymbol symbol = node.symbol;
-
-        if (symbol == null) {
-            diagnostics.error("Cannot delete null symbol");
-            return;
-        }
-
-        if (!symbol.isHeap) {
-            diagnostics.error("Cannot delete non-heap variable '"
-                    + symbol.qualifiedName()
-                    + "'");
-            return;
-        }
-
-        int index = heapIndexOf(symbol);
-
-        if (index < 0) {
-            return;
-        }
-
-        MemoryState current = stateOf(index);
-
-        if (current == MemoryState.DELETED) {
-            diagnostics.error("Variable '"
-                    + symbol.qualifiedName()
-                    + "' has already been deleted");
-            return;
-        }
-
-        if (current == MemoryState.MAYBE_DELETED) {
-            diagnostics.error("Variable '"
-                    + symbol.qualifiedName()
-                    + "' may have already been deleted");
-            state[index] = MemoryState.DELETED;
-            return;
-        }
-
-        state[index] = MemoryState.DELETED;
-
-        /*
-         * Codegen sets a deleted heap variable to nullptr, so an address-typed
-         * heap variable is definitely null after del.
-         */
-        int addrIndex = addrIndexOfSymbol(symbol);
-
-        if (addrIndex >= 0) {
-            addrState[addrIndex] = AddressState.NULL;
-        }
-    }
-
     // ============================================================
     // Expression Checking
     // ============================================================
@@ -1335,11 +1060,6 @@ public final class MemorySafetyChecker {
         }
 
         if (expr instanceof SemanticIntLiteralNode) {
-            return;
-        }
-
-        if (expr instanceof SemanticVarExprNode n) {
-            checkVarUse(n.symbol);
             return;
         }
 
@@ -1392,8 +1112,8 @@ public final class MemorySafetyChecker {
              * Null dereference checking: a deref of an address variable in
              * the NULL or MAYBE_NULL state is an error.
              *
-             * Suppressed during the loop re-check pass; see the field
-             * comment on inLoopRecheckPass.
+             * Suppressed while checking code that cannot execute; see the
+             * field comment on suppressNullDerefChecks.
              */
             if (!suppressNullDerefChecks) {
                 int targetIndex = addrIndexOf(n.expr);
@@ -1437,108 +1157,14 @@ public final class MemorySafetyChecker {
         }
     }
 
-    private void checkVarUse(VariableSymbol symbol) {
-        if (symbol == null || !symbol.isHeap) {
-            return;
-        }
-
-        int index = heapIndexOf(symbol);
-
-        if (index < 0) {
-            return;
-        }
-
-        MemoryState current = stateOf(index);
-
-        if (current == MemoryState.DELETED) {
-            diagnostics.error("Use of deleted variable '"
-                    + symbol.qualifiedName()
-                    + "'");
-        } else if (current == MemoryState.MAYBE_DELETED) {
-            diagnostics.error("Use of possibly deleted variable '"
-                    + symbol.qualifiedName()
-                    + "'");
-        }
-    }
-
-    // ============================================================
-    // Leak Checking
-    // ============================================================
-
-    private void reportLiveHeapVariables(String where) {
-        for (int i = 0; i < heapCount; i++) {
-            VariableSymbol symbol = heapSymbols[i];
-
-            if (symbol == null || !symbol.isHeap) {
-                continue;
-            }
-
-            MemoryState current = state[i];
-
-            if (current == MemoryState.ALIVE) {
-                diagnostics.error("Heap variable '"
-                        + symbol.qualifiedName()
-                        + "' leaks at "
-                        + where
-                        + "; missing del");
-            } else if (current == MemoryState.MAYBE_DELETED) {
-                diagnostics.error("Heap variable '"
-                        + symbol.qualifiedName()
-                        + "' may leak at "
-                        + where
-                        + "; missing del on some path");
-            }
-        }
-    }
-
-    private boolean isAliveOrMaybeDeleted(int index) {
-        MemoryState current = stateOf(index);
-        return current == MemoryState.ALIVE
-                || current == MemoryState.MAYBE_DELETED;
-    }
-
     // ============================================================
     // State Helpers
     // ============================================================
-
-    private int heapIndexOf(VariableSymbol symbol) {
-        Integer index = heapIndexBySymbol.get(symbol);
-        return index == null ? -1 : index;
-    }
-
-    private MemoryState stateOf(int index) {
-        if (index < 0 || index >= heapCount) {
-            return MemoryState.ALIVE;
-        }
-
-        MemoryState value = state[index];
-
-        if (value == null || value == MemoryState.UNTRACKED) {
-            /*
-             * Heap variables should normally enter the active state at their
-             * declaration.
-             *
-             * If a heap symbol appears without a declaration in this traversal,
-             * treat it as alive so memory errors are not hidden.
-             */
-            return MemoryState.ALIVE;
-        }
-
-        return value;
-    }
 
     private int snapshot() {
         ensureSnapshotCapacity();
 
         int slot = snapshotCount++;
-
-        System.arraycopy(
-                state,
-                0,
-                snapshots[slot],
-                0,
-                heapCount
-        );
 
         System.arraycopy(
                 addrState,
@@ -1557,14 +1183,6 @@ public final class MemorySafetyChecker {
         }
 
         System.arraycopy(
-                snapshots[snapshotSlot],
-                0,
-                state,
-                0,
-                heapCount
-        );
-
-        System.arraycopy(
                 addrSnapshots[snapshotSlot],
                 0,
                 addrState,
@@ -1574,20 +1192,16 @@ public final class MemorySafetyChecker {
     }
 
     private void ensureSnapshotCapacity() {
-        if (snapshotCount < snapshots.length) {
+        if (snapshotCount < addrSnapshots.length) {
             return;
         }
 
-        int oldLength = snapshots.length;
+        int oldLength = addrSnapshots.length;
         int newLength = Math.max(16, oldLength * 2);
 
-        snapshots = Arrays.copyOf(snapshots, newLength);
         addrSnapshots = Arrays.copyOf(addrSnapshots, newLength);
 
         for (int i = oldLength; i < newLength; i++) {
-            snapshots[i] = new MemoryState[heapCount];
-            Arrays.fill(snapshots[i], MemoryState.UNTRACKED);
-
             addrSnapshots[i] = new AddressState[addrCount];
             Arrays.fill(addrSnapshots[i], AddressState.MAYBE_NULL);
         }
@@ -1602,41 +1216,6 @@ public final class MemorySafetyChecker {
             boolean hasElse,
             int fallthroughState
     ) {
-        for (int i = 0; i < heapCount; i++) {
-            boolean hasContinuingPath = false;
-            MemoryState merged = null;
-
-            if (!thenReturns) {
-                hasContinuingPath = true;
-                merged = mergeStateValue(
-                        merged,
-                        stateFromSnapshot(thenState, i, before)
-                );
-            }
-
-            if (hasElse) {
-                if (!elseReturns) {
-                    hasContinuingPath = true;
-                    merged = mergeStateValue(
-                            merged,
-                            stateFromSnapshot(elseState, i, before)
-                    );
-                }
-            } else if (fallthroughState >= 0) {
-                hasContinuingPath = true;
-                merged = mergeStateValue(
-                        merged,
-                        stateFromSnapshot(fallthroughState, i, before)
-                );
-            }
-
-            if (hasContinuingPath && merged != null) {
-                state[i] = merged;
-            } else {
-                state[i] = stateFromSnapshot(before, i, before);
-            }
-        }
-
         for (int i = 0; i < addrCount; i++) {
             boolean hasContinuingPath = false;
             AddressState merged = null;
@@ -1677,24 +1256,6 @@ public final class MemorySafetyChecker {
             int before,
             int afterOneIteration
     ) {
-        for (int i = 0; i < heapCount; i++) {
-            MemoryState merged = null;
-
-            merged = mergeStateValue(
-                    merged,
-                    stateFromSnapshot(before, i, before)
-            );
-
-            merged = mergeStateValue(
-                    merged,
-                    stateFromSnapshot(afterOneIteration, i, before)
-            );
-
-            state[i] = merged == null
-                    ? MemoryState.UNTRACKED
-                    : merged;
-        }
-
         for (int i = 0; i < addrCount; i++) {
             AddressState merged = null;
 
@@ -1712,38 +1273,6 @@ public final class MemorySafetyChecker {
                     ? AddressState.MAYBE_NULL
                     : merged;
         }
-    }
-
-    private MemoryState stateFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= heapCount) {
-            return MemoryState.ALIVE;
-        }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && snapshots[snapshotSlot] != null) {
-            MemoryState value = snapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
-            }
-        }
-
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && snapshots[fallbackSlot] != null) {
-            MemoryState fallback = snapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
-        }
-
-        return MemoryState.UNTRACKED;
     }
 
     private AddressState addrStateFromSnapshot(
@@ -1795,32 +1324,5 @@ public final class MemorySafetyChecker {
         }
 
         return AddressState.MAYBE_NULL;
-    }
-
-    private MemoryState mergeStateValue(
-            MemoryState left,
-            MemoryState right
-    ) {
-        if (right == null) {
-            right = MemoryState.UNTRACKED;
-        }
-
-        if (left == null) {
-            return right;
-        }
-
-        if (left == right) {
-            return left;
-        }
-
-        if (left == MemoryState.UNTRACKED) {
-            return right;
-        }
-
-        if (right == MemoryState.UNTRACKED) {
-            return left;
-        }
-
-        return MemoryState.MAYBE_DELETED;
     }
 }

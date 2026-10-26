@@ -104,11 +104,6 @@ public class StatementChecker {
             return;
         }
 
-        if (node instanceof SemanticDelNode n) {
-            visitDel(n);
-            return;
-        }
-
         if (node instanceof SemanticPrintNode n) {
             visitPrint(n);
             return;
@@ -245,19 +240,6 @@ public class StatementChecker {
         }
 
         diagnostics.error("Return statement was checked outside FunctionChecker");
-    }
-
-    // ============================================================
-    // Delete
-    // ============================================================
-
-    private void visitDel(SemanticDelNode node) {
-        VariableSymbol sym = node.symbol;
-
-        if (sym == null) {
-            diagnostics.error("Cannot delete null symbol");
-            return;
-        }
     }
 
     // ============================================================

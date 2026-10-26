@@ -137,7 +137,7 @@ addr<int32_t> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
-This guarantee also applies to address-typed struct fields and to the heap storage of an `alloc`'d address.
+This guarantee also applies to address-typed struct fields.
 
 ### 24.8.2 Nullness Certification
 
@@ -180,4 +180,4 @@ Guarding with `p != null` removes the warning, because the compiler refines the 
 
 Address lifetime is not fully tracked.
 
-The compiler does not fully track dangling addresses or aliasing through addresses. In particular, dereferencing an address whose pointee was freed by `del` cannot be caught at compile time when the address was copied before the delete; a runtime check for this is planned as a later change.
+The compiler does not fully track dangling addresses or aliasing through addresses. An address may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.

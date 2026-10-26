@@ -156,7 +156,7 @@ importDecl
 // A struct body contains field declarations and method declarations.
 // Methods are function declarations whose first parameter must be
 // literally `addr<X> self`, where X is the enclosing struct (see
-// Methods). No assignments, no generics. No alloc fields.
+// Methods). No assignments, no generics.
 //
 // Field initializers, if present, must be constExpr.
 //
@@ -173,7 +173,6 @@ importDecl
 //
 // Invalid:
 //   struct X {
-//       alloc int32_t a
 //       int32_t a = f()
 //       a = 1
 //       func bad(int32_t self) -> void {}
@@ -195,7 +194,6 @@ structFieldDecl
 // ---------- GLOBAL VARIABLES ----------
 //
 // Global variables may have optional constexpr-style initialization.
-// No alloc globals.
 //
 // Valid:
 //   int32_t g
@@ -204,7 +202,6 @@ structFieldDecl
 //   X globalStruct
 //
 // Invalid:
-//   alloc int32_t g
 //   int32_t g = f()
 //   int32_t g = other
 //   int32_t g = arr[0]
@@ -346,7 +343,6 @@ forUpdate
 // not hardcoded in the lexer/parser.
 simpleStmt
     : varDecl
-    | delStmt
     | returnStmt
     | assignStmt
     | printStmt
@@ -375,12 +371,8 @@ simpleStmt
 // The initializer list itself does not allocate, resize, or initialize
 // dynamic array storage. It only lowers to indexed assignments.
 //
-// alloc is allowed only for local variable declarations, not globals,
-// and not struct fields.
-//
 varDecl
     : type IDENTIFIER declSuffix?
-    | ALLOC type IDENTIFIER declSuffix?
     ;
 
 declSuffix
@@ -391,12 +383,6 @@ declSuffix
 declInitializer
     : arrayLiteral
     | expr
-    ;
-
-// ---------- DELETE ----------
-
-delStmt
-    : DEL (IDENTIFIER | SELF)
     ;
 
 // ---------- RETURN ----------
@@ -638,8 +624,6 @@ memberName
     | RETURN
     | VOID
     | STRUCT
-    | ALLOC
-    | DEL
     | PRINT
     | IF
     | ELSE
@@ -968,8 +952,6 @@ VOID   : 'void' ;
 STRUCT : 'struct' ;
 
 // Keywords
-ALLOC   : 'alloc' ;
-DEL     : 'del' ;
 PRINT   : 'print' ;
 IF      : 'if' ;
 ELSE    : 'else' ;

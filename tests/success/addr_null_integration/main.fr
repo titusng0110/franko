@@ -89,14 +89,6 @@ func main() -> int32_t {
 
     print(3)
 
-    // Heap address variable: the slot is null-initialized, so it must be
-    // assigned before deref.
-    alloc addr<int32_t> h
-    h = getaddr(x)
-    deref(h) = 99
-    print(deref(h))
-    del h
-
     // Global address variable is null-initialized.
     print(g == null)
     g = getaddr(x)

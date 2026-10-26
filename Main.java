@@ -185,16 +185,16 @@ public class Main {
         LegalityChecker legalityChecker = new LegalityChecker(legalityDiagnostics);
         legalityChecker.check(semaAST);
 
-        // ----- Memory safety checking -----
-        System.out.println("==== Memory Safety Checking ====");
-        DiagnosticBag memorySafetyDiagnostics = new DiagnosticBag("Memory safety checking failed:");
-        MemorySafetyChecker memorySafetyChecker = new MemorySafetyChecker(memorySafetyDiagnostics);
-        memorySafetyChecker.check(semaAST);
+        // ----- Address null-state checking -----
+        System.out.println("==== Address Null-State Checking ====");
+        DiagnosticBag addressStateDiagnostics = new DiagnosticBag("Address null-state checking failed:");
+        AddressNullStateChecker addressStateChecker = new AddressNullStateChecker(addressStateDiagnostics);
+        addressStateChecker.check(semaAST);
 
-        if (memorySafetyDiagnostics.hasWarnings()) {
-            System.out.println("==== Memory Safety Warnings ====");
+        if (addressStateDiagnostics.hasWarnings()) {
+            System.out.println("==== Address Null-State Warnings ====");
 
-            for (String warning : memorySafetyDiagnostics.getWarnings()) {
+            for (String warning : addressStateDiagnostics.getWarnings()) {
                 System.out.println("  - " + warning);
             }
         }

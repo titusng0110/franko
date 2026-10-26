@@ -128,7 +128,7 @@ public final class ExpressionAnalyzer {
                     ctx.error("Undeclared variable '" + n.name + "'");
                 }
 
-                sym = new VariableSymbol(null, n.name, FALLBACK_TYPE, false);
+                sym = new VariableSymbol(null, n.name, FALLBACK_TYPE);
             }
 
             return new SemanticVarExprNode(sym.type, sym);

@@ -1,9 +1,0 @@
-// Failure fixture: memory_safety/non_heap_delete
-// Deleting a non-heap variable is an error.
-func main() -> int32_t {
-    int32_t x19 = 10
-
-    del x19
-
-    return 0
-}

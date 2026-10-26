@@ -4,7 +4,7 @@ Some Franko source forms are accepted as convenient syntax and rewritten before 
 
 Desugaring does not change program meaning. It rewrites compact user-facing syntax into simpler core forms used by the semantic analyzer.
 
-After desugaring, normal declaration, assignment, array initialization, heap, and type checking rules apply.
+After desugaring, normal declaration, assignment, array initialization, and type checking rules apply.
 
 ## 5.1 Declaration Initializer Sugar
 
@@ -29,7 +29,6 @@ This:
 
 ```franko
 array<int> arr(20);
-alloc array<int> arr2(20);
 ```
 
 is desugared to:
@@ -37,11 +36,6 @@ is desugared to:
 ```franko
 array<int> arr;
 arr(20);
-```
-
-```franko
-alloc array<int> arr2;
-arr2(20);
 ```
 
 The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](21-array-intrinsics.md).
@@ -175,7 +169,7 @@ becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear
 
 Inference rules:
 
-- `?` is legal only in a local declaration-assignment statement (`T name = literal;`, including `alloc` form) whose initializer is an array literal or a string literal;
+- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal or a string literal;
 - when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
 - when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
 - an empty initializer list cannot infer a size;

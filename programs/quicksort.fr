@@ -7,7 +7,6 @@
 //
 //   - structs with a static-array field
 //   - methods with explicit addr<QuickSort> self receivers
-//   - heap structs with alloc / del
 //   - void methods
 //   - non-void return values
 //   - local static arrays
@@ -139,7 +138,7 @@ struct QuickSort {
 }
 
 func main() -> int32_t {
-    alloc QuickSort sorter
+    QuickSort sorter
 
     uint32_t n = 50
     uint8_t sorted = 0
@@ -159,8 +158,6 @@ func main() -> int32_t {
 
     print(2003)
     print(sorted)
-
-    del sorter
 
     return 0
 }

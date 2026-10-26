@@ -1,4 +1,4 @@
-# 33. Foreign Function Interface
+# 32. Foreign Function Interface
 
 Franko has no general native-call syntax. Operating-system access goes
 through FFI intrinsics: functions that are *declared* in Franko and
@@ -8,7 +8,7 @@ its API is documented separately in `library_docs/os.md`. This chapter
 describes the mechanics: how the compiler detects the module, where
 the C++ lives, and which mistakes fail loudly instead of miscompiling.
 
-## 33.1 Activation
+## 32.1 Activation
 
 FFI behavior switches on only when the program imports the module
 through its canonical specifier:
@@ -24,7 +24,7 @@ ordinary Franko file: the stub bodies compile as written and no bridge
 is loaded. See [Source Files](02-source-files.md) for the general
 import path rules.
 
-## 33.2 Declaration File
+## 32.2 Declaration File
 
 `import/franko/os.fr` declares the module API with stub bodies only.
 Every compiler phase between import resolution and code generation
@@ -35,7 +35,7 @@ return failure values (`-1` for posix calls, `0` for win32 calls), so
 if the bridge ever fails to attach, the program reports failure
 instead of silently succeeding.
 
-## 33.3 Bridge File
+## 32.3 Bridge File
 
 The real definitions live in `import/franko/os.ffi.cpp`, next to the
 module. A `.cpp` file can sit there safely because imports only allow
@@ -55,7 +55,7 @@ The file is split into marker-delimited splice units:
 Each unit ends with `// @@franko-ffi:end`. Every intrinsic block
 defines its function under the exact mangled C++ name the backend
 emits for the Franko declaration (see [Runtime and Backend
-Notes](32-runtime-and-backend-notes.md) for the mangling rule): the
+Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
@@ -72,7 +72,7 @@ namespace nesting. The bridge is spliced after the program template's
 `#include "FrankoRuntime.hpp"`, so `Franko_Dynamic_Array`,
 `franko_panic`, and the fixed-width integer types are available.
 
-## 33.4 Splicing
+## 32.4 Splicing
 
 Codegen emits prototypes for every intrinsic (they act as forward
 declarations) but never emits the stub bodies; the bridge provides the
@@ -82,7 +82,7 @@ Merely importing `franko/os` without calling anything adds zero C++
 to the output, and an unused intrinsic leaves only its harmless
 prototype behind.
 
-## 33.5 Verification
+## 32.5 Verification
 
 Three mistakes fail at Franko-compile time instead of C++ link time:
 
@@ -99,7 +99,7 @@ Three mistakes fail at Franko-compile time instead of C++ link time:
   function error. Stubs in those namespaces must never compile
   silently.
 
-## 33.6 Runtime Contract
+## 32.6 Runtime Contract
 
 The bridge checks `count` against the buffer's array length before
 every transfer: `count` beyond the end aborts via `franko_panic`,
@@ -109,7 +109,7 @@ failure value instead of crashing. The win32 blocks compile to a
 `#error` off Windows, so a win32 call built for the wrong target
 fails with a clear message at the C++ stage.
 
-## 33.7 Namespace Ownership
+## 32.7 Namespace Ownership
 
 The ownership rule in 32.5 applies only while the module is active.
 Without `import "franko/os"`, `os::posix` and `os::win32` are

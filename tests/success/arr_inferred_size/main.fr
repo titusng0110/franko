@@ -4,7 +4,7 @@
 // Covers:
 //   `?` from array literals, string literals (UTF-8 bytes),
 //   nested static arrays, ndarray (including middle dimensions),
-//   mixed explicit/inferred dimensions, alloc form.
+//   mixed explicit/inferred dimensions.
 // ============================================================
 
 func main() -> int32_t {
@@ -40,11 +40,6 @@ func main() -> int32_t {
     print(h[0].length());
     print(h[0][0].length());
     print(h[1][1][2]);
-
-    alloc array<int32_t, ?> heap = [7, 8, 9];
-    print(heap.length());
-    print(heap[2]);
-    del heap;
 
     array<int32_t, 1 + 2> e = [1, 2, 3];
     print(e.length());

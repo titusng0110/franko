@@ -20,7 +20,7 @@ The cleaned section ordering is:
 10. Constant Folding
 11. Declarations
 12. Functions
-13. Heap Variables and `alloc`
+13. Pool Allocation
 14. Assignment
 15. Lvalues and Storage-Backed Expressions
 16. Casts
@@ -34,14 +34,13 @@ The cleaned section ordering is:
 24. Addresses
 25. Structs
 26. Methods
-27. `del` and Delete Checking
-28. Memory Safety Checking
-29. Type Equality
-30. Declaration Type Validity
-31. Unsupported or Restricted Features
-32. Runtime and Backend Notes
-33. Foreign Function Interface
-34. Examples
+27. Memory Safety Checking
+28. Type Equality
+29. Declaration Type Validity
+30. Unsupported or Restricted Features
+31. Runtime and Backend Notes
+32. Foreign Function Interface
+33. Examples
 
 ## How to rebuild one combined document
 

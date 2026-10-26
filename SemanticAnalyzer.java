@@ -51,7 +51,6 @@ import java.util.*;
  *   - void-returning calls in value contexts,
  *   - array bounds safety,
  *   - dynamic array initialization-before-use,
- *   - delete legality,
  *   - static array size positivity/range validity,
  *   - runtime/lifetime rules.
  *
@@ -294,9 +293,6 @@ public class SemanticAnalyzer {
          *   - namespace declarations.
          *
          * Executable statements at global scope are rejected here.
-         *
-         * alloc is not allowed at global scope: global variables are
-         * statically allocated.
          */
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof StructDeclNode
@@ -1224,8 +1220,7 @@ public class SemanticAnalyzer {
             VariableSymbol sym = new VariableSymbol(
                     null,
                     n.name,
-                    analyzeNormalType(n.type),
-                    n.isHeap
+                    analyzeNormalType(n.type)
             );
 
             symbolTable.declare(sym);
@@ -1273,29 +1268,6 @@ public class SemanticAnalyzer {
                     analyzeStmt(n.body);
 
             return new SemanticWhileNode(condition, body);
-        }
-
-        if (node instanceof DelNode n) {
-            VariableSymbol sym = symbolTable.resolve(n.name);
-
-            if (sym == null) {
-                if ("self".equals(n.name)) {
-                    symbolTable.error("keyword 'self' is only valid inside a method body");
-                } else {
-                    symbolTable.error("Cannot delete undeclared variable '"
-                            + n.name
-                            + "'");
-                }
-
-                sym = new VariableSymbol(
-                        null,
-                        n.name,
-                        FALLBACK_TYPE,
-                        true
-                );
-            }
-
-            return new SemanticDelNode(sym);
         }
 
         if (node instanceof PrintNode n) {
@@ -1361,8 +1333,7 @@ public class SemanticAnalyzer {
         VariableSymbol sym = new VariableSymbol(
                 null,
                 n.name,
-                type,
-                n.isHeap
+                type
         );
 
         symbolTable.declare(sym);

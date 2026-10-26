@@ -1,8 +1,8 @@
-# 31. Unsupported or Restricted Features
+# 30. Unsupported or Restricted Features
 
 The current Franko implementation intentionally leaves several areas restricted or incomplete.
 
-## 31.1 Function Restrictions
+## 30.1 Function Restrictions
 
 - function declarations are valid only in global scope;
 - nested functions are not supported;
@@ -16,7 +16,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
-## 31.2 No General Member Calls
+## 30.2 No General Member Calls
 
 Struct methods and the built-in array intrinsics use member-call syntax (see [Methods](26-methods.md) and [Array Intrinsics](21-array-intrinsics.md)). All other member calls are rejected, including:
 
@@ -25,11 +25,10 @@ x.print();          // unsupported member call: print is a statement keyword
 x.something(1);     // unsupported member call: unknown method
 ```
 
-## 31.3 Struct Restrictions
+## 30.3 Struct Restrictions
 
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
-- struct fields cannot use `alloc`;
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and addr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `addr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
 - a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is address-only: it can be used only through `addr<X>`;
@@ -37,27 +36,27 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](25-structs.md).
 
-## 31.4 No Floating-Point Types
+## 30.4 No Floating-Point Types
 
 Only integer primitives are supported.
 
-## 31.5 No Separate Boolean Type
+## 30.5 No Separate Boolean Type
 
 Boolean results use `uint8_t`.
 
-## 31.6 No Implicit Numeric Conversions for Nonconstants
+## 30.6 No Implicit Numeric Conversions for Nonconstants
 
 Nonconstant numeric expressions require exact type equality wherever a
 typed value is expected. Moving between integer widths is always
 explicit through the cast<T>(expr) intrinsic (see [Casts](16-casts.md)).
 
-## 31.7 Arrays Are Not Assignable as Values
+## 30.7 Arrays Are Not Assignable as Values
 
 Arrays cannot be assigned directly as ordinary values.
 
 Array initializer assignment is an exception only in syntax shape, not in value semantics.
 
-## 31.8 Array Initializer Lists Are Not General Values
+## 30.8 Array Initializer Lists Are Not General Values
 
 Array initializer lists are not first-class values.
 
@@ -70,25 +69,21 @@ foo([1, 2, 3]);
 return [1, 2, 3];
 ```
 
-## 31.9 No Full Dynamic Array Lifetime Checking
+## 30.9 No Full Dynamic Array Lifetime Checking
 
 The checker validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
 
-## 31.10 Delete Checking Is Limited
-
-Delete checking is symbol-based, not alias-aware, and branch-sensitive only up to a nesting-depth limit (10); beyond that depth the analysis falls back to a conservative path-insensitive merge. See [Memory Safety Checking](28-memory-safety-checking.md) for the full list of rules and limitations.
-
-## 31.11 Address Lifetime Is Not Fully Tracked
+## 30.10 Address Lifetime Is Not Fully Tracked
 
 The compiler does not fully track dangling addresses or ownership.
 
-## 31.12 Print Checking Is Loose
+## 30.11 Print Checking Is Loose
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and addresses (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
 Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
 
-## 31.13 Unsupported Operators
+## 30.12 Unsupported Operators
 
 The following operators do not exist in the language. The lexer rejects the characters `%` and `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
 
@@ -98,7 +93,7 @@ The following operators do not exist in the language. The lexer rejects the char
 +x  // no unary plus operator
 ```
 
-## 31.14 String Literals Are Initializer-Only
+## 30.13 String Literals Are Initializer-Only
 
 String literals are supported as byte-array initializer sugar (see [String Literals](23-string-literals.md)), but they are not general expression values.
 
@@ -110,17 +105,17 @@ foo("hello");
 return "hello";
 ```
 
-## 31.15 No `break` or `continue`
+## 30.14 No `break` or `continue`
 
 Only `if`, `while`, and `for` control flow is implemented. There is no `break` or `continue` statement, so a `for` loop cannot be exited early and its `update` always runs at the end of every body iteration. There is also no `switch`, no `do`/`do-while`, and no `goto`.
 
-## 31.16 Global Scope Is Declaration-Only
+## 30.15 Global Scope Is Declaration-Only
 
 Only struct declaration nodes, variable declaration nodes, and function declaration nodes are valid at global scope.
 
 Executable statements are invalid at global scope.
 
-## 31.17 No C-Style Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
+## 30.16 No C-Style Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
 
 The following forms do not exist in the grammar:
 

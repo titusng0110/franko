@@ -26,7 +26,6 @@
 //   - logical && and ||
 //   - heap dynamic array initialization with init_zero()
 //   - dynamic array uninit()
-//   - alloc / del
 //   - memset()
 //   - memcpy(addr<array<...>>)
 //   - getaddr() and deref()
@@ -204,7 +203,7 @@ func main() -> int32_t {
     Maze maze
     array<uint, 13> line
 
-    alloc array<uint> queue
+    array<uint> queue
 
     uint rows = 12
     uint cols = 13
@@ -222,7 +221,6 @@ func main() -> int32_t {
     qStatus = queue.init_zero(qCap)
 
     if (qStatus != 0) {
-        del queue
         return -1
     }
 
@@ -231,7 +229,6 @@ func main() -> int32_t {
     found = maze.runBfs(getaddr(queue), qCap, cols, startR, startC, goalR, goalC)
 
     queue.uninit()
-    del queue
 
     if (found != 0) {
         maze.reconstructPath(startR, startC, goalR, goalC)
