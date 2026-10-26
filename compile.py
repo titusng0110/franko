@@ -25,7 +25,6 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from franko_tools import (
-    GXX_HINT,
     IMPORT_DIR,
     INCLUDE_DIR,
     JAVA_HINT,
@@ -33,6 +32,7 @@ from franko_tools import (
     cxx_compile_flags,
     ensure_toolchain,
     executable_suffix,
+    find_cxx,
     find_tool,
     franko_classpath,
     host_target,
@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     # Tool checks happen before any build step so a missing JDK or compiler
     # reports the real problem instead of a half-built output.
     java = find_tool("java", JAVA_HINT)
-    find_tool("g++", GXX_HINT)
+    cxx = find_cxx()
     ensure_toolchain()
 
     include, jemalloc_lib = jemalloc_paths()
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     #
     compile_flags = cxx_compile_flags("basic")
     command = [
-        find_tool("g++", GXX_HINT),
+        cxx,
         *compile_flags,
         f"-I{INCLUDE_DIR}",
         f"-I{include}",

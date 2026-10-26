@@ -5,7 +5,7 @@ duplicated (and had already drifted apart) in the Linux shell scripts and
 the Windows PowerShell scripts:
 
 * host target detection and bundled-jemalloc lookup,
-* tool discovery (``java``, ``javac``, ``g++``),
+* tool discovery (``java``, ``javac``, ``g++``/``clang++``),
 * running subprocesses with a printable command line,
 * reading per-case fixture files (``.flags`` / ``.args`` / ``.stdin`` / ...),
 * newline-safe comparison of actual vs expected output,
@@ -116,21 +116,13 @@ def host_target() -> str:
     return f"{host_os()}-{host_arch()}"
 
 
-def jemalloc_bundle_name() -> str:
-    # The Windows bundle is checked in as `windows-x64` while the compiler's
-    # target spelling is `windows-x86_64`.
-    if host_os() == "windows":
-        return "windows-x64"
-    return host_target()
-
-
 def executable_suffix() -> str:
     return ".exe" if IS_WINDOWS else ""
 
 
 def jemalloc_paths() -> tuple[Path, Path]:
     """Return (include dir, static library) for the host's jemalloc bundle."""
-    bundle = ROOT / "third_party" / "jemalloc" / jemalloc_bundle_name()
+    bundle = ROOT / "third_party" / "jemalloc" / host_target()
     include = bundle / "include"
     library = bundle / "lib" / ("jemalloc.lib" if IS_WINDOWS else "libjemalloc.a")
     header = include / "jemalloc" / "jemalloc.h"
@@ -140,7 +132,7 @@ def jemalloc_paths() -> tuple[Path, Path]:
             "bundled jemalloc header not found:\n"
             f"  {header}\n"
             "\nExpected layout:\n"
-            f"  third_party/jemalloc/{jemalloc_bundle_name()}/include/jemalloc/jemalloc.h"
+            f"  third_party/jemalloc/{host_target()}/include/jemalloc/jemalloc.h"
         )
 
     if not library.is_file():
@@ -148,7 +140,7 @@ def jemalloc_paths() -> tuple[Path, Path]:
             "bundled jemalloc static library not found:\n"
             f"  {library}\n"
             "\nExpected layout:\n"
-            f"  third_party/jemalloc/{jemalloc_bundle_name()}/lib/"
+            f"  third_party/jemalloc/{host_target()}/lib/"
             + ("jemalloc.lib" if IS_WINDOWS else "libjemalloc.a")
         )
 
@@ -177,8 +169,12 @@ def cxx_compile_flags(warnings: str = "basic") -> list[str]:
 def link_flags() -> list[str]:
     """Link flags for a native binary, per host OS.
 
-    Linux needs pthread/dl (jemalloc is linked statically), macOS needs
-    pthread only (dl lives in libSystem), MinGW needs neither.
+    Linux needs pthread/dl (jemalloc is linked statically and references
+    both symbol groups; they only matter for glibc < 2.34, where libdl and
+    libpthread are not merged into libc yet), macOS needs pthread only (dl
+    lives in libSystem), MinGW needs neither. The static libstdc++/libgcc
+    pair (Linux/Windows only) keeps binaries independent of the system's
+    GCC runtimes; Apple's clang has no libstdc++ to link.
     """
     flags: list[str] = []
     system = host_os()
@@ -186,8 +182,8 @@ def link_flags() -> list[str]:
         flags.append("-pthread")
     if system == "linux":
         flags.append("-ldl")
-    flags += ["-static-libstdc++", "-static-libgcc"]
     if system != "macos":
+        flags += ["-static-libstdc++", "-static-libgcc"]
         # Apple's clang treats -s as obsolete; GNU ld accepts it.
         flags.append("-s")
     return flags
@@ -197,68 +193,43 @@ def link_flags() -> list[str]:
 # Tool discovery
 # ------------------------------------------------------------
 
-# Probe the usual MSYS2 install locations when the tool is not on PATH, so
-# local Windows checkouts do not need a manual PATH fixup. CI exports the
-# action's real install directory through GITHUB_PATH instead (see
-# .github/workflows/tests.yml), which is why PATH comes first.
-_WINDOWS_TOOL_DIRS = (
-    Path(r"C:\msys64\ucrt64\bin"),
-    Path(r"C:\msys2\ucrt64\bin"),
-    Path(r"C:\msys64\mingw64\bin"),
-    Path(r"C:\msys2\mingw64\bin"),
-)
-
-_tool_cache: dict[str, Path] = {}
-EXTRA_PATH_DIRS: list[Path] = []
-
 JAVA_HINT = "Install a JDK (Java 25) and make sure java/javac are on PATH."
-GXX_HINT = (
-    "Install a C++14 compiler (MinGW-w64 g++ on Windows) and make sure "
-    "g++ is on PATH."
+CXX_HINT = (
+    "Install a C++14 compiler (g++ or clang++; MinGW-w64 g++ on Windows, "
+    "with its bin directory such as C:\\msys64\\ucrt64\\bin on PATH) and "
+    "make sure the compiler is on PATH."
 )
 
 
 def find_tool(name: str, hint: str = "") -> Path:
-    """Locate NAME on PATH, falling back to the usual MSYS2 directories."""
-    cached = _tool_cache.get(name)
-    if cached is not None:
-        return cached
-
+    """Locate NAME on PATH (NAME may be a full path too, as shutil.which
+    checks any name containing a directory component directly)."""
     found = shutil.which(name)
-    if found is None and IS_WINDOWS:
-        executable = name if name.lower().endswith(".exe") else name + ".exe"
-        for directory in _WINDOWS_TOOL_DIRS:
-            candidate = directory / executable
-            if candidate.is_file():
-                found = str(candidate)
-                break
-
     if found is None:
         message = f"required tool not found on PATH: {name}"
         if hint:
             message += f"\n{hint}"
         raise ToolError(message)
-
-    path = Path(found)
-    _tool_cache[name] = path
-
-    if IS_WINDOWS and path.parent not in EXTRA_PATH_DIRS:
-        # MinGW's g++ needs its own bin directory on PATH (cc1plus, as, ld,
-        # its runtime DLLs), and test binaries linked against libwinpthread
-        # resolve that DLL from PATH at run time as well.
-        EXTRA_PATH_DIRS.append(path.parent)
-
-    return path
+    return Path(found)
 
 
-def child_env() -> dict[str, str]:
-    """Environment for child processes, with the extra tool dirs on PATH."""
-    env = dict(os.environ)
-    if EXTRA_PATH_DIRS:
-        prefix = os.pathsep.join(str(directory) for directory in EXTRA_PATH_DIRS)
-        current = env.get("PATH", "")
-        env["PATH"] = prefix + (os.pathsep + current if current else "")
-    return env
+def find_cxx() -> Path:
+    """Locate the host C++ compiler: $CXX if set, else g++, else clang++.
+
+    The compiler must be a GCC-compatible driver (MinGW-w64 g++, Apple
+    clang, Linux clang): the compile/link flags are GCC-style. On Windows
+    the compiler's bin directory must be on PATH for its own pieces (and
+    the runtime DLLs of test binaries, e.g. libwinpthread-1.dll) to be
+    found - which it is, since that is where we found the compiler.
+    """
+    override = os.environ.get("CXX")
+    if override:
+        return find_tool(override, CXX_HINT)
+    for candidate in ("g++", "clang++"):
+        found = shutil.which(candidate)
+        if found is not None:
+            return Path(found)
+    raise ToolError(f"required tool not found on PATH: g++ or clang++\n{CXX_HINT}")
 
 
 def format_command(cmd: list[str]) -> str:
@@ -293,11 +264,11 @@ def run(
     sys.stderr.flush()
 
     if log_file is None:
-        completed = subprocess.run(parts, cwd=cwd, env=child_env(), check=False)
+        completed = subprocess.run(parts, cwd=cwd, check=False)
     else:
         with log_file.open("wb") as handle:
             completed = subprocess.run(
-                parts, cwd=cwd, env=child_env(), stdout=handle,
+                parts, cwd=cwd, stdout=handle,
                 stderr=subprocess.STDOUT, check=False,
             )
 
@@ -558,7 +529,6 @@ def run_test_binary(
         completed = subprocess.run(
             [str(binary), *args],
             cwd=ROOT,
-            env=child_env(),
             input=b"" if stdin_bytes is None else stdin_bytes,
             stdout=handle,
             stderr=subprocess.STDOUT,

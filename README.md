@@ -14,7 +14,7 @@ For language details, see:
 Required on every platform:
 
 * Java 25
-* a C++14 compiler (`g++`)
+* a C++14 compiler (`g++` or `clang++`; set `CXX` to pick one explicitly)
 * [uv](https://docs.astral.sh/uv/) with Python 3.13+
 
 The build and test scripts are plain Python (stdlib only), so one command
@@ -23,7 +23,7 @@ shell/PowerShell scripts to keep in sync.
 
 ### Linux x86_64 / arm64
 
-* `g++`
+* `g++` or `clang++`
 
 The repository already includes:
 
@@ -31,7 +31,7 @@ The repository already includes:
 * Franko runtime headers
 * bundled jemalloc for Linux x86_64 and Linux arm64
 
-### Windows x64
+### Windows x86_64
 
 * MinGW-w64 `g++`
 
@@ -39,15 +39,14 @@ Recommended Windows compiler:
 
 [x86_64 POSIX SEH UCRT MinGW-w64 16.1.0](https://github.com/niXman/mingw-builds-binaries/releases)
 
-The scripts find `g++.exe` on `PATH` first and then probe the usual MSYS2
-locations (`C:\msys64\ucrt64\bin`, ...), so no manual `PATH` fixup is
-needed.
+The scripts look for `g++.exe` on `PATH`, so add the MinGW-w64 `bin`
+directory (e.g. `C:\msys64\ucrt64\bin`) to `PATH` before running them.
 
 The repository already includes:
 
 * ANTLR jar
 * Franko runtime headers
-* bundled jemalloc for Windows x64
+* bundled jemalloc for Windows x86_64
 
 ### macOS (x86_64 / arm64)
 

@@ -49,7 +49,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from franko_tools import (
-    GXX_HINT,
     INCLUDE_DIR,
     JAVA_HINT,
     Results,
@@ -59,6 +58,7 @@ from franko_tools import (
     cxx_compile_flags,
     dump_file,
     executable_suffix,
+    find_cxx,
     find_tool,
     franko_classpath,
     jemalloc_paths,
@@ -77,7 +77,7 @@ from franko_tools import (
 def main() -> int:
     require_toolchain()
     java = find_tool("java", JAVA_HINT)
-    gxx = find_tool("g++", GXX_HINT)
+    cxx = find_cxx()
     include, jemalloc_lib = jemalloc_paths()
 
     results = Results()
@@ -151,7 +151,7 @@ def main() -> int:
             continue
 
         failed = run(
-            [gxx, *cxx_compile_flags("full"), f"-I{INCLUDE_DIR}", f"-I{include}",
+            [cxx, *cxx_compile_flags("full"), f"-I{INCLUDE_DIR}", f"-I{include}",
              out_cpp, jemalloc_lib, *link_flags(), "-o", out_bin],
             log_file=log, echo=False, check=False,
         )
@@ -205,7 +205,7 @@ def main() -> int:
             continue
 
         failed = run(
-            [gxx, *cxx_compile_flags("none"), f"-I{INCLUDE_DIR}", f"-I{include}",
+            [cxx, *cxx_compile_flags("none"), f"-I{INCLUDE_DIR}", f"-I{include}",
              out_cpp, jemalloc_lib, *link_flags(), "-o", out_bin],
             log_file=log, echo=False, check=False,
         )

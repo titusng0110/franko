@@ -17,6 +17,8 @@ jobs:
       matrix:
         os:
           - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - macos-26
           - windows-2022
 
     steps:
@@ -39,7 +41,7 @@ jobs:
           python-version: '3.13'
           enable-cache: true
 
-      # UCRT64, matching build-jemalloc.yml and the checked-in windows-x64
+      # UCRT64, matching build-jemalloc.yml and the checked-in windows-x86_64
       # jemalloc bundle (keeps the CRT consistent with the static archive).
       - name: Setup MSYS2 UCRT64
         if: runner.os == 'Windows'
@@ -52,11 +54,11 @@ jobs:
             gcc:p
 
       # The action installs MSYS2 wherever it decides (see its
-      # msys2-location output), so export that exact ucrt64\bin directory
-      # instead of guessing: the runners then find g++.exe through PATH,
-      # and it is also where libwinpthread-1.dll lives for the test
-      # binaries. The runners still probe the usual C:\msys64 locations as
-      # a fallback for local Windows checkouts.
+      # msys2-location output), so export that exact ucrt64\bin directory:
+      # the runners then find g++.exe through PATH, and it is also where
+      # libwinpthread-1.dll lives for the test binaries. The Python scripts
+      # only look at PATH, so a local Windows checkout needs the MinGW bin
+      # directory on PATH itself (the error message says so).
       - name: Add MSYS2 g++ to PATH
         if: runner.os == 'Windows'
         shell: pwsh

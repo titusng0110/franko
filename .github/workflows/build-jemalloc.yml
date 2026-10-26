@@ -242,7 +242,7 @@ jobs:
           retention-days: 30
 
   build-windows:
-    name: Build windows-x64
+    name: Build windows-x86_64
     runs-on: windows-2022
 
     defaults:
@@ -274,7 +274,7 @@ jobs:
           set -Eeuo pipefail
 
           echo "Runner OS: Windows"
-          echo "Target:    windows-x64"
+          echo "Target:    windows-x86_64"
           echo
 
           echo "uname -a:"
@@ -299,7 +299,7 @@ jobs:
           set -Eeuo pipefail
 
           VERSION="5.3.1"
-          TARGET="windows-x64"
+          TARGET="windows-x86_64"
 
           ROOT="$PWD"
           SRC="$ROOT/third_party/src/jemalloc-$VERSION.tar.bz2"
@@ -385,7 +385,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          TARGET="windows-x64"
+          TARGET="windows-x86_64"
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
           ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
@@ -420,7 +420,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          TARGET="windows-x64"
+          TARGET="windows-x86_64"
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
           ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
@@ -461,7 +461,7 @@ jobs:
       - name: Upload jemalloc artifact
         uses: actions/upload-artifact@v7
         with:
-          name: jemalloc-windows-x64
-          path: third_party/jemalloc/windows-x64
+          name: jemalloc-windows-x86_64
+          path: third_party/jemalloc/windows-x86_64
           if-no-files-found: error
           retention-days: 30
