@@ -1,0 +1,33 @@
+// ============================================================
+// LIBRARY TEST (pool/gen_sparse_set): uninit
+// ============================================================
+// Allocator: std::GenerationalSparseSetAllocator
+//
+// Covers:
+//   success path: uninit() returns 0 and resets capacity/used
+//   failure paths: uninit() before init returns -1, a second
+//     uninit returns -1, and slots are gone after teardown
+//     (exist 0, new_index _END)
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::GenerationalSparseSetAllocator a;
+    print(a.uninit());
+    print(a.init(3));
+    uint32_t i = a.new_index();
+    print(a.used());
+    print(a.uninit());
+    print(a.used());
+    print(a.capacity());
+    print(a.exist(i));
+    print(a.new_index());
+    print(a.init(1));
+    print(a.uninit());
+    print(a.uninit());
+    return 0
+}

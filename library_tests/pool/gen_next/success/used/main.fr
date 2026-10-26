@@ -1,0 +1,35 @@
+// ============================================================
+// LIBRARY TEST (pool/gen_next): used
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: used() grows with new_index and shrinks with
+//     free_index
+//   failure path: used() reports 0 on an uninitialized pool and
+//     after uninit
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::GenerationalNextAllocator a;
+    print(a.used());
+    print(a.init(4));
+    print(a.used());
+    uint32_t i = a.new_index();
+    uint32_t j = a.new_index();
+    print(a.used());
+    print(a.free_index(i));
+    print(a.used());
+    print(a.free_index(j));
+    print(a.used());
+    print(a.new_index());
+    print(a.used());
+    print(a.uninit());
+    print(a.used());
+    return 0
+}

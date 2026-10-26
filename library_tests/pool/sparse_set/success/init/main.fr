@@ -1,0 +1,31 @@
+// ============================================================
+// LIBRARY TEST (pool/sparse_set): init
+// ============================================================
+// Allocator: std::SparseSetAllocator
+//
+// Covers:
+//   success path: init(C) returns 0, sets capacity C, leaves used 0
+//   failure paths: init(0) returns -1 (zero capacity), a second
+//     init on a live pool returns -1, and init after uninit works
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::SparseSetAllocator a;
+    print(a.used());
+    print(a.capacity());
+    print(a.init(0));
+    print(a.init(4));
+    print(a.init(8));
+    print(a.capacity());
+    print(a.used());
+    print(a.uninit());
+    print(a.init(2));
+    print(a.capacity());
+    print(a.uninit());
+    return 0
+}

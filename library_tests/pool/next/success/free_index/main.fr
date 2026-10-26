@@ -1,0 +1,36 @@
+// ============================================================
+// LIBRARY TEST (pool/next): free_index
+// ============================================================
+// Allocator: std::NextAllocator
+//
+// Covers:
+//   success path: free_index(idx) returns 0 and the slot comes
+//     back from new_index()
+//   failure paths: free_index before init returns -1, a double
+//     release returns -1, a never-allocated index returns -1, an
+//     out-of-range index returns -1, and release after uninit
+//     returns -1
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::NextAllocator a;
+    print(a.free_index(0));
+    print(a.init(3));
+    uint32_t i = a.new_index();
+    print(a.free_index(i));
+    print(a.free_index(i));
+    print(a.free_index(2));
+    print(a.free_index(9));
+    print(a.used());
+    print(a.exist(i));
+    print(a.new_index());
+    print(a.used());
+    print(a.uninit());
+    print(a.free_index(0));
+    return 0
+}

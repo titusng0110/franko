@@ -1,0 +1,40 @@
+// ============================================================
+// LIBRARY TEST (pool/gen_sparse_set): grow
+// ============================================================
+// Allocator: std::GenerationalSparseSetAllocator
+//
+// Covers:
+//   success path: grow(newC) returns 0 for newC > capacity, old
+//     slots keep their indices, new slots are allocatable
+//   failure paths: grow before init returns -1, grow to the same
+//     capacity returns -1, grow smaller returns -1, and an
+//     exhausted grown pool reports _END
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::GenerationalSparseSetAllocator a;
+    print(a.grow(8));
+    print(a.init(2));
+    print(a.grow(2));
+    print(a.grow(1));
+    uint32_t i = a.new_index();
+    uint32_t j = a.new_index();
+    print(a.grow(5));
+    print(a.capacity());
+    print(a.used());
+    print(a.exist(i));
+    print(a.exist(j));
+    print(a.new_index());
+    print(a.new_index());
+    print(a.new_index());
+    print(a.new_index());
+    print(a.grow(6));
+    print(a.new_index());
+    print(a.uninit());
+    return 0
+}

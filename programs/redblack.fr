@@ -1,334 +1,249 @@
 // ============================================================
-// Franko Red-Black Tree Showcase
-// Struct + Methods Version
+// Franko Red-Black Tree (CLRS insertion)
 // ============================================================
-//
-// A classic CLRS-style red-black tree (insertion with fixup
-// rotations), implemented with structs and real null pointers.
-//
-// Empty links are null: every absent child and the empty root are
-// null, and address equality against null tests for "no child".
-// There is no sentinel node and no nil variable.
-//
-// Nodes still come from a fixed pool of structs: del is symbol-based
-// (it frees a heap variable, not an address), so a dynamic tree cannot
-// free nodes through pointers. The pool is a plain global static
-// array, so it needs no del.
-//
-// Rotations and the insertion fixup are struct methods with explicit
-// addr<RbNode> self receivers: deref(x).rotateLeft(). Traversals that
-// must accept a possibly-null node (find, count, walk, blackHeight,
-// noRedRed, minKey, nodeCopy) stay free functions, because a method
-// receiver must be a non-null struct lvalue while these functions
-// take nullable addresses.
-//
-// Maybe-null deref warnings: insertFixup reports two expected warnings
-// ('self' after the case-1 grandparent step and 'aunt' behind the
-// short-circuit null check). Everywhere else the null guards let the
-// checker refine the state, so the rest of the program is
-// warning-free.
-//
-// Demonstrates:
-//
-//   - struct declarations at global scope
-//   - struct methods with explicit addr<RbNode> self receivers
-//   - field defaults on primitive fields (key = 0, red = 0)
-//   - addr<RbNode> fields (left / right / parent) breaking
-//     the by-value cycle so a node can reference itself
-//   - null as the empty link (no sentinel node)
-//   - address comparison against null with == and !=
-//   - guard refinement: deref is valid inside if (p != null)
-//   - deref of a provably null variable is an error
-//   - a static array of structs used as the node pool
-//   - struct globals and global addr variables
-//   - global primitives with constant initializers
-//   - member access chains: deref(x).field
-//   - nested member access: deref(deref(x).parent).left
-//   - struct by-value parameters and by-value returns
-//   - whole-struct assignment (RbNode view = nodeCopy(root))
-//   - getaddr() on struct fields (addr<byte> redP = ...)
-//   - recursion (walk, count, blackHeight, noRedRed)
-//   - iterative search with while loops
-//   - insert-fixup rotations as methods (deref(x).rotateLeft())
-//   - structural invariant checks as the test harness
-//
+// Nodes live in one array and every link is a slot index into it:
+// left / right / parent are uint32_t, and 0xFFFFFFFF is NIL, the
+// "no node" index. Free slots come from std::NextAllocator
+// (import "franko/pool"); insert() takes one with new_index() and
+// drops the key when the pool is exhausted.
 // ============================================================
+
+import "franko/pool"
 
 struct RbNode {
     int32_t key = 0
     byte red = 0
-    addr<RbNode> left
-    addr<RbNode> right
-    addr<RbNode> parent
-
-    // rotLeft: make the right child of this node the new parent of it.
-    func rotateLeft(addr<RbNode> self) -> void {
-        if (self == null) {
-            return
-        }
-
-        addr<RbNode> y = deref(self).right
-
-        if (y != null) {
-            deref(self).right = deref(y).left
-            if (deref(y).left != null) {
-                deref(deref(y).left).parent = self
-            }
-            deref(y).parent = deref(self).parent
-            if (deref(self).parent == null) {
-                root = y
-            } else {
-                if (self == deref(deref(self).parent).left) {
-                    deref(deref(self).parent).left = y
-                } else {
-                    deref(deref(self).parent).right = y
-                }
-            }
-            deref(y).left = self
-            deref(self).parent = y
-        }
-
-        return
-    }
-
-    // rotRight: make the left child of this node the new parent of it.
-    func rotateRight(addr<RbNode> self) -> void {
-        if (self == null) {
-            return
-        }
-
-        addr<RbNode> y = deref(self).left
-
-        if (y != null) {
-            deref(self).left = deref(y).right
-            if (deref(y).right != null) {
-                deref(deref(y).right).parent = self
-            }
-            deref(y).parent = deref(self).parent
-            if (deref(self).parent == null) {
-                root = y
-            } else {
-                if (self == deref(deref(self).parent).right) {
-                    deref(deref(self).parent).right = y
-                } else {
-                    deref(deref(self).parent).left = y
-                }
-            }
-            deref(y).right = self
-            deref(self).parent = y
-        }
-
-        return
-    }
-
-    // Restore the red-black invariants after inserting this node.
-    //
-    // The aunt is read once per iteration so case 1 is shared between the
-    // left and right mirrors. An absent aunt counts as black, which is
-    // what the short-circuit null check expresses.
-    func insertFixup(addr<RbNode> self) -> void {
-        if (self == null) {
-            return
-        }
-
-        while ((deref(self).parent != null) && (deref(deref(self).parent).red != 0)) {
-            addr<RbNode> aunt
-
-            if (deref(self).parent == deref(deref(deref(self).parent).parent).left) {
-                aunt = deref(deref(deref(self).parent).parent).right
-            } else {
-                aunt = deref(deref(deref(self).parent).parent).left
-            }
-
-            if ((aunt != null) && (deref(aunt).red != 0)) {
-                // Case 1: red aunt - recolor and move up.
-                deref(deref(self).parent).red = 0
-                deref(aunt).red = 0
-                deref(deref(deref(self).parent).parent).red = 1
-                self = deref(deref(self).parent).parent
-            } else {
-                if (deref(self).parent == deref(deref(deref(self).parent).parent).left) {
-                    if (self == deref(deref(self).parent).right) {
-                        self = deref(self).parent
-                        deref(self).rotateLeft()
-                    }
-                    deref(deref(self).parent).red = 0
-                    deref(deref(deref(self).parent).parent).red = 1
-                    deref(deref(deref(self).parent).parent).rotateRight()
-                } else {
-                    if (self == deref(deref(self).parent).left) {
-                        self = deref(self).parent
-                        deref(self).rotateRight()
-                    }
-                    deref(deref(self).parent).red = 0
-                    deref(deref(deref(self).parent).parent).red = 1
-                    deref(deref(deref(self).parent).parent).rotateLeft()
-                }
-            }
-        }
-
-        if (root != null) {
-            deref(root).red = 0
-        }
-
-        return
-    }
+    uint32_t left = 0xFFFFFFFF
+    uint32_t right = 0xFFFFFFFF
+    uint32_t parent = 0xFFFFFFFF
 }
 
-array<RbNode, 64> pool;
-addr<RbNode> root;
-uint nextFree = 0
+array<RbNode, 64> nodes;
+std::NextAllocator slots;
+uint32_t NIL = 0xFFFFFFFF
+uint32_t root = 0xFFFFFFFF
 
-// Standard BST insertion plus red-black fixup.
-//
-// The fresh node is taken with getaddr(...) right here so z is
-// certified non-null for the rest of the function.
-func insert(int32_t key) -> void {
-    addr<RbNode> z = getaddr(pool[nextFree])
-    nextFree = nextFree + 1
-
-    deref(z).key = key
-    deref(z).red = 1
-    deref(z).left = null
-    deref(z).right = null
-    deref(z).parent = null
-
-    addr<RbNode> y = null
-    addr<RbNode> x = root
-
-    while (x != null) {
-        y = x
-        if (deref(z).key < deref(x).key) {
-            x = deref(x).left
+func rotateLeft(uint32_t x) -> void {
+    if (x == NIL) {
+        return
+    }
+    uint32_t y = nodes[x].right
+    if (y == NIL) {
+        return
+    }
+    nodes[x].right = nodes[y].left
+    if (nodes[y].left != NIL) {
+        nodes[nodes[y].left].parent = x
+    }
+    nodes[y].parent = nodes[x].parent
+    if (nodes[x].parent == NIL) {
+        root = y
+    } else {
+        if (x == nodes[nodes[x].parent].left) {
+            nodes[nodes[x].parent].left = y
         } else {
-            x = deref(x).right
+            nodes[nodes[x].parent].right = y
+        }
+    }
+    nodes[y].left = x
+    nodes[x].parent = y
+    return
+}
+
+func rotateRight(uint32_t x) -> void {
+    if (x == NIL) {
+        return
+    }
+    uint32_t y = nodes[x].left
+    if (y == NIL) {
+        return
+    }
+    nodes[x].left = nodes[y].right
+    if (nodes[y].right != NIL) {
+        nodes[nodes[y].right].parent = x
+    }
+    nodes[y].parent = nodes[x].parent
+    if (nodes[x].parent == NIL) {
+        root = y
+    } else {
+        if (x == nodes[nodes[x].parent].right) {
+            nodes[nodes[x].parent].right = y
+        } else {
+            nodes[nodes[x].parent].left = y
+        }
+    }
+    nodes[y].right = x
+    nodes[x].parent = y
+    return
+}
+
+func insertFixup(uint32_t z) -> void {
+    while ((nodes[z].parent != NIL) && (nodes[nodes[z].parent].red != 0)) {
+        uint32_t aunt = NIL
+
+        if (nodes[z].parent == nodes[nodes[nodes[z].parent].parent].left) {
+            aunt = nodes[nodes[nodes[z].parent].parent].right
+        } else {
+            aunt = nodes[nodes[nodes[z].parent].parent].left
+        }
+
+        if ((aunt != NIL) && (nodes[aunt].red != 0)) {
+            // Case 1: red aunt - recolor and move up.
+            nodes[nodes[z].parent].red = 0
+            nodes[aunt].red = 0
+            nodes[nodes[nodes[z].parent].parent].red = 1
+            z = nodes[nodes[z].parent].parent
+        } else {
+            // Cases 2 and 3: rotate the parent or the grandparent.
+            if (nodes[z].parent == nodes[nodes[nodes[z].parent].parent].left) {
+                if (z == nodes[nodes[z].parent].right) {
+                    z = nodes[z].parent
+                    rotateLeft(z)
+                }
+                nodes[nodes[z].parent].red = 0
+                nodes[nodes[nodes[z].parent].parent].red = 1
+                rotateRight(nodes[nodes[z].parent].parent)
+            } else {
+                if (z == nodes[nodes[z].parent].left) {
+                    z = nodes[z].parent
+                    rotateRight(z)
+                }
+                nodes[nodes[z].parent].red = 0
+                nodes[nodes[nodes[z].parent].parent].red = 1
+                rotateLeft(nodes[nodes[z].parent].parent)
+            }
         }
     }
 
-    deref(z).parent = y
-    if (y == null) {
+    if (root != NIL) {
+        nodes[root].red = 0
+    }
+    return
+}
+
+func insert(int32_t key) -> void {
+    uint32_t z = slots.new_index()
+    if (z == NIL) {
+        return
+    }
+
+    nodes[z].key = key
+    nodes[z].red = 1
+    nodes[z].left = NIL
+    nodes[z].right = NIL
+    nodes[z].parent = NIL
+
+    uint32_t y = NIL
+    uint32_t x = root
+    while (x != NIL) {
+        y = x
+        if (nodes[z].key < nodes[x].key) {
+            x = nodes[x].left
+        } else {
+            x = nodes[x].right
+        }
+    }
+
+    nodes[z].parent = y
+    if (y == NIL) {
         root = z
     } else {
-        if (deref(z).key < deref(y).key) {
-            deref(y).left = z
+        if (nodes[z].key < nodes[y].key) {
+            nodes[y].left = z
         } else {
-            deref(y).right = z
+            nodes[y].right = z
         }
     }
 
-    deref(z).insertFixup()
+    insertFixup(z)
+    return
 }
 
-// Iterative search; returns 1 when key is present.
-func find(addr<RbNode> n, int32_t key) -> byte {
-    while (n != null) {
-        if (key == deref(n).key) {
+func find(uint32_t n, int32_t key) -> byte {
+    while (n != NIL) {
+        if (key == nodes[n].key) {
             return 1
         }
-        if (key < deref(n).key) {
-            n = deref(n).left
+        if (key < nodes[n].key) {
+            n = nodes[n].left
         } else {
-            n = deref(n).right
+            n = nodes[n].right
         }
     }
     return 0
 }
 
-// Smallest key in the tree (follow the left spine).
-func minKey(addr<RbNode> n) -> int32_t {
-    while (n != null) {
-        if (deref(n).left == null) {
-            return deref(n).key
+func minKey(uint32_t n) -> int32_t {
+    while (n != NIL) {
+        if (nodes[n].left == NIL) {
+            return nodes[n].key
         }
-        n = deref(n).left
+        n = nodes[n].left
     }
     return 0
 }
 
-// Number of nodes in the subtree.
-func count(addr<RbNode> n) -> uint {
-    if (n == null) {
+func count(uint32_t n) -> uint32_t {
+    if (n == NIL) {
         return 0
     }
-    return count(deref(n).left) + 1 + count(deref(n).right)
+    return count(nodes[n].left) + 1 + count(nodes[n].right)
 }
 
-// In-order traversal; prints key and red bit for each node.
-func walk(addr<RbNode> n) -> void {
-    if (n == null) {
+func walk(uint32_t n) -> void {
+    if (n == NIL) {
         return
     }
-    walk(deref(n).left)
-    print(deref(n).key, deref(n).red)
-    walk(deref(n).right)
+    walk(nodes[n].left)
+    print(nodes[n].key, nodes[n].red)
+    walk(nodes[n].right)
+    return
 }
 
-// Number of black nodes on every root-to-null path,
-// or -1 when two paths of one node disagree (invariant broken).
-func blackHeight(addr<RbNode> n) -> int32_t {
-    if (n == null) {
+// Black nodes on every root-to-NIL path, or -1 when the tree is broken.
+func blackHeight(uint32_t n) -> int32_t {
+    if (n == NIL) {
         return 1
     }
-    int32_t lh = blackHeight(deref(n).left)
-    int32_t rh = blackHeight(deref(n).right)
+    int32_t lh = blackHeight(nodes[n].left)
+    int32_t rh = blackHeight(nodes[n].right)
     if ((lh != rh) || (lh < 0)) {
         return -1
     }
-    if (deref(n).red == 0) {
+    if (nodes[n].red == 0) {
         return lh + 1
     }
     return lh
 }
 
-// 1 when no red node has a red child, 0 otherwise.
-func noRedRed(addr<RbNode> n) -> byte {
-    if (n == null) {
+func noRedRed(uint32_t n) -> byte {
+    if (n == NIL) {
         return 1
     }
-    if (deref(n).red != 0) {
-        addr<RbNode> l = deref(n).left
-        addr<RbNode> r = deref(n).right
-
+    if (nodes[n].red != 0) {
         byte childRed = 0
-
-        if (l != null) {
-            if (deref(l).red != 0) {
+        if (nodes[n].left != NIL) {
+            if (nodes[nodes[n].left].red != 0) {
                 childRed = 1
             }
         }
-        if (r != null) {
-            if (deref(r).red != 0) {
+        if (nodes[n].right != NIL) {
+            if (nodes[nodes[n].right].red != 0) {
                 childRed = 1
             }
         }
-
         if (childRed != 0) {
             return 0
         }
     }
-    if (noRedRed(deref(n).left) == 0) {
+    if (noRedRed(nodes[n].left) == 0) {
         return 0
     }
-    return noRedRed(deref(n).right)
-}
-
-// By-value return: copies a whole struct out of the tree.
-// Null-safe: a null node copies as a default RbNode.
-func nodeCopy(addr<RbNode> p) -> RbNode {
-    RbNode fallback
-    if (p != null) {
-        return deref(p)
-    }
-    return fallback
-}
-
-// By-value parameter: receives a whole-struct copy.
-func printNode(RbNode n) -> void {
-    print(n.key, n.red)
+    return noRedRed(nodes[n].right)
 }
 
 func main() -> int32_t {
-    root = null
+    slots.init(64)
 
     print(4301)
 
@@ -370,15 +285,10 @@ func main() -> int32_t {
 
     print(4305)
 
-    RbNode view = nodeCopy(root)
-    print(view.key, view.red)
+    print(nodes[root].key, nodes[root].red)
+    print(nodes[1].key, nodes[1].red)
+    print(nodes[root].red)
 
-    printNode(pool[1])
-
-    if (root != null) {
-        addr<byte> redP = getaddr(deref(root).red)
-        print(deref(redP))
-    }
-
+    slots.uninit()
     return 0
 }

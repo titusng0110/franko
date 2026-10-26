@@ -1,0 +1,33 @@
+// ============================================================
+// LIBRARY TEST (pool/sparse_set): exist
+// ============================================================
+// Allocator: std::SparseSetAllocator
+//
+// Covers:
+//   success path: exist(idx) returns 1 exactly while the slot is
+//     live (0 before allocation, 1 after new_index, 0 after
+//     free_index)
+//   failure paths: exist on an out-of-range index returns 0 and
+//     exist before init or after uninit returns 0
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::SparseSetAllocator a;
+    print(a.exist(0));
+    print(a.init(2));
+    print(a.exist(0));
+    print(a.exist(5));
+    uint32_t i = a.new_index();
+    print(a.exist(i));
+    print(a.exist(1));
+    print(a.free_index(i));
+    print(a.exist(i));
+    print(a.uninit());
+    print(a.exist(0));
+    return 0
+}

@@ -1,0 +1,40 @@
+// ============================================================
+// LIBRARY TEST (pool/gen_sparse_set): generation
+// ============================================================
+// Allocator: std::GenerationalSparseSetAllocator
+//
+// Covers:
+//   success path: generation(idx) starts at 0 and is bumped by
+//     every free_index; the counter follows the slot across
+//     reuse, so (index, generation) identifies one allocation
+//   failure paths: generation before init or after uninit returns
+//     _END (4294967295), an out-of-range index returns _END, and
+//     a failed double release leaves the counter unchanged
+//
+// Every line below is asserted exactly: status codes are int32_t
+// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// ============================================================
+
+import "franko/pool"
+
+func main() -> int32_t {
+    std::GenerationalSparseSetAllocator a;
+    print(a.generation(0));
+    print(a.init(3));
+    uint32_t i = a.new_index();
+    print(a.generation(i));
+    print(a.generation(2));
+    print(a.generation(9));
+    print(a.free_index(i));
+    print(a.generation(i));
+    print(a.free_index(i));
+    print(a.generation(i));
+    uint32_t j = a.new_index();
+    print(j);
+    print(a.generation(j));
+    print(a.free_index(j));
+    print(a.generation(j));
+    print(a.uninit());
+    print(a.generation(0));
+    return 0
+}
