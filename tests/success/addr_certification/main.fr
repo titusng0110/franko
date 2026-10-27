@@ -14,26 +14,26 @@ func main() -> int32_t {
     // getaddr certifies p as pointing, so deref is valid.
     addr<int32_t> p
     p = getaddr(x)
-    deref(p) = 5
-    print(deref(p))
+    $(p) = 5
+    print($(p))
 
     // The certification propagates through a copy.
     addr<int32_t> q
     q = p
-    deref(q) = 6
-    print(deref(q))
+    $(q) = 6
+    print($(q))
     print(x)
 
     // ... and transitively through a copy of the copy.
     addr<int32_t> r
     r = q
-    deref(r) = 7
-    print(deref(r))
+    $(r) = 7
+    print($(r))
 
     // Declaration-initializer copies carry the state as well.
     addr<int32_t> s = r
-    deref(s) = 8
-    print(deref(s))
+    $(s) = 8
+    print($(s))
     print(x)
 
     // A null state propagates through copies too: b is null, and the

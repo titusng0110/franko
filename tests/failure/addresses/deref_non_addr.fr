@@ -3,6 +3,6 @@
 // variable is invalid.
 func main() -> int32_t {
     int32_t x = 3
-    print(deref(x))
+    print($(x))
     return 0
 }

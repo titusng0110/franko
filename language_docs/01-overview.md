@@ -11,7 +11,7 @@ Franko is a small statically typed language with:
 - typed addresses using `addr<T>`;
 - explicit address operations:
   - `getaddr(...)`;
-  - `deref(...)`;
+  - `$(...)`;
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;

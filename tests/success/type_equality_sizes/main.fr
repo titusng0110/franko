@@ -11,7 +11,7 @@
 
 func first(addr<array<int32_t, 10>> xs) -> int32_t {
     if (xs != null) {
-        return deref(xs)[0];
+        return $(xs)[0];
     }
     return 0;
 }

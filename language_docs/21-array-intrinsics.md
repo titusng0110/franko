@@ -30,7 +30,7 @@ Examples of storage-backed array targets:
 
 ```franko
 arr
-deref(p)
+$(p)
 arrs[i]
 ```
 

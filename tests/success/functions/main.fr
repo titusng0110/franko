@@ -36,7 +36,7 @@ func getSum(Point p) -> int32_t {
 
 // --- Function with address parameter ---
 func processRef(addr<int32_t> p) -> int32_t {
-    return deref(p);
+    return $(p);
 }
 
 func main() -> int32_t {

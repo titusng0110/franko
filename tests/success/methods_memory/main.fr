@@ -9,17 +9,17 @@
 struct Buf {
     array<int32_t> data
     func setup(addr<Buf> self, uint32_t n) -> int32_t {
-        return deref(self).data.init_zero(n)
+        return $(self).data.init_zero(n)
     }
     func set(addr<Buf> self, uint32_t i, int32_t v) -> void {
-        deref(self).data[i] = v
+        $(self).data[i] = v
         return
     }
     func get(addr<Buf> self, uint32_t i) -> int32_t {
-        return deref(self).data[i]
+        return $(self).data[i]
     }
     func teardown(addr<Buf> self) -> void {
-        deref(self).data.uninit()
+        $(self).data.uninit()
         return
     }
 }

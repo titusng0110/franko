@@ -135,12 +135,12 @@ Member access uses dot syntax. Access chains compose with every storage form:
 
 ```franko
 s.field               // local struct
-deref(p).field        // through an address
-deref(a.next).field   // another hop through an addr field: deref the link first
+$(p).field        // through an address
+$(a.next).field   // another hop through an addr field: deref the link first
 xs[i].field           // element of a static or dynamic array
 ```
 
-- `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `deref(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
+- `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `$(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
 - `getaddr(s.field)` is valid and yields `addr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
   `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getaddr(other))`, `b.data[i]`, and `b.data.uninit()`.

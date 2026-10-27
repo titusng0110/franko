@@ -57,31 +57,31 @@ struct Sieve {
     func init(addr<Sieve> self, uint limit) -> int32_t {
         int32_t initStatus = 0
 
-        initStatus = deref(self).isPrime(limit + 1)
+        initStatus = $(self).isPrime(limit + 1)
 
         if (initStatus != 0) {
             return -1
         }
 
-        deref(self).isPrime.memset(1)
+        $(self).isPrime.memset(1)
 
-        deref(self).isPrime[0] = 0
+        $(self).isPrime[0] = 0
 
         if (limit >= 1) {
-            deref(self).isPrime[1] = 0
+            $(self).isPrime[1] = 0
         }
 
-        deref(self).n = limit
+        $(self).n = limit
         return 0
     }
 
     func run(addr<Sieve> self) -> void {
         uint p = 0
 
-        for (p = 2; p * p <= deref(self).n; p = p + 1) {
-            if (deref(self).isPrime[p] != 0) {
-                for (uint j = p * p; j <= deref(self).n; j = j + p) {
-                    deref(self).isPrime[j] = 0
+        for (p = 2; p * p <= $(self).n; p = p + 1) {
+            if ($(self).isPrime[p] != 0) {
+                for (uint j = p * p; j <= $(self).n; j = j + p) {
+                    $(self).isPrime[j] = 0
                 }
             }
         }
@@ -92,8 +92,8 @@ struct Sieve {
     func printResults(addr<Sieve> self) -> void {
         print(1001)
 
-        for (uint i = 2; i <= deref(self).n; i = i + 1) {
-            if (deref(self).isPrime[i] != 0) {
+        for (uint i = 2; i <= $(self).n; i = i + 1) {
+            if ($(self).isPrime[i] != 0) {
                 print(i)
             }
         }
@@ -103,7 +103,7 @@ struct Sieve {
     }
 
     func uninit(addr<Sieve> self) -> void {
-        deref(self).isPrime.uninit()
+        $(self).isPrime.uninit()
         return
     }
 }

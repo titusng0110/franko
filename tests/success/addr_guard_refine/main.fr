@@ -17,8 +17,8 @@ func main() -> int32_t {
     // because the guard refines the state on that path.
     addr<int32_t> z
     if (z != null) {
-        deref(z) = 1
-        print(deref(z))
+        $(z) = 1
+        print($(z))
     } else {
         print(100)
     }
@@ -35,8 +35,8 @@ func main() -> int32_t {
 
     // Guard before deref: valid inside, clean at the merge point.
     if (m != null) {
-        deref(m) = 42
-        print(deref(m))
+        $(m) = 42
+        print($(m))
     }
 
     print(x)

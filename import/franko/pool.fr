@@ -80,33 +80,33 @@ namespace std {
         // pool is already initialized, when C is 0, or when the slot
         // array cannot be allocated.
         func init(addr<NextAllocator> self, uint32_t C) -> int32_t {
-            if (deref(self)._capacity != 0 || C == 0) {
+            if ($(self)._capacity != 0 || C == 0) {
                 return -1
             }
-            int32_t st = deref(self)._next.init(C)
+            int32_t st = $(self)._next.init(C)
             if (st != 0) {
                 return -1
             }
             for (uint32_t i = 0; i < C; i = i + 1) {
-                deref(self)._next[i] = i + 1
+                $(self)._next[i] = i + 1
             }
-            deref(self)._next[C - 1] = 0xFFFFFFFF
-            deref(self)._capacity = C
-            deref(self)._used = 0
-            deref(self)._head = 0
+            $(self)._next[C - 1] = 0xFFFFFFFF
+            $(self)._capacity = C
+            $(self)._used = 0
+            $(self)._head = 0
             return 0
         }
 
         // Free the slot storage and return to the empty pool. Returns
         // 0 on success, -1 when the pool is not initialized.
         func uninit(addr<NextAllocator> self) -> int32_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return -1
             }
-            deref(self)._capacity = 0
-            deref(self)._used = 0
-            deref(self)._head = 0xFFFFFFFF
-            deref(self)._next.uninit()
+            $(self)._capacity = 0
+            $(self)._used = 0
+            $(self)._head = 0xFFFFFFFF
+            $(self)._next.uninit()
             return 0
         }
 
@@ -117,20 +117,20 @@ namespace std {
         // not greater than the current capacity, or when the slot
         // array cannot be resized.
         func grow(addr<NextAllocator> self, uint32_t newC) -> int32_t {
-            if (deref(self)._capacity == 0 || newC <= deref(self)._capacity) {
+            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
                 return -1
             }
-            uint32_t oldC = deref(self)._capacity
-            int32_t st = deref(self)._next.resize(newC)
+            uint32_t oldC = $(self)._capacity
+            int32_t st = $(self)._next.resize(newC)
             if (st != 0) {
                 return -1
             }
             for (uint32_t i = oldC; i < newC; i = i + 1) {
-                deref(self)._next[i] = i + 1
+                $(self)._next[i] = i + 1
             }
-            deref(self)._next[newC - 1] = deref(self)._head
-            deref(self)._head = oldC
-            deref(self)._capacity = newC
+            $(self)._next[newC - 1] = $(self)._head
+            $(self)._head = oldC
+            $(self)._capacity = newC
             return 0
         }
 
@@ -138,13 +138,13 @@ namespace std {
         // index, or 0xFFFFFFFF (_END) when the pool is not initialized
         // or every slot is live.
         func new_index(addr<NextAllocator> self) -> uint32_t {
-            if (deref(self)._capacity == 0 || deref(self)._head == 0xFFFFFFFF) {
+            if ($(self)._capacity == 0 || $(self)._head == 0xFFFFFFFF) {
                 return 0xFFFFFFFF
             }
-            uint32_t idx = deref(self)._head
-            deref(self)._head = deref(self)._next[idx]
-            deref(self)._next[idx] = 0xFFFFFFFE
-            deref(self)._used = deref(self)._used + 1
+            uint32_t idx = $(self)._head
+            $(self)._head = $(self)._next[idx]
+            $(self)._next[idx] = 0xFFFFFFFE
+            $(self)._used = $(self)._used + 1
             return idx
         }
 
@@ -152,25 +152,25 @@ namespace std {
         // Returns 0 on success, -1 when idx is not a live slot, which
         // covers unknown indices and double release.
         func free_index(addr<NextAllocator> self, uint32_t idx) -> int32_t {
-            if (deref(self).exist(idx) == 0) {
+            if ($(self).exist(idx) == 0) {
                 return -1
             }
-            deref(self)._next[idx] = deref(self)._head
-            deref(self)._head = idx
-            deref(self)._used = deref(self)._used - 1
+            $(self)._next[idx] = $(self)._head
+            $(self)._head = idx
+            $(self)._used = $(self)._used - 1
             return 0
         }
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
         func exist(addr<NextAllocator> self, uint32_t idx) -> uint8_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return 0
             }
-            if (idx >= deref(self)._capacity) {
+            if (idx >= $(self)._capacity) {
                 return 0
             }
-            return deref(self)._next[idx] == 0xFFFFFFFE
+            return $(self)._next[idx] == 0xFFFFFFFE
         }
 
         // Write every live index into out, in ascending order. out
@@ -181,13 +181,13 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            if (deref(self)._capacity == 0 || deref(out).length() < deref(self)._used) {
+            if ($(self)._capacity == 0 || $(out).length() < $(self)._used) {
                 return -1
             }
             uint32_t pos = 0
-            for (uint32_t i = 0; i < deref(self)._capacity; i = i + 1) {
-                if (deref(self)._next[i] == 0xFFFFFFFE) {
-                    deref(out)[pos] = i
+            for (uint32_t i = 0; i < $(self)._capacity; i = i + 1) {
+                if ($(self)._next[i] == 0xFFFFFFFE) {
+                    $(out)[pos] = i
                     pos = pos + 1
                 }
             }
@@ -196,12 +196,12 @@ namespace std {
 
         // Number of live slots.
         func used(addr<NextAllocator> self) -> uint32_t {
-            return deref(self)._used
+            return $(self)._used
         }
 
         // Number of slots the pool holds.
         func capacity(addr<NextAllocator> self) -> uint32_t {
-            return deref(self)._capacity
+            return $(self)._capacity
         }
     }
 
@@ -222,37 +222,37 @@ namespace std {
         // when the pool is already initialized, when C is 0, or when
         // the tables cannot be allocated.
         func init(addr<SparseSetAllocator> self, uint32_t C) -> int32_t {
-            if (deref(self)._capacity != 0 || C == 0) {
+            if ($(self)._capacity != 0 || C == 0) {
                 return -1
             }
-            int32_t st = deref(self)._sparse.init(C)
+            int32_t st = $(self)._sparse.init(C)
             if (st != 0) {
                 return -1
             }
-            st = deref(self)._dense.init(C)
+            st = $(self)._dense.init(C)
             if (st != 0) {
-                deref(self)._sparse.uninit()
+                $(self)._sparse.uninit()
                 return -1
             }
             for (uint32_t i = 0; i < C; i = i + 1) {
-                deref(self)._sparse[i] = i
-                deref(self)._dense[i] = i
+                $(self)._sparse[i] = i
+                $(self)._dense[i] = i
             }
-            deref(self)._capacity = C
-            deref(self)._used = 0
+            $(self)._capacity = C
+            $(self)._used = 0
             return 0
         }
 
         // Free both tables and return to the empty pool. Returns 0 on
         // success, -1 when the pool is not initialized.
         func uninit(addr<SparseSetAllocator> self) -> int32_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return -1
             }
-            deref(self)._capacity = 0
-            deref(self)._used = 0
-            deref(self)._sparse.uninit()
-            deref(self)._dense.uninit()
+            $(self)._capacity = 0
+            $(self)._used = 0
+            $(self)._sparse.uninit()
+            $(self)._dense.uninit()
             return 0
         }
 
@@ -262,24 +262,24 @@ namespace std {
         // not greater than the current capacity, or when the tables
         // cannot be resized.
         func grow(addr<SparseSetAllocator> self, uint32_t newC) -> int32_t {
-            if (deref(self)._capacity == 0 || newC <= deref(self)._capacity) {
+            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
                 return -1
             }
-            uint32_t oldC = deref(self)._capacity
-            int32_t st = deref(self)._sparse.resize(newC)
+            uint32_t oldC = $(self)._capacity
+            int32_t st = $(self)._sparse.resize(newC)
             if (st != 0) {
                 return -1
             }
-            st = deref(self)._dense.resize(newC)
+            st = $(self)._dense.resize(newC)
             if (st != 0) {
-                deref(self)._sparse.resize(oldC)
+                $(self)._sparse.resize(oldC)
                 return -1
             }
             for (uint32_t i = oldC; i < newC; i = i + 1) {
-                deref(self)._sparse[i] = i
-                deref(self)._dense[i] = i
+                $(self)._sparse[i] = i
+                $(self)._dense[i] = i
             }
-            deref(self)._capacity = newC
+            $(self)._capacity = newC
             return 0
         }
 
@@ -287,12 +287,12 @@ namespace std {
         // its index, or 0xFFFFFFFF (_END) when the pool is not
         // initialized or every slot is live.
         func new_index(addr<SparseSetAllocator> self) -> uint32_t {
-            if (deref(self)._capacity == 0 || deref(self)._used >= deref(self)._capacity) {
+            if ($(self)._capacity == 0 || $(self)._used >= $(self)._capacity) {
                 return 0xFFFFFFFF
             }
-            uint32_t idx = deref(self)._dense[deref(self)._used]
-            deref(self)._sparse[idx] = deref(self)._used
-            deref(self)._used = deref(self)._used + 1
+            uint32_t idx = $(self)._dense[$(self)._used]
+            $(self)._sparse[idx] = $(self)._used
+            $(self)._used = $(self)._used + 1
             return idx
         }
 
@@ -300,33 +300,33 @@ namespace std {
         // Returns 0 on success, -1 when idx is not a live slot, which
         // covers unknown indices and double release.
         func free_index(addr<SparseSetAllocator> self, uint32_t idx) -> int32_t {
-            if (deref(self).exist(idx) == 0) {
+            if ($(self).exist(idx) == 0) {
                 return -1
             }
-            uint32_t delPos = deref(self)._sparse[idx]
-            uint32_t lastPos = deref(self)._used - 1
-            uint32_t lastIdx = deref(self)._dense[lastPos]
+            uint32_t delPos = $(self)._sparse[idx]
+            uint32_t lastPos = $(self)._used - 1
+            uint32_t lastIdx = $(self)._dense[lastPos]
 
-            deref(self)._dense[delPos] = lastIdx
-            deref(self)._dense[lastPos] = idx
-            deref(self)._sparse[lastIdx] = delPos
-            deref(self)._sparse[idx] = lastPos
+            $(self)._dense[delPos] = lastIdx
+            $(self)._dense[lastPos] = idx
+            $(self)._sparse[lastIdx] = delPos
+            $(self)._sparse[idx] = lastPos
 
-            deref(self)._used = deref(self)._used - 1
+            $(self)._used = $(self)._used - 1
             return 0
         }
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
         func exist(addr<SparseSetAllocator> self, uint32_t idx) -> uint8_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return 0
             }
-            if (idx >= deref(self)._capacity) {
+            if (idx >= $(self)._capacity) {
                 return 0
             }
-            uint32_t pos = deref(self)._sparse[idx]
-            return pos < deref(self)._used && deref(self)._dense[pos] == idx
+            uint32_t pos = $(self)._sparse[idx]
+            return pos < $(self)._used && $(self)._dense[pos] == idx
         }
 
         // Write every live index into out, in allocation order (the
@@ -337,23 +337,23 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            if (deref(self)._capacity == 0 || deref(out).length() < deref(self)._used) {
+            if ($(self)._capacity == 0 || $(out).length() < $(self)._used) {
                 return -1
             }
-            for (uint32_t i = 0; i < deref(self)._used; i = i + 1) {
-                deref(out)[i] = deref(self)._dense[i]
+            for (uint32_t i = 0; i < $(self)._used; i = i + 1) {
+                $(out)[i] = $(self)._dense[i]
             }
             return 0
         }
 
         // Number of live slots.
         func used(addr<SparseSetAllocator> self) -> uint32_t {
-            return deref(self)._used
+            return $(self)._used
         }
 
         // Number of slots the pool holds.
         func capacity(addr<SparseSetAllocator> self) -> uint32_t {
-            return deref(self)._capacity
+            return $(self)._capacity
         }
     }
 
@@ -375,39 +375,39 @@ namespace std {
         // success, -1 when the pool is already initialized, when C is
         // 0, or when the storage cannot be allocated.
         func init(addr<GenerationalNextAllocator> self, uint32_t C) -> int32_t {
-            if (deref(self)._capacity != 0 || C == 0) {
+            if ($(self)._capacity != 0 || C == 0) {
                 return -1
             }
-            int32_t st = deref(self)._next.init(C)
+            int32_t st = $(self)._next.init(C)
             if (st != 0) {
                 return -1
             }
-            st = deref(self)._generations.init_zero(C)
+            st = $(self)._generations.init_zero(C)
             if (st != 0) {
-                deref(self)._next.uninit()
+                $(self)._next.uninit()
                 return -1
             }
             for (uint32_t i = 0; i < C; i = i + 1) {
-                deref(self)._next[i] = i + 1
+                $(self)._next[i] = i + 1
             }
-            deref(self)._next[C - 1] = 0xFFFFFFFF
-            deref(self)._capacity = C
-            deref(self)._used = 0
-            deref(self)._head = 0
+            $(self)._next[C - 1] = 0xFFFFFFFF
+            $(self)._capacity = C
+            $(self)._used = 0
+            $(self)._head = 0
             return 0
         }
 
         // Free the storage and return to the empty pool. Returns 0 on
         // success, -1 when the pool is not initialized.
         func uninit(addr<GenerationalNextAllocator> self) -> int32_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return -1
             }
-            deref(self)._capacity = 0
-            deref(self)._used = 0
-            deref(self)._head = 0xFFFFFFFF
-            deref(self)._next.uninit()
-            deref(self)._generations.uninit()
+            $(self)._capacity = 0
+            $(self)._used = 0
+            $(self)._head = 0xFFFFFFFF
+            $(self)._next.uninit()
+            $(self)._generations.uninit()
             return 0
         }
 
@@ -417,26 +417,26 @@ namespace std {
         // not greater than the current capacity, or when the storage
         // cannot be resized.
         func grow(addr<GenerationalNextAllocator> self, uint32_t newC) -> int32_t {
-            if (deref(self)._capacity == 0 || newC <= deref(self)._capacity) {
+            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
                 return -1
             }
-            uint32_t oldC = deref(self)._capacity
-            int32_t st = deref(self)._next.resize(newC)
+            uint32_t oldC = $(self)._capacity
+            int32_t st = $(self)._next.resize(newC)
             if (st != 0) {
                 return -1
             }
-            st = deref(self)._generations.resize(newC)
+            st = $(self)._generations.resize(newC)
             if (st != 0) {
-                deref(self)._next.resize(oldC)
+                $(self)._next.resize(oldC)
                 return -1
             }
             for (uint32_t i = oldC; i < newC; i = i + 1) {
-                deref(self)._next[i] = i + 1
-                deref(self)._generations[i] = 0
+                $(self)._next[i] = i + 1
+                $(self)._generations[i] = 0
             }
-            deref(self)._next[newC - 1] = deref(self)._head
-            deref(self)._head = oldC
-            deref(self)._capacity = newC
+            $(self)._next[newC - 1] = $(self)._head
+            $(self)._head = oldC
+            $(self)._capacity = newC
             return 0
         }
 
@@ -444,13 +444,13 @@ namespace std {
         // index, or 0xFFFFFFFF (_END) when the pool is not initialized
         // or every slot is live.
         func new_index(addr<GenerationalNextAllocator> self) -> uint32_t {
-            if (deref(self)._capacity == 0 || deref(self)._head == 0xFFFFFFFF) {
+            if ($(self)._capacity == 0 || $(self)._head == 0xFFFFFFFF) {
                 return 0xFFFFFFFF
             }
-            uint32_t idx = deref(self)._head
-            deref(self)._head = deref(self)._next[idx]
-            deref(self)._next[idx] = 0xFFFFFFFE
-            deref(self)._used = deref(self)._used + 1
+            uint32_t idx = $(self)._head
+            $(self)._head = $(self)._next[idx]
+            $(self)._next[idx] = 0xFFFFFFFE
+            $(self)._used = $(self)._used + 1
             return idx
         }
 
@@ -458,39 +458,39 @@ namespace std {
         // generation. Returns 0 on success, -1 when idx is not a live
         // slot, which covers unknown indices and double release.
         func free_index(addr<GenerationalNextAllocator> self, uint32_t idx) -> int32_t {
-            if (deref(self).exist(idx) == 0) {
+            if ($(self).exist(idx) == 0) {
                 return -1
             }
-            deref(self)._generations[idx] = deref(self)._generations[idx] + 1
-            deref(self)._next[idx] = deref(self)._head
-            deref(self)._head = idx
-            deref(self)._used = deref(self)._used - 1
+            $(self)._generations[idx] = $(self)._generations[idx] + 1
+            $(self)._next[idx] = $(self)._head
+            $(self)._head = idx
+            $(self)._used = $(self)._used - 1
             return 0
         }
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
         func exist(addr<GenerationalNextAllocator> self, uint32_t idx) -> uint8_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return 0
             }
-            if (idx >= deref(self)._capacity) {
+            if (idx >= $(self)._capacity) {
                 return 0
             }
-            return deref(self)._next[idx] == 0xFFFFFFFE
+            return $(self)._next[idx] == 0xFFFFFFFE
         }
 
         // Generation counter of slot idx: 0 for a slot that was never
         // released, bumped by every release. Returns 0xFFFFFFFF (_END)
         // when the pool is not initialized or idx is out of range.
         func generation(addr<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return 0xFFFFFFFF
             }
-            if (idx >= deref(self)._capacity) {
+            if (idx >= $(self)._capacity) {
                 return 0xFFFFFFFF
             }
-            return deref(self)._generations[idx]
+            return $(self)._generations[idx]
         }
 
         // Write every live index into out, in ascending order. out
@@ -501,13 +501,13 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            if (deref(self)._capacity == 0 || deref(out).length() < deref(self)._used) {
+            if ($(self)._capacity == 0 || $(out).length() < $(self)._used) {
                 return -1
             }
             uint32_t pos = 0
-            for (uint32_t i = 0; i < deref(self)._capacity; i = i + 1) {
-                if (deref(self)._next[i] == 0xFFFFFFFE) {
-                    deref(out)[pos] = i
+            for (uint32_t i = 0; i < $(self)._capacity; i = i + 1) {
+                if ($(self)._next[i] == 0xFFFFFFFE) {
+                    $(out)[pos] = i
                     pos = pos + 1
                 }
             }
@@ -516,12 +516,12 @@ namespace std {
 
         // Number of live slots.
         func used(addr<GenerationalNextAllocator> self) -> uint32_t {
-            return deref(self)._used
+            return $(self)._used
         }
 
         // Number of slots the pool holds.
         func capacity(addr<GenerationalNextAllocator> self) -> uint32_t {
-            return deref(self)._capacity
+            return $(self)._capacity
         }
     }
 
@@ -543,44 +543,44 @@ namespace std {
         // initialized, when C is 0, or when the tables cannot be
         // allocated.
         func init(addr<GenerationalSparseSetAllocator> self, uint32_t C) -> int32_t {
-            if (deref(self)._capacity != 0 || C == 0) {
+            if ($(self)._capacity != 0 || C == 0) {
                 return -1
             }
-            int32_t st = deref(self)._sparse.init(C)
+            int32_t st = $(self)._sparse.init(C)
             if (st != 0) {
                 return -1
             }
-            st = deref(self)._dense.init(C)
+            st = $(self)._dense.init(C)
             if (st != 0) {
-                deref(self)._sparse.uninit()
+                $(self)._sparse.uninit()
                 return -1
             }
-            st = deref(self)._generations.init_zero(C)
+            st = $(self)._generations.init_zero(C)
             if (st != 0) {
-                deref(self)._sparse.uninit()
-                deref(self)._dense.uninit()
+                $(self)._sparse.uninit()
+                $(self)._dense.uninit()
                 return -1
             }
             for (uint32_t i = 0; i < C; i = i + 1) {
-                deref(self)._sparse[i] = i
-                deref(self)._dense[i] = i
+                $(self)._sparse[i] = i
+                $(self)._dense[i] = i
             }
-            deref(self)._capacity = C
-            deref(self)._used = 0
+            $(self)._capacity = C
+            $(self)._used = 0
             return 0
         }
 
         // Free the tables and return to the empty pool. Returns 0 on
         // success, -1 when the pool is not initialized.
         func uninit(addr<GenerationalSparseSetAllocator> self) -> int32_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return -1
             }
-            deref(self)._capacity = 0
-            deref(self)._used = 0
-            deref(self)._sparse.uninit()
-            deref(self)._dense.uninit()
-            deref(self)._generations.uninit()
+            $(self)._capacity = 0
+            $(self)._used = 0
+            $(self)._sparse.uninit()
+            $(self)._dense.uninit()
+            $(self)._generations.uninit()
             return 0
         }
 
@@ -590,31 +590,31 @@ namespace std {
         // than the current capacity, or when the tables cannot be
         // resized.
         func grow(addr<GenerationalSparseSetAllocator> self, uint32_t newC) -> int32_t {
-            if (deref(self)._capacity == 0 || newC <= deref(self)._capacity) {
+            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
                 return -1
             }
-            uint32_t oldC = deref(self)._capacity
-            int32_t st = deref(self)._sparse.resize(newC)
+            uint32_t oldC = $(self)._capacity
+            int32_t st = $(self)._sparse.resize(newC)
             if (st != 0) {
                 return -1
             }
-            st = deref(self)._dense.resize(newC)
+            st = $(self)._dense.resize(newC)
             if (st != 0) {
-                deref(self)._sparse.resize(oldC)
+                $(self)._sparse.resize(oldC)
                 return -1
             }
-            st = deref(self)._generations.resize(newC)
+            st = $(self)._generations.resize(newC)
             if (st != 0) {
-                deref(self)._sparse.resize(oldC)
-                deref(self)._dense.resize(oldC)
+                $(self)._sparse.resize(oldC)
+                $(self)._dense.resize(oldC)
                 return -1
             }
             for (uint32_t i = oldC; i < newC; i = i + 1) {
-                deref(self)._sparse[i] = i
-                deref(self)._dense[i] = i
-                deref(self)._generations[i] = 0
+                $(self)._sparse[i] = i
+                $(self)._dense[i] = i
+                $(self)._generations[i] = 0
             }
-            deref(self)._capacity = newC
+            $(self)._capacity = newC
             return 0
         }
 
@@ -622,12 +622,12 @@ namespace std {
         // its index, or 0xFFFFFFFF (_END) when the pool is not
         // initialized or every slot is live.
         func new_index(addr<GenerationalSparseSetAllocator> self) -> uint32_t {
-            if (deref(self)._capacity == 0 || deref(self)._used >= deref(self)._capacity) {
+            if ($(self)._capacity == 0 || $(self)._used >= $(self)._capacity) {
                 return 0xFFFFFFFF
             }
-            uint32_t idx = deref(self)._dense[deref(self)._used]
-            deref(self)._sparse[idx] = deref(self)._used
-            deref(self)._used = deref(self)._used + 1
+            uint32_t idx = $(self)._dense[$(self)._used]
+            $(self)._sparse[idx] = $(self)._used
+            $(self)._used = $(self)._used + 1
             return idx
         }
 
@@ -636,48 +636,48 @@ namespace std {
         // not a live slot, which covers unknown indices and double
         // release.
         func free_index(addr<GenerationalSparseSetAllocator> self, uint32_t idx) -> int32_t {
-            if (deref(self).exist(idx) == 0) {
+            if ($(self).exist(idx) == 0) {
                 return -1
             }
-            deref(self)._generations[idx] = deref(self)._generations[idx] + 1
+            $(self)._generations[idx] = $(self)._generations[idx] + 1
 
-            uint32_t delPos = deref(self)._sparse[idx]
-            uint32_t lastPos = deref(self)._used - 1
-            uint32_t lastIdx = deref(self)._dense[lastPos]
+            uint32_t delPos = $(self)._sparse[idx]
+            uint32_t lastPos = $(self)._used - 1
+            uint32_t lastIdx = $(self)._dense[lastPos]
 
-            deref(self)._dense[delPos] = lastIdx
-            deref(self)._dense[lastPos] = idx
-            deref(self)._sparse[lastIdx] = delPos
-            deref(self)._sparse[idx] = lastPos
+            $(self)._dense[delPos] = lastIdx
+            $(self)._dense[lastPos] = idx
+            $(self)._sparse[lastIdx] = delPos
+            $(self)._sparse[idx] = lastPos
 
-            deref(self)._used = deref(self)._used - 1
+            $(self)._used = $(self)._used - 1
             return 0
         }
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
         func exist(addr<GenerationalSparseSetAllocator> self, uint32_t idx) -> uint8_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return 0
             }
-            if (idx >= deref(self)._capacity) {
+            if (idx >= $(self)._capacity) {
                 return 0
             }
-            uint32_t pos = deref(self)._sparse[idx]
-            return pos < deref(self)._used && deref(self)._dense[pos] == idx
+            uint32_t pos = $(self)._sparse[idx]
+            return pos < $(self)._used && $(self)._dense[pos] == idx
         }
 
         // Generation counter of slot idx: 0 for a slot that was never
         // released, bumped by every release. Returns 0xFFFFFFFF (_END)
         // when the pool is not initialized or idx is out of range.
         func generation(addr<GenerationalSparseSetAllocator> self, uint32_t idx) -> uint32_t {
-            if (deref(self)._capacity == 0) {
+            if ($(self)._capacity == 0) {
                 return 0xFFFFFFFF
             }
-            if (idx >= deref(self)._capacity) {
+            if (idx >= $(self)._capacity) {
                 return 0xFFFFFFFF
             }
-            return deref(self)._generations[idx]
+            return $(self)._generations[idx]
         }
 
         // Write every live index into out, in allocation order (the
@@ -688,23 +688,23 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            if (deref(self)._capacity == 0 || deref(out).length() < deref(self)._used) {
+            if ($(self)._capacity == 0 || $(out).length() < $(self)._used) {
                 return -1
             }
-            for (uint32_t i = 0; i < deref(self)._used; i = i + 1) {
-                deref(out)[i] = deref(self)._dense[i]
+            for (uint32_t i = 0; i < $(self)._used; i = i + 1) {
+                $(out)[i] = $(self)._dense[i]
             }
             return 0
         }
 
         // Number of live slots.
         func used(addr<GenerationalSparseSetAllocator> self) -> uint32_t {
-            return deref(self)._used
+            return $(self)._used
         }
 
         // Number of slots the pool holds.
         func capacity(addr<GenerationalSparseSetAllocator> self) -> uint32_t {
-            return deref(self)._capacity
+            return $(self)._capacity
         }
     }
 }

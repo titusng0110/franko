@@ -10,7 +10,7 @@ Arrays are not arithmetic values.
 
 From highest precedence to lowest:
 
-1. postfix expressions, function calls, array access `a[i]`, `deref(a)`
+1. postfix expressions, function calls, array access `a[i]`, `$(a)`
 2. unary `-x`, `!x`
 3. multiplicative `*`, `/`
 4. additive `+`, `-`

@@ -7,7 +7,7 @@ func main() -> int32_t {
     p2 = getaddr(x2)
     p2 = null
 
-    print(deref(p2))
+    print($(p2))
 
     return 0
 }

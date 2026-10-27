@@ -27,13 +27,13 @@ func main() -> int32_t {
     grid[0].y = 5;
     print(grid[0].x + grid[0].y);
 
-    // Address to a struct, fields assigned through deref(p).
+    // Address to a struct, fields assigned through $(p).
     Point p;
     addr<Point> pp;
     pp = getaddr(p);
-    deref(pp).x = 6;
-    deref(pp).y = 7;
-    print(deref(pp).x + deref(pp).y);
+    $(pp).x = 6;
+    $(pp).y = 7;
+    print($(pp).x + $(pp).y);
 
     // Ndarray (nested static arrays) of structs.
     ndarray<Point, 2, 3> cells;

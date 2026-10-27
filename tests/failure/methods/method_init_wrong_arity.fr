@@ -3,7 +3,7 @@
 struct X {
     int32_t y = 0
     func init(addr<X> self, int32_t v) -> void {
-        deref(self).y = v
+        $(self).y = v
         return
     }
 }

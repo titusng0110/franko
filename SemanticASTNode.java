@@ -296,7 +296,7 @@ class SemanticReturnNode extends SemanticStmtNode {
  * Legacy shorthand:
  *
  *     arr(size)
- *     deref(p)(size)
+ *     $(p)(size)
  *
  * should lower to:
  *
@@ -623,7 +623,7 @@ class SemanticArrayAccessNode extends SemanticExprNode {
  * when the base expression is itself an lvalue:
  *
  *   - local variable base (obj.field),
- *   - deref base (deref(p).field),
+ *   - deref base ($(p).field),
  *   - nested member access (obj.inner.field),
  *   - array element base, static or dynamic (arr[i].field).
  *

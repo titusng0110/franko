@@ -452,10 +452,10 @@ exprList
 //   arr[i]
 //   obj.field
 //   obj.field[i]
-//   deref(p)
-//   deref(p).field
-//   deref(p)[i]
-//   (deref(p)).field[i]
+//   $(p)
+//   $(p).field
+//   $(p)[i]
+//   ($(p)).field[i]
 //
 // Intentionally does NOT allow function-call results as lvalues.
 lvalue
@@ -559,8 +559,8 @@ unaryExpr
 //   obj.field
 //   obj.method()
 //   obj.method(x)[i]
-//   deref(p).field
-//   deref(p).memset(0)
+//   $(p).field
+//   $(p).memset(0)
 //   (foo(x)).bar(y)[z]
 //
 // Does NOT support direct postfixing of array initializer lists:
@@ -631,7 +631,6 @@ memberName
     | FOR
     | ADDR
     | GETADDR
-    | DEREF
     | INT8_T
     | INT16_T
     | INT32_T
@@ -678,7 +677,7 @@ memberName
 //   - array indexing
 //   - member access
 //   - getaddr(...)
-//   - deref(...)
+//   - $(...)
 //   - array initializer lists
 //   - string literals
 //
@@ -834,6 +833,10 @@ getAddrExpr
     : GETADDR LPAREN lvalue RPAREN
     ;
 
+// Dereference: `$(X)`. The operand is a full expr; the result is an
+// lvalue of the pointee type (so `$(p).field`, `$(p)[i]`, and
+// `$(p) = v` are all valid). Always parenthesized: `$X` is a syntax
+// error. Chains nest: `$($(pp))`.
 derefExpr
     : DEREF LPAREN expr RPAREN
     ;
@@ -959,7 +962,8 @@ WHILE   : 'while' ;
 FOR     : 'for' ;
 ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
-DEREF   : 'deref' ;
+// Dereference prefix operator. Syntax is `$(X)`, always parenthesized.
+DEREF   : '$' ;
 CAST    : 'cast' ;
 SELF    : 'self' ;
 NULL    : 'null' ;

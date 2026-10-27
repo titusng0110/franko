@@ -29,11 +29,11 @@ The operand must be a storage-backed lvalue.
 
 If the operand has type `T`, then `getaddr(operand)` has type `addr<T>`.
 
-## 24.2 Dereferencing with `deref`
+## 24.2 Dereferencing with `$`
 
-If the operand has type `addr<T>`, then `deref(...)` has type `T`.
+If the operand has type `addr<T>`, then `$(...)` has type `T`.
 
-`deref(...)` is also an lvalue.
+`$(...)` is also an lvalue.
 
 ## 24.3 Nested Addresses
 
@@ -75,7 +75,7 @@ array<int32_t> arr;
 addr<array<int32_t>> p;
 
 p = getaddr(arr);
-deref(p)(10);
+$(p)(10);
 ```
 
 Array initializer assignment through a dereferenced array address is valid when the dereference produces a storage-backed array lvalue:
@@ -86,15 +86,15 @@ addr<array<int32_t, 3>> p;
 
 p = getaddr(xs);
 
-deref(p) = [1, 2, 3];
+$(p) = [1, 2, 3];
 ```
 
 Equivalent to:
 
 ```franko
-deref(p)[0] = 1;
-deref(p)[1] = 2;
-deref(p)[2] = 3;
+$(p)[0] = 1;
+$(p)[1] = 2;
+$(p)[2] = 3;
 ```
 
 ## 24.8 The null Literal
@@ -145,10 +145,10 @@ The compiler tracks whether an address variable is null. The only expression tha
 
 ```franko
 addr<int32_t> p;            // p is null
-deref(p);                   // error: cannot dereference null
+$(p);                   // error: cannot dereference null
 
 p = getaddr(x);             // p is certified non-null
-deref(p);                   // valid
+$(p);                   // valid
 
 addr<int32_t> q = p;        // q copies p's state: non-null
 addr<int32_t> r = q;        // r copies q's state: non-null
@@ -171,7 +171,7 @@ if (cond != 0) {
 } else {
     p = null;
 }
-deref(p);                   // warning: possibly null
+$(p);                   // warning: possibly null
 ```
 
 Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.

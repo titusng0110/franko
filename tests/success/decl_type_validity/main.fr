@@ -37,23 +37,23 @@ func main() -> int32_t {
     int32_t v = 77;
     addr<int32_t> p;
     p = getaddr(v);
-    deref(p) = 88;
+    $(p) = 88;
 
     // Address of a dynamic array type.
     array<int32_t> dyn;
     dyn.init_zero(2);
     addr<array<int32_t>> ap;
     ap = getaddr(dyn);
-    deref(ap)[1] = 55;
+    $(ap)[1] = 55;
 
     print(s.n);
     print(s.m);
     print(xs[1].n);
     print(bytes[63]);
     print(grid[11][19]);
-    print(deref(p));
-    print(deref(ap)[0]);
-    print(deref(ap)[1]);
+    print($(p));
+    print($(ap)[0]);
+    print($(ap)[1]);
 
     xs.uninit();
     dyn.uninit();

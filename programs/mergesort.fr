@@ -30,14 +30,14 @@ struct MergeSorter {
 
     func printArray(addr<MergeSorter> self, uint n) -> void {
         for (uint i = 0; i < n; i = i + 1) {
-            print(deref(self).a[i])
+            print($(self).a[i])
         }
 
         return
     }
 
     func initData(addr<MergeSorter> self) -> void {
-        deref(self).a = [
+        $(self).a = [
             42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
             21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
             8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
@@ -45,7 +45,7 @@ struct MergeSorter {
             4, 53, 68, 10, 97, 26, 41, 80, 22, 56
         ]
 
-        deref(self).b.memset(0)
+        $(self).b.memset(0)
         return
     }
 
@@ -60,11 +60,11 @@ struct MergeSorter {
         k = low
 
         while (i <= mid && j <= high) {
-            if (deref(self).a[i] <= deref(self).a[j]) {
-                deref(self).b[k] = deref(self).a[i]
+            if ($(self).a[i] <= $(self).a[j]) {
+                $(self).b[k] = $(self).a[i]
                 i = i + 1
             } else {
-                deref(self).b[k] = deref(self).a[j]
+                $(self).b[k] = $(self).a[j]
                 j = j + 1
             }
 
@@ -72,19 +72,19 @@ struct MergeSorter {
         }
 
         while (i <= mid) {
-            deref(self).b[k] = deref(self).a[i]
+            $(self).b[k] = $(self).a[i]
             i = i + 1
             k = k + 1
         }
 
         while (j <= high) {
-            deref(self).b[k] = deref(self).a[j]
+            $(self).b[k] = $(self).a[j]
             j = j + 1
             k = k + 1
         }
 
         count = high - low + 1
-        deref(self).a.memcpy(getaddr(deref(self).b), low, low, count)
+        $(self).a.memcpy(getaddr($(self).b), low, low, count)
         return
     }
 
@@ -94,9 +94,9 @@ struct MergeSorter {
         if (low < high) {
             mid = low + ((high - low) / 2)
 
-            deref(self).mergeSort(low, mid)
-            deref(self).mergeSort(mid + 1, high)
-            deref(self).merge(low, mid, high)
+            $(self).mergeSort(low, mid)
+            $(self).mergeSort(mid + 1, high)
+            $(self).merge(low, mid, high)
         }
 
         return
@@ -106,7 +106,7 @@ struct MergeSorter {
         uint8_t sorted = 1
 
         for (uint k = 1; k < n; k = k + 1) {
-            if (deref(self).a[k] < deref(self).a[k - 1]) {
+            if ($(self).a[k] < $(self).a[k - 1]) {
                 sorted = 0
             }
         }

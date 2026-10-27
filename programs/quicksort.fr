@@ -20,7 +20,7 @@
 //
 // Arrays are passed by address because Franko arrays are not directly
 // assignable, parameter-passable, or returnable by value. Here the
-// array lives in the struct, so methods reach it as deref(self).data.
+// array lives in the struct, so methods reach it as $(self).data.
 // ============================================================
 
 struct QuickSort {
@@ -28,7 +28,7 @@ struct QuickSort {
 
     func printArray(addr<QuickSort> self, uint32_t n) -> void {
         for (uint32_t i = 0; i < n; i = i + 1) {
-            print(deref(self).data[i])
+            print($(self).data[i])
         }
 
         return
@@ -45,16 +45,16 @@ struct QuickSort {
             4, 53, 68, 10, 97, 26, 41, 80, 22, 56
         ]
 
-        deref(self).data.memcpy(getaddr(source))
+        $(self).data.memcpy(getaddr(source))
         return
     }
 
     func swap(addr<QuickSort> self, uint32_t a, uint32_t b) -> void {
         int32_t temp = 0
 
-        temp = deref(self).data[a]
-        deref(self).data[a] = deref(self).data[b]
-        deref(self).data[b] = temp
+        temp = $(self).data[a]
+        $(self).data[a] = $(self).data[b]
+        $(self).data[b] = temp
         return
     }
 
@@ -63,17 +63,17 @@ struct QuickSort {
         uint32_t i = 0
         uint32_t j = 0
 
-        pivot = deref(self).data[high]
+        pivot = $(self).data[high]
         i = low
 
         for (j = low; j < high; j = j + 1) {
-            if (deref(self).data[j] <= pivot) {
-                deref(self).swap(i, j)
+            if ($(self).data[j] <= pivot) {
+                $(self).swap(i, j)
                 i = i + 1
             }
         }
 
-        deref(self).swap(i, high)
+        $(self).swap(i, high)
 
         return i
     }
@@ -105,7 +105,7 @@ struct QuickSort {
             high = stackHigh[top]
 
             if (low < high) {
-                pi = deref(self).partition(low, high)
+                pi = $(self).partition(low, high)
 
                 if (pi > low) {
                     stackLow[top] = low
@@ -128,7 +128,7 @@ struct QuickSort {
         uint8_t sorted = 1
 
         for (uint32_t k = 1; k < n; k = k + 1) {
-            if (deref(self).data[k] < deref(self).data[k - 1]) {
+            if ($(self).data[k] < $(self).data[k - 1]) {
                 sorted = 0
             }
         }

@@ -13,7 +13,7 @@ int32_t big = 300;
 uint8_t small = cast<uint8_t>(big);
 ```
 
-Like `deref` and `getaddr`, `cast<T>` is a compiler intrinsic, not a
+Like `$(...)` and `getaddr`, `cast<T>` is a compiler intrinsic, not a
 function call: it cannot be overloaded, shadowed, or passed around.
 
 ## 16.1 Cast Syntax

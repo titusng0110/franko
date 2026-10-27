@@ -10,11 +10,11 @@ func main() -> int32_t {
 
     // --- Addresses & dereferencing ---
     addr<int32_t> p = getaddr(stackVar);
-    int32_t derefVal = deref(p);
+    int32_t derefVal = $(p);
 
     // --- Writes through an address ---
     addr<int32_t> stackAddr = getaddr(stackVar);
-    deref(stackAddr) = 200;
+    $(stackAddr) = 200;
 
     // --- Null address ---
     addr<int32_t> nullAddr;
@@ -30,16 +30,16 @@ func main() -> int32_t {
     array<int32_t> arr;
     arr.init(10); // or arr(10)
     addr<array<int32_t>> arrPtr = getaddr(arr);
-    deref(arrPtr)[0] = 1;
-    int32_t arrVal = deref(arrPtr)[0];
+    $(arrPtr)[0] = 1;
+    int32_t arrVal = $(arrPtr)[0];
 
     // --- Address of array with static size ---
     array<int32_t, 5> staticArr;
     addr<array<int32_t, 5>> staticArrPtr = getaddr(staticArr);
-    deref(staticArrPtr)[0] = 5;
+    $(staticArrPtr)[0] = 5;
 
     print(derefVal);
-    print(deref(stackAddr));
+    print($(stackAddr));
     print(arrVal);
 
     return 0;

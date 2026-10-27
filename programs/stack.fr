@@ -25,7 +25,7 @@ import "franko/vector"
 namespace app {
     namespace stats {
         func remaining(addr<std::Vector> s) -> uint32_t {
-            return deref(s).length()
+            return $(s).length()
         }
     }
 }

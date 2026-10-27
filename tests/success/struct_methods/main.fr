@@ -3,18 +3,18 @@
 // ============================================================
 // Covers: doc 26.1, doc 26.2, doc 26.3, doc 26.5, doc 26.7, doc 26.9
 // Methods with explicit addr<X> self, overloads, calls on variables,
-// fields, array elements, and deref(p) receivers, local shadowing,
+// fields, array elements, and $(p) receivers, local shadowing,
 // method-to-method calls, self reassignment, and address-only structs.
 // ============================================================
 
 struct Inner {
     int32_t v = 0
     func bump(addr<Inner> self) -> void {
-        deref(self).v = deref(self).v + 1
+        $(self).v = $(self).v + 1
         return
     }
     func get(addr<Inner> self) -> int32_t {
-        return deref(self).v
+        return $(self).v
     }
 }
 
@@ -22,37 +22,37 @@ struct Counter {
     int32_t n = 0
     Inner inner
     func bump(addr<Counter> self) -> void {
-        deref(self).n = deref(self).n + 1
+        $(self).n = $(self).n + 1
         return
     }
     func add(addr<Counter> self, int32_t v) -> void {
-        deref(self).n = deref(self).n + v
+        $(self).n = $(self).n + v
         return
     }
     func add(addr<Counter> self, int32_t a, int32_t b) -> void {
-        deref(self).n = deref(self).n + a + b
+        $(self).n = $(self).n + a + b
         return
     }
     func get(addr<Counter> self) -> int32_t {
-        return deref(self).n
+        return $(self).n
     }
     func doubleBump(addr<Counter> self) -> void {
-        deref(self).bump()
-        deref(self).bump()
+        $(self).bump()
+        $(self).bump()
         return
     }
     func shadow(addr<Counter> self) -> int32_t {
         int32_t n = 100
-        deref(self).n = 7
+        $(self).n = 7
         return n
     }
     func bumpInner(addr<Counter> self) -> void {
-        deref(self).inner.bump()
+        $(self).inner.bump()
         return
     }
     func retarget(addr<Counter> self, addr<Counter> other) -> void {
         self = other
-        deref(self).n = 99
+        $(self).n = 99
         return
     }
 }
@@ -60,11 +60,11 @@ struct Counter {
 struct Big {
     array<int32_t, 4> xs
     func set(addr<Big> self, uint32_t i, int32_t v) -> void {
-        deref(self).xs[i] = v
+        $(self).xs[i] = v
         return
     }
     func get(addr<Big> self, uint32_t i) -> int32_t {
-        return deref(self).xs[i]
+        return $(self).xs[i]
     }
 }
 
@@ -87,7 +87,7 @@ func main() -> int32_t {
     print(arr[0].get())
     addr<Counter> p
     p = getaddr(c)
-    deref(p).bump()
+    $(p).bump()
     print(c.get())
     Counter d
     d.n = 1

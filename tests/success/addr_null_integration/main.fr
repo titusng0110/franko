@@ -26,7 +26,7 @@ addr<int32_t> g
 
 func takeAddr(addr<int32_t> q) -> int32_t {
     if (q != null) {
-        return deref(q)
+        return $(q)
     }
 
     return -1
@@ -50,13 +50,13 @@ func main() -> int32_t {
     p = getaddr(x)
     print(p != null)
 
-    deref(p) = 42
-    print(deref(p))
+    $(p) = 42
+    print($(p))
 
     // Copying a certified variable keeps it certified.
     addr<int32_t> a = p
-    deref(a) = 7
-    print(deref(a))
+    $(a) = 7
+    print($(a))
 
     // A null declaration, and a copy of it: the copy is null too.
     addr<int32_t> b = null
@@ -65,8 +65,8 @@ func main() -> int32_t {
 
     // Guard refinement: the deref here is valid on the refined path.
     if (c != null) {
-        deref(c) = 5
-        print(deref(c))
+        $(c) = 5
+        print($(c))
     } else {
         print(111)
     }
@@ -80,8 +80,8 @@ func main() -> int32_t {
     addr<int32_t> w
     w = getaddr(x)
     while (w != null) {
-        deref(w) = deref(w) + 1
-        if (deref(w) > 2) {
+        $(w) = $(w) + 1
+        if ($(w) > 2) {
             w = null
         }
     }
@@ -101,8 +101,8 @@ func main() -> int32_t {
     print(bo.link == null)
     bo.link = getaddr(x)
     print(bo.link != null)
-    deref(bo.link) = 5
-    print(deref(bo.link))
+    $(bo.link) = 5
+    print($(bo.link))
 
     print(5)
 

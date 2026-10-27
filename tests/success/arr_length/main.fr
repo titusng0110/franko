@@ -11,7 +11,7 @@
 struct Meter {
     int32_t step = 0
     func length(addr<Meter> self) -> int32_t {
-        return deref(self).step + 100
+        return $(self).step + 100
     }
 }
 
@@ -55,7 +55,7 @@ func main() -> int32_t {
 
     addr<array<int32_t, 3>> p;
     p = getaddr(ys);
-    print(deref(p).length());
+    print($(p).length());
 
     Meter meter;
     meter.step = 5;

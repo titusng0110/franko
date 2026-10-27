@@ -7,7 +7,7 @@ struct X {
     int32_t y = 0
 
     func increment(addr<X> self) -> void {
-        deref(self).y = deref(self).y + 1
+        $(self).y = $(self).y + 1
         return
     }
 }
@@ -29,7 +29,7 @@ A struct body contains field declarations and method declarations:
 struct X {
     int32_t y = 0
     func increment(addr<X> self) -> void {
-        deref(self).y = deref(self).y + 1
+        $(self).y = $(self).y + 1
         return
     }
 }
@@ -51,7 +51,7 @@ The first parameter of every method must be literally `addr<X> self`, where `X` 
 struct X {
     int32_t y = 0
     func get(addr<X> self) -> int32_t {
-        return deref(self).y
+        return $(self).y
     }
 }
 ```
@@ -62,7 +62,7 @@ Rules:
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
 - A method whose `self` parameter does not have type `addr<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be addr<X>`. This covers by-value `X self`, non-address `int32_t self`, and `addr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
-- `self` is an ordinary `addr<X>` variable inside the body: `deref(self).y`, `getaddr(deref(self).y)`, and even `self = other` behave exactly like any other address variable. In particular `self.y` is invalid: `self` has type `addr<X>`, and member access requires a struct value, so fields are reached as `deref(self).y` (see [Addresses](24-addresses.md)).
+- `self` is an ordinary `addr<X>` variable inside the body: `$(self).y`, `getaddr($(self).y)`, and even `self = other` behave exactly like any other address variable. In particular `self.y` is invalid: `self` has type `addr<X>`, and member access requires a struct value, so fields are reached as `$(self).y` (see [Addresses](24-addresses.md)).
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
 ## 26.3 Method Calls and Receivers
@@ -71,7 +71,7 @@ A method is invoked with member-call syntax. The compiler prepends `getaddr(rece
 
 ```franko
 s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
-deref(p).increment()       // explicit deref for addr<X> receivers
+$(p).increment()       // explicit deref for addr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
 ```
@@ -79,8 +79,8 @@ s.inner.increment()        // field receiver
 Rules:
 
 - The receiver must have struct type; otherwise the call is rejected: `Method call 'foo' is only valid on struct values, got type T`.
-- An `addr<X>` receiver is rejected with a hint: `Method call 'foo' is only valid on struct values, got type addr<X>; use deref(p).foo(...) for address receivers`. There is no implicit auto-deref.
-- The receiver must be a storage-backed lvalue: a variable, field, array element, or `deref(...)` chain (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)). Call results are rejected: `Method call receiver must be a storage-backed lvalue: a variable, field, array element, or deref(...) expression`.
+- An `addr<X>` receiver is rejected with a hint: `Method call 'foo' is only valid on struct values, got type addr<X>; use $(p).foo(...) for address receivers`. There is no implicit auto-deref.
+- The receiver must be a storage-backed lvalue: a variable, field, array element, or `$(...)` chain (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)). Call results are rejected: `Method call receiver must be a storage-backed lvalue: a variable, field, array element, or $(...) expression`.
 - Unknown methods and mismatched arguments are rejected: `No matching overload for method call 'X.foo(...)'`, with user argument types only (`self` is implicit and excluded from the printed signature). A struct-typed receiver never falls back to array-intrinsic diagnostics, even when the name coincides with one: `s.init()` with no such method reports the method-call diagnostic.
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
@@ -104,11 +104,11 @@ Methods overload exactly like free functions: overload identity is name plus ord
 struct Counter {
     int32_t n = 0
     func add(addr<Counter> self, int32_t v) -> void {
-        deref(self).n = deref(self).n + v
+        $(self).n = $(self).n + v
         return
     }
     func add(addr<Counter> self, int32_t a, int32_t b) -> void {
-        deref(self).n = deref(self).n + a + b
+        $(self).n = $(self).n + a + b
         return
     }
 }
@@ -134,15 +134,15 @@ Rules:
 
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
-- `self` as an expression (`self`, `getaddr(self)`, `deref(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
+- `self` as an expression (`self`, `getaddr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
 - `x.self` parses (member names accept keywords) but always fails resolution, like `x.print`.
 
 ## 26.7 Scope Inside Method Bodies
 
 A method body scopes exactly like a free-function body, plus the `self` parameter:
 
-- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32_t y` inside `increment` is unrelated to `deref(self).y`).
-- A method may call other methods on the same object only through an explicit receiver: `deref(self).other()`.
+- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32_t y` inside `increment` is unrelated to `$(self).y`).
+- A method may call other methods on the same object only through an explicit receiver: `$(self).other()`.
 - `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](12-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).
 
@@ -173,8 +173,8 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
 - Every method must have `addr<X> self` as its first parameter; only the first parameter may be named `self`.
-- `self` is a reserved keyword; `self.y` is invalid (write `deref(self).y`).
-- Receivers must be struct-valued storage-backed lvalues; `addr<X>` receivers require explicit `deref(p).method(...)`.
+- `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
+- Receivers must be struct-valued storage-backed lvalues; `addr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
 - No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.

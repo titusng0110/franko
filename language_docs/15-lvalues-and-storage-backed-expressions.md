@@ -8,7 +8,7 @@ Current storage-backed lvalues are:
 |---|---|
 | variable | yes |
 | array element of storage-backed array | yes |
-| `deref(address)` | yes |
+| `$(address)` | yes |
 | struct field access whose base is an lvalue (`obj.field`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
@@ -16,7 +16,7 @@ Current storage-backed lvalues are:
 | function call result | no |
 | `getaddr(...)` result | no |
 
-Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `deref(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
+Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
 See [Structs](25-structs.md) for the complete struct reference.
 

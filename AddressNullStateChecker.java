@@ -945,7 +945,7 @@ public final class AddressNullStateChecker {
      *   p = getaddr(x);        p: POINTING
      *   if (p != null) { }     then-path: POINTING (matches)
      *                          else-path: infeasible, stays POINTING
-     *   deref(p);              still POINTING, no error
+     *   $(p);              still POINTING, no error
      */
     private void refineAddrStatesFromGuard(
             SemanticExprNode condition,

@@ -9,7 +9,7 @@ func main() -> int32_t {
         print(1)
     }
 
-    print(deref(p5))
+    print($(p5))
 
     return 0
 }

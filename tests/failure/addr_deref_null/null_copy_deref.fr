@@ -6,7 +6,7 @@ func main() -> int32_t {
 
     a3 = b3
 
-    print(deref(a3))
+    print($(a3))
 
     return 0
 }

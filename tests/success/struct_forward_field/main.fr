@@ -30,11 +30,11 @@ func main() -> int32_t {
 
     Later l
     o.link = getaddr(l)
-    deref(o.link).tag = 8
+    $(o.link).tag = 8
 
     print(o.inner.x)
     print(o.v)
-    print(deref(o.link).tag)
+    print($(o.link).tag)
 
     return 0
 }

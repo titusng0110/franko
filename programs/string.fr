@@ -22,11 +22,11 @@ struct TextBuf {
     array<byte> buf
 
     func init(addr<TextBuf> self, uint32_t capacity) -> int32_t {
-        return deref(self).buf.init(capacity)
+        return $(self).buf.init(capacity)
     }
 
     func uninit(addr<TextBuf> self) -> void {
-        deref(self).buf.uninit()
+        $(self).buf.uninit()
         return
     }
 
@@ -42,12 +42,12 @@ struct TextBuf {
         //   "Franko"
         //
         // Expected byte count: 22
-        deref(self).buf.memset(0)
-        deref(self).buf = "Hello,\tWorld!\n\"Franko\""
+        $(self).buf.memset(0)
+        $(self).buf = "Hello,\tWorld!\n\"Franko\""
 
         print(5001)
         for (uint32_t i = 0; i < 22; i = i + 1) {
-            print(deref(self).buf[i])
+            print($(self).buf[i])
         }
 
         return
@@ -69,12 +69,12 @@ struct TextBuf {
         //   😍       -> 4 bytes
         //
         // Total: 23 bytes
-        deref(self).buf.memset(0)
-        deref(self).buf = "你好, Franko 😭😍"
+        $(self).buf.memset(0)
+        $(self).buf = "你好, Franko 😭😍"
 
         print(5002)
         for (uint32_t i = 0; i < 23; i = i + 1) {
-            print(deref(self).buf[i])
+            print($(self).buf[i])
         }
 
         return
@@ -98,14 +98,14 @@ struct TextBuf {
         //   "Line 3" -> 6
         //
         // Total: 20 bytes
-        deref(self).buf.memset(0)
-        deref(self).buf = "Line 1
+        $(self).buf.memset(0)
+        $(self).buf = "Line 1
 Line 2
 Line 3"
 
         print(5003)
         for (uint32_t i = 0; i < 20; i = i + 1) {
-            print(deref(self).buf[i])
+            print($(self).buf[i])
         }
 
         return
@@ -133,12 +133,12 @@ Line 3"
         //   Z   -> 90
         //
         // Total: 13 bytes
-        deref(self).buf.memset(0)
-        deref(self).buf = "A\\B\"C\a\b\f\n\r\t\vZ"
+        $(self).buf.memset(0)
+        $(self).buf = "A\\B\"C\a\b\f\n\r\t\vZ"
 
         print(5004)
         for (uint32_t i = 0; i < 13; i = i + 1) {
-            print(deref(self).buf[i])
+            print($(self).buf[i])
         }
 
         return

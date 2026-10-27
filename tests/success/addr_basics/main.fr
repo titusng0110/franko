@@ -4,7 +4,7 @@
 // Covers:
 //   - addr<addr<int32_t>>: getaddr of an addr variable, double
 //     dereference to write and read through both levels
-//   - addr<array<int32_t>>: deref(p)(n) allocation shorthand and
+//   - addr<array<int32_t>>: $(p)(n) allocation shorthand and
 //     element writes through the dereference
 //   - addr<array<int32_t, 3>>: initializer-list assignment through
 //     the dereference
@@ -20,25 +20,25 @@ func main() -> int32_t {
     pp = getaddr(p)
 
     // Double dereference writes x through both address levels.
-    deref(deref(pp)) = 7
-    print(deref(deref(pp)))
+    $($(pp)) = 7
+    print($($(pp)))
     print(x)
 
     // Writes through p are visible through pp (same pointee).
-    deref(p) = 8
-    print(deref(deref(pp)))
+    $(p) = 8
+    print($($(pp)))
 
     // --- Address of a dynamic array ---
     array<int32_t> dyn
     addr<array<int32_t>> ap
     ap = getaddr(dyn)
 
-    // Allocation shorthand: deref(ap)(4) is deref(ap).init(4).
-    deref(ap)(4)
-    deref(ap)[0] = 10
-    deref(ap)[3] = 40
-    print(deref(ap)[0])
-    print(deref(ap)[3])
+    // Allocation shorthand: $(ap)(4) is $(ap).init(4).
+    $(ap)(4)
+    $(ap)[0] = 10
+    $(ap)[3] = 40
+    print($(ap)[0])
+    print($(ap)[3])
     print(dyn[3])
 
     dyn.uninit()
@@ -48,11 +48,11 @@ func main() -> int32_t {
     addr<array<int32_t, 3>> sp
     sp = getaddr(xs)
 
-    // Equivalent to deref(sp)[0] = 1; deref(sp)[1] = 2; deref(sp)[2] = 3;
-    deref(sp) = [1, 2, 3]
-    print(deref(sp)[0])
-    print(deref(sp)[1])
-    print(deref(sp)[2])
+    // Equivalent to $(sp)[0] = 1; $(sp)[1] = 2; $(sp)[2] = 3;
+    $(sp) = [1, 2, 3]
+    print($(sp)[0])
+    print($(sp)[1])
+    print($(sp)[2])
     print(xs[2])
 
     return 0

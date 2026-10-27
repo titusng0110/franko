@@ -499,7 +499,7 @@ public final class ArrayLowerer {
      * Lowers:
      *
      *   xs(size)
-     *   deref(p)(size)
+     *   $(p)(size)
      *
      * into:
      *

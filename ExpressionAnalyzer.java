@@ -678,8 +678,8 @@ public final class ExpressionAnalyzer {
      * synthesized `getaddr(receiver)` first argument for `self`.
      *
      * The receiver must be a struct-valued storage-backed lvalue
-     * (a variable, field, array element, or deref(...) chain). Address
-     * receivers require an explicit deref: `deref(p).method(...)`.
+     * (a variable, field, array element, or $(...) chain). Address
+     * receivers require an explicit deref: `$(p).method(...)`.
      */
     private SemanticExprNode analyzeMethodCallExpr(
             CallNode call,
@@ -694,7 +694,7 @@ public final class ExpressionAnalyzer {
                         + mac.memberName
                         + "' is only valid on struct values, got type "
                         + target.type.describe()
-                        + "; use deref(p)."
+                        + "; use $(p)."
                         + mac.memberName
                         + "(...) for address receivers");
             } else {
@@ -715,7 +715,7 @@ public final class ExpressionAnalyzer {
 
         if (!isValidStorageBackedLValue(target)) {
             ctx.error("Method call receiver must be a storage-backed lvalue: "
-                    + "a variable, field, array element, or deref(...) expression");
+                    + "a variable, field, array element, or $(...) expression");
 
             return new SemanticIntLiteralNode(
                     FALLBACK_TYPE,

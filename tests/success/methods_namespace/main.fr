@@ -10,17 +10,17 @@ namespace util {
     struct Counter {
         int32_t n = 0
         func bump(addr<Counter> self) -> void {
-            deref(self).n = deref(self).n + 1
+            $(self).n = $(self).n + 1
             return
         }
         func value(addr<Counter> self) -> int32_t {
-            return deref(self).n
+            return $(self).n
         }
     }
 }
 
 func readIt(addr<util::Counter> p) -> int32_t {
-    return deref(p).value()
+    return $(p).value()
 }
 
 func main() -> int32_t {
@@ -31,6 +31,6 @@ func main() -> int32_t {
     print(readIt(getaddr(c)))
     addr<util::Counter> q
     q = getaddr(c)
-    print(deref(q).value())
+    print($(q).value())
     return 0
 }

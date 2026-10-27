@@ -33,8 +33,8 @@ For each address variable the checker tracks one of:
 
 ## 27.3 Dereference Checking
 
-- `deref(p)` where `p` is **null** is an **error**;
-- `deref(p)` where `p` is **possibly null** is a **warning**.
+- `$(p)` where `p` is **null** is an **error**;
+- `$(p)` where `p` is **possibly null** is a **warning**.
 
 A variable warns at most once per check, so a path-sensitive traversal that revisits the same deref site does not repeat the warning.
 
@@ -64,9 +64,9 @@ Inside `if (p == null)` / `if (p != null)` (either operand order), the checker r
 ```franko
 addr<int32_t> p;
 if (p != null) {
-    deref(p);      // valid: p is refined to pointing inside the guard
+    $(p);      // valid: p is refined to pointing inside the guard
 }
-deref(p);          // error: p is provably null after the guard fails
+$(p);          // error: p is provably null after the guard fails
 ```
 
 When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
@@ -75,9 +75,9 @@ When a guard's assertion contradicts a definite current state, that path is stat
 addr<int32_t> p;
 p = getaddr(x);
 if (p != null) {
-    deref(p);      // valid
+    $(p);      // valid
 }
-deref(p);          // valid: p is still pointing; the else path was infeasible
+$(p);          // valid: p is still pointing; the else path was infeasible
 ```
 
 Refinement is path-sensitive up to the nesting-depth limit described above; beyond the limit, refinement stops and states merge conservatively.
@@ -89,7 +89,7 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 Current limitations of the address checker:
 
 - values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain address **variables** are tracked. An address held in a struct field, an array element, or behind a `deref` chain is not tracked;
+- only plain address **variables** are tracked. An address held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
 - dangling addresses are not detected at compile time; an address may outlive its pointee, and the compiler does not detect that case. A runtime check is planned as a later change;
 - checks are intra-procedural; address effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.

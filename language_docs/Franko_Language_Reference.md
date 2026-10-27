@@ -68,7 +68,7 @@ Franko is a small statically typed language with:
 - typed addresses using `addr<T>`;
 - explicit address operations:
   - `getaddr(...)`;
-  - `deref(...)`;
+  - `$(...)`;
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
@@ -1178,7 +1178,7 @@ W b;
 a = b;    // invalid: struct with non-assignable fields is address-only
 ```
 
-Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `deref(p).field`.
+Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `$(p).field`.
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](25-structs.md) for the full assignability rules.
 
@@ -1194,7 +1194,7 @@ Current storage-backed lvalues are:
 |---|---|
 | variable | yes |
 | array element of storage-backed array | yes |
-| `deref(address)` | yes |
+| `$(address)` | yes |
 | struct field access whose base is an lvalue (`obj.field`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
@@ -1202,7 +1202,7 @@ Current storage-backed lvalues are:
 | function call result | no |
 | `getaddr(...)` result | no |
 
-Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `deref(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
+Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
 See [Structs](25-structs.md) for the complete struct reference.
 
@@ -1231,7 +1231,7 @@ int32_t big = 300;
 uint8_t small = cast<uint8_t>(big);
 ```
 
-Like `deref` and `getaddr`, `cast<T>` is a compiler intrinsic, not a
+Like `$(...)` and `getaddr`, `cast<T>` is a compiler intrinsic, not a
 function call: it cannot be overloaded, shadowed, or passed around.
 
 ## 16.1 Cast Syntax
@@ -1349,7 +1349,7 @@ Arrays are not arithmetic values.
 
 From highest precedence to lowest:
 
-1. postfix expressions, function calls, array access `a[i]`, `deref(a)`
+1. postfix expressions, function calls, array access `a[i]`, `$(a)`
 2. unary `-x`, `!x`
 3. multiplicative `*`, `/`
 4. additive `+`, `-`
@@ -1849,7 +1849,7 @@ Examples of storage-backed array targets:
 
 ```franko
 arr
-deref(p)
+$(p)
 arrs[i]
 ```
 
@@ -2559,11 +2559,11 @@ The operand must be a storage-backed lvalue.
 
 If the operand has type `T`, then `getaddr(operand)` has type `addr<T>`.
 
-## 24.2 Dereferencing with `deref`
+## 24.2 Dereferencing with `$`
 
-If the operand has type `addr<T>`, then `deref(...)` has type `T`.
+If the operand has type `addr<T>`, then `$(...)` has type `T`.
 
-`deref(...)` is also an lvalue.
+`$(...)` is also an lvalue.
 
 ## 24.3 Nested Addresses
 
@@ -2605,7 +2605,7 @@ array<int32_t> arr;
 addr<array<int32_t>> p;
 
 p = getaddr(arr);
-deref(p)(10);
+$(p)(10);
 ```
 
 Array initializer assignment through a dereferenced array address is valid when the dereference produces a storage-backed array lvalue:
@@ -2616,15 +2616,15 @@ addr<array<int32_t, 3>> p;
 
 p = getaddr(xs);
 
-deref(p) = [1, 2, 3];
+$(p) = [1, 2, 3];
 ```
 
 Equivalent to:
 
 ```franko
-deref(p)[0] = 1;
-deref(p)[1] = 2;
-deref(p)[2] = 3;
+$(p)[0] = 1;
+$(p)[1] = 2;
+$(p)[2] = 3;
 ```
 
 ## 24.8 The null Literal
@@ -2675,10 +2675,10 @@ The compiler tracks whether an address variable is null. The only expression tha
 
 ```franko
 addr<int32_t> p;            // p is null
-deref(p);                   // error: cannot dereference null
+$(p);                   // error: cannot dereference null
 
 p = getaddr(x);             // p is certified non-null
-deref(p);                   // valid
+$(p);                   // valid
 
 addr<int32_t> q = p;        // q copies p's state: non-null
 addr<int32_t> r = q;        // r copies q's state: non-null
@@ -2701,7 +2701,7 @@ if (cond != 0) {
 } else {
     p = null;
 }
-deref(p);                   // warning: possibly null
+$(p);                   // warning: possibly null
 ```
 
 Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.
@@ -2851,12 +2851,12 @@ Member access uses dot syntax. Access chains compose with every storage form:
 
 ```franko
 s.field               // local struct
-deref(p).field        // through an address
-deref(a.next).field   // another hop through an addr field: deref the link first
+$(p).field        // through an address
+$(a.next).field   // another hop through an addr field: deref the link first
 xs[i].field           // element of a static or dynamic array
 ```
 
-- `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `deref(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
+- `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `$(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
 - `getaddr(s.field)` is valid and yields `addr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
   `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getaddr(other))`, `b.data[i]`, and `b.data.uninit()`.
@@ -2918,7 +2918,7 @@ struct X {
     int32_t y = 0
 
     func increment(addr<X> self) -> void {
-        deref(self).y = deref(self).y + 1
+        $(self).y = $(self).y + 1
         return
     }
 }
@@ -2940,7 +2940,7 @@ A struct body contains field declarations and method declarations:
 struct X {
     int32_t y = 0
     func increment(addr<X> self) -> void {
-        deref(self).y = deref(self).y + 1
+        $(self).y = $(self).y + 1
         return
     }
 }
@@ -2962,7 +2962,7 @@ The first parameter of every method must be literally `addr<X> self`, where `X` 
 struct X {
     int32_t y = 0
     func get(addr<X> self) -> int32_t {
-        return deref(self).y
+        return $(self).y
     }
 }
 ```
@@ -2973,7 +2973,7 @@ Rules:
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
 - A method whose `self` parameter does not have type `addr<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be addr<X>`. This covers by-value `X self`, non-address `int32_t self`, and `addr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
-- `self` is an ordinary `addr<X>` variable inside the body: `deref(self).y`, `getaddr(deref(self).y)`, and even `self = other` behave exactly like any other address variable. In particular `self.y` is invalid: `self` has type `addr<X>`, and member access requires a struct value, so fields are reached as `deref(self).y` (see [Addresses](24-addresses.md)).
+- `self` is an ordinary `addr<X>` variable inside the body: `$(self).y`, `getaddr($(self).y)`, and even `self = other` behave exactly like any other address variable. In particular `self.y` is invalid: `self` has type `addr<X>`, and member access requires a struct value, so fields are reached as `$(self).y` (see [Addresses](24-addresses.md)).
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
 ## 26.3 Method Calls and Receivers
@@ -2982,7 +2982,7 @@ A method is invoked with member-call syntax. The compiler prepends `getaddr(rece
 
 ```franko
 s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
-deref(p).increment()       // explicit deref for addr<X> receivers
+$(p).increment()       // explicit deref for addr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
 ```
@@ -2990,8 +2990,8 @@ s.inner.increment()        // field receiver
 Rules:
 
 - The receiver must have struct type; otherwise the call is rejected: `Method call 'foo' is only valid on struct values, got type T`.
-- An `addr<X>` receiver is rejected with a hint: `Method call 'foo' is only valid on struct values, got type addr<X>; use deref(p).foo(...) for address receivers`. There is no implicit auto-deref.
-- The receiver must be a storage-backed lvalue: a variable, field, array element, or `deref(...)` chain (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)). Call results are rejected: `Method call receiver must be a storage-backed lvalue: a variable, field, array element, or deref(...) expression`.
+- An `addr<X>` receiver is rejected with a hint: `Method call 'foo' is only valid on struct values, got type addr<X>; use $(p).foo(...) for address receivers`. There is no implicit auto-deref.
+- The receiver must be a storage-backed lvalue: a variable, field, array element, or `$(...)` chain (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)). Call results are rejected: `Method call receiver must be a storage-backed lvalue: a variable, field, array element, or $(...) expression`.
 - Unknown methods and mismatched arguments are rejected: `No matching overload for method call 'X.foo(...)'`, with user argument types only (`self` is implicit and excluded from the printed signature). A struct-typed receiver never falls back to array-intrinsic diagnostics, even when the name coincides with one: `s.init()` with no such method reports the method-call diagnostic.
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
@@ -3015,11 +3015,11 @@ Methods overload exactly like free functions: overload identity is name plus ord
 struct Counter {
     int32_t n = 0
     func add(addr<Counter> self, int32_t v) -> void {
-        deref(self).n = deref(self).n + v
+        $(self).n = $(self).n + v
         return
     }
     func add(addr<Counter> self, int32_t a, int32_t b) -> void {
-        deref(self).n = deref(self).n + a + b
+        $(self).n = $(self).n + a + b
         return
     }
 }
@@ -3045,15 +3045,15 @@ Rules:
 
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
-- `self` as an expression (`self`, `getaddr(self)`, `deref(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
+- `self` as an expression (`self`, `getaddr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
 - `x.self` parses (member names accept keywords) but always fails resolution, like `x.print`.
 
 ## 26.7 Scope Inside Method Bodies
 
 A method body scopes exactly like a free-function body, plus the `self` parameter:
 
-- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32_t y` inside `increment` is unrelated to `deref(self).y`).
-- A method may call other methods on the same object only through an explicit receiver: `deref(self).other()`.
+- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32_t y` inside `increment` is unrelated to `$(self).y`).
+- A method may call other methods on the same object only through an explicit receiver: `$(self).other()`.
 - `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](12-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).
 
@@ -3084,8 +3084,8 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
 - Every method must have `addr<X> self` as its first parameter; only the first parameter may be named `self`.
-- `self` is a reserved keyword; `self.y` is invalid (write `deref(self).y`).
-- Receivers must be struct-valued storage-backed lvalues; `addr<X>` receivers require explicit `deref(p).method(...)`.
+- `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
+- Receivers must be struct-valued storage-backed lvalues; `addr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
 - No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.
@@ -3127,8 +3127,8 @@ For each address variable the checker tracks one of:
 
 ## 27.3 Dereference Checking
 
-- `deref(p)` where `p` is **null** is an **error**;
-- `deref(p)` where `p` is **possibly null** is a **warning**.
+- `$(p)` where `p` is **null** is an **error**;
+- `$(p)` where `p` is **possibly null** is a **warning**.
 
 A variable warns at most once per check, so a path-sensitive traversal that revisits the same deref site does not repeat the warning.
 
@@ -3158,9 +3158,9 @@ Inside `if (p == null)` / `if (p != null)` (either operand order), the checker r
 ```franko
 addr<int32_t> p;
 if (p != null) {
-    deref(p);      // valid: p is refined to pointing inside the guard
+    $(p);      // valid: p is refined to pointing inside the guard
 }
-deref(p);          // error: p is provably null after the guard fails
+$(p);          // error: p is provably null after the guard fails
 ```
 
 When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
@@ -3169,9 +3169,9 @@ When a guard's assertion contradicts a definite current state, that path is stat
 addr<int32_t> p;
 p = getaddr(x);
 if (p != null) {
-    deref(p);      // valid
+    $(p);      // valid
 }
-deref(p);          // valid: p is still pointing; the else path was infeasible
+$(p);          // valid: p is still pointing; the else path was infeasible
 ```
 
 Refinement is path-sensitive up to the nesting-depth limit described above; beyond the limit, refinement stops and states merge conservatively.
@@ -3183,7 +3183,7 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 Current limitations of the address checker:
 
 - values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain address **variables** are tracked. An address held in a struct field, an array element, or behind a `deref` chain is not tracked;
+- only plain address **variables** are tracked. An address held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
 - dangling addresses are not detected at compile time; an address may outlive its pointee, and the compiler does not detect that case. A runtime check is planned as a later change;
 - checks are intra-procedural; address effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
@@ -3912,7 +3912,7 @@ func main() -> int32_t {
 
     p = getaddr(xs);
 
-    deref(p) = [1, 2, 3];
+    $(p) = [1, 2, 3];
 
     print(xs[0]);
     print(xs[1]);
@@ -3931,9 +3931,9 @@ func main() -> int32_t {
 
     p = getaddr(xs);
 
-    deref(p)[0] = 1;
-    deref(p)[1] = 2;
-    deref(p)[2] = 3;
+    $(p)[0] = 1;
+    $(p)[1] = 2;
+    $(p)[2] = 3;
 
     print(xs[0]);
     print(xs[1]);
@@ -3970,8 +3970,8 @@ See [String Literals](23-string-literals.md).
 
 ```franko
 func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
-    deref(grid).memset(0);
-    deref(grid)[0][1] = 7;
+    $(grid).memset(0);
+    $(grid)[0][1] = 7;
 }
 
 func main() -> int32_t {
@@ -4099,8 +4099,8 @@ func dist2(Point p) -> int32_t {
 }
 
 func move(addr<Point> p) -> void {
-    deref(p).x = deref(p).x + 1;
-    deref(p).y = deref(p).y + 1;
+    $(p).x = $(p).x + 1;
+    $(p).y = $(p).y + 1;
 }
 
 func main() -> int32_t {
@@ -4219,12 +4219,12 @@ func main() -> int32_t {
 
 ```franko
 func main(addr<array<array<byte>>> args) -> int32_t {
-    uint32_t n = deref(args).length();
+    uint32_t n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
     uint32_t i = 1;
     while (i < n) {
-        print(deref(args)[i].length());   // byte length of argument i
+        print($(args)[i].length());   // byte length of argument i
         i = i + 1;
     }
 

@@ -546,7 +546,7 @@ public class ASTPrinter {
         }
 
         if (expr instanceof DerefNode n) {
-            return "deref(" + exprToInlineString(n.expr) + ")";
+            return "$(" + exprToInlineString(n.expr) + ")";
         }
 
         if (expr instanceof CastNode n) {

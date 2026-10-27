@@ -12,7 +12,7 @@ func main() -> int32_t {
     }
 
     if (p7 == null) {
-        print(deref(p7))
+        print($(p7))
     }
 
     return 0

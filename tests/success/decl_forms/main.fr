@@ -35,7 +35,7 @@ func main() -> int32_t {
     addr<int32_t> p
     print(p == null)
     p = getaddr(y)
-    deref(p) = 99
+    $(p) = 99
 
     print(x)
     print(y)
@@ -45,7 +45,7 @@ func main() -> int32_t {
     print(xs[3])
     print(buffer[0])
     print(buffer[127])
-    print(deref(p))
+    print($(p))
 
     return 0
 }

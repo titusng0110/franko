@@ -202,7 +202,7 @@ func main() -> int32_t {
 
     p = getaddr(xs);
 
-    deref(p) = [1, 2, 3];
+    $(p) = [1, 2, 3];
 
     print(xs[0]);
     print(xs[1]);
@@ -221,9 +221,9 @@ func main() -> int32_t {
 
     p = getaddr(xs);
 
-    deref(p)[0] = 1;
-    deref(p)[1] = 2;
-    deref(p)[2] = 3;
+    $(p)[0] = 1;
+    $(p)[1] = 2;
+    $(p)[2] = 3;
 
     print(xs[0]);
     print(xs[1]);
@@ -260,8 +260,8 @@ See [String Literals](23-string-literals.md).
 
 ```franko
 func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
-    deref(grid).memset(0);
-    deref(grid)[0][1] = 7;
+    $(grid).memset(0);
+    $(grid)[0][1] = 7;
 }
 
 func main() -> int32_t {
@@ -389,8 +389,8 @@ func dist2(Point p) -> int32_t {
 }
 
 func move(addr<Point> p) -> void {
-    deref(p).x = deref(p).x + 1;
-    deref(p).y = deref(p).y + 1;
+    $(p).x = $(p).x + 1;
+    $(p).y = $(p).y + 1;
 }
 
 func main() -> int32_t {
@@ -509,12 +509,12 @@ func main() -> int32_t {
 
 ```franko
 func main(addr<array<array<byte>>> args) -> int32_t {
-    uint32_t n = deref(args).length();
+    uint32_t n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
     uint32_t i = 1;
     while (i < n) {
-        print(deref(args)[i].length());   // byte length of argument i
+        print($(args)[i].length());   // byte length of argument i
         i = i + 1;
     }
 

@@ -8,7 +8,7 @@ func main() -> int32_t {
     a4 = b4
     c4 = a4
 
-    print(deref(c4))
+    print($(c4))
 
     return 0
 }

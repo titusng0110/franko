@@ -1054,7 +1054,7 @@ public class ExpressionChecker {
     private void visitDeref(SemanticDerefNode node) {
         checkExpr(node.expr);
 
-        if (!ensureValueExpression(node.expr, "Operand of 'deref'")) {
+        if (!ensureValueExpression(node.expr, "Operand of '$'")) {
             return;
         }
 
@@ -1065,7 +1065,7 @@ public class ExpressionChecker {
 
         types.ensureAddressType(
                 node.expr.type,
-                "Operand of 'deref' must be an address type"
+                "Operand of '$' must be an address type"
         );
 
         if (node.expr.type instanceof SemanticAddrType addr

@@ -3,19 +3,19 @@
 // ============================================================
 // Covers: passing arrays to functions through addr<array<T>>
 // and addr<array<T, N>> parameters with getaddr(array) at the
-// call site; the callee writes through deref(p)[i].
+// call site; the callee writes through $(p)[i].
 // ============================================================
 
 func fillDynamic(addr<array<int32_t>> p) -> void {
-    deref(p)[0] = 11;
-    deref(p)[1] = 22;
-    deref(p)[2] = 33;
-    deref(p)[3] = 44;
+    $(p)[0] = 11;
+    $(p)[1] = 22;
+    $(p)[2] = 33;
+    $(p)[3] = 44;
 }
 
 func fillStatic(addr<array<int32_t, 8>> p) -> void {
-    deref(p)[0] = 5;
-    deref(p)[7] = 9;
+    $(p)[0] = 5;
+    $(p)[7] = 9;
 }
 
 func main() -> int32_t {

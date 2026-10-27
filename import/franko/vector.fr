@@ -47,12 +47,12 @@ namespace std {
             if (capacity == 0) {
                 return -1
             }
-            int32_t st = deref(self).data.init(capacity)
+            int32_t st = $(self).data.init(capacity)
             if (st != 0) {
                 return -1
             }
-            deref(self).len = 0
-            deref(self).cap = capacity
+            $(self).len = 0
+            $(self).cap = capacity
             return 0
         }
 
@@ -60,24 +60,24 @@ namespace std {
         // then doubling). Works even if init was never called.
         // Returns 0 on success, -1 on allocation failure.
         func push(addr<Vector> self, int32_t value) -> int32_t {
-            if (deref(self).len >= deref(self).cap) {
+            if ($(self).len >= $(self).cap) {
                 uint32_t newCap = 4
-                if (deref(self).cap != 0) {
-                    newCap = deref(self).cap * 2
+                if ($(self).cap != 0) {
+                    newCap = $(self).cap * 2
                 }
                 int32_t st = 0
-                if (deref(self).cap == 0) {
-                    st = deref(self).data.init(newCap)
+                if ($(self).cap == 0) {
+                    st = $(self).data.init(newCap)
                 } else {
-                    st = deref(self).data.resize(newCap)
+                    st = $(self).data.resize(newCap)
                 }
                 if (st != 0) {
                     return -1
                 }
-                deref(self).cap = newCap
+                $(self).cap = newCap
             }
-            deref(self).data[deref(self).len] = value
-            deref(self).len = deref(self).len + 1
+            $(self).data[$(self).len] = value
+            $(self).len = $(self).len + 1
             return 0
         }
 
@@ -87,40 +87,40 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            if (deref(self).len == 0) {
+            if ($(self).len == 0) {
                 return -1
             }
-            deref(self).len = deref(self).len - 1
-            deref(out) = deref(self).data[deref(self).len]
+            $(self).len = $(self).len - 1
+            $(out) = $(self).data[$(self).len]
             return 0
         }
 
         // Read element `index`. The caller must ensure index < len.
         func get(addr<Vector> self, uint32_t index) -> int32_t {
-            return deref(self).data[index]
+            return $(self).data[index]
         }
 
         // Write element `index`. The caller must ensure index < len.
         func set(addr<Vector> self, uint32_t index, int32_t value) -> void {
-            deref(self).data[index] = value
+            $(self).data[index] = value
             return
         }
 
         // Number of live elements.
         func length(addr<Vector> self) -> uint32_t {
-            return deref(self).len
+            return $(self).len
         }
 
         // Number of allocated slots.
         func capacity(addr<Vector> self) -> uint32_t {
-            return deref(self).cap
+            return $(self).cap
         }
 
         // Free element storage and reset to empty.
         func uninit(addr<Vector> self) -> void {
-            deref(self).data.uninit()
-            deref(self).len = 0
-            deref(self).cap = 0
+            $(self).data.uninit()
+            $(self).len = 0
+            $(self).cap = 0
             return
         }
     }

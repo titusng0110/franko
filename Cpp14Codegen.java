@@ -91,7 +91,7 @@ import java.util.Set;
  *
  * Franko:
  *
- *   deref(p)
+ *   $(p)
  *
  * is emitted as:
  *
@@ -1595,7 +1595,7 @@ public class Cpp14Codegen {
 
     private String emitDeref(SemanticDerefNode node) {
         /*
-         * Franko deref(p) -> C++ (*p)
+         * Franko $(p) -> C++ (*p)
          */
         return "(*" + emitExpr(node.expr) + ")";
     }
@@ -1662,7 +1662,7 @@ public class Cpp14Codegen {
      * Emits a struct member access:
      *
      *   obj.field       ->  obj.field
-     *   deref(p).field  ->  (*p).field
+     *   $(p).field  ->  (*p).field
      */
     private String emitMemberAccess(SemanticMemberAccessNode node) {
         return emitExpr(node.target) + "." + node.field.name;
