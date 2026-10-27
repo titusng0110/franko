@@ -1,0 +1,61 @@
+// ============================================================
+// LANGUAGE TEST: Declaration Type Validity
+// ============================================================
+// Covers: every valid declared variable type form from doc 30:
+// struct variable, dynamic array of struct, static array,
+// ndarray (nested static array sugar), addr<T>, and
+// addr<array<T>>. Each variable is assigned and read.
+// ============================================================
+
+struct X {
+    int32_t n
+    int16_t m
+}
+
+func main() -> int32_t {
+    // Struct variable (all fields assignable -> struct is assignable).
+    X s;
+    s.n = 11;
+    s.m = 22;
+
+    // Dynamic array of a struct type.
+    array<X> xs;
+    xs.init_zero(3);
+    xs[1].n = 33;
+
+    // Static array of uint8_t with size 64.
+    array<uint8_t, 64> bytes;
+    bytes.memset(5);
+    bytes[63] = 9;
+
+    // ndarray sugar for array<array<byte, 20>, 12>.
+    ndarray<byte, 12, 20> grid;
+    grid.memset(1);
+    grid[11][19] = 4;
+
+    // Address of a primitive.
+    int32_t v = 77;
+    addr<int32_t> p;
+    p = getaddr(v);
+    $(p) = 88;
+
+    // Address of a dynamic array type.
+    array<int32_t> dyn;
+    dyn.init_zero(2);
+    addr<array<int32_t>> ap;
+    ap = getaddr(dyn);
+    $(ap)[1] = 55;
+
+    print(s.n);
+    print(s.m);
+    print(xs[1].n);
+    print(bytes[63]);
+    print(grid[11][19]);
+    print($(p));
+    print($(ap)[0]);
+    print($(ap)[1]);
+
+    xs.uninit();
+    dyn.uninit();
+    return 0;
+}

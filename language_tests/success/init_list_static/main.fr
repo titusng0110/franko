@@ -1,0 +1,29 @@
+// ============================================================
+// LANGUAGE TEST: Initializer Lists on Static Arrays
+// ============================================================
+// Covers: assignment-form initializer lists on static arrays
+// and partial assignment: a list shorter than the array leaves
+// unlisted elements untouched.
+// ============================================================
+
+func main() -> int32_t {
+    // Full-length assignment form.
+    array<int32_t, 3> a;
+    a = [10, 20, 30];
+
+    print(a[0]);
+    print(a[1]);
+    print(a[2]);
+
+    // Partial assignment: [7, 8] assigns only xs[0] and xs[1].
+    array<int32_t, 4> xs;
+    xs.memset(0);
+    xs = [7, 8];
+
+    print(xs[0]);
+    print(xs[1]);
+    print(xs[2]);
+    print(xs[3]);
+
+    return 0;
+}

@@ -1,0 +1,31 @@
+// ============================================================
+// LANGUAGE TEST: Desugaring — Braceless Control-Flow Bodies
+// ============================================================
+// Covers: 05-desugaring.md 5.6 and 18-statements.md 18.2-18.4.
+// The body of if/while/for may be a single statement without braces;
+// desugaring wraps it in an implicit block so it behaves exactly like
+// a braced body.
+// ============================================================
+
+func main() -> int32_t {
+    int32_t total = 0;
+
+    // Braceless if bodies.
+    int32_t flag = 1;
+    if (flag) print(1);
+    if (!flag) print(999);
+    if (flag) total = total + 1;
+
+    // Braceless while body.
+    int32_t i = 0;
+    while (i < 3) i = i + 1;
+    print(i);
+
+    // Braceless for bodies.
+    for (int32_t k = 0; k < 4; k = k + 1) print(k);
+    for (i = 0; i < 2; i = i + 1) total = total + 10;
+
+    print(total);
+
+    return 0;
+}

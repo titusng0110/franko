@@ -1,0 +1,19 @@
+// ============================================================
+// LANGUAGE TEST: Global zero-initialization
+// ============================================================
+// Covers: uninitialized globals are statically allocated and
+// zero-initialized before main runs (primitives and static arrays).
+// ============================================================
+
+int32_t gz
+
+array<int32_t, 4> garr
+
+func main() -> int32_t {
+    print(gz)
+    print(garr[0])
+    print(garr[1])
+    print(garr[2])
+    print(garr[3])
+    return 0
+}

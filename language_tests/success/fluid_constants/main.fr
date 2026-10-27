@@ -1,0 +1,23 @@
+// ============================================================
+// LANGUAGE TEST: Fluid Integer Constants
+// ============================================================
+// Covers: integer literals are fluid; a constant is accepted
+// when its value exactly fits the context type, including
+// each type's boundary value.
+// ============================================================
+
+func main() -> int32_t {
+    uint8_t x = 255;
+    int8_t s = -128;
+    int16_t h = 32767;
+    int32_t w = -2147483648;
+    uint64_t q = 18446744073709551615;
+
+    print(x);
+    print(s);
+    print(h);
+    print(w);
+    print(q);
+
+    return 0;
+}

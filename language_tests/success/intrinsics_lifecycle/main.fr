@@ -1,0 +1,55 @@
+// ============================================================
+// LANGUAGE TEST: Array Intrinsics Lifecycle
+// ============================================================
+// Covers: memset whole-array and ranged forms on a static
+// array, memset on a dynamic array, memcpy between static and
+// dynamic arrays in both directions via getaddr(source), and
+// memmove with overlapping ranges inside one array.
+// memset fills byte-wise: each 4-byte int32 element becomes
+// value * 0x01010101.
+// ============================================================
+
+func main() -> int32_t {
+    // memset whole static array
+    array<int32_t, 4> a;
+    a.memset(7);
+    print(a[0], a[1], a[2], a[3]);
+
+    // memset element range on a static array
+    array<int32_t, 4> b;
+    b.memset(0);
+    b.memset(9, 1, 2);
+    print(b[0], b[1], b[2], b[3]);
+
+    // memset on a dynamic array
+    array<int32_t> d;
+    d.init(3);
+    d.memset(5);
+    print(d[0], d[1], d[2]);
+
+    // memcpy static -> dynamic
+    array<int32_t> e;
+    e.init_zero(4);
+    e.memcpy(getaddr(a));
+    print(e[0], e[1], e[2], e[3]);
+    e.uninit();
+
+    // memcpy dynamic -> static
+    array<int32_t, 3> f;
+    f.memset(0);
+    f.memcpy(getaddr(d));
+    print(f[0], f[1], f[2]);
+
+    // memmove with overlapping ranges inside one array
+    array<int32_t, 4> g;
+    g.memset(0);
+    g[0] = 1;
+    g[1] = 2;
+    g[2] = 3;
+    g.memmove(1, 0, 3);
+    print(g[0], g[1], g[2], g[3]);
+
+    d.uninit();
+
+    return 0;
+}

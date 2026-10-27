@@ -1,0 +1,60 @@
+// ============================================================
+// LANGUAGE TEST: Functions
+// ============================================================
+// Covers: function declarations, parameters, return types,
+// recursion, and void functions.
+// ============================================================
+
+// --- Basic function with primitive parameters ---
+func add(int32_t a, int32_t b) -> int32_t {
+    return a + b;
+}
+
+// --- Function with void return type ---
+func voidFunc() -> void {
+    print(2);
+}
+
+// --- Recursive function ---
+func factorial(int32_t n) -> int32_t {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+// --- Function with struct parameter ---
+struct Point {
+    int32_t x
+    int32_t y
+}
+
+// Note: Struct parameters are allowed if fields are assignable.
+func getSum(Point p) -> int32_t {
+    return p.x + p.y;
+}
+
+// --- Function with address parameter ---
+func processRef(addr<int32_t> p) -> int32_t {
+    return $(p);
+}
+
+func main() -> int32_t {
+    int32_t result = add(1, 2);
+
+    Point p;
+    p.x = 3;
+    p.y = 4;
+    result = result + getSum(p);
+
+    result = result + factorial(3);
+
+    int32_t val = 100;
+    result = result + processRef(getaddr(val));
+
+    voidFunc();
+
+    print(result);
+    print(result);
+    return 0;
+}

@@ -1,0 +1,43 @@
+// ============================================================
+// LANGUAGE TEST: Explicit cast<T> Intrinsic
+// ============================================================
+// Covers: value-preserving casts (plain static_cast), same-type
+// no-ops, successful runtime-checked casts, constant folding,
+// chained casts, and casts on comparison results.
+// ============================================================
+
+func main() -> int32_t {
+    // Static widening casts.
+    uint8_t a = 200;
+    uint16_t b = cast<uint16_t>(a);
+    print(b);
+    int32_t x = -5;
+    int64_t y = cast<int64_t>(x);
+    print(y);
+    uint32_t w = 70000;
+    int64_t v = cast<int64_t>(w);
+    print(v);
+
+    // Same-type cast: no-op.
+    uint32_t u = cast<uint32_t>(w);
+    print(u);
+
+    // Checked casts that succeed at run time.
+    int32_t s = cast<int32_t>(w);
+    print(s);
+    uint8_t ok = cast<uint8_t>(200);
+    print(ok);
+
+    // Constant folding through casts.
+    uint16_t c = cast<uint16_t>(1000);
+    print(c);
+
+    // Chained casts and casts on comparison results.
+    uint8_t cmp = 1 < 2;
+    int32_t wide = cast<int32_t>(cmp);
+    print(wide);
+    uint8_t back = cast<uint8_t>(wide);
+    print(back);
+
+    return 0;
+}

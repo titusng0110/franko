@@ -1,0 +1,32 @@
+// ============================================================
+// LANGUAGE TEST: Empty Initializer Lists
+// ============================================================
+// Covers: an empty initializer list emits no assignments. A
+// static array target keeps its prior contents; a dynamic
+// array target is neither freed nor changed.
+// ============================================================
+
+func main() -> int32_t {
+    // Static array: [] emits no assignments, so the values
+    // assigned beforehand are still there afterwards.
+    array<int32_t, 3> xs;
+    xs = [5, 6, 7];
+    xs = [];
+
+    print(xs[0]);
+    print(xs[2]);
+
+    // Dynamic array: [] does not free or change it.
+    array<int32_t> dyn;
+    dyn(2);
+    dyn = [41, 43];
+
+    print(dyn[0]);
+
+    dyn = [];
+
+    print(dyn[1]);
+
+    dyn.uninit();
+    return 0;
+}

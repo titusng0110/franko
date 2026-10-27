@@ -1,0 +1,31 @@
+// ============================================================
+// LANGUAGE TEST: CLI Args
+// ============================================================
+// Covers: the args-form entry point
+// `func main(addr<array<array<byte>>> args) -> int32_t`.
+//
+// The template wrapper converts raw argc/argv into nested dynamic
+// byte arrays (full argv with no NUL terminator), and the args
+// parameter needs no null guard. Inner arrays start in the
+// uninitialized state, so even empty arguments report length 0.
+//
+// Run with main.args as the command-line arguments; argv[0] (the
+// binary path, which varies by machine) is skipped by counting
+// `n - 1` and iterating from index 1.
+// ============================================================
+
+func main(addr<array<array<byte>>> args) -> int32_t {
+    uint32_t n = $(args).length()
+    print(n - 1)
+    uint32_t i = 1
+    while (i < n) {
+        print($(args)[i].length())
+        uint32_t j = 0
+        while (j < $(args)[i].length()) {
+            print($(args)[i][j])
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return 0
+}

@@ -1,0 +1,51 @@
+// ============================================================
+// LANGUAGE TEST: Declaration forms
+// ============================================================
+// Covers: primitive declarations (int, int32_t, uint8_t, uint32_t),
+// dynamic and static array declarations, addr<T> declarations with
+// getaddr/deref, and call-init sugar.
+// ============================================================
+
+func main() -> int32_t {
+    // Primitive locals, assigned before any read.
+    int x
+    x = 5
+
+    int32_t y
+    y = -123456
+
+    uint8_t b
+    b = 200
+
+    uint32_t i
+    i = 4000000000
+
+    // Dynamic array: declared empty, then initialized before indexed use.
+    array<int> xs
+    xs.init(4)
+    xs[0] = 7
+    xs[3] = 10
+
+    // Static array with a constExpr size.
+    array<uint8_t, 128> buffer
+    buffer[0] = 255
+    buffer[127] = 1
+
+    // Address: null-initialized, then certified with getaddr of a local.
+    addr<int32_t> p
+    print(p == null)
+    p = getaddr(y)
+    $(p) = 99
+
+    print(x)
+    print(y)
+    print(b)
+    print(i)
+    print(xs[0])
+    print(xs[3])
+    print(buffer[0])
+    print(buffer[127])
+    print($(p))
+
+    return 0
+}

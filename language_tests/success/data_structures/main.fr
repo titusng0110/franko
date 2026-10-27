@@ -1,0 +1,48 @@
+// ============================================================
+// LANGUAGE TEST: Arrays, Structs, and Initializers
+// ============================================================
+// Covers: array declarations, static/dynamic arrays, array
+// initializer lists (nested), struct fields, and ndarray sugar.
+// ============================================================
+
+struct Config {
+    int32_t id
+    int32_t size = 0
+    array<int32_t, 4> data
+}
+
+// --- Ndarray sugar ---
+// ndarray<byte, 12> is syntactic sugar for array<array<byte, 12>>
+ndarray<byte, 12> grid;
+
+func main() -> int32_t {
+    // --- Static Array declaration with array literal initializer ---
+    array<int32_t, 3> staticArr = [1, 2, 3];
+
+    // --- Dynamic Array declaration ---
+    array<int32_t> dynArr;
+
+    // --- Array access & assignment ---
+    staticArr[0] = 100;
+    int32_t val = staticArr[0];
+
+    // --- Nested array literal ---
+    array<array<int32_t, 2>, 2> matrix;
+    matrix = [[1, 2], [3, 4]];
+
+    // --- Struct usage ---
+    Config cfg;
+    cfg.id = 1;
+    cfg.size = 10;
+    cfg.data[0] = 11;
+    cfg.data[1] = 12;
+
+    // --- Struct field array access ---
+    int32_t cfgVal = cfg.data[0];
+
+    print(val);
+    print(cfgVal);
+
+    print(val + cfgVal);
+    return 0;
+}

@@ -1,0 +1,35 @@
+// ============================================================
+// LANGUAGE TEST: Methods Memory Lifecycle
+// ============================================================
+// Covers: doc 26.8
+// Dynamic-array fields managed through methods, with setup/teardown
+// pairing checked by address null-state checking.
+// ============================================================
+
+struct Buf {
+    array<int32_t> data
+    func setup(addr<Buf> self, uint32_t n) -> int32_t {
+        return $(self).data.init_zero(n)
+    }
+    func set(addr<Buf> self, uint32_t i, int32_t v) -> void {
+        $(self).data[i] = v
+        return
+    }
+    func get(addr<Buf> self, uint32_t i) -> int32_t {
+        return $(self).data[i]
+    }
+    func teardown(addr<Buf> self) -> void {
+        $(self).data.uninit()
+        return
+    }
+}
+
+func main() -> int32_t {
+    Buf b
+    b.setup(3)
+    b.set(0, 11)
+    b.set(2, 33)
+    print(b.get(0), b.get(1), b.get(2))
+    b.teardown()
+    return 0
+}

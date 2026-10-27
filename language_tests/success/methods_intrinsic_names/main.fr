@@ -1,0 +1,43 @@
+// ============================================================
+// LANGUAGE TEST: Methods Named Like Array Intrinsics
+// ============================================================
+// Covers: doc 26.2, doc 26.3
+// Array-typed receivers dispatch to array intrinsics while
+// struct-typed receivers dispatch to methods, even when the method
+// name coincides with an intrinsic name.
+// ============================================================
+
+struct Counter {
+    int32_t n = 0
+    func init(addr<Counter> self, int32_t v) -> void {
+        $(self).n = v
+        return
+    }
+    func get(addr<Counter> self) -> int32_t {
+        return $(self).n
+    }
+}
+
+struct Box {
+    array<int32_t> data
+    func init(addr<Box> self, uint32_t n) -> int32_t {
+        return $(self).data.init(n)
+    }
+    func uninit(addr<Box> self) -> void {
+        $(self).data.uninit()
+        return
+    }
+}
+
+func main() -> int32_t {
+    Counter c
+    c.init(7)
+    print(c.get())
+    Box b
+    b.init(2)
+    b.data[0] = 11
+    b.data[1] = 22
+    print(b.data[0], b.data[1])
+    b.uninit()
+    return 0
+}

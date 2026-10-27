@@ -10,8 +10,8 @@ Compiles every program in programs/, runs it, and compares its stdout
 against the checked-in <program>.expected file.
 
 Every program in programs/ is a positive test. Negative checker tests live
-in tests/ and are intentionally not part of this smoke test; run
-`uv run python tests/run_specs_tests.py` for the full suite.
+in language_tests/ and are intentionally not part of this smoke test; run
+`uv run python language_tests/run_language_tests.py` for the full suite.
 
 A program may provide programs/<name>.args: each line is one command-line
 argument passed verbatim to the binary.

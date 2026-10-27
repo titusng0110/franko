@@ -10,15 +10,15 @@ programs/*.cpp
 programs/*.testbin
 programs/*.actual
 
-# Spec test artifacts (success fixtures keep only main.fr + main.expected;
-# failure fixtures keep only their .fr sources).
-tests/**/*.cpp
-tests/**/*.bin
-tests/**/*.testbin
-tests/**/*.actual
-tests/**/*.want
-tests/**/*.compile.log
-tests/**/*.diff
+# Language test artifacts (success fixtures keep only main.fr +
+# main.expected; failure fixtures keep only their .fr sources).
+language_tests/**/*.cpp
+language_tests/**/*.bin
+language_tests/**/*.testbin
+language_tests/**/*.actual
+language_tests/**/*.want
+language_tests/**/*.compile.log
+language_tests/**/*.diff
 
 # Library test artifacts (fixtures keep only main.fr plus
 # main.expected / main.errors / main.args / main.stdin as applicable).

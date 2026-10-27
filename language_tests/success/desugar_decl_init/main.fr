@@ -1,0 +1,19 @@
+// ============================================================
+// LANGUAGE TEST: Desugaring — Declaration Initializer Sugar
+// ============================================================
+// Covers: `T x = expr` in statement context (05-desugaring.md 5.1).
+// The declaration initializer is desugared to a plain declaration
+// followed by an assignment before semantic checking.
+// ============================================================
+
+func main() -> int32_t {
+    int32_t x = 10;
+    print(x);
+
+    // The desugared assignment is an ordinary assignment: x can be
+    // reassigned afterwards.
+    x = x + 5;
+    print(x);
+
+    return 0;
+}

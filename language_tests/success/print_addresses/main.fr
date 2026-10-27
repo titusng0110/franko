@@ -1,0 +1,24 @@
+// ============================================================
+// LANGUAGE TEST: Print Statements — null Addresses
+// ============================================================
+// Covers: print is a dedicated statement (doc 19.6) and the backend
+// prints addresses through const void* (doc 32.7), so print(null)
+// prints the null address as a pointer value (doc 24.8).
+//
+// Only the null address is printed here: a live address's value is
+// not deterministic, so it must never appear in a golden output
+// file. Printing a live address is exercised by
+// language_tests/runtime/print/print_real_address.fr, which is judged by exit
+// status only.
+// ============================================================
+
+func main() -> int32_t {
+    // null prints as the null pointer value.
+    print(null)
+
+    // A null address variable prints the same way as the null literal.
+    addr<int32_t> q
+    print(q)
+
+    return 0
+}

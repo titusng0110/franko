@@ -1,0 +1,36 @@
+// ============================================================
+// LANGUAGE TEST: Methods In Namespaces
+// ============================================================
+// Covers: doc 26.9
+// Struct methods declared in a namespace, called from global scope,
+// with qualified struct types in method signatures and callers.
+// ============================================================
+
+namespace util {
+    struct Counter {
+        int32_t n = 0
+        func bump(addr<Counter> self) -> void {
+            $(self).n = $(self).n + 1
+            return
+        }
+        func value(addr<Counter> self) -> int32_t {
+            return $(self).n
+        }
+    }
+}
+
+func readIt(addr<util::Counter> p) -> int32_t {
+    return $(p).value()
+}
+
+func main() -> int32_t {
+    util::Counter c
+    c.bump()
+    c.bump()
+    print(c.value())
+    print(readIt(getaddr(c)))
+    addr<util::Counter> q
+    q = getaddr(c)
+    print($(q).value())
+    return 0
+}

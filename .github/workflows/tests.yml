@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   test:
-    name: Programs smoke + spec + library suite (${{ matrix.os }})
+    name: Programs smoke + language + library suite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -77,8 +77,8 @@ jobs:
       - name: Smoke test (programs/)
         run: uv run python programs/run_programs.py
 
-      - name: Full spec suite (tests/)
-        run: uv run python tests/run_specs_tests.py
+      - name: Full language suite (language_tests/)
+        run: uv run python language_tests/run_language_tests.py
 
       - name: Library tests (library_tests/)
         run: uv run python library_tests/run_library_tests.py

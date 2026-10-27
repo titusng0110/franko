@@ -154,22 +154,23 @@ Compiles every program in `programs/`, runs it, and compares stdout with the che
 uv run python programs/run_programs.py
 ```
 
-### Full spec suite
+### Full language suite
 
 Runs all checker and runtime cases:
 
-- `tests/failure/` programs must be rejected by the compiler;
-- `tests/success/` programs must compile, run, and match `.expected`;
-- `tests/runtime/` programs must compile, then abort at run time.
+- `language_tests/failure/` programs must be rejected by the compiler;
+- `language_tests/success/` programs must compile, run, and match `.expected`;
+- `language_tests/runtime/` programs must compile, then abort at run time.
 
 ```bash
-uv run python tests/run_specs_tests.py
+uv run python language_tests/run_language_tests.py
 ```
 
 ### Library tests
 
 Tests the importable standard-library modules in `library_tests/`
-(`tests/` covers the language itself and never imports library modules):
+(`language_tests/` covers the language itself and never imports library
+modules):
 
 - `library_tests/<module>/<suite>/success/` programs must compile, run, and match `.expected`;
 - `library_tests/<module>/<suite>/failure/` programs must be rejected by the compiler;

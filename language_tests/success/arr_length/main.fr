@@ -1,0 +1,69 @@
+// ============================================================
+// LANGUAGE TEST: Array length() Intrinsic
+// ============================================================
+// Covers:
+//   dynarr.length()      (runtime length, 0 when uninitialized)
+//   staticarr.length()   (compile-time constant)
+//   nested, ndarray, field, element, and deref receivers
+//   a struct method named `length` still dispatches as a method
+// ============================================================
+
+struct Meter {
+    int32_t step = 0
+    func length(addr<Meter> self) -> int32_t {
+        return $(self).step + 100
+    }
+}
+
+struct Holder {
+    array<int32_t> items
+}
+
+func main() -> int32_t {
+    array<int32_t> xs;
+    print(xs.length());
+    xs.init(4);
+    print(xs.length());
+    xs.resize(10);
+    print(xs.length());
+    xs.uninit();
+    print(xs.length());
+
+    array<int32_t, 3> ys;
+    ys = [10, 20, 30];
+    print(ys.length());
+    print(ys.length() + xs.length());
+
+    uint32_t n;
+    n = ys.length();
+    print(n);
+
+    array<array<int32_t, 2>, 3> m;
+    m = [[1, 2], [3, 4], [5, 6]];
+    print(m.length());
+    print(m[0].length());
+    print(m[2][1]);
+
+    ndarray<int32_t, 2, 4> g;
+    print(g.length());
+    print(g[0].length());
+
+    Holder h;
+    h.items.init(2);
+    print(h.items.length());
+    h.items.uninit();
+
+    addr<array<int32_t, 3>> p;
+    p = getaddr(ys);
+    print($(p).length());
+
+    Meter meter;
+    meter.step = 5;
+    print(meter.length());
+
+    for (uint32_t i = 0; i < ys.length(); i = i + 1) {
+        print(ys[i]);
+    }
+
+    return 0;
+}

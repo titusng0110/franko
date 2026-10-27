@@ -1,0 +1,20 @@
+// ============================================================
+// LANGUAGE TEST: Forward References to Globals and Functions
+// ============================================================
+// Covers: function signatures and global variable declarations are
+// registered before function bodies are analyzed (docs 4.4, 12.11,
+// 31.4), so main can read a global variable and call a function
+// declared later in the source file.
+// ============================================================
+
+func main() -> int32_t {
+    print(laterGlobal)
+    print(laterFunc(2))
+    return 0
+}
+
+int32_t laterGlobal = 41
+
+func laterFunc(int32_t v) -> int32_t {
+    return v * 2
+}
