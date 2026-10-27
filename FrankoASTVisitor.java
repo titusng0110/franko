@@ -441,6 +441,16 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
+    public ASTNode visitBreakStatement(FrankoParser.BreakStatementContext ctx) {
+        return visit(ctx.breakStmt());
+    }
+
+    @Override
+    public ASTNode visitContinueStatement(FrankoParser.ContinueStatementContext ctx) {
+        return visit(ctx.continueStmt());
+    }
+
+    @Override
     public ASTNode visitSimpleStmt(FrankoParser.SimpleStmtContext ctx) {
         if (ctx.varDecl() != null) return visit(ctx.varDecl());
         if (ctx.returnStmt() != null) return visit(ctx.returnStmt());
@@ -521,6 +531,28 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         return new ReturnNode(value);
+    }
+
+    @Override
+    public ASTNode visitBreakStmt(FrankoParser.BreakStmtContext ctx) {
+        ASTNode level = null;
+
+        if (ctx.constExpr() != null) {
+            level = visit(ctx.constExpr());
+        }
+
+        return new BreakNode(level);
+    }
+
+    @Override
+    public ASTNode visitContinueStmt(FrankoParser.ContinueStmtContext ctx) {
+        ASTNode level = null;
+
+        if (ctx.constExpr() != null) {
+            level = visit(ctx.constExpr());
+        }
+
+        return new ContinueNode(level);
     }
 
     @Override

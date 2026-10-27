@@ -86,17 +86,69 @@ becomes:
 }
 ```
 
-The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. There is no `break` or `continue`; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
+The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. It is carried as the desugared loop's epilogue, so `continue` runs it and `break` skips it. See [Break and Continue](19-statements.md) below.
 
 Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](05-desugaring.md).
 
-## 19.5 Return Statements
+## 19.5 Break and Continue
+
+`break` exits the innermost enclosing loop. `continue` skips the rest of the innermost loop's body and proceeds to the next iteration:
+
+```franko
+while (i < 10) {
+    i = i + 1;
+    if (i == 5) {
+        break;
+    }
+    if (i == 3) {
+        continue;
+    }
+    print(i);
+}
+```
+
+In a `for` loop, `continue` still runs the `update` (the loop's final body statement), and `break` skips it, matching C's `for` semantics:
+
+```franko
+for (int32_t i = 0; i < 5; i = i + 1) {
+    if (i == 2) {
+        continue;    // i = i + 1 still runs
+    }
+    if (i == 4) {
+        break;       // i = i + 1 does not run
+    }
+    print(i);
+}
+```
+
+`break` accepts an optional integer constant expression `N` that selects how many nested loops to exit. `N` must be strictly greater than 0 and no larger than the enclosing loop depth. A plain `break` is equivalent to `break 1`:
+
+```franko
+for (int32_t a = 0; a < 3; a = a + 1) {
+    for (int32_t b = 0; b < 3; b = b + 1) {
+        if (b == 1) {
+            break 2;    // exits both loops
+        }
+        print(b);
+    }
+}
+```
+
+`N` is evaluated with the constant-expression rules, so expressions such as `break 1 + 1` are permitted and fold at compile time. A level that is not a positive constant integer, or that exceeds the enclosing loop depth, is an error.
+
+`continue` does not take a level: `continue 2` is invalid, and `continue` always targets the innermost loop.
+
+`break` and `continue` are reserved keywords. They are only valid inside a loop; using either outside every loop is an error. They may not appear in a `for` header's `init` or `update` positions.
+
+On the generated-C++ level, `break` and `continue` lower to `goto` statements targeting per-loop labels, and labels are only generated for loops that are actually targeted. See [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+
+## 19.6 Return Statements
 
 A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 19.6 Print Statements
+## 19.7 Print Statements
 
 `print` is a dedicated statement, not a function and not a member method:
 
@@ -119,7 +171,7 @@ Array initializer lists and string literals are not expressions and cannot be pr
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
-## 19.7 Expression Statements
+## 19.8 Expression Statements
 
 Function calls are commonly used as expression statements.
 

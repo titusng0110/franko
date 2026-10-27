@@ -1,32 +1,18 @@
-// ============================================================
-// Franko Recursive Merge Sort Showcase: 50 Elements
-// Struct + Methods Version With Array Initializer List + Intrinsics
-// ============================================================
+// Recursive merge sort of 50 elements using a helper buffer field.
 //
-// Demonstrates:
+// Demonstrates structs with static-array fields, methods with
+// explicit addr<MergeSorter> self receivers, recursive methods,
+// array initializer lists, and the array intrinsics memset and
+// memcpy(dst, dstStart, srcStart, count).
 //
-//   - structs with static-array fields
-//   - methods with explicit addr<MergeSorter> self receivers
-//   - recursive methods
-//   - void and non-void methods
-//   - uint indexes
-//   - int32_t values
-//   - for loops for counted iteration
-//   - merge sort using a helper copy buffer field
-//   - array initializer-list assignment
-//   - array.memset(...)
-//   - array.memcpy(addr<array<...>>, dstStart, srcStart, count)
-//
-// The two working arrays live in the struct, so no globals are
-// needed: the whole sort state is one MergeSorter value.
-//
-// Arrays are not directly assignable, parameter-passable, or returnable by
-// value. When array data must be copied, use array intrinsics with addresses.
-// ============================================================
+// The two working arrays live in the struct, so the whole sort state
+// is one MergeSorter value and no globals are needed. Arrays are not
+// assignable or passable by value, so array data moves through the
+// intrinsics with addresses.
 
 struct MergeSorter {
-    array<int32_t, 50> a
-    array<int32_t, 50> b
+    array<int, 50> a
+    array<int, 50> b
 
     func printArray(addr<MergeSorter> self, uint n) -> void {
         for (uint i = 0; i < n; i = i + 1) {
@@ -102,12 +88,13 @@ struct MergeSorter {
         return
     }
 
-    func isSorted(addr<MergeSorter> self, uint n) -> uint8_t {
-        uint8_t sorted = 1
+    func isSorted(addr<MergeSorter> self, uint n) -> byte {
+        byte sorted = 1
 
         for (uint k = 1; k < n; k = k + 1) {
             if ($(self).a[k] < $(self).a[k - 1]) {
                 sorted = 0
+                break
             }
         }
 
@@ -115,10 +102,10 @@ struct MergeSorter {
     }
 }
 
-func main() -> int32_t {
+func main() -> int {
     MergeSorter sorter
     uint n = 50
-    uint8_t sorted = 0
+    byte sorted = 0
 
     sorter.initData()
 

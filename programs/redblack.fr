@@ -1,33 +1,31 @@
-// ============================================================
-// Franko Red-Black Tree (CLRS insertion)
-// ============================================================
+// Red-black tree (CLRS insertion).
+//
 // Nodes live in one array and every link is a slot index into it:
-// left / right / parent are uint32_t, and 0xFFFFFFFF is NIL, the
-// "no node" index. Free slots come from std::NextAllocator
+// left / right / parent are uint, and 0xFFFFFFFF is NIL, the "no
+// node" index. Free slots come from std::NextAllocator
 // (import "franko/pool"); insert() takes one with new_index() and
 // drops the key when the pool is exhausted.
-// ============================================================
 
 import "franko/pool"
 
 struct RbNode {
-    int32_t key = 0
+    int key = 0
     byte red = 0
-    uint32_t left = 0xFFFFFFFF
-    uint32_t right = 0xFFFFFFFF
-    uint32_t parent = 0xFFFFFFFF
+    uint left = 0xFFFFFFFF
+    uint right = 0xFFFFFFFF
+    uint parent = 0xFFFFFFFF
 }
 
-array<RbNode, 64> nodes;
-std::NextAllocator slots;
-uint32_t NIL = 0xFFFFFFFF
-uint32_t root = 0xFFFFFFFF
+array<RbNode, 64> nodes
+std::NextAllocator slots
+uint NIL = 0xFFFFFFFF
+uint root = 0xFFFFFFFF
 
-func rotateLeft(uint32_t x) -> void {
+func rotateLeft(uint x) -> void {
     if (x == NIL) {
         return
     }
-    uint32_t y = nodes[x].right
+    uint y = nodes[x].right
     if (y == NIL) {
         return
     }
@@ -50,11 +48,11 @@ func rotateLeft(uint32_t x) -> void {
     return
 }
 
-func rotateRight(uint32_t x) -> void {
+func rotateRight(uint x) -> void {
     if (x == NIL) {
         return
     }
-    uint32_t y = nodes[x].left
+    uint y = nodes[x].left
     if (y == NIL) {
         return
     }
@@ -77,9 +75,9 @@ func rotateRight(uint32_t x) -> void {
     return
 }
 
-func insertFixup(uint32_t z) -> void {
+func insertFixup(uint z) -> void {
     while ((nodes[z].parent != NIL) && (nodes[nodes[z].parent].red != 0)) {
-        uint32_t aunt = NIL
+        uint aunt = NIL
 
         if (nodes[z].parent == nodes[nodes[nodes[z].parent].parent].left) {
             aunt = nodes[nodes[nodes[z].parent].parent].right
@@ -121,8 +119,8 @@ func insertFixup(uint32_t z) -> void {
     return
 }
 
-func insert(int32_t key) -> void {
-    uint32_t z = slots.new_index()
+func insert(int key) -> void {
+    uint z = slots.new_index()
     if (z == NIL) {
         return
     }
@@ -133,8 +131,8 @@ func insert(int32_t key) -> void {
     nodes[z].right = NIL
     nodes[z].parent = NIL
 
-    uint32_t y = NIL
-    uint32_t x = root
+    uint y = NIL
+    uint x = root
     while (x != NIL) {
         y = x
         if (nodes[z].key < nodes[x].key) {
@@ -159,7 +157,7 @@ func insert(int32_t key) -> void {
     return
 }
 
-func find(uint32_t n, int32_t key) -> byte {
+func find(uint n, int key) -> byte {
     while (n != NIL) {
         if (key == nodes[n].key) {
             return 1
@@ -173,7 +171,7 @@ func find(uint32_t n, int32_t key) -> byte {
     return 0
 }
 
-func minKey(uint32_t n) -> int32_t {
+func minKey(uint n) -> int {
     while (n != NIL) {
         if (nodes[n].left == NIL) {
             return nodes[n].key
@@ -183,14 +181,14 @@ func minKey(uint32_t n) -> int32_t {
     return 0
 }
 
-func count(uint32_t n) -> uint32_t {
+func count(uint n) -> uint {
     if (n == NIL) {
         return 0
     }
     return count(nodes[n].left) + 1 + count(nodes[n].right)
 }
 
-func walk(uint32_t n) -> void {
+func walk(uint n) -> void {
     if (n == NIL) {
         return
     }
@@ -201,12 +199,12 @@ func walk(uint32_t n) -> void {
 }
 
 // Black nodes on every root-to-NIL path, or -1 when the tree is broken.
-func blackHeight(uint32_t n) -> int32_t {
+func blackHeight(uint n) -> int {
     if (n == NIL) {
         return 1
     }
-    int32_t lh = blackHeight(nodes[n].left)
-    int32_t rh = blackHeight(nodes[n].right)
+    int lh = blackHeight(nodes[n].left)
+    int rh = blackHeight(nodes[n].right)
     if ((lh != rh) || (lh < 0)) {
         return -1
     }
@@ -216,7 +214,7 @@ func blackHeight(uint32_t n) -> int32_t {
     return lh
 }
 
-func noRedRed(uint32_t n) -> byte {
+func noRedRed(uint n) -> byte {
     if (n == NIL) {
         return 1
     }
@@ -242,7 +240,7 @@ func noRedRed(uint32_t n) -> byte {
     return noRedRed(nodes[n].right)
 }
 
-func main() -> int32_t {
+func main() -> int {
     slots.init(64)
 
     print(4301)

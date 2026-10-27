@@ -1,61 +1,15 @@
-// ============================================================
-// Franko Sieve of Eratosthenes Showcase
-// Struct + Methods Version With Array Intrinsics
-// ============================================================
+// Sieve of Eratosthenes: prints all primes <= n.
 //
-// Prints all prime numbers <= n.
-//
-// Demonstrates:
-//
-//   - uint arithmetic
-//   - structs with a dynamic-array field
-//   - methods with explicit addr<Sieve> self receivers
-//   - methods named init/uninit alongside the array intrinsics:
-//     a struct-typed receiver calls the method while an array-typed
-//     receiver calls the intrinsic
-//   - declaration initializer sugar
-//   - dynamic arrays
-//   - byte as a uint8_t-like flag type
-//   - array.init(size) via member shorthand
-//   - memset()
-//   - uninit()
-//   - for loops (including a strided inner loop)
-//   - if statements
-//
-// Output for n = 80:
-//
-//   1001
-//   2
-//   3
-//   5
-//   7
-//   11
-//   13
-//   17
-//   19
-//   23
-//   29
-//   31
-//   37
-//   41
-//   43
-//   47
-//   53
-//   59
-//   61
-//   67
-//   71
-//   73
-//   79
-//   1002
-// ============================================================
+// Demonstrates structs with a dynamic-array field, methods with
+// explicit addr<Sieve> self receivers, array intrinsics
+// (init / memset / uninit), uint arithmetic, and strided for loops.
 
 struct Sieve {
     array<byte> isPrime
     uint n = 0
 
-    func init(addr<Sieve> self, uint limit) -> int32_t {
-        int32_t initStatus = 0
+    func init(addr<Sieve> self, uint limit) -> int {
+        int initStatus = 0
 
         initStatus = $(self).isPrime(limit + 1)
 
@@ -79,10 +33,12 @@ struct Sieve {
         uint p = 0
 
         for (p = 2; p * p <= $(self).n; p = p + 1) {
-            if ($(self).isPrime[p] != 0) {
-                for (uint j = p * p; j <= $(self).n; j = j + p) {
-                    $(self).isPrime[j] = 0
-                }
+            if ($(self).isPrime[p] == 0) {
+                continue
+            }
+
+            for (uint j = p * p; j <= $(self).n; j = j + p) {
+                $(self).isPrime[j] = 0
             }
         }
 
@@ -93,9 +49,11 @@ struct Sieve {
         print(1001)
 
         for (uint i = 2; i <= $(self).n; i = i + 1) {
-            if ($(self).isPrime[i] != 0) {
-                print(i)
+            if ($(self).isPrime[i] == 0) {
+                continue
             }
+
+            print(i)
         }
 
         print(1002)
@@ -108,7 +66,7 @@ struct Sieve {
     }
 }
 
-func main() -> int32_t {
+func main() -> int {
     Sieve s
 
     if (s.init(80) != 0) {

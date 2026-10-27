@@ -104,6 +104,16 @@ public class StatementChecker {
             return;
         }
 
+        if (node instanceof SemanticBreakNode) {
+            /* Fully validated by the SemanticAnalyzer; nothing to check. */
+            return;
+        }
+
+        if (node instanceof SemanticContinueNode) {
+            /* Fully validated by the SemanticAnalyzer; nothing to check. */
+            return;
+        }
+
         if (node instanceof SemanticPrintNode n) {
             visitPrint(n);
             return;
@@ -214,6 +224,10 @@ public class StatementChecker {
         }
 
         checkStmt(node.body);
+
+        for (SemanticStmtNode updateStmt : node.update) {
+            checkStmt(updateStmt);
+        }
     }
 
     private void visitPrint(SemanticPrintNode node) {

@@ -361,9 +361,16 @@ public class Desugarer {
         if (stmt instanceof WhileNode) {
             WhileNode n = (WhileNode) stmt;
 
+            List<ASTNode> loweredUpdate = new ArrayList<>();
+
+            for (ASTNode updateStmt : n.update) {
+                appendDesugaredStmt(updateStmt, loweredUpdate);
+            }
+
             out.add(new WhileNode(
                 desugarExpr(n.condition),
-                desugarControlledStmt(n.body)
+                desugarControlledStmt(n.body),
+                loweredUpdate
             ));
 
             return;
@@ -371,6 +378,24 @@ public class Desugarer {
 
         if (stmt instanceof ForNode) {
             out.add(desugarForStmt((ForNode) stmt));
+            return;
+        }
+
+        if (stmt instanceof BreakNode) {
+            BreakNode n = (BreakNode) stmt;
+
+            out.add(new BreakNode(
+                n.level != null ? desugarExpr(n.level) : null
+            ));
+            return;
+        }
+
+        if (stmt instanceof ContinueNode) {
+            ContinueNode n = (ContinueNode) stmt;
+
+            out.add(new ContinueNode(
+                n.level != null ? desugarExpr(n.level) : null
+            ));
             return;
         }
 
@@ -879,14 +904,37 @@ public class Desugarer {
         if (stmt instanceof WhileNode) {
             WhileNode n = (WhileNode) stmt;
 
+            List<ASTNode> loweredUpdate = new ArrayList<>();
+
+            for (ASTNode updateStmt : n.update) {
+                appendDesugaredStmt(updateStmt, loweredUpdate);
+            }
+
             return new WhileNode(
                 desugarExpr(n.condition),
-                desugarControlledStmt(n.body)
+                desugarControlledStmt(n.body),
+                loweredUpdate
             );
         }
 
         if (stmt instanceof ForNode) {
             return desugarForStmt((ForNode) stmt);
+        }
+
+        if (stmt instanceof BreakNode) {
+            BreakNode n = (BreakNode) stmt;
+
+            return new BreakNode(
+                n.level != null ? desugarExpr(n.level) : null
+            );
+        }
+
+        if (stmt instanceof ContinueNode) {
+            ContinueNode n = (ContinueNode) stmt;
+
+            return new ContinueNode(
+                n.level != null ? desugarExpr(n.level) : null
+            );
         }
 
         if (stmt instanceof ExprStmtNode) {
@@ -968,7 +1016,7 @@ public class Desugarer {
      *       init
      *       while (condition) {
      *           body
-     *           update
+     *           update      <- carried as the while loop's epilogue
      *       }
      *   }
      *
@@ -992,12 +1040,11 @@ public class Desugarer {
      *       }
      *   }
      *
-     * The update is appended to the end of the loop body so it runs on
-     * every iteration, including the last. Franko has no break/continue,
-     * so this placement is exact.
-     *
-     * desugarControlledStmt guarantees the body lowers to a BlockNode,
-     * which is required to append the update statements.
+     * The update is carried as the while loop's epilogue rather than
+     * being appended to the body block. It still runs at the end of
+     * every iteration, including the last, but codegen places the
+     * continue label BEFORE the epilogue, so `continue` runs the update
+     * and `break` skips it, exactly like C's for loop.
      */
     private ASTNode desugarForStmt(ForNode n) {
         List<ASTNode> outer = new ArrayList<>();
@@ -1016,13 +1063,16 @@ public class Desugarer {
 
         BlockNode bodyBlock = (BlockNode) loweredBody;
 
+        List<ASTNode> loweredUpdate = new ArrayList<>();
+
         if (n.update != null) {
-            appendDesugaredStmt(n.update, bodyBlock.statements);
+            appendDesugaredStmt(n.update, loweredUpdate);
         }
 
         outer.add(new WhileNode(
             desugarExpr(n.condition),
-            bodyBlock
+            bodyBlock,
+            loweredUpdate
         ));
 
         return new BlockNode(outer);

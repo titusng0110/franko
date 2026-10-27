@@ -207,6 +207,28 @@ public class ASTPrinter {
 
             System.out.println(pad + "  body:");
             print(n.body, indent + 2);
+
+            if (!n.update.isEmpty()) {
+                System.out.println(pad + "  update:");
+                for (ASTNode stmt : n.update) {
+                    print(stmt, indent + 2);
+                }
+            }
+        }
+
+        else if (node instanceof BreakNode n) {
+            System.out.println(pad + "Break");
+
+            if (n.level == null) {
+                System.out.println(pad + "  level: <default (1)>");
+            } else {
+                System.out.println(pad + "  level:");
+                print(n.level, indent + 2);
+            }
+        }
+
+        else if (node instanceof ContinueNode) {
+            System.out.println(pad + "Continue");
         }
 
         else if (node instanceof ForNode n) {

@@ -1,27 +1,13 @@
-// ============================================================
-// Franko String Literal Showcase
-// Struct + Methods Version With Byte Array Initializers
-// ============================================================
+// String literals as byte-array initializer sugar.
 //
-// Demonstrates:
-//
-//   - structs with a dynamic-array field
-//   - methods with explicit addr<TextBuf> self receivers
-//   - a method named init wrapping the array init intrinsic
-//   - string literals as byte-array initializer sugar
-//   - array.memset(...)
-//   - array.uninit()
-//   - for loops for counted iteration
-//   - raw Unicode, emoji, multiline strings, and escapes
-//
-// Byte counts are pinned by the print loops, not by comments:
-// each test prints a marker plus exactly the decoded bytes.
-// ============================================================
+// Each test stores a literal into a TextBuf field and prints exactly
+// the decoded bytes after a marker, so the byte counts are pinned by
+// the output rather than by comments.
 
 struct TextBuf {
     array<byte> buf
 
-    func init(addr<TextBuf> self, uint32_t capacity) -> int32_t {
+    func init(addr<TextBuf> self, uint capacity) -> int {
         return $(self).buf.init(capacity)
     }
 
@@ -31,22 +17,12 @@ struct TextBuf {
     }
 
     func testAscii(addr<TextBuf> self) -> void {
-        // ASCII plus common escapes:
-        //
-        //   \t  tab       -> 9
-        //   \n  newline   -> 10
-        //   \"  quote     -> 34
-        //
-        // String:
-        //   Hello,    World!
-        //   "Franko"
-        //
-        // Expected byte count: 22
+        // "Hello,\tWorld!\n\"Franko\"" -> 22 bytes.
         $(self).buf.memset(0)
         $(self).buf = "Hello,\tWorld!\n\"Franko\""
 
         print(5001)
-        for (uint32_t i = 0; i < 22; i = i + 1) {
+        for (uint i = 0; i < 22; i = i + 1) {
             print($(self).buf[i])
         }
 
@@ -54,26 +30,12 @@ struct TextBuf {
     }
 
     func testUnicode(addr<TextBuf> self) -> void {
-        // Raw Unicode and emoji.
-        //
-        // String:
-        //   你好, Franko 😭😍
-        //
-        // UTF-8 byte count:
-        //   你好      -> 6 bytes
-        //   comma    -> 1 byte
-        //   space    -> 1 byte
-        //   Franko   -> 6 bytes
-        //   space    -> 1 byte
-        //   😭       -> 4 bytes
-        //   😍       -> 4 bytes
-        //
-        // Total: 23 bytes
+        // "你好, Franko 😭😍" -> 23 UTF-8 bytes.
         $(self).buf.memset(0)
         $(self).buf = "你好, Franko 😭😍"
 
         print(5002)
-        for (uint32_t i = 0; i < 23; i = i + 1) {
+        for (uint i = 0; i < 23; i = i + 1) {
             print($(self).buf[i])
         }
 
@@ -81,30 +43,14 @@ struct TextBuf {
     }
 
     func testMultiline(addr<TextBuf> self) -> void {
-        // Literal multiline string.
-        //
-        // This contains actual newline characters inside the string.
-        //
-        // String:
-        //   Line 1
-        //   Line 2
-        //   Line 3
-        //
-        // Byte count:
-        //   "Line 1" -> 6
-        //   newline  -> 1
-        //   "Line 2" -> 6
-        //   newline  -> 1
-        //   "Line 3" -> 6
-        //
-        // Total: 20 bytes
+        // A literal multiline string -> 20 bytes.
         $(self).buf.memset(0)
         $(self).buf = "Line 1
 Line 2
 Line 3"
 
         print(5003)
-        for (uint32_t i = 0; i < 20; i = i + 1) {
+        for (uint i = 0; i < 20; i = i + 1) {
             print($(self).buf[i])
         }
 
@@ -112,32 +58,12 @@ Line 3"
     }
 
     func testEscapes(addr<TextBuf> self) -> void {
-        // Backslash and every supported special escape.
-        //
-        // String source:
-        //   A\\B\"C\a\b\f\n\r\t\vZ
-        //
-        // Decoded bytes:
-        //   A   -> 65
-        //   \\  -> 92
-        //   B   -> 66
-        //   \"  -> 34
-        //   C   -> 67
-        //   \a  -> 7
-        //   \b  -> 8
-        //   \f  -> 12
-        //   \n  -> 10
-        //   \r  -> 13
-        //   \t  -> 9
-        //   \v  -> 11
-        //   Z   -> 90
-        //
-        // Total: 13 bytes
+        // "A\\B\"C\a\b\f\n\r\t\vZ" -> 13 bytes.
         $(self).buf.memset(0)
         $(self).buf = "A\\B\"C\a\b\f\n\r\t\vZ"
 
         print(5004)
-        for (uint32_t i = 0; i < 13; i = i + 1) {
+        for (uint i = 0; i < 13; i = i + 1) {
             print($(self).buf[i])
         }
 

@@ -1,6 +1,8 @@
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -100,6 +102,28 @@ public final class AddressNullStateChecker {
     private int snapshotCount = 0;
 
     private int branchDepth = 0;
+
+    /*
+     * Enclosing-loop context for break/continue.
+     *
+     * Each frame records the snapshot slots of the abrupt jump targets
+     * inside that loop:
+     *
+     *   - breakStates:   states at `break` points (jump past the loop,
+     *                    skipping the epilogue),
+     *   - continueStates: states at `continue` points (jump to the loop's
+     *                    continue label, running the epilogue next).
+     *
+     * break N targets the frame N levels up (levels are 1-based; the
+     * innermost loop is the last frame). continue always targets the
+     * innermost frame.
+     */
+    private static final class LoopFrame {
+        final List<Integer> breakStates = new ArrayList<>();
+        final List<Integer> continueStates = new ArrayList<>();
+    }
+
+    private final List<LoopFrame> loopStack = new ArrayList<>();
 
     /*
      * Suppresses null-deref diagnostics while checking code that cannot
@@ -234,6 +258,10 @@ public final class AddressNullStateChecker {
         if (node instanceof SemanticWhileNode n) {
             collectSymbolsFromExpr(n.condition);
             collectSymbols(n.body);
+
+            for (SemanticStmtNode updateStmt : n.update) {
+                collectSymbols(updateStmt);
+            }
             return;
         }
 
@@ -521,7 +549,22 @@ public final class AddressNullStateChecker {
         }
 
         if (node instanceof SemanticWhileNode n) {
-            return 2 + estimateSnapshotDemand(n.body, depth);
+            /*
+             * 2: before-loop and after-one-iteration snapshots. Each
+             * break/continue point additionally captures one snapshot.
+             */
+            int total = 2 + estimateSnapshotDemand(n.body, depth);
+
+            for (SemanticStmtNode updateStmt : n.update) {
+                total += estimateSnapshotDemand(updateStmt, depth);
+            }
+
+            return total;
+        }
+
+        if (node instanceof SemanticBreakNode
+                || node instanceof SemanticContinueNode) {
+            return 1;
         }
 
         return 0;
@@ -677,6 +720,16 @@ public final class AddressNullStateChecker {
 
         if (node instanceof SemanticWhileNode n) {
             return checkWhile(n);
+        }
+
+        if (node instanceof SemanticBreakNode n) {
+            recordJumpState(n.levels, false);
+            return true;
+        }
+
+        if (node instanceof SemanticContinueNode) {
+            recordJumpState(1, true);
+            return true;
         }
 
         if (node instanceof SemanticPrintNode n) {
@@ -1000,8 +1053,11 @@ public final class AddressNullStateChecker {
          */
         boolean bodyFeasible = guardPathFeasible(node.condition, true);
 
-        boolean bodyReturns = false;
-        int afterOneIteration = -1;
+        LoopFrame frame = new LoopFrame();
+        loopStack.add(frame);
+
+        boolean bodyTerminates = false;
+        int afterBody = -1;
 
         if (bodyFeasible) {
             /*
@@ -1010,8 +1066,8 @@ public final class AddressNullStateChecker {
              */
             refineAddrStatesFromGuard(node.condition, true);
 
-            bodyReturns = checkStmt(node.body);
-            afterOneIteration = snapshot();
+            bodyTerminates = checkStmt(node.body);
+            afterBody = snapshot();
         } else {
             /*
              * The body never executes. Check it once with null-deref
@@ -1024,30 +1080,179 @@ public final class AddressNullStateChecker {
         }
 
         /*
+         * Back-edge states: every state from which control re-tests the
+         * loop condition.
+         *
+         *   - the body (and epilogue) fell through,
+         *   - each continue point (which jumps to just before the
+         *     epilogue, so the epilogue runs next).
+         *
+         * Break states are NOT back-edge states: they jump past the loop.
+         */
+        List<Integer> backEdgeStates = new ArrayList<>();
+
+        if (bodyFeasible) {
+            if (!node.update.isEmpty()) {
+                boolean iterationFallsThrough = !bodyTerminates;
+
+                if (iterationFallsThrough) {
+                    for (SemanticStmtNode updateStmt : node.update) {
+                        if (checkStmt(updateStmt)) {
+                            iterationFallsThrough = false;
+                            break;
+                        }
+                    }
+
+                    if (iterationFallsThrough) {
+                        backEdgeStates.add(snapshot());
+                    }
+                }
+
+                /*
+                 * A continue jumps to the continue label placed just before
+                 * the epilogue, so the epilogue runs on every continue path
+                 * as well. Re-run it from each captured continue state.
+                 */
+                for (int continueState : frame.continueStates) {
+                    restore(continueState);
+
+                    boolean continueFallsThrough = true;
+
+                    for (SemanticStmtNode updateStmt : node.update) {
+                        if (checkStmt(updateStmt)) {
+                            continueFallsThrough = false;
+                            break;
+                        }
+                    }
+
+                    if (continueFallsThrough) {
+                        backEdgeStates.add(snapshot());
+                    }
+                }
+            } else {
+                if (!bodyTerminates) {
+                    backEdgeStates.add(afterBody);
+                }
+
+                backEdgeStates.addAll(frame.continueStates);
+            }
+        } else {
+            /*
+             * The body never executes, so neither does the epilogue.
+             * Check it once with diagnostics suppressed.
+             */
+            suppressNullDerefChecks = true;
+
+            for (SemanticStmtNode updateStmt : node.update) {
+                checkStmt(updateStmt);
+            }
+
+            suppressNullDerefChecks = false;
+        }
+
+        loopStack.remove(loopStack.size() - 1);
+
+        /*
          * A while loop may execute zero times. Therefore the state after the
          * loop is a merge of:
          *
          *   - before loop,
-         *   - after one continuing body execution.
+         *   - every state that flows around the back edge.
          *
          * We do not attempt to prove loop termination.
          */
         restore(before);
 
-        if (bodyFeasible && !bodyReturns) {
-            mergeLoopState(before, afterOneIteration);
+        if (bodyFeasible && !backEdgeStates.isEmpty()) {
+            mergeLoopStates(before, backEdgeStates);
         }
 
-        if (!bodyFeasible || !bodyReturns) {
+        if (!bodyFeasible || !bodyTerminates || !backEdgeStates.isEmpty()) {
             /*
              * Continuing code runs only when the condition failed, so the
-             * guard-failing refinement holds after the loop. For
-             * `while (p != null)`, this proves p is null on loop exit.
+             * guard-failing refinement holds after the loop for every path
+             * that re-tested the condition. For `while (p != null)`, this
+             * proves p is null on loop exit.
+             *
+             * Break paths do NOT re-test the condition, so their states are
+             * merged in AFTER this refinement.
              */
             refineAddrStatesFromGuard(node.condition, false);
         }
 
+        if (bodyFeasible) {
+            for (int breakState : frame.breakStates) {
+                mergeStateIntoCurrent(breakState);
+            }
+        }
+
         return false;
+    }
+
+    /*
+     * Records the current state as the target of a break/continue jump.
+     *
+     * levels is 1-based: `break` / `break 1` / continue target the
+     * innermost enclosing loop, `break 2` the one outside it, and so on.
+     */
+    private void recordJumpState(int levels, boolean isContinue) {
+        if (loopStack.isEmpty()) {
+            /* Rejected earlier by semantic analysis; defensive no-op. */
+            return;
+        }
+
+        int slot = snapshot();
+
+        int frameIndex = loopStack.size() - levels;
+
+        if (frameIndex < 0) {
+            frameIndex = 0;
+        }
+
+        LoopFrame frame = loopStack.get(frameIndex);
+
+        if (isContinue) {
+            frame.continueStates.add(slot);
+        } else {
+            frame.breakStates.add(slot);
+        }
+    }
+
+    /*
+     * Merges the given iteration-end states with the before-loop state
+     * into the current state (the loop-exit merge).
+     */
+    private void mergeLoopStates(int before, List<Integer> iterationStates) {
+        for (int i = 0; i < addrCount; i++) {
+            AddressState merged =
+                    mergeAddressStateValue(
+                            null,
+                            addrStateFromSnapshot(before, i, before)
+                    );
+
+            for (int slot : iterationStates) {
+                merged = mergeAddressStateValue(
+                        merged,
+                        addrStateFromSnapshot(slot, i, before)
+                );
+            }
+
+            addrState[i] = merged == null
+                    ? AddressState.MAYBE_NULL
+                    : merged;
+        }
+    }
+
+    /*
+     * Merges the given break-exit states into the current state.
+     */
+    private void mergeStateIntoCurrent(int slot) {
+        for (int i = 0; i < addrCount; i++) {
+            addrState[i] = mergeAddressStateValue(
+                    addrState[i],
+                    addrStateFromSnapshot(slot, i, slot)
+            );
+        }
     }
 
     // ============================================================
@@ -1249,29 +1454,6 @@ public final class AddressNullStateChecker {
             } else {
                 addrState[i] = addrStateFromSnapshot(before, i, before);
             }
-        }
-    }
-
-    private void mergeLoopState(
-            int before,
-            int afterOneIteration
-    ) {
-        for (int i = 0; i < addrCount; i++) {
-            AddressState merged = null;
-
-            merged = mergeAddressStateValue(
-                    merged,
-                    addrStateFromSnapshot(before, i, before)
-            );
-
-            merged = mergeAddressStateValue(
-                    merged,
-                    addrStateFromSnapshot(afterOneIteration, i, before)
-            );
-
-            addrState[i] = merged == null
-                    ? AddressState.MAYBE_NULL
-                    : merged;
         }
     }
 

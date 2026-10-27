@@ -382,7 +382,19 @@ public class FunctionChecker {
          * appearing in the function body, but this does not prove all paths
          * return.
          */
-        return checkStmtInsideFunction(node.body, function);
+        boolean sawReturn = checkStmtInsideFunction(node.body, function);
+
+        /*
+         * The epilogue (the desugared update of a for loop) runs inside the
+         * loop, so returns there carry the same presence-based weight.
+         */
+        for (SemanticStmtNode updateStmt : node.update) {
+            if (checkStmtInsideFunction(updateStmt, function)) {
+                sawReturn = true;
+            }
+        }
+
+        return sawReturn;
     }
 
     // ============================================================

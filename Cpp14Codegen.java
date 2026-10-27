@@ -156,6 +156,35 @@ public class Cpp14Codegen {
     private final StringBuilder out = new StringBuilder();
     private int indentLevel = 0;
 
+    // ============================================================
+    // Break / Continue Loop Labels
+    // ============================================================
+
+    /*
+     * break/continue lower to goto statements targeting per-loop labels.
+     *
+     * Each loop gets a unique id. A loop that is the target of a break
+     * emits a label after the loop (`L_brk_<id>`), and a loop that is the
+     * target of a continue emits a label at the end of its body, just
+     * before the epilogue (`L_cont_<id>`), so a continue runs the
+     * epilogue (the desugared for-loop update) and break skips it.
+     *
+     * Labels are only generated when actually targeted:
+     *
+     *   continue        -> goto L_cont_<innermost loop id>
+     *   break N         -> goto L_brk_<id of Nth enclosing loop>
+     */
+    private static final class LoopFrame {
+        final int id;
+
+        LoopFrame(int id) {
+            this.id = id;
+        }
+    }
+
+    private final List<LoopFrame> loopStack = new ArrayList<>();
+    private int nextLoopId = 0;
+
     /*
      * Raw text of import/franko/os.ffi.cpp, or null when the program did
      * not import "franko/os" through the canonical specifier.
@@ -1024,6 +1053,16 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node instanceof SemanticBreakNode brk) {
+            emitBreak(brk);
+            return;
+        }
+
+        if (node instanceof SemanticContinueNode) {
+            emitContinue();
+            return;
+        }
+
         if (node instanceof SemanticPrintNode print) {
             emitPrint(print);
             return;
@@ -1129,8 +1168,218 @@ public class Cpp14Codegen {
     }
 
     private void emitWhile(SemanticWhileNode node) {
+        /*
+         * Decide label generation up front: the body block's opening brace
+         * is emitted before the body, but the continue label's position
+         * (and the inner block that makes jumping to it legal C++) depends
+         * on whether any continue targets THIS loop. Break labels are
+         * emitted after the loop, so their usage is known by then, but a
+         * consistent pre-scan keeps the two cases symmetric.
+         */
+        boolean needsContinueLabel =
+                scanForContinueTarget(node.body, 0);
+        boolean needsBreakLabel =
+                scanForBreakTarget(node.body, 0);
+
+        LoopFrame frame = new LoopFrame(nextLoopId++);
+        loopStack.add(frame);
+
         emitLine("while (" + emitExpr(node.condition) + ")");
-        emitControlledStmt(node.body);
+
+        boolean hasUpdate = !node.update.isEmpty();
+
+        if (needsContinueLabel) {
+            /*
+             * Wrap the body in an inner block so the continue label sits
+             * in the outer loop-body block, after the body's declarations
+             * leave scope. A goto may not jump forward past a variable's
+             * initialization within the same scope, so the label must not
+             * share a block with the body's declarations.
+             *
+             *   while (cond) {
+             *       { body }
+             *       L_cont_<id>: ;
+             *       update
+             *   }
+             */
+            emitLine("{");
+            indentLevel++;
+
+            emitLine("{");
+            indentLevel++;
+            emitStmt(node.body);
+            indentLevel--;
+            emitLine("}");
+
+            emitLine("L_cont_" + frame.id + ": ;");
+
+            for (SemanticStmtNode updateStmt : node.update) {
+                emitStmt(updateStmt);
+            }
+
+            indentLevel--;
+            emitLine("}");
+        } else if (hasUpdate) {
+            /*
+             * No continue targets this loop, so the body and the epilogue
+             * share one block. The body lowers to a block, so its
+             * statements are emitted inline to keep the output identical
+             * to the earlier lowering, where the update was appended to
+             * the body block.
+             */
+            emitLine("{");
+            indentLevel++;
+
+            if (node.body instanceof SemanticBlockNode bodyBlock) {
+                for (SemanticStmtNode stmt : bodyBlock.statements) {
+                    emitStmt(stmt);
+                }
+            } else {
+                emitStmt(node.body);
+            }
+
+            for (SemanticStmtNode updateStmt : node.update) {
+                emitStmt(updateStmt);
+            }
+
+            indentLevel--;
+            emitLine("}");
+        } else {
+            emitControlledStmt(node.body);
+        }
+
+        loopStack.remove(loopStack.size() - 1);
+
+        if (needsBreakLabel) {
+            emitLine("L_brk_" + frame.id + ": ;");
+        }
+    }
+
+    private void emitBreak(SemanticBreakNode node) {
+        if (loopStack.isEmpty() || node.levels > loopStack.size()) {
+            throw new IllegalStateException(
+                    "Internal compiler error: break with no enclosing loop"
+            );
+        }
+
+        int targetIndex = loopStack.size() - node.levels;
+        LoopFrame target = loopStack.get(targetIndex);
+
+        emitLine("goto L_brk_" + target.id + ";");
+    }
+
+    private void emitContinue() {
+        if (loopStack.isEmpty()) {
+            throw new IllegalStateException(
+                    "Internal compiler error: continue with no enclosing loop"
+            );
+        }
+
+        LoopFrame target = loopStack.get(loopStack.size() - 1);
+
+        emitLine("goto L_cont_" + target.id + ";");
+    }
+
+    /*
+     * Reports whether a continue inside node targets the loop that
+     * contains node. A continue always targets the innermost enclosing
+     * loop, so a continue nested inside another loop (depth > 0 relative
+     * to this one) does not count.
+     */
+    private boolean scanForContinueTarget(SemanticStmtNode node, int depth) {
+        if (node == null) {
+            return false;
+        }
+
+        if (node instanceof SemanticContinueNode) {
+            return depth == 0;
+        }
+
+        if (node instanceof SemanticBreakNode) {
+            return false;
+        }
+
+        if (node instanceof SemanticWhileNode n) {
+            if (scanForContinueTarget(n.body, depth + 1)) {
+                return true;
+            }
+
+            for (SemanticStmtNode updateStmt : n.update) {
+                if (scanForContinueTarget(updateStmt, depth + 1)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (node instanceof SemanticBlockNode n) {
+            for (SemanticStmtNode stmt : n.statements) {
+                if (scanForContinueTarget(stmt, depth)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (node instanceof SemanticIfNode n) {
+            return scanForContinueTarget(n.thenBranch, depth)
+                    || scanForContinueTarget(n.elseBranch, depth);
+        }
+
+        return false;
+    }
+
+    /*
+     * Reports whether a break inside node targets the loop that contains
+     * node. `break N` targets the Nth enclosing loop counting outward:
+     * a break counts the loop that contains node as level 1, and each
+     * further enclosing loop increments the level.
+     */
+    private boolean scanForBreakTarget(SemanticStmtNode node, int depth) {
+        if (node == null) {
+            return false;
+        }
+
+        if (node instanceof SemanticBreakNode brk) {
+            return brk.levels == depth + 1;
+        }
+
+        if (node instanceof SemanticContinueNode) {
+            return false;
+        }
+
+        if (node instanceof SemanticWhileNode n) {
+            if (scanForBreakTarget(n.body, depth + 1)) {
+                return true;
+            }
+
+            for (SemanticStmtNode updateStmt : n.update) {
+                if (scanForBreakTarget(updateStmt, depth + 1)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (node instanceof SemanticBlockNode n) {
+            for (SemanticStmtNode stmt : n.statements) {
+                if (scanForBreakTarget(stmt, depth)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (node instanceof SemanticIfNode n) {
+            return scanForBreakTarget(n.thenBranch, depth)
+                    || scanForBreakTarget(n.elseBranch, depth);
+        }
+
+        return false;
     }
 
     private void emitControlledStmt(SemanticStmtNode node) {

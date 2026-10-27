@@ -1,49 +1,13 @@
-// ============================================================
-// Franko BFS Showcase: Castle Escape
-// Struct + Methods Version, 12 x 13 Maze
-// ============================================================
+// BFS through a 12 x 13 maze: finds the shortest path from the start
+// cell to the exit and prints the solved grid.
 //
-// Cell meanings:
+// Cell values: 0 open, 1 wall, 2 start, 3 exit, 4 shortest path.
 //
-//   0 = open space
-//   1 = wall
-//   2 = start
-//   3 = exit / goal
-//   4 = shortest path
-//
-// Demonstrates:
-//
-//   - ndarray<T, R, C> type sugar
-//   - structs with ndarray fields
-//   - methods with explicit addr<Maze> self receivers
-//   - void methods
-//   - non-void method return
-//   - nested initializer-list assignment
-//   - chained indexing: grid[r][c]
-//   - uint indexes
-//   - for loops for counted iteration
-//   - byte as uint8_t-like flag storage
-//   - logical && and ||
-//   - heap dynamic array initialization with init_zero()
-//   - dynamic array uninit()
-//   - memset()
-//   - memcpy(addr<array<...>>)
-//   - getaddr() and $()
-//   - parent-pointer path reconstruction
-//
-// ndarray<uint, 12, 13> means:
-//
-//   array<array<uint, 13>, 12>
-//
-// so:
-//
-//   grid[r][c]
-//
-// follows the dimension order:
-//
-//   r indexes 12 rows
-//   c indexes 13 columns
-// ============================================================
+// Demonstrates ndarray<T, R, C> (sugar for array<array<T, C>, R>),
+// structs with ndarray fields, methods with explicit addr<Maze> self
+// receivers, nested initializer lists, chained indexing grid[r][c],
+// dynamic arrays with init_zero/uninit, getaddr() and $(), and
+// parent-pointer path reconstruction.
 
 struct Maze {
     ndarray<uint, 12, 13> grid
@@ -114,7 +78,7 @@ struct Maze {
             tail = 0
         }
 
-        while ((head != tail) && (found == 0)) {
+        while (head != tail) {
             pos = $(queue)[head]
 
             head = head + 1
@@ -127,25 +91,24 @@ struct Maze {
 
             if ((r == goalR) && (c == goalC)) {
                 found = 1
+                break
             }
 
-            if (found == 0) {
-                nr = r - 1
-                nc = c
-                $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            nr = r - 1
+            nc = c
+            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
 
-                nr = r + 1
-                nc = c
-                $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            nr = r + 1
+            nc = c
+            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
 
-                nr = r
-                nc = c - 1
-                $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            nr = r
+            nc = c - 1
+            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
 
-                nr = r
-                nc = c + 1
-                $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
-            }
+            nr = r
+            nc = c + 1
+            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
         }
 
         return found
@@ -199,7 +162,7 @@ struct Maze {
     }
 }
 
-func main() -> int32_t {
+func main() -> int {
     Maze maze
     array<uint, 13> line
 
@@ -215,7 +178,7 @@ func main() -> int32_t {
     uint goalC = 11
 
     byte found = 0
-    int32_t qStatus = 0
+    int qStatus = 0
     addr<uint> answer
 
     qStatus = queue.init_zero(qCap)

@@ -135,6 +135,14 @@ public class SemanticAnalyzer {
 
     private FunctionSymbol currentFunction = null;
 
+    /**
+     * Number of loops enclosing the statement currently being analyzed.
+     *
+     * break/continue validate against this depth, and `break N` resolves
+     * its target loop here.
+     */
+    private int loopDepth = 0;
+
     /*
      * Compilation target for the os::IS_* target constants, or null when
      * the program does not import "franko/os".
@@ -1264,10 +1272,42 @@ public class SemanticAnalyzer {
             SemanticExprNode condition =
                     exprAnalyzer.analyzeExpr(n.condition);
 
+            loopDepth++;
+
             SemanticStmtNode body =
                     analyzeStmt(n.body);
 
-            return new SemanticWhileNode(condition, body);
+            List<SemanticStmtNode> update = new ArrayList<>();
+
+            for (ASTNode updateStmt : n.update) {
+                appendAnalyzedStmt(updateStmt, update);
+            }
+
+            loopDepth--;
+
+            return new SemanticWhileNode(condition, body, update);
+        }
+
+        if (node instanceof BreakNode n) {
+            return analyzeBreakStmt(n);
+        }
+
+        if (node instanceof ContinueNode n) {
+            if (n.level != null) {
+                symbolTable.error(
+                        "continue does not take a level: `continue N` is not"
+                                + " valid; continue always targets the"
+                                + " innermost loop");
+                return null;
+            }
+
+            if (loopDepth == 0) {
+                symbolTable.error(
+                        "continue statement outside of a loop");
+                return null;
+            }
+
+            return new SemanticContinueNode();
         }
 
         if (node instanceof PrintNode n) {
@@ -1381,6 +1421,62 @@ public class SemanticAnalyzer {
                 currentFunction,
                 value
         );
+    }
+
+    /**
+     * Analyzes `break` / `break N`.
+     *
+     * Validates that the break is inside a loop and that its level N (when
+     * present) is a positive constant integer expression that does not
+     * exceed the enclosing loop depth.
+     *
+     * A plain `break` is equivalent to `break 1`.
+     */
+    private SemanticStmtNode analyzeBreakStmt(BreakNode n) {
+        if (loopDepth == 0) {
+            symbolTable.error("break statement outside of a loop");
+            return null;
+        }
+
+        if (n.level == null) {
+            return new SemanticBreakNode(1);
+        }
+
+        BigInteger level = null;
+
+        try {
+            level = ConstExpressionEvaluator.evaluatePure(n.level);
+        } catch (ConstExpressionEvaluator.UnevaluableConstant e) {
+            if (e.getDiagnostic() != null) {
+                symbolTable.error(e.getDiagnostic());
+                return null;
+            }
+
+            // Fall through to the generic non-constant diagnostic below.
+        }
+
+        if (level == null) {
+            symbolTable.error(
+                    "break level must be a constant integer expression");
+            return null;
+        }
+
+        if (level.signum() <= 0) {
+            symbolTable.error(
+                    "break level must be greater than 0, got: " + level);
+            return null;
+        }
+
+        if (level.compareTo(BigInteger.valueOf(loopDepth)) > 0) {
+            symbolTable.error(
+                    "break level "
+                            + level
+                            + " exceeds the enclosing loop depth "
+                            + loopDepth);
+            return null;
+        }
+
+        return new SemanticBreakNode(level.intValue());
     }
 
     // ============================================================

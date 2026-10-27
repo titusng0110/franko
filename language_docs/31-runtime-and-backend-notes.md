@@ -149,3 +149,27 @@ The argv conversion follows these rules:
 - each argument is its raw bytes with **no** NUL terminator appended (consistent with string literals, which also append no terminator);
 - each inner array is default-constructed by the runtime `init` into the uninitialized Franko state (`length()` `0`), so an empty argument simply stays uninitialized;
 - after the Franko `main` returns, the outer array's destructor destroys the converted inner arrays and frees both levels; inner and outer arrays the program already released with `uninit()` are skipped safely.
+## 31.10 Break / Continue Lowering
+
+`break` and `continue` lower to `goto` statements targeting per-loop labels, so multi-level `break N` works uniformly and the same scheme serves `while` and desugared `for` loops. Each loop receives a unique label id, and labels are only generated for loops that are actually targeted:
+
+- `continue` emits `goto L_cont_<id>;` where `L_cont_<id>: ;` sits at the end of the loop body, immediately before the loop's epilogue (the desugared `for` update). The label therefore runs the epilogue, matching C's `for` semantics.
+- `break` emits `goto L_brk_<id>;` where `L_brk_<id>: ;` is placed immediately after the loop, so the epilogue is skipped.
+- `break N` targets the label of the Nth enclosing loop; `continue` always targets the innermost loop.
+
+When a `continue` targets a loop, the body is emitted inside an inner block with the label after it:
+
+```cpp
+while (cond)
+{
+    {
+        /* body */
+    }
+    L_cont_0: ;
+    /* update */
+}
+```
+
+The inner block keeps the label out of the scope of the body's declarations: a C++ `goto` may not jump forward past a variable's initialization within the same scope.
+
+Loops with no `break` or `continue` targeting them emit exactly the code they did before the feature existed: no labels, no `goto`, no extra blocks.

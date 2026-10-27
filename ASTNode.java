@@ -63,9 +63,53 @@ class WhileNode extends ASTNode {
     ASTNode condition;
     ASTNode body;
 
+    // Loop epilogue: statements that run at the end of every iteration,
+    // after the body (and before the continue label in codegen). Empty
+    // for a plain while loop; holds the update of a desugared for loop
+    // so that `continue` still runs it.
+    List<ASTNode> update;
+
     WhileNode(ASTNode condition, ASTNode body) {
         this.condition = condition;
         this.body = body;
+        this.update = List.of();
+    }
+
+    WhileNode(ASTNode condition, ASTNode body, List<ASTNode> update) {
+        this.condition = condition;
+        this.body = body;
+        this.update = List.copyOf(update);
+    }
+}
+
+// break exits one or more enclosing loops. The optional level AST is a
+// constExpr (integer literal, unary, or binary constant expression) that
+// selects how many nested loops to exit; it is null for a plain `break`,
+// which is equivalent to `break 1`.
+class BreakNode extends ASTNode {
+    ASTNode level;
+
+    BreakNode(ASTNode level) {
+        this.level = level;
+    }
+}
+
+// continue targets the innermost enclosing loop and always runs that
+// loop's final body statement(s) (the update of a desugared for loop)
+// before re-testing the condition.
+//
+// level is always null in valid programs: it exists only so that
+// `continue N` can be rejected with a clear semantic error instead of
+// being misparsed as two statements.
+class ContinueNode extends ASTNode {
+    ASTNode level;
+
+    ContinueNode() {
+        this.level = null;
+    }
+
+    ContinueNode(ASTNode level) {
+        this.level = level;
     }
 }
 

@@ -1,0 +1,11 @@
+// Failure fixture: loops/continue_with_level
+// continue always targets the innermost loop; `continue N` is not
+// valid.
+
+func main() -> int32_t {
+    int32_t i = 0;
+    while (i < 3) {
+        continue 2;
+    }
+    return 0;
+}

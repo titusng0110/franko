@@ -1,0 +1,11 @@
+// Failure fixture: loops/break_level_div_zero
+// The break level is a constant expression: division by zero is
+// reported during constant folding.
+
+func main() -> int32_t {
+    int32_t i = 0;
+    while (i < 3) {
+        break 1 / 0;
+    }
+    return 0;
+}

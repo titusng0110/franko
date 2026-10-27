@@ -1,0 +1,10 @@
+// Failure fixture: loops/break_level_zero
+// The break level must be strictly greater than 0.
+
+func main() -> int32_t {
+    int32_t i = 0;
+    while (i < 3) {
+        break 0;
+    }
+    return 0;
+}

@@ -112,7 +112,7 @@ Franko currently does **not** implement:
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
-- `switch`, `do`/`do-while`, `break`, and `continue`;
+- `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`).
 
 Franko currently targets C++14.
@@ -560,7 +560,7 @@ becomes:
 
 The whole loop becomes a block, so a loop variable declared in `init` is scoped to the loop and is not visible after it.
 
-The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` is appended to the end of the loop body so it runs on every iteration, including the last. Franko has no `break` or `continue`, so this lowering is exact.
+The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` runs at the end of every iteration, including the last. It is carried as the desugared `while` loop's epilogue rather than being appended to the body block, so `continue` runs it and `break` skips it, matching C's `for` semantics. See [Statements](19-statements.md).
 
 The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](19-statements.md).
 
@@ -1568,17 +1568,69 @@ becomes:
 }
 ```
 
-The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. There is no `break` or `continue`; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
+The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last. It is carried as the desugared loop's epilogue, so `continue` runs it and `break` skips it. See [Break and Continue](19-statements.md) below.
 
 Braces are optional: the body may be a single statement. A braceless body is wrapped in an implicit block during desugaring, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](05-desugaring.md).
 
-## 19.5 Return Statements
+## 19.5 Break and Continue
+
+`break` exits the innermost enclosing loop. `continue` skips the rest of the innermost loop's body and proceeds to the next iteration:
+
+```franko
+while (i < 10) {
+    i = i + 1;
+    if (i == 5) {
+        break;
+    }
+    if (i == 3) {
+        continue;
+    }
+    print(i);
+}
+```
+
+In a `for` loop, `continue` still runs the `update` (the loop's final body statement), and `break` skips it, matching C's `for` semantics:
+
+```franko
+for (int32_t i = 0; i < 5; i = i + 1) {
+    if (i == 2) {
+        continue;    // i = i + 1 still runs
+    }
+    if (i == 4) {
+        break;       // i = i + 1 does not run
+    }
+    print(i);
+}
+```
+
+`break` accepts an optional integer constant expression `N` that selects how many nested loops to exit. `N` must be strictly greater than 0 and no larger than the enclosing loop depth. A plain `break` is equivalent to `break 1`:
+
+```franko
+for (int32_t a = 0; a < 3; a = a + 1) {
+    for (int32_t b = 0; b < 3; b = b + 1) {
+        if (b == 1) {
+            break 2;    // exits both loops
+        }
+        print(b);
+    }
+}
+```
+
+`N` is evaluated with the constant-expression rules, so expressions such as `break 1 + 1` are permitted and fold at compile time. A level that is not a positive constant integer, or that exceeds the enclosing loop depth, is an error.
+
+`continue` does not take a level: `continue 2` is invalid, and `continue` always targets the innermost loop.
+
+`break` and `continue` are reserved keywords. They are only valid inside a loop; using either outside every loop is an error. They may not appear in a `for` header's `init` or `update` positions.
+
+On the generated-C++ level, `break` and `continue` lower to `goto` statements targeting per-loop labels, and labels are only generated for loops that are actually targeted. See [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+
+## 19.6 Return Statements
 
 A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 19.6 Print Statements
+## 19.7 Print Statements
 
 `print` is a dedicated statement, not a function and not a member method:
 
@@ -1601,7 +1653,7 @@ Array initializer lists and string literals are not expressions and cannot be pr
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
-## 19.7 Expression Statements
+## 19.8 Expression Statements
 
 Function calls are commonly used as expression statements.
 
@@ -3412,9 +3464,9 @@ foo("hello");
 return "hello";
 ```
 
-## 30.14 No `break` or `continue`
+## 30.14 No `switch` or `do`/`do-while`
 
-Only `if`, `while`, and `for` control flow is implemented. There is no `break` or `continue` statement, so a `for` loop cannot be exited early and its `update` always runs at the end of every body iteration. There is also no `switch`, no `do`/`do-while`, and no `goto`.
+Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto` (the generated C++ uses `goto` internally to lower `break` and `continue`; see [Statements](19-statements.md)).
 
 ## 30.15 Global Scope Is Declaration-Only
 
@@ -3585,6 +3637,30 @@ The argv conversion follows these rules:
 - each argument is its raw bytes with **no** NUL terminator appended (consistent with string literals, which also append no terminator);
 - each inner array is default-constructed by the runtime `init` into the uninitialized Franko state (`length()` `0`), so an empty argument simply stays uninitialized;
 - after the Franko `main` returns, the outer array's destructor destroys the converted inner arrays and frees both levels; inner and outer arrays the program already released with `uninit()` are skipped safely.
+## 31.10 Break / Continue Lowering
+
+`break` and `continue` lower to `goto` statements targeting per-loop labels, so multi-level `break N` works uniformly and the same scheme serves `while` and desugared `for` loops. Each loop receives a unique label id, and labels are only generated for loops that are actually targeted:
+
+- `continue` emits `goto L_cont_<id>;` where `L_cont_<id>: ;` sits at the end of the loop body, immediately before the loop's epilogue (the desugared `for` update). The label therefore runs the epilogue, matching C's `for` semantics.
+- `break` emits `goto L_brk_<id>;` where `L_brk_<id>: ;` is placed immediately after the loop, so the epilogue is skipped.
+- `break N` targets the label of the Nth enclosing loop; `continue` always targets the innermost loop.
+
+When a `continue` targets a loop, the body is emitted inside an inner block with the label after it:
+
+```cpp
+while (cond)
+{
+    {
+        /* body */
+    }
+    L_cont_0: ;
+    /* update */
+}
+```
+
+The inner block keeps the label out of the scope of the body's declarations: a C++ `goto` may not jump forward past a variable's initialization within the same scope.
+
+Loops with no `break` or `continue` targeting them emit exactly the code they did before the feature existed: no labels, no `goto`, no extra blocks.
 
 ---
 

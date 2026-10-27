@@ -105,9 +105,9 @@ foo("hello");
 return "hello";
 ```
 
-## 30.14 No `break` or `continue`
+## 30.14 No `switch` or `do`/`do-while`
 
-Only `if`, `while`, and `for` control flow is implemented. There is no `break` or `continue` statement, so a `for` loop cannot be exited early and its `update` always runs at the end of every body iteration. There is also no `switch`, no `do`/`do-while`, and no `goto`.
+Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto` (the generated C++ uses `goto` internally to lower `break` and `continue`; see [Statements](19-statements.md)).
 
 ## 30.15 Global Scope Is Declaration-Only
 

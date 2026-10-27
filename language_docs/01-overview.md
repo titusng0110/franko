@@ -55,7 +55,7 @@ Franko currently does **not** implement:
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
-- `switch`, `do`/`do-while`, `break`, and `continue`;
+- `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`).
 
 Franko currently targets C++14.

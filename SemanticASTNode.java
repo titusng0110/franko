@@ -214,10 +214,61 @@ class SemanticWhileNode extends SemanticStmtNode {
     public final SemanticExprNode condition;
     public final SemanticStmtNode body;
 
+    /**
+     * Loop epilogue: statements that run at the end of every iteration,
+     * after the body. Empty for a plain while loop; holds the desugared
+     * update of a for loop. `continue` runs this epilogue (the continue
+     * label is placed before it in codegen); `break` skips it.
+     */
+    public final List<SemanticStmtNode> update;
+
     public SemanticWhileNode(SemanticExprNode condition, SemanticStmtNode body) {
         this.condition = Objects.requireNonNull(condition);
         this.body = Objects.requireNonNull(body);
+        this.update = List.of();
     }
+
+    public SemanticWhileNode(
+            SemanticExprNode condition,
+            SemanticStmtNode body,
+            List<SemanticStmtNode> update
+    ) {
+        this.condition = Objects.requireNonNull(condition);
+        this.body = Objects.requireNonNull(body);
+        this.update = List.copyOf(update);
+    }
+}
+
+/**
+ * Break statement.
+ *
+ * levels is the number of enclosing loops to exit: 1 for a plain
+ * `break` (or `break 1`), N for `break N`. The SemanticAnalyzer has
+ * already validated that the level is a positive constant integer
+ * expression that does not exceed the enclosing loop depth.
+ */
+class SemanticBreakNode extends SemanticStmtNode {
+    public final int levels;
+
+    public SemanticBreakNode(int levels) {
+        if (levels < 1) {
+            throw new IllegalArgumentException(
+                    "break level must be >= 1, got: " + levels
+            );
+        }
+
+        this.levels = levels;
+    }
+}
+
+/**
+ * Continue statement.
+ *
+ * Always targets the innermost enclosing loop and runs that loop's
+ * epilogue (the desugared for-loop update) before re-testing the
+ * condition.
+ */
+class SemanticContinueNode extends SemanticStmtNode {
 }
 
 class SemanticPrintNode extends SemanticStmtNode {

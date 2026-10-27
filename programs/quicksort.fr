@@ -1,33 +1,18 @@
-// ============================================================
-// Franko Iterative Quicksort Showcase: 50 Elements
-// Struct + Methods Version With Array Initializer Lists + Intrinsics
-// ============================================================
+// Iterative quicksort of 50 elements using an explicit stack.
 //
-// Demonstrates:
+// Demonstrates structs with a static-array field, methods with
+// explicit addr<QuickSort> self receivers, array initializer lists,
+// array.memset / array.memcpy, and while-loop-based partitioning.
 //
-//   - structs with a static-array field
-//   - methods with explicit addr<QuickSort> self receivers
-//   - void methods
-//   - non-void return values
-//   - local static arrays
-//   - array initializer-list assignment
-//   - array.memset(...)
-//   - array.memcpy(addr<array<...>>)
-//   - for loops for counted iteration
-//   - while-loop-based iterative quicksort with an explicit stack
-//   - uint32_t indexes
-//   - int32_t values
-//
-// Arrays are passed by address because Franko arrays are not directly
-// assignable, parameter-passable, or returnable by value. Here the
-// array lives in the struct, so methods reach it as $(self).data.
-// ============================================================
+// Arrays live in the struct because Franko arrays are not directly
+// assignable, parameter-passable, or returnable by value; methods
+// reach them as $(self).data.
 
 struct QuickSort {
-    array<int32_t, 50> data
+    array<int, 50> data
 
-    func printArray(addr<QuickSort> self, uint32_t n) -> void {
-        for (uint32_t i = 0; i < n; i = i + 1) {
+    func printArray(addr<QuickSort> self, uint n) -> void {
+        for (uint i = 0; i < n; i = i + 1) {
             print($(self).data[i])
         }
 
@@ -35,7 +20,7 @@ struct QuickSort {
     }
 
     func initData(addr<QuickSort> self) -> void {
-        array<int32_t, 50> source
+        array<int, 50> source
 
         source = [
             42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
@@ -49,8 +34,8 @@ struct QuickSort {
         return
     }
 
-    func swap(addr<QuickSort> self, uint32_t a, uint32_t b) -> void {
-        int32_t temp = 0
+    func swap(addr<QuickSort> self, uint a, uint b) -> void {
+        int temp = 0
 
         temp = $(self).data[a]
         $(self).data[a] = $(self).data[b]
@@ -58,10 +43,10 @@ struct QuickSort {
         return
     }
 
-    func partition(addr<QuickSort> self, uint32_t low, uint32_t high) -> uint32_t {
-        int32_t pivot = 0
-        uint32_t i = 0
-        uint32_t j = 0
+    func partition(addr<QuickSort> self, uint low, uint high) -> uint {
+        int pivot = 0
+        uint i = 0
+        uint j = 0
 
         pivot = $(self).data[high]
         i = low
@@ -78,14 +63,14 @@ struct QuickSort {
         return i
     }
 
-    func quicksort(addr<QuickSort> self, uint32_t n) -> void {
-        array<uint32_t, 128> stackLow
-        array<uint32_t, 128> stackHigh
+    func quicksort(addr<QuickSort> self, uint n) -> void {
+        array<uint, 128> stackLow
+        array<uint, 128> stackHigh
 
-        uint32_t top = 0
-        uint32_t low = 0
-        uint32_t high = 0
-        uint32_t pi = 0
+        uint top = 0
+        uint low = 0
+        uint high = 0
+        uint pi = 0
 
         stackLow.memset(0)
         stackHigh.memset(0)
@@ -124,12 +109,13 @@ struct QuickSort {
         return
     }
 
-    func isSorted(addr<QuickSort> self, uint32_t n) -> uint8_t {
-        uint8_t sorted = 1
+    func isSorted(addr<QuickSort> self, uint n) -> byte {
+        byte sorted = 1
 
-        for (uint32_t k = 1; k < n; k = k + 1) {
+        for (uint k = 1; k < n; k = k + 1) {
             if ($(self).data[k] < $(self).data[k - 1]) {
                 sorted = 0
+                break
             }
         }
 
@@ -137,11 +123,11 @@ struct QuickSort {
     }
 }
 
-func main() -> int32_t {
+func main() -> int {
     QuickSort sorter
 
-    uint32_t n = 50
-    uint8_t sorted = 0
+    uint n = 50
+    byte sorted = 0
 
     sorter.data.memset(0)
     sorter.initData()

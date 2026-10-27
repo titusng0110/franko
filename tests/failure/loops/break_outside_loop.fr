@@ -1,0 +1,7 @@
+// Failure fixture: loops/break_outside_loop
+// break is only valid inside a loop.
+
+func main() -> int32_t {
+    break;
+    return 0;
+}

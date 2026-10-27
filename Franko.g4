@@ -270,6 +270,8 @@ statement
     | ifStmt       # IfStatement
     | whileStmt    # WhileStatement
     | forStmt      # ForStatement
+    | breakStmt    # BreakStatement
+    | continueStmt # ContinueStatement
     | block        # BlockStatement
     ;
 
@@ -293,6 +295,27 @@ ifStmt
 
 whileStmt
     : WHILE LPAREN expr RPAREN separators* statement
+    ;
+
+// ---------- BREAK / CONTINUE ----------
+//
+// break exits one or more enclosing loops. An optional integer constant
+// expression N selects how many nested loops to exit (strictly > 0 and
+// <= the enclosing loop depth); it defaults to 1, so `break` and
+// `break 1` are equivalent.
+//
+// continue targets the innermost enclosing loop only and always runs
+// that loop's final body statement(s) (the update of a desugared for
+// loop) before re-testing the condition. `continue N` is not valid; an
+// optional level is parsed so it can be rejected with a clear semantic
+// error rather than silently desugaring into two statements.
+//
+breakStmt
+    : BREAK constExpr?
+    ;
+
+continueStmt
+    : CONTINUE constExpr?
     ;
 
 // ---------- FOR ----------
@@ -629,6 +652,8 @@ memberName
     | ELSE
     | WHILE
     | FOR
+    | BREAK
+    | CONTINUE
     | ADDR
     | GETADDR
     | INT8_T
@@ -960,6 +985,8 @@ IF      : 'if' ;
 ELSE    : 'else' ;
 WHILE   : 'while' ;
 FOR     : 'for' ;
+BREAK    : 'break' ;
+CONTINUE : 'continue' ;
 ADDR    : 'addr' ;
 GETADDR : 'getaddr' ;
 // Dereference prefix operator. Syntax is `$(X)`, always parenthesized.

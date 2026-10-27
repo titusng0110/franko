@@ -1,38 +1,23 @@
-// ============================================================
-// Franko Stack Showcase (on top of import "franko/vector")
-// ============================================================
-//
-// Demonstrates:
-//
-//   - importing a library module through the -p search directory:
-//       import "franko/vector"  ->  import/franko/vector.fr
-//   - a struct with a dynamic-array field (std::Vector)
-//   - struct methods with explicit addr<Vector> self receivers,
-//     called as s.init(...), s.push(...), s.get(...)
-//   - a nested namespace (app::stats) declared with the nested-block
-//     form and called with a fully qualified path
-//   - init / push (with growth) / get / set / pop / uninit
-//
-// The vector starts with capacity 2, so pushing 5 values grows it
-// 2 -> 4 -> 8. Expected output is in stack.expected.
-// ============================================================
+// Stack operations on import "franko/vector": init / push (with
+// growth) / get / set / pop / uninit, plus a nested namespace
+// (app::stats) called through a fully qualified path. The vector
+// starts with capacity 2, so pushing 5 values grows it 2 -> 4 -> 8.
 
 import "franko/vector"
 
-// Nested-namespace showcase: the nested-block form below declares the
-// same namespace that `namespace app::stats { ... }` would declare.
-// Members are called with the fully qualified path app::stats::....
+// The nested-block form declares the same namespace as
+// `namespace app::stats { ... }`.
 namespace app {
     namespace stats {
-        func remaining(addr<std::Vector> s) -> uint32_t {
+        func remaining(addr<std::Vector> s) -> uint {
             return $(s).length()
         }
     }
 }
 
-func main() -> int32_t {
+func main() -> int {
     std::Vector s
-    int32_t st = s.init(2)
+    int st = s.init(2)
     if (st != 0) {
         print(st)
         return 1
@@ -47,15 +32,15 @@ func main() -> int32_t {
     print(s.length())
     print(s.capacity())
 
-    uint32_t n = s.length()
-    for (uint32_t i = 0; i < n; i = i + 1) {
+    uint n = s.length()
+    for (uint i = 0; i < n; i = i + 1) {
         print(s.get(i))
     }
 
     s.set(0, 99)
     print(s.get(0))
 
-    int32_t top = 0
+    int top = 0
     st = s.pop(getaddr(top))
     print(st, top)
     st = s.pop(getaddr(top))
@@ -63,7 +48,7 @@ func main() -> int32_t {
 
     print(app::stats::remaining(getaddr(s)))
     n = s.length()
-    for (uint32_t i = 0; i < n; i = i + 1) {
+    for (uint i = 0; i < n; i = i + 1) {
         print(s.get(i))
     }
 

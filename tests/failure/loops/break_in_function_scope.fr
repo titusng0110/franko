@@ -1,0 +1,11 @@
+// Failure fixture: loops/break_in_function_scope
+// A function body is not a loop: break inside an if outside any loop
+// is still outside a loop.
+
+func main() -> int32_t {
+    int32_t i = 0;
+    if (i == 0) {
+        break;
+    }
+    return 0;
+}

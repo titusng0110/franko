@@ -213,6 +213,16 @@ public class SemanticASTPrinter {
             return;
         }
 
+        if (node instanceof SemanticBreakNode n) {
+            printBreak(n, indent);
+            return;
+        }
+
+        if (node instanceof SemanticContinueNode n) {
+            printContinue(n, indent);
+            return;
+        }
+
         if (node instanceof SemanticPrintNode n) {
             printPrint(n, indent);
             return;
@@ -289,6 +299,22 @@ public class SemanticASTPrinter {
 
         line(indent + 1, "body:");
         printStmt(node.body, indent + 2);
+
+        if (!node.update.isEmpty()) {
+            line(indent + 1, "update:");
+            for (SemanticStmtNode stmt : node.update) {
+                printStmt(stmt, indent + 2);
+            }
+        }
+    }
+
+    private static void printBreak(SemanticBreakNode node, int indent) {
+        line(indent, "SemanticBreakNode");
+        line(indent + 1, "levels: " + node.levels);
+    }
+
+    private static void printContinue(SemanticContinueNode node, int indent) {
+        line(indent, "SemanticContinueNode");
     }
 
     private static void printPrint(SemanticPrintNode node, int indent) {
