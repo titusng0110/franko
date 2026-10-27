@@ -1,0 +1,77 @@
+// Compound assignment: += -= *= /= %=
+//
+// Covers all five operators, non-trivial targets (array element, struct
+// field, dereference, global), fluid constants on the right-hand side,
+// and the single-evaluation guarantee: the target of a compound
+// assignment is evaluated exactly once.
+
+struct Counter {
+    int32_t n
+}
+
+int32_t g = 2
+
+func idx() -> uint32_t {
+    print(-1); // marker: this call happens exactly once per statement
+    return 1;
+}
+
+func main() -> int32_t {
+    int32_t x = 10;
+    x += 5;
+    x -= 3;
+    x *= 4;
+    x /= 2;
+    x %= 4;
+    print(x); // ((10 + 5 - 3) * 4 / 2) % 4 = 0
+
+    array<int32_t, 4> xs = [1, 2, 3, 4];
+    xs[idx()] += 10;
+    print(xs[1]); // marker once, then 12
+
+    Counter c;
+    c.n = 7;
+    c.n *= 6;
+    print(c.n); // 42
+
+    int32_t v = 5;
+    addr<int32_t> p = getaddr(v);
+    $(p) += 100;
+    $(p) /= 3;
+    print(v); // (5 + 100) / 3 = 35
+
+    uint8_t u = 200;
+    u += 55;
+    print(u); // 255
+    u -= 254;
+    print(u); // 1
+
+    int32_t i = 0;
+    int32_t sum = 0;
+    while (i < 4) {
+        sum += i;
+        i += 1;
+    }
+    print(sum); // 6
+    print(i); // 4
+
+    g *= 21;
+    print(g); // 42
+
+    // Compound assignment as a braceless controlled statement.
+    int32_t br = 1;
+    if (br == 1) br += 10;
+    print(br); // 11
+
+    // Compound assignment in a for-update position.
+    int32_t step = 0;
+    int32_t end = 0;
+    for (int32_t t = 0; t < 3; t += 1) {
+        step = t;
+        end += 2;
+    }
+    print(step); // 2
+    print(end); // 6
+
+    return 0;
+}

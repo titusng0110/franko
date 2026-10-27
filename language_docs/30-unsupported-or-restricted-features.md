@@ -85,13 +85,14 @@ Array initializer lists and string literals are not expressions and therefore ca
 
 ## 30.12 Unsupported Operators
 
-The following operators do not exist in the language. The lexer rejects the characters `%` and `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
+The following operators do not exist in the language. The lexer rejects the character `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
 
 ```franko
-%   // no modulus operator
 ~x  // no bitwise NOT operator
 +x  // no unary plus operator
 ```
+
+Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=`, `>>=`): assignment has only plain `=` plus the five arithmetic compound forms `+=`, `-=`, `*=`, `/=`, `%=` (see [Assignment](14-assignment.md)).
 
 ## 30.13 String Literals Are Initializer-Only
 
@@ -115,12 +116,10 @@ Only struct declaration nodes, variable declaration nodes, and function declarat
 
 Executable statements are invalid at global scope.
 
-## 30.16 No C-Style Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
+## 30.16 No C-Style Casts, Ternary, or Multiple Declarators
 
 The following forms do not exist in the grammar:
 
 - C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` intrinsic, and fluid integer constants still convert implicitly when they fit);
-- compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
-- increment and decrement operators (`++`, `--`);
 - the ternary conditional operator (`?:`);
 - multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).

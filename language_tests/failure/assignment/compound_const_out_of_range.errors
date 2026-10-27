@@ -1,0 +1,2 @@
+Right constant for operator '+=': constant value 256 does not fit in UINT8
+Right constant for operator '*=': constant value 3000000000 does not fit in INT32

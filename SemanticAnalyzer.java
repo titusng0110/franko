@@ -1246,7 +1246,7 @@ public class SemanticAnalyzer {
             SemanticExprNode value =
                     exprAnalyzer.analyzeExpr(n.value);
 
-            return new SemanticAssignNode(target, value);
+            return new SemanticAssignNode(n.op, target, value);
         }
 
         if (node instanceof IfNode n) {

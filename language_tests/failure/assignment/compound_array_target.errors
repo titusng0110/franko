@@ -1,0 +1,2 @@
+Left operand of '+=' must be an integer, got array<INT32, 3>
+Left operand of '*=' must be an integer, got array<INT32, 3>

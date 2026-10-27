@@ -85,7 +85,7 @@ public final class ExpressionAnalyzer {
     );
 
     private static final Set<String> NON_BOOL_INTEGER_RESULT_OPS = Set.of(
-            "+", "-", "*", "/",
+            "+", "-", "*", "/", "%",
             "&", "|", "^",
             "<<", ">>"
     );

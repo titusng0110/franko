@@ -15,7 +15,7 @@ struct MergeSorter {
     array<int, 50> b
 
     func printArray(addr<MergeSorter> self, uint n) -> void {
-        for (uint i = 0; i < n; i = i + 1) {
+        for (uint i = 0; i < n; i++) {
             print($(self).a[i])
         }
 
@@ -48,25 +48,25 @@ struct MergeSorter {
         while (i <= mid && j <= high) {
             if ($(self).a[i] <= $(self).a[j]) {
                 $(self).b[k] = $(self).a[i]
-                i = i + 1
+                i++
             } else {
                 $(self).b[k] = $(self).a[j]
-                j = j + 1
+                j++
             }
 
-            k = k + 1
+            k++
         }
 
         while (i <= mid) {
             $(self).b[k] = $(self).a[i]
-            i = i + 1
-            k = k + 1
+            i++
+            k++
         }
 
         while (j <= high) {
             $(self).b[k] = $(self).a[j]
-            j = j + 1
-            k = k + 1
+            j++
+            k++
         }
 
         count = high - low + 1
@@ -91,7 +91,7 @@ struct MergeSorter {
     func isSorted(addr<MergeSorter> self, uint n) -> byte {
         byte sorted = 1
 
-        for (uint k = 1; k < n; k = k + 1) {
+        for (uint k = 1; k < n; k++) {
             if ($(self).a[k] < $(self).a[k - 1]) {
                 sorted = 0
                 break

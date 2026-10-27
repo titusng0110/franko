@@ -1,0 +1,45 @@
+// The modulus operator `%`.
+//
+// Integer operands only, same rules as `/`. Compile-time constant
+// folding uses truncated division, so the remainder keeps the sign of
+// the dividend, exactly like the generated C++. `%` is also a valid
+// constExpr in declaration initializers and array sizes.
+
+int32_t size = 7 % 3
+
+func main() -> int32_t {
+    array<int32_t, 5 % 3> tiny = [9, 10];
+
+    int32_t a = 7;
+    int32_t b = 3;
+    print(a % b); // 1
+
+    // Folded constants: sign of the dividend.
+    print(-7 % 3); // -1
+    print(7 % -3); // 1
+    print(-7 % -3); // -1
+    print(100 % 7); // 2
+
+    // Runtime values, signed truncation.
+    int32_t n = -7;
+    print(n % 3); // -1
+    print(n % -3); // -1
+
+    // Unsigned operands.
+    uint8_t u = 17;
+    print(u % 5); // 2
+    uint64_t q = 10000000000000000000;
+    print(q % 7); // 3
+
+    // Both sides nonconstant.
+    int32_t x = 100;
+    int32_t y = 7;
+    print(x % y); // 2
+
+    // ConstExpr slots: global initializer and array size.
+    print(size); // 2
+    print(tiny.length()); // 2
+    print(tiny[0]); // 9
+
+    return 0;
+}

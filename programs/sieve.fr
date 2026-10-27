@@ -32,12 +32,12 @@ struct Sieve {
     func run(addr<Sieve> self) -> void {
         uint p = 0
 
-        for (p = 2; p * p <= $(self).n; p = p + 1) {
+        for (p = 2; p * p <= $(self).n; p++) {
             if ($(self).isPrime[p] == 0) {
                 continue
             }
 
-            for (uint j = p * p; j <= $(self).n; j = j + p) {
+            for (uint j = p * p; j <= $(self).n; j += p) {
                 $(self).isPrime[j] = 0
             }
         }
@@ -48,7 +48,7 @@ struct Sieve {
     func printResults(addr<Sieve> self) -> void {
         print(1001)
 
-        for (uint i = 2; i <= $(self).n; i = i + 1) {
+        for (uint i = 2; i <= $(self).n; i++) {
             if ($(self).isPrime[i] == 0) {
                 continue
             }

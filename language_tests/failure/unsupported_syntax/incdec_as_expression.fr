@@ -1,0 +1,8 @@
+// Failure fixture: unsupported_syntax/incdec_as_expression
+// `++` and `--` are statement forms only: they never produce a value, so
+// `print(x++)` does not parse (docs 14, 19).
+func main() -> int32_t {
+    int32_t a = 1;
+    print(a++);
+    return 0;
+}

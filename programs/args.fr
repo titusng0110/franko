@@ -10,9 +10,9 @@ func main(addr<array<array<byte>>> args) -> int {
         uint j = 0
         while (j < $(args)[i].length()) {
             print($(args)[i][j])
-            j = j + 1
+            j++
         }
-        i = i + 1
+        i++
     }
     return 0
 }

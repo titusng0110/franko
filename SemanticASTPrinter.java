@@ -267,6 +267,10 @@ public class SemanticASTPrinter {
     private static void printAssign(SemanticAssignNode node, int indent) {
         line(indent, "SemanticAssignNode");
 
+        if (node.isCompound()) {
+            line(indent + 1, "op: " + node.op);
+        }
+
         line(indent + 1, "target:");
         printExpr(node.target, indent + 2);
 

@@ -338,6 +338,11 @@ public class Desugarer {
             return;
         }
 
+        if (stmt instanceof IncDecNode) {
+            out.add(lowerIncDec((IncDecNode) stmt));
+            return;
+        }
+
         if (stmt instanceof BlockNode) {
             BlockNode b = (BlockNode) stmt;
             out.add(new BlockNode(desugarStmtList(b.statements)));
@@ -817,6 +822,22 @@ public class Desugarer {
         List<ASTNode> out
     ) {
         ASTNode target = desugarLValue(n.target);
+
+        /*
+         * Compound assignment: the right-hand side is an ordinary
+         * expression, never an initializer. String literals are left
+         * untouched so the semantic analyzer rejects them with a proper
+         * diagnostic instead of an internal error.
+         */
+        if (!"=".equals(n.op)) {
+            out.add(new AssignNode(
+                n.op,
+                target,
+                desugarExpr(n.value)
+            ));
+            return;
+        }
+
         ASTNode value = desugarInitializerValue(n.value);
 
         if (value instanceof ArrayLiteralNode) {
@@ -829,9 +850,25 @@ public class Desugarer {
         }
 
         out.add(new AssignNode(
+            n.op,
             target,
             desugarExpr(value)
         ));
+    }
+
+    /**
+     * Lowers `x++` / `x--` into `x += 1` / `x -= 1`.
+     *
+     * The compound assignment carries an explicit literal 1, which stays
+     * a fluid integer constant: contextual checks against the target's
+     * type apply exactly as they do for a hand-written `x += 1`.
+     */
+    private ASTNode lowerIncDec(IncDecNode n) {
+        return new AssignNode(
+            "++".equals(n.op) ? "+=" : "-=",
+            desugarLValue(n.target),
+            new IntNode("1")
+        );
     }
 
     /**
@@ -861,6 +898,16 @@ public class Desugarer {
 
         if (stmt instanceof AssignNode) {
             AssignNode n = (AssignNode) stmt;
+
+            if (!"=".equals(n.op)) {
+                /* Compound assignment: value is an ordinary expression. */
+                return new AssignNode(
+                    n.op,
+                    desugarLValue(n.target),
+                    desugarExpr(n.value)
+                );
+            }
+
             ASTNode value = desugarInitializerValue(n.value);
 
             if (value instanceof ArrayLiteralNode) {
@@ -870,9 +917,14 @@ public class Desugarer {
             }
 
             return new AssignNode(
+                n.op,
                 desugarLValue(n.target),
                 desugarExpr(value)
             );
+        }
+
+        if (stmt instanceof IncDecNode) {
+            return lowerIncDec((IncDecNode) stmt);
         }
 
         if (stmt instanceof ProgramNode) {

@@ -22,7 +22,7 @@ struct TextBuf {
         $(self).buf = "Hello,\tWorld!\n\"Franko\""
 
         print(5001)
-        for (uint i = 0; i < 22; i = i + 1) {
+        for (uint i = 0; i < 22; i++) {
             print($(self).buf[i])
         }
 
@@ -35,7 +35,7 @@ struct TextBuf {
         $(self).buf = "你好, Franko 😭😍"
 
         print(5002)
-        for (uint i = 0; i < 23; i = i + 1) {
+        for (uint i = 0; i < 23; i++) {
             print($(self).buf[i])
         }
 
@@ -50,7 +50,7 @@ Line 2
 Line 3"
 
         print(5003)
-        for (uint i = 0; i < 20; i = i + 1) {
+        for (uint i = 0; i < 20; i++) {
             print($(self).buf[i])
         }
 
@@ -63,7 +63,7 @@ Line 3"
         $(self).buf = "A\\B\"C\a\b\f\n\r\t\vZ"
 
         print(5004)
-        for (uint i = 0; i < 13; i = i + 1) {
+        for (uint i = 0; i < 13; i++) {
             print($(self).buf[i])
         }
 

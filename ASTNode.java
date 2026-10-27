@@ -37,13 +37,48 @@ class ExprStmtNode extends ASTNode {
     }
 }
 
+// An assignment statement.
+//
+// op is the assignment operator text:
+//
+//   "="  plain assignment
+//   "+=" "-=" "*=" "/=" "%="  compound assignment
+//
+// For compound operators the statement is exactly `target = target <base>
+// value`, but the target is evaluated only once: codegen emits the C++
+// compound assignment directly. `x++` / `x--` arrive here as "+=" / "-="
+// with value 1 (lowered by the Desugarer from IncDecNode).
 class AssignNode extends ASTNode {
+    String op;
     ASTNode target;
     ASTNode value;
 
     AssignNode(ASTNode target, ASTNode value) {
+        this("=", target, value);
+    }
+
+    AssignNode(String op, ASTNode target, ASTNode value) {
+        this.op = op;
         this.target = target;
         this.value = value;
+    }
+}
+
+// Postfix increment / decrement statements:
+//
+//   x++;
+//   x--;
+//
+// Sugar for `x += 1` / `x -= 1`. The Desugarer lowers this into an
+// AssignNode with the corresponding compound operator, so no later phase
+// sees an IncDecNode.
+class IncDecNode extends ASTNode {
+    String op; // "++" or "--"
+    ASTNode target;
+
+    IncDecNode(String op, ASTNode target) {
+        this.op = op;
+        this.target = target;
     }
 }
 

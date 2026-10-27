@@ -1,0 +1,18 @@
+// Failure fixture: assignment/compound_type_mismatch
+// Compound assignment applies the base operator's operand rules (docs
+// 14, 17.3): with two nonconstant operands, both sides must have exactly
+// the same integer type.
+func main() -> int32_t {
+    int32_t x = 1;
+    int64_t y = 2;
+
+    x += y;
+    x -= y;
+    x *= y;
+    x /= y;
+    x %= y;
+
+    print(x);
+
+    return 0;
+}

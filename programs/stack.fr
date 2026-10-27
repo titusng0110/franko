@@ -33,7 +33,7 @@ func main() -> int {
     print(s.capacity())
 
     uint n = s.length()
-    for (uint i = 0; i < n; i = i + 1) {
+    for (uint i = 0; i < n; i++) {
         print(s.get(i))
     }
 
@@ -48,7 +48,7 @@ func main() -> int {
 
     print(app::stats::remaining(getaddr(s)))
     n = s.length()
-    for (uint i = 0; i < n; i = i + 1) {
+    for (uint i = 0; i < n; i++) {
         print(s.get(i))
     }
 

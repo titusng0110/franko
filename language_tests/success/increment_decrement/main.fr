@@ -1,0 +1,66 @@
+// Increment and decrement statements: `x++` and `x--`.
+//
+// Lowered to `x += 1` / `x -= 1`, so they work everywhere a compound
+// assignment does: plain variables, array elements, struct fields,
+// for-loop updates, and while-loop updates.
+
+struct Box {
+    int32_t n
+}
+
+func main() -> int32_t {
+    int32_t a = 1;
+    a++;
+    print(a); // 2
+    a--;
+    a--;
+    print(a); // 0
+
+    int32_t i = 0;
+    while (i != 3) {
+        i++;
+    }
+    print(i); // 3
+
+    int32_t total = 0;
+    for (int32_t j = 0; j < 5; j++) {
+        total += j;
+    }
+    print(total); // 10
+
+    for (int32_t k = 3; k > 0; k--) {
+        print(k); // 3, 2, 1
+    }
+
+    // Unsigned wraparound follows the same modular rules as `x -= 1`.
+    uint8_t u = 255;
+    u++;
+    print(u); // 0
+    u--;
+    print(u); // 255
+
+    array<int32_t, 3> xs = [0, 0, 0];
+    xs[0]++;
+    xs[0]++;
+    print(xs[0]); // 2
+
+    Box b;
+    b.n = 39;
+    b.n++;
+    print(b.n); // 40
+
+    // Postfix increment as a braceless controlled statement.
+    if (b.n == 40) b.n++;
+    print(b.n); // 41
+
+    // Postfix increment inside a while-update position.
+    int32_t count = 0;
+    int32_t rounds = 0;
+    while (count != 2) {
+        count++;
+        rounds++;
+    }
+    print(rounds); // 2
+
+    return 0;
+}

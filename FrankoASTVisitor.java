@@ -455,6 +455,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         if (ctx.varDecl() != null) return visit(ctx.varDecl());
         if (ctx.returnStmt() != null) return visit(ctx.returnStmt());
         if (ctx.assignStmt() != null) return visit(ctx.assignStmt());
+        if (ctx.compoundAssignStmt() != null) return visit(ctx.compoundAssignStmt());
+        if (ctx.incDecStmt() != null) return visit(ctx.incDecStmt());
         if (ctx.printStmt() != null) return visit(ctx.printStmt());
         if (ctx.exprStmt() != null) return visit(ctx.exprStmt());
 
@@ -561,6 +563,27 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode value = visit(ctx.assignmentInitializer());
 
         return new AssignNode(target, value);
+    }
+
+    @Override
+    public ASTNode visitCompoundAssignStmt(
+            FrankoParser.CompoundAssignStmtContext ctx
+    ) {
+        ASTNode target = visit(ctx.lvalue());
+        ASTNode value = visit(ctx.expr());
+
+        return new AssignNode(
+            ctx.compoundAssignOp().getText(),
+            target,
+            value
+        );
+    }
+
+    @Override
+    public ASTNode visitIncDecStmt(FrankoParser.IncDecStmtContext ctx) {
+        ASTNode target = visit(ctx.lvalue());
+
+        return new IncDecNode(ctx.PLUSPLUS() != null ? "++" : "--", target);
     }
 
     @Override

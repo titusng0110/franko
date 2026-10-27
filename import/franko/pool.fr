@@ -87,7 +87,7 @@ namespace std {
             if (st != 0) {
                 return -1
             }
-            for (uint32_t i = 0; i < C; i = i + 1) {
+            for (uint32_t i = 0; i < C; i++) {
                 $(self)._next[i] = i + 1
             }
             $(self)._next[C - 1] = 0xFFFFFFFF
@@ -125,7 +125,7 @@ namespace std {
             if (st != 0) {
                 return -1
             }
-            for (uint32_t i = oldC; i < newC; i = i + 1) {
+            for (uint32_t i = oldC; i < newC; i++) {
                 $(self)._next[i] = i + 1
             }
             $(self)._next[newC - 1] = $(self)._head
@@ -144,7 +144,7 @@ namespace std {
             uint32_t idx = $(self)._head
             $(self)._head = $(self)._next[idx]
             $(self)._next[idx] = 0xFFFFFFFE
-            $(self)._used = $(self)._used + 1
+            $(self)._used++
             return idx
         }
 
@@ -157,7 +157,7 @@ namespace std {
             }
             $(self)._next[idx] = $(self)._head
             $(self)._head = idx
-            $(self)._used = $(self)._used - 1
+            $(self)._used--
             return 0
         }
 
@@ -185,10 +185,10 @@ namespace std {
                 return -1
             }
             uint32_t pos = 0
-            for (uint32_t i = 0; i < $(self)._capacity; i = i + 1) {
+            for (uint32_t i = 0; i < $(self)._capacity; i++) {
                 if ($(self)._next[i] == 0xFFFFFFFE) {
                     $(out)[pos] = i
-                    pos = pos + 1
+                    pos++
                 }
             }
             return 0
@@ -234,7 +234,7 @@ namespace std {
                 $(self)._sparse.uninit()
                 return -1
             }
-            for (uint32_t i = 0; i < C; i = i + 1) {
+            for (uint32_t i = 0; i < C; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
             }
@@ -275,7 +275,7 @@ namespace std {
                 $(self)._sparse.resize(oldC)
                 return -1
             }
-            for (uint32_t i = oldC; i < newC; i = i + 1) {
+            for (uint32_t i = oldC; i < newC; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
             }
@@ -292,7 +292,7 @@ namespace std {
             }
             uint32_t idx = $(self)._dense[$(self)._used]
             $(self)._sparse[idx] = $(self)._used
-            $(self)._used = $(self)._used + 1
+            $(self)._used++
             return idx
         }
 
@@ -312,7 +312,7 @@ namespace std {
             $(self)._sparse[lastIdx] = delPos
             $(self)._sparse[idx] = lastPos
 
-            $(self)._used = $(self)._used - 1
+            $(self)._used--
             return 0
         }
 
@@ -340,7 +340,7 @@ namespace std {
             if ($(self)._capacity == 0 || $(out).length() < $(self)._used) {
                 return -1
             }
-            for (uint32_t i = 0; i < $(self)._used; i = i + 1) {
+            for (uint32_t i = 0; i < $(self)._used; i++) {
                 $(out)[i] = $(self)._dense[i]
             }
             return 0
@@ -387,7 +387,7 @@ namespace std {
                 $(self)._next.uninit()
                 return -1
             }
-            for (uint32_t i = 0; i < C; i = i + 1) {
+            for (uint32_t i = 0; i < C; i++) {
                 $(self)._next[i] = i + 1
             }
             $(self)._next[C - 1] = 0xFFFFFFFF
@@ -430,7 +430,7 @@ namespace std {
                 $(self)._next.resize(oldC)
                 return -1
             }
-            for (uint32_t i = oldC; i < newC; i = i + 1) {
+            for (uint32_t i = oldC; i < newC; i++) {
                 $(self)._next[i] = i + 1
                 $(self)._generations[i] = 0
             }
@@ -450,7 +450,7 @@ namespace std {
             uint32_t idx = $(self)._head
             $(self)._head = $(self)._next[idx]
             $(self)._next[idx] = 0xFFFFFFFE
-            $(self)._used = $(self)._used + 1
+            $(self)._used++
             return idx
         }
 
@@ -461,10 +461,10 @@ namespace std {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
-            $(self)._generations[idx] = $(self)._generations[idx] + 1
+            $(self)._generations[idx]++
             $(self)._next[idx] = $(self)._head
             $(self)._head = idx
-            $(self)._used = $(self)._used - 1
+            $(self)._used--
             return 0
         }
 
@@ -505,10 +505,10 @@ namespace std {
                 return -1
             }
             uint32_t pos = 0
-            for (uint32_t i = 0; i < $(self)._capacity; i = i + 1) {
+            for (uint32_t i = 0; i < $(self)._capacity; i++) {
                 if ($(self)._next[i] == 0xFFFFFFFE) {
                     $(out)[pos] = i
-                    pos = pos + 1
+                    pos++
                 }
             }
             return 0
@@ -561,7 +561,7 @@ namespace std {
                 $(self)._dense.uninit()
                 return -1
             }
-            for (uint32_t i = 0; i < C; i = i + 1) {
+            for (uint32_t i = 0; i < C; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
             }
@@ -609,7 +609,7 @@ namespace std {
                 $(self)._dense.resize(oldC)
                 return -1
             }
-            for (uint32_t i = oldC; i < newC; i = i + 1) {
+            for (uint32_t i = oldC; i < newC; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
                 $(self)._generations[i] = 0
@@ -627,7 +627,7 @@ namespace std {
             }
             uint32_t idx = $(self)._dense[$(self)._used]
             $(self)._sparse[idx] = $(self)._used
-            $(self)._used = $(self)._used + 1
+            $(self)._used++
             return idx
         }
 
@@ -639,7 +639,7 @@ namespace std {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
-            $(self)._generations[idx] = $(self)._generations[idx] + 1
+            $(self)._generations[idx]++
 
             uint32_t delPos = $(self)._sparse[idx]
             uint32_t lastPos = $(self)._used - 1
@@ -650,7 +650,7 @@ namespace std {
             $(self)._sparse[lastIdx] = delPos
             $(self)._sparse[idx] = lastPos
 
-            $(self)._used = $(self)._used - 1
+            $(self)._used--
             return 0
         }
 
@@ -691,7 +691,7 @@ namespace std {
             if ($(self)._capacity == 0 || $(out).length() < $(self)._used) {
                 return -1
             }
-            for (uint32_t i = 0; i < $(self)._used; i = i + 1) {
+            for (uint32_t i = 0; i < $(self)._used; i++) {
                 $(out)[i] = $(self)._dense[i]
             }
             return 0

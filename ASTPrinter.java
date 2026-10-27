@@ -173,13 +173,22 @@ public class ASTPrinter {
         }
 
         else if (node instanceof AssignNode n) {
-            System.out.println(pad + "Assign");
+            System.out.println(
+                pad + ("=".equals(n.op) ? "Assign" : "Assign " + n.op)
+            );
 
             System.out.println(pad + "  target:");
             print(n.target, indent + 2);
 
             System.out.println(pad + "  value:");
             print(n.value, indent + 2);
+        }
+
+        else if (node instanceof IncDecNode n) {
+            System.out.println(pad + "IncDec " + n.op);
+
+            System.out.println(pad + "  target:");
+            print(n.target, indent + 2);
         }
 
         else if (node instanceof IfNode n) {

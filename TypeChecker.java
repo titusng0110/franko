@@ -518,7 +518,10 @@ public class TypeChecker {
      *
      * Applies to:
      *
-     *   + - * / & | ^
+     *   + - * / % & | ^
+     *
+     * and, with the compound operator text ("+=", "/=", "%=", ...), to the
+     * compound assignment forms in StatementChecker.
      *
      * Franko rules:
      *

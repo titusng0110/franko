@@ -112,7 +112,6 @@ Franko currently does **not** implement:
 - general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
 - implicit numeric conversions except for fluid integer constants (explicit width changes use the `cast<T>(expr)` intrinsic);
 - cast syntax;
-- compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`).
@@ -624,6 +623,24 @@ array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
 
 Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
 
+## 5.10 Increment and Decrement Desugaring
+
+Postfix increment and decrement statements are sugar for compound assignment:
+
+```franko
+x++;
+x--;
+```
+
+are lowered to:
+
+```franko
+x += 1;
+x -= 1;
+```
+
+before semantic analysis, so every rule that applies to `+=` / `-=` (integer storage-backed lvalue target, operand rules, single evaluation of the target) applies identically to `x++` / `x--`. The literal `1` remains a fluid integer constant. See [Assignment](14-assignment.md).
+
 ---
 
 # 6. Types
@@ -765,6 +782,7 @@ Examples:
 ```franko
 1 + 2       // evaluated to 3
 4 * 5       // evaluated to 20
+7 % 3       // evaluated to 1
 10 == 10    // evaluated to 1
 !0          // evaluated to 1
 1 << 3      // evaluated to 8
@@ -778,7 +796,10 @@ Evaluation failures are reported before semantic analysis:
 
 ```franko
 array<int, 10 / 0> bytes;   // invalid: Division by zero in constant expression
+array<int, 10 % 0> bytes;   // invalid: Division by zero in constant expression
 ```
+
+Modulus folding uses truncated division, so the remainder keeps the sign of the dividend, matching the generated C++ (see [Operators](17-operators.md)).
 
 Evaluation is conservative.
 
@@ -1097,6 +1118,7 @@ Assignment syntax:
 
 ```franko
 target = value;
+target op= value;   // compound: += -= *= /= %=
 ```
 
 The left-hand side must be a storage-backed lvalue.
@@ -1182,6 +1204,84 @@ a = b;    // invalid: struct with non-assignable fields is address-only
 
 Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `$(p).field`.
 
+## 14.5 Compound Assignment
+
+Five compound assignment operators exist:
+
+```franko
++= -= *= /= %=
+```
+
+Valid:
+
+```franko
+x += 1;
+arr[i] -= 2;
+obj.n *= 3;
+$(p) /= 4;
+x %= 7;
+```
+
+The target follows the same rules as plain assignment: an addressable, non-void storage-backed lvalue.
+
+The value must satisfy the rules of the corresponding binary operator (`+ - * / %`, see [Operators](17-operators.md)) against the target:
+
+- both operands are integers (arrays, addresses, and void are invalid);
+- with two nonconstant operands, both sides must have exactly the same integer type;
+- a constant right-hand side must fit the target's type;
+- a constant zero divisor is rejected for `/=` and `%=`, exactly like `x / 0` and `x % 0`.
+
+`target op= value` means exactly `target = target op value`, except the target expression is evaluated only once:
+
+```franko
+arr[f()] += 1;   // f() runs once
+```
+
+The backend emits the C++ compound assignment directly, so array indices, field chains, and dereferences in the target are never evaluated twice.
+
+Invalid:
+
+```franko
+array<int32_t, 3> xs = [1, 2, 3];
+xs += 1;         // arrays are not arithmetic values
+
+int32_t v = 1;
+addr<int32_t> p = getaddr(v);
+p += 1;          // addresses are not arithmetic values
+
+int32_t x = 1;
+int64_t y = 2;
+x += y;          // operands must have the same integer type
+```
+
+The right-hand side may not be an array initializer list (`xs += [1, 2]` does not parse); initializer lists remain plain-`=` sugar only. See [Array Initializer Lists](22-array-initializer-lists.md).
+
+## 14.6 Increment and Decrement
+
+Postfix increment and decrement are statements:
+
+```franko
+x++;
+x--;
+```
+
+They are exactly equivalent to:
+
+```franko
+x += 1;
+x -= 1;
+```
+
+so every compound-assignment rule above applies unchanged: the target must be an integer, non-void storage-backed lvalue (`xs++` and `p++` are invalid for the same reason `xs += 1` and `p += 1` are invalid).
+
+```franko
+for (int32_t i = 0; i < n; i++) {
+    print(i)
+}
+```
+
+Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`print(x++)`, `x = y++`) are syntax errors: `x++` never produces a value. See [Statements](19-statements.md).
+
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](25-structs.md) for the full assignability rules.
 
 ---
@@ -1211,6 +1311,7 @@ See [Structs](25-structs.md) for the complete struct reference.
 This distinction matters for:
 
 - assignment targets;
+- compound assignment targets and `x++` / `x--` targets;
 - `getaddr(...)` operands;
 - array intrinsic receivers;
 - `memcpy` sources;
@@ -1353,7 +1454,7 @@ From highest precedence to lowest:
 
 1. postfix expressions, function calls, array access `a[i]`, `$(a)`
 2. unary `-x`, `!x`
-3. multiplicative `*`, `/`
+3. multiplicative `*`, `/`, `%`
 4. additive `+`, `-`
 5. shift `<<`, `>>`
 6. relational `<`, `<=`, `>`, `>=`
@@ -1384,15 +1485,24 @@ Unsupported unary operators:
 
 ## 17.3 Arithmetic Operators
 
-Arithmetic operators: `+`, `-`, `*`, `/`.
+Arithmetic operators: `+`, `-`, `*`, `/`, `%`.
 
 Operands must be integers. Arrays and addresses are invalid.
 
-The modulus operator `%` is not currently implemented.
+`%` is the modulus (remainder) operator. Integer division truncates toward zero, and the remainder takes the sign of the dividend:
+
+```franko
+7 % 3      // 1
+-7 % 3     // -1
+7 % -3     // 1
+-7 % -3    // -1
+```
 
 Division by zero in a compile-time constant expression is an error; see [Constant Folding](10-constant-folding.md).
 
-This applies even when only the divisor is constant: any expression with a constant zero divisor, such as `x / 0` where `x` is a nonconstant variable, is rejected at compile time.
+This applies to `%` as well as `/`, and applies even when only the divisor is constant: any expression with a constant zero divisor, such as `x / 0` or `x % 0` where `x` is a nonconstant variable, is rejected at compile time.
+
+Each arithmetic operator has a compound assignment form (`+=`, `-=`, `*=`, `/=`, `%=`) with exactly the same operand rules; see [Assignment](14-assignment.md).
 
 ## 17.4 Bitwise Operators
 
@@ -1488,6 +1598,8 @@ Franko supports the following statements inside function bodies and blocks:
 
 - variable declarations;
 - assignments;
+- compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`);
+- increment and decrement statements (`x++`, `x--`);
 - blocks;
 - `if`;
 - `while`;
@@ -1500,6 +1612,8 @@ Franko supports the following statements inside function bodies and blocks:
 - array initializer assignments.
 
 Executable statements are not allowed at global scope.
+
+Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so `print(x++)` does not parse. See [Assignment](14-assignment.md).
 
 ## 19.1 Blocks
 
@@ -1529,13 +1643,17 @@ for (init; condition; update) {
 }
 ```
 
-- `init` and `update` are optional simple statements (declarations, assignments, expression statements, and similar);
+- `init` and `update` are optional simple statements (declarations, assignments, compound assignments, increments, expression statements, and similar);
 - the condition is required and must be an integer expression.
 
 Valid:
 
 ```franko
 for (int32_t i = 0; i < 5; i = i + 1) {
+    print(i)
+}
+
+for (int32_t i = 0; i < 5; i++) {
     print(i)
 }
 
@@ -3446,13 +3564,14 @@ Array initializer lists and string literals are not expressions and therefore ca
 
 ## 30.12 Unsupported Operators
 
-The following operators do not exist in the language. The lexer rejects the characters `%` and `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
+The following operators do not exist in the language. The lexer rejects the character `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
 
 ```franko
-%   // no modulus operator
 ~x  // no bitwise NOT operator
 +x  // no unary plus operator
 ```
+
+Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=`, `>>=`): assignment has only plain `=` plus the five arithmetic compound forms `+=`, `-=`, `*=`, `/=`, `%=` (see [Assignment](14-assignment.md)).
 
 ## 30.13 String Literals Are Initializer-Only
 
@@ -3476,13 +3595,11 @@ Only struct declaration nodes, variable declaration nodes, and function declarat
 
 Executable statements are invalid at global scope.
 
-## 30.16 No C-Style Casts, Compound Assignment, Increments, Ternary, or Multiple Declarators
+## 30.16 No C-Style Casts, Ternary, or Multiple Declarators
 
 The following forms do not exist in the grammar:
 
 - C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` intrinsic, and fluid integer constants still convert implicitly when they fit);
-- compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
-- increment and decrement operators (`++`, `--`);
 - the ternary conditional operator (`?:`);
 - multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).
 

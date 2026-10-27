@@ -55,7 +55,6 @@ Franko currently does **not** implement:
 - general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
 - implicit numeric conversions except for fluid integer constants (explicit width changes use the `cast<T>(expr)` intrinsic);
 - cast syntax;
-- compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`).

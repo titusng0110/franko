@@ -198,3 +198,21 @@ array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
 ```
 
 Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
+
+## 5.10 Increment and Decrement Desugaring
+
+Postfix increment and decrement statements are sugar for compound assignment:
+
+```franko
+x++;
+x--;
+```
+
+are lowered to:
+
+```franko
+x += 1;
+x -= 1;
+```
+
+before semantic analysis, so every rule that applies to `+=` / `-=` (integer storage-backed lvalue target, operand rules, single evaluation of the target) applies identically to `x++` / `x--`. The literal `1` remains a fluid integer constant. See [Assignment](14-assignment.md).

@@ -1,0 +1,13 @@
+// Failure fixture: assignment/compound_addr_target
+// Addresses are not arithmetic values: `p += 1` is rejected the same way
+// as `p + 1` (docs 17.3, 24).
+func main() -> int32_t {
+    int32_t v = 1;
+    addr<int32_t> p = getaddr(v);
+
+    p += 1;
+
+    print(v);
+
+    return 0;
+}

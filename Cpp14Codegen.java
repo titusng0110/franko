@@ -1127,9 +1127,23 @@ public class Cpp14Codegen {
     }
 
     private void emitAssign(SemanticAssignNode node) {
+        /*
+         * Plain assignment emits `target = value;`.
+         *
+         * Compound assignment emits the C++ compound form directly:
+         *
+         *   x += v;   x -= v;   x *= v;   x /= v;   x %= v;
+         *
+         * so the target (array index, field access, dereference, ...) is
+         * evaluated exactly once. The operand checks already guarantee the
+         * right-hand side has the target's type (or is a constant that
+         * fits it), so the cast matches the plain-assignment form.
+         */
         emitLine(
                 emitLValue(node.target)
-                        + " = "
+                        + " "
+                        + node.op
+                        + " "
                         + emitExprAsType(node.value, node.target.type)
                         + ";"
         );

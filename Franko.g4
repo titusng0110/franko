@@ -357,6 +357,8 @@ forUpdate
 // - x.memset(...), x.memcpy(...), x.uninit() are parsed as
 //   ordinary member-call expressions.
 // - function calls also parse as expression statements.
+// - compound assignments (x += 1) and increments (x++) are
+//   dedicated statement forms; they are not expressions.
 //
 // Array intrinsics such as:
 //   arr.memset(0)
@@ -368,6 +370,8 @@ simpleStmt
     : varDecl
     | returnStmt
     | assignStmt
+    | compoundAssignStmt
+    | incDecStmt
     | printStmt
     | exprStmt
     ;
@@ -437,8 +441,51 @@ returnStmt
 // Dynamic arrays must already be initialized before the generated indexed
 // assignments are valid.
 //
+// ---------- COMPOUND ASSIGNMENT ----------
+//
+// Compound assignment operators:
+//
+//   += -= *= /= %=
+//
+// The target is an ordinary lvalue and the right-hand side is an ordinary
+// expr (array initializer lists are NOT accepted on this side).
+//
+//   x += 1;
+//   arr[i] *= 2;
+//   $(p) -= 3;
+//
+// Semantically `x op= v` is exactly `x = x op v`, except the target is
+// evaluated only once: the backend emits the C++ compound assignment
+// directly. `x++` and `x--` are equivalent to `x += 1` and `x -= 1`
+// (see incDecStmt and the Desugarer).
 assignStmt
     : lvalue ASSIGN assignmentInitializer
+    ;
+
+compoundAssignStmt
+    : lvalue compoundAssignOp expr
+    ;
+
+compoundAssignOp
+    : PLUS_ASSIGN
+    | MINUS_ASSIGN
+    | STAR_ASSIGN
+    | SLASH_ASSIGN
+    | PERCENT_ASSIGN
+    ;
+
+// ---------- INCREMENT / DECREMENT ----------
+//
+// Postfix statement forms only:
+//
+//   x++;
+//   x--;
+//
+// Both are sugar for `x += 1` and `x -= 1`, lowered by the Desugarer.
+// Prefix forms (`++x`) and value uses (`print(x++)`) are syntax errors:
+// these operators exist only as statements.
+incDecStmt
+    : lvalue (PLUSPLUS | MINUSMINUS)
     ;
 
 assignmentInitializer
@@ -516,7 +563,7 @@ exprStmt
 //   < <= > >=
 //   << >>
 //   + -
-//   * /
+//   * / %
 //   unary (- !)
 //   postfix [] () .
 //
@@ -564,7 +611,7 @@ additiveExpr
     ;
 
 multiplicativeExpr
-    : unaryExpr ((STAR | SLASH) unaryExpr)*
+    : unaryExpr ((STAR | SLASH | PERCENT) unaryExpr)*
     ;
 
 unaryExpr
@@ -773,7 +820,7 @@ constAdditiveExpr
     ;
 
 constMultiplicativeExpr
-    : constUnaryExpr ((STAR | SLASH) constUnaryExpr)*
+    : constUnaryExpr ((STAR | SLASH | PERCENT) constUnaryExpr)*
     ;
 
 constUnaryExpr
@@ -1025,11 +1072,23 @@ ANDAND  : '&&' ;
 OROR    : '||' ;
 ARROW   : '->' ;
 
+// Compound assignment operators and increment / decrement.
+// Longest match makes ordering against the single-character
+// operators irrelevant, but they are grouped here together.
+PLUS_ASSIGN    : '+=' ;
+MINUS_ASSIGN   : '-=' ;
+STAR_ASSIGN    : '*=' ;
+SLASH_ASSIGN   : '/=' ;
+PERCENT_ASSIGN : '%=' ;
+PLUSPLUS       : '++' ;
+MINUSMINUS     : '--' ;
+
 ASSIGN  : '=' ;
 PLUS    : '+' ;
 MINUS   : '-' ;
 STAR    : '*' ;
 SLASH   : '/' ;
+PERCENT : '%' ;
 BANG    : '!' ;
 AMP     : '&' ;
 PIPE    : '|' ;

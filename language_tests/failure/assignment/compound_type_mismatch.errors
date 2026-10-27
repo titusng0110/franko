@@ -1,0 +1,5 @@
+Operands of '+=' must have the same integer type, got INT32 and INT64
+Operands of '-=' must have the same integer type, got INT32 and INT64
+Operands of '*=' must have the same integer type, got INT32 and INT64
+Operands of '/=' must have the same integer type, got INT32 and INT64
+Operands of '%=' must have the same integer type, got INT32 and INT64

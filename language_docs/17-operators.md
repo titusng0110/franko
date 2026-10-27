@@ -12,7 +12,7 @@ From highest precedence to lowest:
 
 1. postfix expressions, function calls, array access `a[i]`, `$(a)`
 2. unary `-x`, `!x`
-3. multiplicative `*`, `/`
+3. multiplicative `*`, `/`, `%`
 4. additive `+`, `-`
 5. shift `<<`, `>>`
 6. relational `<`, `<=`, `>`, `>=`
@@ -43,15 +43,24 @@ Unsupported unary operators:
 
 ## 17.3 Arithmetic Operators
 
-Arithmetic operators: `+`, `-`, `*`, `/`.
+Arithmetic operators: `+`, `-`, `*`, `/`, `%`.
 
 Operands must be integers. Arrays and addresses are invalid.
 
-The modulus operator `%` is not currently implemented.
+`%` is the modulus (remainder) operator. Integer division truncates toward zero, and the remainder takes the sign of the dividend:
+
+```franko
+7 % 3      // 1
+-7 % 3     // -1
+7 % -3     // 1
+-7 % -3    // -1
+```
 
 Division by zero in a compile-time constant expression is an error; see [Constant Folding](10-constant-folding.md).
 
-This applies even when only the divisor is constant: any expression with a constant zero divisor, such as `x / 0` where `x` is a nonconstant variable, is rejected at compile time.
+This applies to `%` as well as `/`, and applies even when only the divisor is constant: any expression with a constant zero divisor, such as `x / 0` or `x % 0` where `x` is a nonconstant variable, is rejected at compile time.
+
+Each arithmetic operator has a compound assignment form (`+=`, `-=`, `*=`, `/=`, `%=`) with exactly the same operand rules; see [Assignment](14-assignment.md).
 
 ## 17.4 Bitwise Operators
 

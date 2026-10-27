@@ -1,3 +1,5 @@
+import java.math.BigInteger;
+
 /**
  * ============================================================================
  * STATEMENT CHECKER
@@ -183,10 +185,54 @@ public class StatementChecker {
             return;
         }
 
+        if (node.isCompound()) {
+            checkCompoundAssign(node);
+            return;
+        }
+
         types.ensureAssignable(
                 node.target.type,
                 node.value,
                 "Invalid assignment"
+        );
+    }
+
+    /**
+     * Validates a compound assignment:
+     *
+     *     x op= v
+     *
+     * is exactly `x = x op v`, except the target is evaluated only once
+     * (the backend emits the C++ compound assignment directly).
+     *
+     * Two requirements, mirroring plain assignment plus the base binary
+     * operator's rules:
+     *
+     *   - assignable: the target is an addressable, non-void storage-backed
+     *     lvalue (already checked by the caller);
+     *
+     *   - addable: the base operator must accept the operand types. The
+     *     same integral rules as `x op v` apply: both operands integers,
+     *     equal types, or a constant that fits the other side. Those rules
+     *     also give the result exactly the target's type, so no separate
+     *     assignability check of the result is needed.
+     *
+     * Constant zero divisors are rejected for `/=` and `%=`, matching the
+     * plain `x / 0` and `x % 0` rule.
+     */
+    private void checkCompoundAssign(SemanticAssignNode node) {
+        String baseOp = node.baseOp();
+
+        if (("/".equals(baseOp) || "%".equals(baseOp))
+                && node.value.isConstant()
+                && BigInteger.ZERO.equals(node.value.constantValue)) {
+            diagnostics.error("Division by zero in compile-time constant expression");
+        }
+
+        types.ensureSameIntegralTypeOrFit(
+                node.target,
+                node.value,
+                node.op
         );
     }
 

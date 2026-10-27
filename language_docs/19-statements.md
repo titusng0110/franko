@@ -4,6 +4,8 @@ Franko supports the following statements inside function bodies and blocks:
 
 - variable declarations;
 - assignments;
+- compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`);
+- increment and decrement statements (`x++`, `x--`);
 - blocks;
 - `if`;
 - `while`;
@@ -16,6 +18,8 @@ Franko supports the following statements inside function bodies and blocks:
 - array initializer assignments.
 
 Executable statements are not allowed at global scope.
+
+Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so `print(x++)` does not parse. See [Assignment](14-assignment.md).
 
 ## 19.1 Blocks
 
@@ -45,13 +49,17 @@ for (init; condition; update) {
 }
 ```
 
-- `init` and `update` are optional simple statements (declarations, assignments, expression statements, and similar);
+- `init` and `update` are optional simple statements (declarations, assignments, compound assignments, increments, expression statements, and similar);
 - the condition is required and must be an integer expression.
 
 Valid:
 
 ```franko
 for (int32_t i = 0; i < 5; i = i + 1) {
+    print(i)
+}
+
+for (int32_t i = 0; i < 5; i++) {
     print(i)
 }
 

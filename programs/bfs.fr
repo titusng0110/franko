@@ -50,7 +50,7 @@ struct Maze {
 
             $(queue)[$(tail)] = nr * cols + nc
 
-            $(tail) = $(tail) + 1
+            $(tail)++
             if ($(tail) == qCap) {
                 $(tail) = 0
             }
@@ -73,7 +73,7 @@ struct Maze {
         $(self).dist[startR][startC] = 0
         $(queue)[tail] = startR * cols + startC
 
-        tail = tail + 1
+        tail++
         if (tail == qCap) {
             tail = 0
         }
@@ -81,13 +81,13 @@ struct Maze {
         while (head != tail) {
             pos = $(queue)[head]
 
-            head = head + 1
+            head++
             if (head == qCap) {
                 head = 0
             }
 
             r = pos / cols
-            c = pos - r * cols
+            c = pos % cols
 
             if ((r == goalR) && (c == goalC)) {
                 found = 1
@@ -138,10 +138,10 @@ struct Maze {
     }
 
     func printSolvedGrid(addr<Maze> self, addr<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
-        for (uint r = 0; r < rows; r = r + 1) {
+        for (uint r = 0; r < rows; r++) {
             $(line).memcpy(getaddr($(self).grid[r]))
 
-            for (uint c = 0; c < cols; c = c + 1) {
+            for (uint c = 0; c < cols; c++) {
                 if ($(self).path[r][c] != 0) {
                     $(line)[c] = 4
                 }

@@ -188,9 +188,41 @@ class SemanticAssignNode extends SemanticStmtNode {
     public final SemanticExprNode target;
     public final SemanticExprNode value;
 
+    /**
+     * The assignment operator text: "=" for plain assignment, or one of
+     * "+=", "-=", "*=", "/=", "%=" for compound assignment.
+     *
+     * A compound assignment is exactly `target = target <baseOp> value`
+     * except that the target is evaluated only once; the backend emits
+     * the C++ compound assignment directly.
+     */
+    public final String op;
+
     public SemanticAssignNode(SemanticExprNode target, SemanticExprNode value) {
+        this("=", target, value);
+    }
+
+    public SemanticAssignNode(
+            String op,
+            SemanticExprNode target,
+            SemanticExprNode value
+    ) {
+        this.op = Objects.requireNonNull(op);
         this.target = Objects.requireNonNull(target);
         this.value = Objects.requireNonNull(value);
+    }
+
+    /** True when this is a compound assignment (op != "="). */
+    public boolean isCompound() {
+        return !"=".equals(op);
+    }
+
+    /**
+     * The binary operator behind the assignment: "+=" yields "+".
+     * Returns "=" for plain assignment.
+     */
+    public String baseOp() {
+        return isCompound() ? op.substring(0, op.length() - 1) : "=";
     }
 }
 

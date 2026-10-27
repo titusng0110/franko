@@ -12,7 +12,7 @@ struct QuickSort {
     array<int, 50> data
 
     func printArray(addr<QuickSort> self, uint n) -> void {
-        for (uint i = 0; i < n; i = i + 1) {
+        for (uint i = 0; i < n; i++) {
             print($(self).data[i])
         }
 
@@ -51,10 +51,10 @@ struct QuickSort {
         pivot = $(self).data[high]
         i = low
 
-        for (j = low; j < high; j = j + 1) {
+        for (j = low; j < high; j++) {
             if ($(self).data[j] <= pivot) {
                 $(self).swap(i, j)
-                i = i + 1
+                i++
             }
         }
 
@@ -81,10 +81,10 @@ struct QuickSort {
 
         stackLow[top] = 0
         stackHigh[top] = n - 1
-        top = top + 1
+        top++
 
         while (top != 0) {
-            top = top - 1
+            top--
 
             low = stackLow[top]
             high = stackHigh[top]
@@ -95,13 +95,13 @@ struct QuickSort {
                 if (pi > low) {
                     stackLow[top] = low
                     stackHigh[top] = pi - 1
-                    top = top + 1
+                    top++
                 }
 
                 if (pi < high) {
                     stackLow[top] = pi + 1
                     stackHigh[top] = high
-                    top = top + 1
+                    top++
                 }
             }
         }
@@ -112,7 +112,7 @@ struct QuickSort {
     func isSorted(addr<QuickSort> self, uint n) -> byte {
         byte sorted = 1
 
-        for (uint k = 1; k < n; k = k + 1) {
+        for (uint k = 1; k < n; k++) {
             if ($(self).data[k] < $(self).data[k - 1]) {
                 sorted = 0
                 break

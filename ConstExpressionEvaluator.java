@@ -43,7 +43,7 @@ public final class ConstExpressionEvaluator {
             return null;
         }
 
-        if ("/".equals(op) && right.signum() == 0) {
+        if (("/".equals(op) || "%".equals(op)) && right.signum() == 0) {
             ctx.error("Division by zero in constant expression");
             return null;
         }
@@ -94,6 +94,12 @@ public final class ConstExpressionEvaluator {
             case "-" -> left.subtract(right);
             case "*" -> left.multiply(right);
             case "/" -> right.signum() == 0 ? null : left.divide(right);
+            /*
+             * Truncated remainder: BigInteger.remainder keeps the sign of
+             * the dividend, exactly like C++14 integer '%', and pairs with
+             * the truncated '/' above.
+             */
+            case "%" -> right.signum() == 0 ? null : left.remainder(right);
             case "&" -> left.and(right);
             case "|" -> left.or(right);
             case "^" -> left.xor(right);
@@ -181,7 +187,7 @@ public final class ConstExpressionEvaluator {
             BigInteger left = evaluatePure(b.left);
             BigInteger right = evaluatePure(b.right);
 
-            if ("/".equals(b.op) && right.signum() == 0) {
+            if (("/".equals(b.op) || "%".equals(b.op)) && right.signum() == 0) {
                 throw new UnevaluableConstant("Division by zero in constant expression");
             }
 

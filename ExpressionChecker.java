@@ -128,7 +128,7 @@ public class ExpressionChecker {
             Set.of("<<", ">>");
 
     private static final Set<String> ARITHMETIC_OPS =
-            Set.of("+", "-", "*", "/");
+            Set.of("+", "-", "*", "/", "%");
 
     private static final Set<String> BITWISE_OPS =
             Set.of("&", "|", "^");
@@ -288,10 +288,11 @@ public class ExpressionChecker {
             return;
         }
 
-        if (op.equals("/")
-                && node.right.isConstant()
-                && BigInteger.ZERO.equals(node.right.constantValue)) {
-            diagnostics.error("Division by zero in compile-time constant expression");
+        if (op.equals("/") || op.equals("%")) {
+            if (node.right.isConstant()
+                    && BigInteger.ZERO.equals(node.right.constantValue)) {
+                diagnostics.error("Division by zero in compile-time constant expression");
+            }
         }
 
         if (LOGICAL_OPS.contains(op)) {

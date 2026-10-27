@@ -704,10 +704,15 @@ public final class AddressNullStateChecker {
              *   p = getaddr(x);      -> POINTING  (the only certification)
              *   p = q;               -> copy q's exact state
              *   p = <anything else>; -> MAYBE_NULL (unknown provenance)
+             *
+             * Compound assignment never targets an address variable (the
+             * arithmetic operand rules reject address operands), so state
+             * changes only through plain `=`. A compound target that is an
+             * address is already an error; no state is rewritten for it.
              */
             int targetIndex = addrIndexOf(n.target);
 
-            if (targetIndex >= 0) {
+            if (targetIndex >= 0 && !n.isCompound()) {
                 addrState[targetIndex] = addrStateOfValue(n.value);
             }
 

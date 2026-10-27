@@ -9,6 +9,7 @@ Examples:
 ```franko
 1 + 2       // evaluated to 3
 4 * 5       // evaluated to 20
+7 % 3       // evaluated to 1
 10 == 10    // evaluated to 1
 !0          // evaluated to 1
 1 << 3      // evaluated to 8
@@ -22,7 +23,10 @@ Evaluation failures are reported before semantic analysis:
 
 ```franko
 array<int, 10 / 0> bytes;   // invalid: Division by zero in constant expression
+array<int, 10 % 0> bytes;   // invalid: Division by zero in constant expression
 ```
+
+Modulus folding uses truncated division, so the remainder keeps the sign of the dividend, matching the generated C++ (see [Operators](17-operators.md)).
 
 Evaluation is conservative.
 

@@ -23,6 +23,7 @@ See [Structs](25-structs.md) for the complete struct reference.
 This distinction matters for:
 
 - assignment targets;
+- compound assignment targets and `x++` / `x--` targets;
 - `getaddr(...)` operands;
 - array intrinsic receivers;
 - `memcpy` sources;
