@@ -1,0 +1,10 @@
+// Failure fixture: array_length/length_on_ptr
+// An pointer is not an array; deref first.
+func main() -> int32_t {
+    array<int32_t, 3> ys;
+    ys = [1, 2, 3];
+    ptr<array<int32_t, 3>> p;
+    p = getptr(ys);
+    print(p.length());
+    return 0;
+}

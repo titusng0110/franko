@@ -361,7 +361,7 @@ public class SemanticAnalyzer {
          * Register struct names, in every namespace.
          *
          * A placeholder StructSymbol is registered first so struct field
-         * types can reference the struct itself (e.g. addr<Node> next).
+         * types can reference the struct itself (e.g. ptr<Node> next).
          * Fields are resolved into the same symbol in phase 2.
          */
         for (NamespaceProgramItems space : spaces) {
@@ -436,7 +436,7 @@ public class SemanticAnalyzer {
          * Phase 2b:
          * Register method signatures, in every namespace.
          *
-         * Struct names (phase 1) are registered, so `addr<X> self`
+         * Struct names (phase 1) are registered, so `ptr<X> self`
          * resolves. Fields (phase 2) are resolved first so
          * method/field name clashes can be detected at registration.
          */
@@ -665,7 +665,7 @@ public class SemanticAnalyzer {
          */
         if (globalMainCount == 0) {
             symbolTable.error(
-                    "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(addr<array<array<byte>>> <name>) -> int32_t'"
+                    "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t'"
             );
         }
 
@@ -855,7 +855,7 @@ public class SemanticAnalyzer {
          * legal in the global namespace:
          *
          *   func main() -> int32_t
-         *   func main(addr<array<array<byte>>> <name>) -> int32_t
+         *   func main(ptr<array<array<byte>>> <name>) -> int32_t
          *
          * The parameter name of the args form is free. Any other shape
          * cannot be called by a template wrapper, and overloading main
@@ -873,11 +873,11 @@ public class SemanticAnalyzer {
 
             if (globalMainCount > 1) {
                 symbolTable.error(
-                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32_t' or 'func main(addr<array<array<byte>>> <name>) -> int32_t', not both"
+                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t', not both"
                 );
             } else if (!returnsInt32 || (!noArgs && !hasArgsShape)) {
                 symbolTable.error(
-                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' or 'func main(addr<array<array<byte>>> <name>) -> int32_t'"
+                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t'"
                 );
             } else {
                 entryKind = noArgs ? EntryKind.NO_ARGS : EntryKind.ARGS;
@@ -889,17 +889,17 @@ public class SemanticAnalyzer {
 
     /**
      * Whether a type is the entry-point args parameter type:
-     * `addr<array<array<byte>>>`.
+     * `ptr<array<array<byte>>>`.
      *
      * `byte` lexes as `uint8_t`, so the check is structural on
      * UINT8. The parameter name is free and plays no role.
      */
     private static boolean isArgsArrayParamType(SemanticType type) {
-        if (!(type instanceof SemanticAddrType addr)) {
+        if (!(type instanceof SemanticPtrType ptr)) {
             return false;
         }
 
-        if (!(addr.referencedType instanceof SemanticDynamicArrayType outer)) {
+        if (!(ptr.referencedType instanceof SemanticDynamicArrayType outer)) {
             return false;
         }
 
@@ -914,7 +914,7 @@ public class SemanticAnalyzer {
     /**
      * Registers only a method's signature on its owning struct.
      *
-     * The first parameter must be literally `addr<X> self` for the
+     * The first parameter must be literally `ptr<X> self` for the
      * enclosing struct X. Only the first parameter may be named `self`.
      */
     private void registerMethodSignature(
@@ -938,7 +938,7 @@ public class SemanticAnalyzer {
         if (params.isEmpty()) {
             symbolTable.error("Method '"
                     + display
-                    + "' must have 'addr<"
+                    + "' must have 'ptr<"
                     + owner.qualifiedName()
                     + "> self' as its first parameter");
         } else {
@@ -947,7 +947,7 @@ public class SemanticAnalyzer {
             if (!"self".equals(first.name)) {
                 symbolTable.error("Method '"
                         + display
-                        + "' must have 'addr<"
+                        + "' must have 'ptr<"
                         + owner.qualifiedName()
                         + "> self' as its first parameter");
             } else if (!isSelfTypeForOwner(first.type, owner)) {
@@ -955,7 +955,7 @@ public class SemanticAnalyzer {
                         + display
                         + "' has a 'self' parameter of type "
                         + first.type.describe()
-                        + "; it must be addr<"
+                        + "; it must be ptr<"
                         + owner.qualifiedName()
                         + ">");
             }
@@ -980,11 +980,11 @@ public class SemanticAnalyzer {
     }
 
     private boolean isSelfTypeForOwner(SemanticType type, StructSymbol owner) {
-        if (!(type instanceof SemanticAddrType addr)) {
+        if (!(type instanceof SemanticPtrType ptr)) {
             return false;
         }
 
-        if (!(addr.referencedType instanceof SemanticStructType structType)) {
+        if (!(ptr.referencedType instanceof SemanticStructType structType)) {
             return false;
         }
 
@@ -1544,8 +1544,8 @@ public class SemanticAnalyzer {
             );
         }
 
-        if (node instanceof AddrTypeNode a) {
-            return new SemanticAddrType(
+        if (node instanceof PtrTypeNode a) {
+            return new SemanticPtrType(
                     analyzeNormalType(a.referencedType)
             );
         }

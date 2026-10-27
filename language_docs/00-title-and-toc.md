@@ -9,7 +9,7 @@ Franko source
   -> Desugarer
   -> SemanticAnalyzer
   -> LegalityChecker (declarations, expressions, statements, functions, types)
-  -> AddressNullStateChecker
+  -> PointerNullStateChecker
   -> C++14 code generation
 ```
 
@@ -42,7 +42,7 @@ It documents both intended language behavior and important current implementatio
 21. [Array Intrinsics](21-array-intrinsics.md)
 22. [Array Initializer Lists](22-array-initializer-lists.md)
 23. [String Literals](23-string-literals.md)
-24. [Addresses](24-addresses.md)
+24. [Pointers](24-pointers.md)
 25. [Structs](25-structs.md)
 26. [Methods](26-methods.md)
 27. [Memory Safety Checking](27-memory-safety-checking.md)

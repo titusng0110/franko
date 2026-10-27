@@ -1,20 +1,20 @@
 // Recursive merge sort of 50 elements using a helper buffer field.
 //
 // Demonstrates structs with static-array fields, methods with
-// explicit addr<MergeSorter> self receivers, recursive methods,
+// explicit ptr<MergeSorter> self receivers, recursive methods,
 // array initializer lists, and the array intrinsics memset and
 // memcpy(dst, dstStart, srcStart, count).
 //
 // The two working arrays live in the struct, so the whole sort state
 // is one MergeSorter value and no globals are needed. Arrays are not
 // assignable or passable by value, so array data moves through the
-// intrinsics with addresses.
+// intrinsics with pointers.
 
 struct MergeSorter {
     array<int, 50> a
     array<int, 50> b
 
-    func printArray(addr<MergeSorter> self, uint n) -> void {
+    func printArray(ptr<MergeSorter> self, uint n) -> void {
         for (uint i = 0; i < n; i++) {
             print($(self).a[i])
         }
@@ -22,7 +22,7 @@ struct MergeSorter {
         return
     }
 
-    func initData(addr<MergeSorter> self) -> void {
+    func initData(ptr<MergeSorter> self) -> void {
         $(self).a = [
             42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
             21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
@@ -35,7 +35,7 @@ struct MergeSorter {
         return
     }
 
-    func merge(addr<MergeSorter> self, uint low, uint mid, uint high) -> void {
+    func merge(ptr<MergeSorter> self, uint low, uint mid, uint high) -> void {
         uint i = 0
         uint j = 0
         uint k = 0
@@ -70,11 +70,11 @@ struct MergeSorter {
         }
 
         count = high - low + 1
-        $(self).a.memcpy(getaddr($(self).b), low, low, count)
+        $(self).a.memcpy(getptr($(self).b), low, low, count)
         return
     }
 
-    func mergeSort(addr<MergeSorter> self, uint low, uint high) -> void {
+    func mergeSort(ptr<MergeSorter> self, uint low, uint high) -> void {
         uint mid = 0
 
         if (low < high) {
@@ -88,7 +88,7 @@ struct MergeSorter {
         return
     }
 
-    func isSorted(addr<MergeSorter> self, uint n) -> byte {
+    func isSorted(ptr<MergeSorter> self, uint n) -> byte {
         byte sorted = 1
 
         for (uint k = 1; k < n; k++) {

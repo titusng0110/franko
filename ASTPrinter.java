@@ -360,8 +360,8 @@ public class ASTPrinter {
             }
         }
 
-        else if (node instanceof GetAddrNode n) {
-            System.out.println(pad + "GetAddr");
+        else if (node instanceof GetPtrNode n) {
+            System.out.println(pad + "GetPtr");
 
             System.out.println(pad + "  target:");
             print(n.target, indent + 2);
@@ -408,8 +408,8 @@ public class ASTPrinter {
             print(n.sizeExpr, indent + 2);
         }
 
-        else if (node instanceof AddrTypeNode n) {
-            System.out.println(pad + "AddrType");
+        else if (node instanceof PtrTypeNode n) {
+            System.out.println(pad + "PtrType");
             System.out.println(pad + "  referencedType:");
             print(n.referencedType, indent + 2);
         }
@@ -464,8 +464,8 @@ public class ASTPrinter {
                     + ">";
         }
 
-        if (type instanceof AddrTypeNode t) {
-            return "addr<" + typeToString(t.referencedType) + ">";
+        if (type instanceof PtrTypeNode t) {
+            return "ptr<" + typeToString(t.referencedType) + ">";
         }
 
         if (type instanceof StructTypeNode t) {
@@ -572,8 +572,8 @@ public class ASTPrinter {
             return sb.toString();
         }
 
-        if (expr instanceof GetAddrNode n) {
-            return "getaddr(" + exprToInlineString(n.target) + ")";
+        if (expr instanceof GetPtrNode n) {
+            return "getptr(" + exprToInlineString(n.target) + ")";
         }
 
         if (expr instanceof DerefNode n) {

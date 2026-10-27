@@ -31,7 +31,7 @@ import java.util.Set;
  *   - expression types are already inferred,
  *   - invalid operators were rejected,
  *   - invalid assignments were rejected,
- *   - invalid address arithmetic was rejected,
+ *   - invalid pointer arithmetic was rejected,
  *   - invalid array intrinsic usage was rejected,
  *   - invalid function return usage was rejected.
  *
@@ -70,12 +70,12 @@ import java.util.Set;
  * resolution in C++.
  *
  * ----------------------------------------------------------------------------
- * ADDRESS REPRESENTATION
+ * POINTER REPRESENTATION
  * ----------------------------------------------------------------------------
  *
  * Franko:
  *
- *   addr<T>
+ *   ptr<T>
  *
  * is emitted as:
  *
@@ -83,7 +83,7 @@ import java.util.Set;
  *
  * Franko:
  *
- *   getaddr(x)
+ *   getptr(x)
  *
  * is emitted as:
  *
@@ -126,8 +126,8 @@ import java.util.Set;
  *   target.uninit()                      -> SemanticArrayIntrinsicCallNode UNINIT
  *   target.memset(value)                 -> SemanticArrayIntrinsicCallNode MEMSET
  *   target.memset(value, start, count)   -> SemanticArrayIntrinsicCallNode MEMSET
- *   target.memcpy(sourceAddr)            -> SemanticArrayIntrinsicCallNode MEMCPY
- *   target.memcpy(sourceAddr, dstStart, srcStart, count)
+ *   target.memcpy(sourcePtr)            -> SemanticArrayIntrinsicCallNode MEMCPY
+ *   target.memcpy(sourcePtr, dstStart, srcStart, count)
  *                                      -> SemanticArrayIntrinsicCallNode MEMCPY
  *   target.memmove(dstStart, srcStart, count)
  *                                      -> SemanticArrayIntrinsicCallNode MEMMOVE
@@ -381,7 +381,7 @@ public class Cpp14Codegen {
 
         /*
          * 1. Forward-declare every struct, grouped by namespace, so
-         *    addr<Struct> fields, global pointer types, and function
+         *    ptr<Struct> fields, global pointer types, and function
          *    signatures can name structs defined later.
          */
         for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
@@ -416,7 +416,7 @@ public class Cpp14Codegen {
          * because they can be referenced in global variable types and
          * function signatures. A struct used by value inside another
          * struct must be defined first, so declarations are topologically
-         * sorted over by-value field dependencies. addr fields and
+         * sorted over by-value field dependencies. ptr fields and
          * dynamic-array fields are pointer-backed and impose no ordering
          * constraint.
          *
@@ -830,9 +830,9 @@ public class Cpp14Codegen {
         if (field.foldedDefault != null) {
             sb.append(" = ");
             sb.append(emitBigIntegerLiteral(field.foldedDefault));
-        } else if (field.type instanceof SemanticAddrType) {
+        } else if (field.type instanceof SemanticPtrType) {
             /*
-             * Address fields are guaranteed null-initialized. C++ default
+             * Pointer fields are guaranteed null-initialized. C++ default
              * member initializers apply whenever a struct instance is
              * created without explicit field initialization.
              */
@@ -853,7 +853,7 @@ public class Cpp14Codegen {
      *   - a field whose type is a struct,
      *   - a field whose type is a static array of structs (recursively).
      *
-     * addr fields and dynamic-array fields are pointer-backed and impose no
+     * ptr fields and dynamic-array fields are pointer-backed and impose no
      * ordering constraint.
      *
      * By-value cycles are rejected by DeclarationChecker before codegen, so a
@@ -1115,11 +1115,11 @@ public class Cpp14Codegen {
         }
 
         /*
-         * Address declarations are guaranteed null-initialized, unlike
+         * Pointer declarations are guaranteed null-initialized, unlike
          * ordinary declarations which are left uninitialized.
          */
         if (initializer.isEmpty()
-                && sym.type instanceof SemanticAddrType) {
+                && sym.type instanceof SemanticPtrType) {
             initializer = " = nullptr";
         }
 
@@ -1488,8 +1488,8 @@ public class Cpp14Codegen {
             return emitArrayIntrinsicCall(intrinsic);
         }
 
-        if (node instanceof SemanticGetAddrNode getAddr) {
-            return emitGetAddr(getAddr);
+        if (node instanceof SemanticGetPtrNode getPtr) {
+            return emitGetPtr(getPtr);
         }
 
         if (node instanceof SemanticDerefNode deref) {
@@ -1788,11 +1788,11 @@ public class Cpp14Codegen {
             case MEMCPY -> {
                 if (index == 0) {
                     /*
-                     * memcpy source is addr<array<...>>.
+                     * memcpy source is ptr<array<...>>.
                      *
                      * Example:
                      *
-                     *   dst.memcpy(getaddr(src))
+                     *   dst.memcpy(getptr(src))
                      *
                      * emits:
                      *
@@ -1849,9 +1849,9 @@ public class Cpp14Codegen {
         }
     }
 
-    private String emitGetAddr(SemanticGetAddrNode node) {
+    private String emitGetPtr(SemanticGetPtrNode node) {
         /*
-         * Franko getaddr(lvalue) -> C++ &lvalue
+         * Franko getptr(lvalue) -> C++ &lvalue
          */
         return "(&" + emitLValue(node.target) + ")";
     }
@@ -1958,8 +1958,8 @@ public class Cpp14Codegen {
                     + ">";
         }
 
-        if (type instanceof SemanticAddrType addr) {
-            return emitType(addr.referencedType) + "*";
+        if (type instanceof SemanticPtrType ptr) {
+            return emitType(ptr.referencedType) + "*";
         }
 
         if (type instanceof SemanticStructType struct) {
@@ -2233,8 +2233,8 @@ public class Cpp14Codegen {
         }
 
         /*
-         * Do not cast arrays or addresses unless Franko later defines explicit
-         * conversions for them. Address arguments/returns are already strongly
+         * Do not cast arrays or pointers unless Franko later defines explicit
+         * conversions for them. Pointer arguments/returns are already strongly
          * typed and checked exactly.
          */
         return raw;
@@ -2249,7 +2249,7 @@ public class Cpp14Codegen {
         }
 
         /*
-         * Do not cast addresses or arrays.
+         * Do not cast pointers or arrays.
          */
         return raw;
     }
@@ -2275,16 +2275,16 @@ public class Cpp14Codegen {
             return emitted;
         }
 
-        if (expr.type instanceof SemanticAddrType) {
+        if (expr.type instanceof SemanticPtrType) {
             /*
-             * Avoid accidental char-pointer string printing for addresses.
+             * Avoid accidental char-pointer string printing for pointers.
              */
             return "static_cast<const void*>(" + emitted + ")";
         }
 
         if (expr instanceof SemanticNullLiteralNode) {
             /*
-             * print(null) prints the null address as a pointer value.
+             * print(null) prints the null pointer as a pointer value.
              */
             return "static_cast<const void*>(" + emitted + ")";
         }

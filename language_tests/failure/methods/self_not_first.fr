@@ -2,7 +2,7 @@
 // `self` must be the first parameter (doc 26.2).
 struct X {
     int32_t y = 0
-    func bad(int32_t v, addr<X> self) -> void {
+    func bad(int32_t v, ptr<X> self) -> void {
         return
     }
 }

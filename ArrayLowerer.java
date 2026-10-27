@@ -343,22 +343,22 @@ public final class ArrayLowerer {
     /**
      * Lowers:
      *
-     *   target.memcpy(sourceAddr)
-     *   target.memcpy(sourceAddr, dstStart, srcStart, count)
+     *   target.memcpy(sourcePtr)
+     *   target.memcpy(sourcePtr, dstStart, srcStart, count)
      *
      * The source argument is intentionally analyzed as a normal expression.
      *
      * Franko arrays are not passed as values. Therefore memcpy source should be
-     * an address to an array:
+     * an pointer to an array:
      *
-     *   addr<array<T>>
-     *   addr<array<T, N>>
+     *   ptr<array<T>>
+     *   ptr<array<T, N>>
      *
      * Example source-level shape:
      *
-     *   dst.memcpy(getaddr(src));
+     *   dst.memcpy(getptr(src));
      *
-     * Full validation that sourceAddr is addr<array<...>> belongs in
+     * Full validation that sourcePtr is ptr<array<...>> belongs in
      * ExpressionChecker.
      */
     private SemanticArrayIntrinsicCallNode lowerMemcpy(
@@ -381,12 +381,12 @@ public final class ArrayLowerer {
                 "memcpy target"
         );
 
-        SemanticExprNode sourceAddr =
+        SemanticExprNode sourcePtr =
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
         List<SemanticExprNode> args = new ArrayList<>();
 
-        args.add(sourceAddr);
+        args.add(sourcePtr);
 
         if (call.args.size() == 4) {
             SemanticExprNode dstStart =

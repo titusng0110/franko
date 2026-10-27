@@ -995,10 +995,10 @@ public final class SymbolTable {
         }
 
         /*
-         * A null literal argument applies only to address parameters.
+         * A null literal argument applies only to pointer parameters.
          */
         if (arg.type instanceof SemanticNullType) {
-            return parameterType instanceof SemanticAddrType;
+            return parameterType instanceof SemanticPtrType;
         }
 
         /*

@@ -8,7 +8,7 @@ func main() -> int32_t {
     array<byte> buf;
     buf.init(4);
     buf.memset(0);
-    int64_t n = os::posix::read(0, getaddr(buf), 99);
+    int64_t n = os::posix::read(0, getptr(buf), 99);
     print(n);
     buf.uninit();
     return 0;

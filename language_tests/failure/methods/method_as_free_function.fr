@@ -2,12 +2,12 @@
 // Methods are never callable as free functions (doc 26.3).
 struct X {
     int32_t y = 0
-    func foo(addr<X> self) -> void {
+    func foo(ptr<X> self) -> void {
         return
     }
 }
 func main() -> int32_t {
     X s
-    foo(getaddr(s))
+    foo(getptr(s))
     return 0
 }

@@ -1,7 +1,7 @@
 // Iterative quicksort of 50 elements using an explicit stack.
 //
 // Demonstrates structs with a static-array field, methods with
-// explicit addr<QuickSort> self receivers, array initializer lists,
+// explicit ptr<QuickSort> self receivers, array initializer lists,
 // array.memset / array.memcpy, and while-loop-based partitioning.
 //
 // Arrays live in the struct because Franko arrays are not directly
@@ -11,7 +11,7 @@
 struct QuickSort {
     array<int, 50> data
 
-    func printArray(addr<QuickSort> self, uint n) -> void {
+    func printArray(ptr<QuickSort> self, uint n) -> void {
         for (uint i = 0; i < n; i++) {
             print($(self).data[i])
         }
@@ -19,7 +19,7 @@ struct QuickSort {
         return
     }
 
-    func initData(addr<QuickSort> self) -> void {
+    func initData(ptr<QuickSort> self) -> void {
         array<int, 50> source
 
         source = [
@@ -30,11 +30,11 @@ struct QuickSort {
             4, 53, 68, 10, 97, 26, 41, 80, 22, 56
         ]
 
-        $(self).data.memcpy(getaddr(source))
+        $(self).data.memcpy(getptr(source))
         return
     }
 
-    func swap(addr<QuickSort> self, uint a, uint b) -> void {
+    func swap(ptr<QuickSort> self, uint a, uint b) -> void {
         int temp = 0
 
         temp = $(self).data[a]
@@ -43,7 +43,7 @@ struct QuickSort {
         return
     }
 
-    func partition(addr<QuickSort> self, uint low, uint high) -> uint {
+    func partition(ptr<QuickSort> self, uint low, uint high) -> uint {
         int pivot = 0
         uint i = 0
         uint j = 0
@@ -63,7 +63,7 @@ struct QuickSort {
         return i
     }
 
-    func quicksort(addr<QuickSort> self, uint n) -> void {
+    func quicksort(ptr<QuickSort> self, uint n) -> void {
         array<uint, 128> stackLow
         array<uint, 128> stackHigh
 
@@ -109,7 +109,7 @@ struct QuickSort {
         return
     }
 
-    func isSorted(addr<QuickSort> self, uint n) -> byte {
+    func isSorted(ptr<QuickSort> self, uint n) -> byte {
         byte sorted = 1
 
         for (uint k = 1; k < n; k++) {

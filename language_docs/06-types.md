@@ -7,7 +7,7 @@ primitive integers
 structs
 dynamic arrays
 static arrays
-typed addresses
+typed pointers
 function return-only void
 ```
 

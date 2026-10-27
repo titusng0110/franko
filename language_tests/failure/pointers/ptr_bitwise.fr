@@ -1,0 +1,8 @@
+// Failure fixture: pointers/ptr_bitwise
+// Pointers cannot participate in bitwise operations: p & 1 is invalid.
+func main() -> int32_t {
+    int32_t x = 0
+    ptr<int32_t> p = getptr(x)
+    print(p & 1)
+    return 0
+}

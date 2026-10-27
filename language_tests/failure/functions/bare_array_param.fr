@@ -1,5 +1,5 @@
 // Failure fixture: functions/bare_array_param
-// Bare array types are not passable: an array parameter must use addr<array<T>> and getaddr at the call site.
+// Bare array types are not passable: an array parameter must use ptr<array<T>> and getptr at the call site.
 
 func f(array<int32_t> xs) -> void {
     return;

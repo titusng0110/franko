@@ -1,8 +1,0 @@
-// Failure fixture: addresses/addr_bitwise
-// Addresses cannot participate in bitwise operations: p & 1 is invalid.
-func main() -> int32_t {
-    int32_t x = 0
-    addr<int32_t> p = getaddr(x)
-    print(p & 1)
-    return 0
-}

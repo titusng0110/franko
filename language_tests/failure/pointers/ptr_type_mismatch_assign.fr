@@ -1,0 +1,10 @@
+// Failure fixture: pointers/ptr_type_mismatch_assign
+// Pointer assignment requires exact type equality: an ptr<uint8_t>
+// cannot be assigned to an ptr<int32_t>.
+func main() -> int32_t {
+    uint8_t b = 7
+    ptr<uint8_t> pb = getptr(b)
+    int32_t x = 0
+    ptr<int32_t> px = pb
+    return 0
+}

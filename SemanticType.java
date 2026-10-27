@@ -15,7 +15,7 @@ abstract class SemanticType {
      * This spells the type exactly as it is written in source:
      * primitives as `int8_t`/`uint64_t`, `void` as `void`,
      * `array<E>` / `array<E,N>` (no space, canonical folded decimal
-     * size), `addr<T>`, and structs by qualified name (`a::b::X`).
+     * size), `ptr<T>`, and structs by qualified name (`a::b::X`).
      *
      * It is independent of describe(), which is diagnostic text and
      * may drift. Function types have no source spelling as a
@@ -108,7 +108,7 @@ final class SemanticPrimitiveType extends SemanticType {
  *
  *   void x;              // invalid
  *   array<void> xs;      // invalid
- *   addr<void> p;        // invalid
+ *   ptr<void> p;        // invalid
  *
  * The grammar already prevents most of these, but semantic analysis should
  * still treat void specially and defensively.
@@ -273,29 +273,29 @@ final class SemanticStaticArrayType extends SemanticType {
 }
 
 // ============================================================
-// Address Types
+// Pointer Types
 // ============================================================
 
-final class SemanticAddrType extends SemanticType {
+final class SemanticPtrType extends SemanticType {
     final SemanticType referencedType;
 
-    SemanticAddrType(SemanticType referencedType) {
+    SemanticPtrType(SemanticType referencedType) {
         this.referencedType = Objects.requireNonNull(referencedType);
     }
 
     @Override
     public String describe() {
-        return "addr<" + referencedType.describe() + ">";
+        return "ptr<" + referencedType.describe() + ">";
     }
 
     @Override
     public String mangleKey() {
-        return "addr<" + referencedType.mangleKey() + ">";
+        return "ptr<" + referencedType.mangleKey() + ">";
     }
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof SemanticAddrType other)) {
+        if (!(obj instanceof SemanticPtrType other)) {
             return false;
         }
 
@@ -304,7 +304,7 @@ final class SemanticAddrType extends SemanticType {
 
     @Override
     public int hashCode() {
-        return Objects.hash(SemanticAddrType.class, referencedType);
+        return Objects.hash(SemanticPtrType.class, referencedType);
     }
 }
 
@@ -315,9 +315,9 @@ final class SemanticAddrType extends SemanticType {
 /**
  * The type of the 'null' literal.
  *
- * 'null' is only valid where an address type is expected:
+ * 'null' is only valid where an pointer type is expected:
  *
- *   addr<int32_t> p = null;
+ *   ptr<int32_t> p = null;
  *   p == null
  *   p != null
  *   p = null
@@ -446,7 +446,7 @@ final class SemanticFunctionType extends SemanticType {
      * declared parameter types in order (including `self` for
      * methods), then the return type, each spelled via mangleKey().
      *
-     * Example: `fn(int32_t,addr<std::X>)->void`.
+     * Example: `fn(int32_t,ptr<std::X>)->void`.
      */
     public String signatureKey() {
         StringBuilder sb = new StringBuilder();

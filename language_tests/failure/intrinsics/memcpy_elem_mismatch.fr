@@ -3,6 +3,6 @@
 func main() -> int32_t {
     array<int32_t, 4> a;
     array<uint8_t, 4> b;
-    a.memcpy(getaddr(b));
+    a.memcpy(getptr(b));
     return 0;
 }

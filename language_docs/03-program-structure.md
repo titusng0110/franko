@@ -82,7 +82,7 @@ func main() -> int32_t {
     return 0;
 }
 
-func main(addr<array<array<byte>>> args) -> int32_t {
+func main(ptr<array<array<byte>>> args) -> int32_t {
     return 0;
 }
 ```

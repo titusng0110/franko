@@ -29,10 +29,10 @@
 //   - call v.init once before use;
 //   - call v.uninit when done (frees element storage).
 //
-// A struct containing a dynamic array is address-only: it cannot be
-// passed or returned by value. Methods take addr<Vector> self and are
+// A struct containing a dynamic array is pointer-only: it cannot be
+// passed or returned by value. Methods take ptr<Vector> self and are
 // called on a struct lvalue (v.push(7)); the compiler synthesizes
-// getaddr(v) as self.
+// getptr(v) as self.
 // ============================================================
 
 namespace std {
@@ -43,7 +43,7 @@ namespace std {
 
         // Allocate `capacity` slots. Returns 0 on success, -1 on failure.
         // A zero capacity is rejected without touching the array.
-        func init(addr<Vector> self, uint32_t capacity) -> int32_t {
+        func init(ptr<Vector> self, uint32_t capacity) -> int32_t {
             if (capacity == 0) {
                 return -1
             }
@@ -59,7 +59,7 @@ namespace std {
         // Push one value, growing the storage when full (4 slots first,
         // then doubling). Works even if init was never called.
         // Returns 0 on success, -1 on allocation failure.
-        func push(addr<Vector> self, int32_t value) -> int32_t {
+        func push(ptr<Vector> self, int32_t value) -> int32_t {
             if ($(self).len >= $(self).cap) {
                 uint32_t newCap = 4
                 if ($(self).cap != 0) {
@@ -83,7 +83,7 @@ namespace std {
 
         // Pop the top value into `out`. Returns 0 on success, -1 when the
         // vector is empty or `out` is null.
-        func pop(addr<Vector> self, addr<int32_t> out) -> int32_t {
+        func pop(ptr<Vector> self, ptr<int32_t> out) -> int32_t {
             if (out == null) {
                 return -1
             }
@@ -96,28 +96,28 @@ namespace std {
         }
 
         // Read element `index`. The caller must ensure index < len.
-        func get(addr<Vector> self, uint32_t index) -> int32_t {
+        func get(ptr<Vector> self, uint32_t index) -> int32_t {
             return $(self).data[index]
         }
 
         // Write element `index`. The caller must ensure index < len.
-        func set(addr<Vector> self, uint32_t index, int32_t value) -> void {
+        func set(ptr<Vector> self, uint32_t index, int32_t value) -> void {
             $(self).data[index] = value
             return
         }
 
         // Number of live elements.
-        func length(addr<Vector> self) -> uint32_t {
+        func length(ptr<Vector> self) -> uint32_t {
             return $(self).len
         }
 
         // Number of allocated slots.
-        func capacity(addr<Vector> self) -> uint32_t {
+        func capacity(ptr<Vector> self) -> uint32_t {
             return $(self).cap
         }
 
         // Free element storage and reset to empty.
-        func uninit(addr<Vector> self) -> void {
+        func uninit(ptr<Vector> self) -> void {
             $(self).data.uninit()
             $(self).len = 0
             $(self).cap = 0

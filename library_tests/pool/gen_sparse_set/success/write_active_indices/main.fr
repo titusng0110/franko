@@ -20,22 +20,22 @@ func main() -> int32_t {
     std::GenerationalSparseSetAllocator a;
     array<uint32_t> out;
     out.init(4);
-    print(a.write_active_indices(getaddr(out)));
+    print(a.write_active_indices(getptr(out)));
     print(a.init(4));
     uint32_t i = a.new_index();
     uint32_t j = a.new_index();
     uint32_t k = a.new_index();
-    print(a.write_active_indices(getaddr(out)));
+    print(a.write_active_indices(getptr(out)));
     print(out[0], out[1], out[2]);
     print(a.free_index(i));
-    print(a.write_active_indices(getaddr(out)));
+    print(a.write_active_indices(getptr(out)));
     print(out[0], out[1]);
     array<uint32_t> small;
     small.init(1);
-    print(a.write_active_indices(getaddr(small)));
+    print(a.write_active_indices(getptr(small)));
     print(a.write_active_indices(null));
     print(a.uninit());
-    print(a.write_active_indices(getaddr(out)));
+    print(a.write_active_indices(getptr(out)));
     out.uninit();
     small.uninit();
     return 0

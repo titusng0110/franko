@@ -514,7 +514,7 @@ public class Desugarer {
             return usesInferredSize(d.elementType);
         }
 
-        if (type instanceof AddrTypeNode a) {
+        if (type instanceof PtrTypeNode a) {
             return usesInferredSize(a.referencedType);
         }
 
@@ -525,7 +525,7 @@ public class Desugarer {
      * Returns true when every array level in the type is static.
      *
      * `?` inference requires a fully static nest: a dynamic array level
-     * (or an addr level) anywhere in the type rejects inference.
+     * (or an ptr level) anywhere in the type rejects inference.
      */
     private boolean isFullyStaticArrayNest(TypeNode type) {
         if (type instanceof StaticArrayTypeNode s) {
@@ -540,7 +540,7 @@ public class Desugarer {
             return false;
         }
 
-        if (type instanceof AddrTypeNode) {
+        if (type instanceof PtrTypeNode) {
             return false;
         }
 
@@ -808,8 +808,8 @@ public class Desugarer {
             );
         }
 
-        if (type instanceof AddrTypeNode a) {
-            return new AddrTypeNode(
+        if (type instanceof PtrTypeNode a) {
+            return new PtrTypeNode(
                 replaceInferredSizesWithFallback(a.referencedType)
             );
         }
@@ -1259,7 +1259,7 @@ public class Desugarer {
 
         /*
          * Null literals are leaf expressions that require no desugaring.
-         * Semantic analysis checks that null is only used in address contexts.
+         * Semantic analysis checks that null is only used in pointer contexts.
          */
         if (expr instanceof NullNode) {
             return expr;
@@ -1317,10 +1317,10 @@ public class Desugarer {
             );
         }
 
-        if (expr instanceof GetAddrNode) {
-            GetAddrNode n = (GetAddrNode) expr;
+        if (expr instanceof GetPtrNode) {
+            GetPtrNode n = (GetPtrNode) expr;
 
-            return new GetAddrNode(
+            return new GetPtrNode(
                 desugarLValue(n.target)
             );
         }
@@ -1572,10 +1572,10 @@ public class Desugarer {
             return desugarNdArrayType((NdArrayTypeNode) type);
         }
 
-        if (type instanceof AddrTypeNode) {
-            AddrTypeNode n = (AddrTypeNode) type;
+        if (type instanceof PtrTypeNode) {
+            PtrTypeNode n = (PtrTypeNode) type;
 
-            return new AddrTypeNode(
+            return new PtrTypeNode(
                 desugarType(n.referencedType)
             );
         }

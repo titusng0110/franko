@@ -35,7 +35,7 @@ Runs the full language test suite:
     without breaking the suite.
 
 Success golden outputs must be deterministic. Never put values whose
-rendering varies across runs or platforms (such as live addresses) in a
+rendering varies across runs or platforms (such as live pointers) in a
 .expected file; cover those through the runtime category, which is judged
 by exit status only.
 

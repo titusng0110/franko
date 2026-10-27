@@ -1,7 +1,7 @@
 // ============================================================
 // LIBRARY TEST (os/posix): read from stdin
 // ============================================================
-// Covers: os::posix::read(fd, addr<array<byte>>, count) with stdin
+// Covers: os::posix::read(fd, ptr<array<byte>>, count) with stdin
 // fed from main.stdin ("ABC\n"). Reads up to 8 bytes, prints the
 // count and the first three bytes, then writes those three bytes
 // back to stdout and prints that count.
@@ -17,14 +17,14 @@ func main() -> int32_t {
     array<byte> buf;
     buf.init(8);
     buf.memset(0);
-    int64_t n = os::posix::read(os::posix::STDIN_FILENO, getaddr(buf), 8);
+    int64_t n = os::posix::read(os::posix::STDIN_FILENO, getptr(buf), 8);
     print(n);
     uint32_t i = 0;
     while (i < 3) {
         print(buf[i]);
         i = i + 1;
     }
-    int64_t m = os::posix::write(1, getaddr(buf), 3);
+    int64_t m = os::posix::write(1, getptr(buf), 3);
     print(m);
     buf.uninit();
     return 0;

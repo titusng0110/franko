@@ -35,7 +35,7 @@ func main() -> int32_t {
     print(c.n); // 42
 
     int32_t v = 5;
-    addr<int32_t> p = getaddr(v);
+    ptr<int32_t> p = getptr(v);
     $(p) += 100;
     $(p) /= 3;
     print(v); // (5 + 100) / 3 = 35

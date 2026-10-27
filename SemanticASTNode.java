@@ -771,13 +771,13 @@ class SemanticFunctionCallNode extends SemanticExprNode {
 }
 
 // ============================================================
-// Address / Pointer Expressions
+// Pointer / Pointer Expressions
 // ============================================================
 
-class SemanticGetAddrNode extends SemanticExprNode {
+class SemanticGetPtrNode extends SemanticExprNode {
     public final SemanticExprNode target;
 
-    public SemanticGetAddrNode(SemanticType type, SemanticExprNode target) {
+    public SemanticGetPtrNode(SemanticType type, SemanticExprNode target) {
         super(type, null);
         this.target = Objects.requireNonNull(target);
     }

@@ -37,7 +37,7 @@ arrs[i]
 Examples that are not storage-backed array targets:
 
 ```franko
-getaddr(arr)
+getptr(arr)
 x + y
 1
 ```
@@ -121,7 +121,7 @@ Current memsetable types:
 | static arrays of memsetable elements | yes |
 | structs whose fields are all memsetable, recursively | yes |
 | dynamic arrays | no |
-| addresses | no |
+| pointers | no |
 
 ## 21.6 `memcpy`
 
@@ -137,7 +137,7 @@ target.memcpy(source, dstStart, srcStart, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be an **address to an array** (`addr<array<T>>` or `addr<array<T, N>>`), typically produced with `getaddr(...)`; passing an array value directly is invalid;
+- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`; passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
@@ -175,7 +175,7 @@ Current memcpyable types:
 | Element type | Memcpyable? |
 |---|---|
 | primitive integers | yes |
-| addresses | yes |
+| pointers | yes |
 | static arrays of memcpyable elements | yes |
 | structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |

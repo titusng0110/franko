@@ -1,1 +1,1 @@
-Method 'Y.bad' has a 'self' parameter of type addr<X>; it must be addr<Y>
+Method 'Y.bad' has a 'self' parameter of type ptr<X>; it must be ptr<Y>

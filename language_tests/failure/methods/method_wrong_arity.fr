@@ -2,7 +2,7 @@
 // Calling a method with the wrong number of arguments is rejected (doc 26.3).
 struct X {
     int32_t y = 0
-    func foo(addr<X> self, int32_t a) -> void {
+    func foo(ptr<X> self, int32_t a) -> void {
         return
     }
 }

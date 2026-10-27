@@ -25,7 +25,7 @@ import java.util.*;
  *   - lowering structural constructs:
  *       - array indexing
  *       - unary and binary operations
- *       - address-of and dereference
+ *       - pointer-of and dereference
  *   - validating structural requirements for lvalues where needed.
  *
  * ----------------------------------------------------------------------------
@@ -239,14 +239,14 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (node instanceof GetAddrNode n) {
+        if (node instanceof GetPtrNode n) {
             SemanticExprNode target = analyzeRequiredLValueExpr(
                     n.target,
-                    "getaddr(...) target"
+                    "getptr(...) target"
             );
 
-            return new SemanticGetAddrNode(
-                    new SemanticAddrType(target.type),
+            return new SemanticGetPtrNode(
+                    new SemanticPtrType(target.type),
                     target
             );
         }
@@ -256,12 +256,12 @@ public final class ExpressionAnalyzer {
 
             SemanticType refType = FALLBACK_TYPE;
 
-            if (expr.type instanceof SemanticAddrType addrT) {
-                refType = addrT.referencedType;
+            if (expr.type instanceof SemanticPtrType ptrT) {
+                refType = ptrT.referencedType;
             } else if (expr.type instanceof SemanticNullType) {
                 ctx.error("Cannot dereference null");
             } else {
-                ctx.error("Cannot dereference non-address type");
+                ctx.error("Cannot dereference non-pointer type");
             }
 
             return new SemanticDerefNode(refType, expr);
@@ -503,7 +503,7 @@ public final class ExpressionAnalyzer {
          * literals here. Downstream this means conditions like
          * `os::IS_WINDOWS == 1` carry a constant value (so the backend
          * can prune the dead branch), and uses that would mutate or
-         * observe the global (assignment, getaddr) are rejected by the
+         * observe the global (assignment, getptr) are rejected by the
          * existing literal checks with no special-casing.
          */
         if (sym instanceof GlobalVariableSymbol global
@@ -675,10 +675,10 @@ public final class ExpressionAnalyzer {
      *   receiver.name(args...)
      *
      * into an ordinary function call to the resolved MethodSymbol with a
-     * synthesized `getaddr(receiver)` first argument for `self`.
+     * synthesized `getptr(receiver)` first argument for `self`.
      *
      * The receiver must be a struct-valued storage-backed lvalue
-     * (a variable, field, array element, or $(...) chain). Address
+     * (a variable, field, array element, or $(...) chain). Pointer
      * receivers require an explicit deref: `$(p).method(...)`.
      */
     private SemanticExprNode analyzeMethodCallExpr(
@@ -689,14 +689,14 @@ public final class ExpressionAnalyzer {
 
         if (!(target.type instanceof SemanticStructType structType)
                 || structType.structSymbol == null) {
-            if (target.type instanceof SemanticAddrType) {
+            if (target.type instanceof SemanticPtrType) {
                 ctx.error("Method call '"
                         + mac.memberName
                         + "' is only valid on struct values, got type "
                         + target.type.describe()
                         + "; use $(p)."
                         + mac.memberName
-                        + "(...) for address receivers");
+                        + "(...) for pointer receivers");
             } else {
                 ctx.error("Method call '"
                         + mac.memberName
@@ -733,8 +733,8 @@ public final class ExpressionAnalyzer {
             userArgTypes.add(loweredArg.type);
         }
 
-        SemanticGetAddrNode selfArg = new SemanticGetAddrNode(
-                new SemanticAddrType(target.type),
+        SemanticGetPtrNode selfArg = new SemanticGetPtrNode(
+                new SemanticPtrType(target.type),
                 target
         );
 

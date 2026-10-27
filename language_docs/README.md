@@ -31,7 +31,7 @@ The cleaned section ordering is:
 21. Array Intrinsics
 22. Array Initializer Lists
 23. String Literals
-24. Addresses
+24. Pointers
 25. Structs
 26. Methods
 27. Memory Safety Checking

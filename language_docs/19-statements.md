@@ -168,10 +168,10 @@ print();              // prints a bare newline
 
 The checker validates print arguments as expressions usable where a value is required (in particular, `void` expressions are rejected), but it does not impose a strict printable-type policy.
 
-Current print limitation: only integer primitives and addresses are printable. The C++14 backend can print:
+Current print limitation: only integer primitives and pointers are printable. The C++14 backend can print:
 
 - integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
-- addresses, including the `null` address (printed through `const void*`).
+- pointers, including the `null` pointer (printed through `const void*`).
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
@@ -188,6 +188,6 @@ Array intrinsic calls are special expression-statement forms:
 ```franko
 arr(10);
 arr.memset(0);
-arr.memcpy(getaddr(other));
+arr.memcpy(getptr(other));
 arr.uninit();
 ```

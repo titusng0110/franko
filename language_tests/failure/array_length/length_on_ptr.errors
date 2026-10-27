@@ -1,0 +1,1 @@
+length() receiver must have array type, got ptr<array<INT32, 3>>

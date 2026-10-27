@@ -27,14 +27,14 @@ if (arr) {
 Invalid:
 
 ```franko
-addr<int32_t> p;
+ptr<int32_t> p;
 
 if (p) {
     print(1);
 }
 ```
 
-To test addresses, compare them explicitly:
+To test pointers, compare them explicitly:
 
 ```franko
 if (p == q) {

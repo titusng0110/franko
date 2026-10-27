@@ -1,0 +1,6 @@
+// Failure fixture: size_inference/question_in_ptr
+// `?` under ptr is not a fully static nest.
+func main() -> int32_t {
+    ptr<array<int32_t, ?>> p;
+    return 0;
+}

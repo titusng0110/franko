@@ -11,7 +11,7 @@ Franko source
   -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
   -> SemanticAnalyzer (validation of evaluated values, no re-folding, entry-point selection)
   -> LegalityChecker
-  -> AddressNullStateChecker
+  -> PointerNullStateChecker
   -> C++14 code generation
   -> program template wrapper (entry-point call + argv conversion)
 ```
@@ -98,7 +98,7 @@ Large integer literals are emitted so that they remain well-formed C++14. In par
 
 - plain integer primitives are inserted directly;
 - `int8_t`/`uint8_t` values are promoted with unary `+` so a number is printed rather than a character;
-- addresses are cast to `const void*` to avoid accidental string printing.
+- pointers are cast to `const void*` to avoid accidental string printing.
 
 See [Statements](19-statements.md) for which types are meaningfully printable.
 
@@ -119,7 +119,7 @@ So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
 Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
 
-Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `addr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
+Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `ptr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
 
 Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X_HASH_<8hex>`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
 
@@ -132,14 +132,14 @@ When a variable or function shares its name with a declared struct, the compiler
   - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
 ```
 
-Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
+Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `ptr<X>` fields and pointer references may name structs declared later in source order.
 
 ## 31.9 Entry-Point Wrapper and Command-Line Arguments
 
 The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
 
 - `ProgramTemplate.cpp` provides `int main()` and calls the no-args Franko `main` (`FUNC_main_HASH_d8625720`, the hash of `fn()->int32_t`).
-- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_3f161798`, the hash of `fn(addr<array<array<uint8_t>>>)->int32_t`).
+- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_5708d149`, the hash of `fn(ptr<array<array<uint8_t>>>)->int32_t`).
 
 The compiler selects the template from the declared entry-point shape; an explicit `-t` template overrides the selection.
 

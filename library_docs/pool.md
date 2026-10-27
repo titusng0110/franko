@@ -26,9 +26,9 @@ Design rules:
   indices, and generations are `uint32_t`.
 - `new_index()` and `generation()` report failure with the `_END`
   sentinel (`0xFFFFFFFF`) instead of a status code.
-- Every method takes `addr<X> self` and is called on a pool lvalue;
-  the compiler synthesizes `getaddr(...)`.
-- A pool owns dynamic arrays, so it is address-only: it cannot be
+- Every method takes `ptr<X> self` and is called on a pool lvalue;
+  the compiler synthesizes `getptr(...)`.
+- A pool owns dynamic arrays, so it is pointer-only: it cannot be
   passed or returned by value, and no assignment copies its storage.
 - Lifecycle: a declaration produces the empty pool (`capacity() == 0`,
   `used() == 0`), `init(C)` prepares it, `grow(newC)` enlarges it,
@@ -58,7 +58,7 @@ documented once. The signatures below are spelled with
 ### init
 
 ```franko
-func init(addr<NextAllocator> self, uint32_t C) -> int32_t
+func init(ptr<NextAllocator> self, uint32_t C) -> int32_t
 ```
 
 Prepares `C` slots (`C > 0`), all free, and returns `0`. Returns `-1`
@@ -69,7 +69,7 @@ reset it: the pool keeps its current state and the call fails.
 ### uninit
 
 ```franko
-func uninit(addr<NextAllocator> self) -> int32_t
+func uninit(ptr<NextAllocator> self) -> int32_t
 ```
 
 Frees the slot tables and returns the pool to its empty state
@@ -80,7 +80,7 @@ per-slot action — release the payloads yourself before `uninit`.
 ### grow
 
 ```franko
-func grow(addr<NextAllocator> self, uint32_t newC) -> int32_t
+func grow(ptr<NextAllocator> self, uint32_t newC) -> int32_t
 ```
 
 Enlarges the pool to `newC` slots (`newC > capacity()`). Existing
@@ -92,7 +92,7 @@ cannot be resized. A failed grow leaves the pool at its old capacity.
 ### new_index
 
 ```franko
-func new_index(addr<NextAllocator> self) -> uint32_t
+func new_index(ptr<NextAllocator> self) -> uint32_t
 ```
 
 Takes one free slot and returns its index. Returns `0xFFFFFFFF`
@@ -104,7 +104,7 @@ to `free_index`.
 ### free_index
 
 ```franko
-func free_index(addr<NextAllocator> self, uint32_t idx) -> int32_t
+func free_index(ptr<NextAllocator> self, uint32_t idx) -> int32_t
 ```
 
 Returns the live slot `idx` to the pool. Returns `0` on success, `-1`
@@ -115,7 +115,7 @@ already-released indices (double release), and indices beyond
 ### exist
 
 ```franko
-func exist(addr<NextAllocator> self, uint32_t idx) -> uint8_t
+func exist(ptr<NextAllocator> self, uint32_t idx) -> uint8_t
 ```
 
 Returns `1` when slot `idx` is live, `0` otherwise (never allocated,
@@ -125,7 +125,7 @@ and never reads out of bounds.
 ### write_active_indices
 
 ```franko
-func write_active_indices(addr<NextAllocator> self, addr<array<uint32_t>> out) -> int32_t
+func write_active_indices(ptr<NextAllocator> self, ptr<array<uint32_t>> out) -> int32_t
 ```
 
 Writes every live index into `out`, which must hold at least
@@ -136,7 +136,7 @@ order depends on the allocator (see each allocator below).
 ### used
 
 ```franko
-func used(addr<NextAllocator> self) -> uint32_t
+func used(ptr<NextAllocator> self) -> uint32_t
 ```
 
 Returns the number of live slots. Starts at `0` after `init`, rises on
@@ -146,7 +146,7 @@ every successful `new_index` and falls on every successful
 ### capacity
 
 ```franko
-func capacity(addr<NextAllocator> self) -> uint32_t
+func capacity(ptr<NextAllocator> self) -> uint32_t
 ```
 
 Returns the number of slots the pool currently holds: `C` after
@@ -159,7 +159,7 @@ The two generational allocators add one method.
 ### generation
 
 ```franko
-func generation(addr<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t
+func generation(ptr<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t
 ```
 
 Returns the generation counter of slot `idx`. A counter starts at `0`

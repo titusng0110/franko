@@ -1,10 +1,10 @@
 // Failure fixture: type_equality/static_size_mismatch
-// Passing an array<int32_t, 20> address where array<int32_t, 10> is required
+// Passing an array<int32_t, 20> pointer where array<int32_t, 10> is required
 // violates static array equality: sizes must be numerically equal (doc 29.3);
-// the mismatch propagates through addr<> because address equality requires
+// the mismatch propagates through ptr<> because pointer equality requires
 // equal referenced types (doc 29.4).
 
-func first(addr<array<int32_t, 10>> xs) -> int32_t {
+func first(ptr<array<int32_t, 10>> xs) -> int32_t {
     if (xs != null) {
         return $(xs)[0];
     }
@@ -14,6 +14,6 @@ func first(addr<array<int32_t, 10>> xs) -> int32_t {
 func main() -> int32_t {
     array<int32_t, 20> big;
     big.memset(0);
-    print(first(getaddr(big)));
+    print(first(getptr(big)));
     return 0;
 }

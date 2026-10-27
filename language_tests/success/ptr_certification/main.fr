@@ -1,0 +1,50 @@
+// ============================================================
+// LANGUAGE TEST: Pointers — nullness certification via getptr
+// ============================================================
+// Covers:
+//   - getptr(x) is the only certification of a non-null pointer
+//   - certification propagates through a copy (q = p)
+//   - certification propagates transitively (r = q, s = r)
+//   - a null state also propagates through copies
+// ============================================================
+
+func main() -> int32_t {
+    int32_t x = 0
+
+    // getptr certifies p as pointing, so deref is valid.
+    ptr<int32_t> p
+    p = getptr(x)
+    $(p) = 5
+    print($(p))
+
+    // The certification propagates through a copy.
+    ptr<int32_t> q
+    q = p
+    $(q) = 6
+    print($(q))
+    print(x)
+
+    // ... and transitively through a copy of the copy.
+    ptr<int32_t> r
+    r = q
+    $(r) = 7
+    print($(r))
+
+    // Declaration-initializer copies carry the state as well.
+    ptr<int32_t> s = r
+    $(s) = 8
+    print($(s))
+    print(x)
+
+    // A null state propagates through copies too: b is null, and the
+    // copies of b are null as well (no dereference of them).
+    ptr<int32_t> b
+    b = null
+    ptr<int32_t> c
+    c = b
+    print(c == null)
+    ptr<int32_t> d = c
+    print(d == null)
+
+    return 0
+}

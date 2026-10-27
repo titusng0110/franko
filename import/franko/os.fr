@@ -30,10 +30,10 @@ namespace os {
         // bridge definitions from import/franko/os.ffi.cpp. The stubs
         // report failure (-1) so a missing bridge can never look like
         // silent success.
-        func read(int32_t fd, addr<array<byte>> buf, uint64_t count) -> int64_t {
+        func read(int32_t fd, ptr<array<byte>> buf, uint64_t count) -> int64_t {
             return -1
         }
-        func write(int32_t fd, addr<array<byte>> buf, uint64_t count) -> int64_t {
+        func write(int32_t fd, ptr<array<byte>> buf, uint64_t count) -> int64_t {
             return -1
         }
     }
@@ -55,10 +55,10 @@ namespace os {
         func GetStdHandle(uint32_t nStdHandle) -> uint64_t {
             return 0
         }
-        func ReadFile(uint64_t hFile, addr<array<byte>> buf, uint32_t count, addr<uint32_t> bytesRead) -> int32_t {
+        func ReadFile(uint64_t hFile, ptr<array<byte>> buf, uint32_t count, ptr<uint32_t> bytesRead) -> int32_t {
             return 0
         }
-        func WriteFile(uint64_t hFile, addr<array<byte>> buf, uint32_t count, addr<uint32_t> bytesWritten) -> int32_t {
+        func WriteFile(uint64_t hFile, ptr<array<byte>> buf, uint32_t count, ptr<uint32_t> bytesWritten) -> int32_t {
             return 0
         }
     }

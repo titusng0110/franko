@@ -185,16 +185,16 @@ public class Main {
         LegalityChecker legalityChecker = new LegalityChecker(legalityDiagnostics);
         legalityChecker.check(semaAST);
 
-        // ----- Address null-state checking -----
-        System.out.println("==== Address Null-State Checking ====");
-        DiagnosticBag addressStateDiagnostics = new DiagnosticBag("Address null-state checking failed:");
-        AddressNullStateChecker addressStateChecker = new AddressNullStateChecker(addressStateDiagnostics);
-        addressStateChecker.check(semaAST);
+        // ----- Pointer null-state checking -----
+        System.out.println("==== Pointer Null-State Checking ====");
+        DiagnosticBag pointerStateDiagnostics = new DiagnosticBag("Pointer null-state checking failed:");
+        PointerNullStateChecker pointerStateChecker = new PointerNullStateChecker(pointerStateDiagnostics);
+        pointerStateChecker.check(semaAST);
 
-        if (addressStateDiagnostics.hasWarnings()) {
-            System.out.println("==== Address Null-State Warnings ====");
+        if (pointerStateDiagnostics.hasWarnings()) {
+            System.out.println("==== Pointer Null-State Warnings ====");
 
-            for (String warning : addressStateDiagnostics.getWarnings()) {
+            for (String warning : pointerStateDiagnostics.getWarnings()) {
                 System.out.println("  - " + warning);
             }
         }
@@ -268,7 +268,7 @@ public class Main {
          */
         if (!explicitTemplate) {
             String expectedEntryCall = switch (sema.entryKind()) {
-                case ARGS -> "FUNC_main_HASH_3f161798";
+                case ARGS -> "FUNC_main_HASH_5708d149";
                 case NO_ARGS -> "FUNC_main_HASH_d8625720";
                 case NONE -> throw new RuntimeException(
                     "Internal compiler error: no entry-point function 'main' after successful analysis"

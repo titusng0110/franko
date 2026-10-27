@@ -34,8 +34,8 @@ func getSum(Point p) -> int32_t {
     return p.x + p.y;
 }
 
-// --- Function with address parameter ---
-func processRef(addr<int32_t> p) -> int32_t {
+// --- Function with pointer parameter ---
+func processRef(ptr<int32_t> p) -> int32_t {
     return $(p);
 }
 
@@ -50,7 +50,7 @@ func main() -> int32_t {
     result = result + factorial(3);
 
     int32_t val = 100;
-    result = result + processRef(getaddr(val));
+    result = result + processRef(getptr(val));
 
     voidFunc();
 

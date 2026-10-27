@@ -13,7 +13,7 @@ int32_t big = 300;
 uint8_t small = cast<uint8_t>(big);
 ```
 
-Like `$(...)` and `getaddr`, `cast<T>` is a compiler intrinsic, not a
+Like `$(...)` and `getptr`, `cast<T>` is a compiler intrinsic, not a
 function call: it cannot be overloaded, shadowed, or passed around.
 
 ## 16.1 Cast Syntax
@@ -24,9 +24,9 @@ cast<uint16_t>(a)
 
 The target `T` must be one of the eight primitive integer types
 (`int8_t` … `uint64_t`, including the `int` / `uint` / `byte` aliases).
-Anything else — addresses, arrays, structs, `void` — is rejected at
+Anything else — pointers, arrays, structs, `void` — is rejected at
 parse time. The operand must be an integer expression; casting an
-address, array, struct, null, or void value is a compile error.
+pointer, array, struct, null, or void value is a compile error.
 
 A cast is never an lvalue:
 
@@ -92,8 +92,8 @@ uint8_t bad = cast<uint8_t>(300);   // invalid: 300 does not fit uint8_t
 
 ## 16.5 What Casts Do Not Cover
 
-- There are no casts for addresses, arrays, structs, or void. Raw
-  integers cannot be converted to addresses.
+- There are no casts for pointers, arrays, structs, or void. Raw
+  integers cannot be converted to pointers.
 - Casts do not appear in constant-expression slots (static array
   sizes, global initializers, struct field defaults): those contexts
   accept only plain integer literals and operators.

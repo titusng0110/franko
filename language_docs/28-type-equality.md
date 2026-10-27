@@ -38,9 +38,9 @@ array<int32_t, 5 + 5>  == array<int32_t, 10>
 array<int32_t, 10>     != array<int32_t, 20>
 ```
 
-## 28.4 Address Equality
+## 28.4 Pointer Equality
 
-Address types are equal if their referenced types are equal.
+Pointer types are equal if their referenced types are equal.
 
 ## 28.5 Function Signature Equality
 

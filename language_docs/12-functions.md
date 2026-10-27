@@ -27,10 +27,10 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
-- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable; or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is address-only: pass `addr<X>` and `getaddr(s)` instead. See [Structs](25-structs.md).
+- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<array<int32_t>>`, `ptr<array<int32_t, 8>>`, and `ptr<ptr<int32_t>>` are all passable; or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass `ptr<X>` and `getptr(s)` instead. See [Structs](25-structs.md).
 
-Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
+Bare array types are not passable. To pass an array to a function, declare an `ptr<array<T>>` (or `ptr<array<T, N>>`) parameter and pass `getptr(array)` at the call site.
 
 `void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
 
@@ -51,7 +51,7 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `addr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 
@@ -99,7 +99,7 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
-- an address type, `addr<T>`; or
+- an pointer type, `ptr<T>`; or
 - a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)).
 
 Arrays cannot currently be returned directly.
@@ -108,4 +108,4 @@ Arrays cannot currently be returned directly.
 
 Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
 
-Struct methods follow the same signature, overload, and return rules with an explicit `addr<X> self` first parameter; see [Methods](26-methods.md).
+Struct methods follow the same signature, overload, and return rules with an explicit `ptr<X> self` first parameter; see [Methods](26-methods.md).

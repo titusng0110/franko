@@ -402,8 +402,8 @@ public class SemanticASTPrinter {
             return;
         }
 
-        if (node instanceof SemanticGetAddrNode n) {
-            printGetAddr(n, indent);
+        if (node instanceof SemanticGetPtrNode n) {
+            printGetPtr(n, indent);
             return;
         }
 
@@ -549,11 +549,11 @@ public class SemanticASTPrinter {
         }
     }
 
-    private static void printGetAddr(
-            SemanticGetAddrNode node,
+    private static void printGetPtr(
+            SemanticGetPtrNode node,
             int indent
     ) {
-        line(indent, "SemanticGetAddrNode");
+        line(indent, "SemanticGetPtrNode");
         printExprMetadata(node, indent + 1);
 
         line(indent + 1, "target:");

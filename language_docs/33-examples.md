@@ -193,14 +193,14 @@ func main() -> int32_t {
 }
 ```
 
-## 33.10 Array Initializer Through Address
+## 33.10 Array Initializer Through Pointer
 
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
-    addr<array<int32_t, 3>> p;
+    ptr<array<int32_t, 3>> p;
 
-    p = getaddr(xs);
+    p = getptr(xs);
 
     $(p) = [1, 2, 3];
 
@@ -217,9 +217,9 @@ Equivalent core form:
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
-    addr<array<int32_t, 3>> p;
+    ptr<array<int32_t, 3>> p;
 
-    p = getaddr(xs);
+    p = getptr(xs);
 
     $(p)[0] = 1;
     $(p)[1] = 2;
@@ -259,7 +259,7 @@ See [String Literals](23-string-literals.md).
 ## 33.12 `ndarray` Grid
 
 ```franko
-func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
+func fill(ptr<ndarray<byte, 2, 3>> grid) -> void {
     $(grid).memset(0);
     $(grid)[0][1] = 7;
 }
@@ -267,7 +267,7 @@ func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
 func main() -> int32_t {
     ndarray<byte, 2, 3> grid;
 
-    fill(getaddr(grid));
+    fill(getptr(grid));
 
     print(grid[0][1]);
     print(grid[1][2]);
@@ -374,9 +374,9 @@ func main() -> int32_t {
 }
 ```
 
-## 33.17 Structs Passed by Value and by Address
+## 33.17 Structs Passed by Value and by Pointer
 
-Assignable structs may be passed and returned by value; address-only structs must go through `addr<X>`.
+Assignable structs may be passed and returned by value; pointer-only structs must go through `ptr<X>`.
 
 ```franko
 struct Point {
@@ -388,7 +388,7 @@ func dist2(Point p) -> int32_t {
     return p.x * p.x + p.y * p.y;
 }
 
-func move(addr<Point> p) -> void {
+func move(ptr<Point> p) -> void {
     $(p).x = $(p).x + 1;
     $(p).y = $(p).y + 1;
 }
@@ -401,7 +401,7 @@ func main() -> int32_t {
 
     print(dist2(p));   // 25
 
-    move(getaddr(p));
+    move(getptr(p));
 
     print(p.x);        // 4
     print(p.y);        // 5
@@ -412,7 +412,7 @@ func main() -> int32_t {
 
 ## 33.18 Structs with Array Fields
 
-An array field makes the struct non-assignable: the struct is address-only and its arrays are managed through the usual intrinsics.
+An array field makes the struct non-assignable: the struct is pointer-only and its arrays are managed through the usual intrinsics.
 
 ```franko
 struct Buffer {
@@ -508,7 +508,7 @@ func main() -> int32_t {
 ## 33.22 Command-Line Arguments
 
 ```franko
-func main(addr<array<array<byte>>> args) -> int32_t {
+func main(ptr<array<array<byte>>> args) -> int32_t {
     uint32_t n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
@@ -522,4 +522,4 @@ func main(addr<array<array<byte>>> args) -> int32_t {
 }
 ```
 
-Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live address (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).

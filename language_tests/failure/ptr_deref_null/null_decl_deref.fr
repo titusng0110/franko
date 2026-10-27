@@ -1,0 +1,11 @@
+// Failure fixture: ptr_deref_null/null_decl_deref
+// Dereferencing an pointer variable that the checker proves is null:
+// an ordinary ptr<T> declaration is null-initialized.
+func main() -> int32_t {
+    int32_t x1 = 0
+    ptr<int32_t> p1
+
+    print($(p1))
+
+    return 0
+}

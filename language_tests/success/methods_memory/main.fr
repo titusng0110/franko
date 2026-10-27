@@ -3,22 +3,22 @@
 // ============================================================
 // Covers: doc 26.8
 // Dynamic-array fields managed through methods, with setup/teardown
-// pairing checked by address null-state checking.
+// pairing checked by pointer null-state checking.
 // ============================================================
 
 struct Buf {
     array<int32_t> data
-    func setup(addr<Buf> self, uint32_t n) -> int32_t {
+    func setup(ptr<Buf> self, uint32_t n) -> int32_t {
         return $(self).data.init_zero(n)
     }
-    func set(addr<Buf> self, uint32_t i, int32_t v) -> void {
+    func set(ptr<Buf> self, uint32_t i, int32_t v) -> void {
         $(self).data[i] = v
         return
     }
-    func get(addr<Buf> self, uint32_t i) -> int32_t {
+    func get(ptr<Buf> self, uint32_t i) -> int32_t {
         return $(self).data[i]
     }
-    func teardown(addr<Buf> self) -> void {
+    func teardown(ptr<Buf> self) -> void {
         $(self).data.uninit()
         return
     }

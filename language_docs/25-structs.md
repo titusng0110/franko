@@ -50,7 +50,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, addresses (`addr<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -71,7 +71,7 @@ struct Counter {
 Rules:
 
 - Defaults must be constant expressions (`constExpr`) and are folded at compile time (see [Constant Folding](10-constant-folding.md)).
-- Only primitive fields can have default values. Struct, array, and addr fields reject `= constExpr` as a type mismatch.
+- Only primitive fields can have default values. Struct, array, and ptr fields reject `= constExpr` as a type mismatch.
 - A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8_t x = 300`).
 
 ## 25.4 Using Struct Types
@@ -80,7 +80,7 @@ A struct name used in a type position is resolved against the struct namespace:
 
 - Unknown struct names are rejected with an "unknown struct type" error.
 - Field types may reference structs declared anywhere in the program, including structs declared later in the file.
-- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `addr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
+- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
 
 ## 25.5 By-Value Cycles
 
@@ -103,7 +103,7 @@ Indirection breaks the cycle and is allowed:
 ```franko
 struct Node {
     int32_t v
-    addr<Node> next        // valid: address edge
+    ptr<Node> next        // valid: pointer edge
     array<Node> kids       // valid: dynamic array edge
 }
 ```
@@ -113,19 +113,19 @@ struct Node {
 A type is **assignable** when a value of that type can participate in ordinary assignment with `=`:
 
 - primitive integer types are assignable;
-- address types `addr<T>` are assignable;
+- pointer types `ptr<T>` are assignable;
 - a struct is assignable if and only if all of its fields are assignable, recursively.
 
-Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **address-only**.
+Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **pointer-only**.
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For an address-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through `addr<X>` and `getaddr(s)` instead.
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For an pointer-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through `ptr<X>` and `getptr(s)` instead.
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](12-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
-Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (addresses excluded), and `memcpy`-able when every field is `memcpy`-able (addresses included). See [Array Intrinsics](21-array-intrinsics.md).
+Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
 Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
 
@@ -135,15 +135,15 @@ Member access uses dot syntax. Access chains compose with every storage form:
 
 ```franko
 s.field               // local struct
-$(p).field        // through an address
-$(a.next).field   // another hop through an addr field: deref the link first
+$(p).field        // through an pointer
+$(a.next).field   // another hop through an ptr field: deref the link first
 xs[i].field           // element of a static or dynamic array
 ```
 
 - `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `$(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
-- `getaddr(s.field)` is valid and yields `addr<T>` for the field's type `T`.
+- `getptr(s.field)` is valid and yields `ptr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
-  `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getaddr(other))`, `b.data[i]`, and `b.data.uninit()`.
+  `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
 - Struct methods also use member-call syntax (`s.increment()`); see [Methods](26-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
 
 ## 25.8 Initialization Semantics
@@ -173,8 +173,8 @@ int32_t scale = 2;
 
 The C++14 backend:
 
-- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so addresses may reference structs declared later in source order;
-- orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
+- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so pointers may reference structs declared later in source order;
+- orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`ptr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`.
 - emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](26-methods.md).
@@ -186,7 +186,7 @@ The C++14 backend:
 - No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` cannot print a whole struct — print individual fields instead.
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
-- A struct may not reach itself by value (through struct fields or static array elements); `addr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is address-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `addr<X>`.
+- A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
+- A struct with any non-assignable field is pointer-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `ptr<X>`.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).

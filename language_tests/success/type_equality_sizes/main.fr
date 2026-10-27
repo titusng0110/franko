@@ -3,13 +3,13 @@
 // ============================================================
 // Covers: static array sizes compare numerically after unfolding
 // the size expression (doc 29.3): 10 == 0xA == 5 + 5.
-// The parameter uses addr<array<int32_t, 10>> because bare array
-// parameters are not passable (doc 12.3); address equality is
+// The parameter uses ptr<array<int32_t, 10>> because bare array
+// parameters are not passable (doc 12.3); pointer equality is
 // defined by the referenced type's equality (doc 29.4), so the
 // hex and arithmetic size spellings must still match exactly.
 // ============================================================
 
-func first(addr<array<int32_t, 10>> xs) -> int32_t {
+func first(ptr<array<int32_t, 10>> xs) -> int32_t {
     if (xs != null) {
         return $(xs)[0];
     }
@@ -25,7 +25,7 @@ func main() -> int32_t {
     b.memset(0);
     a[0] = 42;
     b[0] = 24;
-    print(first(getaddr(a)));
-    print(first(getaddr(b)));
+    print(first(getptr(a)));
+    print(first(getptr(b)));
     return 0;
 }

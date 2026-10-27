@@ -8,7 +8,7 @@
 //
 // Covers: import "franko/os", os::win32::STD_OUTPUT_HANDLE,
 // os::win32::GetStdHandle(nStdHandle) -> uint64_t (HANDLE widened),
-// and os::win32::WriteFile(hFile, addr<array<byte>>, count,
+// and os::win32::WriteFile(hFile, ptr<array<byte>>, count,
 // bytesWritten) -> int32_t with a null out-param.
 //
 // Expected stdout is exactly "hello1\n": "hello" from WriteFile (no
@@ -22,7 +22,7 @@ func main() -> int32_t {
     array<byte> msg;
     msg.init(5);
     msg = "hello";
-    int32_t ok = os::win32::WriteFile(h, getaddr(msg), 5, null);
+    int32_t ok = os::win32::WriteFile(h, getptr(msg), 5, null);
     print(ok);
     msg.uninit();
     return 0;

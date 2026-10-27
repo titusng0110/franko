@@ -21,7 +21,7 @@ import java.util.Set;
  *   - is this type an integer primitive?
  *   - is this type an unsigned integer primitive?
  *   - is this type an array?
- *   - is this type an address?
+ *   - is this type an pointer?
  *   - can this BigInteger constant fit into a target primitive type?
  *   - is this assignment type-compatible?
  *   - is this type valid as a function return type?
@@ -42,7 +42,7 @@ import java.util.Set;
  *
  *   - variables,
  *   - array element types,
- *   - address referenced types,
+ *   - pointer referenced types,
  *   - assignment values,
  *   - ordinary expression value contexts.
  *
@@ -54,13 +54,13 @@ import java.util.Set;
  *
  *   - void,
  *   - a primitive integer type,
- *   - an address type addr<T>.
+ *   - an pointer type ptr<T>.
  *
  * Array types cannot be returned directly because arrays are not assignable in
  * Franko. Functions that need to expose arrays should return:
  *
- *   addr<array<T>>
- *   addr<array<T, N>>
+ *   ptr<array<T>>
+ *   ptr<array<T, N>>
  *
  * ----------------------------------------------------------------------------
  * IMPORTANT: FLUID INTEGER CONSTANTS
@@ -86,27 +86,27 @@ import java.util.Set;
  *     intrinsic argument checking, return checking, or call argument checking.
  *
  * ----------------------------------------------------------------------------
- * ADDRESS RULES
+ * POINTER RULES
  * ----------------------------------------------------------------------------
  *
- * Franko addresses are strongly typed addr<T> values.
+ * Franko pointers are strongly typed ptr<T> values.
  *
  * They are:
  *
  *   - assignable,
  *   - copyable,
  *   - dereferenceable,
- *   - comparable with compatible address types.
+ *   - comparable with compatible pointer types.
  *
  * They are not integer arithmetic values.
  *
  * Therefore:
  *
- *   - addr<T> assignment requires exactly addr<T> on the RHS;
- *   - raw integer constants cannot be assigned to address variables;
- *   - address comparisons require identical addr<T> types;
- *   - arithmetic, bitwise, and shift operators reject addresses because
- *     addresses are not integral types.
+ *   - ptr<T> assignment requires exactly ptr<T> on the RHS;
+ *   - raw integer constants cannot be assigned to pointer variables;
+ *   - pointer comparisons require identical ptr<T> types;
+ *   - arithmetic, bitwise, and shift operators reject pointers because
+ *     pointers are not integral types.
  *
  * ============================================================================
  */
@@ -131,7 +131,7 @@ public class TypeChecker {
      *   - dynamic arrays must have the same element type;
      *   - static arrays must have the same element type and numerically equal
      *     size literals;
-     *   - address types must reference the same type;
+     *   - pointer types must reference the same type;
      *   - function types must have equal parameter types and return type.
      */
     public boolean sameType(SemanticType a, SemanticType b) {
@@ -188,8 +188,8 @@ public class TypeChecker {
         return t instanceof SemanticStaticArrayType;
     }
 
-    public boolean isAddressType(SemanticType t) {
-        return t instanceof SemanticAddrType;
+    public boolean isPointerType(SemanticType t) {
+        return t instanceof SemanticPtrType;
     }
 
     public boolean isNullType(SemanticType t) {
@@ -203,7 +203,7 @@ public class TypeChecker {
      * Current assignable value types:
      *
      *   - primitive integer types;
-     *   - address types;
+     *   - pointer types;
      *   - struct types whose fields are all assignable value types.
      *
      * Non-assignable:
@@ -226,7 +226,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticPrimitiveType
-                || t instanceof SemanticAddrType) {
+                || t instanceof SemanticPtrType) {
             return true;
         }
 
@@ -263,7 +263,7 @@ public class TypeChecker {
      *
      *   - void;
      *   - primitive integer types;
-     *   - address types;
+     *   - pointer types;
      *   - struct types whose fields are all assignable value types.
      *
      * Array return types are invalid because arrays are not assignable.
@@ -288,8 +288,8 @@ public class TypeChecker {
         return null;
     }
 
-    public SemanticType referencedTypeOfAddress(SemanticType type) {
-        return type instanceof SemanticAddrType a ? a.referencedType : null;
+    public SemanticType referencedTypeOfPointer(SemanticType type) {
+        return type instanceof SemanticPtrType a ? a.referencedType : null;
     }
 
     // ============================================================
@@ -338,8 +338,8 @@ public class TypeChecker {
         }
     }
 
-    public void ensureAddressType(SemanticType t, String message) {
-        if (!isAddressType(t)) {
+    public void ensurePointerType(SemanticType t, String message) {
+        if (!isPointerType(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
@@ -371,7 +371,7 @@ public class TypeChecker {
         }
 
         if (isArrayType(type)) {
-            diagnostics.error(message + ": arrays cannot be returned directly; use addr<"
+            diagnostics.error(message + ": arrays cannot be returned directly; use ptr<"
                     + type.describe()
                     + "> instead");
             return;
@@ -409,7 +409,7 @@ public class TypeChecker {
      *      Moving between integer widths is never implicit: use the
      *      explicit cast&lt;T&gt;(expr) intrinsic.
      *
-     *   4. Address targets require exact same address type.
+     *   4. Pointer targets require exact same pointer type.
      *
      *   5. Other types require exact type equality unless Franko later defines
      *      special conversion rules.
@@ -435,18 +435,18 @@ public class TypeChecker {
         }
 
         /*
-         * null is only valid for address targets.
+         * null is only valid for pointer targets.
          *
-         *   addr<int32_t> p;
+         *   ptr<int32_t> p;
          *   p = null;            valid
          *
          *   int32_t x;
          *   x = null;            invalid: 0 is not null
          */
         if (expr.type instanceof SemanticNullType) {
-            if (!(targetType instanceof SemanticAddrType)) {
+            if (!(targetType instanceof SemanticPtrType)) {
                 diagnostics.error(message
-                        + ": null is only valid for address types, got target "
+                        + ": null is only valid for pointer types, got target "
                         + targetType.describe());
             }
             return;
@@ -526,7 +526,7 @@ public class TypeChecker {
      * Franko rules:
      *
      *   - both operands must be integer expressions;
-     *   - arrays, addresses, and void are rejected because they are not
+     *   - arrays, pointers, and void are rejected because they are not
      *     integral;
      *   - if both operands are nonconstant, their types must be exactly equal;
      *   - if exactly one operand is constant, that constant must fit the other
@@ -597,7 +597,7 @@ public class TypeChecker {
      *   - if both operands are constants, allow the expression for now;
      *   - if both operands are nonconstant, no same-type requirement applies.
      *
-     * Address comparisons are handled separately in ExpressionChecker before
+     * Pointer comparisons are handled separately in ExpressionChecker before
      * this helper is called.
      */
     public void ensureMixedIntegralOperandsWithConstantFit(
@@ -884,7 +884,7 @@ public class TypeChecker {
      *   - primitive integer elements are memsetable;
      *   - static arrays are memsetable if their element type is memsetable;
      *   - dynamic arrays are not memsetable as element values;
-     *   - addresses are not memsetable;
+     *   - pointers are not memsetable;
      *   - void is not memsetable.
      */
     public boolean isMemsetable(SemanticType t) {
@@ -938,7 +938,7 @@ public class TypeChecker {
      *   - primitive integer elements are memcpyable;
      *   - static arrays are memcpyable if their element type is memcpyable;
      *   - dynamic arrays are not memcpyable as element values;
-     *   - addresses are memcpyable;
+     *   - pointers are memcpyable;
      *   - void is not memcpyable.
      */
     public boolean isMemcpyable(SemanticType t) {
@@ -951,7 +951,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticPrimitiveType
-                || t instanceof SemanticAddrType) {
+                || t instanceof SemanticPtrType) {
             return true;
         }
 

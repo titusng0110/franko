@@ -239,7 +239,7 @@ class ParameterNode extends ASTNode {
 // when present, are raw constExpr ASTs that the semantic analyzer
 // folds into canonical constants. Method declarations are raw
 // FunctionDeclNode objects whose first parameter must be
-// `addr<X> self` for the enclosing struct X.
+// `ptr<X> self` for the enclosing struct X.
 
 class StructDeclNode extends ASTNode {
     String name;
@@ -363,7 +363,7 @@ class NamespaceNode extends ASTNode {
 //
 // Produced wherever a qualified name is syntactically valid:
 //
-//   - struct type positions:    addr<util::Point>
+//   - struct type positions:    ptr<util::Point>
 //   - primary expressions:      util::offset
 //   - lvalue positions:         util::offset = 1
 //   - call callees:             util::doubleIt(5)
@@ -522,10 +522,10 @@ class NdArrayTypeNode extends TypeNode {
     }
 }
 
-class AddrTypeNode extends TypeNode {
+class PtrTypeNode extends TypeNode {
     TypeNode referencedType;
 
-    AddrTypeNode(TypeNode referencedType) {
+    PtrTypeNode(TypeNode referencedType) {
         this.referencedType = referencedType;
     }
 }
@@ -535,7 +535,7 @@ class AddrTypeNode extends TypeNode {
 //   struct X { int32_t n }
 //   X x
 //   array<X, 4> xs
-//   addr<X> p
+//   ptr<X> p
 //
 // The parser accepts any IDENTIFIER as a possible struct type.
 // Semantic analysis must verify that the identifier actually names
@@ -709,13 +709,13 @@ class CallNode extends ASTNode {
 }
 
 // ============================================================
-// Address / pointer-style expressions
+// Pointer / pointer-style expressions
 // ============================================================
 
-class GetAddrNode extends ASTNode {
+class GetPtrNode extends ASTNode {
     ASTNode target;
 
-    GetAddrNode(ASTNode target) {
+    GetPtrNode(ASTNode target) {
         this.target = target;
     }
 }

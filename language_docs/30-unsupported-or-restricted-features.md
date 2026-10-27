@@ -12,7 +12,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - parameter names are not used in overload resolution;
 - return type is not used in overload resolution;
 - arrays cannot be returned by value;
-- arrays cannot be passed as parameters by value; use addr<array<...>> parameters (see [Functions](12-functions.md));
+- arrays cannot be passed as parameters by value; use ptr<array<...>> parameters (see [Functions](12-functions.md));
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
@@ -29,10 +29,10 @@ x.something(1);     // unsupported member call: unknown method
 
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
-- struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and addr fields reject `= constExpr` as a type mismatch);
-- a struct may not reach itself by value through struct fields or static array elements; `addr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is address-only: it can be used only through `addr<X>`;
-- structs have methods with explicit `addr<X> self` receivers (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
+- struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
+- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: it can be used only through `ptr<X>`;
+- structs have methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](25-structs.md).
 
@@ -73,13 +73,13 @@ return [1, 2, 3];
 
 The checker validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
 
-## 30.10 Address Lifetime Is Not Fully Tracked
+## 30.10 Pointer Lifetime Is Not Fully Tracked
 
-The compiler does not fully track dangling addresses or ownership.
+The compiler does not fully track dangling pointers or ownership.
 
 ## 30.11 Print Checking Is Loose
 
-The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and addresses (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
+The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
 Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
 

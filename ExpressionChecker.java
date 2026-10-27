@@ -70,7 +70,7 @@ import java.util.Set;
  *   - operands,
  *   - array indexes,
  *   - array sizes,
- *   - getaddr targets,
+ *   - getptr targets,
  *   - deref operands,
  *   - function call arguments.
  *
@@ -112,8 +112,8 @@ import java.util.Set;
  *
  *   - arrays cannot be passed directly as arguments;
  *
- *   - functions that need array access should take addr<array<T>> or
- *     addr<array<T, N>>, and callers should pass getaddr(array).
+ *   - functions that need array access should take ptr<array<T>> or
+ *     ptr<array<T, N>>, and callers should pass getptr(array).
  *
  * ============================================================================
  */
@@ -162,7 +162,7 @@ public class ExpressionChecker {
             /*
              * Null is a legal leaf expression. Contextual rules (assignment,
              * comparison, arguments, returns) enforce that null is only used
-             * where an address type is expected.
+             * where an pointer type is expected.
              */
             return;
         }
@@ -197,8 +197,8 @@ public class ExpressionChecker {
             return;
         }
 
-        if (node instanceof SemanticGetAddrNode n) {
-            visitGetAddr(n);
+        if (node instanceof SemanticGetPtrNode n) {
+            visitGetPtr(n);
             return;
         }
 
@@ -357,19 +357,19 @@ public class ExpressionChecker {
             SemanticBinOpNode node,
             String op
     ) {
-        boolean leftAddr = types.isAddressType(node.left.type);
-        boolean rightAddr = types.isAddressType(node.right.type);
+        boolean leftPtr = types.isPointerType(node.left.type);
+        boolean rightPtr = types.isPointerType(node.right.type);
         boolean leftNull = types.isNullType(node.left.type);
         boolean rightNull = types.isNullType(node.right.type);
 
         /*
-         * Addresses and null literals are only comparable with equality
+         * Pointers and null literals are only comparable with equality
          * operators ('==' and '!='). Relational operators ('<', '>', '<=',
-         * '>=') are prohibited for addresses and null.
+         * '>=') are prohibited for pointers and null.
          */
         if (op.equals("<") || op.equals(">") || op.equals("<=") || op.equals(">=")) {
-            if (leftAddr || rightAddr) {
-                diagnostics.error("Address comparisons must only use equality operators ('==' or '!='), but got '" + op + "'.");
+            if (leftPtr || rightPtr) {
+                diagnostics.error("Pointer comparisons must only use equality operators ('==' or '!='), but got '" + op + "'.");
                 return;
             }
 
@@ -380,8 +380,8 @@ public class ExpressionChecker {
         }
 
         /*
-         * Null literals can only be compared with address types using
-         * equality operators. Comparing null with a non-address value is
+         * Null literals can only be compared with pointer types using
+         * equality operators. Comparing null with a non-pointer value is
          * invalid.
          */
         if (leftNull || rightNull) {
@@ -392,18 +392,18 @@ public class ExpressionChecker {
                 return;
             }
 
-            if (!types.isAddressType(other.type)) {
-                diagnostics.error("Cannot compare null with non-address type '"
+            if (!types.isPointerType(other.type)) {
+                diagnostics.error("Cannot compare null with non-pointer type '"
                         + other.type.describe()
                         + "'");
             }
             return;
         }
 
-        if (leftAddr && rightAddr) {
+        if (leftPtr && rightPtr) {
             if (!types.sameType(node.left.type, node.right.type)) {
-                diagnostics.error("Address comparison '" + op
-                        + "' requires identical address types, got "
+                diagnostics.error("Pointer comparison '" + op
+                        + "' requires identical pointer types, got "
                         + node.left.type.describe()
                         + " and "
                         + node.right.type.describe());
@@ -411,8 +411,8 @@ public class ExpressionChecker {
             return;
         }
 
-        if (leftAddr || rightAddr) {
-            diagnostics.error("Cannot compare address and non-address using '" + op
+        if (leftPtr || rightPtr) {
+            diagnostics.error("Cannot compare pointer and non-pointer using '" + op
                     + "', got "
                     + node.left.type.describe()
                     + " and "
@@ -546,7 +546,7 @@ public class ExpressionChecker {
                     + function.signatureString()
                     + "' has invalid array type "
                     + parameterType.describe()
-                    + "; use addr<"
+                    + "; use ptr<"
                     + parameterType.describe()
                     + "> instead");
             return;
@@ -556,19 +556,19 @@ public class ExpressionChecker {
             diagnostics.error("Argument " + (index + 1)
                     + " of call to '"
                     + function.signatureString()
-                    + "' passes array value directly; use getaddr(...) and an addr<array<...>> parameter");
+                    + "' passes array value directly; use getptr(...) and an ptr<array<...>> parameter");
             return;
         }
 
         /*
-         * null is only valid for address parameters.
+         * null is only valid for pointer parameters.
          */
         if (types.isNullType(arg.type)) {
-            if (!(parameterType instanceof SemanticAddrType)) {
+            if (!(parameterType instanceof SemanticPtrType)) {
                 diagnostics.error("Argument " + (index + 1)
                         + " of call to '"
                         + function.signatureString()
-                        + "' passes null to non-address parameter type "
+                        + "' passes null to non-pointer parameter type "
                         + types.describeSafe(parameterType));
             }
             return;
@@ -597,11 +597,11 @@ public class ExpressionChecker {
 
         /*
          * Nonconstant expressions must exactly match the selected parameter
-         * type. This covers primitive variables, address arguments, etc.
+         * type. This covers primitive variables, pointer arguments, etc.
          *
          * Arrays are intentionally not included here as value arguments.
-         * Array access through functions should use addr<array<T>> or
-         * addr<array<T, N>>.
+         * Array access through functions should use ptr<array<T>> or
+         * ptr<array<T, N>>.
          */
         if (!types.sameType(parameterType, arg.type)) {
             diagnostics.error("Argument " + (index + 1)
@@ -766,24 +766,24 @@ public class ExpressionChecker {
                 "memcpy() target must be an array"
         );
 
-        SemanticExprNode sourceAddr = node.args.get(0);
-        checkExpr(sourceAddr);
+        SemanticExprNode sourcePtr = node.args.get(0);
+        checkExpr(sourcePtr);
 
         SemanticType sourceArrayType = null;
 
         if (ensureValueExpression(
-                sourceAddr,
-                "memcpy() source address"
+                sourcePtr,
+                "memcpy() source pointer"
         )) {
-            if (!(sourceAddr.type instanceof SemanticAddrType addr)) {
-                diagnostics.error("memcpy() source must be an address to an array, got "
-                        + types.describeSafe(sourceAddr.type));
-            } else if (!types.isArrayType(addr.referencedType)) {
-                diagnostics.error("memcpy() source must be an address to an array, got addr<"
-                        + types.describeSafe(addr.referencedType)
+            if (!(sourcePtr.type instanceof SemanticPtrType ptr)) {
+                diagnostics.error("memcpy() source must be an pointer to an array, got "
+                        + types.describeSafe(sourcePtr.type));
+            } else if (!types.isArrayType(ptr.referencedType)) {
+                diagnostics.error("memcpy() source must be an pointer to an array, got ptr<"
+                        + types.describeSafe(ptr.referencedType)
                         + ">");
             } else {
-                sourceArrayType = addr.referencedType;
+                sourceArrayType = ptr.referencedType;
             }
         }
 
@@ -1036,19 +1036,19 @@ public class ExpressionChecker {
     }
 
     // ============================================================
-    // Address Expressions
+    // Pointer Expressions
     // ============================================================
 
-    private void visitGetAddr(SemanticGetAddrNode node) {
+    private void visitGetPtr(SemanticGetPtrNode node) {
         checkExpr(node.target);
 
         if (types.isVoidType(node.target.type)) {
-            diagnostics.error("Operand of 'getaddr' cannot have void type");
+            diagnostics.error("Operand of 'getptr' cannot have void type");
             return;
         }
 
         if (!isStorageBackedLValue(node.target)) {
-            diagnostics.error("Operand of 'getaddr' must be an addressable storage-backed lvalue");
+            diagnostics.error("Operand of 'getptr' must be a pointable storage-backed lvalue");
         }
     }
 
@@ -1064,14 +1064,14 @@ public class ExpressionChecker {
             return;
         }
 
-        types.ensureAddressType(
+        types.ensurePointerType(
                 node.expr.type,
-                "Operand of '$' must be an address type"
+                "Operand of '$' must be an pointer type"
         );
 
-        if (node.expr.type instanceof SemanticAddrType addr
-                && types.isVoidType(addr.referencedType)) {
-            diagnostics.error("Cannot dereference addr<void>");
+        if (node.expr.type instanceof SemanticPtrType ptr
+                && types.isVoidType(ptr.referencedType)) {
+            diagnostics.error("Cannot dereference ptr<void>");
         }
     }
 
@@ -1133,7 +1133,7 @@ public class ExpressionChecker {
      *
      *   - variables,
      *   - array elements whose target is storage-backed,
-     *   - dereferenced addresses,
+     *   - dereferenced pointers,
      *   - struct field accesses whose base is storage-backed.
      */
     private boolean isStorageBackedLValue(SemanticExprNode expr) {
@@ -1346,7 +1346,7 @@ public class ExpressionChecker {
      *
      *   logDone();
      *
-     * But operators, array indexes, array sizes, deref operands, getaddr
+     * But operators, array indexes, array sizes, deref operands, getptr
      * operands, and function arguments require real values.
      */
     private boolean ensureValueExpression(

@@ -1,6 +1,0 @@
-// Failure fixture: size_inference/question_in_addr
-// `?` under addr is not a fully static nest.
-func main() -> int32_t {
-    addr<array<int32_t, ?>> p;
-    return 0;
-}

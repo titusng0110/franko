@@ -3,8 +3,8 @@
 // ============================================================
 // Covers: every valid declared variable type form from doc 30:
 // struct variable, dynamic array of struct, static array,
-// ndarray (nested static array sugar), addr<T>, and
-// addr<array<T>>. Each variable is assigned and read.
+// ndarray (nested static array sugar), ptr<T>, and
+// ptr<array<T>>. Each variable is assigned and read.
 // ============================================================
 
 struct X {
@@ -33,17 +33,17 @@ func main() -> int32_t {
     grid.memset(1);
     grid[11][19] = 4;
 
-    // Address of a primitive.
+    // Pointer of a primitive.
     int32_t v = 77;
-    addr<int32_t> p;
-    p = getaddr(v);
+    ptr<int32_t> p;
+    p = getptr(v);
     $(p) = 88;
 
-    // Address of a dynamic array type.
+    // Pointer of a dynamic array type.
     array<int32_t> dyn;
     dyn.init_zero(2);
-    addr<array<int32_t>> ap;
-    ap = getaddr(dyn);
+    ptr<array<int32_t>> ap;
+    ap = getptr(dyn);
     $(ap)[1] = 55;
 
     print(s.n);

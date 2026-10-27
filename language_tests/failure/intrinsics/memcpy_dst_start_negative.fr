@@ -6,6 +6,6 @@ func main() -> int32_t {
     array<int32_t, 4> b;
     a.memset(0);
     b.memset(0);
-    a.memcpy(getaddr(b), -1, 0, 1);
+    a.memcpy(getptr(b), -1, 0, 1);
     return 0;
 }

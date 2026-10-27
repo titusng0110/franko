@@ -4,9 +4,9 @@
 // Cell values: 0 open, 1 wall, 2 start, 3 exit, 4 shortest path.
 //
 // Demonstrates ndarray<T, R, C> (sugar for array<array<T, C>, R>),
-// structs with ndarray fields, methods with explicit addr<Maze> self
+// structs with ndarray fields, methods with explicit ptr<Maze> self
 // receivers, nested initializer lists, chained indexing grid[r][c],
-// dynamic arrays with init_zero/uninit, getaddr() and $(), and
+// dynamic arrays with init_zero/uninit, getptr() and $(), and
 // parent-pointer path reconstruction.
 
 struct Maze {
@@ -17,7 +17,7 @@ struct Maze {
     ndarray<uint, 12, 13> parentR
     ndarray<uint, 12, 13> parentC
 
-    func initArrays(addr<Maze> self) -> void {
+    func initArrays(ptr<Maze> self) -> void {
         $(self).grid = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
@@ -41,7 +41,7 @@ struct Maze {
         return
     }
 
-    func tryVisit(addr<Maze> self, addr<array<uint>> queue, addr<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
+    func tryVisit(ptr<Maze> self, ptr<array<uint>> queue, ptr<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
         if (($(self).grid[nr][nc] != 1) && ($(self).visited[nr][nc] == 0)) {
             $(self).visited[nr][nc] = 1
             $(self).dist[nr][nc] = $(self).dist[r][c] + 1
@@ -59,7 +59,7 @@ struct Maze {
         return
     }
 
-    func runBfs(addr<Maze> self, addr<array<uint>> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
+    func runBfs(ptr<Maze> self, ptr<array<uint>> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
         uint head = 0
         uint tail = 0
         uint r = 0
@@ -96,25 +96,25 @@ struct Maze {
 
             nr = r - 1
             nc = c
-            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
 
             nr = r + 1
             nc = c
-            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
 
             nr = r
             nc = c - 1
-            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
 
             nr = r
             nc = c + 1
-            $(self).tryVisit(queue, getaddr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
         }
 
         return found
     }
 
-    func reconstructPath(addr<Maze> self, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    func reconstructPath(ptr<Maze> self, uint startR, uint startC, uint goalR, uint goalC) -> void {
         uint r = 0
         uint c = 0
         uint nr = 0
@@ -137,9 +137,9 @@ struct Maze {
         return
     }
 
-    func printSolvedGrid(addr<Maze> self, addr<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    func printSolvedGrid(ptr<Maze> self, ptr<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
         for (uint r = 0; r < rows; r++) {
-            $(line).memcpy(getaddr($(self).grid[r]))
+            $(line).memcpy(getptr($(self).grid[r]))
 
             for (uint c = 0; c < cols; c++) {
                 if ($(self).path[r][c] != 0) {
@@ -179,7 +179,7 @@ func main() -> int {
 
     byte found = 0
     int qStatus = 0
-    addr<uint> answer
+    ptr<uint> answer
 
     qStatus = queue.init_zero(qCap)
 
@@ -189,7 +189,7 @@ func main() -> int {
 
     maze.initArrays()
 
-    found = maze.runBfs(getaddr(queue), qCap, cols, startR, startC, goalR, goalC)
+    found = maze.runBfs(getptr(queue), qCap, cols, startR, startC, goalR, goalC)
 
     queue.uninit()
 
@@ -200,7 +200,7 @@ func main() -> int {
     print(4001)
 
     if (found != 0) {
-        answer = getaddr(maze.dist[goalR][goalC])
+        answer = getptr(maze.dist[goalR][goalC])
         print($(answer))
     } else {
         print(-1)
@@ -208,7 +208,7 @@ func main() -> int {
 
     print(4002)
 
-    maze.printSolvedGrid(getaddr(line), rows, cols, startR, startC, goalR, goalC)
+    maze.printSolvedGrid(getptr(line), rows, cols, startR, startC, goalR, goalC)
 
     return 0
 }

@@ -13,7 +13,7 @@ Valid assignment targets include:
 
 - variables;
 - array elements;
-- dereferenced addresses;
+- dereferenced pointers;
 - struct field accesses (`obj.field`).
 
 ## 14.1 Primitive Assignment
@@ -26,11 +26,11 @@ A primitive integer variable may be assigned:
 Moving between integer widths is never implicit: use the explicit
 `cast<T>(expr)` intrinsic (see [Casts](16-casts.md)).
 
-## 14.2 Address Assignment
+## 14.2 Pointer Assignment
 
-Address assignment requires exact address type equality.
+Pointer assignment requires exact pointer type equality.
 
-Raw integers cannot be converted to addresses.
+Raw integers cannot be converted to pointers.
 
 ## 14.3 Array Assignment
 
@@ -61,14 +61,14 @@ a[2] = 3;
 
 ## 14.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields.
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields.
 
 Valid:
 
 ```franko
 struct X {
     int32_t n
-    addr<Y> p
+    ptr<Y> p
 }
 
 X a;
@@ -85,10 +85,10 @@ struct W {
 
 W a;
 W b;
-a = b;    // invalid: struct with non-assignable fields is address-only
+a = b;    // invalid: struct with non-assignable fields is pointer-only
 ```
 
-Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `$(p).field`.
+Structs with non-assignable fields can still be shared through `ptr<X>`: pass or store `getptr(s)`, and access fields through `$(p).field`.
 
 ## 14.5 Compound Assignment
 
@@ -108,11 +108,11 @@ $(p) /= 4;
 x %= 7;
 ```
 
-The target follows the same rules as plain assignment: an addressable, non-void storage-backed lvalue.
+The target follows the same rules as plain assignment: a pointable, non-void storage-backed lvalue.
 
 The value must satisfy the rules of the corresponding binary operator (`+ - * / %`, see [Operators](17-operators.md)) against the target:
 
-- both operands are integers (arrays, addresses, and void are invalid);
+- both operands are integers (arrays, pointers, and void are invalid);
 - with two nonconstant operands, both sides must have exactly the same integer type;
 - a constant right-hand side must fit the target's type;
 - a constant zero divisor is rejected for `/=` and `%=`, exactly like `x / 0` and `x % 0`.
@@ -132,8 +132,8 @@ array<int32_t, 3> xs = [1, 2, 3];
 xs += 1;         // arrays are not arithmetic values
 
 int32_t v = 1;
-addr<int32_t> p = getaddr(v);
-p += 1;          // addresses are not arithmetic values
+ptr<int32_t> p = getptr(v);
+p += 1;          // pointers are not arithmetic values
 
 int32_t x = 1;
 int64_t y = 2;

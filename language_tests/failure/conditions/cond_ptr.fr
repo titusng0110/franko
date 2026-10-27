@@ -1,0 +1,12 @@
+// Failure fixture: conditions/cond_ptr
+// if/while/for conditions must be integer expressions; an ptr<T> is not
+// a valid condition (compare pointers with == or != instead).
+func main() -> int32_t {
+    ptr<int32_t> p;
+
+    if (p) {
+        print(1);
+    }
+
+    return 0
+}

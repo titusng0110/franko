@@ -2,8 +2,8 @@
 // LANGUAGE TEST: Declaration forms
 // ============================================================
 // Covers: primitive declarations (int, int32_t, uint8_t, uint32_t),
-// dynamic and static array declarations, addr<T> declarations with
-// getaddr/deref, and call-init sugar.
+// dynamic and static array declarations, ptr<T> declarations with
+// getptr/deref, and call-init sugar.
 // ============================================================
 
 func main() -> int32_t {
@@ -31,10 +31,10 @@ func main() -> int32_t {
     buffer[0] = 255
     buffer[127] = 1
 
-    // Address: null-initialized, then certified with getaddr of a local.
-    addr<int32_t> p
+    // Pointer: null-initialized, then certified with getptr of a local.
+    ptr<int32_t> p
     print(p == null)
-    p = getaddr(y)
+    p = getptr(y)
     $(p) = 99
 
     print(x)

@@ -1,14 +1,14 @@
 // Sieve of Eratosthenes: prints all primes <= n.
 //
 // Demonstrates structs with a dynamic-array field, methods with
-// explicit addr<Sieve> self receivers, array intrinsics
+// explicit ptr<Sieve> self receivers, array intrinsics
 // (init / memset / uninit), uint arithmetic, and strided for loops.
 
 struct Sieve {
     array<byte> isPrime
     uint n = 0
 
-    func init(addr<Sieve> self, uint limit) -> int {
+    func init(ptr<Sieve> self, uint limit) -> int {
         int initStatus = 0
 
         initStatus = $(self).isPrime(limit + 1)
@@ -29,7 +29,7 @@ struct Sieve {
         return 0
     }
 
-    func run(addr<Sieve> self) -> void {
+    func run(ptr<Sieve> self) -> void {
         uint p = 0
 
         for (p = 2; p * p <= $(self).n; p++) {
@@ -45,7 +45,7 @@ struct Sieve {
         return
     }
 
-    func printResults(addr<Sieve> self) -> void {
+    func printResults(ptr<Sieve> self) -> void {
         print(1001)
 
         for (uint i = 2; i <= $(self).n; i++) {
@@ -60,7 +60,7 @@ struct Sieve {
         return
     }
 
-    func uninit(addr<Sieve> self) -> void {
+    func uninit(ptr<Sieve> self) -> void {
         $(self).isPrime.uninit()
         return
     }

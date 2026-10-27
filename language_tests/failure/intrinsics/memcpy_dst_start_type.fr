@@ -7,6 +7,6 @@ func main() -> int32_t {
     a.memset(0);
     b.memset(0);
     int32_t s = 0;
-    a.memcpy(getaddr(b), s, 0, 1);
+    a.memcpy(getptr(b), s, 0, 1);
     return 0;
 }

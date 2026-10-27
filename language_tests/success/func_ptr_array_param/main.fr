@@ -1,0 +1,33 @@
+// ============================================================
+// LANGUAGE TEST: Array Parameters via ptr<array<T>>
+// ============================================================
+// Covers: passing arrays to functions through ptr<array<T>>
+// and ptr<array<T, N>> parameters with getptr(array) at the
+// call site; the callee writes through $(p)[i].
+// ============================================================
+
+func fillDynamic(ptr<array<int32_t>> p) -> void {
+    $(p)[0] = 11;
+    $(p)[1] = 22;
+    $(p)[2] = 33;
+    $(p)[3] = 44;
+}
+
+func fillStatic(ptr<array<int32_t, 8>> p) -> void {
+    $(p)[0] = 5;
+    $(p)[7] = 9;
+}
+
+func main() -> int32_t {
+    array<int32_t> xs;
+    xs.init_zero(4);
+    fillDynamic(getptr(xs));
+    print(xs[0], xs[1], xs[2], xs[3]);
+
+    array<int32_t, 8> grid;
+    fillStatic(getptr(grid));
+    print(grid[0], grid[7]);
+
+    xs.uninit();
+    return 0;
+}

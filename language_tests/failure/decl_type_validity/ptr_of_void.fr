@@ -1,0 +1,8 @@
+// Failure fixture: decl_type_validity/ptr_of_void
+// Pointers require a valid non-void referenced type (doc 30, doc 24), so
+// `ptr<void> p;` is invalid.
+
+func main() -> int32_t {
+    ptr<void> p;
+    return 0;
+}

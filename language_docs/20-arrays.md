@@ -156,11 +156,11 @@ For static arrays, constant indexes are checked against the known static size wh
 
 Array elements are storage-backed lvalues when the array target is storage-backed.
 
-Array elements may be addressed:
+Array elements may be pointed to:
 
 ```franko
-addr<int32_t> p;
-p = getaddr(xs[0]);
+ptr<int32_t> p;
+p = getptr(xs[0]);
 ```
 
 Nested array elements may also be lvalues when each target is storage-backed.
@@ -181,7 +181,7 @@ a = b;
 Use one of:
 
 ```franko
-a.memcpy(getaddr(b));
+a.memcpy(getptr(b));
 a.memset(0);
 a.uninit();
 ```

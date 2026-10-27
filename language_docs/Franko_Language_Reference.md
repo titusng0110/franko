@@ -9,7 +9,7 @@ Franko source
   -> Desugarer
   -> SemanticAnalyzer
   -> LegalityChecker (declarations, expressions, statements, functions, types)
-  -> AddressNullStateChecker
+  -> PointerNullStateChecker
   -> C++14 code generation
 ```
 
@@ -42,7 +42,7 @@ It documents both intended language behavior and important current implementatio
 21. [Array Intrinsics](21-array-intrinsics.md)
 22. [Array Initializer Lists](22-array-initializer-lists.md)
 23. [String Literals](23-string-literals.md)
-24. [Addresses](24-addresses.md)
+24. [Pointers](24-pointers.md)
 25. [Structs](25-structs.md)
 26. [Methods](26-methods.md)
 27. [Memory Safety Checking](27-memory-safety-checking.md)
@@ -65,14 +65,14 @@ Franko is a small statically typed language with:
 - dynamic arrays;
 - static arrays;
 - `ndarray<...>` sugar for nested static arrays;
-- typed addresses using `addr<T>`;
-- explicit address operations:
-  - `getaddr(...)`;
+- typed pointers using `ptr<T>`;
+- explicit pointer operations:
+  - `getptr(...)`;
   - `$(...)`;
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
-- struct methods with explicit `addr<X> self` receivers (see [Methods](26-methods.md));
+- struct methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
@@ -317,7 +317,7 @@ func main() -> int32_t {
     return 0;
 }
 
-func main(addr<array<array<byte>>> args) -> int32_t {
+func main(ptr<array<array<byte>>> args) -> int32_t {
     return 0;
 }
 ```
@@ -599,7 +599,7 @@ Inference rules:
 - an empty initializer list cannot infer a size;
 - without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
 
-Misplaced `?` (parameters, return types, struct fields, globals, addresses, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
+Misplaced `?` (parameters, return types, struct fields, globals, pointers, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
 
 ## 5.9 Constant Expression Evaluation
 
@@ -652,7 +652,7 @@ primitive integers
 structs
 dynamic arrays
 static arrays
-typed addresses
+typed pointers
 function return-only void
 ```
 
@@ -838,7 +838,7 @@ uint8_t b;
 uint32_t i;
 ```
 
-Array and address declarations:
+Array and pointer declarations:
 
 ```franko
 array<int> xs;
@@ -846,9 +846,9 @@ array<int32_t> ys;
 array<uint8_t, 128> buffer;
 ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
 
-addr<int> p;
-addr<int32_t> q;
-addr<array<int>> arrayPtr;
+ptr<int> p;
+ptr<int32_t> q;
+ptr<array<int>> arrayPtr;
 ```
 
 Declaration initializers are syntax sugar:
@@ -910,7 +910,7 @@ int32_t g = 1 + 2
 uint64_t mask = 1 << 8
 ```
 
-The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and addr globals reject `= constExpr` as a type mismatch.
+The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
 
 **Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, string literals `= "text"`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
@@ -928,9 +928,9 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **address variables are the exception: an `addr<T>` declaration is guaranteed null-initialized** (see [Addresses](24-addresses.md)).
+- **pointer variables are the exception: an `ptr<T>` declaration is guaranteed null-initialized** (see [Pointers](24-pointers.md)).
 
-There is no implicit zero-initialization for locals other than addresses. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals other than pointers. Use `init_zero` for zeroed dynamic array storage.
 
 **Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
 
@@ -942,7 +942,7 @@ Struct fields are declared with the same `type name` syntax as variables, inside
 struct X {
     int32_t num = 0
     array<int32_t, 4> xs
-    addr<Y> next
+    ptr<Y> next
 }
 ```
 
@@ -981,10 +981,10 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
-- an address type `addr<T>`, where `T` is any valid declared type. Arrays and nested addresses are allowed as the referenced type, so `addr<array<int32_t>>`, `addr<array<int32_t, 8>>`, and `addr<addr<int32_t>>` are all passable; or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is address-only: pass `addr<X>` and `getaddr(s)` instead. See [Structs](25-structs.md).
+- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<array<int32_t>>`, `ptr<array<int32_t, 8>>`, and `ptr<ptr<int32_t>>` are all passable; or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass `ptr<X>` and `getptr(s)` instead. See [Structs](25-structs.md).
 
-Bare array types are not passable. To pass an array to a function, declare an `addr<array<T>>` (or `addr<array<T, N>>`) parameter and pass `getaddr(array)` at the call site.
+Bare array types are not passable. To pass an array to a function, declare an `ptr<array<T>>` (or `ptr<array<T, N>>`) parameter and pass `getptr(array)` at the call site.
 
 `void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
 
@@ -1005,7 +1005,7 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `addr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 
@@ -1053,7 +1053,7 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
-- an address type, `addr<T>`; or
+- an pointer type, `ptr<T>`; or
 - a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)).
 
 Arrays cannot currently be returned directly.
@@ -1062,7 +1062,7 @@ Arrays cannot currently be returned directly.
 
 Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
 
-Struct methods follow the same signature, overload, and return rules with an explicit `addr<X> self` first parameter; see [Methods](26-methods.md).
+Struct methods follow the same signature, overload, and return rules with an explicit `ptr<X> self` first parameter; see [Methods](26-methods.md).
 
 ---
 
@@ -1127,7 +1127,7 @@ Valid assignment targets include:
 
 - variables;
 - array elements;
-- dereferenced addresses;
+- dereferenced pointers;
 - struct field accesses (`obj.field`).
 
 ## 14.1 Primitive Assignment
@@ -1140,11 +1140,11 @@ A primitive integer variable may be assigned:
 Moving between integer widths is never implicit: use the explicit
 `cast<T>(expr)` intrinsic (see [Casts](16-casts.md)).
 
-## 14.2 Address Assignment
+## 14.2 Pointer Assignment
 
-Address assignment requires exact address type equality.
+Pointer assignment requires exact pointer type equality.
 
-Raw integers cannot be converted to addresses.
+Raw integers cannot be converted to pointers.
 
 ## 14.3 Array Assignment
 
@@ -1175,14 +1175,14 @@ a[2] = 3;
 
 ## 14.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields.
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields.
 
 Valid:
 
 ```franko
 struct X {
     int32_t n
-    addr<Y> p
+    ptr<Y> p
 }
 
 X a;
@@ -1199,10 +1199,10 @@ struct W {
 
 W a;
 W b;
-a = b;    // invalid: struct with non-assignable fields is address-only
+a = b;    // invalid: struct with non-assignable fields is pointer-only
 ```
 
-Structs with non-assignable fields can still be shared through `addr<X>`: pass or store `getaddr(s)`, and access fields through `$(p).field`.
+Structs with non-assignable fields can still be shared through `ptr<X>`: pass or store `getptr(s)`, and access fields through `$(p).field`.
 
 ## 14.5 Compound Assignment
 
@@ -1222,11 +1222,11 @@ $(p) /= 4;
 x %= 7;
 ```
 
-The target follows the same rules as plain assignment: an addressable, non-void storage-backed lvalue.
+The target follows the same rules as plain assignment: a pointable, non-void storage-backed lvalue.
 
 The value must satisfy the rules of the corresponding binary operator (`+ - * / %`, see [Operators](17-operators.md)) against the target:
 
-- both operands are integers (arrays, addresses, and void are invalid);
+- both operands are integers (arrays, pointers, and void are invalid);
 - with two nonconstant operands, both sides must have exactly the same integer type;
 - a constant right-hand side must fit the target's type;
 - a constant zero divisor is rejected for `/=` and `%=`, exactly like `x / 0` and `x % 0`.
@@ -1246,8 +1246,8 @@ array<int32_t, 3> xs = [1, 2, 3];
 xs += 1;         // arrays are not arithmetic values
 
 int32_t v = 1;
-addr<int32_t> p = getaddr(v);
-p += 1;          // addresses are not arithmetic values
+ptr<int32_t> p = getptr(v);
+p += 1;          // pointers are not arithmetic values
 
 int32_t x = 1;
 int64_t y = 2;
@@ -1296,13 +1296,13 @@ Current storage-backed lvalues are:
 |---|---|
 | variable | yes |
 | array element of storage-backed array | yes |
-| `$(address)` | yes |
+| `$(pointer)` | yes |
 | struct field access whose base is an lvalue (`obj.field`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
 | comparison expression | no |
 | function call result | no |
-| `getaddr(...)` result | no |
+| `getptr(...)` result | no |
 
 Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
@@ -1312,7 +1312,7 @@ This distinction matters for:
 
 - assignment targets;
 - compound assignment targets and `x++` / `x--` targets;
-- `getaddr(...)` operands;
+- `getptr(...)` operands;
 - array intrinsic receivers;
 - `memcpy` sources;
 - array initializer assignment targets.
@@ -1334,7 +1334,7 @@ int32_t big = 300;
 uint8_t small = cast<uint8_t>(big);
 ```
 
-Like `$(...)` and `getaddr`, `cast<T>` is a compiler intrinsic, not a
+Like `$(...)` and `getptr`, `cast<T>` is a compiler intrinsic, not a
 function call: it cannot be overloaded, shadowed, or passed around.
 
 ## 16.1 Cast Syntax
@@ -1345,9 +1345,9 @@ cast<uint16_t>(a)
 
 The target `T` must be one of the eight primitive integer types
 (`int8_t` … `uint64_t`, including the `int` / `uint` / `byte` aliases).
-Anything else — addresses, arrays, structs, `void` — is rejected at
+Anything else — pointers, arrays, structs, `void` — is rejected at
 parse time. The operand must be an integer expression; casting an
-address, array, struct, null, or void value is a compile error.
+pointer, array, struct, null, or void value is a compile error.
 
 A cast is never an lvalue:
 
@@ -1413,8 +1413,8 @@ uint8_t bad = cast<uint8_t>(300);   // invalid: 300 does not fit uint8_t
 
 ## 16.5 What Casts Do Not Cover
 
-- There are no casts for addresses, arrays, structs, or void. Raw
-  integers cannot be converted to addresses.
+- There are no casts for pointers, arrays, structs, or void. Raw
+  integers cannot be converted to pointers.
 - Casts do not appear in constant-expression slots (static array
   sizes, global initializers, struct field defaults): those contexts
   accept only plain integer literals and operators.
@@ -1444,7 +1444,7 @@ func main() -> int32_t {
 
 Franko operators apply primarily to integer expressions.
 
-Addresses have special comparison rules.
+Pointers have special comparison rules.
 
 Arrays are not arithmetic values.
 
@@ -1487,7 +1487,7 @@ Unsupported unary operators:
 
 Arithmetic operators: `+`, `-`, `*`, `/`, `%`.
 
-Operands must be integers. Arrays and addresses are invalid.
+Operands must be integers. Arrays and pointers are invalid.
 
 `%` is the modulus (remainder) operator. Integer division truncates toward zero, and the remainder takes the sign of the dividend:
 
@@ -1524,9 +1524,9 @@ Comparison operators produce `uint8_t`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
-Address comparison is supported only between identical address types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
+Pointer comparison is supported only between identical pointer types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
-The `null` literal may be compared with an address using `==` and `!=` only. `null` cannot be compared with non-address values, and `0` is not `null`.
+The `null` literal may be compared with an pointer using `==` and `!=` only. `null` cannot be compared with non-pointer values, and `0` is not `null`.
 
 ## 17.7 Logical Operators
 
@@ -1534,9 +1534,9 @@ Logical operators: `&&`, `||`, `!`.
 
 Operands must be integers. Results are `uint8_t` values `0` or `1`.
 
-## 17.8 No Address Arithmetic
+## 17.8 No Pointer Arithmetic
 
-Addresses are not integers and cannot participate in arithmetic, bitwise, or shift operations.
+Pointers are not integers and cannot participate in arithmetic, bitwise, or shift operations.
 
 ## 17.9 Result Types
 
@@ -1575,14 +1575,14 @@ if (arr) {
 Invalid:
 
 ```franko
-addr<int32_t> p;
+ptr<int32_t> p;
 
 if (p) {
     print(1);
 }
 ```
 
-To test addresses, compare them explicitly:
+To test pointers, compare them explicitly:
 
 ```franko
 if (p == q) {
@@ -1762,10 +1762,10 @@ print();              // prints a bare newline
 
 The checker validates print arguments as expressions usable where a value is required (in particular, `void` expressions are rejected), but it does not impose a strict printable-type policy.
 
-Current print limitation: only integer primitives and addresses are printable. The C++14 backend can print:
+Current print limitation: only integer primitives and pointers are printable. The C++14 backend can print:
 
 - integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
-- addresses, including the `null` address (printed through `const void*`).
+- pointers, including the `null` pointer (printed through `const void*`).
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
@@ -1782,7 +1782,7 @@ Array intrinsic calls are special expression-statement forms:
 ```franko
 arr(10);
 arr.memset(0);
-arr.memcpy(getaddr(other));
+arr.memcpy(getptr(other));
 arr.uninit();
 ```
 
@@ -1946,11 +1946,11 @@ For static arrays, constant indexes are checked against the known static size wh
 
 Array elements are storage-backed lvalues when the array target is storage-backed.
 
-Array elements may be addressed:
+Array elements may be pointed to:
 
 ```franko
-addr<int32_t> p;
-p = getaddr(xs[0]);
+ptr<int32_t> p;
+p = getptr(xs[0]);
 ```
 
 Nested array elements may also be lvalues when each target is storage-backed.
@@ -1971,7 +1971,7 @@ a = b;
 Use one of:
 
 ```franko
-a.memcpy(getaddr(b));
+a.memcpy(getptr(b));
 a.memset(0);
 a.uninit();
 ```
@@ -2028,7 +2028,7 @@ arrs[i]
 Examples that are not storage-backed array targets:
 
 ```franko
-getaddr(arr)
+getptr(arr)
 x + y
 1
 ```
@@ -2112,7 +2112,7 @@ Current memsetable types:
 | static arrays of memsetable elements | yes |
 | structs whose fields are all memsetable, recursively | yes |
 | dynamic arrays | no |
-| addresses | no |
+| pointers | no |
 
 ## 21.6 `memcpy`
 
@@ -2128,7 +2128,7 @@ target.memcpy(source, dstStart, srcStart, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be an **address to an array** (`addr<array<T>>` or `addr<array<T, N>>`), typically produced with `getaddr(...)`; passing an array value directly is invalid;
+- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`; passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
@@ -2166,7 +2166,7 @@ Current memcpyable types:
 | Element type | Memcpyable? |
 |---|---|
 | primitive integers | yes |
-| addresses | yes |
+| pointers | yes |
 | static arrays of memcpyable elements | yes |
 | structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |
@@ -2700,93 +2700,93 @@ See also [Array Initializer Lists](22-array-initializer-lists.md).
 
 ---
 
-# 24. Addresses
+# 24. Pointers
 
-Franko has typed addresses:
+Franko has typed pointers:
 
 ```franko
-addr<T>
+ptr<T>
 ```
 
-An address value refers to a storage location containing a value of type `T`.
+An pointer value refers to a storage location containing a value of type `T`.
 
 Examples:
 
 ```franko
-addr<int32_t> p;
-addr<uint8_t> b;
-addr<addr<int32_t>> pp;
-addr<array<int32_t>> ap;
+ptr<int32_t> p;
+ptr<uint8_t> b;
+ptr<ptr<int32_t>> pp;
+ptr<array<int32_t>> ap;
 ```
 
-Addresses are typed, assignable, copyable, dereferenceable, and comparable.
+Pointers are typed, assignable, copyable, dereferenceable, and comparable.
 
-Addresses are not arithmetic values.
+Pointers are not arithmetic values.
 
-`addr<void>` is invalid because `void` is not an ordinary value type.
+`ptr<void>` is invalid because `void` is not an ordinary value type.
 
-## 24.1 Creating Addresses with `getaddr`
+## 24.1 Creating Pointers with `getptr`
 
 The operand must be a storage-backed lvalue.
 
-If the operand has type `T`, then `getaddr(operand)` has type `addr<T>`.
+If the operand has type `T`, then `getptr(operand)` has type `ptr<T>`.
 
 ## 24.2 Dereferencing with `$`
 
-If the operand has type `addr<T>`, then `$(...)` has type `T`.
+If the operand has type `ptr<T>`, then `$(...)` has type `T`.
 
 `$(...)` is also an lvalue.
 
-## 24.3 Nested Addresses
+## 24.3 Nested Pointers
 
-Franko supports addresses to addresses.
+Franko supports pointers to pointers.
 
-## 24.4 Address Assignment
+## 24.4 Pointer Assignment
 
-Address assignment requires exact type equality.
+Pointer assignment requires exact type equality.
 
-Raw integers cannot be converted to addresses.
+Raw integers cannot be converted to pointers.
 
-## 24.5 Address Comparison
+## 24.5 Pointer Comparison
 
-Addresses may be compared using only the equality operators:
+Pointers may be compared using only the equality operators:
 
 ```franko
 ==
 !=
 ```
 
-Both operands must have identical address types.
+Both operands must have identical pointer types.
 
-Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
+Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
-Address comparison produces `uint8_t`.
+Pointer comparison produces `uint8_t`.
 
-## 24.6 No Address Arithmetic
+## 24.6 No Pointer Arithmetic
 
-Addresses are not integers and do not support arithmetic.
+Pointers are not integers and do not support arithmetic.
 
-## 24.7 Addresses of Arrays
+## 24.7 Pointers of Arrays
 
-Arrays may be addressed.
+Arrays may be pointed to.
 
 Example:
 
 ```franko
 array<int32_t> arr;
-addr<array<int32_t>> p;
+ptr<array<int32_t>> p;
 
-p = getaddr(arr);
+p = getptr(arr);
 $(p)(10);
 ```
 
-Array initializer assignment through a dereferenced array address is valid when the dereference produces a storage-backed array lvalue:
+Array initializer assignment through a dereferenced array pointer is valid when the dereference produces a storage-backed array lvalue:
 
 ```franko
 array<int32_t, 3> xs;
-addr<array<int32_t, 3>> p;
+ptr<array<int32_t, 3>> p;
 
-p = getaddr(xs);
+p = getptr(xs);
 
 $(p) = [1, 2, 3];
 ```
@@ -2801,19 +2801,19 @@ $(p)[2] = 3;
 
 ## 24.8 The null Literal
 
-`null` is a literal of type `null`. It is valid only where an address is expected:
+`null` is a literal of type `null`. It is valid only where an pointer is expected:
 
 ```franko
-addr<int32_t> p;
+ptr<int32_t> p;
 p = null;               // valid
 
-int32_t x = null;       // invalid: null is only valid for address types
+int32_t x = null;       // invalid: null is only valid for pointer types
 p = 0;                  // invalid: 0 is an integer, not null
 ```
 
-`null` and `0` are different values. An address cannot be assigned or compared against the integer `0`; use `null` instead.
+`null` and `0` are different values. An pointer cannot be assigned or compared against the integer `0`; use `null` instead.
 
-`null` may be compared with an address using equality only:
+`null` may be compared with an pointer using equality only:
 
 ```franko
 if (p == null) {
@@ -2824,39 +2824,39 @@ if (p != null) {
 }
 ```
 
-Comparing `null` with a non-address value is invalid. Relational comparison (`<`, `>`) of `null` is invalid.
+Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`, `>`) of `null` is invalid.
 
-`null` may be passed to `addr<T>` parameters and returned from `addr<T>` functions.
+`null` may be passed to `ptr<T>` parameters and returned from `ptr<T>` functions.
 
-`print(null)` prints the null address as a pointer value.
+`print(null)` prints the null pointer as a pointer value.
 
-### 24.8.1 Null-Initialized Address Declarations
+### 24.8.1 Null-Initialized Pointer Declarations
 
-Address declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
+Pointer declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
 
 ```franko
-addr<int32_t> p;        // p is null here, guaranteed
+ptr<int32_t> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
-This guarantee also applies to address-typed struct fields.
+This guarantee also applies to pointer-typed struct fields.
 
 ### 24.8.2 Nullness Certification
 
-The compiler tracks whether an address variable is null. The only expression that certifies an address as non-null is `getaddr(...)`:
+The compiler tracks whether an pointer variable is null. The only expression that certifies an pointer as non-null is `getptr(...)`:
 
 ```franko
-addr<int32_t> p;            // p is null
+ptr<int32_t> p;            // p is null
 $(p);                   // error: cannot dereference null
 
-p = getaddr(x);             // p is certified non-null
+p = getptr(x);             // p is certified non-null
 $(p);                   // valid
 
-addr<int32_t> q = p;        // q copies p's state: non-null
-addr<int32_t> r = q;        // r copies q's state: non-null
+ptr<int32_t> q = p;        // q copies p's state: non-null
+ptr<int32_t> r = q;        // r copies q's state: non-null
 ```
 
-Assignment from another address variable copies that variable's exact state, so a null state propagates through copies and an `getaddr` certification propagates transitively.
+Assignment from another pointer variable copies that variable's exact state, so a null state propagates through copies and an `getptr` certification propagates transitively.
 
 Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
@@ -2867,9 +2867,9 @@ Dereferencing a variable that is **definitely null** is an error.
 Dereferencing a variable that is **possibly null** (null on some path, for example after a branch merge) is a **warning**, not an error:
 
 ```franko
-addr<int32_t> p;
+ptr<int32_t> p;
 if (cond != 0) {
-    p = getaddr(x);
+    p = getptr(x);
 } else {
     p = null;
 }
@@ -2878,11 +2878,11 @@ $(p);                   // warning: possibly null
 
 Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.
 
-## 24.9 Address Lifetime Limitations
+## 24.9 Pointer Lifetime Limitations
 
-Address lifetime is not fully tracked.
+Pointer lifetime is not fully tracked.
 
-The compiler does not fully track dangling addresses or aliasing through addresses. An address may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.
+The compiler does not fully track dangling pointers or aliasing through pointers. An pointer may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.
 
 ---
 
@@ -2938,7 +2938,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, addresses (`addr<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -2959,7 +2959,7 @@ struct Counter {
 Rules:
 
 - Defaults must be constant expressions (`constExpr`) and are folded at compile time (see [Constant Folding](10-constant-folding.md)).
-- Only primitive fields can have default values. Struct, array, and addr fields reject `= constExpr` as a type mismatch.
+- Only primitive fields can have default values. Struct, array, and ptr fields reject `= constExpr` as a type mismatch.
 - A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8_t x = 300`).
 
 ## 25.4 Using Struct Types
@@ -2968,7 +2968,7 @@ A struct name used in a type position is resolved against the struct namespace:
 
 - Unknown struct names are rejected with an "unknown struct type" error.
 - Field types may reference structs declared anywhere in the program, including structs declared later in the file.
-- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `addr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
+- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
 
 ## 25.5 By-Value Cycles
 
@@ -2991,7 +2991,7 @@ Indirection breaks the cycle and is allowed:
 ```franko
 struct Node {
     int32_t v
-    addr<Node> next        // valid: address edge
+    ptr<Node> next        // valid: pointer edge
     array<Node> kids       // valid: dynamic array edge
 }
 ```
@@ -3001,19 +3001,19 @@ struct Node {
 A type is **assignable** when a value of that type can participate in ordinary assignment with `=`:
 
 - primitive integer types are assignable;
-- address types `addr<T>` are assignable;
+- pointer types `ptr<T>` are assignable;
 - a struct is assignable if and only if all of its fields are assignable, recursively.
 
-Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **address-only**.
+Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **pointer-only**.
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For an address-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through `addr<X>` and `getaddr(s)` instead.
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For an pointer-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through `ptr<X>` and `getptr(s)` instead.
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](12-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
-Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (addresses excluded), and `memcpy`-able when every field is `memcpy`-able (addresses included). See [Array Intrinsics](21-array-intrinsics.md).
+Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
 Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
 
@@ -3023,15 +3023,15 @@ Member access uses dot syntax. Access chains compose with every storage form:
 
 ```franko
 s.field               // local struct
-$(p).field        // through an address
-$(a.next).field   // another hop through an addr field: deref the link first
+$(p).field        // through an pointer
+$(a.next).field   // another hop through an ptr field: deref the link first
 xs[i].field           // element of a static or dynamic array
 ```
 
 - `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `$(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
-- `getaddr(s.field)` is valid and yields `addr<T>` for the field's type `T`.
+- `getptr(s.field)` is valid and yields `ptr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
-  `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getaddr(other))`, `b.data[i]`, and `b.data.uninit()`.
+  `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
 - Struct methods also use member-call syntax (`s.increment()`); see [Methods](26-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
 
 ## 25.8 Initialization Semantics
@@ -3061,8 +3061,8 @@ int32_t scale = 2;
 
 The C++14 backend:
 
-- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so addresses may reference structs declared later in source order;
-- orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`addr` and dynamic-array fields impose no ordering constraint);
+- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so pointers may reference structs declared later in source order;
+- orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`ptr` and dynamic-array fields impose no ordering constraint);
 - emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
 - emits member access as `target.field`.
 - emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](26-methods.md).
@@ -3074,8 +3074,8 @@ The C++14 backend:
 - No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` cannot print a whole struct — print individual fields instead.
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
-- A struct may not reach itself by value (through struct fields or static array elements); `addr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is address-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `addr<X>`.
+- A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
+- A struct with any non-assignable field is pointer-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `ptr<X>`.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -3083,13 +3083,13 @@ The C++14 backend:
 
 # 26. Methods
 
-A struct may declare methods: functions bound to the struct whose first parameter is explicitly `addr<X> self`. Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getaddr(receiver)` first argument (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
+A struct may declare methods: functions bound to the struct whose first parameter is explicitly `ptr<X> self`. Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getptr(receiver)` first argument (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
 
 ```franko
 struct X {
     int32_t y = 0
 
-    func increment(addr<X> self) -> void {
+    func increment(ptr<X> self) -> void {
         $(self).y = $(self).y + 1
         return
     }
@@ -3111,7 +3111,7 @@ A struct body contains field declarations and method declarations:
 ```franko
 struct X {
     int32_t y = 0
-    func increment(addr<X> self) -> void {
+    func increment(ptr<X> self) -> void {
         $(self).y = $(self).y + 1
         return
     }
@@ -3128,12 +3128,12 @@ Rules:
 
 ## 26.2 The `self` Parameter
 
-The first parameter of every method must be literally `addr<X> self`, where `X` is the enclosing struct:
+The first parameter of every method must be literally `ptr<X> self`, where `X` is the enclosing struct:
 
 ```franko
 struct X {
     int32_t y = 0
-    func get(addr<X> self) -> int32_t {
+    func get(ptr<X> self) -> int32_t {
         return $(self).y
     }
 }
@@ -3141,20 +3141,20 @@ struct X {
 
 Rules:
 
-- A method with no parameters is rejected: `Method 'X.foo' must have 'addr<X> self' as its first parameter`.
+- A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter`.
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
-- A method whose `self` parameter does not have type `addr<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be addr<X>`. This covers by-value `X self`, non-address `int32_t self`, and `addr<Y> self` for a different struct `Y`.
+- A method whose `self` parameter does not have type `ptr<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X>`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
-- `self` is an ordinary `addr<X>` variable inside the body: `$(self).y`, `getaddr($(self).y)`, and even `self = other` behave exactly like any other address variable. In particular `self.y` is invalid: `self` has type `addr<X>`, and member access requires a struct value, so fields are reached as `$(self).y` (see [Addresses](24-addresses.md)).
+- `self` is an ordinary `ptr<X>` variable inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: `self` has type `ptr<X>`, and member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)).
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
 ## 26.3 Method Calls and Receivers
 
-A method is invoked with member-call syntax. The compiler prepends `getaddr(receiver)` as the `self` argument:
+A method is invoked with member-call syntax. The compiler prepends `getptr(receiver)` as the `self` argument:
 
 ```franko
 s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
-$(p).increment()       // explicit deref for addr<X> receivers
+$(p).increment()       // explicit deref for ptr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
 ```
@@ -3162,13 +3162,13 @@ s.inner.increment()        // field receiver
 Rules:
 
 - The receiver must have struct type; otherwise the call is rejected: `Method call 'foo' is only valid on struct values, got type T`.
-- An `addr<X>` receiver is rejected with a hint: `Method call 'foo' is only valid on struct values, got type addr<X>; use $(p).foo(...) for address receivers`. There is no implicit auto-deref.
+- An `ptr<X>` receiver is rejected with a hint: `Method call 'foo' is only valid on struct values, got type ptr<X>; use $(p).foo(...) for pointer receivers`. There is no implicit auto-deref.
 - The receiver must be a storage-backed lvalue: a variable, field, array element, or `$(...)` chain (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)). Call results are rejected: `Method call receiver must be a storage-backed lvalue: a variable, field, array element, or $(...) expression`.
 - Unknown methods and mismatched arguments are rejected: `No matching overload for method call 'X.foo(...)'`, with user argument types only (`self` is implicit and excluded from the printed signature). A struct-typed receiver never falls back to array-intrinsic diagnostics, even when the name coincides with one: `s.init()` with no such method reports the method-call diagnostic.
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
-- Methods are never callable as free functions: `X.foo(getaddr(s))` and `foo(getaddr(s))` are rejected as ordinary overload failures.
-- A method call lowers to `SemanticFunctionCallNode` with a synthesized `getaddr(receiver)` first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
+- Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
+- A method call lowers to `SemanticFunctionCallNode` with a synthesized `getptr(receiver)` first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
 
 ## 26.4 Fields vs Methods Name Resolution
 
@@ -3186,11 +3186,11 @@ Methods overload exactly like free functions: overload identity is name plus ord
 ```franko
 struct Counter {
     int32_t n = 0
-    func add(addr<Counter> self, int32_t v) -> void {
+    func add(ptr<Counter> self, int32_t v) -> void {
         $(self).n = $(self).n + v
         return
     }
-    func add(addr<Counter> self, int32_t a, int32_t b) -> void {
+    func add(ptr<Counter> self, int32_t a, int32_t b) -> void {
         $(self).n = $(self).n + a + b
         return
     }
@@ -3199,7 +3199,7 @@ struct Counter {
 
 Rules:
 
-- The implicit `self` parameter (`addr<X>`) does not distinguish overloads; overloads must differ in their user parameters.
+- The implicit `self` parameter (`ptr<X>`) does not distinguish overloads; overloads must differ in their user parameters.
 - Duplicate method signatures are rejected: `Duplicate declaration of method 'X.foo(...)' in struct 'X'`.
 - Ambiguous constant arguments are rejected like free-function ambiguity: `Ambiguous call to overloaded method 'X.foo(...)': argument constants fit multiple overloads`.
 
@@ -3217,7 +3217,7 @@ Rules:
 
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
-- `self` as an expression (`self`, `getaddr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
+- `self` as an expression (`self`, `getptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
 - `x.self` parses (member names accept keywords) but always fails resolution, like `x.print`.
 
 ## 26.7 Scope Inside Method Bodies
@@ -3229,12 +3229,12 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 - `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](12-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).
 
-## 26.8 Methods and Address Checking
+## 26.8 Methods and Pointer Checking
 
-`self` is an `addr<X>` parameter:
+`self` is an `ptr<X>` parameter:
 
-- `self` enters pointing: the call synthesizes `getaddr(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
-- Address dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)). The checker is intra-procedural.
+- `self` enters pointing: the call synthesizes `getptr(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)). The checker is intra-procedural.
 
 ## 26.9 Backend Notes
 
@@ -3245,7 +3245,7 @@ Methods emit as free C++ functions with a mangled name:
 | method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | method `self` parameter | `VAR_self` (`STRUCT_X*`) |
 
-The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `addr<X>`, then the return type); see [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
 
 - The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
 - `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
@@ -3255,9 +3255,9 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 ## 26.10 Restrictions Summary
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
-- Every method must have `addr<X> self` as its first parameter; only the first parameter may be named `self`.
+- Every method must have `ptr<X> self` as its first parameter; only the first parameter may be named `self`.
 - `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
-- Receivers must be struct-valued storage-backed lvalues; `addr<X>` receivers require explicit `$(p).method(...)`.
+- Receivers must be struct-valued storage-backed lvalues; `ptr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
 - No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.
@@ -3266,36 +3266,36 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 
 # 27. Memory Safety Checking
 
-After legality checking, the compiler runs a dedicated **address null-state pass** (`AddressNullStateChecker`) over address-typed variables.
+After legality checking, the compiler runs a dedicated **pointer null-state pass** (`PointerNullStateChecker`) over pointer-typed variables.
 
-The pass tracks one fact per address variable: whether it is definitely null, definitely pointing, or possibly null on the current execution path.
+The pass tracks one fact per pointer variable: whether it is definitely null, definitely pointing, or possibly null on the current execution path.
 
 It checks:
 
-- dereferencing a null address (an error);
-- dereferencing a possibly-null address (a warning);
-- that `null` is only used for address types (see [Types](06-types.md)).
+- dereferencing a null pointer (an error);
+- dereferencing a possibly-null pointer (a warning);
+- that `null` is only used for pointer types (see [Types](06-types.md)).
 
-The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's addresses.
+The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers.
 
-## 27.1 Address States
+## 27.1 Pointer States
 
-For each address variable the checker tracks one of:
+For each pointer variable the checker tracks one of:
 
 | State | Meaning |
 |---|---|
-| pointing | the variable holds a certified, real storage address |
+| pointing | the variable holds a certified, real storage pointer |
 | null | the variable is definitely null on the current path |
 | maybe-null | the variable is null on some continuing paths |
 
 ## 27.2 Assignment Rules
 
-- an ordinary `addr<T>` declaration is **null-initialized**, so it starts in the null state;
+- an ordinary `ptr<T>` declaration is **null-initialized**, so it starts in the null state;
 - assigning the `null` literal makes the target null;
-- assigning `getaddr(...)` makes the target pointing; this is the **only** certification of a non-null address;
-- assigning another address variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
+- assigning `getptr(...)` makes the target pointing; this is the **only** certification of a non-null pointer;
+- assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked address variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getaddr(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `addr<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live address.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `ptr<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
 
 ## 27.3 Dereference Checking
 
@@ -3328,7 +3328,7 @@ Loop termination is not proven; the post-loop state is conservative.
 Inside `if (p == null)` / `if (p != null)` (either operand order), the checker refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
 
 ```franko
-addr<int32_t> p;
+ptr<int32_t> p;
 if (p != null) {
     $(p);      // valid: p is refined to pointing inside the guard
 }
@@ -3338,8 +3338,8 @@ $(p);          // error: p is provably null after the guard fails
 When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
 
 ```franko
-addr<int32_t> p;
-p = getaddr(x);
+ptr<int32_t> p;
+p = getptr(x);
 if (p != null) {
     $(p);      // valid
 }
@@ -3352,12 +3352,12 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 
 ## 27.7 Limitations
 
-Current limitations of the address checker:
+Current limitations of the pointer checker:
 
 - values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain address **variables** are tracked. An address held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
-- dangling addresses are not detected at compile time; an address may outlive its pointee, and the compiler does not detect that case. A runtime check is planned as a later change;
-- checks are intra-procedural; address effects of called functions are not analyzed;
+- only plain pointer **variables** are tracked. An pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
+- dangling pointers are not detected at compile time; an pointer may outlive its pointee, and the compiler does not detect that case. A runtime check is planned as a later change;
+- checks are intra-procedural; pointer effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
 
 ---
@@ -3402,9 +3402,9 @@ array<int32_t, 5 + 5>  == array<int32_t, 10>
 array<int32_t, 10>     != array<int32_t, 20>
 ```
 
-## 28.4 Address Equality
+## 28.4 Pointer Equality
 
-Address types are equal if their referenced types are equal.
+Pointer types are equal if their referenced types are equal.
 
 ## 28.5 Function Signature Equality
 
@@ -3439,7 +3439,7 @@ A declared variable type is valid if it is one of:
 - a declared struct type;
 - dynamic array of a valid non-`void` type;
 - static array of a valid non-`void` type with valid size;
-- address of a valid non-`void` type.
+- pointer of a valid non-`void` type.
 
 Valid:
 
@@ -3451,8 +3451,8 @@ X s;
 array<X> xs;
 array<uint8_t, 64> bytes;
 ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
-addr<int32_t> p;
-addr<array<int32_t>> ap;
+ptr<int32_t> p;
+ptr<array<int32_t>> ap;
 ```
 
 Invalid:
@@ -3460,7 +3460,7 @@ Invalid:
 ```franko
 void x;
 array<void> xs;
-addr<void> p;
+ptr<void> p;
 T s;    // invalid when no struct named T is declared
 ```
 
@@ -3470,7 +3470,7 @@ A function return type has separate rules. It may be:
 
 - `void`;
 - a primitive integer type;
-- an address type; or
+- an pointer type; or
 - a struct whose fields are all assignable value types, recursively.
 
 Array return types are invalid.
@@ -3491,7 +3491,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - parameter names are not used in overload resolution;
 - return type is not used in overload resolution;
 - arrays cannot be returned by value;
-- arrays cannot be passed as parameters by value; use addr<array<...>> parameters (see [Functions](12-functions.md));
+- arrays cannot be passed as parameters by value; use ptr<array<...>> parameters (see [Functions](12-functions.md));
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
@@ -3508,10 +3508,10 @@ x.something(1);     // unsupported member call: unknown method
 
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
-- struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and addr fields reject `= constExpr` as a type mismatch);
-- a struct may not reach itself by value through struct fields or static array elements; `addr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | address | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is address-only: it can be used only through `addr<X>`;
-- structs have methods with explicit `addr<X> self` receivers (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
+- struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
+- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: it can be used only through `ptr<X>`;
+- structs have methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](25-structs.md).
 
@@ -3552,13 +3552,13 @@ return [1, 2, 3];
 
 The checker validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
 
-## 30.10 Address Lifetime Is Not Fully Tracked
+## 30.10 Pointer Lifetime Is Not Fully Tracked
 
-The compiler does not fully track dangling addresses or ownership.
+The compiler does not fully track dangling pointers or ownership.
 
 ## 30.11 Print Checking Is Loose
 
-The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and addresses (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
+The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
 Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
 
@@ -3618,7 +3618,7 @@ Franko source
   -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
   -> SemanticAnalyzer (validation of evaluated values, no re-folding, entry-point selection)
   -> LegalityChecker
-  -> AddressNullStateChecker
+  -> PointerNullStateChecker
   -> C++14 code generation
   -> program template wrapper (entry-point call + argv conversion)
 ```
@@ -3705,7 +3705,7 @@ Large integer literals are emitted so that they remain well-formed C++14. In par
 
 - plain integer primitives are inserted directly;
 - `int8_t`/`uint8_t` values are promoted with unary `+` so a number is printed rather than a character;
-- addresses are cast to `const void*` to avoid accidental string printing.
+- pointers are cast to `const void*` to avoid accidental string printing.
 
 See [Statements](19-statements.md) for which types are meaningfully printable.
 
@@ -3726,7 +3726,7 @@ So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
 
 Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
 
-Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `addr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
+Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `ptr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
 
 Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X_HASH_<8hex>`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
 
@@ -3739,14 +3739,14 @@ When a variable or function shares its name with a declared struct, the compiler
   - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
 ```
 
-Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `addr<X>` fields and pointer references may name structs declared later in source order.
+Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `ptr<X>` fields and pointer references may name structs declared later in source order.
 
 ## 31.9 Entry-Point Wrapper and Command-Line Arguments
 
 The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
 
 - `ProgramTemplate.cpp` provides `int main()` and calls the no-args Franko `main` (`FUNC_main_HASH_d8625720`, the hash of `fn()->int32_t`).
-- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_3f161798`, the hash of `fn(addr<array<array<uint8_t>>>)->int32_t`).
+- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_5708d149`, the hash of `fn(ptr<array<array<uint8_t>>>)->int32_t`).
 
 The compiler selects the template from the declared entry-point shape; an explicit `-t` template overrides the selection.
 
@@ -3844,11 +3844,11 @@ Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
-FUNC_read_HASH_10a3784c            os::posix::read
-FUNC_write_HASH_10a3784c           os::posix::write
+FUNC_read_HASH_b155decf            os::posix::read
+FUNC_write_HASH_b155decf           os::posix::write
 FUNC_GetStdHandle_HASH_493245c2    os::win32::GetStdHandle
-FUNC_ReadFile_HASH_5775278d        os::win32::ReadFile
-FUNC_WriteFile_HASH_5775278d       os::win32::WriteFile
+FUNC_ReadFile_HASH_b1df72ed        os::win32::ReadFile
+FUNC_WriteFile_HASH_b1df72ed       os::win32::WriteFile
 ```
 
 Signatures must match the prototypes codegen emits for the `os.fr`
@@ -4098,14 +4098,14 @@ func main() -> int32_t {
 }
 ```
 
-## 33.10 Array Initializer Through Address
+## 33.10 Array Initializer Through Pointer
 
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
-    addr<array<int32_t, 3>> p;
+    ptr<array<int32_t, 3>> p;
 
-    p = getaddr(xs);
+    p = getptr(xs);
 
     $(p) = [1, 2, 3];
 
@@ -4122,9 +4122,9 @@ Equivalent core form:
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
-    addr<array<int32_t, 3>> p;
+    ptr<array<int32_t, 3>> p;
 
-    p = getaddr(xs);
+    p = getptr(xs);
 
     $(p)[0] = 1;
     $(p)[1] = 2;
@@ -4164,7 +4164,7 @@ See [String Literals](23-string-literals.md).
 ## 33.12 `ndarray` Grid
 
 ```franko
-func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
+func fill(ptr<ndarray<byte, 2, 3>> grid) -> void {
     $(grid).memset(0);
     $(grid)[0][1] = 7;
 }
@@ -4172,7 +4172,7 @@ func fill(addr<ndarray<byte, 2, 3>> grid) -> void {
 func main() -> int32_t {
     ndarray<byte, 2, 3> grid;
 
-    fill(getaddr(grid));
+    fill(getptr(grid));
 
     print(grid[0][1]);
     print(grid[1][2]);
@@ -4279,9 +4279,9 @@ func main() -> int32_t {
 }
 ```
 
-## 33.17 Structs Passed by Value and by Address
+## 33.17 Structs Passed by Value and by Pointer
 
-Assignable structs may be passed and returned by value; address-only structs must go through `addr<X>`.
+Assignable structs may be passed and returned by value; pointer-only structs must go through `ptr<X>`.
 
 ```franko
 struct Point {
@@ -4293,7 +4293,7 @@ func dist2(Point p) -> int32_t {
     return p.x * p.x + p.y * p.y;
 }
 
-func move(addr<Point> p) -> void {
+func move(ptr<Point> p) -> void {
     $(p).x = $(p).x + 1;
     $(p).y = $(p).y + 1;
 }
@@ -4306,7 +4306,7 @@ func main() -> int32_t {
 
     print(dist2(p));   // 25
 
-    move(getaddr(p));
+    move(getptr(p));
 
     print(p.x);        // 4
     print(p.y);        // 5
@@ -4317,7 +4317,7 @@ func main() -> int32_t {
 
 ## 33.18 Structs with Array Fields
 
-An array field makes the struct non-assignable: the struct is address-only and its arrays are managed through the usual intrinsics.
+An array field makes the struct non-assignable: the struct is pointer-only and its arrays are managed through the usual intrinsics.
 
 ```franko
 struct Buffer {
@@ -4413,7 +4413,7 @@ func main() -> int32_t {
 ## 33.22 Command-Line Arguments
 
 ```franko
-func main(addr<array<array<byte>>> args) -> int32_t {
+func main(ptr<array<array<byte>>> args) -> int32_t {
     uint32_t n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
@@ -4427,4 +4427,4 @@ func main(addr<array<array<byte>>> args) -> int32_t {
 }
 ```
 
-Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live address (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).

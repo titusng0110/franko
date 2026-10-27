@@ -37,11 +37,11 @@ import java.util.Set;
  *
  * Current intrinsics:
  *
- *   os::posix::read(int32_t, addr<array<byte>>, uint64_t) -> int64_t
- *   os::posix::write(int32_t, addr<array<byte>>, uint64_t) -> int64_t
+ *   os::posix::read(int32_t, ptr<array<byte>>, uint64_t) -> int64_t
+ *   os::posix::write(int32_t, ptr<array<byte>>, uint64_t) -> int64_t
  *   os::win32::GetStdHandle(uint32_t) -> uint64_t
- *   os::win32::ReadFile(uint64_t, addr<array<byte>>, uint32_t, addr<uint32_t>) -> int32_t
- *   os::win32::WriteFile(uint64_t, addr<array<byte>>, uint32_t, addr<uint32_t>) -> int32_t
+ *   os::win32::ReadFile(uint64_t, ptr<array<byte>>, uint32_t, ptr<uint32_t>) -> int32_t
+ *   os::win32::WriteFile(uint64_t, ptr<array<byte>>, uint32_t, ptr<uint32_t>) -> int32_t
  *
  * Current target constants (namespace os, all byte):
  *
@@ -162,7 +162,7 @@ final class OsFfi {
     private static boolean isPosixReadWriteSignature(FunctionSymbol fn) {
         return fn.parameterTypes().size() == 3
                 && isPrimitive(fn.parameterTypes().get(0), SemanticPrimitiveKind.INT32)
-                && isByteBufferAddr(fn.parameterTypes().get(1))
+                && isByteBufferPtr(fn.parameterTypes().get(1))
                 && isPrimitive(fn.parameterTypes().get(2), SemanticPrimitiveKind.UINT64)
                 && isPrimitive(fn.returnType(), SemanticPrimitiveKind.INT64);
     }
@@ -176,9 +176,9 @@ final class OsFfi {
     private static boolean isWin32ReadWriteSignature(FunctionSymbol fn) {
         return fn.parameterTypes().size() == 4
                 && isPrimitive(fn.parameterTypes().get(0), SemanticPrimitiveKind.UINT64)
-                && isByteBufferAddr(fn.parameterTypes().get(1))
+                && isByteBufferPtr(fn.parameterTypes().get(1))
                 && isPrimitive(fn.parameterTypes().get(2), SemanticPrimitiveKind.UINT32)
-                && isUint32Addr(fn.parameterTypes().get(3))
+                && isUint32Ptr(fn.parameterTypes().get(3))
                 && isPrimitive(fn.returnType(), SemanticPrimitiveKind.INT32);
     }
 
@@ -186,16 +186,16 @@ final class OsFfi {
         return new SemanticPrimitiveType(kind).equals(type);
     }
 
-    private static boolean isByteBufferAddr(SemanticType type) {
-        return new SemanticAddrType(
+    private static boolean isByteBufferPtr(SemanticType type) {
+        return new SemanticPtrType(
                 new SemanticDynamicArrayType(
                         new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8)
                 )
         ).equals(type);
     }
 
-    private static boolean isUint32Addr(SemanticType type) {
-        return new SemanticAddrType(
+    private static boolean isUint32Ptr(SemanticType type) {
+        return new SemanticPtrType(
                 new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
         ).equals(type);
     }
@@ -384,11 +384,11 @@ final class OsFfi {
      */
     static String expectedEmittedName(Kind kind) {
         return switch (kind) {
-            case POSIX_READ -> "FUNC_read_HASH_10a3784c";
-            case POSIX_WRITE -> "FUNC_write_HASH_10a3784c";
+            case POSIX_READ -> "FUNC_read_HASH_b155decf";
+            case POSIX_WRITE -> "FUNC_write_HASH_b155decf";
             case WIN32_GETSTDHANDLE -> "FUNC_GetStdHandle_HASH_493245c2";
-            case WIN32_READFILE -> "FUNC_ReadFile_HASH_5775278d";
-            case WIN32_WRITEFILE -> "FUNC_WriteFile_HASH_5775278d";
+            case WIN32_READFILE -> "FUNC_ReadFile_HASH_b1df72ed";
+            case WIN32_WRITEFILE -> "FUNC_WriteFile_HASH_b1df72ed";
         };
     }
 

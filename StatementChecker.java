@@ -159,7 +159,7 @@ public class StatementChecker {
      *
      *     xs.init(10);
      *     xs.memset(0);
-     *     dst.memcpy(getaddr(src));
+     *     dst.memcpy(getptr(src));
      */
     private void visitExprStmt(SemanticExprStmtNode node) {
         expressions.checkExpr(node.expr);
@@ -170,7 +170,7 @@ public class StatementChecker {
         expressions.checkExpr(node.value);
 
         if (!isStorageBackedLValue(node.target)) {
-            diagnostics.error("Left-hand side of assignment must be an addressable storage-backed lvalue");
+            diagnostics.error("Left-hand side of assignment must be a pointable storage-backed lvalue");
         }
 
         if (types.isVoidType(node.target.type)) {
@@ -208,7 +208,7 @@ public class StatementChecker {
      * Two requirements, mirroring plain assignment plus the base binary
      * operator's rules:
      *
-     *   - assignable: the target is an addressable, non-void storage-backed
+     *   - assignable: the target is a pointable, non-void storage-backed
      *     lvalue (already checked by the caller);
      *
      *   - addable: the base operator must accept the operand types. The
@@ -341,7 +341,7 @@ public class StatementChecker {
      * Storage-backed lvalues are currently:
      *
      *   - variables,
-     *   - dereferenced addresses,
+     *   - dereferenced pointers,
      *   - array elements whose target is storage-backed,
      *   - struct field accesses whose base is storage-backed.
      *

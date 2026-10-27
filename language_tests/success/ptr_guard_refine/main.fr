@@ -1,0 +1,45 @@
+// ============================================================
+// LANGUAGE TEST: Pointers — guard refinement of null state
+// ============================================================
+// Covers:
+//   - inside if (p != null) the dereference is valid: the guard
+//     refines the variable's state to pointing on that path
+//   - a branch merge that assigns getptr on one path and null on
+//     the other yields a possibly-null variable; guarding it with
+//     if (p != null) before dereferencing keeps the program clean
+// ============================================================
+
+func main() -> int32_t {
+    int32_t x = 0
+
+    // A definitely-null variable guarded by p != null: the guard path
+    // is infeasible at runtime, but the deref inside is accepted
+    // because the guard refines the state on that path.
+    ptr<int32_t> z
+    if (z != null) {
+        $(z) = 1
+        print($(z))
+    } else {
+        print(100)
+    }
+
+    // Branch merge: m is pointing on one path and null on the other,
+    // so after the merge it is possibly null.
+    uint32_t pick = 1
+    ptr<int32_t> m
+    if (pick != 0) {
+        m = getptr(x)
+    } else {
+        m = null
+    }
+
+    // Guard before deref: valid inside, clean at the merge point.
+    if (m != null) {
+        $(m) = 42
+        print($(m))
+    }
+
+    print(x)
+
+    return 0
+}

@@ -2,18 +2,18 @@
 // LANGUAGE TEST: Struct Methods Core
 // ============================================================
 // Covers: doc 26.1, doc 26.2, doc 26.3, doc 26.5, doc 26.7, doc 26.9
-// Methods with explicit addr<X> self, overloads, calls on variables,
+// Methods with explicit ptr<X> self, overloads, calls on variables,
 // fields, array elements, and $(p) receivers, local shadowing,
-// method-to-method calls, self reassignment, and address-only structs.
+// method-to-method calls, self reassignment, and pointer-only structs.
 // ============================================================
 
 struct Inner {
     int32_t v = 0
-    func bump(addr<Inner> self) -> void {
+    func bump(ptr<Inner> self) -> void {
         $(self).v = $(self).v + 1
         return
     }
-    func get(addr<Inner> self) -> int32_t {
+    func get(ptr<Inner> self) -> int32_t {
         return $(self).v
     }
 }
@@ -21,36 +21,36 @@ struct Inner {
 struct Counter {
     int32_t n = 0
     Inner inner
-    func bump(addr<Counter> self) -> void {
+    func bump(ptr<Counter> self) -> void {
         $(self).n = $(self).n + 1
         return
     }
-    func add(addr<Counter> self, int32_t v) -> void {
+    func add(ptr<Counter> self, int32_t v) -> void {
         $(self).n = $(self).n + v
         return
     }
-    func add(addr<Counter> self, int32_t a, int32_t b) -> void {
+    func add(ptr<Counter> self, int32_t a, int32_t b) -> void {
         $(self).n = $(self).n + a + b
         return
     }
-    func get(addr<Counter> self) -> int32_t {
+    func get(ptr<Counter> self) -> int32_t {
         return $(self).n
     }
-    func doubleBump(addr<Counter> self) -> void {
+    func doubleBump(ptr<Counter> self) -> void {
         $(self).bump()
         $(self).bump()
         return
     }
-    func shadow(addr<Counter> self) -> int32_t {
+    func shadow(ptr<Counter> self) -> int32_t {
         int32_t n = 100
         $(self).n = 7
         return n
     }
-    func bumpInner(addr<Counter> self) -> void {
+    func bumpInner(ptr<Counter> self) -> void {
         $(self).inner.bump()
         return
     }
-    func retarget(addr<Counter> self, addr<Counter> other) -> void {
+    func retarget(ptr<Counter> self, ptr<Counter> other) -> void {
         self = other
         $(self).n = 99
         return
@@ -59,11 +59,11 @@ struct Counter {
 
 struct Big {
     array<int32_t, 4> xs
-    func set(addr<Big> self, uint32_t i, int32_t v) -> void {
+    func set(ptr<Big> self, uint32_t i, int32_t v) -> void {
         $(self).xs[i] = v
         return
     }
-    func get(addr<Big> self, uint32_t i) -> int32_t {
+    func get(ptr<Big> self, uint32_t i) -> int32_t {
         return $(self).xs[i]
     }
 }
@@ -85,13 +85,13 @@ func main() -> int32_t {
     array<Counter, 2> arr
     arr[0].bump()
     print(arr[0].get())
-    addr<Counter> p
-    p = getaddr(c)
+    ptr<Counter> p
+    p = getptr(c)
     $(p).bump()
     print(c.get())
     Counter d
     d.n = 1
-    c.retarget(getaddr(d))
+    c.retarget(getptr(d))
     print(c.get())
     print(d.get())
     Big b

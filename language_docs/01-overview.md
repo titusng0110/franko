@@ -8,14 +8,14 @@ Franko is a small statically typed language with:
 - dynamic arrays;
 - static arrays;
 - `ndarray<...>` sugar for nested static arrays;
-- typed addresses using `addr<T>`;
-- explicit address operations:
-  - `getaddr(...)`;
+- typed pointers using `ptr<T>`;
+- explicit pointer operations:
+  - `getptr(...)`;
   - `$(...)`;
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
-- struct methods with explicit `addr<X> self` receivers (see [Methods](26-methods.md));
+- struct methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;

@@ -51,7 +51,7 @@ import java.util.Set;
  *
  *   - constants may return into primitive integer types if they fit,
  *   - nonconstant primitive expressions must exactly match,
- *   - address expressions must exactly match,
+ *   - pointer expressions must exactly match,
  *   - arrays cannot be returned directly.
  *
  * ----------------------------------------------------------------------------
@@ -169,7 +169,7 @@ public class FunctionChecker {
     /**
      * Validates a method's `self` parameter shape.
      *
-     * The first parameter must be literally `addr<X> self` for the owning
+     * The first parameter must be literally `ptr<X> self` for the owning
      * struct X, and only the first parameter may be named `self`.
      */
     private void validateMethodSelf(MethodSymbol method) {
@@ -179,7 +179,7 @@ public class FunctionChecker {
         if (method.parameters.isEmpty()) {
             diagnostics.error("Method '"
                     + display
-                    + "' must have 'addr<"
+                    + "' must have 'ptr<"
                     + ownerName
                     + "> self' as its first parameter");
             return;
@@ -190,7 +190,7 @@ public class FunctionChecker {
         if (!"self".equals(first.name)) {
             diagnostics.error("Method '"
                     + display
-                    + "' must have 'addr<"
+                    + "' must have 'ptr<"
                     + ownerName
                     + "> self' as its first parameter");
         } else if (!isSelfTypeForOwner(first.type, method.owner)) {
@@ -198,7 +198,7 @@ public class FunctionChecker {
                     + display
                     + "' has a 'self' parameter of type "
                     + types.describeSafe(first.type)
-                    + "; it must be addr<"
+                    + "; it must be ptr<"
                     + ownerName
                     + ">");
         }
@@ -212,11 +212,11 @@ public class FunctionChecker {
     }
 
     private boolean isSelfTypeForOwner(SemanticType type, StructSymbol owner) {
-        if (!(type instanceof SemanticAddrType addr)) {
+        if (!(type instanceof SemanticPtrType ptr)) {
             return false;
         }
 
-        if (!(addr.referencedType instanceof SemanticStructType structType)) {
+        if (!(ptr.referencedType instanceof SemanticStructType structType)) {
             return false;
         }
 

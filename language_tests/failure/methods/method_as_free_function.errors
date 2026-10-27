@@ -1,1 +1,1 @@
-No matching overload for function call 'foo(addr<X>)'
+No matching overload for function call 'foo(ptr<X>)'

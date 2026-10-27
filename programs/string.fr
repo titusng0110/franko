@@ -7,16 +7,16 @@
 struct TextBuf {
     array<byte> buf
 
-    func init(addr<TextBuf> self, uint capacity) -> int {
+    func init(ptr<TextBuf> self, uint capacity) -> int {
         return $(self).buf.init(capacity)
     }
 
-    func uninit(addr<TextBuf> self) -> void {
+    func uninit(ptr<TextBuf> self) -> void {
         $(self).buf.uninit()
         return
     }
 
-    func testAscii(addr<TextBuf> self) -> void {
+    func testAscii(ptr<TextBuf> self) -> void {
         // "Hello,\tWorld!\n\"Franko\"" -> 22 bytes.
         $(self).buf.memset(0)
         $(self).buf = "Hello,\tWorld!\n\"Franko\""
@@ -29,7 +29,7 @@ struct TextBuf {
         return
     }
 
-    func testUnicode(addr<TextBuf> self) -> void {
+    func testUnicode(ptr<TextBuf> self) -> void {
         // "你好, Franko 😭😍" -> 23 UTF-8 bytes.
         $(self).buf.memset(0)
         $(self).buf = "你好, Franko 😭😍"
@@ -42,7 +42,7 @@ struct TextBuf {
         return
     }
 
-    func testMultiline(addr<TextBuf> self) -> void {
+    func testMultiline(ptr<TextBuf> self) -> void {
         // A literal multiline string -> 20 bytes.
         $(self).buf.memset(0)
         $(self).buf = "Line 1
@@ -57,7 +57,7 @@ Line 3"
         return
     }
 
-    func testEscapes(addr<TextBuf> self) -> void {
+    func testEscapes(ptr<TextBuf> self) -> void {
         // "A\\B\"C\a\b\f\n\r\t\vZ" -> 13 bytes.
         $(self).buf.memset(0)
         $(self).buf = "A\\B\"C\a\b\f\n\r\t\vZ"

@@ -254,12 +254,12 @@ class FunctionSymbol extends CallableSymbol {
  * MethodSymbol represents a method declared inside a struct body.
  *
  * A method is a function whose first parameter must be literally
- * `addr<X> self` for the enclosing struct X. The receiver is passed
+ * `ptr<X> self` for the enclosing struct X. The receiver is passed
  * explicitly as `self`; method calls lower to ordinary function calls
- * with a synthesized `getaddr(receiver)` first argument.
+ * with a synthesized `getptr(receiver)` first argument.
  *
  * Overload identity matches functions: method name + ordered parameter
- * types. The `self` parameter is always `addr<X>` so it does not affect
+ * types. The `self` parameter is always `ptr<X>` so it does not affect
  * resolution between overloads.
  */
 class MethodSymbol extends FunctionSymbol {
@@ -299,7 +299,7 @@ class MethodSymbol extends FunctionSymbol {
      *
      * The hash follows the same rule as functions: FNV-1a 32-bit over
      * the canonical signature key. The implicit `self` parameter
-     * (`addr<X>`) is a declared parameter and participates in the hash.
+     * (`ptr<X>`) is a declared parameter and participates in the hash.
      */
     @Override
     public String mangledName() {

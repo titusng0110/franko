@@ -5,14 +5,14 @@
 // program, including structs declared later in the file (doc 25.4);
 // the backend forward-declares every struct and orders definitions
 // topologically over by-value field dependencies (doc 25.11), so both
-// a by-value field of a later struct and an addr field of a later
+// a by-value field of a later struct and an ptr field of a later
 // struct compile and work.
 // ============================================================
 
 struct Outer {
     Inner inner
     int32_t v
-    addr<Later> link
+    ptr<Later> link
 }
 
 struct Inner {
@@ -29,7 +29,7 @@ func main() -> int32_t {
     o.inner.x = 5
 
     Later l
-    o.link = getaddr(l)
+    o.link = getptr(l)
     $(o.link).tag = 8
 
     print(o.inner.x)

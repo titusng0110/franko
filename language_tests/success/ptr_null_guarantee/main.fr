@@ -1,0 +1,30 @@
+// ============================================================
+// LANGUAGE TEST: Pointers — null-initialization guarantees
+// ============================================================
+// Covers:
+//   - a local ptr<T> declaration is guaranteed null-initialized
+//   - a global ptr<T> variable is null-initialized
+//   - an ptr-typed struct field is null-initialized
+// ============================================================
+
+struct Box {
+    int32_t v
+    ptr<int32_t> link
+}
+
+ptr<int32_t> g
+
+func main() -> int32_t {
+    // Local pointer declaration: null, guaranteed.
+    ptr<int32_t> local
+    print(local == null)
+
+    // Global pointer variable: null before any assignment.
+    print(g == null)
+
+    // Pointer-typed struct field: null.
+    Box b
+    print(b.link == null)
+
+    return 0
+}

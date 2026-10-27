@@ -2,13 +2,13 @@
 // LANGUAGE TEST: Struct Member Access Chains
 // ============================================================
 // Covers: s.field on a local, $(p).field (assigned through),
-// $(a.next).field (an addr-typed field dereferenced then a
+// $(a.next).field (an ptr-typed field dereferenced then a
 // field accessed), xs[i].field on a static array of structs, and
-// getaddr(s.field) used to write a field through its address.
+// getptr(s.field) used to write a field through its pointer.
 // ============================================================
 
 struct Link {
-    addr<Link> next
+    ptr<Link> next
     int32_t val
 }
 
@@ -23,18 +23,18 @@ func main() -> int32_t {
     print(s.v);
 
     // $(p).field, assigned through.
-    addr<Cell> p;
-    p = getaddr(s);
+    ptr<Cell> p;
+    p = getptr(s);
     $(p).v = 10;
     print($(p).v);
 
-    // $(a.next).field: dereference an addr-typed field, then
+    // $(a.next).field: dereference an ptr-typed field, then
     // access a field of the struct it points to.
     Link l1;
     Link l2;
     l1.val = 100;
     l2.val = 200;
-    l1.next = getaddr(l2);
+    l1.next = getptr(l2);
     $(l1.next).val = 222;
     print(l1.val, $(l1.next).val);
 
@@ -45,15 +45,15 @@ func main() -> int32_t {
     xs[2].v = 7;
     print(xs[0].v, xs[1].v, xs[2].v);
 
-    // getaddr(s.field): write the field through its address.
-    addr<int32_t> fa;
-    fa = getaddr(s.v);
+    // getptr(s.field): write the field through its pointer.
+    ptr<int32_t> fa;
+    fa = getptr(s.v);
     $(fa) = 42;
     print(s.v);
 
-    // getaddr of an array-element field.
-    addr<int32_t> fa2;
-    fa2 = getaddr(xs[2].v);
+    // getptr of an array-element field.
+    ptr<int32_t> fa2;
+    fa2 = getptr(xs[2].v);
     $(fa2) = 77;
     print(xs[2].v);
 

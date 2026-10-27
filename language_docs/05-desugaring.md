@@ -175,7 +175,7 @@ Inference rules:
 - an empty initializer list cannot infer a size;
 - without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
 
-Misplaced `?` (parameters, return types, struct fields, globals, addresses, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
+Misplaced `?` (parameters, return types, struct fields, globals, pointers, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
 
 ## 5.9 Constant Expression Evaluation
 

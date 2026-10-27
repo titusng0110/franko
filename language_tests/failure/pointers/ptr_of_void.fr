@@ -1,0 +1,6 @@
+// Failure fixture: pointers/ptr_of_void
+// ptr<void> is invalid because void is not an ordinary value type.
+func main() -> int32_t {
+    ptr<void> p
+    return 0
+}

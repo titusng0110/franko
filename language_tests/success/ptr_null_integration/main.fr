@@ -1,0 +1,130 @@
+// ============================================================
+// Franko null-for-pointers Showcase
+// ============================================================
+//
+// Demonstrates:
+//
+//   - null is only valid for pointers (0 is not null)
+//   - pointer declarations are guaranteed null-initialized
+//   - getptr(...) certifies an pointer as non-null
+//   - assignment from another pointer copies its exact null state
+//   - guard refinement: deref inside if (p != null) is valid
+//   - loop-guard refinement and provable null after loop exit
+//   - null passed to ptr parameters and returned from ptr functions
+//   - struct fields of pointer type default to null
+//   - equality-only pointer comparison (== and != only)
+//
+// Expected output is in null.expected.
+// ============================================================
+
+struct Box {
+    int32_t v
+    ptr<int32_t> link
+}
+
+ptr<int32_t> g
+
+func takePtr(ptr<int32_t> q) -> int32_t {
+    if (q != null) {
+        return $(q)
+    }
+
+    return -1
+}
+
+func makeNull() -> ptr<int32_t> {
+    return null
+}
+
+func main() -> int32_t {
+    int32_t x = 0
+
+    print(1)
+
+    // Pointer declarations are guaranteed null-initialized.
+    ptr<int32_t> p
+    print(p == null)
+    print(p != null)
+
+    // getptr certifies the variable as non-null.
+    p = getptr(x)
+    print(p != null)
+
+    $(p) = 42
+    print($(p))
+
+    // Copying a certified variable keeps it certified.
+    ptr<int32_t> a = p
+    $(a) = 7
+    print($(a))
+
+    // A null declaration, and a copy of it: the copy is null too.
+    ptr<int32_t> b = null
+    ptr<int32_t> c = b
+    print(c == null)
+
+    // Guard refinement: the deref here is valid on the refined path.
+    if (c != null) {
+        $(c) = 5
+        print($(c))
+    } else {
+        print(111)
+    }
+
+    // Equality-only comparison between two pointers.
+    print(a == p)
+
+    print(2)
+
+    // Loop-guard refinement, and provable null after loop exit.
+    ptr<int32_t> w
+    w = getptr(x)
+    while (w != null) {
+        $(w) = $(w) + 1
+        if ($(w) > 2) {
+            w = null
+        }
+    }
+    print(w == null)
+
+    print(3)
+
+    // Global pointer variable is null-initialized.
+    print(g == null)
+    g = getptr(x)
+    print(g != null)
+
+    print(4)
+
+    // Struct field of pointer type defaults to null.
+    Box bo
+    print(bo.link == null)
+    bo.link = getptr(x)
+    print(bo.link != null)
+    $(bo.link) = 5
+    print($(bo.link))
+
+    print(5)
+
+    // ptr<ptr<int32_t>> null handling.
+    ptr<ptr<int32_t>> pp
+    print(pp == null)
+    pp = getptr(p)
+    print(pp != null)
+
+    // Assignment from a certified variable chain stays certified.
+    ptr<int32_t> cn
+    cn = g
+    print(cn != null)
+
+    print(6)
+
+    // null across function boundaries.
+    print(takePtr(null))
+    print(takePtr(getptr(x)))
+
+    ptr<int32_t> r = makeNull()
+    print(r == null)
+
+    return 0
+}

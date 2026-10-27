@@ -1,0 +1,59 @@
+// ============================================================
+// LANGUAGE TEST: Pointers — nested pointers and arrays behind ptr
+// ============================================================
+// Covers:
+//   - ptr<ptr<int32_t>>: getptr of an ptr variable, double
+//     dereference to write and read through both levels
+//   - ptr<array<int32_t>>: $(p)(n) allocation shorthand and
+//     element writes through the dereference
+//   - ptr<array<int32_t, 3>>: initializer-list assignment through
+//     the dereference
+// ============================================================
+
+func main() -> int32_t {
+    // --- Nested pointers: pointer of an pointer variable ---
+    int32_t x = 0
+    ptr<int32_t> p
+    p = getptr(x)
+
+    ptr<ptr<int32_t>> pp
+    pp = getptr(p)
+
+    // Double dereference writes x through both pointer levels.
+    $($(pp)) = 7
+    print($($(pp)))
+    print(x)
+
+    // Writes through p are visible through pp (same pointee).
+    $(p) = 8
+    print($($(pp)))
+
+    // --- Pointer of a dynamic array ---
+    array<int32_t> dyn
+    ptr<array<int32_t>> ap
+    ap = getptr(dyn)
+
+    // Allocation shorthand: $(ap)(4) is $(ap).init(4).
+    $(ap)(4)
+    $(ap)[0] = 10
+    $(ap)[3] = 40
+    print($(ap)[0])
+    print($(ap)[3])
+    print(dyn[3])
+
+    dyn.uninit()
+
+    // --- Pointer of a static array: initializer list through deref ---
+    array<int32_t, 3> xs
+    ptr<array<int32_t, 3>> sp
+    sp = getptr(xs)
+
+    // Equivalent to $(sp)[0] = 1; $(sp)[1] = 2; $(sp)[2] = 3;
+    $(sp) = [1, 2, 3]
+    print($(sp)[0])
+    print($(sp)[1])
+    print($(sp)[2])
+    print(xs[2])
+
+    return 0
+}

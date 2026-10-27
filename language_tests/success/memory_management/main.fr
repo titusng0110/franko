@@ -1,45 +1,45 @@
 // ============================================================
-// LANGUAGE TEST: Memory Management (Addresses)
+// LANGUAGE TEST: Memory Management (Pointers)
 // ============================================================
-// Covers: addr<T>, getaddr, deref, and null literals.
+// Covers: ptr<T>, getptr, deref, and null literals.
 // ============================================================
 
 func main() -> int32_t {
     // --- Stack variable ---
     int32_t stackVar = 42;
 
-    // --- Addresses & dereferencing ---
-    addr<int32_t> p = getaddr(stackVar);
+    // --- Pointers & dereferencing ---
+    ptr<int32_t> p = getptr(stackVar);
     int32_t derefVal = $(p);
 
-    // --- Writes through an address ---
-    addr<int32_t> stackAddr = getaddr(stackVar);
-    $(stackAddr) = 200;
+    // --- Writes through an pointer ---
+    ptr<int32_t> stackPtr = getptr(stackVar);
+    $(stackPtr) = 200;
 
-    // --- Null address ---
-    addr<int32_t> nullAddr;
-    if (nullAddr == null) {
+    // --- Null pointer ---
+    ptr<int32_t> nullPtr;
+    if (nullPtr == null) {
         print(1);
     }
-    nullAddr = getaddr(stackVar);
-    if (nullAddr != null) {
+    nullPtr = getptr(stackVar);
+    if (nullPtr != null) {
         print(0);
     }
 
-    // --- Address of array ---
+    // --- Pointer of array ---
     array<int32_t> arr;
     arr.init(10); // or arr(10)
-    addr<array<int32_t>> arrPtr = getaddr(arr);
+    ptr<array<int32_t>> arrPtr = getptr(arr);
     $(arrPtr)[0] = 1;
     int32_t arrVal = $(arrPtr)[0];
 
-    // --- Address of array with static size ---
+    // --- Pointer of array with static size ---
     array<int32_t, 5> staticArr;
-    addr<array<int32_t, 5>> staticArrPtr = getaddr(staticArr);
+    ptr<array<int32_t, 5>> staticArrPtr = getptr(staticArr);
     $(staticArrPtr)[0] = 5;
 
     print(derefVal);
-    print($(stackAddr));
+    print($(stackPtr));
     print(arrVal);
 
     return 0;

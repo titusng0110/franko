@@ -21,7 +21,7 @@ import java.util.Set;
  *       * their size is greater than zero,
  *       * their size fits uint32_t,
  *
- *   - address types are valid if their referenced type is valid.
+ *   - pointer types are valid if their referenced type is valid.
  *
  * Notes:
  *
@@ -192,15 +192,15 @@ public class DeclarationChecker {
             return;
         }
 
-        if (type instanceof SemanticAddrType address) {
+        if (type instanceof SemanticPtrType pointer) {
             /*
-             * addr<T> is a pointer indirection, so struct cycles through
-             * addresses are allowed: the by-value path is intentionally
+             * ptr<T> is a pointer indirection, so struct cycles through
+             * pointers are allowed: the by-value path is intentionally
              * reset here.
              */
             checkDeclaredType(
-                address.referencedType,
-                where + " address referenced type",
+                pointer.referencedType,
+                where + " pointer referenced type",
                 structWalkStates,
                 new HashSet<>()
             );
@@ -227,7 +227,7 @@ public class DeclarationChecker {
      *   - IN_PROGRESS: struct fields are being validated. Re-entry via a
      *     by-value edge (struct field or static array element) means an
      *     infinite-size cycle; re-entry via an indirection edge (dynamic
-     *     array element or addr referenced type) is harmless because the
+     *     array element or ptr referenced type) is harmless because the
      *     in-progress frame is already validating this struct,
      *   - DONE: struct fully validated within this walk.
      */
@@ -245,10 +245,10 @@ public class DeclarationChecker {
      *   - field names must be unique within the struct,
      *   - field types must be valid declared types (void is rejected),
      *   - a struct must not reach itself by value through struct fields or
-     *     static array elements; addr and dynamic array fields break the
+     *     static array elements; ptr and dynamic array fields break the
      *     cycle and are allowed,
      *   - a field initializer, when present, must fit a primitive field
-     *     type; struct, array, and addr fields reject initializers as
+     *     type; struct, array, and ptr fields reject initializers as
      *     type mismatches.
      */
     private void validateStructType(
@@ -340,7 +340,7 @@ public class DeclarationChecker {
      * Validates an optional struct field initializer.
      *
      * A field default must fit a primitive field type. Struct, array, and
-     * addr fields reject initializers as type mismatches.
+     * ptr fields reject initializers as type mismatches.
      */
     private void validateFieldDefault(
         FieldSymbol field,
@@ -368,7 +368,7 @@ public class DeclarationChecker {
      * Validates a folded global const initializer against the declared type.
      *
      * In practice only primitive globals can have initializers; struct,
-     * array, and addr globals reject initializers as type mismatches.
+     * array, and ptr globals reject initializers as type mismatches.
      */
     private void validateGlobalConstInitializer(SemanticVarDeclNode node) {
         if (node.symbol.type instanceof SemanticPrimitiveType primitive) {

@@ -10,7 +10,7 @@
 
 struct Meter {
     int32_t step = 0
-    func length(addr<Meter> self) -> int32_t {
+    func length(ptr<Meter> self) -> int32_t {
         return $(self).step + 100
     }
 }
@@ -53,8 +53,8 @@ func main() -> int32_t {
     print(h.items.length());
     h.items.uninit();
 
-    addr<array<int32_t, 3>> p;
-    p = getaddr(ys);
+    ptr<array<int32_t, 3>> p;
+    p = getptr(ys);
     print($(p).length());
 
     Meter meter;

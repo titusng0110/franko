@@ -8,13 +8,13 @@ Current storage-backed lvalues are:
 |---|---|
 | variable | yes |
 | array element of storage-backed array | yes |
-| `$(address)` | yes |
+| `$(pointer)` | yes |
 | struct field access whose base is an lvalue (`obj.field`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
 | comparison expression | no |
 | function call result | no |
-| `getaddr(...)` result | no |
+| `getptr(...)` result | no |
 
 Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
@@ -24,7 +24,7 @@ This distinction matters for:
 
 - assignment targets;
 - compound assignment targets and `x++` / `x--` targets;
-- `getaddr(...)` operands;
+- `getptr(...)` operands;
 - array intrinsic receivers;
 - `memcpy` sources;
 - array initializer assignment targets.

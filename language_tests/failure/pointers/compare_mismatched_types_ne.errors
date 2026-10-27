@@ -1,0 +1,1 @@
+Pointer comparison '!=' requires identical pointer types, got ptr<INT32> and ptr<UINT8>

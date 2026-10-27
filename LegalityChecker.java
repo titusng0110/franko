@@ -22,7 +22,7 @@ import java.util.Objects;
  * MasterChecker coordinates the stricter legality checking passes:
  *
  *   - DeclarationChecker validates declared types,
- *   - ExpressionChecker validates expression/operator/address/index/call rules,
+ *   - ExpressionChecker validates expression/operator/pointer/index/call rules,
  *   - StatementChecker validates statement-level rules and array intrinsics,
  *   - FunctionChecker validates function-level rules,
  *   - TypeChecker provides shared type-system utilities.

@@ -1,0 +1,24 @@
+// ============================================================
+// LANGUAGE TEST: Print Statements — null Pointers
+// ============================================================
+// Covers: print is a dedicated statement (doc 19.6) and the backend
+// prints pointers through const void* (doc 32.7), so print(null)
+// prints the null pointer as a pointer value (doc 24.8).
+//
+// Only the null pointer is printed here: a live pointer's value is
+// not deterministic, so it must never appear in a golden output
+// file. Printing a live pointer is exercised by
+// language_tests/runtime/print/print_real_pointer.fr, which is judged by exit
+// status only.
+// ============================================================
+
+func main() -> int32_t {
+    // null prints as the null pointer value.
+    print(null)
+
+    // A null pointer variable prints the same way as the null literal.
+    ptr<int32_t> q
+    print(q)
+
+    return 0
+}

@@ -1,5 +1,5 @@
 // Failure fixture: functions/main_args_by_value
-// The args parameter must be an address: a by-value array is not a valid main shape.
+// The args parameter must be an pointer: a by-value array is not a valid main shape.
 
 func main(array<array<byte>> args) -> int32_t {
     return 0

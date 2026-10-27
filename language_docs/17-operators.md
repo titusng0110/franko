@@ -2,7 +2,7 @@
 
 Franko operators apply primarily to integer expressions.
 
-Addresses have special comparison rules.
+Pointers have special comparison rules.
 
 Arrays are not arithmetic values.
 
@@ -45,7 +45,7 @@ Unsupported unary operators:
 
 Arithmetic operators: `+`, `-`, `*`, `/`, `%`.
 
-Operands must be integers. Arrays and addresses are invalid.
+Operands must be integers. Arrays and pointers are invalid.
 
 `%` is the modulus (remainder) operator. Integer division truncates toward zero, and the remainder takes the sign of the dividend:
 
@@ -82,9 +82,9 @@ Comparison operators produce `uint8_t`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
-Address comparison is supported only between identical address types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for addresses.
+Pointer comparison is supported only between identical pointer types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
-The `null` literal may be compared with an address using `==` and `!=` only. `null` cannot be compared with non-address values, and `0` is not `null`.
+The `null` literal may be compared with an pointer using `==` and `!=` only. `null` cannot be compared with non-pointer values, and `0` is not `null`.
 
 ## 17.7 Logical Operators
 
@@ -92,9 +92,9 @@ Logical operators: `&&`, `||`, `!`.
 
 Operands must be integers. Results are `uint8_t` values `0` or `1`.
 
-## 17.8 No Address Arithmetic
+## 17.8 No Pointer Arithmetic
 
-Addresses are not integers and cannot participate in arithmetic, bitwise, or shift operations.
+Pointers are not integers and cannot participate in arithmetic, bitwise, or shift operations.
 
 ## 17.9 Result Types
 

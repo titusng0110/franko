@@ -2,7 +2,7 @@
 // A method may not share its name with a field (doc 26.4).
 struct X {
     int32_t foo = 0
-    func foo(addr<X> self) -> void {
+    func foo(ptr<X> self) -> void {
         return
     }
 }

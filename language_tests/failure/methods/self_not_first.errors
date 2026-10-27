@@ -1,1 +1,1 @@
-Method 'X.bad' must have 'addr<X> self' as its first parameter
+Method 'X.bad' must have 'ptr<X> self' as its first parameter

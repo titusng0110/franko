@@ -1,0 +1,8 @@
+// Failure fixture: pointers/deref_non_ptr
+// deref requires an pointer operand; dereferencing a plain integer
+// variable is invalid.
+func main() -> int32_t {
+    int32_t x = 3
+    print($(x))
+    return 0
+}

@@ -2,7 +2,7 @@
 // LANGUAGE TEST: Structs Composed with Other Type Constructors
 // ============================================================
 // Covers: struct types used inside the other type constructors:
-// array<Point> (dynamic), array<Point, 4> (static), addr<Point>,
+// array<Point> (dynamic), array<Point, 4> (static), ptr<Point>,
 // and ndarray<Point, 2, 3> sugar; field assignment and access
 // through each storage form.
 // ============================================================
@@ -27,10 +27,10 @@ func main() -> int32_t {
     grid[0].y = 5;
     print(grid[0].x + grid[0].y);
 
-    // Address to a struct, fields assigned through $(p).
+    // Pointer to a struct, fields assigned through $(p).
     Point p;
-    addr<Point> pp;
-    pp = getaddr(p);
+    ptr<Point> pp;
+    pp = getptr(p);
     $(pp).x = 6;
     $(pp).y = 7;
     print($(pp).x + $(pp).y);

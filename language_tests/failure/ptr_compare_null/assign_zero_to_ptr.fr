@@ -1,0 +1,9 @@
+// Failure fixture: ptr_compare_null/assign_zero_to_ptr
+// The integer 0 is not null and cannot be assigned to an pointer.
+func main() -> int32_t {
+    ptr<int32_t> p5
+
+    p5 = 0
+
+    return 0
+}

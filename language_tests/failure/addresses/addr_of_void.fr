@@ -1,6 +1,0 @@
-// Failure fixture: addresses/addr_of_void
-// addr<void> is invalid because void is not an ordinary value type.
-func main() -> int32_t {
-    addr<void> p
-    return 0
-}

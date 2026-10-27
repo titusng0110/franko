@@ -155,7 +155,7 @@ importDecl
 //
 // A struct body contains field declarations and method declarations.
 // Methods are function declarations whose first parameter must be
-// literally `addr<X> self`, where X is the enclosing struct (see
+// literally `ptr<X> self`, where X is the enclosing struct (see
 // Methods). No assignments, no generics.
 //
 // Field initializers, if present, must be constExpr.
@@ -168,7 +168,7 @@ importDecl
 //       int32_t a
 //       int64_t b = 123
 //       array<int32_t, 4> xs
-//       func increment(addr<X> self) -> void { ... }
+//       func increment(ptr<X> self) -> void { ... }
 //   }
 //
 // Invalid:
@@ -244,7 +244,7 @@ constDeclInitializer
 // This prevents declarations such as:
 //   void x;
 //   array<void> xs;
-//   addr<void> p.
+//   ptr<void> p.
 //
 functionDecl
     : FUNC IDENTIFIER LPAREN parameterList? RPAREN ARROW returnType separators* block
@@ -647,7 +647,7 @@ primary
     | IDENTIFIER
     | SELF
     | qualifiedName
-    | getAddrExpr
+    | getPtrExpr
     | derefExpr
     | castExpr
     | LPAREN expr RPAREN
@@ -701,8 +701,8 @@ memberName
     | FOR
     | BREAK
     | CONTINUE
-    | ADDR
-    | GETADDR
+    | PTR
+    | GETPTR
     | INT8_T
     | INT16_T
     | INT32_T
@@ -748,7 +748,7 @@ memberName
 //   - function calls
 //   - array indexing
 //   - member access
-//   - getaddr(...)
+//   - getptr(...)
 //   - $(...)
 //   - array initializer lists
 //   - string literals
@@ -901,8 +901,8 @@ arrayLiteralElement
     | expr
     ;
 
-getAddrExpr
-    : GETADDR LPAREN lvalue RPAREN
+getPtrExpr
+    : GETPTR LPAREN lvalue RPAREN
     ;
 
 // Dereference: `$(X)`. The operand is a full expr; the result is an
@@ -914,7 +914,7 @@ derefExpr
     ;
 
 // Explicit integer conversion. The target must be one of the eight
-// primitive integer types; arrays, addresses, structs, and void are
+// primitive integer types; arrays, pointers, structs, and void are
 // rejected here at parse time.
 castExpr
     : CAST LT primitiveType GT LPAREN expr RPAREN
@@ -1015,7 +1015,7 @@ type
     | ARRAY LT type GT                         # DynamicArrayType
     | ARRAY LT type COMMA arraySize GT        # StaticArrayType
     | NDARRAY LT type COMMA arraySizeList GT  # NdArrayType
-    | ADDR LT type GT                          # AddrType
+    | PTR LT type GT                          # PtrType
     ;
 
 // ---------- LEXER ----------
@@ -1034,8 +1034,8 @@ WHILE   : 'while' ;
 FOR     : 'for' ;
 BREAK    : 'break' ;
 CONTINUE : 'continue' ;
-ADDR    : 'addr' ;
-GETADDR : 'getaddr' ;
+PTR    : 'ptr' ;
+GETPTR : 'getptr' ;
 // Dereference prefix operator. Syntax is `$(X)`, always parenthesized.
 DEREF   : '$' ;
 CAST    : 'cast' ;

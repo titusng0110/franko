@@ -2,10 +2,10 @@
 // Duplicate method signatures are rejected (doc 26.5).
 struct X {
     int32_t y = 0
-    func foo(addr<X> self) -> void {
+    func foo(ptr<X> self) -> void {
         return
     }
-    func foo(addr<X> self) -> void {
+    func foo(ptr<X> self) -> void {
         return
     }
 }

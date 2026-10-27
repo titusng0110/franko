@@ -1,0 +1,32 @@
+// ============================================================
+// LANGUAGE TEST: Maybe-Null Dereference Warning
+// ============================================================
+// Covers: dereferencing a possibly-null variable is a warning, not an
+// error (docs 24.8.3, 27.7). The variable below is pointing on one
+// branch path and null on the other, so after the merge an unguarded
+// deref compiles with a "Deref of possibly null variable" warning;
+// the run still dereferences only a certified pointer, so the binary
+// runs cleanly.
+// ============================================================
+
+func main() -> int32_t {
+    int32_t x = 5
+
+    ptr<int32_t> p
+
+    // Branch merge: pointing on one path, null on the other, so p is
+    // possibly null after the if.
+    uint32_t pick = 1
+    if (pick != 0) {
+        p = getptr(x)
+    } else {
+        p = null
+    }
+
+    // Unguarded deref of a possibly-null variable: the checker warns.
+    // At runtime pick is 1, so p is certified and the write is safe.
+    $(p) = 6
+    print($(p))
+
+    return 0
+}

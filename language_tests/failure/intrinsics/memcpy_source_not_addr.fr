@@ -1,8 +1,0 @@
-// Failure fixture: intrinsics/memcpy_source_not_addr
-// The memcpy source must be an address to an array, not an array value.
-func main() -> int32_t {
-    array<int32_t, 4> a;
-    array<int32_t, 4> b;
-    a.memcpy(b);
-    return 0;
-}

@@ -1,0 +1,49 @@
+// ============================================================
+// LANGUAGE TEST: Pointers — null across function boundaries
+// ============================================================
+// Covers:
+//   - null passed to an ptr<T> parameter (callee checks p == null
+//     and returns a marker)
+//   - null returned from an ptr<T> function (caller sees null)
+//   - p = null assignment makes a certified pointer null again
+// ============================================================
+
+func checkPtr(ptr<int32_t> q) -> int32_t {
+    if (q == null) {
+        return -1
+    }
+    return $(q)
+}
+
+func pickPtr(uint32_t which, ptr<int32_t> a) -> ptr<int32_t> {
+    if (which != 0) {
+        return a
+    }
+    return null
+}
+
+func main() -> int32_t {
+    int32_t x = 20
+
+    // null as an argument: the callee checks and returns a marker.
+    print(checkPtr(null))
+    print(checkPtr(getptr(x)))
+
+    // null returned from an ptr<T> function.
+    ptr<int32_t> r1 = pickPtr(0, getptr(x))
+    print(r1 == null)
+    ptr<int32_t> r2 = pickPtr(1, getptr(x))
+    print(r2 == null)
+    if (r2 != null) {
+        print($(r2))
+    }
+
+    // p = null makes a certified pointer null again.
+    ptr<int32_t> p
+    p = getptr(x)
+    print(p != null)
+    p = null
+    print(p == null)
+
+    return 0
+}

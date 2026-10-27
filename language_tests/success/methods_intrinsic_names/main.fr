@@ -9,21 +9,21 @@
 
 struct Counter {
     int32_t n = 0
-    func init(addr<Counter> self, int32_t v) -> void {
+    func init(ptr<Counter> self, int32_t v) -> void {
         $(self).n = v
         return
     }
-    func get(addr<Counter> self) -> int32_t {
+    func get(ptr<Counter> self) -> int32_t {
         return $(self).n
     }
 }
 
 struct Box {
     array<int32_t> data
-    func init(addr<Box> self, uint32_t n) -> int32_t {
+    func init(ptr<Box> self, uint32_t n) -> int32_t {
         return $(self).data.init(n)
     }
-    func uninit(addr<Box> self) -> void {
+    func uninit(ptr<Box> self) -> void {
         $(self).data.uninit()
         return
     }

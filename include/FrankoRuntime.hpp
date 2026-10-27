@@ -142,7 +142,7 @@ struct Franko_Static_Array {
     template <uint32_t M>
     void memcpy(const Franko_Static_Array<T, M>* other) {
         if (other == nullptr)
-            franko_panic("Franko_Static_Array memcpy source address is null");
+            franko_panic("Franko_Static_Array memcpy source pointer is null");
 
         const uint32_t count = (N < M) ? N : M;
 
@@ -153,7 +153,7 @@ struct Franko_Static_Array {
 
     void memcpy(const Franko_Dynamic_Array<T>* other) {
         if (other == nullptr)
-            franko_panic("Franko_Static_Array memcpy source address is null");
+            franko_panic("Franko_Static_Array memcpy source pointer is null");
 
         if (other->data == nullptr)
             franko_panic("Franko_Static_Array memcpy from uninitialized dynamic array");
@@ -168,7 +168,7 @@ struct Franko_Static_Array {
     template <uint32_t M>
     void memcpy(const Franko_Static_Array<T, M>* other, uint32_t dstStart, uint32_t srcStart, uint32_t count) {
         if (other == nullptr)
-            franko_panic("Franko_Static_Array memcpy source address is null");
+            franko_panic("Franko_Static_Array memcpy source pointer is null");
 
         if (dstStart > N)
             franko_panic("Franko_Static_Array memcpy destination start out of bounds");
@@ -189,7 +189,7 @@ struct Franko_Static_Array {
 
     void memcpy(const Franko_Dynamic_Array<T>* other, uint32_t dstStart, uint32_t srcStart, uint32_t count) {
         if (other == nullptr)
-            franko_panic("Franko_Static_Array memcpy source address is null");
+            franko_panic("Franko_Static_Array memcpy source pointer is null");
 
         if (other->data == nullptr)
             franko_panic("Franko_Static_Array memcpy from uninitialized dynamic array");
@@ -383,7 +383,7 @@ struct Franko_Dynamic_Array {
             franko_panic("Franko_Dynamic_Array memcpy on uninitialized target array");
 
         if (other == nullptr)
-            franko_panic("Franko_Dynamic_Array memcpy source address is null");
+            franko_panic("Franko_Dynamic_Array memcpy source pointer is null");
 
         if (other->data == nullptr)
             franko_panic("Franko_Dynamic_Array memcpy from uninitialized source array");
@@ -401,7 +401,7 @@ struct Franko_Dynamic_Array {
             franko_panic("Franko_Dynamic_Array memcpy on uninitialized target array");
 
         if (other == nullptr)
-            franko_panic("Franko_Dynamic_Array memcpy source address is null");
+            franko_panic("Franko_Dynamic_Array memcpy source pointer is null");
 
         const uint32_t copyCount = (count < M) ? count : M;
 
@@ -415,7 +415,7 @@ struct Franko_Dynamic_Array {
             franko_panic("Franko_Dynamic_Array memcpy on uninitialized target array");
 
         if (other == nullptr)
-            franko_panic("Franko_Dynamic_Array memcpy source address is null");
+            franko_panic("Franko_Dynamic_Array memcpy source pointer is null");
 
         if (other->data == nullptr)
             franko_panic("Franko_Dynamic_Array memcpy from uninitialized source array");
@@ -443,7 +443,7 @@ struct Franko_Dynamic_Array {
             franko_panic("Franko_Dynamic_Array memcpy on uninitialized target array");
 
         if (other == nullptr)
-            franko_panic("Franko_Dynamic_Array memcpy source address is null");
+            franko_panic("Franko_Dynamic_Array memcpy source pointer is null");
 
         if (dstStart > this->count)
             franko_panic("Franko_Dynamic_Array memcpy destination start out of bounds");

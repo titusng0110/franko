@@ -59,11 +59,11 @@ Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
-FUNC_read_HASH_10a3784c            os::posix::read
-FUNC_write_HASH_10a3784c           os::posix::write
+FUNC_read_HASH_b155decf            os::posix::read
+FUNC_write_HASH_b155decf           os::posix::write
 FUNC_GetStdHandle_HASH_493245c2    os::win32::GetStdHandle
-FUNC_ReadFile_HASH_5775278d        os::win32::ReadFile
-FUNC_WriteFile_HASH_5775278d       os::win32::WriteFile
+FUNC_ReadFile_HASH_b1df72ed        os::win32::ReadFile
+FUNC_WriteFile_HASH_b1df72ed       os::win32::WriteFile
 ```
 
 Signatures must match the prototypes codegen emits for the `os.fr`

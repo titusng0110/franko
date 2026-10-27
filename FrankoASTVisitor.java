@@ -701,9 +701,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitAddrType(FrankoParser.AddrTypeContext ctx) {
+    public ASTNode visitPtrType(FrankoParser.PtrTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new AddrTypeNode(referencedType);
+        return new PtrTypeNode(referencedType);
     }
 
     @Override
@@ -880,7 +880,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     //   BinOpNode
     //
     // The grammar has already restricted constExpr so it cannot contain
-    // identifiers, calls, indexing, member access, getaddr, deref, etc.
+    // identifiers, calls, indexing, member access, getptr, deref, etc.
     // The semantic checker should still fold and validate the expression.
 
     @Override
@@ -1037,8 +1037,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             );
         }
 
-        if (ctx.getAddrExpr() != null) {
-            return visit(ctx.getAddrExpr());
+        if (ctx.getPtrExpr() != null) {
+            return visit(ctx.getPtrExpr());
         }
 
         if (ctx.derefExpr() != null) {
@@ -1062,9 +1062,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitGetAddrExpr(FrankoParser.GetAddrExprContext ctx) {
+    public ASTNode visitGetPtrExpr(FrankoParser.GetPtrExprContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        return new GetAddrNode(target);
+        return new GetPtrNode(target);
     }
 
     @Override
