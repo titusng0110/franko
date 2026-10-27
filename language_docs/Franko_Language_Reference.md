@@ -81,6 +81,7 @@ Franko is a small statically typed language with:
 - `if`;
 - `while`;
 - `for`;
+- `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
 - `print`;
 - string literals as byte-array initializer sugar;
@@ -93,6 +94,7 @@ Franko is a small statically typed language with:
   - `arr.memset(value)` and `arr.memset(value, start, count)`;
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
+  - `arr.length()`;
 - array initializer lists as array element assignment sugar;
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).
@@ -108,7 +110,7 @@ Franko currently does **not** implement:
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
-- implicit numeric conversions except for fluid integer constants (explicit width changes use the cast<T>(expr) intrinsic).
+- implicit numeric conversions except for fluid integer constants (explicit width changes use the `cast<T>(expr)` intrinsic);
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;
@@ -989,7 +991,7 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the parameter type.
-There are no implicit conversions: pass cast<T>(x) explicitly to move a
+There are no implicit conversions: pass `cast<T>(x)` explicitly to move a
 value across integer widths (see [Casts](16-casts.md)).
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
@@ -3407,7 +3409,7 @@ Boolean results use `uint8_t`.
 
 Nonconstant numeric expressions require exact type equality wherever a
 typed value is expected. Moving between integer widths is always
-explicit through the cast<T>(expr) intrinsic (see [Casts](16-casts.md)).
+explicit through the `cast<T>(expr)` intrinsic (see [Casts](16-casts.md)).
 
 ## 30.7 Arrays Are Not Assignable as Values
 
@@ -3478,7 +3480,7 @@ Executable statements are invalid at global scope.
 
 The following forms do not exist in the grammar:
 
-- C-style cast syntax (`(T)x` does not exist; explicit conversions use the cast<T>(expr) intrinsic, and fluid integer constants still convert implicitly when they fit);
+- C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` intrinsic, and fluid integer constants still convert implicitly when they fit);
 - compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
 - increment and decrement operators (`++`, `--`);
 - the ternary conditional operator (`?:`);

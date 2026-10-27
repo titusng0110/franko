@@ -48,7 +48,7 @@ Boolean results use `uint8_t`.
 
 Nonconstant numeric expressions require exact type equality wherever a
 typed value is expected. Moving between integer widths is always
-explicit through the cast<T>(expr) intrinsic (see [Casts](16-casts.md)).
+explicit through the `cast<T>(expr)` intrinsic (see [Casts](16-casts.md)).
 
 ## 30.7 Arrays Are Not Assignable as Values
 
@@ -119,7 +119,7 @@ Executable statements are invalid at global scope.
 
 The following forms do not exist in the grammar:
 
-- C-style cast syntax (`(T)x` does not exist; explicit conversions use the cast<T>(expr) intrinsic, and fluid integer constants still convert implicitly when they fit);
+- C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` intrinsic, and fluid integer constants still convert implicitly when they fit);
 - compound assignment operators (`+=`, `-=`, `*=`, `/=`, and similar) — only plain `=` exists;
 - increment and decrement operators (`++`, `--`);
 - the ternary conditional operator (`?:`);

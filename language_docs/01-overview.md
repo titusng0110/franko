@@ -24,6 +24,7 @@ Franko is a small statically typed language with:
 - `if`;
 - `while`;
 - `for`;
+- `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
 - `print`;
 - string literals as byte-array initializer sugar;
@@ -36,6 +37,7 @@ Franko is a small statically typed language with:
   - `arr.memset(value)` and `arr.memset(value, start, count)`;
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
+  - `arr.length()`;
 - array initializer lists as array element assignment sugar;
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).
@@ -51,7 +53,7 @@ Franko currently does **not** implement:
 - floating-point types;
 - a distinct boolean type;
 - general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
-- implicit numeric conversions except for fluid integer constants (explicit width changes use the cast<T>(expr) intrinsic).
+- implicit numeric conversions except for fluid integer constants (explicit width changes use the `cast<T>(expr)` intrinsic);
 - cast syntax;
 - compound assignment operators (`+=` and similar), increment, and decrement operators;
 - a ternary conditional operator;

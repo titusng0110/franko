@@ -58,7 +58,7 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the parameter type.
-There are no implicit conversions: pass cast<T>(x) explicitly to move a
+There are no implicit conversions: pass `cast<T>(x)` explicitly to move a
 value across integer widths (see [Casts](16-casts.md)).
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
