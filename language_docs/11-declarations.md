@@ -17,7 +17,7 @@ Array and pointer declarations:
 array<int> xs;
 array<int32_t> ys;
 array<uint8_t, 128> buffer;
-ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
+array<array<byte, 20>, 12> grid;
 
 ptr<int> p;
 ptr<int32_t> q;

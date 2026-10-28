@@ -3,7 +3,7 @@
 // ============================================================
 // Covers: primitive integer types (signed/unsigned, fixed-width),
 // type aliases (int, uint, byte), void, pointer types, and
-// array/ndarray types.
+// array types.
 // ============================================================
 
 struct Node {
@@ -45,7 +45,7 @@ func main() -> int32_t {
     // --- Array types ---
     array<int32_t> dynArray;
     array<int32_t, 10> staticArray;
-    ndarray<byte, 12, 12> ndArray;
+    array<array<byte, 12>, 12> nestedArray;
     ptr<int32_t> ptrInt;
     ptr<Node> ptrStruct;
 

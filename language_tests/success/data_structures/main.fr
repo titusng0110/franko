@@ -2,7 +2,7 @@
 // LANGUAGE TEST: Arrays, Structs, and Initializers
 // ============================================================
 // Covers: array declarations, static/dynamic arrays, array
-// initializer lists (nested), struct fields, and ndarray sugar.
+// initializer lists (nested), struct fields, and static arrays.
 // ============================================================
 
 struct Config {
@@ -11,9 +11,8 @@ struct Config {
     array<int32_t, 4> data
 }
 
-// --- Ndarray sugar ---
-// ndarray<byte, 12> is syntactic sugar for array<array<byte, 12>>
-ndarray<byte, 12> grid;
+// --- Static array of bytes ---
+array<byte, 12> grid;
 
 func main() -> int32_t {
     // --- Static Array declaration with array literal initializer ---

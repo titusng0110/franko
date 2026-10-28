@@ -488,7 +488,7 @@ public class Desugarer {
 
     /**
      * Returns true when the declared type contains a `?` size marker
-     * anywhere (static sizes, ndarray dimensions, or nested positions).
+     * anywhere (static sizes or nested positions).
      */
     private boolean usesInferredSize(TypeNode type) {
         if (type == null) {
@@ -498,16 +498,6 @@ public class Desugarer {
         if (type instanceof StaticArrayTypeNode s) {
             return s.sizeExpr instanceof InferredSizeNode
                 || usesInferredSize(s.elementType);
-        }
-
-        if (type instanceof NdArrayTypeNode nd) {
-            for (ASTNode dim : nd.dimensions) {
-                if (dim instanceof InferredSizeNode) {
-                    return true;
-                }
-            }
-
-            return usesInferredSize(nd.elementType);
         }
 
         if (type instanceof DynamicArrayTypeNode d) {
@@ -532,10 +522,6 @@ public class Desugarer {
             return isFullyStaticArrayNest(s.elementType);
         }
 
-        if (type instanceof NdArrayTypeNode nd) {
-            return isFullyStaticArrayNest(nd.elementType);
-        }
-
         if (type instanceof DynamicArrayTypeNode) {
             return false;
         }
@@ -552,8 +538,7 @@ public class Desugarer {
      * `?` markers), i.e. its initializer must be a nested literal.
      */
     private boolean isStaticArrayLevel(TypeNode type) {
-        return type instanceof StaticArrayTypeNode
-            || type instanceof NdArrayTypeNode;
+        return type instanceof StaticArrayTypeNode;
     }
 
     /**
@@ -624,16 +609,6 @@ public class Desugarer {
      *     must have equal length (perfect rectangle).
      */
     private TypeNode inferLevel(TypeNode type, ArrayLiteralNode literal, String varName) {
-        if (type instanceof NdArrayTypeNode nd) {
-            TypeNode nested = nd.elementType;
-
-            for (int i = nd.dimensions.size() - 1; i >= 0; i--) {
-                nested = new StaticArrayTypeNode(nested, nd.dimensions.get(i));
-            }
-
-            return inferLevel(nested, literal, varName);
-        }
-
         if (!(type instanceof StaticArrayTypeNode s)) {
             throw new InferenceFailure("Internal inference error: expected a static array level for '"
                 + varName
@@ -703,17 +678,6 @@ public class Desugarer {
      * Every level must match exactly; nested levels must be rectangular.
      */
     private void checkLevel(TypeNode concrete, ArrayLiteralNode literal, String varName) {
-        if (concrete instanceof NdArrayTypeNode nd) {
-            TypeNode nested = nd.elementType;
-
-            for (int i = nd.dimensions.size() - 1; i >= 0; i--) {
-                nested = new StaticArrayTypeNode(nested, nd.dimensions.get(i));
-            }
-
-            checkLevel(nested, literal, varName);
-            return;
-        }
-
         if (!(concrete instanceof StaticArrayTypeNode s)) {
             return;
         }
@@ -786,19 +750,6 @@ public class Desugarer {
             return new StaticArrayTypeNode(
                 replaceInferredSizesWithFallback(s.elementType),
                 size
-            );
-        }
-
-        if (type instanceof NdArrayTypeNode nd) {
-            List<ASTNode> dims = new ArrayList<>();
-
-            for (ASTNode dim : nd.dimensions) {
-                dims.add(dim instanceof InferredSizeNode ? new IntNode("1") : dim);
-            }
-
-            return new NdArrayTypeNode(
-                replaceInferredSizesWithFallback(nd.elementType),
-                dims
             );
         }
 
@@ -1360,10 +1311,10 @@ public class Desugarer {
     /**
      * Evaluates a constExpr slot into a canonical decimal literal.
      *
-     * Static array sizes, ndarray dimensions, global initializers,
-     * and struct field defaults are computed here, before semantic
-     * analysis, so later phases only validate the resulting value
-     * (positivity, range, fit) instead of folding it.
+     * Static array sizes, global initializers, and struct field defaults
+     * are computed here, before semantic analysis, so later phases only
+     * validate the resulting value (positivity, range, fit) instead of
+     * folding it.
      *
      * Evaluation failures are reported as desugaring diagnostics and
      * recover with a placeholder size of 1.
@@ -1481,52 +1432,6 @@ public class Desugarer {
 // Type handling
 // ============================================================
 
-    private TypeNode desugarNdArrayType(NdArrayTypeNode n) {
-        if (n == null) return null;
-
-        TypeNode current = desugarType(n.elementType);
-
-        /*
-        * ndarray<T, A, B, C>
-        *
-        * dimensions are stored in access order:
-        *
-        *   [A, B, C]
-        *
-        * Lower from right to left:
-        *
-        *   T
-        *   array<T, C>
-        *   array<array<T, C>, B>
-        *   array<array<array<T, C>, B>, A>
-        *
-        * This gives the intended access order:
-        *
-        *   arr[i][j][k]
-        *
-        * where:
-        *
-        *   i indexes A
-        *   j indexes B
-        *   k indexes C
-        */
-        for (int i = n.dimensions.size() - 1; i >= 0; i--) {
-            ASTNode dim = n.dimensions.get(i);
-
-            if (dim instanceof InferredSizeNode) {
-                diagnostics.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
-                dim = new IntNode("1");
-            }
-
-            current = new StaticArrayTypeNode(
-                current,
-                evalConstExpr(dim, "static array size")
-            );
-        }
-
-        return current;
-    }
-
     private TypeNode desugarType(TypeNode type) {
         if (type == null) return null;
 
@@ -1566,10 +1471,6 @@ public class Desugarer {
                 desugarType(n.elementType),
                 evalConstExpr(n.sizeExpr, "static array size")
             );
-        }
-
-        if (type instanceof NdArrayTypeNode) {
-            return desugarNdArrayType((NdArrayTypeNode) type);
         }
 
         if (type instanceof PtrTypeNode) {

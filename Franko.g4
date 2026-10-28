@@ -385,7 +385,7 @@ simpleStmt
 //   int32_t x = 1 + 2;
 //   array<int32_t, 3> xs = [1, 2, 3];
 //   array<int32_t> ys = [1, 2, 3];
-//   ndarray<byte, 12, 12> grid;
+//   array<array<byte, 12>, 12> grid;
 //
 // Important:
 //   T x = [ ... ];
@@ -712,23 +712,20 @@ memberName
     | UINT32_T
     | UINT64_T
     | ARRAY
-    | NDARRAY
     ;
 
 // ---------- CONSTANT EXPRESSIONS ----------
 //
 // Used for:
 //   - static array size expressions
-//   - ndarray dimension expressions
 //   - global variable initializers
 //   - struct field default initializers
 //
-// A static array size (or ndarray dimension) is either an explicit
-// constant expression or an inferred-size marker `?`:
+// A static array size is either an explicit constant expression or an
+// inferred-size marker `?`:
 //
 //   array<int32_t, 10>   explicit size
 //   array<int32_t, ?>    size inferred from a declaration initializer
-//   ndarray<byte, ?, 3>  middle dimension inferred
 //
 // `?` is only meaningful in a declaration with an array-literal or
 // string-literal initializer; the desugarer rejects it everywhere else.
@@ -766,21 +763,11 @@ constExpr
     : constLogicalOrExpr
     ;
 
-// A single static array size or ndarray dimension: either an explicit
-// constant expression or an inferred-size `?` marker.
+// A single static array size: either an explicit constant expression
+// or an inferred-size `?` marker.
 arraySize
     : constExpr  # ExplicitArraySize
     | QUESTION   # InferredArraySize
-    ;
-
-// Used by ndarray<T, N, N, N...>, where each N may be `?`.
-arraySizeList
-    : arraySize (COMMA arraySize)*
-    ;
-
-// Used by ndarray<T, N, N, N...>.
-constExprList
-    : constExpr (COMMA constExpr)*
     ;
 
 constLogicalOrExpr
@@ -957,31 +944,15 @@ nullLiteral
 //   array<int, 2 * 5>
 //   array<array<int, 1 + 1>, 2 + 2>
 //
-// ndarray is syntactic sugar for nested static arrays.
+// Static arrays nest, so multidimensional arrays are written as
+// nested static array types:
 //
-// Examples:
-//   ndarray<byte, 12>
-//      means:
-//   array<byte, 12>
-//
-//   ndarray<byte, 12, 20>
-//      means:
 //   array<array<byte, 20>, 12>
 //
-//   ndarray<byte, 12, 20, 30>
-//      means:
-//   array<array<array<byte, 30>, 20>, 12>
+// Access order follows the nesting:
 //
-// Access order follows the dimension list:
-//
-//   ndarray<byte, R, C> grid
+//   array<array<byte, C>, R> grid
 //   grid[r][c]
-//
-//   ndarray<byte, X, Y, Z> cube
-//   cube[x][y][z]
-//
-// Grammar only parses this form. The AST visitor or desugarer should lower
-// ndarray<T, N, N, ...> to nested StaticArrayTypeNode values.
 //
 // Semantic checker should later require that each size expression is:
 //   - a valid compile-time integer constant expression
@@ -993,11 +964,8 @@ nullLiteral
 //   array<int, x>
 //   array<int, f()>
 //   array<int, arr[0]>
-//   ndarray<int, x, 10>
-//   ndarray<int, f(), 10>
-//   ndarray<int, arr[0], 10>
 //
-// do not parse as static array / ndarray types because identifiers, calls,
+// do not parse as static array types because identifiers, calls,
 // and indexing are not constExpr forms. `?` is the only non-constExpr form
 // allowed as a size, and only the desugarer accepts it (in declarations
 // with an array-literal or string-literal initializer).
@@ -1014,7 +982,6 @@ type
     | qualifiedName                            # QualifiedStructType
     | ARRAY LT type GT                         # DynamicArrayType
     | ARRAY LT type COMMA arraySize GT        # StaticArrayType
-    | NDARRAY LT type COMMA arraySizeList GT  # NdArrayType
     | PTR LT type GT                          # PtrType
     ;
 
@@ -1061,7 +1028,6 @@ UINT32_T : 'uint32_t' | 'uint' ;
 UINT64_T : 'uint64_t' ;
 
 ARRAY    : 'array' ;
-NDARRAY  : 'ndarray' ;
 
 // Operators / punctuation
 EQ      : '==' ;

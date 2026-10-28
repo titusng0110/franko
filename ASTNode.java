@@ -490,38 +490,6 @@ class StaticArrayTypeNode extends TypeNode {
     }
 }
 
-class NdArrayTypeNode extends TypeNode {
-    TypeNode elementType;
-
-    /*
-     * Dimension expressions in access order.
-     *
-     * Example:
-     *
-     *   ndarray<byte, 12, 20, 30>
-     *
-     * dimensions:
-     *
-     *   [12, 20, 30]
-     *
-     * Later desugaring should lower this to:
-     *
-     *   array<array<array<byte, 30>, 20>, 12>
-     *
-     * so that:
-     *
-     *   arr[i][j][k]
-     *
-     * follows the declared dimension order.
-     */
-    List<ASTNode> dimensions;
-
-    NdArrayTypeNode(TypeNode elementType, List<ASTNode> dimensions) {
-        this.elementType = elementType;
-        this.dimensions = dimensions;
-    }
-}
-
 class PtrTypeNode extends TypeNode {
     TypeNode referencedType;
 
@@ -579,11 +547,9 @@ class IntNode extends ASTNode {
 // Inferred static array sizes
 // ============================================================
 //
-// InferredSizeNode is a marker for `?` in a static array size or
-// ndarray dimension:
+// InferredSizeNode is a marker for `?` in a static array size:
 //
 //   array<int32_t, ?>
-//   ndarray<byte, ?, 3>
 //
 // It is resolved by the desugarer (only in declarations with an
 // array-literal or string-literal initializer) into an IntNode before

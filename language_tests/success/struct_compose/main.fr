@@ -3,7 +3,7 @@
 // ============================================================
 // Covers: struct types used inside the other type constructors:
 // array<Point> (dynamic), array<Point, 4> (static), ptr<Point>,
-// and ndarray<Point, 2, 3> sugar; field assignment and access
+// and nested array<array<Point, 3>, 2>; field assignment and access
 // through each storage form.
 // ============================================================
 
@@ -35,8 +35,8 @@ func main() -> int32_t {
     $(pp).y = 7;
     print($(pp).x + $(pp).y);
 
-    // Ndarray (nested static arrays) of structs.
-    ndarray<Point, 2, 3> cells;
+    // Nested static arrays of structs.
+    array<array<Point, 3>, 2> cells;
     cells[1][2].x = 8;
     cells[1][2].y = 9;
     print(cells[1][2].x, cells[1][2].y);

@@ -64,7 +64,6 @@ Franko is a small statically typed language with:
 - struct member access using `obj.field` (see [Structs](25-structs.md));
 - dynamic arrays;
 - static arrays;
-- `ndarray<...>` sugar for nested static arrays;
 - typed pointers using `ptr<T>`;
 - explicit pointer operations:
   - `getptr(...)`;
@@ -500,23 +499,7 @@ and is then lowered to indexed byte assignments. No null terminator is added.
 
 String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](23-string-literals.md).
 
-## 5.5 `ndarray` Type Desugaring
-
-`ndarray<T, D1, D2, ..., Dn>` is sugar for nested static arrays:
-
-```franko
-ndarray<byte, 12, 20, 30>
-```
-
-desugars to:
-
-```franko
-array<array<array<byte, 30>, 20>, 12>
-```
-
-so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](20-arrays.md).
-
-## 5.6 Braceless Control-Flow Bodies
+## 5.5 Braceless Control-Flow Bodies
 
 `if`, `while`, and `for` bodies may be a single statement without braces:
 
@@ -536,7 +519,7 @@ for (; i < 10; i = i + 1) { print(i); }
 
 This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
 
-## 5.7 For Loop Desugaring
+## 5.6 For Loop Desugaring
 
 A `for` loop is lowered to declaration/assignment statements and a `while` loop:
 
@@ -565,9 +548,9 @@ The `init` and `update` parts are optional simple statements. The condition is r
 
 The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](19-statements.md).
 
-## 5.8 Inferred Static Array Sizes (`?`)
+## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size (or `ndarray` dimension) may be written as `?` when the array is declared with an array-literal or string-literal initializer:
+A static array size may be written as `?` when the array is declared with an array-literal or string-literal initializer:
 
 ```franko
 array<int32_t, ?> a = [0, 1, 2, 3];
@@ -589,7 +572,7 @@ String literals count UTF-8 bytes (`array<byte, ?> s = "hello"` infers `5`), and
 array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
 ```
 
-becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear in any dimension, including middle `ndarray` dimensions.
+becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear at any level of the nest, including middle levels.
 
 Inference rules:
 
@@ -601,7 +584,7 @@ Inference rules:
 
 Misplaced `?` (parameters, return types, struct fields, globals, pointers, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
 
-## 5.9 Constant Expression Evaluation
+## 5.8 Constant Expression Evaluation
 
 Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
 
@@ -613,7 +596,7 @@ struct S {                 // field default becomes 8
 }
 ```
 
-Static array sizes, `ndarray` dimensions, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
+Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
 
 Evaluation failures are desugaring diagnostics:
 
@@ -623,7 +606,7 @@ array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
 
 Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
 
-## 5.10 Increment and Decrement Desugaring
+## 5.9 Increment and Decrement Desugaring
 
 Postfix increment and decrement statements are sugar for compound assignment:
 
@@ -661,8 +644,6 @@ There is currently no separate semantic boolean type. Boolean-like results are r
 Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical. See [Type Equality](28-type-equality.md), [Declarations](11-declarations.md), and the complete struct reference in [Structs](25-structs.md).
 
 `void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
-
-`ndarray<T, D1, D2, ...>` is not a separate semantic type category. It is syntactic sugar desugared into nested static array types before semantic analysis.
 
 A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal or string-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
 
@@ -775,7 +756,7 @@ Fluid constants also participate in function overload resolution. A folded integ
 
 Franko splits constant handling into evaluation and validation.
 
-**Evaluation** computes the value of a syntactically pure constant expression. This happens before semantic analysis, in the desugarer, for every `constExpr` slot: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults.
+**Evaluation** computes the value of a syntactically pure constant expression. This happens before semantic analysis, in the desugarer, for every `constExpr` slot: static array sizes, global initializers, and struct field defaults.
 
 Examples:
 
@@ -844,7 +825,7 @@ Array and pointer declarations:
 array<int> xs;
 array<int32_t> ys;
 array<uint8_t, 128> buffer;
-ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
+array<array<byte, 20>, 12> grid;
 
 ptr<int> p;
 ptr<int32_t> q;
@@ -1857,32 +1838,7 @@ array<byte, ?> s = "hello";           // ? = 5
 
 The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
-## 20.2 `ndarray` Sugar
-
-`ndarray<T, D1, D2, ..., Dn>` is syntactic sugar for nested static arrays:
-
-```franko
-ndarray<byte, 12, 20, 30>
-```
-
-means:
-
-```franko
-array<array<array<byte, 30>, 20>, 12>
-```
-
-Access order follows the dimension list: `arr[i][j][k]` indexes `i` along `12`, `j` along `20`, and `k` along `30`.
-
-Each dimension follows the same static-array size rules above (a positive compile-time integer constant folding to a value that fits `uint32_t`).
-
-Any dimension may be `?` when the `ndarray` is declared with an array-literal initializer; each `?` is inferred independently from the corresponding literal level:
-
-```franko
-ndarray<int32_t, ?, ?> g = [[1, 2, 3], [4, 5, 6]];   // 2 by 3
-ndarray<byte, 2, ?, 3> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
-```
-
-## 20.3 Dynamic Arrays
+## 20.2 Dynamic Arrays
 
 A dynamic array has runtime size:
 
@@ -1922,7 +1878,7 @@ The call-initialization form is only valid for dynamic arrays:
 int32_t x(5);   // invalid: x is not a dynamic array
 ```
 
-## 20.4 Array Access
+## 20.3 Array Access
 
 Array indexing syntax:
 
@@ -1942,7 +1898,7 @@ Index rules:
 
 For static arrays, constant indexes are checked against the known static size when possible.
 
-## 20.5 Array Elements as Lvalues
+## 20.4 Array Elements as Lvalues
 
 Array elements are storage-backed lvalues when the array target is storage-backed.
 
@@ -1955,7 +1911,7 @@ p = getptr(xs[0]);
 
 Nested array elements may also be lvalues when each target is storage-backed.
 
-## 20.6 Array Direct Assignment Is Invalid
+## 20.5 Array Direct Assignment Is Invalid
 
 Arrays cannot be assigned directly as ordinary values.
 
@@ -1978,7 +1934,7 @@ a.uninit();
 
 Array initializer assignment is not whole-array value assignment.
 
-## 20.7 Array Lifetime Limitations
+## 20.6 Array Lifetime Limitations
 
 The checker validates intrinsic legality, but it does not fully prove:
 
@@ -2938,7 +2894,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -2968,14 +2924,14 @@ A struct name used in a type position is resolved against the struct namespace:
 
 - Unknown struct names are rejected with an "unknown struct type" error.
 - Field types may reference structs declared anywhere in the program, including structs declared later in the file.
-- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
+- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `array<array<Point, 3>, 2> cells` are all valid declared types.
 
 ## 25.5 By-Value Cycles
 
 A struct may not reach itself by value through its fields. The by-value edges are:
 
 - a field whose type is a struct;
-- a field whose type is a static array of structs (recursively, including `ndarray` sugar).
+- a field whose type is a static array of structs (recursively, including nested static arrays).
 
 An infinite by-value chain would have no size, so such cycles are rejected at compile time:
 
@@ -3450,7 +3406,7 @@ int32_t x;
 X s;
 array<X> xs;
 array<uint8_t, 64> bytes;
-ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
+array<array<byte, 20>, 12> grid;
 ptr<int32_t> p;
 ptr<array<int32_t>> ap;
 ```
@@ -3464,7 +3420,7 @@ ptr<void> p;
 T s;    // invalid when no struct named T is declared
 ```
 
-`ndarray` declarations are valid exactly when their unfolded nested static array type is valid: every dimension must satisfy the static array size rules (see [Arrays](20-arrays.md)).
+Static arrays nest: every level of `array<array<byte, 20>, 12>` must satisfy the static array size rules (see [Arrays](20-arrays.md)).
 
 A function return type has separate rules. It may be:
 
@@ -3687,11 +3643,9 @@ Nested initializer lists are lowered recursively.
 
 String literals are converted to byte array literals in the same pass (see [String Literals](23-string-literals.md)).
 
-`ndarray` types are lowered to nested static arrays before type analysis.
-
 `?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count (strings count as UTF-8 bytes) before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
 
-Every other `constExpr` slot is also evaluated in this pass: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
+Every other `constExpr` slot is also evaluated in this pass: static array sizes, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
 
 The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
 
@@ -4161,16 +4115,16 @@ func main() -> int32_t {
 
 See [String Literals](23-string-literals.md).
 
-## 33.12 `ndarray` Grid
+## 33.12 Nested Static Array Grid
 
 ```franko
-func fill(ptr<ndarray<byte, 2, 3>> grid) -> void {
+func fill(ptr<array<array<byte, 3>, 2>> grid) -> void {
     $(grid).memset(0);
     $(grid)[0][1] = 7;
 }
 
 func main() -> int32_t {
-    ndarray<byte, 2, 3> grid;
+    array<array<byte, 3>, 2> grid;
 
     fill(getptr(grid));
 
@@ -4181,7 +4135,7 @@ func main() -> int32_t {
 }
 ```
 
-`ndarray<byte, 2, 3>` is sugar for `array<array<byte, 3>, 2>`.
+`array<array<byte, 3>, 2>` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
 
 ## 33.13 Status-Returning Intrinsics
 
