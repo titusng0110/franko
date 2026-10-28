@@ -45,6 +45,8 @@ Desugared AST
 Semantic AST (SemanticProgramNode)
    │  LegalityChecker   (orchestrates TypeChecker, ExpressionChecker,
    │                     DeclarationChecker, StatementChecker, FunctionChecker)
+   │  BranchPruner       (truth-table-based conditional/loop pruning on the
+   │                     Semantic AST; removes dead branches and dead loops)
    │  PointerNullStateChecker (intra-procedural pointer null dataflow)
    ▼
 checked Semantic AST
@@ -103,6 +105,7 @@ flowchart TD
     StatementChecker --> ExpressionChecker
     ExpressionChecker --> TypeChecker
     DeclarationChecker --> TypeChecker
+    Main --> BranchPruner
     Main --> PointerNullStateChecker
     Main --> Cpp14Codegen
     Cpp14Codegen --> Mangler
@@ -125,7 +128,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `PointerNullStateChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
+| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `PointerNullStateChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
 | `ImportResolver` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ASTNode` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
 | `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
@@ -133,6 +136,7 @@ flowchart TD
 | `ArrayLowerer` | `ExpressionAnalyzer`, `SymbolTable` |
 | `ConstExpressionEvaluator` | `SymbolTable` (diagnostics only) |
 | `LegalityChecker` | `FunctionChecker`, `DeclarationChecker`, `StatementChecker`, `ExpressionChecker` |
+| `BranchPruner` | reads/writes `SemanticASTNode` trees only (called by `Main`); no other compiler classes |
 | `FunctionChecker` | `StatementChecker`, `ExpressionChecker`, `DeclarationChecker`, `TypeChecker` |
 | `StatementChecker` | `DeclarationChecker`, `ExpressionChecker`, `TypeChecker` |
 | `DeclarationChecker` | `TypeChecker` (incl. static `fitsBigIntegerToPrimitive`) |
@@ -516,7 +520,56 @@ preallocated `PointerState[][]` store), merge back-edge states, and compute
 zero-trip exit states. Reports deref of definitely-NULL as error and
 maybe-null as warning (each pointer warns at most once per check site).
 
-### 3.4 Backend
+### 3.4 Branch pruning
+
+#### `BranchPruner`
+Runs on the Semantic AST **after** `LegalityChecker` and **before**
+`PointerNullStateChecker` (invoked by `Main`; prints no phase header). It is a
+functional, bottom-up rewrite pass: semantic AST nodes are immutable
+(`public final` fields), so the pruner rebuilds changed nodes and returns the
+original instances when nothing changed. It prunes conditionally dead code and
+normalizes loop conditions using a **truth-table evaluation** of the
+condition's boolean structure:
+
+- **Connective structure**: `&&`, `||`, `!` nodes form the propositional
+  skeleton of the formula.
+- **Atoms**: effect-free `uint8_t`-typed leaves — comparisons
+  (`== != < > <= >=`) over pure operands, and `uint8_t`-typed variable, member,
+  deref, or array-access reads. Syntactically identical atoms (structural
+  comparison with **symbol object identity** for variables/fields — never
+  names, which may shadow) share one truth-table variable.
+  `==`/`!=` pairs with identical operands are canonicalized to one variable
+  and its negation, so classic null-guard patterns like
+  `p == null || p != null` (tautology) and `p == null && p != null`
+  (contradiction) are detected.
+- **Effect rule**: any function call or array intrinsic call anywhere in the
+  condition blocks pruning of that statement entirely — a pruned condition is
+  *discarded* and never evaluated, so a call's side effects must survive.
+- **Trap policy**: derefs (`$(p)`) and array indexing are allowed as atoms
+  even though they can trap; when a condition is pruned, such a trap
+  disappears with it (deliberate trade-off).
+- **Enumeration**: at most `MAX_ATOMS = 10` variables (≤ 1024 rows); atoms are
+  treated as independent propositional variables, which over-approximates
+  reality — so "true on all rows" / "false on all rows" soundly implies the
+  condition is a tautology / contradiction. More than 10 atoms → no pruning.
+  Zero atoms recovers plain constant folding (a folded `constantValue`
+  decides immediately).
+- **Outcomes**: an always-true `if` keeps only its pruned then-branch; an
+  always-false `if` keeps only its pruned else-branch, or disappears
+  entirely when there is no else; an always-false `while` is removed with its
+  body and update epilogue; an always-true `while` is normalized to
+  `while (1)`; anything undecided is left in place with recursion into its
+  branches/body/update.
+- **Scoping rule**: a pruned branch is returned as-is (a block stays a block,
+  a single statement stays a single statement) and is never flattened into the
+  parent block — flattening could collide same-named locals (both emitted as
+  `VAR_x`) in the generated C++. `checkEmittedNameCollisions` remains as the
+  final safety net.
+- **Effect on later phases**: `PointerNullStateChecker` and codegen see the
+  pruned tree, so null-state warnings and code are never produced for dead
+  branches, and dead loops vanish from the emitted C++.
+
+### 3.5 Backend
 
 #### `Cpp14Codegen`
 The C++14 backend: walks the checked Semantic AST and emits the translation
@@ -567,7 +620,7 @@ Debug printers (`--verbose` only): `ASTPrinter` for the raw AST at three
 checkpoints, `SemanticASTPrinter` for the final semantic AST (types,
 constant values, lvalue flags, mangled names, symbol identity hashes).
 
-### 3.5 Support
+### 3.6 Support
 
 #### `DiagnosticBag`
 Phase-agnostic error/warning accumulator with a configurable header and
@@ -658,6 +711,22 @@ type it would have in C++. Consequences:
 
 ---
 
+### 4.7 Conditional branch pruning (BranchPruner)
+- A condition is pruned only when it is a **tautology or contradiction** under
+  a truth table of at most 10 effect-free `uint8_t`-typed atoms; `==`/`!=`
+  pairs over identical operands are the same variable and its negation.
+- Pruning **discards** the condition, so conditions containing function or
+  array-intrinsic calls are never pruned (effects must survive); derefs and
+  array indexes may be atoms, meaning a trap in a pruned condition disappears
+  (deliberate).
+- `if`: true → then-branch only; false → else-branch only, or the statement
+  disappears. `while`: false → loop removed entirely; true → condition
+  normalized to `1`.
+- Pruned branches are spliced as-is, never flattened into parent blocks
+  (keeps `VAR_x` name scopes intact in the emitted C++).
+- Runs after all checking and before pointer null-state analysis, so dead
+  code receives no null-state diagnostics and never reaches codegen.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -690,6 +759,7 @@ uv run python library_tests/run_library_tests.py
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `ASTNode.java` |
 | Remove/rename syntax sugar | `Desugarer` |
+| Simplify or remove dead branches/loops | `BranchPruner` |
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |

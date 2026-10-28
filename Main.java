@@ -160,6 +160,8 @@ public class Main {
         LegalityChecker legalityChecker = new LegalityChecker(legalityDiagnostics);
         legalityChecker.check(semaAST);
 
+        semaAST = new BranchPruner().prune(semaAST);
+
         System.out.println("==== Pointer Null-State Checking ====");
         DiagnosticBag pointerStateDiagnostics = new DiagnosticBag("Pointer null-state checking failed:");
         PointerNullStateChecker pointerStateChecker = new PointerNullStateChecker(pointerStateDiagnostics);
