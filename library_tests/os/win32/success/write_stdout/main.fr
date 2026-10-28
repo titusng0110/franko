@@ -21,7 +21,7 @@ func main() -> int32_t {
     uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
     array<byte> msg;
     msg.init(5);
-    msg = "hello";
+    msg.memcpy("hello");
     int32_t ok = os::win32::WriteFile(h, getptr(msg), 5, null);
     print(ok);
     msg.uninit();

@@ -1,7 +1,7 @@
 // Failure fixture: type_equality/int32_to_uint64
 // There are no implicit numeric conversions (doc 31.6): a nonconstant
 // int32_t variable does not assign to uint64_t. Convert explicitly
-// with cast<uint64_t>(a), which throws at run time for negative
+// with unsafe_cast<uint64_t>(a), which throws at run time for negative
 // values.
 
 func main() -> int32_t {

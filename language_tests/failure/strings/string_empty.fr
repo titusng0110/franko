@@ -1,0 +1,7 @@
+// Failure fixture: strings/string_empty
+// Empty string literals are not supported: a string literal is a
+// view<array<byte, N>> value with N >= 1.
+func main() -> int32_t {
+    view<array<byte, 1>> v = "";
+    return 0;
+}

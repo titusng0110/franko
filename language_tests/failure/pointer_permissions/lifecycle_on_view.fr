@@ -1,0 +1,7 @@
+// Lifecycle intrinsics are blocked on view<T> receivers as well.
+func main() -> int32_t {
+    array<byte> d;
+    view<array<byte>> v = getview(d);
+    $(v).init(3);
+    return 0;
+}

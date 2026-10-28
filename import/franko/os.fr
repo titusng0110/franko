@@ -30,10 +30,10 @@ namespace os {
         // bridge definitions from import/franko/os.ffi.cpp. The stubs
         // report failure (-1) so a missing bridge can never look like
         // silent success.
-        func read(int32_t fd, ptr<array<byte>> buf, uint64_t count) -> int64_t {
+        func read(int32_t fd, mview<array<byte>> buf, uint64_t count) -> int64_t {
             return -1
         }
-        func write(int32_t fd, ptr<array<byte>> buf, uint64_t count) -> int64_t {
+        func write(int32_t fd, view<array<byte>> buf, uint64_t count) -> int64_t {
             return -1
         }
     }
@@ -50,15 +50,17 @@ namespace os {
         // posix functions above. hFile is a HANDLE widened to 64 bits;
         // obtain one with GetStdHandle. lpOverlapped is dropped: the
         // bridge always passes NULL (synchronous I/O). bytesRead and
-        // bytesWritten may be null. The stubs report failure (0) so a
+        // bytesWritten are written through (mview) and may be null. The
+        // buffer is read-only for WriteFile (view) and written in place
+        // for ReadFile (mview). The stubs report failure (0) so a
         // missing bridge can never look like silent success.
         func GetStdHandle(uint32_t nStdHandle) -> uint64_t {
             return 0
         }
-        func ReadFile(uint64_t hFile, ptr<array<byte>> buf, uint32_t count, ptr<uint32_t> bytesRead) -> int32_t {
+        func ReadFile(uint64_t hFile, mview<array<byte>> buf, uint32_t count, mview<uint32_t> bytesRead) -> int32_t {
             return 0
         }
-        func WriteFile(uint64_t hFile, ptr<array<byte>> buf, uint32_t count, ptr<uint32_t> bytesWritten) -> int32_t {
+        func WriteFile(uint64_t hFile, view<array<byte>> buf, uint32_t count, mview<uint32_t> bytesWritten) -> int32_t {
             return 0
         }
     }

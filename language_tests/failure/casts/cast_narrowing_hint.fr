@@ -1,0 +1,9 @@
+// Failure fixture: casts/cast_narrowing_hint
+// cast<T> only performs value-preserving widening; a conversion that
+// can lose data must be written with unsafe_cast<T>.
+func main() -> int32_t {
+    int64_t big = 300;
+    int32_t n = cast<int32_t>(big);
+    print(n);
+    return 0;
+}

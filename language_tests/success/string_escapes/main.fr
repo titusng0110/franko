@@ -2,13 +2,14 @@
 // LANGUAGE TEST: String Escape Sequences
 // ============================================================
 // Covers: supported escapes (\t, \n, \", \\) decoded to their
-// byte values when a string literal desugars into a byte array.
+// byte values in the hoisted global byte array behind a string
+// literal view.
 // ============================================================
 
 func main() -> int32_t {
     // "\t\n\"\\" decodes to byte values 9, 10, 34, 92.
     array<byte, 4> e;
-    e = "\t\n\"\\";
+    e.memcpy("\t\n\"\\");
 
     print(e[0]);
     print(e[1]);
@@ -17,7 +18,7 @@ func main() -> int32_t {
 
     // Escapes mixed with ordinary characters: "a\tb\nc" -> 97, 9, 98, 10, 99.
     array<byte, 5> f;
-    f = "a\tb\nc";
+    f.memcpy("a\tb\nc");
 
     print(f[0]);
     print(f[1]);

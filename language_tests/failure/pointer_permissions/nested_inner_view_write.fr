@@ -1,0 +1,12 @@
+// Rule 2: the extracted view locks its own pointee even though the
+// outer array is accessed through an mview.
+func main() -> int32_t {
+    array<byte> t;
+    t.init(3);
+    array<view<array<byte>>> slots;
+    slots.init(1);
+    slots[0] = getview(t);
+    mview<array<view<array<byte>>>> m = getmview(slots);
+    $($(m)[0])[0] = 5;
+    return 0;
+}

@@ -26,8 +26,11 @@ Design rules:
   indices, and generations are `uint32_t`.
 - `new_index()` and `generation()` report failure with the `_END`
   sentinel (`0xFFFFFFFF`) instead of a status code.
-- Every method takes `ptr<X> self` and is called on a pool lvalue;
-  the compiler synthesizes `getptr(...)`.
+- Methods are called on a pool lvalue and declare the permission they
+  need: `ptr<X> self` for the lifecycle operations (`init`, `uninit`,
+  `grow`), `mview<X> self` for `new_index`/`free_index`, and
+  `view<X> self` for the observers. The compiler synthesizes the
+  matching `getptr(...)`/`getmview(...)`/`getview(...)`.
 - A pool owns dynamic arrays, so it is pointer-only: it cannot be
   passed or returned by value, and no assignment copies its storage.
 - Lifecycle: a declaration produces the empty pool (`capacity() == 0`,
@@ -92,7 +95,7 @@ cannot be resized. A failed grow leaves the pool at its old capacity.
 ### new_index
 
 ```franko
-func new_index(ptr<NextAllocator> self) -> uint32_t
+func new_index(mview<NextAllocator> self) -> uint32_t
 ```
 
 Takes one free slot and returns its index. Returns `0xFFFFFFFF`
@@ -104,7 +107,7 @@ to `free_index`.
 ### free_index
 
 ```franko
-func free_index(ptr<NextAllocator> self, uint32_t idx) -> int32_t
+func free_index(mview<NextAllocator> self, uint32_t idx) -> int32_t
 ```
 
 Returns the live slot `idx` to the pool. Returns `0` on success, `-1`
@@ -115,7 +118,7 @@ already-released indices (double release), and indices beyond
 ### exist
 
 ```franko
-func exist(ptr<NextAllocator> self, uint32_t idx) -> uint8_t
+func exist(view<NextAllocator> self, uint32_t idx) -> uint8_t
 ```
 
 Returns `1` when slot `idx` is live, `0` otherwise (never allocated,
@@ -125,7 +128,7 @@ and never reads out of bounds.
 ### write_active_indices
 
 ```franko
-func write_active_indices(ptr<NextAllocator> self, ptr<array<uint32_t>> out) -> int32_t
+func write_active_indices(view<NextAllocator> self, mview<array<uint32_t>> out) -> int32_t
 ```
 
 Writes every live index into `out`, which must hold at least
@@ -136,7 +139,7 @@ order depends on the allocator (see each allocator below).
 ### used
 
 ```franko
-func used(ptr<NextAllocator> self) -> uint32_t
+func used(view<NextAllocator> self) -> uint32_t
 ```
 
 Returns the number of live slots. Starts at `0` after `init`, rises on
@@ -146,7 +149,7 @@ every successful `new_index` and falls on every successful
 ### capacity
 
 ```franko
-func capacity(ptr<NextAllocator> self) -> uint32_t
+func capacity(view<NextAllocator> self) -> uint32_t
 ```
 
 Returns the number of slots the pool currently holds: `C` after
@@ -159,7 +162,7 @@ The two generational allocators add one method.
 ### generation
 
 ```franko
-func generation(ptr<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t
+func generation(view<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t
 ```
 
 Returns the generation counter of slot `idx`. A counter starts at `0`

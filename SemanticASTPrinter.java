@@ -223,6 +223,11 @@ public class SemanticASTPrinter {
         printVariableSymbol("symbol", node.symbol, indent + 1);
         line(indent + 1, "foldedConstInitializer: "
                 + describeConstant(node.foldedConstInitializer));
+
+        if (node.staticInitializer != null) {
+            line(indent + 1, "staticInitializer:");
+            printExpr(node.staticInitializer, indent + 2);
+        }
     }
 
     private static void printAssign(SemanticAssignNode node, int indent) {

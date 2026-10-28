@@ -51,17 +51,26 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 
 A function call is valid if and only if exactly one overload is applicable.
 
-For nonconstant arguments, the argument type must exactly match the parameter type.
-There are no implicit conversions: pass `cast<T>(x)` explicitly to move a
-value across integer widths (see [Casts](16-casts.md)).
+For nonconstant arguments, the argument type must exactly match the
+parameter type, with the single exception of the pointer permission
+downgrade: a `ptr`/`mview`/`view` argument may be passed where a weaker
+permission over an identical referenced type is expected (see
+[Pointers](24-pointers.md)). There are no other implicit conversions: pass
+`cast<T>(x)` explicitly to move a value across integer widths (see
+[Casts](16-casts.md)).
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
+
+Overload preference: among applicable overloads, ones matched without any
+permission downgrade win over downgrading ones, and among the rest the
+ones relying on the fewest downgrades win. If several overloads remain
+tied, the call is ambiguous and is rejected.
 
 ## 12.7 Bare Function Names
 
@@ -108,4 +117,4 @@ Arrays cannot currently be returned directly.
 
 Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
 
-Struct methods follow the same signature, overload, and return rules with an explicit `ptr<X> self` first parameter; see [Methods](26-methods.md).
+Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](26-methods.md).

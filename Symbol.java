@@ -53,6 +53,8 @@ class GlobalVariableSymbol extends VariableSymbol {
 
     BigInteger compileTimeConstantValue = null;
 
+    List<BigInteger> literalBytes = null;
+
     GlobalVariableSymbol(String namespace, String name, SemanticType type) {
         super(namespace, name, type);
     }

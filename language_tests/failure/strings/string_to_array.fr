@@ -1,0 +1,7 @@
+// Failure fixture: strings/string_to_array
+// A string literal cannot initialize an array: it is a
+// view<array<byte, N>> value. Copy the bytes with the memcpy intrinsic.
+func main() -> int32_t {
+    array<byte, 4> s = "test";
+    return 0;
+}

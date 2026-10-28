@@ -1,10 +1,15 @@
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Desugarer {
 
     private final DiagnosticBag diagnostics;
+
+    private final Map<String, GlobalVarDeclNode> hoistedStringGlobals =
+        new LinkedHashMap<>();
 
     public Desugarer() {
         this(new DiagnosticBag("Desugaring failed:"));
@@ -35,22 +40,57 @@ public class Desugarer {
 
         if (root instanceof ProgramNode) {
             ProgramNode p = (ProgramNode) root;
-            return new ProgramNode(desugarTopLevelItemList(p.topLevelItems));
+            List<ASTNode> items =
+                desugarTopLevelItemList(p.topLevelItems);
+
+            items.addAll(0, hoistedStringGlobals.values());
+
+            return new ProgramNode(items);
         }
 
         return desugarStmt(root);
     }
 
-    private ASTNode desugarInitializerValue(ASTNode value) {
-        if (value == null) return null;
+    private ASTNode hoistStringLiteral(StringLiteralNode literal) {
+        List<BigInteger> bytes =
+            StringLiteralDecoder.toUtf8Bytes(literal);
 
-        if (value instanceof StringLiteralNode) {
-            return StringLiteralDecoder.toUtf8ByteArrayLiteral(
-                (StringLiteralNode) value
-            );
+        if (bytes.isEmpty()) {
+            diagnostics.error("Empty string literals are not supported: "
+                + "a string literal is a view<array<byte, N>> value with "
+                + "N >= 1");
+            bytes = new ArrayList<>();
+            bytes.add(BigInteger.ZERO);
         }
 
-        return value;
+        StringBuilder contentKey = new StringBuilder();
+
+        for (BigInteger b : bytes) {
+            contentKey.append(b.toString(10)).append(',');
+        }
+
+        String key = contentKey.toString();
+
+        GlobalVarDeclNode decl = hoistedStringGlobals.get(key);
+
+        if (decl == null) {
+            decl = new GlobalVarDeclNode(
+                new StaticArrayTypeNode(
+                    new PrimitiveTypeNode(PrimitiveKind.UINT8),
+                    new IntNode(Integer.toString(bytes.size()))
+                ),
+                "_STR_" + Mangler.hashHex(key),
+                null
+            );
+
+            decl.literalBytes = bytes;
+            hoistedStringGlobals.put(key, decl);
+        }
+
+        return new GetPtrNode(
+            PtrPermission.READ_ONLY,
+            new VarNode(decl.name)
+        );
     }
 
     private List<ASTNode> desugarTopLevelItemList(List<ASTNode> items) {
@@ -125,7 +165,7 @@ public class Desugarer {
         if (usesInferredSize(n.type)) {
             diagnostics.error("'?' array size is not allowed for global variable '"
                 + n.name
-                + "'; '?' is only allowed in a local declaration with an array-literal or string-literal initializer");
+                + "'; '?' is only allowed in a local declaration with an array-literal initializer");
 
             return new GlobalVarDeclNode(
                 desugarType(replaceInferredSizesWithFallback(n.type)),
@@ -134,10 +174,57 @@ public class Desugarer {
             );
         }
 
+        TypeNode type = desugarType(n.type);
+        ASTNode init = n.constInitializer;
+
+        if (init instanceof StringLiteralNode s) {
+            ASTNode hoisted = hoistStringLiteral(s);
+
+            if (!(type instanceof PtrTypeNode)) {
+                diagnostics.error("Global variable '"
+                    + n.name
+                    + "': a string literal is a view<array<byte, N>> value "
+                    + "and cannot initialize a non-pointer global");
+
+                return new GlobalVarDeclNode(type, n.name, null);
+            }
+
+            return new GlobalVarDeclNode(type, n.name, hoisted);
+        }
+
+        if (init instanceof GetPtrNode) {
+            if (!(type instanceof PtrTypeNode)) {
+                diagnostics.error("Global variable '"
+                    + n.name
+                    + "': only pointer-typed globals may be initialized with "
+                    + "getptr/getmview/getview");
+
+                return new GlobalVarDeclNode(type, n.name, null);
+            }
+
+            return new GlobalVarDeclNode(
+                type,
+                n.name,
+                desugarExpr(init)
+            );
+        }
+
+        if (init instanceof NullNode) {
+            if (!(type instanceof PtrTypeNode)) {
+                diagnostics.error("Global variable '"
+                    + n.name
+                    + "': null is only valid for pointer types");
+
+                return new GlobalVarDeclNode(type, n.name, null);
+            }
+
+            return new GlobalVarDeclNode(type, n.name, null);
+        }
+
         return new GlobalVarDeclNode(
-            desugarType(n.type),
+            type,
             n.name,
-            evalConstExpr(n.constInitializer, "global variable initializer")
+            evalConstExpr(init, "global variable initializer")
         );
     }
 
@@ -269,7 +356,7 @@ public class Desugarer {
         VarDeclInitNode n,
         List<ASTNode> out
     ) {
-        ASTNode rawInit = n.init == null ? null : desugarInitializerValue(n.init);
+        ASTNode rawInit = n.init;
 
         TypeNode loweredType;
 
@@ -312,7 +399,7 @@ public class Desugarer {
         if (usesInferredSize(n.type)) {
             diagnostics.error("'?' array size for '"
                 + n.name
-                + "' requires an array-literal or string-literal initializer, not a size argument");
+                + "' requires an array-literal initializer, not a size argument");
 
             out.add(new VarDeclNode(
                 desugarType(replaceInferredSizesWithFallback(n.type)),
@@ -390,12 +477,24 @@ public class Desugarer {
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
 
+        if (init instanceof StringLiteralNode) {
+            diagnostics.error("'?' array size for '"
+                + varName
+                + "' cannot be inferred from a string literal: a string "
+                + "literal is a view<array<byte, N>> value; declare the size "
+                + "explicitly and copy the bytes with '"
+                + varName
+                + ".memcpy(\"...\")'");
+
+            return desugarType(replaceInferredSizesWithFallback(declared));
+        }
+
         ArrayLiteralNode literal = normalizeInitializer(init);
 
         if (literal == null) {
             diagnostics.error("'?' array size for '"
                 + varName
-                + "' requires an array-literal or string-literal initializer");
+                + "' requires an array-literal initializer");
 
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
@@ -412,10 +511,6 @@ public class Desugarer {
     private ArrayLiteralNode normalizeInitializer(ASTNode init) {
         if (init instanceof ArrayLiteralNode lit) {
             return lit;
-        }
-
-        if (init instanceof StringLiteralNode s) {
-            return StringLiteralDecoder.toUtf8ByteArrayLiteral(s);
         }
 
         return null;
@@ -467,7 +562,7 @@ public class Desugarer {
                 if (row == null) {
                     throw new InferenceFailure("'?' array size inference for '"
                         + varName
-                        + "' requires nested array or string literals");
+                        + "' requires nested array literals");
                 }
 
                 rows.add(row);
@@ -514,7 +609,7 @@ public class Desugarer {
             if (row == null) {
                 throw new InferenceFailure("'?' array size inference for '"
                     + varName
-                    + "' requires nested array or string literals");
+                    + "' requires nested array literals");
             }
 
             rows.add(row);
@@ -563,6 +658,7 @@ public class Desugarer {
 
         if (type instanceof PtrTypeNode a) {
             return new PtrTypeNode(
+                a.kind,
                 replaceInferredSizesWithFallback(a.referencedType)
             );
         }
@@ -585,7 +681,7 @@ public class Desugarer {
             return;
         }
 
-        ASTNode value = desugarInitializerValue(n.value);
+        ASTNode value = n.value;
 
         if (value instanceof ArrayLiteralNode) {
             appendArrayInitializerAssignments(
@@ -638,7 +734,7 @@ public class Desugarer {
                 );
             }
 
-            ASTNode value = desugarInitializerValue(n.value);
+            ASTNode value = n.value;
 
             if (value instanceof ArrayLiteralNode) {
                 List<ASTNode> lowered = new ArrayList<>();
@@ -815,7 +911,7 @@ public class Desugarer {
         }
 
         for (int i = 0; i < literal.elements.size(); i++) {
-            ASTNode element = desugarInitializerValue(literal.elements.get(i));
+            ASTNode element = literal.elements.get(i);
 
             ASTNode indexedTarget = new ArrayAccessNode(
                 cloneLValue(loweredTarget),
@@ -846,7 +942,7 @@ public class Desugarer {
         }
 
         if (expr instanceof StringLiteralNode) {
-            return expr;
+            return hoistStringLiteral((StringLiteralNode) expr);
         }
 
         if (expr instanceof VarNode) {
@@ -917,6 +1013,7 @@ public class Desugarer {
             GetPtrNode n = (GetPtrNode) expr;
 
             return new GetPtrNode(
+                n.kind,
                 desugarLValue(n.target)
             );
         }
@@ -933,8 +1030,9 @@ public class Desugarer {
             CastNode n = (CastNode) expr;
 
             return new CastNode(
-                n.target,
-                desugarExpr(n.expr)
+                desugarType(n.target),
+                desugarExpr(n.expr),
+                n.unsafe
             );
         }
 
@@ -1077,7 +1175,7 @@ public class Desugarer {
             StaticArrayTypeNode n = (StaticArrayTypeNode) type;
 
             if (n.sizeExpr instanceof InferredSizeNode) {
-                diagnostics.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
+                diagnostics.error("'?' array size is only allowed in a declaration with an array-literal initializer");
 
                 return new StaticArrayTypeNode(
                     desugarType(n.elementType),
@@ -1095,6 +1193,7 @@ public class Desugarer {
             PtrTypeNode n = (PtrTypeNode) type;
 
             return new PtrTypeNode(
+                n.kind,
                 desugarType(n.referencedType)
             );
         }

@@ -1,5 +1,6 @@
 import java.math.BigInteger;
 import java.util.*;
+import java.util.function.Function;
 
 public final class ExpressionAnalyzer {
 
@@ -7,6 +8,8 @@ public final class ExpressionAnalyzer {
     private final ConstExpressionEvaluator constEval;
 
     private ArrayLowerer arrayLowerer = null;
+
+    private Function<TypeNode, SemanticType> typeResolver = null;
 
     private static final SemanticType FALLBACK_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
@@ -37,6 +40,12 @@ public final class ExpressionAnalyzer {
 
     public void setArrayLowerer(ArrayLowerer arrayLowerer) {
         this.arrayLowerer = Objects.requireNonNull(arrayLowerer);
+    }
+
+    public void setTypeResolver(
+            Function<TypeNode, SemanticType> typeResolver
+    ) {
+        this.typeResolver = Objects.requireNonNull(typeResolver);
     }
 
     public SemanticExprNode analyzeExpr(ASTNode node) {
@@ -173,13 +182,19 @@ public final class ExpressionAnalyzer {
         }
 
         if (node instanceof GetPtrNode n) {
+            String intrinsicName = switch (n.kind) {
+                case OWNER -> "getptr";
+                case MUTABLE -> "getmview";
+                case READ_ONLY -> "getview";
+            };
+
             SemanticExprNode target = analyzeRequiredLValueExpr(
                     n.target,
-                    "getptr(...) target"
+                    intrinsicName + "(...) target"
             );
 
             return new SemanticGetPtrNode(
-                    new SemanticPtrType(target.type),
+                    pointerTypeFor(n.kind, target.type),
                     target
             );
         }
@@ -201,27 +216,28 @@ public final class ExpressionAnalyzer {
         }
 
         if (node instanceof CastNode n) {
-            SemanticPrimitiveKind targetKind =
-                    SemanticPrimitiveKind.valueOf(n.target.name());
-
-            SemanticType targetType =
-                    new SemanticPrimitiveType(targetKind);
-
+            SemanticType targetType = resolveTypeNode(n.target);
             SemanticExprNode expr = analyzeExpr(n.expr);
 
+            String syntax = n.unsafe ? "unsafe_cast" : "cast";
+
             if (expr.type instanceof SemanticVoidType) {
-                ctx.error("Operand of 'cast' cannot have void type");
+                ctx.error("Operand of '" + syntax + "' cannot have void type");
+
                 return new SemanticCastExprNode(
                         targetType,
                         null,
                         expr,
-                        false
+                        n.unsafe
                 );
             }
 
-            if (!(expr.type instanceof SemanticPrimitiveType sourcePrimitive)) {
-                ctx.error("Operand of 'cast' must be an integer expression, got "
-                        + expr.type.describe());
+            if (n.unsafe
+                    && (!(targetType instanceof SemanticPrimitiveType unsafeTarget)
+                        || !(expr.type instanceof SemanticPrimitiveType unsafeSource))) {
+                ctx.error("Operand of 'unsafe_cast' must be an integer "
+                        + "expression, got " + expr.type.describe());
+
                 return new SemanticCastExprNode(
                         targetType,
                         null,
@@ -230,18 +246,25 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            if (sourcePrimitive.kind == targetKind) {
-                return expr;
+            if (targetType instanceof SemanticPrimitiveType targetPrimitive
+                    && expr.type instanceof SemanticPrimitiveType sourcePrimitive) {
+                if (sourcePrimitive.kind == targetPrimitive.kind) {
+                    return expr;
+                }
+
+                return new SemanticCastExprNode(
+                        targetType,
+                        expr.constantValue,
+                        expr,
+                        n.unsafe
+                );
             }
 
             return new SemanticCastExprNode(
                     targetType,
-                    expr.constantValue,
+                    null,
                     expr,
-                    !TypeChecker.isValuePreservingIntegerWidening(
-                            sourcePrimitive.kind,
-                            targetKind
-                    )
+                    n.unsafe
             );
         }
 
@@ -252,7 +275,8 @@ public final class ExpressionAnalyzer {
         }
 
         if (node instanceof StringLiteralNode) {
-            ctx.error("String literal is not a valid expression; string literals are only allowed as assignment or declaration initializers");
+            ctx.error("String literal is not a valid expression here; a "
+                    + "string literal is a view<array<byte, N>> value");
 
             return new SemanticIntLiteralNode(
                     FALLBACK_TYPE,
@@ -269,6 +293,27 @@ public final class ExpressionAnalyzer {
                 BigInteger.ZERO,
                 "0"
         );
+    }
+
+    private SemanticType resolveTypeNode(TypeNode node) {
+        if (typeResolver == null) {
+            ctx.error("Internal compiler error: no type resolver wired into "
+                    + "ExpressionAnalyzer");
+            return FALLBACK_TYPE;
+        }
+
+        return typeResolver.apply(node);
+    }
+
+    private static SemanticType pointerTypeFor(
+            PtrPermission kind,
+            SemanticType referencedType
+    ) {
+        return switch (kind) {
+            case OWNER -> new SemanticPtrType(referencedType);
+            case MUTABLE -> new SemanticMViewType(referencedType);
+            case READ_ONLY -> new SemanticViewType(referencedType);
+        };
     }
 
     public BigInteger preEvaluatedConstValue(
@@ -594,16 +639,21 @@ public final class ExpressionAnalyzer {
             userArgTypes.add(loweredArg.type);
         }
 
-        SemanticGetPtrNode selfArg = new SemanticGetPtrNode(
-                new SemanticPtrType(target.type),
-                target
-        );
+        MethodSymbol method = ctx.resolveMethod(owner, mac.memberName, userArgs);
+
+        SemanticType selfType = new SemanticPtrType(target.type);
+
+        if (method != null
+                && !method.parameters.isEmpty()
+                && method.parameters.get(0).type instanceof SemanticPtrType declaredSelf) {
+            selfType = declaredSelf;
+        }
+
+        SemanticGetPtrNode selfArg = new SemanticGetPtrNode(selfType, target);
 
         List<SemanticExprNode> fullArgs = new ArrayList<>();
         fullArgs.add(selfArg);
         fullArgs.addAll(userArgs);
-
-        MethodSymbol method = ctx.resolveMethod(owner, mac.memberName, fullArgs);
 
         if (method == null) {
             ctx.error("No matching overload for method call '"

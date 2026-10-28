@@ -9,7 +9,7 @@ import "franko/vector"
 // `namespace app::stats { ... }`.
 namespace app {
     namespace stats {
-        func remaining(ptr<std::Vector> s) -> uint {
+        func remaining(view<std::Vector> s) -> uint {
             return $(s).length()
         }
     }
@@ -41,12 +41,12 @@ func main() -> int {
     print(s.get(0))
 
     int top = 0
-    st = s.pop(getptr(top))
+    st = s.pop(getmview(top))
     print(st, top)
-    st = s.pop(getptr(top))
+    st = s.pop(getmview(top))
     print(st, top)
 
-    print(app::stats::remaining(getptr(s)))
+    print(app::stats::remaining(getview(s)))
     n = s.length()
     for (uint i = 0; i < n; i++) {
         print(s.get(i))

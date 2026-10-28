@@ -1,5 +1,6 @@
 // Failure fixture: strings/string_in_call_arg
-// A string literal is not an expression, so it cannot be passed as a function call argument.
+// A string literal is a view<array<byte, N>> value; it cannot be passed
+// as an argument to an int32_t parameter.
 func f(int32_t x) -> void {
     print(x);
 }

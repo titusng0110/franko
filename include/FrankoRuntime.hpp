@@ -3,7 +3,7 @@
 #include <cstddef>   // for size_t
 #include <cstdint>   // for uint8_t, uint32_t, int32_t
 #include <cstring>   // for std::memcpy, std::memset, std::memmove
-#include <limits>    // for std::numeric_limits (franko_safe_cast bounds)
+#include <limits>    // for std::numeric_limits (franko_unsafe_cast bounds)
 #include <new>       // for placement new
 #include <stdexcept> // for std::runtime_error
 #include <type_traits> // for std::is_integral, std::is_signed, std::make_unsigned
@@ -15,12 +15,13 @@
 }
 
 // ============================================================
-// franko_safe_cast<To>(v): runtime-checked integer conversion
+// franko_unsafe_cast<To>(v): runtime-checked integer conversion
 // ============================================================
 //
-// Emitted for Franko cast<T>(expr) conversions that can lose data
-// (narrowing, signedness changes, ...). Value-preserving conversions
-// compile to a plain static_cast instead and never reach this.
+// Emitted for Franko unsafe_cast<T>(expr) conversions, which may lose
+// data (narrowing, signedness changes, ...). Value-preserving widening
+// conversions use plain cast<T>(expr) and compile to a static_cast
+// instead, so they never reach this.
 //
 // Throws via franko_panic when v lies outside To's range; otherwise
 // returns static_cast<To>(v).
@@ -31,11 +32,11 @@
 template <typename To, typename From,
         bool FromSigned = std::is_signed<From>::value,
         bool ToSigned = std::is_signed<To>::value>
-struct franko_cast_range;
+struct franko_unsafe_cast_range;
 
 // Signed source, signed target: direct comparison promotes safely.
 template <typename To, typename From>
-struct franko_cast_range<To, From, true, true> {
+struct franko_unsafe_cast_range<To, From, true, true> {
     static bool below_min(From v) { return v < std::numeric_limits<To>::min(); }
     static bool above_max(From v) { return v > std::numeric_limits<To>::max(); }
 };
@@ -43,7 +44,7 @@ struct franko_cast_range<To, From, true, true> {
 // Unsigned source, unsigned target: v >= 0 == min(To), so only the
 // upper bound can fail. Both sides unsigned: no sign warnings.
 template <typename To, typename From>
-struct franko_cast_range<To, From, false, false> {
+struct franko_unsafe_cast_range<To, From, false, false> {
     static bool below_min(From) { return false; }
     static bool above_max(From v) { return v > std::numeric_limits<To>::max(); }
 };
@@ -51,7 +52,7 @@ struct franko_cast_range<To, From, false, false> {
 // Signed source, unsigned target: negatives always fail; the upper
 // bound compares non-negative values as unsigned.
 template <typename To, typename From>
-struct franko_cast_range<To, From, true, false> {
+struct franko_unsafe_cast_range<To, From, true, false> {
     static bool below_min(From v) { return v < 0; }
     static bool above_max(From v) {
         if (v < 0) {
@@ -66,7 +67,7 @@ struct franko_cast_range<To, From, true, false> {
 // Unsigned source, signed target: v >= 0 can never fall below
 // min(To); the upper bound compares as unsigned against max(To).
 template <typename To, typename From>
-struct franko_cast_range<To, From, false, true> {
+struct franko_unsafe_cast_range<To, From, false, true> {
     static bool below_min(From) { return false; }
     static bool above_max(From v) {
         typedef typename std::make_unsigned<To>::type unsigned_to;
@@ -75,19 +76,19 @@ struct franko_cast_range<To, From, false, true> {
 };
 
 template <typename To, typename From>
-To franko_safe_cast(From v) {
+To franko_unsafe_cast(From v) {
     static_assert(std::is_integral<To>::value,
-            "franko_safe_cast requires an integral target type");
+            "franko_unsafe_cast requires an integral target type");
     static_assert(std::is_integral<From>::value,
-            "franko_safe_cast requires an integral source type");
+            "franko_unsafe_cast requires an integral source type");
     static_assert(!std::is_same<To, bool>::value,
-            "franko_safe_cast does not support bool");
+            "franko_unsafe_cast does not support bool");
     static_assert(!std::is_same<From, bool>::value,
-            "franko_safe_cast does not support bool");
+            "franko_unsafe_cast does not support bool");
 
-    if (franko_cast_range<To, From>::below_min(v)
-            || franko_cast_range<To, From>::above_max(v)) {
-        franko_panic("franko_safe_cast: value out of range for target type");
+    if (franko_unsafe_cast_range<To, From>::below_min(v)
+            || franko_unsafe_cast_range<To, From>::above_max(v)) {
+        franko_panic("franko_unsafe_cast: value out of range for target type");
     }
 
     return static_cast<To>(v);

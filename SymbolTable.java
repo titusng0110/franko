@@ -355,12 +355,18 @@ public final class SymbolTable {
         );
 
         for (MethodSymbol existing : overloads) {
-            if (sameParameterSignature(existing.parameters, method.parameters)) {
+            if (sameMethodUserParameterSignature(
+                    existing.parameters,
+                    method.parameters)) {
                 error("Duplicate declaration of method '"
                         + method.signatureString()
                         + "' in struct '"
                         + owner.qualifiedName()
-                        + "'");
+                        + "'"
+                        + (existing.parameters.size() > 1
+                                ? ": method overload identity excludes the "
+                                    + "self parameter type"
+                                : ""));
                 return;
             }
         }
@@ -390,7 +396,7 @@ public final class SymbolTable {
             StructSymbol owner,
             String name,
             List<MethodSymbol> overloads,
-            List<SemanticExprNode> args
+            List<SemanticExprNode> userArgs
     ) {
         if (overloads == null || overloads.isEmpty()) {
             return null;
@@ -399,16 +405,21 @@ public final class SymbolTable {
         List<MethodSymbol> matches = new ArrayList<>();
 
         for (MethodSymbol m : overloads) {
-            if (isApplicableFunction(m, args)) {
+            if (isApplicableMethod(m, userArgs)) {
                 matches.add(m);
             }
         }
+
+        matches = preferExactPermissionMatches(
+                matches,
+                m -> countMethodPermissionDowngrades(m, userArgs)
+        );
 
         if (matches.size() == 1) {
             return matches.get(0);
         }
 
-        List<SemanticType> argTypes = args.stream()
+        List<SemanticType> argTypes = userArgs.stream()
                 .map(arg -> arg == null ? null : arg.type)
                 .toList();
 
@@ -417,7 +428,9 @@ public final class SymbolTable {
                     + owner.qualifiedName()
                     + "."
                     + formatCallSignature(name, argTypes)
-                    + "': argument constants fit multiple overloads");
+                    + "': multiple overloads match equally well (argument "
+                    + "constants fit several signatures, or arguments rely "
+                    + "on the same number of pointer permission downgrades)");
 
             return matches.get(0);
         }
@@ -470,6 +483,11 @@ public final class SymbolTable {
             }
         }
 
+        matches = preferExactPermissionMatches(
+                matches,
+                fn -> countPermissionDowngrades(args, fn.parameterTypes())
+        );
+
         if (matches.size() == 1) {
             return matches.get(0);
         }
@@ -481,12 +499,39 @@ public final class SymbolTable {
         if (matches.size() > 1) {
             error("Ambiguous call to overloaded function '"
                     + formatCallSignature(name, argTypes)
-                    + "': argument constants fit multiple overloads");
+                    + "': multiple overloads match equally well (argument "
+                    + "constants fit several signatures, or arguments rely "
+                    + "on the same number of pointer permission downgrades)");
 
             return matches.get(0);
         }
 
         return null;
+    }
+
+    private static <T> List<T> preferExactPermissionMatches(
+            List<T> matches,
+            java.util.function.ToIntFunction<T> downgradeCount
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (T match : matches) {
+            best = Math.min(best, downgradeCount.applyAsInt(match));
+        }
+
+        List<T> preferred = new ArrayList<>();
+
+        for (T match : matches) {
+            if (downgradeCount.applyAsInt(match) == best) {
+                preferred.add(match);
+            }
+        }
+
+        return preferred;
     }
 
     public boolean hasAnyFunctionNamed(String name) {
@@ -673,6 +718,26 @@ public final class SymbolTable {
         return true;
     }
 
+    private static boolean sameMethodUserParameterSignature(
+            List<ParameterSymbol> a,
+            List<ParameterSymbol> b
+    ) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+
+        for (int i = 1; i < a.size(); i++) {
+            ParameterSymbol left = a.get(i);
+            ParameterSymbol right = b.get(i);
+
+            if (!sameType(left.type, right.type)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static boolean isApplicableFunction(
             FunctionSymbol fn,
             List<SemanticExprNode> args
@@ -695,6 +760,73 @@ public final class SymbolTable {
         return true;
     }
 
+    private static boolean isApplicableMethod(
+            MethodSymbol method,
+            List<SemanticExprNode> userArgs
+    ) {
+        if (method.parameters.size() != userArgs.size() + 1) {
+            return false;
+        }
+
+        for (int i = 0; i < userArgs.size(); i++) {
+            SemanticType parameterType =
+                    method.parameters.get(i + 1).type;
+            SemanticExprNode arg = userArgs.get(i);
+
+            if (!isArgumentApplicableToParameter(arg, parameterType)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int countPermissionDowngrades(
+            List<SemanticExprNode> args,
+            List<SemanticType> parameterTypes
+    ) {
+        int count = 0;
+
+        for (int i = 0; i < args.size(); i++) {
+            SemanticExprNode arg = args.get(i);
+
+            if (arg == null || arg.type == null) {
+                continue;
+            }
+
+            if (!sameType(arg.type, parameterTypes.get(i))
+                    && arg.type instanceof SemanticPtrType) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static int countMethodPermissionDowngrades(
+            MethodSymbol method,
+            List<SemanticExprNode> userArgs
+    ) {
+        int count = 0;
+
+        for (int i = 0; i < userArgs.size(); i++) {
+            SemanticExprNode arg = userArgs.get(i);
+
+            if (arg == null || arg.type == null) {
+                continue;
+            }
+
+            SemanticType parameterType = method.parameters.get(i + 1).type;
+
+            if (!sameType(arg.type, parameterType)
+                    && arg.type instanceof SemanticPtrType) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static boolean isArgumentApplicableToParameter(
             SemanticExprNode arg,
             SemanticType parameterType
@@ -715,7 +847,18 @@ public final class SymbolTable {
             );
         }
 
-        return sameType(arg.type, parameterType);
+        if (sameType(arg.type, parameterType)) {
+            return true;
+        }
+
+        return isPermissionDowngrade(arg.type, parameterType);
+    }
+
+    static boolean isPermissionDowngrade(
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        return PointerPermissions.isPermissionDowngrade(sourceType, targetType);
     }
 
     private static boolean fitsBigIntegerToPrimitive(

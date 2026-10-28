@@ -1,0 +1,31 @@
+// ============================================================
+// LANGUAGE TEST: Capability Linter Ignores Globals
+// ============================================================
+// The capability linter tracks function-local variables and
+// parameters only. G is read in main but exercised at the owner
+// level through alloc: no per-function downgrade warning is
+// emitted for it (see main.forbidden). The parameter p exercises
+// allocation rights, so it is not warned about either.
+// ============================================================
+
+ptr<array<byte>> G;
+
+func alloc(ptr<array<byte>> p) -> void {
+    $(p).init(3);
+    $(p)[0] = 1;
+    $(p)[1] = 2;
+    $(p)[2] = 3;
+}
+
+func main() -> int32_t {
+    array<byte> b;
+    G = getptr(b);
+    alloc(G);
+
+    print($(G).length());
+    print($(G)[0]);
+    print($(G)[1]);
+    print($(G)[2]);
+
+    return 0;
+}

@@ -1,0 +1,7 @@
+// Whole-pointee assignment through a view<T> is blocked.
+func main() -> int32_t {
+    int32_t x = 5;
+    view<int32_t> v = getview(x);
+    $(v) = 6;
+    return 0;
+}

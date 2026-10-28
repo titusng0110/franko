@@ -536,6 +536,26 @@ def check_substrings(expected_path: Path, observed: str) -> bool:
     return ok
 
 
+def check_no_substrings(forbidden_path: Path, observed: str) -> bool:
+    """Check that no non-empty, non-comment line of FORBIDDEN occurs in
+    OBSERVED (used for warnings that must not be emitted).
+
+    Normalisation matches `check_substrings`.
+    """
+    haystack = observed.replace("\\", "/")
+    ok = True
+
+    for line in _read_lines(forbidden_path):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.replace("\\", "/") in haystack:
+            print(f"forbidden text found in output: {stripped}")
+            ok = False
+
+    return ok
+
+
 def compare_output(actual_path: Path, expected_path: Path) -> bool:
     """Compare two files after newline normalisation, printing a diff."""
     if not expected_path.is_file():

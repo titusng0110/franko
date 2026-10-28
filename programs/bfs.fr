@@ -17,7 +17,7 @@ struct Maze {
     array<array<uint, 13>, 12> parentR
     array<array<uint, 13>, 12> parentC
 
-    func initArrays(ptr<Maze> self) -> void {
+    func initArrays(mview<Maze> self) -> void {
         $(self).grid = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
@@ -41,7 +41,7 @@ struct Maze {
         return
     }
 
-    func tryVisit(ptr<Maze> self, ptr<array<uint>> queue, ptr<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
+    func tryVisit(mview<Maze> self, mview<array<uint>> queue, mview<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
         if (($(self).grid[nr][nc] != 1) && ($(self).visited[nr][nc] == 0)) {
             $(self).visited[nr][nc] = 1
             $(self).dist[nr][nc] = $(self).dist[r][c] + 1
@@ -59,7 +59,7 @@ struct Maze {
         return
     }
 
-    func runBfs(ptr<Maze> self, ptr<array<uint>> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
+    func runBfs(mview<Maze> self, mview<array<uint>> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
         uint head = 0
         uint tail = 0
         uint r = 0
@@ -96,25 +96,25 @@ struct Maze {
 
             nr = r - 1
             nc = c
-            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getmview(tail), qCap, cols, r, c, nr, nc)
 
             nr = r + 1
             nc = c
-            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getmview(tail), qCap, cols, r, c, nr, nc)
 
             nr = r
             nc = c - 1
-            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getmview(tail), qCap, cols, r, c, nr, nc)
 
             nr = r
             nc = c + 1
-            $(self).tryVisit(queue, getptr(tail), qCap, cols, r, c, nr, nc)
+            $(self).tryVisit(queue, getmview(tail), qCap, cols, r, c, nr, nc)
         }
 
         return found
     }
 
-    func reconstructPath(ptr<Maze> self, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    func reconstructPath(mview<Maze> self, uint startR, uint startC, uint goalR, uint goalC) -> void {
         uint r = 0
         uint c = 0
         uint nr = 0
@@ -137,9 +137,9 @@ struct Maze {
         return
     }
 
-    func printSolvedGrid(ptr<Maze> self, ptr<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    func printSolvedGrid(view<Maze> self, mview<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
         for (uint r = 0; r < rows; r++) {
-            $(line).memcpy(getptr($(self).grid[r]))
+            $(line).memcpy(getview($(self).grid[r]))
 
             for (uint c = 0; c < cols; c++) {
                 if ($(self).path[r][c] != 0) {
@@ -179,7 +179,7 @@ func main() -> int {
 
     byte found = 0
     int qStatus = 0
-    ptr<uint> answer
+    view<uint> answer
 
     qStatus = queue.init_zero(qCap)
 
@@ -189,7 +189,7 @@ func main() -> int {
 
     maze.initArrays()
 
-    found = maze.runBfs(getptr(queue), qCap, cols, startR, startC, goalR, goalC)
+    found = maze.runBfs(getmview(queue), qCap, cols, startR, startC, goalR, goalC)
 
     queue.uninit()
 
@@ -200,7 +200,7 @@ func main() -> int {
     print(4001)
 
     if (found != 0) {
-        answer = getptr(maze.dist[goalR][goalC])
+        answer = getview(maze.dist[goalR][goalC])
         print($(answer))
     } else {
         print(-1)
@@ -208,7 +208,7 @@ func main() -> int {
 
     print(4002)
 
-    maze.printSolvedGrid(getptr(line), rows, cols, startR, startC, goalR, goalC)
+    maze.printSolvedGrid(getmview(line), rows, cols, startR, startC, goalR, goalC)
 
     return 0
 }

@@ -1,0 +1,21 @@
+// ============================================================
+// LANGUAGE TEST: Capability Linter (Read-Only Warning)
+// ============================================================
+// A ptr<T>/mview<T> variable that is only ever read from gets a
+// non-fatal downgrade-to-view warning (see main.warnings). The
+// build still succeeds and runs.
+// ============================================================
+
+func main() -> int32_t {
+    array<byte, 3> buf;
+    buf.memset(9);
+
+    // Only reads through the pointer.
+    ptr<array<byte, 3>> p = getptr(buf);
+    print($(p)[1]);
+
+    mview<array<byte, 3>> m = getmview(buf);
+    print($(m)[2]);
+
+    return 0;
+}

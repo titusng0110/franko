@@ -1,6 +1,6 @@
 # 26. Methods
 
-A struct may declare methods: functions bound to the struct whose first parameter is explicitly `ptr<X> self`. Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getptr(receiver)` first argument (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
+A struct may declare methods: functions bound to the struct whose first parameter is explicitly `self` (`ptr<X> self`, `mview<X> self`, or `view<X> self`). Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getptr`/`getmview`/`getview(receiver)` first argument matching the declared `self` type (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
 
 ```franko
 struct X {
@@ -45,29 +45,40 @@ Rules:
 
 ## 26.2 The `self` Parameter
 
-The first parameter of every method must be literally `ptr<X> self`, where `X` is the enclosing struct:
+The first parameter of every method must be literally `self`, typed
+`ptr<X> self`, `mview<X> self`, or `view<X> self`, where `X` is the
+enclosing struct. The permission declares what the method does with its
+receiver: an owning `self` may run lifecycle operations, a mutable
+`self` may write, a read-only `self` may only read (see
+[Pointers](24-pointers.md)):
 
 ```franko
 struct X {
     int32_t y = 0
-    func get(ptr<X> self) -> int32_t {
+    func get(view<X> self) -> int32_t {
         return $(self).y
+    }
+    func set(mview<X> self, int32_t v) -> void {
+        $(self).y = v
     }
 }
 ```
 
 Rules:
 
-- A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter`.
+- A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter (also allowed: 'mview<X> self', 'view<X> self')`.
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
-- A method whose `self` parameter does not have type `ptr<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X>`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
+- A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
-- `self` is an ordinary `ptr<X>` variable inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: `self` has type `ptr<X>`, and member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)).
+- Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
+- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
 ## 26.3 Method Calls and Receivers
 
-A method is invoked with member-call syntax. The compiler prepends `getptr(receiver)` as the `self` argument:
+A method is invoked with member-call syntax. The compiler prepends the
+`self` argument, created with `getptr`, `getmview`, or `getview`
+matching the method's declared `self` type:
 
 ```franko
 s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
@@ -75,6 +86,14 @@ $(p).increment()       // explicit deref for ptr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
 ```
+
+The creation intrinsic enforces the receiver's permission: calling a
+`ptr<X> self` method through a `view` receiver is rejected
+(`getptr(...) requires allocation rights (ptr) over its target`), while
+a `view<X> self` method is callable through any receiver. When the
+receiver is an lvalue reached through an inner pointer (for example
+`$($(v)[0]).increment()` where the element is a `ptr<X>`), that inner
+pointer's own permission applies.
 
 Rules:
 
@@ -85,7 +104,7 @@ Rules:
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
 - Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
-- A method call lowers to `SemanticFunctionCallNode` with a synthesized `getptr(receiver)` first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
+- A method call lowers to `SemanticFunctionCallNode` with a synthesized creation-intrinsic (`getptr`/`getmview`/`getview`) first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
 
 ## 26.4 Fields vs Methods Name Resolution
 
@@ -116,9 +135,9 @@ struct Counter {
 
 Rules:
 
-- The implicit `self` parameter (`ptr<X>`) does not distinguish overloads; overloads must differ in their user parameters.
+- The implicit `self` parameter (whatever its permission) does not distinguish overloads; overloads must differ in their user parameters.
 - Duplicate method signatures are rejected: `Duplicate declaration of method 'X.foo(...)' in struct 'X'`.
-- Ambiguous constant arguments are rejected like free-function ambiguity: `Ambiguous call to overloaded method 'X.foo(...)': argument constants fit multiple overloads`.
+- Ambiguous arguments are rejected like free-function ambiguity: `Ambiguous call to overloaded method 'X.foo(...)': multiple overloads match equally well (argument constants fit several signatures, or arguments rely on the same number of pointer permission downgrades)`.
 
 ## 26.6 `self` Is a Reserved Keyword
 
@@ -150,7 +169,7 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 `self` is an `ptr<X>` parameter:
 
-- `self` enters pointing: the call synthesizes `getptr(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- `self` enters pointing: the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
 - Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)). The checker is intra-procedural.
 
 ## 26.9 Backend Notes
@@ -172,7 +191,7 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 ## 26.10 Restrictions Summary
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
-- Every method must have `ptr<X> self` as its first parameter; only the first parameter may be named `self`.
+- Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.
 - `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
 - Receivers must be struct-valued storage-backed lvalues; `ptr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.

@@ -59,12 +59,17 @@ Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
-FUNC_read_HASH_b155decf            os::posix::read
-FUNC_write_HASH_b155decf           os::posix::write
+FUNC_read_HASH_be149563            os::posix::read
+FUNC_write_HASH_731d748e           os::posix::write
 FUNC_GetStdHandle_HASH_493245c2    os::win32::GetStdHandle
-FUNC_ReadFile_HASH_b1df72ed        os::win32::ReadFile
-FUNC_WriteFile_HASH_b1df72ed       os::win32::WriteFile
+FUNC_ReadFile_HASH_50f286c1        os::win32::ReadFile
+FUNC_WriteFile_HASH_c811d200       os::win32::WriteFile
 ```
+
+(The hashes move whenever the `os.fr` signatures change: they are the
+FNV-1a hash of the canonical signature key, which includes the
+parameter pointer permissions — `read` fills an `mview<array<byte>>`
+while `write` only reads a `view<array<byte>>`.)
 
 Signatures must match the prototypes codegen emits for the `os.fr`
 declarations, including the `NS_os::NS_posix` / `NS_os::NS_win32`

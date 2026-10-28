@@ -1,3 +1,4 @@
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -5,7 +6,7 @@ import java.util.List;
 public final class StringLiteralDecoder {
     private StringLiteralDecoder() {}
 
-    public static ArrayLiteralNode toUtf8ByteArrayLiteral(StringLiteralNode node) {
+    public static List<BigInteger> toUtf8Bytes(StringLiteralNode node) {
         if (node == null) {
             throw new RuntimeException("Cannot decode null StringLiteralNode");
         }
@@ -13,15 +14,13 @@ public final class StringLiteralDecoder {
         String decoded = decodeRawContent(node.rawContent);
         byte[] bytes = decoded.getBytes(StandardCharsets.UTF_8);
 
-        List<ASTNode> elements = new ArrayList<>();
+        List<BigInteger> elements = new ArrayList<>();
 
         for (byte b : bytes) {
-
-            int unsignedByte = b & 0xFF;
-            elements.add(new IntNode(Integer.toString(unsignedByte)));
+            elements.add(BigInteger.valueOf(b & 0xFF));
         }
 
-        return new ArrayLiteralNode(elements);
+        return elements;
     }
 
     public static String decodeRawContent(String rawContent) {

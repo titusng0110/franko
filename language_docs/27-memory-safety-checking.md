@@ -1,6 +1,6 @@
 # 27. Memory Safety Checking
 
-After legality checking, the compiler runs a dedicated **pointer null-state pass** (`PointerNullStateChecker`) over pointer-typed variables.
+After legality checking, the compiler runs a dedicated **pointer null-state pass** (`PointerNullStateChecker`) over pointer-typed variables (`ptr`, `mview`, and `view` alike).
 
 The pass tracks one fact per pointer variable: whether it is definitely null, definitely pointing, or possibly null on the current execution path.
 
@@ -10,7 +10,7 @@ It checks:
 - dereferencing a possibly-null pointer (a warning);
 - that `null` is only used for pointer types (see [Types](06-types.md)).
 
-The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers.
+The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers, and no facts cross function boundaries (interprocedural nullability is deliberately not attempted).
 
 ## 27.1 Pointer States
 
@@ -26,10 +26,10 @@ For each pointer variable the checker tracks one of:
 
 - an ordinary `ptr<T>` declaration is **null-initialized**, so it starts in the null state;
 - assigning the `null` literal makes the target null;
-- assigning `getptr(...)` makes the target pointing; this is the **only** certification of a non-null pointer;
+- assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `ptr<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
 
 ## 27.3 Dereference Checking
 
@@ -93,3 +93,10 @@ Current limitations of the pointer checker:
 - dangling pointers are not detected at compile time; an pointer may outlive its pointee, and the compiler does not detect that case. A runtime check is planned as a later change;
 - checks are intra-procedural; pointer effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
+
+## 27.4 Capability Linting
+
+A second, independent pass (`PointerPermissionChecker`) warns when a
+`ptr`/`mview` local variable or parameter requests permissions it never
+exercises, so developers default to the tightest pointer that fits. See
+the "Capability Linter" section of [Pointers](24-pointers.md).

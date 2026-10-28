@@ -108,6 +108,10 @@ public class ASTPrinter {
                             + n.name
             );
 
+            if (n.literalBytes != null) {
+                System.out.println(pad + "  literalBytes: " + n.literalBytes);
+            }
+
             if (n.constInitializer != null) {
                 System.out.println(pad + "  init:");
                 print(n.constInitializer, indent + 2);
@@ -337,7 +341,7 @@ public class ASTPrinter {
         }
 
         else if (node instanceof GetPtrNode n) {
-            System.out.println(pad + "GetPtr");
+            System.out.println(pad + "Get" + n.kind.spelling() + "()");
 
             System.out.println(pad + "  target:");
             print(n.target, indent + 2);
@@ -351,7 +355,10 @@ public class ASTPrinter {
         }
 
         else if (node instanceof CastNode n) {
-            System.out.println(pad + "Cast<" + primitiveKindSpelling(n.target) + ">");
+            System.out.println(pad
+                    + (n.unsafe ? "UnsafeCast<" : "Cast<")
+                    + typeToString(n.target)
+                    + ">");
 
             System.out.println(pad + "  expr:");
             print(n.expr, indent + 2);
@@ -381,7 +388,7 @@ public class ASTPrinter {
         }
 
         else if (node instanceof PtrTypeNode n) {
-            System.out.println(pad + "PtrType");
+            System.out.println(pad + "PtrType(" + n.kind.spelling() + ")");
             System.out.println(pad + "  referencedType:");
             print(n.referencedType, indent + 2);
         }
@@ -433,7 +440,7 @@ public class ASTPrinter {
         }
 
         if (type instanceof PtrTypeNode t) {
-            return "ptr<" + typeToString(t.referencedType) + ">";
+            return t.kind.spelling() + "<" + typeToString(t.referencedType) + ">";
         }
 
         if (type instanceof StructTypeNode t) {
@@ -445,23 +452,6 @@ public class ASTPrinter {
         }
 
         return "<unknown-type:" + type.getClass().getSimpleName() + ">";
-    }
-
-    private static String primitiveKindSpelling(PrimitiveKind kind) {
-        if (kind == null) {
-            return "<null-kind>";
-        }
-
-        return switch (kind) {
-            case INT8 -> "int8_t";
-            case INT16 -> "int16_t";
-            case INT32 -> "int32_t";
-            case INT64 -> "int64_t";
-            case UINT8 -> "uint8_t";
-            case UINT16 -> "uint16_t";
-            case UINT32 -> "uint32_t";
-            case UINT64 -> "uint64_t";
-        };
     }
 
     private static String exprToInlineString(ASTNode expr) {
@@ -531,7 +521,7 @@ public class ASTPrinter {
         }
 
         if (expr instanceof GetPtrNode n) {
-            return "getptr(" + exprToInlineString(n.target) + ")";
+            return "get" + n.kind.spelling() + "(" + exprToInlineString(n.target) + ")";
         }
 
         if (expr instanceof DerefNode n) {
@@ -539,7 +529,11 @@ public class ASTPrinter {
         }
 
         if (expr instanceof CastNode n) {
-            return "cast<" + primitiveKindSpelling(n.target) + ">(" + exprToInlineString(n.expr) + ")";
+            return (n.unsafe ? "unsafe_cast<" : "cast<")
+                    + typeToString(n.target)
+                    + ">("
+                    + exprToInlineString(n.expr)
+                    + ")";
         }
 
         if (expr instanceof ArrayLiteralNode n) {

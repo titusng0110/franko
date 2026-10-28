@@ -421,15 +421,18 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!types.sameType(parameterType, arg.type)) {
-            diagnostics.error("Argument " + (index + 1)
-                    + " of call to '"
-                    + function.signatureString()
-                    + "' has incompatible type: expected "
-                    + types.describeSafe(parameterType)
-                    + ", got "
-                    + types.describeSafe(arg.type));
+        if (types.sameType(parameterType, arg.type)
+                || types.isPermissionDowngrade(arg.type, parameterType)) {
+            return;
         }
+
+        diagnostics.error("Argument " + (index + 1)
+                + " of call to '"
+                + function.signatureString()
+                + "' has incompatible type: expected "
+                + types.describeSafe(parameterType)
+                + ", got "
+                + types.describeSafe(arg.type));
     }
 
     private void visitArrayIntrinsicCall(SemanticArrayIntrinsicCallNode node) {
@@ -439,6 +442,22 @@ public class ExpressionChecker {
         }
 
         checkExpr(node.receiver);
+
+        switch (node.kind) {
+            case INIT, INIT_ZERO, RESIZE, UNINIT -> ensureRegionPermission(
+                    node.receiver,
+                    PtrPermission.OWNER,
+                    node.kind.runtimeName + "()"
+            );
+
+            case MEMSET, MEMCPY, MEMMOVE -> ensureRegionPermission(
+                    node.receiver,
+                    PtrPermission.MUTABLE,
+                    node.kind.runtimeName + "()"
+            );
+
+            case LENGTH -> { }
+        }
 
         switch (node.kind) {
             case INIT, INIT_ZERO, RESIZE -> visitArrayAllocIntrinsic(node);
@@ -825,14 +844,54 @@ public class ExpressionChecker {
     private void visitGetPtr(SemanticGetPtrNode node) {
         checkExpr(node.target);
 
+        String intrinsicName = PointerPermissions.creationIntrinsic(
+                PointerPermissions.pointerPermission(node.type)
+        );
+
         if (types.isVoidType(node.target.type)) {
-            diagnostics.error("Operand of 'getptr' cannot have void type");
+            diagnostics.error("Operand of '" + intrinsicName
+                    + "' cannot have void type");
             return;
         }
 
         if (!isStorageBackedLValue(node.target)) {
-            diagnostics.error("Operand of 'getptr' must be a pointable storage-backed lvalue");
+            diagnostics.error("Operand of '" + intrinsicName
+                    + "' must be a pointable storage-backed lvalue");
+            return;
         }
+
+        ensureRegionPermission(
+                node.target,
+                PointerPermissions.pointerPermission(node.type),
+                intrinsicName + "(...)"
+        );
+    }
+
+    public void ensureRegionPermission(
+            SemanticExprNode target,
+            PtrPermission required,
+            String what
+    ) {
+        PtrPermission region = PointerPermissions.regionPermission(target);
+
+        if (region.allows(required)) {
+            return;
+        }
+
+        String requiredWord = required == PtrPermission.OWNER
+                ? "allocation rights (ptr)"
+                : "mutation rights (mview or ptr)";
+
+        String regionWord = region == PtrPermission.READ_ONLY
+                ? "'view'-protected (read-only)"
+                : "only 'mview'-accessible";
+
+        diagnostics.error(what
+                + " requires "
+                + requiredWord
+                + " over its target, but the target is "
+                + regionWord
+                + " here");
     }
 
     private void visitDeref(SemanticDerefNode node) {
@@ -861,18 +920,42 @@ public class ExpressionChecker {
     private void visitCast(SemanticCastExprNode node) {
         checkExpr(node.expr);
 
-        if (!ensureValueExpression(node.expr, "Operand of 'cast'")) {
+        String syntax = node.checked ? "unsafe_cast" : "cast";
+
+        if (!ensureValueExpression(node.expr, "Operand of '" + syntax + "'")) {
+            return;
+        }
+
+        if (node.type instanceof SemanticPtrType targetPointer) {
+            visitPermissionCast(node, targetPointer);
             return;
         }
 
         if (!(node.type instanceof SemanticPrimitiveType targetPrimitive)) {
-            diagnostics.error("Cast target must be a primitive integer type");
+            diagnostics.error("Cast target must be a primitive integer type "
+                    + "or a pointer type, got "
+                    + types.describeSafe(node.type));
             return;
         }
 
-        if (!(node.expr.type instanceof SemanticPrimitiveType)) {
-            diagnostics.error("Operand of 'cast' must be an integer expression, got "
+        if (!(node.expr.type instanceof SemanticPrimitiveType sourcePrimitive)) {
+            diagnostics.error("Operand of '" + syntax
+                    + "' must be an integer expression, got "
                     + types.describeSafe(node.expr.type));
+            return;
+        }
+
+        if (!node.checked
+                && !TypeChecker.isValuePreservingIntegerWidening(
+                        sourcePrimitive.kind,
+                        targetPrimitive.kind)) {
+            diagnostics.error("'cast' cannot lose data: conversion from "
+                    + sourcePrimitive.describe()
+                    + " to "
+                    + targetPrimitive.describe()
+                    + " is not a value-preserving widening; write unsafe_cast<"
+                    + targetPrimitive.describe()
+                    + ">(...) to make the checked narrowing explicit");
             return;
         }
 
@@ -882,6 +965,54 @@ public class ExpressionChecker {
                     targetPrimitive.kind,
                     "Cast to " + targetPrimitive.kind.name()
             );
+        }
+    }
+
+    private void visitPermissionCast(
+            SemanticCastExprNode node,
+            SemanticPtrType targetPointer
+    ) {
+        if (node.checked) {
+            diagnostics.error("'unsafe_cast' target must be a primitive "
+                    + "integer type, got "
+                    + types.describeSafe(node.type));
+            return;
+        }
+
+        if (types.isNullType(node.expr.type)) {
+            return;
+        }
+
+        if (!(node.expr.type instanceof SemanticPtrType sourcePointer)) {
+            diagnostics.error("'cast' to "
+                    + types.describeSafe(node.type)
+                    + " requires a pointer or null operand, got "
+                    + types.describeSafe(node.expr.type));
+            return;
+        }
+
+        if (!sourcePointer.referencedType.equals(
+                targetPointer.referencedType)) {
+            diagnostics.error("'cast' cannot convert between different "
+                    + "pointee types: got "
+                    + types.describeSafe(node.expr.type)
+                    + ", expected "
+                    + types.describeSafe(node.type));
+            return;
+        }
+
+        if (sourcePointer.permission == targetPointer.permission) {
+            return;
+        }
+
+        if (!PointerPermissions.isPermissionDowngrade(
+                node.expr.type,
+                node.type)) {
+            diagnostics.error("'cast' cannot raise pointer permissions: "
+                    + types.describeSafe(node.expr.type)
+                    + " cannot be cast to "
+                    + types.describeSafe(node.type)
+                    + "; permissions only downgrade (ptr -> mview -> view)");
         }
     }
 

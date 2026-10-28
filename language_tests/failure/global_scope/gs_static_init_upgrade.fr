@@ -1,0 +1,11 @@
+// Failure fixture: global_scope/gs_static_init_upgrade
+// A static address initializer must be a pointer type match or a
+// permission downgrade: initializing a ptr<T> global from getview(...)
+// raises permissions and is rejected.
+array<byte, 5> greeting;
+
+ptr<array<byte, 5>> G = getview(greeting);
+
+func main() -> int32_t {
+    return 0;
+}

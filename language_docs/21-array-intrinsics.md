@@ -44,7 +44,33 @@ x + y
 
 `length()` is read-only, so its receiver may be any array-typed expression; it does not need to be a storage-backed lvalue.
 
-## 21.1 `init`, `init_zero`, and `target(size)`
+## 21.1 Receiver Permissions
+
+The array intrinsics participate in the pointer permission model (see
+[Pointers](24-pointers.md)). When a receiver is reached through a
+pointer dereference, the intrinsic needs that pointer's permission:
+
+| Intrinsic | Required receiver permission |
+|---|---|
+| `init`, `init_zero`, `resize`, `uninit`, `target(size)` | allocation (`ptr`) |
+| `memset`, `memcpy`, `memmove` (as target) | mutation (`mview` or `ptr`) |
+| `length()` and element reads | read (any permission) |
+
+The `memcpy`/`memmove` *source* is only read, so it may be any pointer
+to an array.
+
+```franko
+view<array<byte>> v = getview(buf);
+$(v)[0] = 1;         // blocked: view is read-only
+$(v).memset(0);      // blocked: mutating intrinsic
+$(v).length();       // allowed
+
+mview<array<byte>> m = getmview(dyn);
+$(m)[0] = 1;         // allowed
+$(m).init(10);       // blocked: init needs allocation rights (ptr)
+```
+
+## 21.2 `init`, `init_zero`, and `target(size)`
 
 Dynamic array initialization.
 
@@ -62,7 +88,7 @@ Rules:
 
 Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
 
-## 21.2 `resize`
+## 21.3 `resize`
 
 Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements; shrinking destroys the dropped tail elements. Trivial element types skip both.
 
@@ -76,7 +102,7 @@ Rules:
   - a positive constant fitting `uint32_t`; or
   - a nonconstant expression of exactly type `uint32_t`.
 
-## 21.3 `uninit`
+## 21.4 `uninit`
 
 Frees a dynamic array's element storage and resets it to the uninitialized state. Constructed elements are destroyed before the buffer is freed; trivially destructible element types skip destruction.
 
@@ -86,7 +112,7 @@ Rules:
 - receiver must be a dynamic array;
 - takes exactly zero arguments.
 
-## 21.4 `memset`
+## 21.5 `memset`
 
 Fills an array byte-wise.
 
@@ -111,7 +137,7 @@ Rules:
   - nonconstant expressions of exactly type `uint32_t`;
 - for static arrays, constant start/count ranges are checked against the static size at compile time.
 
-## 21.5 Memsetable Element Types
+## 21.6 Memsetable Element Types
 
 Current memsetable types:
 
@@ -123,7 +149,7 @@ Current memsetable types:
 | dynamic arrays | no |
 | pointers | no |
 
-## 21.6 `memcpy`
+## 21.7 `memcpy`
 
 Copies array contents byte-wise according to the generated C++ array model.
 
@@ -148,7 +174,7 @@ Rules:
   - nonconstant expressions of exactly type `uint32_t`;
 - for static arrays, constant start/count ranges on both the destination and the source are checked against the static sizes at compile time.
 
-## 21.7 `memmove`
+## 21.8 `memmove`
 
 Copies an element range within one array, overlapping ranges included.
 
@@ -168,7 +194,7 @@ Rules:
   - nonconstant expressions of exactly type `uint32_t`;
 - for static arrays, constant ranges are checked against the static size at compile time.
 
-## 21.8 Memcpyable Element Types
+## 21.9 Memcpyable Element Types
 
 Current memcpyable types:
 
@@ -180,7 +206,7 @@ Current memcpyable types:
 | structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |
 
-## 21.9 `length`
+## 21.10 `length`
 
 Returns the element count of an array as `uint32_t`.
 

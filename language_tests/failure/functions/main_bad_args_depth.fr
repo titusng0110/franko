@@ -1,6 +1,6 @@
 // Failure fixture: functions/main_bad_args_depth
 // A single-level byte array is not a valid main shape.
 
-func main(ptr<array<byte>> args) -> int32_t {
+func main(view<array<byte>> args) -> int32_t {
     return 0
 }

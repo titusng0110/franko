@@ -32,7 +32,7 @@ Structs are supported as user-defined aggregate types with named fields, subject
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
 - a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: it can be used only through `ptr<X>`;
-- structs have methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
+- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](25-structs.md).
 
@@ -48,7 +48,7 @@ Boolean results use `uint8_t`.
 
 Nonconstant numeric expressions require exact type equality wherever a
 typed value is expected. Moving between integer widths is always
-explicit through the `cast<T>(expr)` intrinsic (see [Casts](16-casts.md)).
+explicit through the `cast<T>(expr)` intrinsic (value-preserving widening) or `unsafe_cast<T>(expr)` (checked conversions that can lose data) (see [Casts](16-casts.md)).
 
 ## 30.7 Arrays Are Not Assignable as Values
 
@@ -81,7 +81,7 @@ The compiler does not fully track dangling pointers or ownership.
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
-Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
+Array initializer lists are not expressions and therefore cannot be printed directly. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 ## 30.12 Unsupported Operators
 
@@ -94,16 +94,26 @@ The following operators do not exist in the language. The lexer rejects the char
 
 Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=`, `>>=`): assignment has only plain `=` plus the five arithmetic compound forms `+=`, `-=`, `*=`, `/=`, `%=` (see [Assignment](14-assignment.md)).
 
-## 30.13 String Literals Are Initializer-Only
+## 30.13 String Literals Cannot Initialize Arrays
 
-String literals are supported as byte-array initializer sugar (see [String Literals](23-string-literals.md)), but they are not general expression values.
+A string literal is a `view<array<byte, N>>` value, not byte-array
+sugar (see [String Literals](23-string-literals.md)). Arrays are not
+assignable, so a string literal cannot initialize or assign an array;
+copy the bytes with `memcpy` instead.
 
 Invalid:
 
 ```franko
-print("hello");
-foo("hello");
-return "hello";
+array<byte, 6> s = "hello";    // invalid
+s = "hello";                   // invalid
+array<byte, ?> s = "hello";    // invalid: '?' infers from array literals
+```
+
+Valid:
+
+```franko
+array<byte, 6> s;
+s.memcpy("hello");
 ```
 
 ## 30.14 No `switch` or `do`/`do-while`
@@ -120,6 +130,6 @@ Executable statements are invalid at global scope.
 
 The following forms do not exist in the grammar:
 
-- C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` intrinsic, and fluid integer constants still convert implicitly when they fit);
+- C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` and `unsafe_cast<T>(expr)` intrinsics, and fluid integer constants still convert implicitly when they fit);
 - the ternary conditional operator (`?:`);
 - multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).

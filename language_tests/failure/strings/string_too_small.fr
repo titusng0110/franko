@@ -1,5 +1,6 @@
 // Failure fixture: strings/string_too_small
-// String assignment into a static array too small: the generated s[2] = 67 is rejected by static array bounds checking.
+// A string literal is a view<array<byte, N>> value; arrays cannot be
+// assigned from one. Copy the bytes with the memcpy intrinsic instead.
 func main() -> int32_t {
     array<byte, 2> s;
     s = "ABC";

@@ -93,16 +93,27 @@ class SemanticVarDeclNode extends SemanticStmtNode {
     public final VariableSymbol symbol;
     public final BigInteger foldedConstInitializer;
 
+    public final SemanticExprNode staticInitializer;
+
     public SemanticVarDeclNode(VariableSymbol symbol) {
-        this(symbol, null);
+        this(symbol, null, null);
     }
 
     public SemanticVarDeclNode(
             VariableSymbol symbol,
             BigInteger foldedConstInitializer
     ) {
+        this(symbol, foldedConstInitializer, null);
+    }
+
+    public SemanticVarDeclNode(
+            VariableSymbol symbol,
+            BigInteger foldedConstInitializer,
+            SemanticExprNode staticInitializer
+    ) {
         this.symbol = Objects.requireNonNull(symbol);
         this.foldedConstInitializer = foldedConstInitializer;
+        this.staticInitializer = staticInitializer;
     }
 }
 

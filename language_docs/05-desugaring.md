@@ -60,21 +60,24 @@ Nested initializer lists are recursively lowered to nested indexed assignments.
 
 ## 5.4 String Literal Desugaring
 
-String literals are converted to array initializer lists of UTF-8 byte values before ordinary initializer lowering:
+Every string literal is hoisted to a literal-backed global `array<byte, N>`
+holding its UTF-8 bytes (no null terminator is added) and replaced with a
+`getview(...)` expression over that global, of type `view<array<byte, N>>`:
 
 ```franko
-s = "ABC";
+print($("ABC")[0]);
 ```
 
-first becomes:
+first becomes (one global per distinct literal text):
 
 ```franko
-s = [65, 66, 67];
+array<byte, 3> _STR_<hash>;
+print($(getview(_STR_<hash>))[0]);
 ```
 
-and is then lowered to indexed byte assignments. No null terminator is added.
-
-String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](23-string-literals.md).
+Identical literals share one global. Because a string literal is a view
+value, it cannot initialize or assign an array: copy the bytes with
+`memcpy` instead. See [String Literals](23-string-literals.md).
 
 ## 5.5 Braceless Control-Flow Bodies
 
@@ -127,7 +130,7 @@ The `init` and `update` statements go through the ordinary statement desugaring 
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size may be written as `?` when the array is declared with an array-literal or string-literal initializer:
+A static array size may be written as `?` when the array is declared with an array-literal initializer:
 
 ```franko
 array<int32_t, ?> a = [0, 1, 2, 3];
@@ -143,7 +146,7 @@ a[2] = 2;
 a[3] = 3;
 ```
 
-String literals count UTF-8 bytes (`array<byte, ?> s = "hello"` infers `5`), and nested literals infer level by level:
+Nested literals infer level by level:
 
 ```franko
 array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
@@ -153,7 +156,7 @@ becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear
 
 Inference rules:
 
-- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal or a string literal;
+- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal (string literals are `view<array<byte, N>>` values and do not participate);
 - when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
 - when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
 - an empty initializer list cannot infer a size;

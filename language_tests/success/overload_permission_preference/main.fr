@@ -1,0 +1,42 @@
+// ============================================================
+// LANGUAGE TEST: Overload Preference for Permission Downgrades
+// ============================================================
+// Among applicable overloads, exact pointer-permission matches win
+// over downgrading ones; among the downgrading matches, the ones
+// relying on the fewest downgrades win (see
+// failure/pointer_permissions/overload_permission_tie for the
+// ambiguous case).
+// ============================================================
+
+func f(ptr<array<byte, 3>> x) -> void {
+    print(1);
+}
+
+func f(view<array<byte, 3>> x) -> void {
+    print(2);
+}
+
+func g(mview<array<byte, 3>> a, mview<array<byte, 3>> b) -> void {
+    print(3);
+}
+
+func g(mview<array<byte, 3>> a, view<array<byte, 3>> b) -> void {
+    print(4);
+}
+
+func main() -> int32_t {
+    array<byte, 3> buf;
+    buf.memset(0);
+
+    ptr<array<byte, 3>> p = getptr(buf);
+    mview<array<byte, 3>> m = getmview(buf);
+    view<array<byte, 3>> v = getview(buf);
+
+    f(p);
+    f(m);
+    f(v);
+    g(p, m);
+    g(p, v);
+
+    return 0;
+}

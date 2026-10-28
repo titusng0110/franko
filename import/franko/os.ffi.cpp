@@ -19,7 +19,7 @@
 //     name the backend emits for the Franko declaration in ../os.fr
 //     (FUNC_<name>_HASH_<8hex>, the FNV-1a hash of the canonical signature
 //     key). This is the same trick ProgramTemplateWithRawCArgs.cpp uses to
-//     call FUNC_main_HASH_5708d149. Main sanity-checks that each used
+//     call FUNC_main_HASH_db73581e. Main sanity-checks that each used
 //     mangled name is present here and fails the compile loudly on drift.
 //
 //   - Signatures must match the prototypes Cpp14Codegen emits for the
@@ -70,7 +70,7 @@
 // @@franko-ffi:posix.read
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_read_HASH_b155decf(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint64_t VAR_count)
+int64_t FUNC_read_HASH_be149563(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint64_t VAR_count)
 {
     if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
         return -1;
@@ -91,7 +91,7 @@ int64_t FUNC_read_HASH_b155decf(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* V
 // @@franko-ffi:posix.write
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_write_HASH_b155decf(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint64_t VAR_count)
+int64_t FUNC_write_HASH_731d748e(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t> const* VAR_buf, uint64_t VAR_count)
 {
     if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
         return -1;
@@ -128,7 +128,7 @@ uint64_t FUNC_GetStdHandle_HASH_493245c2(uint32_t VAR_nStdHandle)
 // @@franko-ffi:win32.ReadFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_ReadFile_HASH_b1df72ed(uint64_t VAR_hFile, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
+int32_t FUNC_ReadFile_HASH_50f286c1(uint64_t VAR_hFile, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
 {
 #ifdef _WIN32
     if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
@@ -154,7 +154,7 @@ int32_t FUNC_ReadFile_HASH_b1df72ed(uint64_t VAR_hFile, Franko_Dynamic_Array<uin
 // @@franko-ffi:win32.WriteFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_WriteFile_HASH_b1df72ed(uint64_t VAR_hFile, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
+int32_t FUNC_WriteFile_HASH_c811d200(uint64_t VAR_hFile, Franko_Dynamic_Array<uint8_t> const* VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
 {
 #ifdef _WIN32
     if (VAR_buf == nullptr || VAR_buf->data == nullptr) {

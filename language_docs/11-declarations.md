@@ -85,14 +85,31 @@ uint64_t mask = 1 << 8
 
 The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, string literals `= "text"`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+**Static address initializers.** A pointer-typed global may be
+initialized with `null`, with `getptr`/`getmview`/`getview` over another
+global variable, or with a string literal (which is a view over a
+hoisted global; see [String Literals](23-string-literals.md)):
+
+```franko
+array<byte, 5> greeting
+view<array<byte, 5>> v = getview(greeting)
+view<array<byte, 5>> s = "hello"
+ptr<array<byte, 5>> p = null
+```
+
+The initializer must be a statically representable address of the right
+type (a permission downgrade is allowed, an upgrade is not).
+
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
 int32_t g = h                     // invalid: the initializer must be constant
 array<int32_t, 3> xs = [1, 2, 3]  // invalid: desugars into indexed assignments
+array<byte, 6> s = "hello"        // invalid: strings cannot initialize arrays
 ```
 
-The constant-initializer form above is the only way to initialize a global at its declaration.
+The constant-initializer and static-address forms above are the only
+ways to initialize a global at its declaration.
 
 ## 11.5 Uninitialized Values
 

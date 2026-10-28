@@ -1,7 +1,8 @@
 // Sieve of Eratosthenes: prints all primes <= n.
 //
 // Demonstrates structs with a dynamic-array field, methods with
-// explicit ptr<Sieve> self receivers, array intrinsics
+// explicit self receivers (ptr for lifecycle, mview for mutation,
+// view for reads), array intrinsics
 // (init / memset / uninit), uint arithmetic, and strided for loops.
 
 struct Sieve {
@@ -29,7 +30,7 @@ struct Sieve {
         return 0
     }
 
-    func run(ptr<Sieve> self) -> void {
+    func run(mview<Sieve> self) -> void {
         uint p = 0
 
         for (p = 2; p * p <= $(self).n; p++) {
@@ -45,7 +46,7 @@ struct Sieve {
         return
     }
 
-    func printResults(ptr<Sieve> self) -> void {
+    func printResults(view<Sieve> self) -> void {
         print(1001)
 
         for (uint i = 2; i <= $(self).n; i++) {

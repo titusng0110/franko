@@ -1,0 +1,19 @@
+// ============================================================
+// LANGUAGE TEST: Capability Linter (Unused Allocation Warning)
+// ============================================================
+// A ptr<T> variable that never exercises allocation or lifecycle
+// permissions gets a non-fatal downgrade warning (see
+// main.warnings). The build still succeeds and runs.
+// ============================================================
+
+func main() -> int32_t {
+    array<byte, 3> buf;
+    buf.memset(0);
+
+    // Writes only: mutation rights, never allocation rights.
+    ptr<array<byte, 3>> p = getptr(buf);
+    $(p)[0] = 5;
+    print($(p)[0]);
+
+    return 0;
+}

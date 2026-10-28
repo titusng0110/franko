@@ -51,6 +51,7 @@ public class SemanticAnalyzer {
                 new ArrayLowerer(symbolTable, exprAnalyzer);
 
         this.exprAnalyzer.setArrayLowerer(arrayLowerer);
+        this.exprAnalyzer.setTypeResolver(this::analyzeNormalType);
     }
 
     public List<String> warnings() {
@@ -153,6 +154,8 @@ public class SemanticAnalyzer {
         Map<GlobalVarDeclNode, VariableSymbol> globalSymbols =
                 new IdentityHashMap<>();
         Map<GlobalVarDeclNode, BigInteger> globalInitializers =
+                new IdentityHashMap<>();
+        Map<GlobalVarDeclNode, ASTNode> globalStaticInitializers =
                 new IdentityHashMap<>();
 
         Map<ASTNode, SemanticASTNode> loweredByNode = new IdentityHashMap<>();
@@ -267,11 +270,21 @@ public class SemanticAnalyzer {
                     }
                 }
 
+                if (n.literalBytes != null) {
+                    sym.literalBytes = n.literalBytes;
+                }
+
                 if (symbolTable.declareGlobalVariable(sym)) {
                     globalSymbols.put(n, sym);
                 }
 
-                if (n.constInitializer != null) {
+                if (n.literalBytes != null) {
+                    continue;
+                }
+
+                if (n.constInitializer instanceof GetPtrNode) {
+                    globalStaticInitializers.put(n, n.constInitializer);
+                } else if (n.constInitializer != null) {
                     globalInitializers.put(n, exprAnalyzer.preEvaluatedConstValue(
                             n.constInitializer,
                             "global variable initializer"
@@ -326,9 +339,16 @@ public class SemanticAnalyzer {
                     VariableSymbol sym = globalSymbols.get(n);
 
                     if (sym != null) {
+                        ASTNode staticInit = globalStaticInitializers.get(n);
+
+                        SemanticExprNode loweredStaticInit = staticInit == null
+                                ? null
+                                : exprAnalyzer.analyzeExpr(staticInit);
+
                         loweredByNode.put(item, new SemanticVarDeclNode(
                                 sym,
-                                globalInitializers.get(n)
+                                globalInitializers.get(n),
+                                loweredStaticInit
                         ));
                     }
 
@@ -388,7 +408,7 @@ public class SemanticAnalyzer {
 
         if (globalMainCount == 0) {
             symbolTable.error(
-                    "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t'"
+                    "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t'"
             );
         }
 
@@ -547,11 +567,11 @@ public class SemanticAnalyzer {
 
             if (globalMainCount > 1) {
                 symbolTable.error(
-                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t', not both"
+                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t', not both"
                 );
             } else if (!returnsInt32 || (!noArgs && !hasArgsShape)) {
                 symbolTable.error(
-                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t'"
+                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t'"
                 );
             } else {
                 entryKind = noArgs ? EntryKind.NO_ARGS : EntryKind.ARGS;
@@ -562,7 +582,8 @@ public class SemanticAnalyzer {
     }
 
     private static boolean isArgsArrayParamType(SemanticType type) {
-        if (!(type instanceof SemanticPtrType ptr)) {
+        if (!(type instanceof SemanticPtrType ptr)
+                || ptr.permission != PtrPermission.READ_ONLY) {
             return false;
         }
 
@@ -601,7 +622,12 @@ public class SemanticAnalyzer {
                     + display
                     + "' must have 'ptr<"
                     + owner.qualifiedName()
-                    + "> self' as its first parameter");
+                    + "> self' as its first parameter"
+                    + " (also allowed: 'mview<"
+                    + owner.qualifiedName()
+                    + "> self', 'view<"
+                    + owner.qualifiedName()
+                    + "> self')");
         } else {
             ParameterSymbol first = params.get(0);
 
@@ -610,7 +636,12 @@ public class SemanticAnalyzer {
                         + display
                         + "' must have 'ptr<"
                         + owner.qualifiedName()
-                        + "> self' as its first parameter");
+                        + "> self' as its first parameter"
+                        + " (also allowed: 'mview<"
+                        + owner.qualifiedName()
+                        + "> self', 'view<"
+                        + owner.qualifiedName()
+                        + "> self')");
             } else if (!isSelfTypeForOwner(first.type, owner)) {
                 symbolTable.error("Method '"
                         + display
@@ -618,7 +649,11 @@ public class SemanticAnalyzer {
                         + first.type.describe()
                         + "; it must be ptr<"
                         + owner.qualifiedName()
-                        + ">");
+                        + "> (or mview<"
+                        + owner.qualifiedName()
+                        + "> or view<"
+                        + owner.qualifiedName()
+                        + ">)");
             }
 
             for (int i = 1; i < params.size(); i++) {
@@ -1092,7 +1127,7 @@ public class SemanticAnalyzer {
         if (node instanceof StaticArrayTypeNode s) {
 
             if (s.sizeExpr instanceof InferredSizeNode) {
-                symbolTable.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
+                symbolTable.error("'?' array size is only allowed in a declaration with an array-literal initializer");
                 return FALLBACK_TYPE;
             }
 
@@ -1109,9 +1144,13 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof PtrTypeNode a) {
-            return new SemanticPtrType(
-                    analyzeNormalType(a.referencedType)
-            );
+            SemanticType referencedType = analyzeNormalType(a.referencedType);
+
+            return switch (a.kind) {
+                case OWNER -> new SemanticPtrType(referencedType);
+                case MUTABLE -> new SemanticMViewType(referencedType);
+                case READ_ONLY -> new SemanticViewType(referencedType);
+            };
         }
 
         if (node instanceof VoidTypeNode) {

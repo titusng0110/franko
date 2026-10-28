@@ -80,7 +80,7 @@ Nested initializer lists are lowered recursively.
 
 String literals are converted to byte array literals in the same pass (see [String Literals](23-string-literals.md)).
 
-`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count (strings count as UTF-8 bytes) before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
+`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
 
 Every other `constExpr` slot is also evaluated in this pass: static array sizes, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
 
@@ -137,7 +137,7 @@ Struct definitions are emitted after a forward-declaration block (`struct STRUCT
 The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
 
 - `ProgramTemplate.cpp` provides `int main()` and calls the no-args Franko `main` (`FUNC_main_HASH_d8625720`, the hash of `fn()->int32_t`).
-- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_5708d149`, the hash of `fn(ptr<array<array<uint8_t>>>)->int32_t`).
+- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_db73581e`, the hash of `fn(view<array<array<uint8_t>>>)->int32_t`).
 
 The compiler selects the template from the declared entry-point shape; an explicit `-t` template overrides the selection.
 

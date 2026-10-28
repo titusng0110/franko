@@ -1,13 +1,15 @@
 // ============================================================
-// LANGUAGE TEST: Explicit cast<T> Intrinsic
+// LANGUAGE TEST: Explicit cast<T> and unsafe_cast<T> Intrinsics
 // ============================================================
-// Covers: value-preserving casts (plain static_cast), same-type
-// no-ops, successful runtime-checked casts, constant folding,
-// chained casts, and casts on comparison results.
+// Covers: value-preserving widening casts with cast<T> (plain
+// static_cast), same-type no-ops, unsafe_cast<T> for conversions
+// that can lose data (runtime-checked franko_unsafe_cast),
+// constant folding with compile-time range checks, chained
+// casts, and casts on comparison results.
 // ============================================================
 
 func main() -> int32_t {
-    // Static widening casts.
+    // Static widening casts stay plain casts.
     uint8_t a = 200;
     uint16_t b = cast<uint16_t>(a);
     print(b);
@@ -22,21 +24,22 @@ func main() -> int32_t {
     uint32_t u = cast<uint32_t>(w);
     print(u);
 
-    // Checked casts that succeed at run time.
-    int32_t s = cast<int32_t>(w);
+    // Conversions that can lose data use unsafe_cast.
+    int32_t s = unsafe_cast<int32_t>(w);
     print(s);
-    uint8_t ok = cast<uint8_t>(200);
+    uint8_t ok = unsafe_cast<uint8_t>(200);
     print(ok);
 
-    // Constant folding through casts.
-    uint16_t c = cast<uint16_t>(1000);
+    // Constant folding through casts (constants are range-checked
+    // at compile time).
+    uint16_t c = unsafe_cast<uint16_t>(1000);
     print(c);
 
     // Chained casts and casts on comparison results.
     uint8_t cmp = 1 < 2;
     int32_t wide = cast<int32_t>(cmp);
     print(wide);
-    uint8_t back = cast<uint8_t>(wide);
+    uint8_t back = unsafe_cast<uint8_t>(wide);
     print(back);
 
     return 0;

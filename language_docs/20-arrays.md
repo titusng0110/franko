@@ -62,8 +62,11 @@ The size may be written as `?` to infer it from a declaration initializer (see [
 
 ```franko
 array<int32_t, ?> a = [0, 1, 2, 3];   // ? = 4
-array<byte, ?> s = "hello";           // ? = 5
+array<byte, ?> b = [104, 105];        // ? = 2
 ```
+
+(String literals are `view<array<byte, N>>` values and do not
+participate in `?` inference; see [String Literals](23-string-literals.md).)
 
 The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 

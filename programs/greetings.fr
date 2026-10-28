@@ -17,13 +17,13 @@
 import "franko/os"
 
 func main() -> int {
-    // Static template buffers carry the inferred string size; the
-    // write API needs dynamic arrays, so size them from the template
-    // with length() and memcpy the template over.
-    array<byte, ?> promptT = "What's your name? ";
+    // A string literal is a view<array<byte, N>> over a hoisted
+    // global; the write API needs dynamic arrays, so size them from
+    // the literal's length() and memcpy the bytes over.
+    view<array<byte, 18>> promptT = "What's your name? ";
     array<byte> prompt;
-    prompt.init(promptT.length());
-    prompt.memcpy(getptr(promptT));
+    prompt.init($(promptT).length());
+    prompt.memcpy(promptT);
 
     array<byte> name;
     name.init(32);
@@ -31,11 +31,11 @@ func main() -> int {
 
     if (os::IS_WINDOWS) {
         uint64_t hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(hOut, getptr(prompt), cast<uint32_t>(promptT.length()), null);
+        os::win32::WriteFile(hOut, getptr(prompt), cast<uint32_t>($(promptT).length()), null);
         uint64_t hIn = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
         os::win32::ReadFile(hIn, getptr(name), 32, null);
     } else if (os::IS_LINUX || os::IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, getptr(prompt), cast<uint64_t>(promptT.length()));
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(prompt), cast<uint64_t>($(promptT).length()));
         os::posix::read(os::posix::STDIN_FILENO, getptr(name), 32);
     }
 
@@ -55,12 +55,12 @@ func main() -> int {
     }
 
     // "Hello, " template plus up to 32 name bytes plus "~" (126).
-    array<byte, ?> helloT = "Hello, ";
+    view<array<byte, 7>> helloT = "Hello, ";
     array<byte> out;
-    out.init(helloT.length() + 32 + 1);
+    out.init($(helloT).length() + 32 + 1);
     out.memset(0);
-    out.memcpy(getptr(helloT));
-    uint greetingLen = helloT.length();
+    out.memcpy(helloT);
+    uint greetingLen = $(helloT).length();
     uint j = 0;
     while (j < len) {
         out[greetingLen + j] = name[j];

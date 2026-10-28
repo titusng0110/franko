@@ -1,3 +1,4 @@
+import java.math.BigInteger;
 import java.util.List;
 
 abstract class ASTNode {}
@@ -201,6 +202,8 @@ class GlobalVarDeclNode extends ASTNode {
     String name;
     ASTNode constInitializer;
 
+    List<BigInteger> literalBytes;
+
     GlobalVarDeclNode(TypeNode type, String name, ASTNode constInitializer) {
         this.type = type;
         this.name = name;
@@ -311,9 +314,15 @@ class StaticArrayTypeNode extends TypeNode {
 }
 
 class PtrTypeNode extends TypeNode {
+    PtrPermission kind;
     TypeNode referencedType;
 
     PtrTypeNode(TypeNode referencedType) {
+        this(PtrPermission.OWNER, referencedType);
+    }
+
+    PtrTypeNode(PtrPermission kind, TypeNode referencedType) {
+        this.kind = kind;
         this.referencedType = referencedType;
     }
 }
@@ -425,9 +434,15 @@ class CallNode extends ASTNode {
 }
 
 class GetPtrNode extends ASTNode {
+    PtrPermission kind;
     ASTNode target;
 
     GetPtrNode(ASTNode target) {
+        this(PtrPermission.OWNER, target);
+    }
+
+    GetPtrNode(PtrPermission kind, ASTNode target) {
+        this.kind = kind;
         this.target = target;
     }
 }
@@ -441,12 +456,19 @@ class DerefNode extends ASTNode {
 }
 
 class CastNode extends ASTNode {
-    PrimitiveKind target;
+    TypeNode target;
     ASTNode expr;
 
-    CastNode(PrimitiveKind target, ASTNode expr) {
+    boolean unsafe;
+
+    CastNode(TypeNode target, ASTNode expr) {
+        this(target, expr, false);
+    }
+
+    CastNode(TypeNode target, ASTNode expr, boolean unsafe) {
         this.target = target;
         this.expr = expr;
+        this.unsafe = unsafe;
     }
 }
 

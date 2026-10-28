@@ -1,0 +1,7 @@
+// Failure fixture: global_scope/gs_null_non_pointer
+// null is only valid for pointer types, at global scope too.
+int32_t G = null;
+
+func main() -> int32_t {
+    return 0;
+}

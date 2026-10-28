@@ -19,6 +19,8 @@ final class InactiveDeclarationPruner {
 
     private boolean entryPointFound = false;
 
+    private final List<SemanticVarDeclNode> globalVarDecls = new ArrayList<>();
+
     private static <T> Set<T> newSet() {
         return Collections.newSetFromMap(new IdentityHashMap<>());
     }
@@ -65,6 +67,11 @@ final class InactiveDeclarationPruner {
 
         if (node instanceof SemanticFunctionDeclNode fn) {
             indexFunction(fn);
+            return;
+        }
+
+        if (node instanceof SemanticVarDeclNode varDecl) {
+            globalVarDecls.add(varDecl);
         }
     }
 
@@ -136,6 +143,28 @@ final class InactiveDeclarationPruner {
             collectVariables(node.body, refs);
 
             keptVariables.addAll(refs);
+        }
+
+        boolean changed = true;
+
+        while (changed) {
+            changed = false;
+
+            for (SemanticVarDeclNode global : globalVarDecls) {
+                if (global.staticInitializer == null
+                        || !keptVariables.contains(global.symbol)) {
+                    continue;
+                }
+
+                Set<VariableSymbol> refs = newSet();
+                collectExprVariables(global.staticInitializer, refs);
+
+                for (VariableSymbol ref : refs) {
+                    if (keptVariables.add(ref)) {
+                        changed = true;
+                    }
+                }
+            }
         }
     }
 

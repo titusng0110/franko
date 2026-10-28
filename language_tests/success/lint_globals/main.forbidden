@@ -1,0 +1,4 @@
+# The global G is never attributed by the capability linter: no
+# per-function downgrade warning may mention it.
+G' is only ever read
+G' never exercises
