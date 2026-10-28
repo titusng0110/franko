@@ -755,17 +755,6 @@ public class Cpp14Codegen {
 
     private void emitIf(SemanticIfNode node) {
 
-        if (node.condition.isConstant()
-                && node.condition.constantValue != null) {
-            if (!node.condition.constantValue.equals(BigInteger.ZERO)) {
-                emitStmt(node.thenBranch);
-            } else if (node.elseBranch != null) {
-                emitStmt(node.elseBranch);
-            }
-
-            return;
-        }
-
         emitLine("if (" + emitExpr(node.condition) + ")");
         emitControlledStmt(node.thenBranch);
 
