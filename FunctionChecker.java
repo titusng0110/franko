@@ -2,79 +2,6 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * ============================================================================
- * FUNCTION CHECKER
- * ============================================================================
- *
- * PURPOSE:
- * FunctionChecker validates function-level Franko legality rules over lowered
- * SemanticFunctionDeclNode objects.
- *
- * The SemanticAnalyzer has already:
- *
- *   - registered function signatures before body analysis,
- *   - resolved function declarations to FunctionSymbol objects,
- *   - resolved parameters to ParameterSymbol / VariableSymbol objects,
- *   - resolved return statements to their owning FunctionSymbol,
- *   - resolved function calls to selected FunctionSymbol overloads,
- *   - lowered the function body into SemanticStmtNode objects.
- *
- * FunctionChecker performs stricter function legality checks:
- *
- *   - function return type validity,
- *   - parameter declaration validity,
- *   - duplicate parameter name validation,
- *   - function body statement checking,
- *   - return; / return expr; legality,
- *   - return expression compatibility,
- *   - missing return in non-void functions.
- *
- * ----------------------------------------------------------------------------
- * RETURN RULES
- * ----------------------------------------------------------------------------
- *
- *   void function:
- *
- *      - does not require a return statement,
- *      - may use bare return;,
- *      - must not use return expr;.
- *
- *   non-void function:
- *
- *      - must contain at least one return statement,
- *      - must not use bare return;,
- *      - every return must return an expression,
- *      - returned expression must be compatible with declared return type.
- *
- * Return compatibility follows ordinary assignment compatibility:
- *
- *   - constants may return into primitive integer types if they fit,
- *   - nonconstant primitive expressions must exactly match,
- *   - pointer expressions must exactly match,
- *   - arrays cannot be returned directly.
- *
- * ----------------------------------------------------------------------------
- * RETURN PATH NOTE
- * ----------------------------------------------------------------------------
- *
- * This checker performs presence-based missing-return detection:
- *
- *      func f() -> int32_t { }
- *
- * is rejected because it contains no return.
- *
- * It does not perform full control-flow/path-sensitive proof such as:
- *
- *      func f(uint8_t x) -> int32_t {
- *          if (x) {
- *              return 1;
- *          }
- *      }
- *
- * Full return-path legality can be added later as a dedicated control-flow
- * checker if desired.
- */
 public class FunctionChecker {
     private final DiagnosticBag diagnostics;
     private final DeclarationChecker declarations;
@@ -129,10 +56,6 @@ public class FunctionChecker {
         }
     }
 
-    // ============================================================
-    // Function-Level Validation
-    // ============================================================
-
     private void validateParameters(SemanticFunctionDeclNode node) {
         Set<String> names = new HashSet<>();
 
@@ -166,12 +89,6 @@ public class FunctionChecker {
         }
     }
 
-    /**
-     * Validates a method's `self` parameter shape.
-     *
-     * The first parameter must be literally `ptr<X> self` for the owning
-     * struct X, and only the first parameter may be named `self`.
-     */
     private void validateMethodSelf(MethodSymbol method) {
         String display = method.qualifiedName();
         String ownerName = method.owner.qualifiedName();
@@ -252,10 +169,6 @@ public class FunctionChecker {
         }
     }
 
-    // ============================================================
-    // Body / Statement Traversal
-    // ============================================================
-
     private boolean checkFunctionBody(SemanticFunctionDeclNode fn) {
         boolean sawReturn = false;
 
@@ -268,15 +181,6 @@ public class FunctionChecker {
         return sawReturn;
     }
 
-    /**
-     * Checks statements inside a function.
-     *
-     * Important:
-     *
-     *   StatementChecker currently does not handle SemanticReturnNode.
-     *   Therefore FunctionChecker must intercept returns and recursively
-     *   traverse compound statements that may contain returns.
-     */
     private boolean checkStmtInsideFunction(
             SemanticStmtNode stmt,
             FunctionSymbol function
@@ -302,10 +206,6 @@ public class FunctionChecker {
             return visitWhile(n, function);
         }
 
-        /*
-         * All other statements can be delegated to StatementChecker because
-         * they cannot directly contain nested statements/returns.
-         */
         statements.checkStmt(stmt);
         return false;
     }
@@ -330,7 +230,7 @@ public class FunctionChecker {
             FunctionSymbol function
     ) {
         expressions.checkExpr(node.condition);
-        
+
         if (types.isVoidType(node.condition.type)) {
             diagnostics.error("if condition cannot be void");
             return false;
@@ -355,9 +255,6 @@ public class FunctionChecker {
             );
         }
 
-        /*
-         * Presence-based return detection, not path-sensitive proof.
-         */
         return thenReturns || elseReturns;
     }
 
@@ -377,17 +274,8 @@ public class FunctionChecker {
                 "while condition must be an integer"
         );
 
-        /*
-         * Presence-based only. A return inside a loop counts as a return
-         * appearing in the function body, but this does not prove all paths
-         * return.
-         */
         boolean sawReturn = checkStmtInsideFunction(node.body, function);
 
-        /*
-         * The epilogue (the desugared update of a for loop) runs inside the
-         * loop, so returns there carry the same presence-based weight.
-         */
         for (SemanticStmtNode updateStmt : node.update) {
             if (checkStmtInsideFunction(updateStmt, function)) {
                 sawReturn = true;
@@ -396,10 +284,6 @@ public class FunctionChecker {
 
         return sawReturn;
     }
-
-    // ============================================================
-    // Return Checking
-    // ============================================================
 
     private void visitReturn(
             SemanticReturnNode node,
@@ -433,15 +317,10 @@ public class FunctionChecker {
             FunctionSymbol function
     ) {
         if (node.value == null) {
-            /*
-             * return; is valid in void functions.
-             */
+
             return;
         }
 
-        /*
-         * Still check the expression so nested illegal constructs are reported.
-         */
         expressions.checkExpr(node.value);
 
         diagnostics.error("Void function '"

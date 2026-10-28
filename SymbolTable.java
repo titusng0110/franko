@@ -1,137 +1,36 @@
 import java.math.BigInteger;
 import java.util.*;
 
-/**
- * ============================================================================
- * SYMBOL TABLE
- * Scope Management, Symbol Registration, and Function Overload Resolution
- * ============================================================================
- *
- * This class is the refactored form of SemanticAnalyzer.Context.
- *
- * It owns:
- *
- *   - lexical variable scopes,
- *   - global VarDeclNode -> VariableSymbol registration metadata,
- *   - function overload tables,
- *   - FunctionDeclNode -> FunctionSymbol registration metadata.
- *
- * Diagnostics are delegated to DiagnosticBag.
- */
 public final class SymbolTable {
-
-    // ============================================================
-    // Scope State
-    // ============================================================
 
     private final Deque<Map<String, VariableSymbol>> scopes =
             new ArrayDeque<>();
 
-    /*
-     * Global-namespace variables, in declaration order.
-     *
-     * Globals live here rather than in the bottom lexical scope so
-     * unqualified lookup can implement the namespace chain exactly:
-     * lexical scopes (locals) -> current namespace globals -> global
-     * namespace globals.
-     */
     private final Map<String, VariableSymbol> globalVariables =
             new LinkedHashMap<>();
 
-    /*
-     * Raw global VarDeclNode -> registered global symbol.
-     *
-     * Used so global declarations are registered before function body
-     * analysis, then reused when lowering the final SemanticProgramNode.
-     */
     private final IdentityHashMap<VarDeclNode, VariableSymbol> varDeclSymbols =
             new IdentityHashMap<>();
 
-    // ============================================================
-    // Function State
-    // ============================================================
-
-    /*
-     * Function overload table.
-     *
-     * Declaration identity:
-     *
-     *   function name + ordered parameter types
-     *
-     * Parameter names and return type are not part of the signature.
-     */
     private final Map<String, List<FunctionSymbol>> functions =
             new LinkedHashMap<>();
 
-    /*
-     * Raw FunctionDeclNode -> registered FunctionSymbol.
-     *
-     * Used for two-phase function analysis:
-     *
-     *   1. register all signatures,
-     *   2. analyze bodies using the exact registered symbol.
-     */
     private final IdentityHashMap<FunctionDeclNode, FunctionSymbol> functionDeclSymbols =
             new IdentityHashMap<>();
 
-    // ============================================================
-    // Struct State
-    // ============================================================
-
-    /*
-     * Type-name namespace for struct declarations.
-     *
-     * Kept separate from variable scopes and the function overload table:
-     * struct names live in their own namespace, so a struct may share a name
-     * with a variable or a function.
-     */
     private final Map<String, StructSymbol> structs =
             new LinkedHashMap<>();
 
-    /*
-     * Names of local variables and parameters declared through declare(),
-     * across all lexical scopes. Used only for name-clash warnings;
-     * scopes themselves remain the source of truth for visibility.
-     */
     private final Set<String> declaredVariableNames =
             new HashSet<>();
 
-    /*
-     * Names of namespace-level variables declared in the global
-     * namespace. Kept separate from declaredVariableNames and from each
-     * namespace's variableNames so clash warnings stay scoped to one
-     * namespace.
-     */
     private final Set<String> globalNamespaceVariableNames =
             new HashSet<>();
 
-    // ============================================================
-    // Namespace State
-    // ============================================================
-
-    /*
-     * Declared top-level namespaces, in first-declaration order.
-     *
-     * Nested namespaces live in their parent's children map, not
-     * here. Redeclaring a path merges into the existing symbol
-     * chain.
-     */
     private final Map<String, NamespaceSymbol> namespaces =
             new LinkedHashMap<>();
 
-    /*
-     * The namespace whose items are currently being analyzed, or null
-     * while the global namespace is being analyzed.
-     *
-     * Registration and lookup APIs route through this context so
-     * SemanticAnalyzer does not have to pass the namespace explicitly
-     * on every call.
-     */
     private NamespaceSymbol currentNamespace;
-
-    // ============================================================
-    // Diagnostics
-    // ============================================================
 
     private final DiagnosticBag diagnostics;
 
@@ -143,21 +42,11 @@ public final class SymbolTable {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
-    /**
-     * Clears symbol-table state and diagnostics.
-     *
-     * This preserves the old Context/SymbolTable behavior.
-     */
     public void clear() {
         clearSymbols();
         diagnostics.clear();
     }
 
-    /**
-     * Clears only scope/function/declaration registration state.
-     *
-     * Useful if a caller wants to preserve diagnostics.
-     */
     public void clearSymbols() {
         scopes.clear();
         varDeclSymbols.clear();
@@ -170,29 +59,10 @@ public final class SymbolTable {
         currentNamespace = null;
     }
 
-    /**
-     * Clears only diagnostics.
-     *
-     * Useful for checker phases that use SymbolTable as a shared diagnostic
-     * context but do not want to disturb symbol state.
-     */
     public void clearErrors() {
         diagnostics.clear();
     }
 
-    // ============================================================
-    // Namespaces
-    // ============================================================
-
-    /**
-     * Returns the namespace with the given full path, creating it (and
-     * any missing intermediate namespaces) on first declaration so
-     * later declarations of the same path merge into the same symbol.
-     *
-     * Both declaration forms funnel through the path: "a::b" from a
-     * path header and "b" nested inside "a" resolve to the same
-     * symbol.
-     */
     public NamespaceSymbol declareNamespace(String path) {
         List<String> segments = splitNamespacePath(path);
 
@@ -226,19 +96,10 @@ public final class SymbolTable {
         return current;
     }
 
-    /**
-     * Resolves a namespace by full path, or null when no namespace
-     * with that path was declared.
-     */
     public NamespaceSymbol resolveNamespace(String path) {
         return resolveNamespace(splitNamespacePath(path));
     }
 
-    /**
-     * Resolves a namespace by path segments, or null when no
-     * namespace with that path was declared. An empty segment list
-     * never resolves.
-     */
     public NamespaceSymbol resolveNamespace(List<String> segments) {
         if (segments == null || segments.isEmpty()) {
             return null;
@@ -253,9 +114,6 @@ public final class SymbolTable {
         return current;
     }
 
-    /**
-     * Splits a namespace path ("a::b") into its segments.
-     */
     public static List<String> splitNamespacePath(String path) {
         if (path == null || path.isEmpty()) {
             throw new IllegalArgumentException(
@@ -276,10 +134,6 @@ public final class SymbolTable {
         return List.of(parts);
     }
 
-    /**
-     * All declared namespaces in first-declaration order, depth-first:
-     * each namespace is followed by its nested namespaces.
-     */
     public Collection<NamespaceSymbol> allNamespaces() {
         List<NamespaceSymbol> out = new ArrayList<>();
 
@@ -301,12 +155,6 @@ public final class SymbolTable {
         }
     }
 
-    /**
-     * Sets the namespace whose items are currently being analyzed.
-     *
-     * Registration and lookup route through this context. Null selects
-     * the global namespace.
-     */
     public void setCurrentNamespace(NamespaceSymbol namespace) {
         this.currentNamespace = namespace;
     }
@@ -315,19 +163,6 @@ public final class SymbolTable {
         return currentNamespace;
     }
 
-    // ============================================================
-    // Struct Namespace
-    // ============================================================
-
-    /**
-     * Declares a struct by name in the type-name namespace of the
-     * namespace currently being analyzed (or the global namespace).
-     *
-     * Duplicate struct names are rejected within the same namespace;
-     * nominal typing means each declaration is a distinct type.
-     *
-     * @return true when the struct was registered.
-     */
     public boolean declareStruct(StructSymbol symbol) {
         Map<String, StructSymbol> target = targetStructs();
 
@@ -342,10 +177,6 @@ public final class SymbolTable {
         return true;
     }
 
-    /**
-     * Resolves a struct name with the namespace chain: the namespace
-     * currently being analyzed first, then the global namespace.
-     */
     public StructSymbol resolveStruct(String name) {
         if (currentNamespace != null) {
             StructSymbol sym = currentNamespace.structs.get(name);
@@ -358,10 +189,6 @@ public final class SymbolTable {
         return structs.get(name);
     }
 
-    /**
-     * Resolves a struct name strictly inside one namespace, with no
-     * fallback to the global namespace.
-     */
     public StructSymbol resolveStructIn(NamespaceSymbol namespace, String name) {
         if (namespace == null) {
             return structs.get(name);
@@ -405,14 +232,6 @@ public final class SymbolTable {
         return true;
     }
 
-    /**
-     * Declares a namespace-level variable (a global) into the global
-     * namespace, or into the namespace currently being analyzed.
-     *
-     * Duplicate names are rejected within the same namespace.
-     *
-     * @return true when the variable was registered.
-     */
     public boolean declareGlobalVariable(VariableSymbol sym) {
         Map<String, VariableSymbol> target = targetGlobalVariables();
 
@@ -432,13 +251,6 @@ public final class SymbolTable {
         return true;
     }
 
-    /**
-     * Resolves a variable name with the full lookup chain:
-     *
-     *   1. lexical scopes (locals and parameters),
-     *   2. the namespace currently being analyzed, if any,
-     *   3. the global namespace.
-     */
     public VariableSymbol resolve(String name) {
         for (Map<String, VariableSymbol> scope : scopes) {
             VariableSymbol sym = scope.get(name);
@@ -459,10 +271,6 @@ public final class SymbolTable {
         return globalVariables.get(name);
     }
 
-    /**
-     * Resolves a variable name strictly inside one namespace, with no
-     * fallback to the global namespace.
-     */
     public VariableSymbol resolveGlobalVarIn(NamespaceSymbol namespace, String name) {
         if (namespace == null) {
             return globalVariables.get(name);
@@ -513,12 +321,6 @@ public final class SymbolTable {
         targetDeclSymbols.put(decl, fn);
     }
 
-    /**
-     * Finds the FunctionSymbol registered for a raw declaration.
-     *
-     * Looks in the namespace currently being analyzed first, then in the
-     * global namespace, mirroring the registration route.
-     */
     public FunctionSymbol findRegisteredFunction(FunctionDeclNode decl) {
         if (currentNamespace != null) {
             FunctionSymbol sym = currentNamespace.functionDeclSymbols.get(decl);
@@ -531,12 +333,6 @@ public final class SymbolTable {
         return functionDeclSymbols.get(decl);
     }
 
-    /**
-     * Declares a method in its owning struct's method table.
-     *
-     * Methods live only on the struct; they are never registered as free
-     * functions, so `increment(...)` is never callable without a receiver.
-     */
     public void declareMethod(
             StructSymbol owner,
             FunctionDeclNode decl,
@@ -573,9 +369,6 @@ public final class SymbolTable {
         owner.methodDeclSymbols.put(decl, method);
     }
 
-    /**
-     * Finds the MethodSymbol registered for a raw method declaration.
-     */
     public MethodSymbol findRegisteredMethod(
             StructSymbol owner,
             FunctionDeclNode decl
@@ -583,12 +376,6 @@ public final class SymbolTable {
         return owner.methodDeclSymbols.get(decl);
     }
 
-    /**
-     * Resolves a method call against one struct's method overloads.
-     *
-     * Returns null when no overload applies; reports ambiguity when
-     * folded constants fit multiple overloads.
-     */
     public MethodSymbol resolveMethod(
             StructSymbol owner,
             String name,
@@ -638,13 +425,6 @@ public final class SymbolTable {
         return null;
     }
 
-    /**
-     * Resolves a function call with the namespace chain.
-     *
-     * When the namespace currently being analyzed declares any overload
-     * of the name, only those overloads are considered; otherwise the
-     * global namespace's overloads are used.
-     */
     public FunctionSymbol resolveFunction(
             String name,
             List<SemanticExprNode> args
@@ -661,10 +441,6 @@ public final class SymbolTable {
         return resolveFromOverloads(name, overloads, args);
     }
 
-    /**
-     * Resolves a function call strictly inside one namespace, with no
-     * fallback to the global namespace.
-     */
     public FunctionSymbol resolveFunctionIn(
             NamespaceSymbol namespace,
             String name,
@@ -707,10 +483,6 @@ public final class SymbolTable {
                     + formatCallSignature(name, argTypes)
                     + "': argument constants fit multiple overloads");
 
-            /*
-             * Return one candidate as fallback so analysis can continue.
-             * The call is already invalid because an error was reported.
-             */
             return matches.get(0);
         }
 
@@ -727,10 +499,6 @@ public final class SymbolTable {
         return overloads != null && !overloads.isEmpty();
     }
 
-    /**
-     * Whether one namespace declares any overload of the given name,
-     * with no fallback to the global namespace.
-     */
     public boolean hasAnyFunctionNamedIn(NamespaceSymbol namespace, String name) {
         List<FunctionSymbol> overloads = namespace == null
                 ? functions.get(name)
@@ -753,23 +521,10 @@ public final class SymbolTable {
         return List.copyOf(out);
     }
 
-    // ============================================================
-    // Name-Clash Warnings
-    // ============================================================
-
-    /**
-     * Returns the names of all declared structs.
-     */
     public Set<String> structNames() {
         return Set.copyOf(structs.keySet());
     }
 
-    /**
-     * Records a non-fatal warning.
-     *
-     * Warnings never fail compilation; the driver prints them after a
-     * successful semantic analysis.
-     */
     public void warning(String msg) {
         diagnostics.warning(msg);
     }
@@ -782,25 +537,8 @@ public final class SymbolTable {
         return diagnostics.hasWarnings();
     }
 
-    /**
-     * Warns when a declared variable or function shares its name with a
-     * declared struct.
-     *
-     * Franko keeps struct names in a separate namespace, so this is legal.
-     * The C++ backend emits kind-prefixed names (VAR_X, FUNC_f_HASH_...,
-     * STRUCT_X), so the generated code is unambiguous, but the shared
-     * source name is usually confusing and worth calling out.
-     *
-     * Called once at the end of program analysis, when struct, variable, and
-     * function names are all registered.
-     */
     public void warnStructNameClashes() {
-        /*
-         * Global space: consider local and parameter names as well as
-         * global-level variable names, preserving the original behavior
-         * for programs without namespaces. Namespace-level variables are
-         * deliberately excluded: they belong to their own namespace.
-         */
+
         Set<String> globalSpaceVariableNames =
                 new HashSet<>(declaredVariableNames);
         globalSpaceVariableNames.addAll(globalNamespaceVariableNames);
@@ -811,11 +549,6 @@ public final class SymbolTable {
                 globalSpaceVariableNames
         );
 
-        /*
-         * Each namespace is a separate space: only that namespace's own
-         * namespace-level variables can clash with its structs. Variables
-         * and structs in other namespaces are unrelated symbols.
-         */
         for (NamespaceSymbol namespace : allNamespaces()) {
             warnStructNameClashesInSpace(
                     namespace.structs,
@@ -824,26 +557,11 @@ public final class SymbolTable {
             );
         }
 
-        /*
-         * A namespace name shares its enclosing scope with that
-         * scope's struct, function, and variable names. This is legal
-         * (Franko namespaces are their own name space), but the shared
-         * name is usually confusing and worth calling out. Reported
-         * names are fully qualified, so a clash with the parent scope
-         * reads as "Namespace 'a::b' shares its name with struct
-         * 'a::b'".
-         */
         for (NamespaceSymbol namespace : allNamespaces()) {
             warnNamespaceNameClash(namespace);
         }
     }
 
-    /**
-     * Warns when a namespace's simple name collides with a struct,
-     * function, or variable name declared in its enclosing scope (the
-     * global namespace for top-level namespaces, the parent namespace
-     * otherwise).
-     */
     private void warnNamespaceNameClash(NamespaceSymbol namespace) {
         Map<String, StructSymbol> scopeStructs;
         Map<String, List<FunctionSymbol>> scopeFunctions;
@@ -861,11 +579,6 @@ public final class SymbolTable {
 
         String simpleName = namespace.simpleName();
 
-        /*
-         * The clash partner's qualified name always equals this
-         * namespace's full path: parent path + "::" + simple name, or
-         * the simple name itself at the top level.
-         */
         String qualifiedClashName = namespace.name;
 
         if (scopeStructs.containsKey(simpleName)) {
@@ -893,10 +606,6 @@ public final class SymbolTable {
         }
     }
 
-    /**
-     * Warns when a struct in one namespace shares its name with a
-     * variable or function declared in that same namespace.
-     */
     private void warnStructNameClashesInSpace(
             Map<String, StructSymbol> spaceStructs,
             Map<String, List<FunctionSymbol>> spaceFunctions,
@@ -994,19 +703,10 @@ public final class SymbolTable {
             return false;
         }
 
-        /*
-         * A null literal argument applies only to pointer parameters.
-         */
         if (arg.type instanceof SemanticNullType) {
             return parameterType instanceof SemanticPtrType;
         }
 
-        /*
-         * Folded integer constants are fluid during call resolution.
-         *
-         * A constant argument may match any primitive integer parameter
-         * whose range can represent the constant value.
-         */
         if (arg.isConstant()
                 && parameterType instanceof SemanticPrimitiveType primitive) {
             return fitsBigIntegerToPrimitive(
@@ -1015,9 +715,6 @@ public final class SymbolTable {
             );
         }
 
-        /*
-         * Nonconstant expressions must match exactly.
-         */
         return sameType(arg.type, parameterType);
     }
 
@@ -1067,11 +764,6 @@ public final class SymbolTable {
             return false;
         }
 
-        /*
-         * SemanticType classes should implement structural equals/hashCode.
-         * The describe() fallback keeps overload resolution useful even if
-         * a future SemanticType subclass forgets to override equality.
-         */
         return a.equals(b) || a.describe().equals(b.describe());
     }
 
@@ -1096,10 +788,6 @@ public final class SymbolTable {
 
         return sb.toString();
     }
-
-    // ============================================================
-    // Diagnostics Delegation
-    // ============================================================
 
     public void error(String msg) {
         diagnostics.error(msg);

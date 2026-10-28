@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        // Defaults
+
         String sourceFile = "test.fr";
         String templateFile = null;
         boolean explicitTemplate = false;
@@ -19,9 +19,6 @@ public class Main {
         boolean verbose = false;
         String targetSpec = null;
 
-        // ------------------------------------------------------------
-        // Parse CLI arguments
-        // ------------------------------------------------------------
         if (args.length > 0) {
             sourceFile = args[0];
         }
@@ -66,17 +63,9 @@ public class Main {
             }
         }
 
-        // ----- Lex / parse -----
         CharStream input = CharStreams.fromFileName(sourceFile, StandardCharsets.UTF_8);
         FrankoLexer lexer = new FrankoLexer(input);
 
-        /*
-         * Lexing must be a hard gate. ANTLR's lexer only prints a "token
-         * recognition error" and then silently skips characters that match no
-         * token rule, which would let programs such as `c = a % b` or
-         * `c = ~a + 1` compile into a different (wrong) program. Collect
-         * every lexer error and reject the program if any occurred.
-         */
         LexErrorCollector lexErrors = new LexErrorCollector();
         lexer.removeErrorListeners();
         lexer.addErrorListener(lexErrors);
@@ -96,7 +85,6 @@ public class Main {
             );
         }
 
-        // ----- Build AST -----
         FrankoASTVisitor visitor = new FrankoASTVisitor();
         ASTNode rawAst = visitor.visit(tree);
         if (verbose) {
@@ -104,11 +92,9 @@ public class Main {
             ASTPrinter.print(rawAst, 0);
         }
 
-        // ----- Resolve imports -----
         ImportResolver importResolver = new ImportResolver(importSearchDir);
         ASTNode ast = importResolver.resolve(rawAst, Path.of(sourceFile));
 
-        // ----- Compilation target -----
         TargetInfo target = targetSpec == null
                 ? TargetInfo.detectHost()
                 : TargetInfo.parse(targetSpec);
@@ -120,13 +106,6 @@ public class Main {
             System.out.println("Target: " + target.canonical());
         }
 
-        /*
-         * Rewrite the os::IS_* placeholder initializers in os.fr to the
-         * target's 0/1 values before desugaring, so the folded
-         * initializers and the emitted C++ globals carry the target.
-         * Only the canonical "franko/os" import activates this; a
-         * user-defined `os` namespace without that import is untouched.
-         */
         if (osModuleImported) {
             OsFfi.applyTargetConstants(ast, target);
         }
@@ -146,7 +125,6 @@ public class Main {
             ASTPrinter.print(ast, 0);
         }
 
-        // ----- Desugar AST -----
         Desugarer desugarer = new Desugarer();
         ast = desugarer.desugar(ast);
         if (desugarer.hasErrors()) {
@@ -157,7 +135,6 @@ public class Main {
             ASTPrinter.print(ast, 0);
         }
 
-        // ----- Semantic analysis -----
         SemanticAnalyzer sema = new SemanticAnalyzer();
 
         if (osModuleImported) {
@@ -170,7 +147,6 @@ public class Main {
             SemanticASTPrinter.print(semaAST, 0);
         }
 
-        // ----- Report non-fatal warnings -----
         if (sema.hasWarnings()) {
             System.out.println("==== Warnings ====");
 
@@ -179,13 +155,11 @@ public class Main {
             }
         }
 
-        // ----- Legality checking -----
         System.out.println("==== Legality Checking ====");
         DiagnosticBag legalityDiagnostics = new DiagnosticBag("Legality checking failed:");
         LegalityChecker legalityChecker = new LegalityChecker(legalityDiagnostics);
         legalityChecker.check(semaAST);
 
-        // ----- Pointer null-state checking -----
         System.out.println("==== Pointer Null-State Checking ====");
         DiagnosticBag pointerStateDiagnostics = new DiagnosticBag("Pointer null-state checking failed:");
         PointerNullStateChecker pointerStateChecker = new PointerNullStateChecker(pointerStateDiagnostics);
@@ -201,7 +175,6 @@ public class Main {
 
         System.out.println("All checks passed.");
 
-        // ----- OS FFI bridge -----
         String osFfiBridgeText = null;
 
         if (osModuleImported) {
@@ -229,21 +202,12 @@ public class Main {
 
             osFfiBridgeText = Files.readString(ffiBridgeFile, StandardCharsets.UTF_8);
 
-            /*
-             * Sanity check, mirroring the entry-point template check below:
-             * every os intrinsic declared in the program must have its
-             * mangled definition present in ffi.cpp. This catches a bridge
-             * that drifted out of sync with os.fr at Franko-compile time
-             * instead of C++ link time.
-             */
             OsFfi.verifyBridge(semaAST, osFfiBridgeText);
         }
 
-        // ----- Generate C++ body -----
         Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText, target);
         String generatedBody = codegen.generate(semaAST);
 
-        // ----- Select template -----
         if (!explicitTemplate) {
             templateFile = switch (sema.entryKind()) {
                 case ARGS -> "ProgramTemplateWithRawCArgs.cpp";
@@ -254,18 +218,12 @@ public class Main {
             };
         }
 
-        // ----- Load template -----
         String template = Files.readString(Path.of(templateFile), StandardCharsets.UTF_8);
 
         if (!template.contains("__FRANKO_PROGRAM__")) {
             throw new RuntimeException("Template does not contain __FRANKO_PROGRAM__ placeholder.");
         }
 
-        /*
-         * Sanity check: the wrapper template must call the mangled name
-         * matching the declared entry-point shape. This catches a
-         * template that drifted out of sync with the mangling rules.
-         */
         if (!explicitTemplate) {
             String expectedEntryCall = switch (sema.entryKind()) {
                 case ARGS -> "FUNC_main_HASH_5708d149";
@@ -283,20 +241,17 @@ public class Main {
             }
         }
 
-        // ----- Inject generated code into template -----
         String finalCpp = template.replace(
             "__FRANKO_PROGRAM__",
             indentBlock(generatedBody, 0).trim()
         );
 
-        // ----- Ensure output directory exists if needed -----
         Path outPath = Path.of(outputFile);
         Path parent = outPath.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
 
-        // ----- Write output file -----
         Files.writeString(outPath, finalCpp, StandardCharsets.UTF_8);
 
         System.out.println("Successfully compiled to C++14: " + outputFile);
@@ -317,14 +272,6 @@ public class Main {
         return sb.toString();
     }
 
-    /**
-     * Collects lexer diagnostics instead of merely printing them.
-     *
-     * ANTLR's lexer reports an unrecognizable character as a "token
-     * recognition error" and then skips it, silently changing the program's
-     * token stream. This listener reformats those errors in the compiler's
-     * diagnostic style so the driver can reject the program.
-     */
     private static final class LexErrorCollector extends BaseErrorListener {
         final List<String> errors = new ArrayList<>();
 
@@ -337,13 +284,7 @@ public class Main {
                 String msg,
                 RecognitionException e
         ) {
-            /*
-             * ANTLR's lexer message has the shape:
-             *
-             *   token recognition error at: '~'
-             *
-             * Extract the offending text between the quotes and reformat it.
-             */
+
             String text = msg;
             String marker = "token recognition error at: '";
             int start = msg.indexOf(marker);

@@ -1,31 +1,5 @@
 import java.math.BigInteger;
 
-/**
- * ============================================================================
- * COMPILATION TARGET (OS + ARCHITECTURE)
- * ============================================================================
- *
- * PURPOSE
- *
- * TargetInfo owns the Java compiler's notion of *which machine the program
- * is being compiled for*. It is the single source of truth behind the
- * `os::IS_*` target constants in `import/franko/os.fr`:
- *
- *   - `IS_LINUX` / `IS_WINDOWS` / `IS_MACOS`
- *   - `IS_X86_64` / `IS_ARM64`
- *
- * The target comes from the `--target <os>-<arch>` CLI flag when given,
- * and falls back to auto-detection from the JVM host
- * (`os.name` / `os.arch`) otherwise.
- *
- * Supported canonical targets:
- *
- *   linux-x86_64, linux-arm64,
- *   windows-x86_64, windows-arm64,
- *   macos-x86_64, macos-arm64
- *
- * Arch aliases `x64`, `amd64`, and `aarch64` are accepted and normalized.
- */
 final class TargetInfo {
 
     static final String OS_LINUX = "linux";
@@ -43,9 +17,6 @@ final class TargetInfo {
         this.arch = arch;
     }
 
-    /**
-     * Canonical target spelling, e.g. "linux-x86_64".
-     */
     String canonical() {
         return os + "-" + arch;
     }
@@ -70,9 +41,6 @@ final class TargetInfo {
         return ARCH_ARM64.equals(arch);
     }
 
-    /**
-     * The 0/1 value of one `os::IS_*` constant name for this target.
-     */
     BigInteger constantFor(String name) {
         return switch (name) {
             case "IS_LINUX" -> isLinux() ? BigInteger.ONE : BigInteger.ZERO;
@@ -86,16 +54,6 @@ final class TargetInfo {
         };
     }
 
-    // ============================================================
-    // Parsing and Host Detection
-    // ============================================================
-
-    /**
-     * Parses a `--target` spec such as "linux-x86_64" or "windows-x64".
-     *
-     * Throws IllegalArgumentException with the supported values on any
-     * malformed or unknown spec.
-     */
     static TargetInfo parse(String spec) {
         String[] parts = spec.split("-", -1);
 
@@ -121,12 +79,6 @@ final class TargetInfo {
         return new TargetInfo(os, arch);
     }
 
-    /**
-     * Detects the compilation target from the JVM host.
-     *
-     * Throws IllegalStateException naming `--target` when the host OS or
-     * architecture is not recognized.
-     */
     static TargetInfo detectHost() {
         String osName = System.getProperty("os.name", "");
         String osArch = System.getProperty("os.arch", "");

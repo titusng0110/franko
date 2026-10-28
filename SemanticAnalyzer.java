@@ -1,114 +1,6 @@
 import java.math.BigInteger;
 import java.util.*;
 
-/**
- * ============================================================================
- * SEMANTIC ANALYZER
- * ============================================================================
- *
- * PURPOSE
- *
- * SemanticAnalyzer performs the first semantic pass over the AST.
- *
- * It converts parser AST nodes into a typed, symbol-resolved semantic AST.
- *
- * ----------------------------------------------------------------------------
- * WHAT THIS PHASE DOES
- * ----------------------------------------------------------------------------
- *
- * This phase is responsible for:
- *
- *   - symbol table construction and scope management,
- *   - variable and function declaration registration,
- *   - function signature registration and lookup,
- *   - function body lowering,
- *   - statement lowering,
- *   - parser TypeNode -> SemanticType mapping,
- *   - delegating expression lowering to ExpressionAnalyzer,
- *   - wiring array intrinsic lowering through ExpressionAnalyzer.
- *
- * It guarantees that:
- *
- *   - declared variables become VariableSymbol objects,
- *   - declared functions become FunctionSymbol objects,
- *   - function parameters are declared as local variables in function scope,
- *   - expressions are lowered into typed SemanticExprNode objects,
- *   - function calls are resolved to FunctionSymbol candidates,
- *   - the resulting tree is structurally suitable for later checkers.
- *
- * ----------------------------------------------------------------------------
- * WHAT THIS PHASE DOES NOT DO
- * ----------------------------------------------------------------------------
- *
- * This phase deliberately does NOT enforce full language correctness.
- *
- * Later semantic checkers are responsible for:
- *
- *   - assignment compatibility,
- *   - operator legality,
- *   - return type correctness,
- *   - missing returns,
- *   - void-returning calls in value contexts,
- *   - array bounds safety,
- *   - dynamic array initialization-before-use,
- *   - static array size positivity/range validity,
- *   - runtime/lifetime rules.
- *
- * ----------------------------------------------------------------------------
- * ARRAY INITIALIZER LISTS
- * ----------------------------------------------------------------------------
- *
- * Array initializer lists are not handled in this phase.
- *
- * They are eliminated by the desugaring phase.
- *
- * Example:
- *
- *   xs = [1, 2, 3];
- *
- * desugars before semantic analysis into:
- *
- *   xs[0] = 1;
- *   xs[1] = 2;
- *   xs[2] = 3;
- *
- * Therefore SemanticAnalyzer should not normally see ArrayLiteralNode.
- * Array behavior from initializer lists is checked later through ordinary
- * assignment and indexing rules.
- *
- * ----------------------------------------------------------------------------
- * COLLABORATORS
- * ----------------------------------------------------------------------------
- *
- * SymbolTable:
- *   - lexical scopes,
- *   - variable symbols,
- *   - function overload tables,
- *   - diagnostics.
- *
- * ExpressionAnalyzer:
- *   - expression lowering,
- *   - variable expression resolution,
- *   - function call overload resolution,
- *   - array intrinsic call lowering,
- *   - constant metadata propagation,
- *   - structural lvalue helpers.
- *
- * ArrayLowerer:
- *   - array intrinsic lowering:
- *       arr(size)
- *       arr.init(...)
- *       arr.init_zero(...)
- *       arr.resize(...)
- *       arr.memset(...)
- *       arr.memcpy(...)
- *       arr.memmove(...)
- *       arr.uninit()
- *
- * ConstExpressionEvaluator:
- *   - integer literal parsing,
- *   - unary/binary constant folding.
- */
 public class SemanticAnalyzer {
 
     public static final class SemanticException extends RuntimeException {
@@ -117,11 +9,6 @@ public class SemanticAnalyzer {
         }
     }
 
-    /**
-     * The entry-point shape declared by the program's global `main`.
-     *
-     * NONE means no valid global `main` was registered.
-     */
     public enum EntryKind {
         NONE,
         NO_ARGS,
@@ -135,30 +22,10 @@ public class SemanticAnalyzer {
 
     private FunctionSymbol currentFunction = null;
 
-    /**
-     * Number of loops enclosing the statement currently being analyzed.
-     *
-     * break/continue validate against this depth, and `break N` resolves
-     * its target loop here.
-     */
     private int loopDepth = 0;
 
-    /*
-     * Compilation target for the os::IS_* target constants, or null when
-     * the program does not import "franko/os".
-     *
-     * The driver sets this only for programs importing the os module, so
-     * a user-defined `os` namespace without that import keeps ordinary
-     * mutable globals.
-     */
     private TargetInfo target = null;
 
-    /**
-     * Sets the compilation target for os::IS_* stamping.
-     *
-     * Call only when the program imports "franko/os" through its
-     * canonical specifier.
-     */
     public void setTarget(TargetInfo target) {
         this.target = target;
     }
@@ -166,11 +33,6 @@ public class SemanticAnalyzer {
     private EntryKind entryKind = EntryKind.NONE;
     private int globalMainCount = 0;
 
-    /**
-     * The entry-point shape declared by the analyzed program.
-     *
-     * The driver uses this to select the C++ program template.
-     */
     public EntryKind entryKind() {
         return entryKind;
     }
@@ -191,12 +53,6 @@ public class SemanticAnalyzer {
         this.exprAnalyzer.setArrayLowerer(arrayLowerer);
     }
 
-    /**
-     * Non-fatal warnings collected during semantic analysis.
-     *
-     * Warnings do not fail compilation; the driver prints them after a
-     * successful analyze() call.
-     */
     public List<String> warnings() {
         return symbolTable.warnings();
     }
@@ -205,13 +61,6 @@ public class SemanticAnalyzer {
         return symbolTable.hasWarnings();
     }
 
-    // ============================================================
-    // Entry Points
-    // ============================================================
-
-    /**
-     * Lowers one raw AST root into a semantic AST root.
-     */
     public SemanticASTNode analyze(ASTNode root) {
         symbolTable.clear();
         symbolTable.pushScope();
@@ -223,11 +72,7 @@ public class SemanticAnalyzer {
         if (root instanceof ProgramNode p) {
             result = analyzeProgram(p);
         } else if (root instanceof FunctionDeclNode fn) {
-            /*
-             * Standalone function analysis is useful for tests.
-             *
-             * Register the signature first so recursive calls can resolve.
-             */
+
             registerFunctionSignature(fn);
             result = analyzeFunctionDecl(fn);
         } else {
@@ -247,11 +92,6 @@ public class SemanticAnalyzer {
         return result;
     }
 
-    /**
-     * Statement-oriented entry point for tests or partial analysis.
-     *
-     * Use analyze(ProgramNode) for full programs containing functions.
-     */
     public List<SemanticStmtNode> analyze(List<ASTNode> nodes) {
         symbolTable.clear();
         symbolTable.pushScope();
@@ -271,19 +111,8 @@ public class SemanticAnalyzer {
         return out;
     }
 
-    // ============================================================
-    // Program / Function Handling
-    // ============================================================
-
-    /**
-     * One namespace path's pending work during program analysis.
-     *
-     * space is null for the global namespace. Multiple declarations of
-     * the same path merge into one instance, so its items list
-     * accumulates across declarations in source order.
-     */
     private static final class NamespaceProgramItems {
-        final NamespaceSymbol space; // null = global namespace
+        final NamespaceSymbol space;
         final List<ASTNode> items = new ArrayList<>();
 
         NamespaceProgramItems(NamespaceSymbol space) {
@@ -292,16 +121,7 @@ public class SemanticAnalyzer {
     }
 
     private SemanticProgramNode analyzeProgram(ProgramNode program) {
-        /*
-         * Global scope currently allows only:
-         *
-         *   - struct declarations,
-         *   - global variable declarations,
-         *   - function declarations,
-         *   - namespace declarations.
-         *
-         * Executable statements at global scope are rejected here.
-         */
+
         for (ASTNode item : program.topLevelItems) {
             if (item instanceof StructDeclNode
                     || item instanceof GlobalVarDeclNode
@@ -315,14 +135,6 @@ public class SemanticAnalyzer {
                     + "': only struct declarations, global variable declarations, function declarations, and namespace declarations are allowed at global scope");
         }
 
-        /*
-         * Collect the global namespace and one item list per declared
-         * namespace path. Multiple declarations of the same path merge
-         * into one space, in first-declaration order. Nested namespace
-         * declarations are flattened here: each nested path gets its
-         * own entry keyed by full path, so later phases only ever see
-         * top-level paths.
-         */
         List<NamespaceProgramItems> spaces = new ArrayList<>();
         Map<String, NamespaceProgramItems> spacesByName = new LinkedHashMap<>();
 
@@ -338,32 +150,13 @@ public class SemanticAnalyzer {
             globalSpace.items.add(item);
         }
 
-        /*
-         * Global const initializers are folded in phase 3 and kept in this
-         * map so phase 5 can attach them to the lowered SemanticVarDeclNode
-         * without folding twice. Keys are raw nodes, which are unique
-         * across all namespaces.
-         */
         Map<GlobalVarDeclNode, VariableSymbol> globalSymbols =
                 new IdentityHashMap<>();
         Map<GlobalVarDeclNode, BigInteger> globalInitializers =
                 new IdentityHashMap<>();
 
-        /*
-         * Lowered semantic items by raw node, filled in phase 5. Keys are
-         * unique across all namespaces, so one map serves the whole
-         * program.
-         */
         Map<ASTNode, SemanticASTNode> loweredByNode = new IdentityHashMap<>();
 
-        /*
-         * Phase 1:
-         * Register struct names, in every namespace.
-         *
-         * A placeholder StructSymbol is registered first so struct field
-         * types can reference the struct itself (e.g. ptr<Node> next).
-         * Fields are resolved into the same symbol in phase 2.
-         */
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
 
@@ -376,16 +169,6 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * Phase 2:
-         * Resolve struct field types and fold field defaults, in every
-         * namespace.
-         *
-         * Fields are appended in declaration order. The struct symbol was
-         * registered in phase 1, so field types may reference the struct
-         * itself, any struct declared earlier in the same namespace, and
-         * any struct in the global namespace.
-         */
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
 
@@ -432,14 +215,6 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * Phase 2b:
-         * Register method signatures, in every namespace.
-         *
-         * Struct names (phase 1) are registered, so `ptr<X> self`
-         * resolves. Fields (phase 2) are resolved first so
-         * method/field name clashes can be detected at registration.
-         */
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
 
@@ -460,14 +235,6 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * Phase 3:
-         * Register all global variables, in every namespace, before
-         * function bodies are analyzed.
-         *
-         * This allows functions to reference globals declared later in
-         * source and in other namespaces.
-         */
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
 
@@ -484,12 +251,6 @@ public class SemanticAnalyzer {
                         type
                 );
 
-                /*
-                 * Stamp the os::IS_* compile-time target constants so
-                 * every reference folds into an integer literal during
-                 * expression lowering. A non-byte declaration is an os.fr
-                 * drift error, mirroring the intrinsic signature checks.
-                 */
                 if (target != null
                         && OsFfi.isTargetConstantName(
                                 currentNamespaceName(), n.name)) {
@@ -519,14 +280,6 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * Phase 4:
-         * Register all function signatures, in every namespace, before
-         * analyzing any body.
-         *
-         * This enables forward references, recursion, and mutual recursion
-         * across namespaces.
-         */
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
 
@@ -537,10 +290,6 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * Phase 5:
-         * Lower all valid top-level items, in every namespace.
-         */
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
 
@@ -576,11 +325,6 @@ public class SemanticAnalyzer {
                 if (item instanceof GlobalVarDeclNode n) {
                     VariableSymbol sym = globalSymbols.get(n);
 
-                    /*
-                     * Null usually means registration failed due to a
-                     * duplicate declaration. The diagnostic has already been
-                     * recorded.
-                     */
                     if (sym != null) {
                         loweredByNode.put(item, new SemanticVarDeclNode(
                                 sym,
@@ -603,13 +347,6 @@ public class SemanticAnalyzer {
 
         symbolTable.setCurrentNamespace(null);
 
-        /*
-         * Assemble the semantic program in source order. A namespace's
-         * merged items are emitted at the position of its first
-         * declaration; later declarations of the same path only
-         * contributed items. Nested paths are emitted right after
-         * their outermost declared ancestor.
-         */
         List<SemanticASTNode> semanticItems = new ArrayList<>();
         Set<String> emittedNamespaces = new LinkedHashSet<>();
 
@@ -634,12 +371,6 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * Safety net: every collected path is introduced by some
-         * top-level declaration, so the loop above emits all of them.
-         * Emit any leftovers in discovery order rather than dropping
-         * them silently.
-         */
         for (NamespaceProgramItems space : spaces) {
             if (space.space == null) {
                 continue;
@@ -653,16 +384,8 @@ public class SemanticAnalyzer {
             }
         }
 
-        /*
-         * All struct, variable, and function names are registered at this
-         * point, so cross-namespace name clashes can be detected in one pass.
-         */
         symbolTable.warnStructNameClashes();
 
-        /*
-         * A program without a global entry-point function has nothing
-         * for the template wrapper to call.
-         */
         if (globalMainCount == 0) {
             symbolTable.error(
                     "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t'"
@@ -672,16 +395,6 @@ public class SemanticAnalyzer {
         return new SemanticProgramNode(semanticItems);
     }
 
-    /**
-     * Collects one namespace declaration (and any namespaces nested
-     * inside it) into the merged per-path item lists.
-     *
-     * parentPath is null for top-level declarations. A path header
-     * ("a::b") is only valid at the top level; a nested declaration
-     * must use a single name, and its full path is the enclosing path
-     * plus that name. A nested path header is rejected here and its
-     * items are skipped.
-     */
     private void collectNamespaceDecl(
             NamespaceNode node,
             String parentPath,
@@ -727,12 +440,6 @@ public class SemanticAnalyzer {
         }
     }
 
-    /**
-     * Emits the merged node for one declared namespace path, followed
-     * by any not-yet-emitted nested paths below it, in
-     * first-discovery order. Merged declarations of the same path
-     * emit once, at the first declaration's position.
-     */
     private void emitNamespacePath(
             String path,
             List<NamespaceProgramItems> spaces,
@@ -770,10 +477,6 @@ public class SemanticAnalyzer {
         }
     }
 
-    /**
-     * Lowers one namespace's items in the order they were declared,
-     * across every declaration that contributed to the namespace.
-     */
     private List<SemanticASTNode> loweredItemsOf(
             NamespaceProgramItems space,
             Map<ASTNode, SemanticASTNode> loweredByNode
@@ -791,30 +494,14 @@ public class SemanticAnalyzer {
         return out;
     }
 
-    /**
-     * The name of the namespace currently being analyzed, or null for
-     * the global namespace.
-     */
     private String currentNamespaceName() {
         NamespaceSymbol space = symbolTable.currentNamespace();
 
         return space == null ? null : space.name;
     }
 
-    /**
-     * Registers only a function's signature.
-     *
-     * Function identity is:
-     *
-     *   name + ordered parameter types
-     *
-     * Return type and parameter names are not part of overload identity.
-     */
     private void registerFunctionSignature(FunctionDeclNode fn) {
-        /*
-         * The entry-point function must live in the global namespace: the
-         * template wrapper calls the global mangled `main` directly.
-         */
+
         if ("main".equals(fn.name) && currentNamespaceName() != null) {
             symbolTable.error("The entry-point function 'main' must be declared in the global namespace, not in namespace '"
                     + currentNamespaceName()
@@ -848,19 +535,6 @@ public class SemanticAnalyzer {
                 false
         );
 
-        /*
-         * The entry-point function keeps a mangled C++ name like every
-         * other function; the generated C++ entry point is a small
-         * wrapper in the program template that calls it. Two shapes are
-         * legal in the global namespace:
-         *
-         *   func main() -> int32_t
-         *   func main(ptr<array<array<byte>>> <name>) -> int32_t
-         *
-         * The parameter name of the args form is free. Any other shape
-         * cannot be called by a template wrapper, and overloading main
-         * is forbidden (C++ forbids overloading main).
-         */
         if ("main".equals(fn.name) && currentNamespaceName() == null) {
             boolean returnsInt32 = symbol.returnType() instanceof SemanticPrimitiveType prim
                     && prim.kind == SemanticPrimitiveKind.INT32;
@@ -887,13 +561,6 @@ public class SemanticAnalyzer {
         symbolTable.declareFunction(fn, symbol);
     }
 
-    /**
-     * Whether a type is the entry-point args parameter type:
-     * `ptr<array<array<byte>>>`.
-     *
-     * `byte` lexes as `uint8_t`, so the check is structural on
-     * UINT8. The parameter name is free and plays no role.
-     */
     private static boolean isArgsArrayParamType(SemanticType type) {
         if (!(type instanceof SemanticPtrType ptr)) {
             return false;
@@ -911,12 +578,6 @@ public class SemanticAnalyzer {
                 && prim.kind == SemanticPrimitiveKind.UINT8;
     }
 
-    /**
-     * Registers only a method's signature on its owning struct.
-     *
-     * The first parameter must be literally `ptr<X> self` for the
-     * enclosing struct X. Only the first parameter may be named `self`.
-     */
     private void registerMethodSignature(
             StructSymbol owner,
             FunctionDeclNode methodNode
@@ -999,13 +660,7 @@ public class SemanticAnalyzer {
         FunctionSymbol symbol = symbolTable.findRegisteredFunction(fn);
 
         if (symbol == null) {
-            /*
-             * Signature registration can fail, usually because this function
-             * duplicates an existing overload.
-             *
-             * Still build a fallback symbol with the real parameters so the
-             * body can be analyzed and more diagnostics can be collected.
-             */
+
             List<ParameterSymbol> fallbackParams = new ArrayList<>();
 
             for (int i = 0; i < fn.parameters.size(); i++) {
@@ -1034,12 +689,6 @@ public class SemanticAnalyzer {
 
         List<VariableSymbol> parameterVariables = new ArrayList<>();
 
-        /*
-         * Parameters are ordinary variables inside the function body.
-         *
-         * ParameterSymbol extends VariableSymbol, so each parameter is declared
-         * directly into the function's initial local scope.
-         */
         for (ParameterSymbol param : symbol.parameters) {
             symbolTable.declare(param);
             parameterVariables.add(param);
@@ -1073,13 +722,7 @@ public class SemanticAnalyzer {
         MethodSymbol symbol = symbolTable.findRegisteredMethod(owner, methodNode);
 
         if (symbol == null) {
-            /*
-             * Signature registration can fail, usually because this method
-             * duplicates an existing overload or conflicts with a field.
-             *
-             * Still build a fallback symbol with the real parameters so the
-             * body can be analyzed and more diagnostics can be collected.
-             */
+
             List<ParameterSymbol> fallbackParams = new ArrayList<>();
 
             for (int i = 0; i < methodNode.parameters.size(); i++) {
@@ -1138,23 +781,6 @@ public class SemanticAnalyzer {
         );
     }
 
-    // ============================================================
-    // Statement List Lowering
-    // ============================================================
-
-    /**
-     * Appends one lowered semantic statement into a statement list.
-     *
-     * Most statements lower to one semantic statement.
-     *
-     * VarDeclInitNode may lower to:
-     *
-     *   SemanticVarDeclNode
-     *   SemanticAssignNode
-     *
-     * This method is defensive. In the normal pipeline, most declaration
-     * initializer sugar is already removed by the desugarer.
-     */
     private void appendAnalyzedStmt(
             ASTNode stmt,
             List<SemanticStmtNode> out
@@ -1174,10 +800,6 @@ public class SemanticAnalyzer {
             out.add(lowered);
         }
     }
-
-    // ============================================================
-    // Statements
-    // ============================================================
 
     private SemanticStmtNode analyzeStmt(ASTNode node) {
         if (node == null) {
@@ -1199,13 +821,7 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof VarDeclInitNode n) {
-            /*
-             * Defensive fallback for declaration initializer sugar that reaches
-             * a single-statement position.
-             *
-             * If multiple semantic statements are produced, wrap them in a
-             * semantic block to preserve statement structure.
-             */
+
             symbolTable.pushScope();
             List<SemanticStmtNode> stmts = analyzeVarDeclInitStmtList(n);
             symbolTable.popScope();
@@ -1214,10 +830,7 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof VarDeclNode n) {
-            /*
-             * Global declarations are pre-registered by analyzeProgram.
-             * Local declarations are declared here.
-             */
+
             VariableSymbol registered =
                     symbolTable.findRegisteredVarDeclSymbol(n);
 
@@ -1343,31 +956,10 @@ public class SemanticAnalyzer {
         return null;
     }
 
-    // ============================================================
-    // Declaration Initializers
-    // ============================================================
-
     private List<SemanticStmtNode> analyzeVarDeclInitStmtList(
             VarDeclInitNode n
     ) {
-        /*
-         * Defensive fallback.
-         *
-         * In the normal pipeline, declaration initializer sugar should already
-         * be removed by Desugarer.
-         *
-         * This method handles remaining:
-         *
-         *   T x = expr;
-         *
-         * as:
-         *
-         *   SemanticVarDeclNode(x)
-         *   SemanticAssignNode(x, expr)
-         *
-         * ArrayLiteralNode should not reach this point because array
-         * initializer lists are desugared into indexed assignments earlier.
-         */
+
         SemanticType type = analyzeNormalType(n.type);
 
         VariableSymbol sym = new VariableSymbol(
@@ -1423,15 +1015,6 @@ public class SemanticAnalyzer {
         );
     }
 
-    /**
-     * Analyzes `break` / `break N`.
-     *
-     * Validates that the break is inside a loop and that its level N (when
-     * present) is a positive constant integer expression that does not
-     * exceed the enclosing loop depth.
-     *
-     * A plain `break` is equivalent to `break 1`.
-     */
     private SemanticStmtNode analyzeBreakStmt(BreakNode n) {
         if (loopDepth == 0) {
             symbolTable.error("break statement outside of a loop");
@@ -1452,7 +1035,6 @@ public class SemanticAnalyzer {
                 return null;
             }
 
-            // Fall through to the generic non-constant diagnostic below.
         }
 
         if (level == null) {
@@ -1478,10 +1060,6 @@ public class SemanticAnalyzer {
 
         return new SemanticBreakNode(level.intValue());
     }
-
-    // ============================================================
-    // Type Mapping
-    // ============================================================
 
     private SemanticType analyzeNormalType(TypeNode node) {
         if (node == null) {
@@ -1512,21 +1090,7 @@ public class SemanticAnalyzer {
         }
 
         if (node instanceof StaticArrayTypeNode s) {
-            /*
-             * Static array size expressions arrive pre-evaluated: the
-             * desugarer folds every size into a canonical decimal
-             * literal, so this only reads the value.
-             *
-             * Legality is checked later:
-             *
-             *   - positivity,
-             *   - uint32_t range,
-             *   - other static-size rules.
-             *
-             * A surviving InferredSizeNode means the desugarer missed a `?`
-             * (defensive: inference or the misplaced-`?` diagnostic should
-             * have handled it first).
-             */
+
             if (s.sizeExpr instanceof InferredSizeNode) {
                 symbolTable.error("'?' array size is only allowed in a declaration with an array-literal or string-literal initializer");
                 return FALLBACK_TYPE;
@@ -1574,18 +1138,6 @@ public class SemanticAnalyzer {
         return analyzeNormalType(node);
     }
 
-    /**
-     * Resolves a struct type reference to its StructSymbol.
-     *
-     * Unqualified names use the namespace chain: the namespace currently
-     * being analyzed first, then the global namespace. (Enclosing
-     * namespaces are not searched.)
-     *
-     * Qualified names resolve strictly inside the named namespace path,
-     * starting from the top level: all but the last segment must name
-     * a declared namespace path, and the last segment names a struct
-     * declared in it.
-     */
     private StructSymbol resolveStructTypeSymbol(StructTypeNode s) {
         if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
             StructSymbol structSymbol = symbolTable.resolveStruct(s.name);

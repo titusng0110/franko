@@ -1,69 +1,6 @@
 import java.math.BigInteger;
 import java.util.*;
 
-/**
- * ============================================================================
- * EXPRESSION ANALYZER
- * ============================================================================
- *
- * PURPOSE
- *
- * ExpressionAnalyzer lowers parser expression AST nodes into
- * SemanticExprNode trees.
- *
- * ----------------------------------------------------------------------------
- * WHAT THIS PHASE DOES
- * ----------------------------------------------------------------------------
- *
- * This phase is responsible for:
- *
- *   - resolving variable references to VariableSymbol,
- *   - resolving function calls to FunctionSymbol overloads,
- *   - resolving array intrinsic calls,
- *   - inferring expression result types,
- *   - attaching constant folding metadata (BigInteger),
- *   - lowering structural constructs:
- *       - array indexing
- *       - unary and binary operations
- *       - pointer-of and dereference
- *   - validating structural requirements for lvalues where needed.
- *
- * ----------------------------------------------------------------------------
- * WHAT THIS PHASE DOES NOT DO
- * ----------------------------------------------------------------------------
- *
- * This phase intentionally does NOT validate:
- *
- *   - assignment compatibility,
- *   - operator type legality,
- *   - function argument correctness,
- *   - return type correctness,
- *   - bounds safety,
- *   - dynamic array initialization correctness,
- *   - delete legality,
- *   - full constant expression legality.
- *
- * These are handled by later checkers.
- *
- * ----------------------------------------------------------------------------
- * IMPORTANT: ARRAY INITIALIZER LISTS
- * ----------------------------------------------------------------------------
- *
- * Array initializer lists MUST NOT reach this phase.
- *
- * They are eliminated by the desugarer into indexed assignments:
- *
- *     xs = [1,2,3]
- *
- * becomes:
- *
- *     xs[0] = 1
- *     xs[1] = 2
- *     xs[2] = 3
- *
- * Encountering ArrayLiteralNode here indicates a compiler pipeline bug.
- *
- */
 public final class ExpressionAnalyzer {
 
     private final SymbolTable ctx;
@@ -101,10 +38,6 @@ public final class ExpressionAnalyzer {
     public void setArrayLowerer(ArrayLowerer arrayLowerer) {
         this.arrayLowerer = Objects.requireNonNull(arrayLowerer);
     }
-
-    // ============================================================
-    // Public Expression Lowering API
-    // ============================================================
 
     public SemanticExprNode analyzeExpr(ASTNode node) {
         if (node instanceof IntNode n) {
@@ -297,19 +230,10 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            /*
-             * Same-type casts are no-ops: return the operand unchanged so
-             * no cast node (and no redundant C++ cast) is emitted.
-             */
             if (sourcePrimitive.kind == targetKind) {
                 return expr;
             }
 
-            /*
-             * Constants keep their folded value through the cast so the
-             * later checker can validate the value against the target
-             * range exactly like any other constant in a typed context.
-             */
             return new SemanticCastExprNode(
                     targetType,
                     expr.constantValue,
@@ -347,19 +271,6 @@ public final class ExpressionAnalyzer {
         );
     }
 
-    // ============================================================
-    // Const Expression Helpers
-    // ============================================================
-
-    /**
-     * Reads a pre-evaluated constant slot.
-     *
-     * Constant-expression slots (static array sizes, global
-     * initializers, struct field defaults) are evaluated by the
-     * desugarer into canonical IntNode literals before semantic
-     * analysis. This only parses the literal; validation (positivity,
-     * range, fit) stays in later checkers.
-     */
     public BigInteger preEvaluatedConstValue(
             ASTNode expr,
             String roleDescription
@@ -376,10 +287,6 @@ public final class ExpressionAnalyzer {
         ctx.error("Invalid constant expression for " + roleDescription);
         return BigInteger.ZERO;
     }
-
-    // ============================================================
-    // LValue Requirements
-    // ============================================================
 
     public SemanticExprNode analyzeRequiredLValueExpr(
             ASTNode node,
@@ -448,21 +355,6 @@ public final class ExpressionAnalyzer {
         return expr.isLValue();
     }
 
-    // ============================================================
-    // Call Lowering
-    // ============================================================
-
-    /**
-     * Lowers a qualified variable reference:
-     *
-     *   util::offset
-     *   a::b::limit
-     *
-     * The reference resolves strictly inside the named namespace path,
-     * starting from the top level; there is no fallback to the global
-     * namespace and no relative resolution through the current
-     * namespace.
-     */
     private SemanticExprNode analyzeQualifiedNameExpr(QualifiedNameNode q) {
         List<String> namespaceSegments =
                 q.segments.subList(0, q.segments.size() - 1);
@@ -498,14 +390,6 @@ public final class ExpressionAnalyzer {
             sym = new GlobalVariableSymbol(namespace.name, name, FALLBACK_TYPE);
         }
 
-        /*
-         * The os::IS_* compile-time target constants fold into integer
-         * literals here. Downstream this means conditions like
-         * `os::IS_WINDOWS == 1` carry a constant value (so the backend
-         * can prune the dead branch), and uses that would mutate or
-         * observe the global (assignment, getptr) are rejected by the
-         * existing literal checks with no special-casing.
-         */
         if (sym instanceof GlobalVariableSymbol global
                 && global.compileTimeConstantValue != null) {
             return new SemanticIntLiteralNode(
@@ -527,12 +411,6 @@ public final class ExpressionAnalyzer {
                 return intrinsic;
             }
 
-            /*
-             * A clear diagnostic was already reported while attempting to lower
-             * this call as an array intrinsic. Stop here instead of falling
-             * through to ordinary overload resolution, which would emit a
-             * second, misleading "no matching overload" error.
-             */
             if (arrayLowerer.shouldSuppressCallDiagnostic(call)) {
                 return new SemanticIntLiteralNode(
                         FALLBACK_TYPE,
@@ -594,11 +472,6 @@ public final class ExpressionAnalyzer {
                 argTypes.add(loweredArg.type);
             }
 
-            /*
-             * All but the last segment must name a declared namespace
-             * path, resolved from the top level; the last segment is
-             * the called function.
-             */
             List<String> namespaceSegments = calleeQ.segments.subList(
                     0, calleeQ.segments.size() - 1);
             String calleeName =
@@ -669,18 +542,6 @@ public final class ExpressionAnalyzer {
         );
     }
 
-    /**
-     * Lowers a struct method call:
-     *
-     *   receiver.name(args...)
-     *
-     * into an ordinary function call to the resolved MethodSymbol with a
-     * synthesized `getptr(receiver)` first argument for `self`.
-     *
-     * The receiver must be a struct-valued storage-backed lvalue
-     * (a variable, field, array element, or $(...) chain). Pointer
-     * receivers require an explicit deref: `$(p).method(...)`.
-     */
     private SemanticExprNode analyzeMethodCallExpr(
             CallNode call,
             MemberAccessNode mac
@@ -773,10 +634,6 @@ public final class ExpressionAnalyzer {
         );
     }
 
-    // ============================================================
-    // Type Helpers
-    // ============================================================
-
     private SemanticType inferBinaryResultType(
             String op,
             SemanticExprNode left,
@@ -811,10 +668,6 @@ public final class ExpressionAnalyzer {
         ctx.error("Indexed expression is not an array");
         return FALLBACK_TYPE;
     }
-
-    // ============================================================
-    // Formatting
-    // ============================================================
 
     private String formatCallSignature(
             String name,

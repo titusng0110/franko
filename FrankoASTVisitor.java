@@ -4,19 +4,8 @@ import java.util.List;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-// ================= VISITOR =================
-
 public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
-    // ============================================================
-    // Helpers
-    // ============================================================
-
-    /**
-     * Left-folds a binary-expression rule whose parse tree shape is:
-     *
-     *   operand (op operand)*
-     */
     private ASTNode foldSimpleBinaryRule(ParserRuleContext ctx) {
         ASTNode current = visit(ctx.getChild(0));
 
@@ -29,13 +18,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    /**
-     * Left-folds shiftExpr for grammar:
-     *
-     *   shiftExpr
-     *       : additiveExpr ((LT LT | GT GT) additiveExpr)*
-     *       ;
-     */
     private ASTNode foldShiftExpr(FrankoParser.ShiftExprContext ctx) {
         ASTNode current = visit(ctx.additiveExpr(0));
 
@@ -68,13 +50,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    /**
-     * Left-folds constShiftExpr for grammar:
-     *
-     *   constShiftExpr
-     *       : constAdditiveExpr ((LT LT | GT GT) constAdditiveExpr)*
-     *       ;
-     */
     private ASTNode foldConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
         ASTNode current = visit(ctx.constAdditiveExpr(0));
 
@@ -163,10 +138,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    // ============================================================
-    // Program / top-level items
-    // ============================================================
-
     @Override
     public ASTNode visitProgram(FrankoParser.ProgramContext ctx) {
         List<ASTNode> topLevelItems = new ArrayList<>();
@@ -206,19 +177,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         throw new RuntimeException("Unknown topLevelItem: " + ctx.getText());
     }
 
-    // ============================================================
-    // Namespaces
-    // ============================================================
-
     @Override
     public ASTNode visitNamespaceDecl(FrankoParser.NamespaceDeclContext ctx) {
-        /*
-         * The header may be a single name ("util") or a path
-         * ("a::b"). Nested-block declarations always carry a single
-         * name; the semantic analyzer prefixes it with the enclosing
-         * path. The raw name is stored joined; path interpretation
-         * happens during program collection.
-         */
+
         List<String> segments = new ArrayList<>();
 
         for (TerminalNode identifier : ctx.IDENTIFIER()) {
@@ -260,16 +221,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         throw new RuntimeException("Unknown namespaceItem: " + ctx.getText());
     }
 
-    // ============================================================
-    // Qualified names
-    // ============================================================
-
-    /**
-     * Builds the ordered segment list of a qualified name:
-     *
-     *   util::Point    -> ["util", "Point"]
-     *   a::b::c        -> ["a", "b", "c"]
-     */
     private List<String> qualifiedNameSegments(FrankoParser.QualifiedNameContext ctx) {
         List<String> segments = new ArrayList<>();
 
@@ -284,10 +235,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitQualifiedStructType(FrankoParser.QualifiedStructTypeContext ctx) {
         List<String> segments = qualifiedNameSegments(ctx.qualifiedName());
 
-        /*
-         * The last segment is the struct name; everything before it names
-         * the namespace it lives in.
-         */
         List<String> namespaceSegments =
                 new ArrayList<>(segments.subList(0, segments.size() - 1));
 
@@ -296,28 +243,15 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return new StructTypeNode(namespaceSegments, name);
     }
 
-    // ============================================================
-    // Imports
-    // ============================================================
-
     @Override
     public ASTNode visitImportDecl(FrankoParser.ImportDeclContext ctx) {
         String rawText = ctx.STRING_LITERAL().getText();
 
-        /*
-         * rawText still carries the surrounding quotes. Strip them and
-         * decode Franko's supported escape sequences so the resolver
-         * works with the actual path text.
-         */
         String rawContent = rawText.substring(1, rawText.length() - 1);
         String decoded = StringLiteralDecoder.decodeRawContent(rawContent);
 
         return new ImportNode(decoded);
     }
-
-    // ============================================================
-    // Struct / global declarations
-    // ============================================================
 
     @Override
     public ASTNode visitStructDecl(FrankoParser.StructDeclContext ctx) {
@@ -367,10 +301,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return new GlobalVarDeclNode(type, name, constInitializer);
     }
 
-    // ============================================================
-    // Function declarations
-    // ============================================================
-
     @Override
     public ASTNode visitFunctionDecl(FrankoParser.FunctionDeclContext ctx) {
         String name = ctx.IDENTIFIER().getText();
@@ -415,10 +345,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         throw new RuntimeException("Unknown returnType: " + ctx.getText());
     }
-
-    // ============================================================
-    // Statements
-    // ============================================================
 
     @Override
     public ASTNode visitSimpleStatement(FrankoParser.SimpleStatementContext ctx) {
@@ -619,10 +545,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return new ExprStmtNode(visit(ctx.expr()));
     }
 
-    // ============================================================
-    // Types
-    // ============================================================
-
     @Override
     public ASTNode visitInt8Type(FrankoParser.Int8TypeContext ctx) {
         return new PrimitiveTypeNode(PrimitiveKind.INT8);
@@ -698,10 +620,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return new StructTypeNode(List.of(), ctx.IDENTIFIER().getText());
     }
 
-    // ============================================================
-    // Declarations
-    // ============================================================
-
     @Override
     public ASTNode visitVarDecl(FrankoParser.VarDeclContext ctx) {
         TypeNode type = (TypeNode) visit(ctx.type());
@@ -745,10 +663,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         throw new RuntimeException("Unknown declInitializer: " + ctx.getText());
     }
 
-    // ============================================================
-    // Lvalues
-    // ============================================================
-
     @Override
     public ASTNode visitLvalue(FrankoParser.LvalueContext ctx) {
         ASTNode base = visit(ctx.lvalueAtom());
@@ -781,10 +695,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         throw new RuntimeException("Unknown lvalueAtom: " + ctx.getText());
     }
-
-    // ============================================================
-    // Expressions
-    // ============================================================
 
     @Override
     public ASTNode visitExpr(FrankoParser.ExprContext ctx) {
@@ -855,20 +765,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitPostfixExprOnly(FrankoParser.PostfixExprOnlyContext ctx) {
         return visit(ctx.postfixExpr());
     }
-
-    // ============================================================
-    // Constant expressions
-    // ============================================================
-    //
-    // These use the same AST expression nodes as normal expressions:
-    //
-    //   IntNode
-    //   UnaryOpNode
-    //   BinOpNode
-    //
-    // The grammar has already restricted constExpr so it cannot contain
-    // identifiers, calls, indexing, member access, getptr, deref, etc.
-    // The semantic checker should still fold and validate the expression.
 
     @Override
     public ASTNode visitConstExpr(FrankoParser.ConstExprContext ctx) {
@@ -955,10 +851,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         throw new RuntimeException("Unknown constPrimary: " + ctx.getText());
     }
 
-    // ============================================================
-    // Array literals
-    // ============================================================
-
     @Override
     public ASTNode visitArrayLiteral(FrankoParser.ArrayLiteralContext ctx) {
         List<ASTNode> elements = new ArrayList<>();
@@ -985,10 +877,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         throw new RuntimeException("Unknown arrayLiteralElement: " + ctx.getText());
     }
-
-    // ============================================================
-    // Postfix / call / member / index
-    // ============================================================
 
     @Override
     public ASTNode visitPostfixExpr(FrankoParser.PostfixExprContext ctx) {

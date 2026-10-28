@@ -6,62 +6,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * ============================================================================
- * POINTER NULL-STATE CHECKER
- * ============================================================================
- *
- * PURPOSE:
- * PointerNullStateChecker validates Franko pointer rules over the fully
- * lowered, legality-checked Semantic AST.
- *
- * It tracks one fact per pointer-typed variable: whether the variable is
- * definitely null, definitely pointing, or possibly null on the current
- * execution path.
- *
- * Rules checked:
- *
- *   - null is only valid for pointer types; integer 0 is not null,
- *   - pointer declarations are guaranteed null-initialized,
- *   - dereferencing a NULL pointer variable is an error,
- *   - dereferencing a MAYBE_NULL pointer variable is a warning,
- *   - only getptr(...) certifies an pointer variable as POINTING; an
- *     assignment from another pointer variable copies that variable's exact
- *     state, so POINTING propagates only through certified sources,
- *   - pointer state is tracked path-sensitively up to MAX_BRANCH_DEPTH,
- *     with guard refinement for 'p == null' and 'p != null' conditions,
- *   - at function entry every tracked pointer variable is MAYBE_NULL;
- *     declarations and assignments refine it.
- *
- * This checker is intentionally intra-procedural.
- */
 public final class PointerNullStateChecker {
     private static final int MAX_BRANCH_DEPTH = 10;
 
-    /*
-     * Pointer-state matrix for pointer-typed variables.
-     *
-     * POINTING:
-     *   The variable is certified to hold a real storage pointer on the
-     *   current path.
-     *
-     *   The only expression that certifies POINTING is getptr(...).
-     *   Assignment from another variable copies that variable's state, so
-     *   POINTING propagates only transitively through certified sources.
-     *
-     * NULL:
-     *   The variable is definitely null on the current path. Pointer
-     *   declarations are guaranteed null-initialized, so a fresh
-     *   declaration starts here.
-     *
-     * MAYBE_NULL:
-     *   The variable may be null on the current path. This is the entry
-     *   state for function parameters, globals, and values of unknown
-     *   provenance (call results, member/array reads).
-     *
-     * In all three states, dereferencing a NULL or MAYBE_NULL variable is
-     * invalid.
-     */
     private enum PointerState {
         POINTING,
         NULL,
@@ -70,54 +17,20 @@ public final class PointerNullStateChecker {
 
     private final DiagnosticBag diagnostics;
 
-    /*
-     * Symbol indexing.
-     *
-     * The checker uses arrays for active state and snapshots. A small
-     * identity map is used only to translate a VariableSymbol identity into a
-     * stable array index.
-     */
     private final IdentityHashMap<VariableSymbol, Integer> pointerIndexBySymbol =
             new IdentityHashMap<>();
 
     private VariableSymbol[] pointerSymbols = new VariableSymbol[0];
     private int pointerCount = 0;
 
-    /*
-     * Active pointer state.
-     *
-     * pointerState[i] is the pointer state for pointerSymbols[i].
-     */
     private PointerState[] pointerState = new PointerState[0];
 
-    /*
-     * Preallocated snapshot storage.
-     *
-     * pointerSnapshots[k] is a full copy of pointerState at some control-flow
-     * point. Snapshot capacity is estimated from the number of if/else
-     * structures, nested branch depth, loops, and functions.
-     */
     private PointerState[][] pointerSnapshots = new PointerState[0][];
 
     private int snapshotCount = 0;
 
     private int branchDepth = 0;
 
-    /*
-     * Enclosing-loop context for break/continue.
-     *
-     * Each frame records the snapshot slots of the abrupt jump targets
-     * inside that loop:
-     *
-     *   - breakStates:   states at `break` points (jump past the loop,
-     *                    skipping the epilogue),
-     *   - continueStates: states at `continue` points (jump to the loop's
-     *                    continue label, running the epilogue next).
-     *
-     * break N targets the frame N levels up (levels are 1-based; the
-     * innermost loop is the last frame). continue always targets the
-     * innermost frame.
-     */
     private static final class LoopFrame {
         final List<Integer> breakStates = new ArrayList<>();
         final List<Integer> continueStates = new ArrayList<>();
@@ -125,25 +38,8 @@ public final class PointerNullStateChecker {
 
     private final List<LoopFrame> loopStack = new ArrayList<>();
 
-    /*
-     * Suppresses null-deref diagnostics while checking code that cannot
-     * execute:
-     *
-     *   - bodies of statically infeasible guard paths, where the guard's
-     *     assertion contradicts a definite current state.
-     */
     private boolean suppressNullDerefChecks = false;
 
-    /*
-     * Pointer variables that have already produced a maybe-null deref
-     * warning.
-     *
-     * Path-sensitive exploration revisits the same deref site once per path
-     * through ancestor branches, and desugared array initializers duplicate
-     * a single source-level deref into one deref node per element. To keep
-     * the warning volume bounded and useful, each pointer variable warns at
-     * most once per check.
-     */
     private final Set<VariableSymbol> warnedMaybeNullVars =
             Collections.newSetFromMap(new IdentityHashMap<>());
 
@@ -171,10 +67,6 @@ public final class PointerNullStateChecker {
             );
         }
     }
-
-    // ============================================================
-    // Analysis Preparation
-    // ============================================================
 
     private void prepareAnalysis(SemanticASTNode root) {
         pointerIndexBySymbol.clear();
@@ -376,16 +268,6 @@ public final class PointerNullStateChecker {
         pointerCount++;
     }
 
-    /*
-     * Resolves a SemanticExprNode to the pointer-matrix index of the plain
-     * pointer-typed variable it denotes.
-     *
-     * Only plain variable expressions with an pointer type are tracked.
-     * Other shapes (array elements, struct fields, deref chains, call
-     * results) are not tracked.
-     *
-     * Returns the pointer-matrix index, or -1 when not trackable.
-     */
     private int pointerIndexOf(SemanticExprNode expr) {
         if (!(expr instanceof SemanticVarExprNode n)) {
             return -1;
@@ -405,9 +287,6 @@ public final class PointerNullStateChecker {
         return index == null ? -1 : index;
     }
 
-    /*
-     * Human-readable name for diagnostics about an pointer expression.
-     */
     private String varNameOf(SemanticExprNode expr) {
         if (expr instanceof SemanticVarExprNode n
                 && n.symbol != null) {
@@ -417,10 +296,6 @@ public final class PointerNullStateChecker {
         return "<expression>";
     }
 
-    /*
-     * Resolves the tracked variable symbol denoted by an pointer expression,
-     * or null when the expression is not a plain variable.
-     */
     private VariableSymbol symbolOf(SemanticExprNode expr) {
         if (expr instanceof SemanticVarExprNode n) {
             return n.symbol;
@@ -429,25 +304,6 @@ public final class PointerNullStateChecker {
         return null;
     }
 
-    /*
-     * Computes the pointer state a variable takes when assigned the given
-     * value expression.
-     *
-     *   null literal         -> NULL      (definitely null)
-     *   getptr(...)         -> POINTING  (the only certification of a
-     *                                         real storage pointer)
-     *   pointer variable     -> copy that variable's exact state:
-     *
-     *                             ptr<int> b = null;
-     *                             ptr<int> a = b;   a: NULL, not MAYBE_NULL
-     *
-     *                         A variable only becomes POINTING when it was
-     *                         itself certified, directly by getptr or
-     *                         transitively through certified variables.
-     *
-     *   anything else        -> MAYBE_NULL (unknown provenance: call results,
-     *                          parameters, member/array reads, deref chains)
-     */
     private PointerState pointerStateOfValue(SemanticExprNode value) {
         if (value instanceof SemanticNullLiteralNode) {
             return PointerState.NULL;
@@ -466,24 +322,6 @@ public final class PointerNullStateChecker {
         return PointerState.MAYBE_NULL;
     }
 
-    /*
-     * Estimate snapshot demand from control-flow shape.
-     *
-     * if/else:
-     *   - before snapshot
-     *   - thenState snapshot
-     *   - optional elseState snapshot
-     *
-     * while:
-     *   - before snapshot
-     *   - afterOneIteration snapshot
-     *
-     * function:
-     *   - beforeFunction snapshot
-     *
-     * The estimate is intentionally conservative and capped by
-     * MAX_BRANCH_DEPTH for path-sensitive if analysis.
-     */
     private int estimateSnapshotDemand(
             SemanticASTNode node,
             int depth
@@ -549,10 +387,7 @@ public final class PointerNullStateChecker {
         }
 
         if (node instanceof SemanticWhileNode n) {
-            /*
-             * 2: before-loop and after-one-iteration snapshots. Each
-             * break/continue point additionally captures one snapshot.
-             */
+
             int total = 2 + estimateSnapshotDemand(n.body, depth);
 
             for (SemanticStmtNode updateStmt : n.update) {
@@ -569,10 +404,6 @@ public final class PointerNullStateChecker {
 
         return 0;
     }
-
-    // ============================================================
-    // Top-Level Dispatch
-    // ============================================================
 
     private boolean checkNode(SemanticASTNode node) {
         if (node == null) {
@@ -621,19 +452,6 @@ public final class PointerNullStateChecker {
     private void checkFunction(SemanticFunctionDeclNode node) {
         int beforeFunction = snapshot();
 
-        /*
-         * At function entry every pointer state is unknown: parameters carry
-         * caller values, globals may have been modified by earlier calls.
-         * Local declarations set their own state (NULL for pointer
-         * declarations).
-         *
-         * Exception: a method's `self` parameter is synthesized by the
-         * compiler as getptr(receiver) over a storage-backed lvalue, so
-         * it is definitionally pointing at entry. Seed it as POINTING so
-         * dereferencing `self` without a redundant null guard does not
-         * warn. Later assignments (e.g. `self = other`, `self = null`)
-         * flow normally through assignment propagation.
-         */
         Arrays.fill(pointerState, PointerState.MAYBE_NULL);
 
         if (node.symbol instanceof MethodSymbol method
@@ -649,14 +467,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        /*
-         * Exception: the global entry-point `main` in its args form
-         * receives `ptr<array<array<byte>>>` from the template wrapper,
-         * which always passes a live pointer. Seed it as POINTING so
-         * dereferencing the args parameter without a redundant null
-         * guard does not warn. Later assignments flow normally through
-         * assignment propagation.
-         */
         if (!(node.symbol instanceof MethodSymbol)
                 && "main".equals(node.symbol.name)
                 && node.symbol.namespace == null
@@ -674,10 +484,6 @@ public final class PointerNullStateChecker {
 
         restore(beforeFunction);
     }
-
-    // ============================================================
-    // Statement Checking
-    // ============================================================
 
     private boolean checkStmt(SemanticStmtNode node) {
         if (node == null) {
@@ -697,19 +503,6 @@ public final class PointerNullStateChecker {
             checkExpr(n.target);
             checkExpr(n.value);
 
-            /*
-             * Pointer null-state propagation.
-             *
-             *   p = null;            -> NULL      (definitely null)
-             *   p = getptr(x);      -> POINTING  (the only certification)
-             *   p = q;               -> copy q's exact state
-             *   p = <anything else>; -> MAYBE_NULL (unknown provenance)
-             *
-             * Compound assignment never targets an pointer variable (the
-             * arithmetic operand rules reject pointer operands), so state
-             * changes only through plain `=`. A compound target that is an
-             * pointer is already an error; no state is rewritten for it.
-             */
             int targetIndex = pointerIndexOf(n.target);
 
             if (targetIndex >= 0 && !n.isCompound()) {
@@ -779,11 +572,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        /*
-         * Pointer variables declared in this block leave scope at block exit.
-         * Reset them to MAYBE_NULL so later code cannot inherit their
-         * refined state.
-         */
         for (int i = 0; i < blockPointerCount; i++) {
             pointerState[blockPointerIndices[i]] = PointerState.MAYBE_NULL;
         }
@@ -796,17 +584,6 @@ public final class PointerNullStateChecker {
             return;
         }
 
-        /*
-         * Pointer declarations are guaranteed null-initialized: the
-         * generated C++ null-initializes the storage, so the variable holds
-         * null until an explicit assignment (getptr(...), a certified
-         * variable, or null) refines it.
-         *
-         *   ptr<T> p;             -> p is definitely NULL
-         *
-         * An explicit initializer lowers to a separate assignment statement,
-         * which then refines this state.
-         */
         int pointerIndex = pointerIndexOfSymbol(node.symbol);
 
         if (pointerIndex >= 0) {
@@ -859,15 +636,7 @@ public final class PointerNullStateChecker {
 
             elseState = elseFeasible ? snapshot() : -1;
         } else if (elseFeasible) {
-            /*
-             * With no else branch, the continuing path is the guard-failing
-             * path. Capture its refined state so the merge below sees the
-             * guard's else-path implications for pointer variables.
-             *
-             * When the guard-failing path is infeasible (the guard is
-             * statically true), no fall-through snapshot is contributed, so
-             * only the then-branch state flows onward.
-             */
+
             refinePointerStatesFromGuard(node.condition, false);
             fallthroughState = snapshot();
         }
@@ -891,13 +660,6 @@ public final class PointerNullStateChecker {
                 && (elseReturns || !elseFeasible);
     }
 
-    /**
-     * Fallback when branch nesting exceeds MAX_BRANCH_DEPTH.
-     *
-     * This remains conservative but stops deeper path splitting. It checks both
-     * branches and merges their continuing effects. No guard refinement is
-     * applied at the depth cap.
-     */
     private boolean checkIfPathInsensitive(SemanticIfNode node) {
         int before = snapshot();
 
@@ -929,17 +691,6 @@ public final class PointerNullStateChecker {
         return node.elseBranch != null && thenReturns && elseReturns;
     }
 
-    /*
-     * Reports whether a guard path is feasible for tracked pointer variables.
-     *
-     * The guard-holding path of 'p == null' asserts that p is NULL, and the
-     * guard-failing path asserts that p is POINTING ('p != null' swaps the
-     * two). When the asserted state contradicts the variable's definite
-     * current state, that path cannot execute at runtime.
-     *
-     * Returns false only for such statically infeasible paths; every other
-     * condition shape is treated as feasible.
-     */
     private boolean guardPathFeasible(
             SemanticExprNode condition,
             boolean guardHolds
@@ -980,31 +731,6 @@ public final class PointerNullStateChecker {
                 || current == asserted;
     }
 
-    /*
-     * Applies guard refinement for a condition of the form:
-     *
-     *   p == null   /   null == p
-     *   p != null   /   null != p
-     *
-     * where p is a tracked pointer variable.
-     *
-     * On the path where the guard holds, the asserted state is:
-     *
-     *   p == null holds  ->  p is NULL
-     *   p != null holds  ->  p is POINTING
-     *
-     * and on the path where the guard fails, the opposite state is asserted.
-     *
-     * Refinement intersects the asserted state with the variable's current
-     * state. When the assertion conflicts with a definite current state the
-     * path is infeasible and the current state is kept, which prevents the
-     * infeasible path from polluting later merges:
-     *
-     *   p = getptr(x);        p: POINTING
-     *   if (p != null) { }     then-path: POINTING (matches)
-     *                          else-path: infeasible, stays POINTING
-     *   $(p);              still POINTING, no error
-     */
     private void refinePointerStatesFromGuard(
             SemanticExprNode condition,
             boolean guardHolds
@@ -1051,11 +777,6 @@ public final class PointerNullStateChecker {
 
         int before = snapshot();
 
-        /*
-         * Loop-condition guard feasibility: when the guard is statically
-         * false for every tracked variable (for example `while (p != null)`
-         * with p definitely null), the body never executes.
-         */
         boolean bodyFeasible = guardPathFeasible(node.condition, true);
 
         LoopFrame frame = new LoopFrame();
@@ -1065,35 +786,18 @@ public final class PointerNullStateChecker {
         int afterBody = -1;
 
         if (bodyFeasible) {
-            /*
-             * Loop-condition guard refinement: inside the body the condition
-             * holds, so `p != null` certifies p as POINTING for the body.
-             */
+
             refinePointerStatesFromGuard(node.condition, true);
 
             bodyTerminates = checkStmt(node.body);
             afterBody = snapshot();
         } else {
-            /*
-             * The body never executes. Check it once with null-deref
-             * diagnostics suppressed so unrelated errors still surface, then
-             * discard its state effects.
-             */
+
             suppressNullDerefChecks = true;
             checkStmt(node.body);
             suppressNullDerefChecks = false;
         }
 
-        /*
-         * Back-edge states: every state from which control re-tests the
-         * loop condition.
-         *
-         *   - the body (and epilogue) fell through,
-         *   - each continue point (which jumps to just before the
-         *     epilogue, so the epilogue runs next).
-         *
-         * Break states are NOT back-edge states: they jump past the loop.
-         */
         List<Integer> backEdgeStates = new ArrayList<>();
 
         if (bodyFeasible) {
@@ -1113,11 +817,6 @@ public final class PointerNullStateChecker {
                     }
                 }
 
-                /*
-                 * A continue jumps to the continue label placed just before
-                 * the epilogue, so the epilogue runs on every continue path
-                 * as well. Re-run it from each captured continue state.
-                 */
                 for (int continueState : frame.continueStates) {
                     restore(continueState);
 
@@ -1142,10 +841,7 @@ public final class PointerNullStateChecker {
                 backEdgeStates.addAll(frame.continueStates);
             }
         } else {
-            /*
-             * The body never executes, so neither does the epilogue.
-             * Check it once with diagnostics suppressed.
-             */
+
             suppressNullDerefChecks = true;
 
             for (SemanticStmtNode updateStmt : node.update) {
@@ -1157,15 +853,6 @@ public final class PointerNullStateChecker {
 
         loopStack.remove(loopStack.size() - 1);
 
-        /*
-         * A while loop may execute zero times. Therefore the state after the
-         * loop is a merge of:
-         *
-         *   - before loop,
-         *   - every state that flows around the back edge.
-         *
-         * We do not attempt to prove loop termination.
-         */
         restore(before);
 
         if (bodyFeasible && !backEdgeStates.isEmpty()) {
@@ -1173,15 +860,7 @@ public final class PointerNullStateChecker {
         }
 
         if (!bodyFeasible || !bodyTerminates || !backEdgeStates.isEmpty()) {
-            /*
-             * Continuing code runs only when the condition failed, so the
-             * guard-failing refinement holds after the loop for every path
-             * that re-tested the condition. For `while (p != null)`, this
-             * proves p is null on loop exit.
-             *
-             * Break paths do NOT re-test the condition, so their states are
-             * merged in AFTER this refinement.
-             */
+
             refinePointerStatesFromGuard(node.condition, false);
         }
 
@@ -1194,15 +873,9 @@ public final class PointerNullStateChecker {
         return false;
     }
 
-    /*
-     * Records the current state as the target of a break/continue jump.
-     *
-     * levels is 1-based: `break` / `break 1` / continue target the
-     * innermost enclosing loop, `break 2` the one outside it, and so on.
-     */
     private void recordJumpState(int levels, boolean isContinue) {
         if (loopStack.isEmpty()) {
-            /* Rejected earlier by semantic analysis; defensive no-op. */
+
             return;
         }
 
@@ -1223,10 +896,6 @@ public final class PointerNullStateChecker {
         }
     }
 
-    /*
-     * Merges the given iteration-end states with the before-loop state
-     * into the current state (the loop-exit merge).
-     */
     private void mergeLoopStates(int before, List<Integer> iterationStates) {
         for (int i = 0; i < pointerCount; i++) {
             PointerState merged =
@@ -1248,9 +917,6 @@ public final class PointerNullStateChecker {
         }
     }
 
-    /*
-     * Merges the given break-exit states into the current state.
-     */
     private void mergeStateIntoCurrent(int slot) {
         for (int i = 0; i < pointerCount; i++) {
             pointerState[i] = mergePointerStateValue(
@@ -1259,10 +925,6 @@ public final class PointerNullStateChecker {
             );
         }
     }
-
-    // ============================================================
-    // Expression Checking
-    // ============================================================
 
     private void checkExpr(SemanticExprNode expr) {
         if (expr == null) {
@@ -1318,13 +980,7 @@ public final class PointerNullStateChecker {
         }
 
         if (expr instanceof SemanticDerefNode n) {
-            /*
-             * Null dereference checking: a deref of an pointer variable in
-             * the NULL or MAYBE_NULL state is an error.
-             *
-             * Suppressed while checking code that cannot execute; see the
-             * field comment on suppressNullDerefChecks.
-             */
+
             if (!suppressNullDerefChecks) {
                 int targetIndex = pointerIndexOf(n.expr);
 
@@ -1337,15 +993,7 @@ public final class PointerNullStateChecker {
                                 + varName
                                 + "'");
                     } else if (current == PointerState.MAYBE_NULL) {
-                        /*
-                         * A maybe-null dereference is a warning, not an
-                         * error. It means the variable is null on some
-                         * continuing path, which is not statically provable
-                         * to be the executing path.
-                         *
-                         * Each variable warns at most once per check; see
-                         * the field comment on warnedMaybeNullVars.
-                         */
+
                         VariableSymbol targetSymbol =
                                 symbolOf(n.expr);
 
@@ -1366,10 +1014,6 @@ public final class PointerNullStateChecker {
             checkExpr(n.expr);
         }
     }
-
-    // ============================================================
-    // State Helpers
-    // ============================================================
 
     private int snapshot() {
         ensureSnapshotCapacity();

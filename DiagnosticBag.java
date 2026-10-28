@@ -1,22 +1,6 @@
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * ============================================================================
- * DIAGNOSTIC BAG
- * Error Accumulation and Formatting
- * ============================================================================
- *
- * PURPOSE:
- * DiagnosticBag is a small reusable diagnostics container used by compiler
- * phases that want to collect multiple errors and report them together.
- *
- * It also accumulates non-fatal warnings. Warnings never fail a phase; they
- * are surfaced separately by the driver.
- *
- * It intentionally does not know anything about symbols, scopes, AST nodes,
- * semantic types, or checker state.
- */
 public final class DiagnosticBag {
 
     private final List<String> errors = new ArrayList<>();

@@ -3,113 +3,6 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * ============================================================================
- * TYPE CHECKER
- * ============================================================================
- *
- * PURPOSE:
- * TypeChecker provides reusable Franko type-system predicates and validation
- * helpers for the MasterChecker sub-checkers.
- *
- * This class does not traverse the AST by itself. Instead, StatementChecker,
- * ExpressionChecker, FunctionChecker, and DeclarationChecker call into
- * TypeChecker whenever they need to answer questions such as:
- *
- *   - are these two SemanticType objects exactly the same type?
- *   - is this type void?
- *   - is this type an integer primitive?
- *   - is this type an unsigned integer primitive?
- *   - is this type an array?
- *   - is this type an pointer?
- *   - can this BigInteger constant fit into a target primitive type?
- *   - is this assignment type-compatible?
- *   - is this type valid as a function return type?
- *   - are these operands legal for arithmetic, bitwise, logical, comparison,
- *     or shift operators?
- *
- * ----------------------------------------------------------------------------
- * VOID RULE
- * ----------------------------------------------------------------------------
- *
- * void is not an ordinary value type.
- *
- * It is valid only where Franko explicitly permits it, currently:
- *
- *   - function return types.
- *
- * It is not valid for:
- *
- *   - variables,
- *   - array element types,
- *   - pointer referenced types,
- *   - assignment values,
- *   - ordinary expression value contexts.
- *
- * ----------------------------------------------------------------------------
- * FUNCTION RETURN TYPE RULE
- * ----------------------------------------------------------------------------
- *
- * A function return type must be either:
- *
- *   - void,
- *   - a primitive integer type,
- *   - an pointer type ptr<T>.
- *
- * Array types cannot be returned directly because arrays are not assignable in
- * Franko. Functions that need to expose arrays should return:
- *
- *   ptr<array<T>>
- *   ptr<array<T, N>>
- *
- * ----------------------------------------------------------------------------
- * IMPORTANT: FLUID INTEGER CONSTANTS
- * ----------------------------------------------------------------------------
- *
- * Franko integer literals and folded constant integer expressions are fluid.
- *
- * The SemanticAnalyzer stores integer literal values as BigInteger constants
- * and gives literal nodes a fallback SemanticType, typically int32_t. That
- * fallback type is useful for keeping the Semantic AST fully decorated, but it
- * is not treated as a binding source-language type when the expression is a
- * constant.
- *
- * Instead, during checking:
- *
- *   - a constant expression is checked by its BigInteger value;
- *   - when a constant appears next to a nonconstant typed integer expression,
- *     the constant must fit the other side's concrete type;
- *   - when a constant is assigned to a primitive integer target, it must fit
- *     that target type;
- *   - when both operands are constants, the expression may remain a BigInteger
- *     constant until a later contextual check, such as assignment, array size,
- *     intrinsic argument checking, return checking, or call argument checking.
- *
- * ----------------------------------------------------------------------------
- * POINTER RULES
- * ----------------------------------------------------------------------------
- *
- * Franko pointers are strongly typed ptr<T> values.
- *
- * They are:
- *
- *   - assignable,
- *   - copyable,
- *   - dereferenceable,
- *   - comparable with compatible pointer types.
- *
- * They are not integer arithmetic values.
- *
- * Therefore:
- *
- *   - ptr<T> assignment requires exactly ptr<T> on the RHS;
- *   - raw integer constants cannot be assigned to pointer variables;
- *   - pointer comparisons require identical ptr<T> types;
- *   - arithmetic, bitwise, and shift operators reject pointers because
- *     pointers are not integral types.
- *
- * ============================================================================
- */
 public class TypeChecker {
     private final DiagnosticBag diagnostics;
 
@@ -117,45 +10,17 @@ public class TypeChecker {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
-    // ============================================================
-    // Type Equality / Type Structure
-    // ============================================================
-
-    /**
-     * Returns true if two Franko semantic types are exactly the same type.
-     *
-     * Notes:
-     *
-     *   - void equals void;
-     *   - primitive types must have the same primitive kind;
-     *   - dynamic arrays must have the same element type;
-     *   - static arrays must have the same element type and numerically equal
-     *     size literals;
-     *   - pointer types must reference the same type;
-     *   - function types must have equal parameter types and return type.
-     */
     public boolean sameType(SemanticType a, SemanticType b) {
         if (a == null || b == null) {
             return false;
         }
 
-        /*
-         * Every SemanticType subclass implements structural equals/hashCode,
-         * and SemanticStaticArrayType compares its size numerically after
-         * unfolding the constant size expression. equals is therefore the
-         * single source of truth for type equality, keeping overload
-         * resolution, assignment checking, and diagnostics consistent.
-         */
         return a.equals(b);
     }
 
     public String describeSafe(SemanticType type) {
         return type == null ? "<null>" : type.describe();
     }
-
-    // ============================================================
-    // Type Classification
-    // ============================================================
 
     public boolean isVoidType(SemanticType t) {
         return t instanceof SemanticVoidType;
@@ -196,23 +61,6 @@ public class TypeChecker {
         return t instanceof SemanticNullType;
     }
 
-    /**
-     * Returns true if a value of this type can participate in ordinary Franko
-     * assignment with '='.
-     *
-     * Current assignable value types:
-     *
-     *   - primitive integer types;
-     *   - pointer types;
-     *   - struct types whose fields are all assignable value types.
-     *
-     * Non-assignable:
-     *
-     *   - void;
-     *   - dynamic arrays;
-     *   - static arrays;
-     *   - function types.
-     */
     public boolean isAssignableValueType(SemanticType t) {
         return isAssignableValueType(t, new HashSet<>());
     }
@@ -235,12 +83,6 @@ public class TypeChecker {
                 return false;
             }
 
-            /*
-             * The visited set is path-scoped: entries are removed once their
-             * subtree is checked. This keeps diamond-shaped field graphs (the
-             * same struct appearing as two sibling fields) assignable while
-             * still terminating on by-value cycles.
-             */
             boolean assignable = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
@@ -258,16 +100,6 @@ public class TypeChecker {
         return false;
     }
 
-    /**
-     * Valid function return types are:
-     *
-     *   - void;
-     *   - primitive integer types;
-     *   - pointer types;
-     *   - struct types whose fields are all assignable value types.
-     *
-     * Array return types are invalid because arrays are not assignable.
-     */
     public boolean isValidFunctionReturnType(SemanticType t) {
         return isVoidType(t) || isAssignableValueType(t);
     }
@@ -291,10 +123,6 @@ public class TypeChecker {
     public SemanticType referencedTypeOfPointer(SemanticType type) {
         return type instanceof SemanticPtrType a ? a.referencedType : null;
     }
-
-    // ============================================================
-    // Basic Ensure Helpers
-    // ============================================================
 
     public void ensureNotVoid(SemanticType t, String message) {
         if (isVoidType(t)) {
@@ -381,39 +209,6 @@ public class TypeChecker {
                 + describeSafe(type));
     }
 
-    // ============================================================
-    // Assignment Compatibility
-    // ============================================================
-
-    /**
-     * Checks Franko assignment legality.
-     *
-     * Rules:
-     *
-     *   1. void cannot participate in assignment.
-     *
-     *   2. Arrays are not directly assignable.
-     *
-     *      array<int> a;
-     *      array<int> b;
-     *      a = b;           invalid
-     *
-     *      Array operations must use array intrinsics such as init, memcpy,
-     *      memset, or uninit.
-     *
-     *   3. Primitive integer targets accept:
-     *
-     *      - nonconstant expressions of exactly the same primitive type;
-     *      - constant BigInteger expressions if the value fits the target type.
-     *
-     *      Moving between integer widths is never implicit: use the
-     *      explicit cast&lt;T&gt;(expr) intrinsic.
-     *
-     *   4. Pointer targets require exact same pointer type.
-     *
-     *   5. Other types require exact type equality unless Franko later defines
-     *      special conversion rules.
-     */
     public void ensureAssignable(
             SemanticType targetType,
             SemanticExprNode expr,
@@ -434,15 +229,6 @@ public class TypeChecker {
             return;
         }
 
-        /*
-         * null is only valid for pointer targets.
-         *
-         *   ptr<int32_t> p;
-         *   p = null;            valid
-         *
-         *   int32_t x;
-         *   x = null;            invalid: 0 is not null
-         */
         if (expr.type instanceof SemanticNullType) {
             if (!(targetType instanceof SemanticPtrType)) {
                 diagnostics.error(message
@@ -509,31 +295,6 @@ public class TypeChecker {
         }
     }
 
-    // ============================================================
-    // Operator Helpers: Arithmetic / Bitwise
-    // ============================================================
-
-    /**
-     * Checks arithmetic and bitwise operand compatibility.
-     *
-     * Applies to:
-     *
-     *   + - * / % & | ^
-     *
-     * and, with the compound operator text ("+=", "/=", "%=", ...), to the
-     * compound assignment forms in StatementChecker.
-     *
-     * Franko rules:
-     *
-     *   - both operands must be integer expressions;
-     *   - arrays, pointers, and void are rejected because they are not
-     *     integral;
-     *   - if both operands are nonconstant, their types must be exactly equal;
-     *   - if exactly one operand is constant, that constant must fit the other
-     *     operand's concrete integer type;
-     *   - if both operands are constants, allow the expression for now because
-     *     the folded BigInteger result is checked later in a contextual position.
-     */
     public void ensureSameIntegralTypeOrFit(
             SemanticExprNode left,
             SemanticExprNode right,
@@ -576,30 +337,6 @@ public class TypeChecker {
         }
     }
 
-    // ============================================================
-    // Operator Helpers: Logical / Comparison Integer Side
-    // ============================================================
-
-    /**
-     * Checks integer operands for operators that allow mixed integer types.
-     *
-     * Applies to the integer side of:
-     *
-     *   && ||
-     *   == != < > <= >=
-     *
-     * Franko rules:
-     *
-     *   - operands must be integer expressions;
-     *   - mixed nonconstant integer types are allowed;
-     *   - if one operand is a constant and the other is nonconstant, the
-     *     constant must fit the nonconstant side's concrete integer type;
-     *   - if both operands are constants, allow the expression for now;
-     *   - if both operands are nonconstant, no same-type requirement applies.
-     *
-     * Pointer comparisons are handled separately in ExpressionChecker before
-     * this helper is called.
-     */
     public void ensureMixedIntegralOperandsWithConstantFit(
             SemanticExprNode left,
             SemanticExprNode right,
@@ -646,26 +383,6 @@ public class TypeChecker {
         return isIntegral(left.type) && isIntegral(right.type);
     }
 
-    // ============================================================
-    // Operator Helpers: Shift
-    // ============================================================
-
-    /**
-     * Checks Franko shift operator operands.
-     *
-     * Applies to:
-     *
-     *   << >>
-     *
-     * Rules:
-     *
-     *   - left operand must be an integer expression;
-     *   - right operand must be an integer expression;
-     *   - nonconstant right operand must be unsigned integer type;
-     *   - constant right operand must be nonnegative;
-     *   - constant right operand must fit the unsigned variant of the left
-     *     operand's primitive type.
-     */
     public void ensureValidShiftOperands(
             SemanticExprNode left,
             SemanticExprNode right,
@@ -675,13 +392,6 @@ public class TypeChecker {
             return;
         }
 
-        /*
-         * If the left side is itself a constant, validate it against its current
-         * semantic type. Today that is usually the analyzer's fallback int32_t.
-         *
-         * Pure constant expressions can still be contextually checked later by
-         * assignment or another enclosing operation.
-         */
         if (left.isConstant()) {
             requireConstantFitsType(
                     left.constantValue,
@@ -741,10 +451,6 @@ public class TypeChecker {
             case INT64, UINT64 -> SemanticPrimitiveKind.INT64;
         };
     }
-
-    // ============================================================
-    // Constant Fit Helpers
-    // ============================================================
 
     public void requireConstantFitsType(
             BigInteger value,
@@ -822,32 +528,6 @@ public class TypeChecker {
         };
     }
 
-    /**
-     * One-way integer widening: true when every value of the source type is
-     * representable in the target type.
-     *
-     * This is the shared predicate behind cast&lt;T&gt; code selection:
-     * ExpressionAnalyzer uses it to decide whether a cast compiles to a
-     * plain static_cast (true) or a runtime-checked franko_safe_cast
-     * (false). It is static so analysis phases without a TypeChecker
-     * instance can use it.
-     *
-     * Allowed:
-     *
-     *   - strictly wider, same signedness:
-     *     uint8_t -> uint16_t -> uint32_t -> uint64_t,
-     *     int8_t -> int16_t -> int32_t -> int64_t;
-     *   - unsigned to signed of strictly greater width:
-     *     uint8_t -> int16_t, uint16_t -> int32_t, uint32_t -> int64_t.
-     *
-     * Rejected (same-width, narrowing, or signed-to-unsigned):
-     *
-     *   uint8_t -> int8_t, int32_t -> uint32_t, int32_t -> uint64_t,
-     *   uint64_t -> int64_t, any narrowing.
-     *
-     * Same-kind pairs return false here; exact equality is handled by
-     * sameType at the call site.
-     */
     public static boolean isValuePreservingIntegerWidening(
             SemanticPrimitiveKind from,
             SemanticPrimitiveKind to
@@ -871,22 +551,6 @@ public class TypeChecker {
         return !isSigned(kind);
     }
 
-    // ============================================================
-    // Memset / Memcpy Element Constraints
-    // ============================================================
-
-    /**
-     * Returns true if values of this type can be safely used as elements of an
-     * array that is memset.
-     *
-     * Current conservative rule:
-     *
-     *   - primitive integer elements are memsetable;
-     *   - static arrays are memsetable if their element type is memsetable;
-     *   - dynamic arrays are not memsetable as element values;
-     *   - pointers are not memsetable;
-     *   - void is not memsetable.
-     */
     public boolean isMemsetable(SemanticType t) {
         return isMemsetable(t, new HashSet<>());
     }
@@ -905,10 +569,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStructType struct) {
-            /*
-             * Path-scoped visited set: diamonds stay memsetable, by-value
-             * cycles terminate as false instead of recursing forever.
-             */
+
             if (!visited.add(t)) {
                 return false;
             }
@@ -930,17 +591,6 @@ public class TypeChecker {
         return false;
     }
 
-    /**
-     * Returns true if values of this type can be copied byte-for-byte by memcpy.
-     *
-     * Current conservative rule:
-     *
-     *   - primitive integer elements are memcpyable;
-     *   - static arrays are memcpyable if their element type is memcpyable;
-     *   - dynamic arrays are not memcpyable as element values;
-     *   - pointers are memcpyable;
-     *   - void is not memcpyable.
-     */
     public boolean isMemcpyable(SemanticType t) {
         return isMemcpyable(t, new HashSet<>());
     }
@@ -960,10 +610,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStructType struct) {
-            /*
-             * Path-scoped visited set: diamonds stay memcpyable, by-value
-             * cycles terminate as false instead of recursing forever.
-             */
+
             if (!visited.add(t)) {
                 return false;
             }
@@ -984,10 +631,6 @@ public class TypeChecker {
 
         return false;
     }
-
-    // ============================================================
-    // Array Size / Literal Utilities
-    // ============================================================
 
     public BigInteger parseIntegerLiteral(String val) {
         if (val == null) {

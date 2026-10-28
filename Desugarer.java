@@ -24,13 +24,6 @@ public class Desugarer {
         return diagnostics.formatErrors();
     }
 
-    /**
-     * Internal control-flow signal for `?` size inference failures.
-     *
-     * The message is reported as a desugaring diagnostic; the declaration
-     * falls back to a placeholder size so the pipeline can continue
-     * without cascading internal errors.
-     */
     private static final class InferenceFailure extends RuntimeException {
         InferenceFailure(String message) {
             super(message);
@@ -48,29 +41,6 @@ public class Desugarer {
         return desugarStmt(root);
     }
 
-    // ============================================================
-    // String-literal initializer handling
-    // ============================================================
-
-    /**
-     * Converts initializer-like values before ordinary assignment/declaration
-     * lowering.
-     *
-     * String literals lower to ArrayLiteralNode of UTF-8 byte values.
-     *
-     * Example:
-     *
-     *   "a\nb"
-     *
-     * becomes:
-     *
-     *   [97, 10, 98]
-     *
-     * No null terminator is appended.
-     *
-     * The returned ArrayLiteralNode is then handled by the existing
-     * array-initializer lowering in this same desugarer pass.
-     */
     private ASTNode desugarInitializerValue(ASTNode value) {
         if (value == null) return null;
 
@@ -83,23 +53,6 @@ public class Desugarer {
         return value;
     }
 
-    // ============================================================
-    // Top-level handling
-    // ============================================================
-
-    /**
-     * Desugars a list of top-level items.
-     *
-     * Top-level items may be:
-     *   - FunctionDeclNode
-     *   - statements
-     *
-     * Statement-level declaration sugar can still expand into multiple
-     * top-level statements.
-     *
-     * Function declarations themselves do not expand, but their bodies
-     * are recursively desugared.
-     */
     private List<ASTNode> desugarTopLevelItemList(List<ASTNode> items) {
         List<ASTNode> out = new ArrayList<>();
 
@@ -110,27 +63,9 @@ public class Desugarer {
         return out;
     }
 
-    /**
-     * Appends a desugared top-level item into the output list.
-     *
-     * Function declarations remain one top-level item.
-     * Struct declarations remain one top-level item with desugared field
-     * types; field const initializers are left untouched.
-     *
-     * Global variable declarations remain one top-level item with a desugared
-     * type; the const initializer is left untouched and must never be
-     * rewritten into assignment statements.
-     *
-     * Top-level statement sugar may expand into multiple statements.
-     */
     private void appendDesugaredTopLevelItem(ASTNode item, List<ASTNode> out) {
         if (item == null) return;
 
-        /*
-         * Import directives are consumed by the ImportResolver before
-         * desugaring. Reaching this point means the resolver was skipped
-         * or failed to splice a file.
-         */
         if (item instanceof ImportNode) {
             throw new RuntimeException(
                 "Internal desugarer error: unresolved ImportNode '"
@@ -162,13 +97,6 @@ public class Desugarer {
         appendDesugaredStmt(item, out);
     }
 
-    /**
-     * Desugars a namespace declaration.
-     *
-     * The namespace name (single or path form) is untouched; its items
-     * are desugared with the same top-level handling as ordinary
-     * program items, recursing into nested namespace declarations.
-     */
     private NamespaceNode desugarNamespaceDecl(NamespaceNode n) {
         return new NamespaceNode(n.name, desugarTopLevelItemList(n.items));
     }
@@ -240,71 +168,6 @@ public class Desugarer {
         );
     }
 
-    // ============================================================
-    // Statement-list handling
-    // ============================================================
-
-    /**
-     * Desugars a list of statements, flattening declaration and initializer
-     * sugar into core statements.
-     *
-     * Ordinary declaration initializer:
-     *
-     *   int32_t x = 1;
-     *
-     * becomes:
-     *
-     *   int32_t x;
-     *   x = 1;
-     *
-     * Dynamic array init declaration sugar:
-     *
-     *   array<int32_t> arr(20);
-     *
-     * becomes:
-     *
-     *   array<int32_t> arr;
-     *   arr(20);
-     *
-     * Array initializer-list declaration sugar:
-     *
-     *   array<int32_t, 3> xs = [1, 2, 3];
-     *
-     * becomes:
-     *
-     *   array<int32_t, 3> xs;
-     *   xs[0] = 1;
-     *   xs[1] = 2;
-     *   xs[2] = 3;
-     *
-     * String literal declaration sugar:
-     *
-     *   array<byte, 3> c = "a\nb";
-     *
-     * first becomes:
-     *
-     *   array<byte, 3> c = [97, 10, 98];
-     *
-     * then, in the same desugarer pass, becomes:
-     *
-     *   array<byte, 3> c;
-     *   c[0] = 97;
-     *   c[1] = 10;
-     *   c[2] = 98;
-     *
-     * For dynamic arrays, no allocation/init is emitted:
-     *
-     *   array<int32_t> xs = [1, 2, 3];
-     *
-     * becomes:
-     *
-     *   array<int32_t> xs;
-     *   xs[0] = 1;
-     *   xs[1] = 2;
-     *   xs[2] = 3;
-     *
-     * Later checkers reject this if xs was not initialized.
-     */
     private List<ASTNode> desugarStmtList(List<ASTNode> stmts) {
         List<ASTNode> out = new ArrayList<>();
 
@@ -315,11 +178,6 @@ public class Desugarer {
         return out;
     }
 
-    /**
-     * Appends a desugared statement into an output statement list.
-     *
-     * This is where statement sugar can expand into multiple statements.
-     */
     private void appendDesugaredStmt(ASTNode stmt, List<ASTNode> out) {
         if (stmt == null) return;
 
@@ -482,14 +340,6 @@ public class Desugarer {
         }
     }
 
-    // ============================================================
-    // Inferred static array sizes (`?`)
-    // ============================================================
-
-    /**
-     * Returns true when the declared type contains a `?` size marker
-     * anywhere (static sizes or nested positions).
-     */
     private boolean usesInferredSize(TypeNode type) {
         if (type == null) {
             return false;
@@ -511,12 +361,6 @@ public class Desugarer {
         return false;
     }
 
-    /**
-     * Returns true when every array level in the type is static.
-     *
-     * `?` inference requires a fully static nest: a dynamic array level
-     * (or an ptr level) anywhere in the type rejects inference.
-     */
     private boolean isFullyStaticArrayNest(TypeNode type) {
         if (type instanceof StaticArrayTypeNode s) {
             return isFullyStaticArrayNest(s.elementType);
@@ -533,22 +377,10 @@ public class Desugarer {
         return true;
     }
 
-    /**
-     * Returns true when the type is a static array level (possibly with
-     * `?` markers), i.e. its initializer must be a nested literal.
-     */
     private boolean isStaticArrayLevel(TypeNode type) {
         return type instanceof StaticArrayTypeNode;
     }
 
-    /**
-     * Resolves `?` markers in a declaration type against an initializer.
-     *
-     * On success returns the type with every marker replaced by an
-     * IntNode count. On failure reports one diagnostic and returns a
-     * fallback type (markers replaced by size 1) so the pipeline can
-     * continue.
-     */
     private TypeNode inferStaticSizes(TypeNode declared, ASTNode init, String varName) {
         if (!isFullyStaticArrayNest(declared)) {
             diagnostics.error("'?' size inference for '"
@@ -577,12 +409,6 @@ public class Desugarer {
         }
     }
 
-    /**
-     * Normalizes a declaration initializer into an array literal for
-     * shape analysis: string literals decode to UTF-8 byte lists.
-     *
-     * Returns null when the initializer is not a literal list.
-     */
     private ArrayLiteralNode normalizeInitializer(ASTNode init) {
         if (init instanceof ArrayLiteralNode lit) {
             return lit;
@@ -595,19 +421,6 @@ public class Desugarer {
         return null;
     }
 
-    /**
-     * Infers one static type level against a literal.
-     *
-     * Rules enforced here (only when `?` is used in the declaration):
-     *
-     *   - a `?` level takes the literal's element count; an empty
-     *     literal cannot infer a size;
-     *   - an explicit level must match the literal's element count
-     *     exactly (no partial fill);
-     *   - when the element type is itself a static level, every element
-     *     must be a nested array or string literal and all siblings
-     *     must have equal length (perfect rectangle).
-     */
     private TypeNode inferLevel(TypeNode type, ArrayLiteralNode literal, String varName) {
         if (!(type instanceof StaticArrayTypeNode s)) {
             throw new InferenceFailure("Internal inference error: expected a static array level for '"
@@ -672,11 +485,6 @@ public class Desugarer {
         return new StaticArrayTypeNode(inferredElem, sizeNode);
     }
 
-    /**
-     * Verifies a literal against a fully inferred (concrete) static type.
-     *
-     * Every level must match exactly; nested levels must be rectangular.
-     */
     private void checkLevel(TypeNode concrete, ArrayLiteralNode literal, String varName) {
         if (!(concrete instanceof StaticArrayTypeNode s)) {
             return;
@@ -735,12 +543,6 @@ public class Desugarer {
         }
     }
 
-    /**
-     * Rebuilds a type with every `?` marker replaced by size 1.
-     *
-     * Used only for error recovery so the pipeline continues with a
-     * well-formed type after an inference diagnostic.
-     */
     private TypeNode replaceInferredSizesWithFallback(TypeNode type) {
         if (type instanceof StaticArrayTypeNode s) {
             ASTNode size = s.sizeExpr instanceof InferredSizeNode
@@ -774,12 +576,6 @@ public class Desugarer {
     ) {
         ASTNode target = desugarLValue(n.target);
 
-        /*
-         * Compound assignment: the right-hand side is an ordinary
-         * expression, never an initializer. String literals are left
-         * untouched so the semantic analyzer rejects them with a proper
-         * diagnostic instead of an internal error.
-         */
         if (!"=".equals(n.op)) {
             out.add(new AssignNode(
                 n.op,
@@ -807,13 +603,6 @@ public class Desugarer {
         ));
     }
 
-    /**
-     * Lowers `x++` / `x--` into `x += 1` / `x -= 1`.
-     *
-     * The compound assignment carries an explicit literal 1, which stays
-     * a fluid integer constant: contextual checks against the target's
-     * type apply exactly as they do for a hand-written `x += 1`.
-     */
     private ASTNode lowerIncDec(IncDecNode n) {
         return new AssignNode(
             "++".equals(n.op) ? "+=" : "-=",
@@ -822,16 +611,6 @@ public class Desugarer {
         );
     }
 
-    /**
-     * Desugars a statement in a single-statement position such as:
-     *
-     *   if (...) <statement>
-     *   else <statement>
-     *   while (...) <statement>
-     *
-     * If sugar expands to multiple statements, the lowered result is wrapped
-     * in a BlockNode.
-     */
     private ASTNode desugarStmt(ASTNode stmt) {
         if (stmt == null) return null;
 
@@ -851,7 +630,7 @@ public class Desugarer {
             AssignNode n = (AssignNode) stmt;
 
             if (!"=".equals(n.op)) {
-                /* Compound assignment: value is an ordinary expression. */
+
                 return new AssignNode(
                     n.op,
                     desugarLValue(n.target),
@@ -978,23 +757,6 @@ public class Desugarer {
         );
     }
 
-    /**
-     * Desugars a controlled statement, i.e. the body of an if/while/for.
-     *
-     * Single-statement bodies are wrapped in an implicit block so that:
-     *
-     *   - braceless and braced bodies scope identically,
-     *   - declarations inside a braceless body are scoped to that body
-     *     and are not visible after the if/while/for.
-     *
-     * Example:
-     *
-     *   if (c) int32_t x;
-     *
-     * is desugared to:
-     *
-     *   if (c) { int32_t x; }
-     */
     private ASTNode desugarControlledStmt(ASTNode stmt) {
         ASTNode lowered = desugarStmt(stmt);
 
@@ -1008,47 +770,6 @@ public class Desugarer {
         return new BlockNode(wrapped);
     }
 
-    /**
-     * Lowers a for loop into an equivalent block + while loop.
-     *
-     *   for (init; condition; update) body
-     *
-     * becomes:
-     *
-     *   {
-     *       init
-     *       while (condition) {
-     *           body
-     *           update      <- carried as the while loop's epilogue
-     *       }
-     *   }
-     *
-     * The wrapping block scopes the loop variable declared by init so it
-     * is not visible after the loop.
-     *
-     * The init and update statements are lowered through the ordinary
-     * statement machinery, so declaration initializer sugar inside the
-     * header expands normally:
-     *
-     *   for (int32_t i = 0; i < n; i = i + 1) { print(i) }
-     *
-     * becomes:
-     *
-     *   {
-     *       int32_t i;
-     *       i = 0;
-     *       while (i < n) {
-     *           print(i)
-     *           i = i + 1;
-     *       }
-     *   }
-     *
-     * The update is carried as the while loop's epilogue rather than
-     * being appended to the body block. It still runs at the end of
-     * every iteration, including the last, but codegen places the
-     * continue label BEFORE the epilogue, so `continue` runs the update
-     * and `break` skips it, exactly like C's for loop.
-     */
     private ASTNode desugarForStmt(ForNode n) {
         List<ASTNode> outer = new ArrayList<>();
 
@@ -1081,53 +802,6 @@ public class Desugarer {
         return new BlockNode(outer);
     }
 
-    // ============================================================
-    // Array initializer-list lowering
-    // ============================================================
-
-    /**
-     * Lowers:
-     *
-     *   target = [a, b, c];
-     *
-     * into:
-     *
-     *   target[0] = a;
-     *   target[1] = b;
-     *   target[2] = c;
-     *
-     * Nested initializer lists recursively lower:
-     *
-     *   target = [[a, b], [c, d]];
-     *
-     * into:
-     *
-     *   target[0][0] = a;
-     *   target[0][1] = b;
-     *   target[1][0] = c;
-     *   target[1][1] = d;
-     *
-     * String literal elements are first converted to UTF-8 byte array
-     * literals and then recursively lowered:
-     *
-     *   target = ["hi", "ok"];
-     *
-     * becomes:
-     *
-     *   target[0][0] = 104;
-     *   target[0][1] = 105;
-     *   target[1][0] = 111;
-     *   target[1][1] = 107;
-     *
-     * This lowering is purely syntactic.
-     *
-     * It does not:
-     *   - check target type,
-     *   - check element type,
-     *   - check bounds,
-     *   - allocate or initialize dynamic arrays,
-     *   - resize dynamic arrays.
-     */
     private void appendArrayInitializerAssignments(
         ASTNode target,
         ArrayLiteralNode literal,
@@ -1135,14 +809,6 @@ public class Desugarer {
     ) {
         ASTNode loweredTarget = desugarLValue(target);
 
-        /*
-         * An empty initializer list emits no indexed assignments.
-         *
-         * The target is still emitted as an expression statement so that it
-         * is resolved and checked as an expression: an undeclared or
-         * otherwise invalid target is still diagnosed even though the
-         * initializer list itself is a no-op.
-         */
         if (literal.elements.isEmpty()) {
             out.add(new ExprStmtNode(loweredTarget));
             return;
@@ -1172,10 +838,6 @@ public class Desugarer {
         }
     }
 
-    // ============================================================
-    // Expression handling
-    // ============================================================
-
     private ASTNode desugarExpr(ASTNode expr) {
         if (expr == null) return null;
 
@@ -1183,14 +845,6 @@ public class Desugarer {
             return expr;
         }
 
-        /*
-         * String literals are lowered to UTF-8 byte array literals only in
-         * initializer contexts (see desugarInitializerValue).
-         *
-         * In ordinary expression contexts the literal is preserved unchanged
-         * so that the semantic analyzer can report a proper diagnostic
-         * instead of an internal compiler error.
-         */
         if (expr instanceof StringLiteralNode) {
             return expr;
         }
@@ -1199,19 +853,10 @@ public class Desugarer {
             return expr;
         }
 
-        /*
-         * Qualified name references (ns::name) are leaf expressions.
-         * The semantic analyzer resolves them against namespace tables;
-         * desugaring never rewrites them.
-         */
         if (expr instanceof QualifiedNameNode) {
             return expr;
         }
 
-        /*
-         * Null literals are leaf expressions that require no desugaring.
-         * Semantic analysis checks that null is only used in pointer contexts.
-         */
         if (expr instanceof NullNode) {
             return expr;
         }
@@ -1304,21 +949,6 @@ public class Desugarer {
         );
     }
 
-    // ============================================================
-    // Constant-expression handling
-    // ============================================================
-
-    /**
-     * Evaluates a constExpr slot into a canonical decimal literal.
-     *
-     * Static array sizes, global initializers, and struct field defaults
-     * are computed here, before semantic analysis, so later phases only
-     * validate the resulting value (positivity, range, fit) instead of
-     * folding it.
-     *
-     * Evaluation failures are reported as desugaring diagnostics and
-     * recover with a placeholder size of 1.
-     */
     private ASTNode evalConstExpr(ASTNode expr, String role) {
         if (expr == null) return null;
 
@@ -1337,10 +967,6 @@ public class Desugarer {
         }
     }
 
-    // ============================================================
-    // Lvalue handling
-    // ============================================================
-
     private ASTNode desugarLValue(ASTNode node) {
         if (node == null) return null;
 
@@ -1348,10 +974,6 @@ public class Desugarer {
             return node;
         }
 
-        /*
-         * Qualified name lvalues (ns::g) are leaves; the semantic
-         * analyzer resolves them against namespace tables.
-         */
         if (node instanceof QualifiedNameNode) {
             return node;
         }
@@ -1427,10 +1049,6 @@ public class Desugarer {
             + node.getClass().getSimpleName()
         );
     }
-
-// ============================================================
-// Type handling
-// ============================================================
 
     private TypeNode desugarType(TypeNode type) {
         if (type == null) return null;

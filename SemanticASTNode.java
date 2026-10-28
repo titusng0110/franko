@@ -2,17 +2,13 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
-// ============================================================
-// Base Nodes
-// ============================================================
-
 abstract class SemanticASTNode {}
 
 abstract class SemanticStmtNode extends SemanticASTNode {}
 
 abstract class SemanticExprNode extends SemanticASTNode {
     public final SemanticType type;
-    public final BigInteger constantValue; // Populated by SemanticAnalyzer if foldable
+    public final BigInteger constantValue;
 
     protected SemanticExprNode(SemanticType type, BigInteger constantValue) {
         this.type = Objects.requireNonNull(type);
@@ -26,21 +22,6 @@ abstract class SemanticExprNode extends SemanticASTNode {
     public abstract boolean isLValue();
 }
 
-// ============================================================
-// Program / Blocks
-// ============================================================
-
-/**
- * Program node contains top-level semantic items.
- *
- * Valid top-level items currently include:
- *
- *   - SemanticFunctionDeclNode
- *   - SemanticStmtNode
- *
- * In practice, SemanticAnalyzer currently permits only global variable
- * declarations and function declarations at global scope.
- */
 class SemanticProgramNode extends SemanticASTNode {
     public final List<SemanticASTNode> topLevelItems;
 
@@ -49,17 +30,6 @@ class SemanticProgramNode extends SemanticASTNode {
     }
 }
 
-/**
- * Semantic namespace declaration.
- *
- * Groups the lowered semantic items of one namespace. The namespace's
- * symbols (structs, functions, global variables) carry the namespace
- * name themselves; this node exists so program walkers can descend
- * into namespace items.
- *
- * Multiple source declarations of the same namespace merge into one
- * node, holding all items in declaration order.
- */
 class SemanticNamespaceNode extends SemanticASTNode {
     public final String name;
     public final List<SemanticASTNode> items;
@@ -86,23 +56,6 @@ class SemanticExprStmtNode extends SemanticStmtNode {
     }
 }
 
-/**
- * Semantic function declaration.
- *
- * The FunctionSymbol stores:
- *
- *   - function name,
- *   - parameter symbols,
- *   - function type/signature,
- *   - builtin flag.
- *
- * Raw AST declaration ownership is analyzer-local bookkeeping, not symbol
- * state. SemanticAnalyzer/SymbolTable maps raw FunctionDeclNode objects to
- * their registered FunctionSymbol.
- *
- * parameterVariables are the function parameters as ordinary local variables
- * declared in the function's initial scope.
- */
 class SemanticFunctionDeclNode extends SemanticASTNode {
     public final FunctionSymbol symbol;
     public final List<VariableSymbol> parameterVariables;
@@ -119,18 +72,6 @@ class SemanticFunctionDeclNode extends SemanticASTNode {
     }
 }
 
-// ============================================================
-// Struct Declarations
-// ============================================================
-
-/**
- * Semantic struct declaration.
- *
- * The StructSymbol stores the struct name and ordered resolved fields
- * (FieldSymbol with folded default constants where present).
- *
- * Emitted as a C++ struct definition before globals and functions.
- */
 class SemanticStructDeclNode extends SemanticASTNode {
     public final StructSymbol symbol;
     public final List<SemanticFunctionDeclNode> methods;
@@ -148,21 +89,6 @@ class SemanticStructDeclNode extends SemanticASTNode {
     }
 }
 
-// ============================================================
-// Declarations
-// ============================================================
-
-/**
- * Semantic variable declaration.
- *
- * For global variables with a const initializer, the desugarer evaluates
- * the initializer constExpr into a canonical literal; the analyzer reads
- * the value into a BigInteger stored here so codegen can emit static
- * initialization without a new dispatch node class.
- *
- * foldedConstInitializer is null for ordinary locals and for globals without
- * an initializer.
- */
 class SemanticVarDeclNode extends SemanticStmtNode {
     public final VariableSymbol symbol;
     public final BigInteger foldedConstInitializer;
@@ -180,22 +106,10 @@ class SemanticVarDeclNode extends SemanticStmtNode {
     }
 }
 
-// ============================================================
-// General Statements
-// ============================================================
-
 class SemanticAssignNode extends SemanticStmtNode {
     public final SemanticExprNode target;
     public final SemanticExprNode value;
 
-    /**
-     * The assignment operator text: "=" for plain assignment, or one of
-     * "+=", "-=", "*=", "/=", "%=" for compound assignment.
-     *
-     * A compound assignment is exactly `target = target <baseOp> value`
-     * except that the target is evaluated only once; the backend emits
-     * the C++ compound assignment directly.
-     */
     public final String op;
 
     public SemanticAssignNode(SemanticExprNode target, SemanticExprNode value) {
@@ -212,15 +126,10 @@ class SemanticAssignNode extends SemanticStmtNode {
         this.value = Objects.requireNonNull(value);
     }
 
-    /** True when this is a compound assignment (op != "="). */
     public boolean isCompound() {
         return !"=".equals(op);
     }
 
-    /**
-     * The binary operator behind the assignment: "+=" yields "+".
-     * Returns "=" for plain assignment.
-     */
     public String baseOp() {
         return isCompound() ? op.substring(0, op.length() - 1) : "=";
     }
@@ -229,7 +138,7 @@ class SemanticAssignNode extends SemanticStmtNode {
 class SemanticIfNode extends SemanticStmtNode {
     public final SemanticExprNode condition;
     public final SemanticStmtNode thenBranch;
-    public final SemanticStmtNode elseBranch; // null if absent
+    public final SemanticStmtNode elseBranch;
 
     public SemanticIfNode(
             SemanticExprNode condition,
@@ -246,12 +155,6 @@ class SemanticWhileNode extends SemanticStmtNode {
     public final SemanticExprNode condition;
     public final SemanticStmtNode body;
 
-    /**
-     * Loop epilogue: statements that run at the end of every iteration,
-     * after the body. Empty for a plain while loop; holds the desugared
-     * update of a for loop. `continue` runs this epilogue (the continue
-     * label is placed before it in codegen); `break` skips it.
-     */
     public final List<SemanticStmtNode> update;
 
     public SemanticWhileNode(SemanticExprNode condition, SemanticStmtNode body) {
@@ -271,14 +174,6 @@ class SemanticWhileNode extends SemanticStmtNode {
     }
 }
 
-/**
- * Break statement.
- *
- * levels is the number of enclosing loops to exit: 1 for a plain
- * `break` (or `break 1`), N for `break N`. The SemanticAnalyzer has
- * already validated that the level is a positive constant integer
- * expression that does not exceed the enclosing loop depth.
- */
 class SemanticBreakNode extends SemanticStmtNode {
     public final int levels;
 
@@ -293,13 +188,6 @@ class SemanticBreakNode extends SemanticStmtNode {
     }
 }
 
-/**
- * Continue statement.
- *
- * Always targets the innermost enclosing loop and runs that loop's
- * epilogue (the desugared for-loop update) before re-testing the
- * condition.
- */
 class SemanticContinueNode extends SemanticStmtNode {
 }
 
@@ -311,28 +199,9 @@ class SemanticPrintNode extends SemanticStmtNode {
     }
 }
 
-/**
- * Return statement.
- *
- * The SemanticAnalyzer attaches the function that owns this return.
- *
- * value is:
- *
- *   - null for `return;`
- *   - non-null for `return expr;`
- *
- * The analyzer does not enforce return compatibility.
- * Later statement/type checkers should validate:
- *
- *   - return outside a function,
- *   - return; in non-void functions,
- *   - return expr; in void functions,
- *   - return expression type compatibility,
- *   - missing return in non-void functions.
- */
 class SemanticReturnNode extends SemanticStmtNode {
     public final FunctionSymbol function;
-    public final SemanticExprNode value; // null for `return;`
+    public final SemanticExprNode value;
 
     public SemanticReturnNode(FunctionSymbol function, SemanticExprNode value) {
         this.function = Objects.requireNonNull(function);
@@ -340,51 +209,6 @@ class SemanticReturnNode extends SemanticStmtNode {
     }
 }
 
-// ============================================================
-// Array Intrinsic Calls
-// Lowered from CallNode / MemberAccessNode by SemanticAnalyzer
-// ============================================================
-
-/**
- * Built-in array intrinsic kind.
- *
- * These correspond to the Franko runtime array methods:
- *
- *   Dynamic-array-only, status-returning:
- *
- *     arr.init(size)       -> INT32
- *     arr.init_zero(size)  -> INT32
- *     arr.resize(size)     -> INT32
- *
- *   Dynamic-array-only, void-returning:
- *
- *     arr.uninit()         -> void
- *
- *   Static-or-dynamic-array, void-returning:
- *
- *     arr.memset(value)                    -> void
- *     arr.memset(value, start, count)      -> void
- *
- *     dst.memcpy(src)                      -> void
- *     dst.memcpy(src, dstStart, srcStart, count)
- *                                          -> void
- *
- *     arr.memmove(dstStart, srcStart, count)
- *                                          -> void
- *
- *   Static-or-dynamic-array, value-returning:
- *
- *     arr.length()                         -> UINT32
- *
- * Legacy shorthand:
- *
- *     arr(size)
- *     $(p)(size)
- *
- * should lower to:
- *
- *     SemanticArrayIntrinsicKind.INIT
- */
 enum SemanticArrayIntrinsicKind {
     INIT("init", true),
     INIT_ZERO("init_zero", true),
@@ -412,21 +236,6 @@ enum SemanticArrayIntrinsicKind {
         this.returnsLength = returnsLength;
     }
 
-    /**
-     * Returns the semantic return type of this intrinsic.
-     *
-     * Status-returning array intrinsics map to INT32 because the runtime uses:
-     *
-     *   int32_t init(...)
-     *   int32_t init_zero(...)
-     *   int32_t resize(...)
-     *
-     * The length intrinsic maps to UINT32 because the runtime uses:
-     *
-     *   uint32_t length()
-     *
-     * Void intrinsics map to SemanticVoidType.
-     */
     public SemanticType returnType() {
         if (returnsStatus) {
             return new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
@@ -444,80 +253,6 @@ enum SemanticArrayIntrinsicKind {
     }
 }
 
-/**
- * Unified semantic array intrinsic call expression.
- *
- * This node is intentionally expression-shaped, like SemanticFunctionCallNode.
- * That is important because some array intrinsics return a value:
- *
- *   xs.init(10)       -> INT32
- *   xs.init_zero(10)  -> INT32
- *   xs.resize(20)     -> INT32
- *
- * while others are void:
- *
- *   xs.uninit()       -> void
- *   xs.memset(...)    -> void
- *   dst.memcpy(...)   -> void
- *   xs.memmove(...)   -> void
- *
- * This means all of the following can be represented uniformly:
- *
- *   xs.init(10);
- *
- * as:
- *
- *   SemanticExprStmtNode(
- *       SemanticArrayIntrinsicCallNode(INIT, xs, [10])
- *   )
- *
- * and:
- *
- *   status = xs.init(10);
- *
- * as:
- *
- *   SemanticAssignNode(
- *       status,
- *       SemanticArrayIntrinsicCallNode(INIT, xs, [10])
- *   )
- *
- * For void-returning intrinsics, later semantic checkers should reject
- * value-use contexts:
- *
- *   x = xs.memset(0);       // invalid: memset returns void
- *   return dst.memcpy(src); // invalid unless handled as void return context
- *
- * Receiver:
- *
- *   The receiver is stored separately from args, like an implicit `this`.
- *
- * Examples:
- *
- *   xs.init(10)
- *
- * lowers to:
- *
- *   kind     = INIT
- *   receiver = xs
- *   args     = [10]
- *
- *   xs.memset(0, 2, 5)
- *
- * lowers to:
- *
- *   kind     = MEMSET
- *   receiver = xs
- *   args     = [0, 2, 5]
- *
- *   dst.memcpy(src, 0, 4, 8)
- *
- * lowers to:
- *
- *   kind     = MEMCPY
- *   receiver = dst
- *   args     = [src, 0, 4, 8]
- */
 class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
     public final SemanticArrayIntrinsicKind kind;
     public final SemanticExprNode receiver;
@@ -555,12 +290,6 @@ class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
         return args.size();
     }
 
-    /**
-     * Convenience helpers for overload-shaped intrinsics.
-     *
-     * These do not replace proper checker validation. They are merely useful
-     * for StatementChecker, ExpressionChecker, and codegen.
-     */
     public boolean isFullArrayMemset() {
         return kind == SemanticArrayIntrinsicKind.MEMSET
                 && args.size() == 1;
@@ -582,12 +311,8 @@ class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
     }
 }
 
-// ============================================================
-// Expressions
-// ============================================================
-
 class SemanticIntLiteralNode extends SemanticExprNode {
-    public final String rawValue; // Keeping for exact codegen representation
+    public final String rawValue;
 
     public SemanticIntLiteralNode(
             SemanticType type,
@@ -694,26 +419,6 @@ class SemanticArrayAccessNode extends SemanticExprNode {
     }
 }
 
-/**
- * Struct member access expression:
- *
- *   obj.field
- *   obj.field = value
- *
- * The expression type is the resolved field type.
- *
- * The lvalue flag mirrors whether the access can be assigned to. It is true
- * when the base expression is itself an lvalue:
- *
- *   - local variable base (obj.field),
- *   - deref base ($(p).field),
- *   - nested member access (obj.inner.field),
- *   - array element base, static or dynamic (arr[i].field).
- *
- * Array element access yields a reference to storage, so field access through
- * an element of a storage-backed array is an lvalue. Field access on a
- * function call result is not an lvalue.
- */
 class SemanticMemberAccessNode extends SemanticExprNode {
     public final SemanticExprNode target;
     public final FieldSymbol field;
@@ -734,22 +439,6 @@ class SemanticMemberAccessNode extends SemanticExprNode {
     }
 }
 
-/**
- * User-defined function call.
- *
- * This is produced from raw:
- *
- *   CallNode(
- *       callee = VarNode("foo"),
- *       args = [...]
- *   )
- *
- * after overload resolution.
- *
- * The expression type is the selected function's return type.
- * If the return type is void, the later checker should reject value-use
- * contexts where void is not allowed.
- */
 class SemanticFunctionCallNode extends SemanticExprNode {
     public final FunctionSymbol function;
     public final List<SemanticExprNode> args;
@@ -769,10 +458,6 @@ class SemanticFunctionCallNode extends SemanticExprNode {
         return false;
     }
 }
-
-// ============================================================
-// Pointer / Pointer Expressions
-// ============================================================
 
 class SemanticGetPtrNode extends SemanticExprNode {
     public final SemanticExprNode target;
@@ -802,22 +487,6 @@ class SemanticDerefNode extends SemanticExprNode {
     }
 }
 
-/**
- * Explicit integer conversion: cast&lt;T&gt;(expr).
- *
- * The expression type is always the target primitive integer type.
- * Unlike deref, a cast is never an lvalue.
- *
- * The constant value passes through from the operand when the operand
- * is a folded constant, so ExpressionChecker can validate the value
- * against the target range exactly like any other constant in a typed
- * context, and codegen can emit the folded literal directly.
- *
- * The checked flag is decided once by ExpressionAnalyzer: false when
- * the conversion is the identity or value-preserving (plain
- * static_cast), true when it can lose data (runtime-checked
- * franko_safe_cast).
- */
 class SemanticCastExprNode extends SemanticExprNode {
     public final SemanticExprNode expr;
     public final boolean checked;
