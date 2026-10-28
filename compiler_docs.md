@@ -47,6 +47,9 @@ Semantic AST (SemanticProgramNode)
    │                     DeclarationChecker, StatementChecker, FunctionChecker)
    │  BranchPruner       (truth-table-based conditional/loop pruning on the
    │                     Semantic AST; removes dead branches and dead loops)
+   │  InactiveDeclarationPruner (zero-reference pruning: structs, functions,
+   │                     and variables never used in surviving code are
+   │                     removed from the Semantic AST)
    │  PointerNullStateChecker (intra-procedural pointer null dataflow)
    ▼
 checked Semantic AST
@@ -106,6 +109,7 @@ flowchart TD
     ExpressionChecker --> TypeChecker
     DeclarationChecker --> TypeChecker
     Main --> BranchPruner
+    Main --> InactiveDeclarationPruner
     Main --> PointerNullStateChecker
     Main --> Cpp14Codegen
     Cpp14Codegen --> Mangler
@@ -128,7 +132,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `PointerNullStateChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
+| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
 | `ImportResolver` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ASTNode` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
 | `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
@@ -137,6 +141,7 @@ flowchart TD
 | `ConstExpressionEvaluator` | `SymbolTable` (diagnostics only) |
 | `LegalityChecker` | `FunctionChecker`, `DeclarationChecker`, `StatementChecker`, `ExpressionChecker` |
 | `BranchPruner` | reads/writes `SemanticASTNode` trees only (called by `Main`); no other compiler classes |
+| `InactiveDeclarationPruner` | reads/writes `SemanticASTNode` trees only (called by `Main`); no other compiler classes |
 | `FunctionChecker` | `StatementChecker`, `ExpressionChecker`, `DeclarationChecker`, `TypeChecker` |
 | `StatementChecker` | `DeclarationChecker`, `ExpressionChecker`, `TypeChecker` |
 | `DeclarationChecker` | `TypeChecker` (incl. static `fitsBigIntegerToPrimitive`) |
@@ -569,7 +574,40 @@ condition's boolean structure:
   pruned tree, so null-state warnings and code are never produced for dead
   branches, and dead loops vanish from the emitted C++.
 
-### 3.5 Backend
+### 3.5 Inactive declaration pruning
+
+#### `InactiveDeclarationPruner`
+Runs on the Semantic AST **immediately after `BranchPruner`** and before
+`PointerNullStateChecker` (invoked by `Main`; prints nothing). It removes
+declarations that nothing in the surviving code uses, so they are never
+emitted into C++ at all. The rule is zero-reference pruning — no liveness or
+dead-store analysis:
+
+- **Functions**: kept iff reachable via the call graph from the entry point
+  `main` (call closure over `SemanticFunctionCallNode` symbols — includes
+  methods; recursion and overloads are resolved symbols so each is counted
+  separately). `main` is always kept (its mangled name is pinned in the
+  program templates). Call sites on the *target* of an assignment count
+  (e.g. `xs[idx()] += 10` keeps `idx`).
+- **Variables**: kept iff referenced anywhere in kept function bodies.
+  Assignments count as uses (an initializing assignment keeps its variable),
+  so the only variables pruned are declared-but-never-mentioned ones —
+  including variables whose only uses disappeared with a BranchPruner cut.
+- **Structs**: kept iff a `SemanticStructType` for them appears in surviving
+  code: kept function signatures, kept variable declarations (globals and
+  locals), expression types in kept bodies, or the receiver of a called
+  method. Struct liveness is expanded transitively through the fields and
+  kept methods of live structs (by-value composition). A kept struct prunes
+  its never-called methods; a pruned struct takes all its methods with it.
+- If pruning empties a namespace, the namespace node itself is dropped.
+  Blocks are never flattened (same scoping rule as `BranchPruner`).
+- If no `main` is found (cannot happen after successful analysis), the pass
+  is a no-op.
+- **Interaction with the os FFI bridge**: `OsFfi.verifyBridge` runs later and
+  walks the surviving declarations, so unused os intrinsics pruned here no
+  longer require a bridge block; used ones are kept and verified as before.
+
+### 3.6 Backend
 
 #### `Cpp14Codegen`
 The C++14 backend: walks the checked Semantic AST and emits the translation
@@ -620,7 +658,7 @@ Debug printers (`--verbose` only): `ASTPrinter` for the raw AST at three
 checkpoints, `SemanticASTPrinter` for the final semantic AST (types,
 constant values, lvalue flags, mangled names, symbol identity hashes).
 
-### 3.6 Support
+### 3.7 Support
 
 #### `DiagnosticBag`
 Phase-agnostic error/warning accumulator with a configurable header and
@@ -727,6 +765,18 @@ type it would have in C++. Consequences:
 - Runs after all checking and before pointer null-state analysis, so dead
   code receives no null-state diagnostics and never reaches codegen.
 
+### 4.8 Inactive declaration pruning (InactiveDeclarationPruner)
+- Runs right after branch pruning so declarations orphaned by branch cuts
+  become prunable.
+- Zero-reference rule, per kind: functions must be call-reachable from
+  `main`; variables must be mentioned somewhere in kept bodies (assignments
+  are mentions); structs must appear as a type in kept code (signatures,
+  kept variable declarations, expression types, method receivers), expanded
+  transitively through fields and kept methods.
+- No dead-store elimination: a variable that is only written still counts as
+  used. No unused-field pruning. Unused methods of kept structs are pruned.
+- Pruning never flattens blocks and never touches `main`.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -760,6 +810,7 @@ uv run python library_tests/run_library_tests.py
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `ASTNode.java` |
 | Remove/rename syntax sugar | `Desugarer` |
 | Simplify or remove dead branches/loops | `BranchPruner` |
+| Remove unused structs/functions/variables | `InactiveDeclarationPruner` |
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
