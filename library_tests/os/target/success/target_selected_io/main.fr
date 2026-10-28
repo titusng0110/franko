@@ -19,7 +19,7 @@ import "franko/os"
 func main() -> int32_t {
     array<byte> msg;
     msg.init(5);
-    msg = "hello";
+    msg.memcpy("hello");
 
     if (os::IS_WINDOWS == 1) {
         uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);

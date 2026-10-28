@@ -12,7 +12,9 @@
 //   std::GenerationalNextAllocator       free-list pool + generations
 //   std::GenerationalSparseSetAllocator  sparse-set pool + generations
 //
-// Common API (every method takes ptr<X> self):
+// Common API (each method declares the permission it needs: lifecycle
+// operations take ptr<X> self, mutating ones mview<X> self, read-only
+// ones view<X> self):
 //
 //   init(C)                 -> int32_t   set up C slots
 //   uninit()                -> int32_t   tear the pool down
@@ -44,9 +46,12 @@
 //   - a pool may be re-initialized after uninit.
 //
 // A pool contains dynamic arrays, so it is pointer-only: it cannot be
-// passed or returned by value. Methods take ptr<X> self and are
-// called on a pool lvalue (a.init(4)); the compiler synthesizes
-// getptr(a) as self.
+// passed or returned by value. Methods are called on a pool lvalue
+// (a.init(4)) and declare the permission they need: ptr<X> self for
+// init/uninit/grow, mview<X> self for new_index/free_index, and
+// view<X> self for the observers (exist/generation/used/capacity/
+// write_active_indices). The compiler synthesizes the matching
+// getptr/getmview/getview(a) as self.
 //
 // Adapted from Python pseudo-code, with these Franko adjustments:
 //
@@ -137,7 +142,7 @@ namespace std {
         // Take the slot at the head of the free list. Returns its
         // index, or 0xFFFFFFFF (_END) when the pool is not initialized
         // or every slot is live.
-        func new_index(ptr<NextAllocator> self) -> uint32_t {
+        func new_index(mview<NextAllocator> self) -> uint32_t {
             if ($(self)._capacity == 0 || $(self)._head == 0xFFFFFFFF) {
                 return 0xFFFFFFFF
             }
@@ -151,7 +156,7 @@ namespace std {
         // Return slot idx to the head of the free list (LIFO reuse).
         // Returns 0 on success, -1 when idx is not a live slot, which
         // covers unknown indices and double release.
-        func free_index(ptr<NextAllocator> self, uint32_t idx) -> int32_t {
+        func free_index(mview<NextAllocator> self, uint32_t idx) -> int32_t {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -163,7 +168,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(ptr<NextAllocator> self, uint32_t idx) -> uint8_t {
+        func exist(view<NextAllocator> self, uint32_t idx) -> uint8_t {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -177,7 +182,7 @@ namespace std {
         // must hold at least used() elements. Returns 0 on success, -1
         // when out is null, when the pool is not initialized, or when
         // out is too small.
-        func write_active_indices(ptr<NextAllocator> self, ptr<array<uint32_t>> out) -> int32_t {
+        func write_active_indices(view<NextAllocator> self, mview<array<uint32_t>> out) -> int32_t {
             if (out == null) {
                 return -1
             }
@@ -195,12 +200,12 @@ namespace std {
         }
 
         // Number of live slots.
-        func used(ptr<NextAllocator> self) -> uint32_t {
+        func used(view<NextAllocator> self) -> uint32_t {
             return $(self)._used
         }
 
         // Number of slots the pool holds.
-        func capacity(ptr<NextAllocator> self) -> uint32_t {
+        func capacity(view<NextAllocator> self) -> uint32_t {
             return $(self)._capacity
         }
     }
@@ -286,7 +291,7 @@ namespace std {
         // Take the slot that sits at dense position used(). Returns
         // its index, or 0xFFFFFFFF (_END) when the pool is not
         // initialized or every slot is live.
-        func new_index(ptr<SparseSetAllocator> self) -> uint32_t {
+        func new_index(mview<SparseSetAllocator> self) -> uint32_t {
             if ($(self)._capacity == 0 || $(self)._used >= $(self)._capacity) {
                 return 0xFFFFFFFF
             }
@@ -299,7 +304,7 @@ namespace std {
         // Release slot idx by swapping it with the last live entry.
         // Returns 0 on success, -1 when idx is not a live slot, which
         // covers unknown indices and double release.
-        func free_index(ptr<SparseSetAllocator> self, uint32_t idx) -> int32_t {
+        func free_index(mview<SparseSetAllocator> self, uint32_t idx) -> int32_t {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -318,7 +323,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(ptr<SparseSetAllocator> self, uint32_t idx) -> uint8_t {
+        func exist(view<SparseSetAllocator> self, uint32_t idx) -> uint8_t {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -333,7 +338,7 @@ namespace std {
         // dense order). out must hold at least used() elements.
         // Returns 0 on success, -1 when out is null, when the pool is
         // not initialized, or when out is too small.
-        func write_active_indices(ptr<SparseSetAllocator> self, ptr<array<uint32_t>> out) -> int32_t {
+        func write_active_indices(view<SparseSetAllocator> self, mview<array<uint32_t>> out) -> int32_t {
             if (out == null) {
                 return -1
             }
@@ -347,12 +352,12 @@ namespace std {
         }
 
         // Number of live slots.
-        func used(ptr<SparseSetAllocator> self) -> uint32_t {
+        func used(view<SparseSetAllocator> self) -> uint32_t {
             return $(self)._used
         }
 
         // Number of slots the pool holds.
-        func capacity(ptr<SparseSetAllocator> self) -> uint32_t {
+        func capacity(view<SparseSetAllocator> self) -> uint32_t {
             return $(self)._capacity
         }
     }
@@ -443,7 +448,7 @@ namespace std {
         // Take the slot at the head of the free list. Returns its
         // index, or 0xFFFFFFFF (_END) when the pool is not initialized
         // or every slot is live.
-        func new_index(ptr<GenerationalNextAllocator> self) -> uint32_t {
+        func new_index(mview<GenerationalNextAllocator> self) -> uint32_t {
             if ($(self)._capacity == 0 || $(self)._head == 0xFFFFFFFF) {
                 return 0xFFFFFFFF
             }
@@ -457,7 +462,7 @@ namespace std {
         // Return slot idx to the free list (LIFO reuse), bumping its
         // generation. Returns 0 on success, -1 when idx is not a live
         // slot, which covers unknown indices and double release.
-        func free_index(ptr<GenerationalNextAllocator> self, uint32_t idx) -> int32_t {
+        func free_index(mview<GenerationalNextAllocator> self, uint32_t idx) -> int32_t {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -470,7 +475,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(ptr<GenerationalNextAllocator> self, uint32_t idx) -> uint8_t {
+        func exist(view<GenerationalNextAllocator> self, uint32_t idx) -> uint8_t {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -483,7 +488,7 @@ namespace std {
         // Generation counter of slot idx: 0 for a slot that was never
         // released, bumped by every release. Returns 0xFFFFFFFF (_END)
         // when the pool is not initialized or idx is out of range.
-        func generation(ptr<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t {
+        func generation(view<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t {
             if ($(self)._capacity == 0) {
                 return 0xFFFFFFFF
             }
@@ -497,7 +502,7 @@ namespace std {
         // must hold at least used() elements. Returns 0 on success, -1
         // when out is null, when the pool is not initialized, or when
         // out is too small.
-        func write_active_indices(ptr<GenerationalNextAllocator> self, ptr<array<uint32_t>> out) -> int32_t {
+        func write_active_indices(view<GenerationalNextAllocator> self, mview<array<uint32_t>> out) -> int32_t {
             if (out == null) {
                 return -1
             }
@@ -515,12 +520,12 @@ namespace std {
         }
 
         // Number of live slots.
-        func used(ptr<GenerationalNextAllocator> self) -> uint32_t {
+        func used(view<GenerationalNextAllocator> self) -> uint32_t {
             return $(self)._used
         }
 
         // Number of slots the pool holds.
-        func capacity(ptr<GenerationalNextAllocator> self) -> uint32_t {
+        func capacity(view<GenerationalNextAllocator> self) -> uint32_t {
             return $(self)._capacity
         }
     }
@@ -621,7 +626,7 @@ namespace std {
         // Take the slot that sits at dense position used(). Returns
         // its index, or 0xFFFFFFFF (_END) when the pool is not
         // initialized or every slot is live.
-        func new_index(ptr<GenerationalSparseSetAllocator> self) -> uint32_t {
+        func new_index(mview<GenerationalSparseSetAllocator> self) -> uint32_t {
             if ($(self)._capacity == 0 || $(self)._used >= $(self)._capacity) {
                 return 0xFFFFFFFF
             }
@@ -635,7 +640,7 @@ namespace std {
         // bumping its generation. Returns 0 on success, -1 when idx is
         // not a live slot, which covers unknown indices and double
         // release.
-        func free_index(ptr<GenerationalSparseSetAllocator> self, uint32_t idx) -> int32_t {
+        func free_index(mview<GenerationalSparseSetAllocator> self, uint32_t idx) -> int32_t {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -656,7 +661,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(ptr<GenerationalSparseSetAllocator> self, uint32_t idx) -> uint8_t {
+        func exist(view<GenerationalSparseSetAllocator> self, uint32_t idx) -> uint8_t {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -670,7 +675,7 @@ namespace std {
         // Generation counter of slot idx: 0 for a slot that was never
         // released, bumped by every release. Returns 0xFFFFFFFF (_END)
         // when the pool is not initialized or idx is out of range.
-        func generation(ptr<GenerationalSparseSetAllocator> self, uint32_t idx) -> uint32_t {
+        func generation(view<GenerationalSparseSetAllocator> self, uint32_t idx) -> uint32_t {
             if ($(self)._capacity == 0) {
                 return 0xFFFFFFFF
             }
@@ -684,7 +689,7 @@ namespace std {
         // dense order). out must hold at least used() elements.
         // Returns 0 on success, -1 when out is null, when the pool is
         // not initialized, or when out is too small.
-        func write_active_indices(ptr<GenerationalSparseSetAllocator> self, ptr<array<uint32_t>> out) -> int32_t {
+        func write_active_indices(view<GenerationalSparseSetAllocator> self, mview<array<uint32_t>> out) -> int32_t {
             if (out == null) {
                 return -1
             }
@@ -698,12 +703,12 @@ namespace std {
         }
 
         // Number of live slots.
-        func used(ptr<GenerationalSparseSetAllocator> self) -> uint32_t {
+        func used(view<GenerationalSparseSetAllocator> self) -> uint32_t {
             return $(self)._used
         }
 
         // Number of slots the pool holds.
-        func capacity(ptr<GenerationalSparseSetAllocator> self) -> uint32_t {
+        func capacity(view<GenerationalSparseSetAllocator> self) -> uint32_t {
             return $(self)._capacity
         }
     }

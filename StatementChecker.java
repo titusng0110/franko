@@ -93,6 +93,12 @@ public class StatementChecker {
 
         if (!isStorageBackedLValue(node.target)) {
             diagnostics.error("Left-hand side of assignment must be a pointable storage-backed lvalue");
+        } else {
+            expressions.ensureRegionPermission(
+                    node.target,
+                    PtrPermission.MUTABLE,
+                    "assignment"
+            );
         }
 
         if (types.isVoidType(node.target.type)) {

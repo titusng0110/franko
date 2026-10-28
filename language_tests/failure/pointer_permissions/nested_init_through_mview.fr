@@ -1,0 +1,13 @@
+// Failure fixture: pointer_permissions/nested_init_through_mview
+// The region rule: an index or member access never leaves the region its
+// pointer dereference created, so lifecycle intrinsics need allocation
+// rights at every level. A bare local is owner-protected (allowed), but
+// through an mview<T> even an inner array's init() is blocked.
+func main() -> int32_t {
+    array<array<byte>> d;
+    d.init(1);
+    d[0].init(2);
+    mview<array<array<byte>>> m = getmview(d);
+    $(m)[0].init(3);
+    return 0;
+}

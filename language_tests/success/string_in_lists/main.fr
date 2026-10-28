@@ -2,18 +2,29 @@
 // LANGUAGE TEST: Strings Inside Array Initializer Lists
 // ============================================================
 // Covers: string literals as elements of an array initializer
-// list; each string becomes a nested byte list. ["hi", "ok"]
-// lowers to byte assignments 104 105 and 111 107.
+// list whose element type is a view. ["hi", "ok"] assigns one
+// getview(<hoisted global>) per slot. Byte buffers copy their
+// content with memcpy instead, since arrays are not assignable
+// from string literals.
 // ============================================================
 
 func main() -> int32_t {
-    array<array<byte, 3>, 2> m;
+    array<view<array<byte, 2>>, 2> m;
     m = ["hi", "ok"];
 
-    print(m[0][0]);
-    print(m[0][1]);
-    print(m[1][0]);
-    print(m[1][1]);
+    print($(m[0])[0]);
+    print($(m[0])[1]);
+    print($(m[1])[0]);
+    print($(m[1])[1]);
+
+    array<array<byte, 3>, 2> b;
+    b[0].memcpy("hi");
+    b[1].memcpy("ok");
+
+    print(b[0][0]);
+    print(b[0][1]);
+    print(b[1][0]);
+    print(b[1][1]);
 
     return 0;
 }

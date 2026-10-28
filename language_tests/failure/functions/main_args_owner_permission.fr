@@ -1,0 +1,6 @@
+// Failure fixture: functions/main_args_owner_permission
+// The raw-args entry point takes view<array<array<byte>>> args; the old
+// owner form ptr<array<array<byte>>> is no longer a valid entry point.
+func main(ptr<array<array<byte>>> args) -> int32_t {
+    return 0
+}

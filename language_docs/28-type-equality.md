@@ -40,7 +40,20 @@ array<int32_t, 10>     != array<int32_t, 20>
 
 ## 28.4 Pointer Equality
 
-Pointer types are equal if their referenced types are equal.
+Pointer types are equal if their referenced types are equal **and** their
+permissions match: `ptr<T>`, `mview<T>`, and `view<T>` are three distinct
+types.
+
+```text
+ptr<array<byte>>     == ptr<array<byte>>
+ptr<array<byte>>     != mview<array<byte>>
+mview<array<byte>>   != view<array<byte>>
+view<array<byte, 3>> != view<array<byte, 5>>
+```
+
+A pointer permission downgrade (`ptr<T>` to `mview<T>`/`view<T>`,
+`mview<T>` to `view<T>`) is the single implicit conversion the language
+allows; it does not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
 
@@ -49,7 +62,9 @@ Function signatures are equal if they have:
 - the same function identifier;
 - the same ordered list of parameter types.
 
-Return type and parameter names are not part of function signature equality.
+Return type and parameter names are not part of function signature
+equality. For methods, the `self` parameter type is not part of signature
+equality either (see [Methods](26-methods.md)).
 
 ## 28.6 Struct Equality
 

@@ -6,7 +6,7 @@ import "franko/os"
 func main() -> int32_t {
     array<byte> msg;
     msg.init(2);
-    msg = "hi";
+    msg.memcpy("hi");
     int64_t n = os::posix::write(1, getptr(msg), 99);
     print(n);
     msg.uninit();

@@ -1,0 +1,7 @@
+// getptr() of view-protected storage would launder the permission.
+func main() -> int32_t {
+    array<byte, 3> buf;
+    view<array<byte, 3>> v = getview(buf);
+    ptr<array<byte, 3>> p = getptr($(v));
+    return 0;
+}

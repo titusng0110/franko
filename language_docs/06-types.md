@@ -7,7 +7,7 @@ primitive integers
 structs
 dynamic arrays
 static arrays
-typed pointers
+typed pointers (ptr / mview / view)
 function return-only void
 ```
 
@@ -17,4 +17,6 @@ Structs are nominal types: two distinct struct declarations are distinct types e
 
 `void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
 
-A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal or string-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
+Pointers come in three permission levels — `ptr<T>` (owner), `mview<T>` (mutable view), `view<T>` (read-only view) — one capability model for all of them. See [Pointers](24-pointers.md).
+
+A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.

@@ -239,6 +239,23 @@ public class TypeChecker {
         }
 
         if (isArrayType(targetType) || isArrayType(expr.type)) {
+            if (isArrayType(targetType)
+                    && expr.type instanceof SemanticPtrType sourcePtr
+                    && isArrayType(sourcePtr.referencedType)) {
+                if (isStringLiteralView(expr)) {
+                    diagnostics.error(message + ": a string literal is a "
+                            + expr.type.describe()
+                            + " value and cannot be assigned to an array; copy "
+                            + "the bytes with '<target>.memcpy(<source>)'");
+                } else {
+                    diagnostics.error(message + ": "
+                            + expr.type.describe()
+                            + " cannot be assigned to an array; copy "
+                            + "the bytes with '<target>.memcpy(<source>)'");
+                }
+                return;
+            }
+
             diagnostics.error(message + ": arrays cannot be directly assigned");
             return;
         }
@@ -273,12 +290,30 @@ public class TypeChecker {
             return;
         }
 
+        if (isPermissionDowngrade(expr.type, targetType)) {
+            return;
+        }
+
         if (!sameType(targetType, expr.type)) {
             diagnostics.error(message + ": expected "
                     + targetType.describe()
                     + ", got "
                     + expr.type.describe());
         }
+    }
+
+    public boolean isPermissionDowngrade(
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        return PointerPermissions.isPermissionDowngrade(sourceType, targetType);
+    }
+
+    private static boolean isStringLiteralView(SemanticExprNode expr) {
+        return expr instanceof SemanticGetPtrNode get
+                && get.target instanceof SemanticVarExprNode var
+                && var.symbol instanceof GlobalVariableSymbol global
+                && global.literalBytes != null;
     }
 
     private void requireAssignableConstant(

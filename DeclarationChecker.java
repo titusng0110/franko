@@ -40,6 +40,40 @@ public class DeclarationChecker {
         if (node.foldedConstInitializer != null) {
             validateGlobalConstInitializer(node);
         }
+
+        if (node.staticInitializer != null) {
+            validateGlobalStaticInitializer(node);
+        }
+    }
+
+    private void validateGlobalStaticInitializer(SemanticVarDeclNode node) {
+        SemanticType type = node.symbol.type;
+
+        if (!(type instanceof SemanticPtrType)) {
+            diagnostics.error("Variable '"
+                + node.symbol.qualifiedName()
+                + "' has a static address initializer, but only pointer "
+                + "globals can be initialized with getptr/getmview/getview");
+            return;
+        }
+
+        expressions.checkExpr(node.staticInitializer);
+
+        if (node.staticInitializer.type == null) {
+            return;
+        }
+
+        if (!types.sameType(type, node.staticInitializer.type)
+                && !types.isPermissionDowngrade(
+                        node.staticInitializer.type,
+                        type)) {
+            diagnostics.error("Variable '"
+                + node.symbol.qualifiedName()
+                + "' initializer has type "
+                + types.describeSafe(node.staticInitializer.type)
+                + ", expected "
+                + types.describeSafe(type));
+        }
     }
 
     public void checkStructDecl(SemanticStructDeclNode node) {
@@ -276,7 +310,10 @@ public class DeclarationChecker {
 
         diagnostics.error("Variable '"
             + node.symbol.qualifiedName()
-            + "' has an initializer, but only primitive globals can have initializers");
+            + "' has a constant initializer, but only primitive globals "
+            + "can have constant initializers (pointer globals accept "
+            + "null, getptr/getmview/getview over a global, or a string "
+            + "literal)");
     }
 
     private void validateStaticArraySize(

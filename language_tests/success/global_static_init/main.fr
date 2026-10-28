@@ -1,0 +1,27 @@
+// ============================================================
+// LANGUAGE TEST: Global Static Address Initializers
+// ============================================================
+// Covers: pointer globals initialized with getptr/getmview/getview
+// over another global (including hoisted string-literal globals),
+// permission downgrades in the initializer, and forward references
+// between globals (the backend forward-declares globals, so source
+// order does not matter).
+// ============================================================
+
+view<array<byte, 5>> v = getview(greeting);
+ptr<array<byte, 5>> p = getptr(greeting);
+mview<array<byte, 5>> m = getmview(greeting);
+view<array<byte, 5>> s = "hello";
+array<byte, 5> greeting;
+
+func main() -> int32_t {
+    greeting.memset(7);
+
+    print($(v).length());
+    print($(p)[0]);
+    print($(m)[1]);
+    print($(s).length());
+    print($("hello")[0]);
+
+    return 0;
+}

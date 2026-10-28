@@ -200,21 +200,50 @@ final class SemanticStaticArrayType extends SemanticType {
     }
 }
 
-final class SemanticPtrType extends SemanticType {
+enum PtrPermission {
+    OWNER("ptr"),
+    MUTABLE("mview"),
+    READ_ONLY("view");
+
+    private final String spelling;
+
+    PtrPermission(String spelling) {
+        this.spelling = spelling;
+    }
+
+    String spelling() {
+        return spelling;
+    }
+
+    boolean allows(PtrPermission other) {
+        return this.ordinal() <= other.ordinal();
+    }
+}
+
+class SemanticPtrType extends SemanticType {
     final SemanticType referencedType;
+    final PtrPermission permission;
 
     SemanticPtrType(SemanticType referencedType) {
+        this(referencedType, PtrPermission.OWNER);
+    }
+
+    protected SemanticPtrType(
+            SemanticType referencedType,
+            PtrPermission permission
+    ) {
         this.referencedType = Objects.requireNonNull(referencedType);
+        this.permission = Objects.requireNonNull(permission);
     }
 
     @Override
     public String describe() {
-        return "ptr<" + referencedType.describe() + ">";
+        return permission.spelling() + "<" + referencedType.describe() + ">";
     }
 
     @Override
     public String mangleKey() {
-        return "ptr<" + referencedType.mangleKey() + ">";
+        return permission.spelling() + "<" + referencedType.mangleKey() + ">";
     }
 
     @Override
@@ -223,12 +252,38 @@ final class SemanticPtrType extends SemanticType {
             return false;
         }
 
+        if (getClass() != other.getClass()) {
+            return false;
+        }
+
         return referencedType.equals(other.referencedType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(SemanticPtrType.class, referencedType);
+        return Objects.hash(getClass(), referencedType);
+    }
+
+    public SemanticPtrType withPermission(PtrPermission newPermission) {
+        return switch (newPermission) {
+            case OWNER -> new SemanticPtrType(referencedType);
+            case MUTABLE -> new SemanticMViewType(referencedType);
+            case READ_ONLY -> new SemanticViewType(referencedType);
+        };
+    }
+}
+
+final class SemanticMViewType extends SemanticPtrType {
+
+    SemanticMViewType(SemanticType referencedType) {
+        super(referencedType, PtrPermission.MUTABLE);
+    }
+}
+
+final class SemanticViewType extends SemanticPtrType {
+
+    SemanticViewType(SemanticType referencedType) {
+        super(referencedType, PtrPermission.READ_ONLY);
     }
 }
 

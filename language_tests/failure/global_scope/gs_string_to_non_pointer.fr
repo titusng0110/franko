@@ -1,0 +1,9 @@
+// Failure fixture: global_scope/gs_string_to_non_pointer
+// A string literal is a view<array<byte, N>> value: only pointer-typed
+// globals may be initialized with one (or with getptr/getmview/getview
+// over a global, or null).
+array<byte, 6> G = "hello";
+
+func main() -> int32_t {
+    return 0;
+}

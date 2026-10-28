@@ -98,7 +98,12 @@ public class FunctionChecker {
                     + display
                     + "' must have 'ptr<"
                     + ownerName
-                    + "> self' as its first parameter");
+                    + "> self' as its first parameter"
+                    + " (also allowed: 'mview<"
+                    + ownerName
+                    + "> self', 'view<"
+                    + ownerName
+                    + "> self')");
             return;
         }
 
@@ -109,7 +114,12 @@ public class FunctionChecker {
                     + display
                     + "' must have 'ptr<"
                     + ownerName
-                    + "> self' as its first parameter");
+                    + "> self' as its first parameter"
+                    + " (also allowed: 'mview<"
+                    + ownerName
+                    + "> self', 'view<"
+                    + ownerName
+                    + "> self')");
         } else if (!isSelfTypeForOwner(first.type, method.owner)) {
             diagnostics.error("Method '"
                     + display
@@ -117,7 +127,11 @@ public class FunctionChecker {
                     + types.describeSafe(first.type)
                     + "; it must be ptr<"
                     + ownerName
-                    + ">");
+                    + "> (or mview<"
+                    + ownerName
+                    + "> or view<"
+                    + ownerName
+                    + ">)");
         }
 
         for (int i = 1; i < method.parameters.size(); i++) {

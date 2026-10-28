@@ -1,181 +1,109 @@
 # 23. String Literals
 
-Franko supports string literals as **initializer sugar** for byte arrays.
-
-A string literal is written with double quotes:
+Franko string literals are **read-only views of byte arrays**. A string
+literal is an ordinary expression whose type is `view<array<byte, N>>`
+(see [Pointers](24-pointers.md)): a read-only pointer to a static byte
+array of `N` UTF-8 bytes, where `N` is the literal's byte length.
 
 ```franko
-"Franko"
-"Hello, World!"
+"Franko"           // view<array<byte, 6>>
+"Hello, World!"    // view<array<byte, 13>>
 ```
 
-## 23.1 A String Literal Is Not an Expression Value
+## 23.1 A String Literal Is a View Value
 
-A string literal is **not** a general expression value. Like array initializer lists, string literals are meaningful only in assignment/initializer contexts where there is an explicit array target.
+Each distinct literal is hoisted to its own global `array<byte, N>`
+holding the UTF-8 bytes, and the literal expression is `getview(...)`
+over it. Identical literal texts share one global. No null terminator is
+appended: `N` is exactly the number of content bytes.
 
-A string literal may appear:
-
-- as an assignment initializer: `s = "text";`
-- as a declaration initializer: `array<byte, N> s = "text";`
-- as an element of an array initializer list: `rows = ["one", "two"];`
-
-It is invalid in ordinary expression positions such as:
+Because the literal is a pointer, it must be dereferenced with `$(...)`
+to reach the bytes:
 
 ```franko
-print("hi");        // invalid: print arguments are expressions
-foo("hi");          // invalid: function arguments are expressions
-return "hi";        // invalid: return values are expressions
-"hi"                // invalid: a string literal is not an expression statement
+print($("abc").length());   // 3
+print($("abc")[0]);         // 97
 ```
 
-## 23.2 Desugaring to UTF-8 Bytes
-
-A string literal desugars into an array initializer list containing the literal's **UTF-8 bytes** as ordinary integer constants:
+A string literal may appear anywhere an expression may appear:
 
 ```franko
-"ABC"
+view<array<byte, 3>> s = "abc";     // declaration initializer
+s = "xyz";                          // assignment to a view variable
+print($("hi").length());            // print argument
+take("hi");                         // function argument
+return "hi";                        // return value (with a view return type)
 ```
 
-becomes:
+## 23.2 UTF-8 Bytes
+
+A string literal stores the literal's **UTF-8 bytes**: one array element
+per byte. Multi-byte sequences expand accordingly:
 
 ```franko
-[65, 66, 67]
+print($("你好").length());   // 6: 228 189 160 229 165 189
 ```
 
-Multi-byte UTF-8 sequences expand to one element per byte:
+## 23.3 Escapes
+
+The supported escape sequences are `\\ \" \a \b \f \n \r \t \v`.
+`\u`, `\x`, and `\0` are not supported, and a trailing backslash is
+invalid. Any other escape is a lex error.
 
 ```franko
-"你好"
+print($("\t\n\"\\"")[0]);   // 9
 ```
 
-becomes:
+## 23.4 Strings and Byte Buffers
+
+Arrays are value types and are **not assignable from strings**: a
+`view<array<byte, N>>` cannot initialize or assign an array. Copy the
+bytes with the `memcpy` intrinsic instead — a string literal is a valid
+`memcpy` source:
 
 ```franko
-[228, 189, 160, 229, 165, 189]
+array<byte, 6> buf;
+buf.memcpy("hello");      // copies 5 bytes; buf[5] is untouched
+print(buf[0]);            // 104
 ```
 
-**No null terminator is appended.**
-
-## 23.3 String Assignment
-
-Because a string literal is array initializer sugar, this:
+For dynamic arrays, size the buffer first:
 
 ```franko
-array<byte, 6> s;
-s = "ABCDE";
+array<byte> buf;
+buf.init($("hello").length());
+buf.memcpy("hello");
 ```
 
-desugars through the ordinary array initializer lowering to:
+For the same reason `array<byte, ?>` cannot infer its size from a string
+literal; declare the size explicitly or infer from an array literal.
+
+## 23.5 Global String Views
+
+A pointer-typed global may be initialized with a string literal (or with
+`getptr`/`getmview`/`getview` over another global, or `null`):
 
 ```franko
-array<byte, 6> s;
-s[0] = 65;
-s[1] = 66;
-s[2] = 67;
-s[3] = 68;
-s[4] = 69;
-```
+view<array<byte, 5>> GREETING = "hello";
 
-`s[5]` is untouched.
-
-As with other initializer lists:
-
-- the initializer list itself does **not** initialize, allocate, or resize storage;
-- a dynamic array target must already be initialized before string assignment — this requirement is enforced by the runtime, not at compile time (accessing an uninitialized dynamic array aborts with a "Franko_Dynamic_Array not initialized" error);
-- assignment into a static array that is too small is rejected by ordinary static array bounds checking.
-
-The target may be any array whose element type can hold byte constants `0..255` under normal assignment rules. `array<byte, N>` (or `array<uint8_t, N>`) is the idiomatic target, but wider integer element types also accept each byte value.
-
-## 23.4 String Declaration Initializers
-
-```franko
-array<byte, 6> s = "ABCDE";
-```
-
-is ordinary declaration initializer sugar, equivalent to:
-
-```franko
-array<byte, 6> s;
-s = "ABCDE";
-```
-
-which then lowers to the per-byte assignments shown above.
-
-The size may be inferred with `?`; it counts UTF-8 bytes (no null terminator is added):
-
-```franko
-array<byte, ?> t = "hello";   // ? = 5
-```
-
-## 23.5 Strings Inside Array Initializer Lists
-
-String literals may appear as elements of an array initializer list. Each string element becomes a nested byte list:
-
-```franko
-array<array<byte, 3>, 2> m;
-m = ["hi", "ok"];
-```
-
-lowers to:
-
-```franko
-m[0][0] = 104;  // 'h'
-m[0][1] = 105;  // 'i'
-m[1][0] = 111;  // 'o'
-m[1][1] = 107;  // 'k'
-```
-
-The inner target element must itself be an array, and ordinary element assignment rules apply to each generated byte assignment.
-
-## 23.6 Escape Sequences
-
-The lexer accepts the following escapes inside string literals:
-
-| Escape | Meaning |
-|---|---|
-| `\\` | backslash |
-| `\"` | double quote |
-| `\a` | bell |
-| `\b` | backspace |
-| `\f` | form feed |
-| `\n` | line feed |
-| `\r` | carriage return |
-| `\t` | horizontal tab |
-| `\v` | vertical tab |
-
-String literals may also contain:
-
-- raw Unicode characters;
-- literal tabs;
-- literal newlines (multi-line string literals are allowed).
-
-They may **not** contain:
-
-- a raw, unescaped `"`;
-- a raw, unescaped backslash;
-- unsupported escapes such as `\u1234`, `\xFF`, `\0`, or any other `\<char>` not listed above.
-
-There is no string concatenation operator and no interpolation syntax.
-
-## 23.7 Example
-
-```franko
 func main() -> int32_t {
-    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
-    uint i = 0;
-
-    str(200);
-    str.memset(0);
-    str = "Hello,\tWorld!\n\"Franko\"";
-
-    while (i < 22) {
-        print(str[i]);
-        i = i + 1;
-    }
-
-    str.uninit();
+    print($(GREETING).length());   // 5
     return 0;
 }
 ```
 
-See also [Array Initializer Lists](22-array-initializer-lists.md).
+## 23.6 Printing Strings
+
+`print` is unchanged (it is superseded by a future io class): a string
+literal passed to `print` prints as the address of its global byte
+array, like any other pointer. Print individual bytes instead:
+
+```franko
+print($("hi")[0]);   // 104
+print($("hi")[1]);   // 105
+```
+
+## 23.7 Empty Strings
+
+An empty string literal `""` is not supported: a string literal is a
+`view<array<byte, N>>` with `N >= 1`.

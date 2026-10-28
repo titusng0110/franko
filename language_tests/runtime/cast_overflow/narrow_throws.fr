@@ -1,9 +1,9 @@
 // Runtime fixture: cast_overflow/narrow_throws
-// A narrowing cast whose value does not fit the target throws via
-// franko_safe_cast; the binary must exit non-zero.
+// A narrowing unsafe_cast whose value does not fit the target
+// throws via franko_unsafe_cast; the binary must exit non-zero.
 func main() -> int32_t {
     int32_t big = 300;
-    uint8_t small = cast<uint8_t>(big);
+    uint8_t small = unsafe_cast<uint8_t>(big);
     print(small);
     return 0;
 }

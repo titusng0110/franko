@@ -294,11 +294,39 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         ASTNode constInitializer = null;
 
-        if (ctx.constDeclSuffix() != null) {
-            constInitializer = visit(ctx.constDeclSuffix().constDeclInitializer());
+        if (ctx.globalVarInitializer() != null) {
+            constInitializer =
+                    visit(ctx.globalVarInitializer().globalVarInitValue());
         }
 
         return new GlobalVarDeclNode(type, name, constInitializer);
+    }
+
+    @Override
+    public ASTNode visitGlobalVarInitValue(
+            FrankoParser.GlobalVarInitValueContext ctx
+    ) {
+        if (ctx.constExpr() != null) {
+            return visit(ctx.constExpr());
+        }
+
+        if (ctx.stringLiteral() != null) {
+            return visit(ctx.stringLiteral());
+        }
+
+        if (ctx.getPtrExpr() != null) {
+            return visit(ctx.getPtrExpr());
+        }
+
+        if (ctx.getViewExpr() != null) {
+            return visit(ctx.getViewExpr());
+        }
+
+        if (ctx.getMViewExpr() != null) {
+            return visit(ctx.getMViewExpr());
+        }
+
+        return visit(ctx.nullLiteral());
     }
 
     @Override
@@ -612,7 +640,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitPtrType(FrankoParser.PtrTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(referencedType);
+        return new PtrTypeNode(PtrPermission.OWNER, referencedType);
+    }
+
+    @Override
+    public ASTNode visitMViewType(FrankoParser.MViewTypeContext ctx) {
+        TypeNode referencedType = (TypeNode) visit(ctx.type());
+        return new PtrTypeNode(PtrPermission.MUTABLE, referencedType);
+    }
+
+    @Override
+    public ASTNode visitViewType(FrankoParser.ViewTypeContext ctx) {
+        TypeNode referencedType = (TypeNode) visit(ctx.type());
+        return new PtrTypeNode(PtrPermission.READ_ONLY, referencedType);
     }
 
     @Override
@@ -916,12 +956,24 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.getPtrExpr());
         }
 
+        if (ctx.getViewExpr() != null) {
+            return visit(ctx.getViewExpr());
+        }
+
+        if (ctx.getMViewExpr() != null) {
+            return visit(ctx.getMViewExpr());
+        }
+
         if (ctx.derefExpr() != null) {
             return visit(ctx.derefExpr());
         }
 
         if (ctx.castExpr() != null) {
             return visit(ctx.castExpr());
+        }
+
+        if (ctx.unsafeCastExpr() != null) {
+            return visit(ctx.unsafeCastExpr());
         }
 
         if (ctx.expr() != null) {
@@ -939,7 +991,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitGetPtrExpr(FrankoParser.GetPtrExprContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(target);
+        return new GetPtrNode(PtrPermission.OWNER, target);
+    }
+
+    @Override
+    public ASTNode visitGetViewExpr(FrankoParser.GetViewExprContext ctx) {
+        ASTNode target = visit(ctx.lvalue());
+        return new GetPtrNode(PtrPermission.READ_ONLY, target);
+    }
+
+    @Override
+    public ASTNode visitGetMViewExpr(FrankoParser.GetMViewExprContext ctx) {
+        ASTNode target = visit(ctx.lvalue());
+        return new GetPtrNode(PtrPermission.MUTABLE, target);
     }
 
     @Override
@@ -950,33 +1014,43 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitCastExpr(FrankoParser.CastExprContext ctx) {
-        FrankoParser.PrimitiveTypeContext target = ctx.primitiveType();
+        TypeNode target = (TypeNode) visit(ctx.type());
+        return new CastNode(target, visit(ctx.expr()));
+    }
 
-        PrimitiveKind kind;
+    @Override
+    public ASTNode visitUnsafeCastExpr(FrankoParser.UnsafeCastExprContext ctx) {
+        TypeNode target = new PrimitiveTypeNode(
+                primitiveKindOf(ctx.primitiveType())
+        );
 
+        return new CastNode(target, visit(ctx.expr()), true);
+    }
+
+    private static PrimitiveKind primitiveKindOf(
+            FrankoParser.PrimitiveTypeContext target
+    ) {
         if (target.INT8_T() != null) {
-            kind = PrimitiveKind.INT8;
+            return PrimitiveKind.INT8;
         } else if (target.INT16_T() != null) {
-            kind = PrimitiveKind.INT16;
+            return PrimitiveKind.INT16;
         } else if (target.INT32_T() != null) {
-            kind = PrimitiveKind.INT32;
+            return PrimitiveKind.INT32;
         } else if (target.INT64_T() != null) {
-            kind = PrimitiveKind.INT64;
+            return PrimitiveKind.INT64;
         } else if (target.UINT8_T() != null) {
-            kind = PrimitiveKind.UINT8;
+            return PrimitiveKind.UINT8;
         } else if (target.UINT16_T() != null) {
-            kind = PrimitiveKind.UINT16;
+            return PrimitiveKind.UINT16;
         } else if (target.UINT32_T() != null) {
-            kind = PrimitiveKind.UINT32;
+            return PrimitiveKind.UINT32;
         } else if (target.UINT64_T() != null) {
-            kind = PrimitiveKind.UINT64;
-        } else {
-            throw new RuntimeException(
-                    "Internal compiler error: cast target is not a primitive integer type"
-            );
+            return PrimitiveKind.UINT64;
         }
 
-        return new CastNode(kind, visit(ctx.expr()));
+        throw new RuntimeException(
+                "Internal compiler error: cast target is not a primitive integer type"
+        );
     }
 
     @Override

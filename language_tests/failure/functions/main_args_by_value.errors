@@ -1,1 +1,1 @@
-must be declared as 'func main() -> int32_t' or 'func main(ptr<array<array<byte>>> <name>) -> int32_t'
+must be declared as 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t'

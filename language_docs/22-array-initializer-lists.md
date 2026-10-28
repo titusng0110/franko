@@ -43,7 +43,11 @@ foo([1, 2, 3]);
 return [1, 2, 3];
 ```
 
-String literals are allowed as elements of array initializer lists (see [String Literals](23-string-literals.md)).
+String literals are ordinary `view<array<byte, N>>` values, so they are
+allowed as elements only when the element type is a view (for example
+`array<view<array<byte, 3>>, 2> xs = ["abc", "def"];`). They cannot
+initialize array-typed elements; copy their bytes with `memcpy` instead
+(see [String Literals](23-string-literals.md)).
 
 Array initializer lists are only meaningful in assignment-style contexts where there is an explicit array assignment target.
 

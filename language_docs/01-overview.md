@@ -14,7 +14,7 @@ Franko is a small statically typed language with:
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
-- struct methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md));
+- struct methods with explicit `self` receivers (`ptr<X> self`, `mview<X> self`, `view<X> self`, see [Methods](26-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
@@ -26,7 +26,7 @@ Franko is a small statically typed language with:
 - `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
 - `print`;
-- string literals as byte-array initializer sugar;
+- string literals as read-only `view<array<byte, N>>` values;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);
   - `arr.init(size)`;
@@ -51,8 +51,8 @@ Franko currently does **not** implement:
 - generics;
 - floating-point types;
 - a distinct boolean type;
-- general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
-- implicit numeric conversions except for fluid integer constants (explicit width changes use the `cast<T>(expr)` intrinsic);
+- dedicated string types or a string library (strings are byte-array views, see [String Literals](23-string-literals.md));
+- implicit numeric conversions except for fluid integer constants (explicit width changes use `cast<T>(expr)` for widening and `unsafe_cast<T>(expr)` for checked conversions);
 - cast syntax;
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;

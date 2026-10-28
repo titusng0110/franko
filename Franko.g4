@@ -200,14 +200,33 @@ structFieldDecl
 //   int32_t g = 1 + 2
 //   uint64_t mask = 1 << 8
 //   X globalStruct
+//   ptr<X> p = null
+//   view<array<byte, 5>> s = "hello"
+//   ptr<array<byte, 5>> q = getptr(otherGlobal)
 //
 // Invalid:
 //   int32_t g = f()
 //   int32_t g = other
 //   int32_t g = arr[0]
 //
+// A pointer-typed global may also be initialized with a statically
+// representable address: getptr/getmview/getview over a global variable
+// (string literals desugar to getview over a hoisted global).
 globalVarDecl
-    : type IDENTIFIER constDeclSuffix?
+    : type IDENTIFIER globalVarInitializer?
+    ;
+
+globalVarInitializer
+    : ASSIGN globalVarInitValue
+    ;
+
+globalVarInitValue
+    : constExpr
+    | stringLiteral
+    | getPtrExpr
+    | getViewExpr
+    | getMViewExpr
+    | nullLiteral
     ;
 
 // ---------- CONST DECLARATION INITIALIZERS ----------
@@ -648,8 +667,11 @@ primary
     | SELF
     | qualifiedName
     | getPtrExpr
+    | getViewExpr
+    | getMViewExpr
     | derefExpr
     | castExpr
+    | unsafeCastExpr
     | LPAREN expr RPAREN
     ;
 
@@ -702,7 +724,12 @@ memberName
     | BREAK
     | CONTINUE
     | PTR
+    | MVIEW
+    | VIEW
     | GETPTR
+    | GETMVIEW
+    | GETVIEW
+    | UNSAFE_CAST
     | INT8_T
     | INT16_T
     | INT32_T
@@ -892,6 +919,14 @@ getPtrExpr
     : GETPTR LPAREN lvalue RPAREN
     ;
 
+getViewExpr
+    : GETVIEW LPAREN lvalue RPAREN
+    ;
+
+getMViewExpr
+    : GETMVIEW LPAREN lvalue RPAREN
+    ;
+
 // Dereference: `$(X)`. The operand is a full expr; the result is an
 // lvalue of the pointee type (so `$(p).field`, `$(p)[i]`, and
 // `$(p) = v` are all valid). Always parenthesized: `$X` is a syntax
@@ -900,11 +935,26 @@ derefExpr
     : DEREF LPAREN expr RPAREN
     ;
 
-// Explicit integer conversion. The target must be one of the eight
-// primitive integer types; arrays, pointers, structs, and void are
-// rejected here at parse time.
+// Explicit conversion. Two forms:
+//
+//   cast<T>(expr)
+//     - integer target: value-preserving widening only (emits plain
+//       static_cast); a conversion that can lose data must be written
+//       with unsafe_cast instead
+//     - pointer target (ptr/mview/view): explicit permission downgrade
+//       only; casting upwards is invalid
+//
+//   unsafe_cast<T>(expr)
+//     - arbitrary integer conversion; range-checked at runtime through
+//       franko_unsafe_cast (and range-checked at compile time when the
+//       operand is a constant). The target is restricted to the eight
+//       primitive integer types at parse time.
 castExpr
-    : CAST LT primitiveType GT LPAREN expr RPAREN
+    : CAST LT type GT LPAREN expr RPAREN
+    ;
+
+unsafeCastExpr
+    : UNSAFE_CAST LT primitiveType GT LPAREN expr RPAREN
     ;
 
 primitiveType
@@ -983,6 +1033,8 @@ type
     | ARRAY LT type GT                         # DynamicArrayType
     | ARRAY LT type COMMA arraySize GT        # StaticArrayType
     | PTR LT type GT                          # PtrType
+    | MVIEW LT type GT                        # MViewType
+    | VIEW LT type GT                         # ViewType
     ;
 
 // ---------- LEXER ----------
@@ -1002,10 +1054,15 @@ FOR     : 'for' ;
 BREAK    : 'break' ;
 CONTINUE : 'continue' ;
 PTR    : 'ptr' ;
+MVIEW  : 'mview' ;
+VIEW   : 'view' ;
 GETPTR : 'getptr' ;
+GETMVIEW : 'getmview' ;
+GETVIEW  : 'getview' ;
 // Dereference prefix operator. Syntax is `$(X)`, always parenthesized.
 DEREF   : '$' ;
 CAST    : 'cast' ;
+UNSAFE_CAST : 'unsafe_cast' ;
 SELF    : 'self' ;
 NULL    : 'null' ;
 

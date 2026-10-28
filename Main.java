@@ -176,6 +176,21 @@ public class Main {
             }
         }
 
+        System.out.println("==== Pointer Permission Linting ====");
+        DiagnosticBag permissionDiagnostics =
+                new DiagnosticBag("Pointer permission linting failed:");
+        PointerPermissionChecker permissionChecker =
+                new PointerPermissionChecker(permissionDiagnostics);
+        permissionChecker.check(semaAST);
+
+        if (permissionDiagnostics.hasWarnings()) {
+            System.out.println("==== Pointer Permission Warnings ====");
+
+            for (String warning : permissionDiagnostics.getWarnings()) {
+                System.out.println("  - " + warning);
+            }
+        }
+
         System.out.println("All checks passed.");
 
         String osFfiBridgeText = null;
@@ -229,7 +244,7 @@ public class Main {
 
         if (!explicitTemplate) {
             String expectedEntryCall = switch (sema.entryKind()) {
-                case ARGS -> "FUNC_main_HASH_5708d149";
+                case ARGS -> "FUNC_main_HASH_db73581e";
                 case NO_ARGS -> "FUNC_main_HASH_d8625720";
                 case NONE -> throw new RuntimeException(
                     "Internal compiler error: no entry-point function 'main' after successful analysis"

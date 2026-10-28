@@ -1,0 +1,8 @@
+// uninit() needs allocation rights: blocked on mview<T>.
+func main() -> int32_t {
+    array<byte> d;
+    d.init(3);
+    mview<array<byte>> m = getmview(d);
+    $(m).uninit();
+    return 0;
+}

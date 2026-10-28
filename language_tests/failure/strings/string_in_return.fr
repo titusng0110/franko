@@ -1,5 +1,6 @@
 // Failure fixture: strings/string_in_return
-// A string literal is not an expression, so it cannot be a return value.
+// A string literal is a view<array<byte, N>> value; it cannot be
+// returned from a function with an int32_t return type.
 func f() -> int32_t {
     return "hi";
 }

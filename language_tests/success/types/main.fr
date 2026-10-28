@@ -39,8 +39,9 @@ func main() -> int32_t {
     int32_t hex = 0xFF;
     int32_t hexUpperPrefix = 0XFF;
 
-    // --- String literals (as initializer for byte arrays) ---
-    array<byte, 5> str = "hello";
+    // --- String literals (view<array<byte, N>> over a hoisted global) ---
+    array<byte, 5> str;
+    str.memcpy("hello");
 
     // --- Array types ---
     array<int32_t> dynArray;

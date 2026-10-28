@@ -182,6 +182,26 @@ public class Cpp14Codegen {
                 openNamespace(entry.getKey());
 
                 for (SemanticVarDeclNode global : entry.getValue()) {
+                    emitGlobalForwardDeclaration(global);
+                }
+
+                closeNamespace(entry.getKey());
+            }
+
+            for (SemanticVarDeclNode global : globalGlobals) {
+                emitGlobalForwardDeclaration(global);
+            }
+
+            emitLine("");
+
+            for (Map.Entry<String, List<SemanticVarDeclNode>> entry : nsGlobals.entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    continue;
+                }
+
+                openNamespace(entry.getKey());
+
+                for (SemanticVarDeclNode global : entry.getValue()) {
                     emitVarDecl(global);
                 }
 
@@ -720,11 +740,38 @@ public class Cpp14Codegen {
         emitLine("}");
     }
 
+    private void emitGlobalForwardDeclaration(SemanticVarDeclNode node) {
+        VariableSymbol sym = node.symbol;
+
+        String cppType = emitType(sym.type);
+        String name = emitSymbolName(sym);
+        String qualifier = "";
+
+        if (sym instanceof GlobalVariableSymbol global
+                && global.literalBytes != null) {
+            qualifier = "const ";
+        }
+
+        emitLine("extern " + qualifier + cppType + " " + name + ";");
+    }
+
     private void emitVarDecl(SemanticVarDeclNode node) {
         VariableSymbol sym = node.symbol;
 
         String cppType = emitType(sym.type);
         String name = emitSymbolName(sym);
+
+        if (sym instanceof GlobalVariableSymbol global
+                && global.literalBytes != null) {
+            emitLine("const "
+                    + cppType
+                    + " "
+                    + name
+                    + " = "
+                    + emitByteArrayInitializer(global.literalBytes)
+                    + ";");
+            return;
+        }
 
         String initializer = "";
 
@@ -733,12 +780,34 @@ public class Cpp14Codegen {
                     + emitBigIntegerLiteral(node.foldedConstInitializer);
         }
 
+        if (node.staticInitializer != null) {
+            initializer = " = " + emitExpr(node.staticInitializer);
+        }
+
         if (initializer.isEmpty()
                 && sym.type instanceof SemanticPtrType) {
             initializer = " = nullptr";
         }
 
         emitLine(cppType + " " + name + initializer + ";");
+    }
+
+    private String emitByteArrayInitializer(List<BigInteger> bytes) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("{{");
+
+        for (int i = 0; i < bytes.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            sb.append(bytes.get(i).toString(10));
+        }
+
+        sb.append("}}");
+
+        return sb.toString();
     }
 
     private void emitAssign(SemanticAssignNode node) {
@@ -1332,7 +1401,7 @@ public class Cpp14Codegen {
             return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
         }
 
-        return "franko_safe_cast<" + emitType(node.type) + ">(" + raw + ")";
+        return "franko_unsafe_cast<" + emitType(node.type) + ">(" + raw + ")";
     }
 
     private String emitLValue(SemanticExprNode node) {
@@ -1386,7 +1455,11 @@ public class Cpp14Codegen {
         }
 
         if (type instanceof SemanticPtrType ptr) {
-            return emitType(ptr.referencedType) + "*";
+            String pointee = emitType(ptr.referencedType);
+
+            return ptr.permission == PtrPermission.READ_ONLY
+                    ? pointee + " const*"
+                    : pointee + "*";
         }
 
         if (type instanceof SemanticStructType struct) {

@@ -233,7 +233,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.11 String Literal Assignment
+## 33.11 String Literal Bytes
 
 ```franko
 func main() -> int32_t {
@@ -242,7 +242,7 @@ func main() -> int32_t {
 
     str(200);
     str.memset(0);
-    str = "Hello,\tWorld!\n\"Franko\"";
+    str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
     while (i < 22) {
         print(str[i]);
@@ -254,7 +254,8 @@ func main() -> int32_t {
 }
 ```
 
-See [String Literals](23-string-literals.md).
+A string literal is a `view<array<byte, N>>`; byte buffers receive its
+content through `memcpy`. See [String Literals](23-string-literals.md).
 
 ## 33.12 Nested Static Array Grid
 
@@ -494,7 +495,7 @@ func main() -> int32_t {
     array<int32_t, ?> a = [0, 1, 2, 3];
     print(a.length());   // 4
 
-    array<byte, ?> s = "hello";
+    array<byte, ?> s = [104, 101, 108, 108, 111];
     print(s.length());   // 5
 
     array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
@@ -508,7 +509,7 @@ func main() -> int32_t {
 ## 33.22 Command-Line Arguments
 
 ```franko
-func main(ptr<array<array<byte>>> args) -> int32_t {
+func main(view<array<array<byte>>> args) -> int32_t {
     uint32_t n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 

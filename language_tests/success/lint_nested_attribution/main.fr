@@ -1,0 +1,25 @@
+// ============================================================
+// LANGUAGE TEST: Capability Linter, Nested Attribution
+// ============================================================
+// Attribution follows the pointer-boundary rule: once an access
+// path crosses another dereference, the operation belongs to the
+// extracted inner pointer, and the outer variable is credited
+// read-only. v is declared ptr but only ever read from (the
+// lifecycle work happens on the extracted inner ptr), so the
+// linter tells it to become a view (see main.warnings).
+// ============================================================
+
+func main() -> int32_t {
+    array<byte> d;
+    array<ptr<array<byte>>> store;
+    store.init(1);
+    store[0] = getptr(d);
+
+    ptr<array<ptr<array<byte>>>> v = getptr(store);
+    $($(v)[0]).init(2);
+    $($(v)[0])[0] = 9;
+    print($(store[0]).length());
+    print($(store[0])[0]);
+
+    return 0;
+}

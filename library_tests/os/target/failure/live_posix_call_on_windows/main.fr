@@ -18,7 +18,7 @@ import "franko/os"
 func main() -> int32_t {
     array<byte> msg;
     msg.init(5);
-    msg = "hello";
+    msg.memcpy("hello");
     os::posix::write(os::posix::STDOUT_FILENO, getptr(msg), 5);
     msg.uninit();
     return 0;

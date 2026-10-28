@@ -1,0 +1,9 @@
+// Failure fixture: casts/cast_int_to_pointer
+// A pointer cast target requires a pointer or null operand: casting an
+// integer to ptr<int32_t> is rejected by the semantic analyzer.
+func main() -> int32_t {
+    int32_t x = 5;
+    int32_t y = cast<ptr<int32_t>>(x);
+    print(y);
+    return 0;
+}

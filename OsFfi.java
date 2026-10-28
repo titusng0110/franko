@@ -53,14 +53,14 @@ final class OsFfi {
 
     private static Kind matchPosix(FunctionSymbol fn) {
         if (fn.name.equals("read")) {
-            if (!isPosixReadWriteSignature(fn)) {
+            if (!isPosixReadSignature(fn)) {
                 throw new IllegalStateException(ffiDriftError(fn));
             }
             return Kind.POSIX_READ;
         }
 
         if (fn.name.equals("write")) {
-            if (!isPosixReadWriteSignature(fn)) {
+            if (!isPosixWriteSignature(fn)) {
                 throw new IllegalStateException(ffiDriftError(fn));
             }
             return Kind.POSIX_WRITE;
@@ -78,14 +78,14 @@ final class OsFfi {
         }
 
         if (fn.name.equals("ReadFile")) {
-            if (!isWin32ReadWriteSignature(fn)) {
+            if (!isWin32ReadFileSignature(fn)) {
                 throw new IllegalStateException(ffiDriftError(fn));
             }
             return Kind.WIN32_READFILE;
         }
 
         if (fn.name.equals("WriteFile")) {
-            if (!isWin32ReadWriteSignature(fn)) {
+            if (!isWin32WriteFileSignature(fn)) {
                 throw new IllegalStateException(ffiDriftError(fn));
             }
             return Kind.WIN32_WRITEFILE;
@@ -94,10 +94,18 @@ final class OsFfi {
         throw new IllegalStateException(ffiUnsupportedError(fn));
     }
 
-    private static boolean isPosixReadWriteSignature(FunctionSymbol fn) {
+    private static boolean isPosixReadSignature(FunctionSymbol fn) {
         return fn.parameterTypes().size() == 3
                 && isPrimitive(fn.parameterTypes().get(0), SemanticPrimitiveKind.INT32)
-                && isByteBufferPtr(fn.parameterTypes().get(1))
+                && isByteBufferPtr(fn.parameterTypes().get(1), PtrPermission.MUTABLE)
+                && isPrimitive(fn.parameterTypes().get(2), SemanticPrimitiveKind.UINT64)
+                && isPrimitive(fn.returnType(), SemanticPrimitiveKind.INT64);
+    }
+
+    private static boolean isPosixWriteSignature(FunctionSymbol fn) {
+        return fn.parameterTypes().size() == 3
+                && isPrimitive(fn.parameterTypes().get(0), SemanticPrimitiveKind.INT32)
+                && isByteBufferPtr(fn.parameterTypes().get(1), PtrPermission.READ_ONLY)
                 && isPrimitive(fn.parameterTypes().get(2), SemanticPrimitiveKind.UINT64)
                 && isPrimitive(fn.returnType(), SemanticPrimitiveKind.INT64);
     }
@@ -108,12 +116,21 @@ final class OsFfi {
                 && isPrimitive(fn.returnType(), SemanticPrimitiveKind.UINT64);
     }
 
-    private static boolean isWin32ReadWriteSignature(FunctionSymbol fn) {
+    private static boolean isWin32ReadFileSignature(FunctionSymbol fn) {
         return fn.parameterTypes().size() == 4
                 && isPrimitive(fn.parameterTypes().get(0), SemanticPrimitiveKind.UINT64)
-                && isByteBufferPtr(fn.parameterTypes().get(1))
+                && isByteBufferPtr(fn.parameterTypes().get(1), PtrPermission.MUTABLE)
                 && isPrimitive(fn.parameterTypes().get(2), SemanticPrimitiveKind.UINT32)
-                && isUint32Ptr(fn.parameterTypes().get(3))
+                && isUint32Ptr(fn.parameterTypes().get(3), PtrPermission.MUTABLE)
+                && isPrimitive(fn.returnType(), SemanticPrimitiveKind.INT32);
+    }
+
+    private static boolean isWin32WriteFileSignature(FunctionSymbol fn) {
+        return fn.parameterTypes().size() == 4
+                && isPrimitive(fn.parameterTypes().get(0), SemanticPrimitiveKind.UINT64)
+                && isByteBufferPtr(fn.parameterTypes().get(1), PtrPermission.READ_ONLY)
+                && isPrimitive(fn.parameterTypes().get(2), SemanticPrimitiveKind.UINT32)
+                && isUint32Ptr(fn.parameterTypes().get(3), PtrPermission.MUTABLE)
                 && isPrimitive(fn.returnType(), SemanticPrimitiveKind.INT32);
     }
 
@@ -121,18 +138,18 @@ final class OsFfi {
         return new SemanticPrimitiveType(kind).equals(type);
     }
 
-    private static boolean isByteBufferPtr(SemanticType type) {
+    private static boolean isByteBufferPtr(SemanticType type, PtrPermission permission) {
         return new SemanticPtrType(
                 new SemanticDynamicArrayType(
                         new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8)
                 )
-        ).equals(type);
+        ).withPermission(permission).equals(type);
     }
 
-    private static boolean isUint32Ptr(SemanticType type) {
+    private static boolean isUint32Ptr(SemanticType type, PtrPermission permission) {
         return new SemanticPtrType(
                 new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
-        ).equals(type);
+        ).withPermission(permission).equals(type);
     }
 
     private static String ffiDriftError(FunctionSymbol fn) {
@@ -272,11 +289,11 @@ final class OsFfi {
 
     static String expectedEmittedName(Kind kind) {
         return switch (kind) {
-            case POSIX_READ -> "FUNC_read_HASH_b155decf";
-            case POSIX_WRITE -> "FUNC_write_HASH_b155decf";
+            case POSIX_READ -> "FUNC_read_HASH_be149563";
+            case POSIX_WRITE -> "FUNC_write_HASH_731d748e";
             case WIN32_GETSTDHANDLE -> "FUNC_GetStdHandle_HASH_493245c2";
-            case WIN32_READFILE -> "FUNC_ReadFile_HASH_b1df72ed";
-            case WIN32_WRITEFILE -> "FUNC_WriteFile_HASH_b1df72ed";
+            case WIN32_READFILE -> "FUNC_ReadFile_HASH_50f286c1";
+            case WIN32_WRITEFILE -> "FUNC_WriteFile_HASH_c811d200";
         };
     }
 

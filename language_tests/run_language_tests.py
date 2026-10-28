@@ -23,6 +23,9 @@ Runs the full language test suite:
     Must compile, run, and produce stdout matching main.expected.
     Optional main.warnings: every non-empty line must appear as a
     substring of the compiler output, pinning expected warnings.
+    Optional main.forbidden: every non-empty line must NOT appear as a
+    substring of the compiler output, pinning warnings that must not
+    be emitted.
     Optional main.flags: extra compiler flags, same format as above.
     Optional main.args: each line is one command-line argument passed
     verbatim to the binary (empty lines pass empty-string arguments; a
@@ -54,6 +57,7 @@ from franko_tools import (
     JAVA_HINT,
     Results,
     ToolError,
+    check_no_substrings,
     check_substrings,
     compare_output,
     cxx_compile_flags,
@@ -128,6 +132,7 @@ def main() -> int:
         log = Path(f"{base}.compile.log")
         expected = Path(f"{base}.expected")
         warnings = Path(f"{base}.warnings")
+        forbidden = Path(f"{base}.forbidden")
 
         print(f"=== {relative(src)} ===")
 
@@ -149,6 +154,12 @@ def main() -> int:
             print("---- compiler output (missing expected warnings): ----")
             dump_file(log)
             results.fail_case(f"{relative(src)} (missing expected warnings)")
+            continue
+
+        if forbidden.is_file() and not check_no_substrings(forbidden, read_text(log)):
+            print("---- compiler output (emitted forbidden warnings): ----")
+            dump_file(log)
+            results.fail_case(f"{relative(src)} (emitted forbidden warnings)")
             continue
 
         failed = run(

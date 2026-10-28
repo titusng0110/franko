@@ -1,0 +1,8 @@
+// resize() needs allocation rights: blocked on mview<T>.
+func main() -> int32_t {
+    array<byte> d;
+    d.init(3);
+    mview<array<byte>> m = getmview(d);
+    $(m).resize(5);
+    return 0;
+}

@@ -1,0 +1,14 @@
+// Inside a view<X> self method, self's pointee is read-only.
+struct Box {
+    int32_t x
+
+    func bad(view<Box> self) -> void {
+        $(self).x = 1;
+    }
+}
+
+func main() -> int32_t {
+    Box b;
+    b.bad();
+    return 0;
+}

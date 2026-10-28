@@ -1,0 +1,9 @@
+// Failure fixture: global_scope/gs_const_init_pointer
+// Only primitive globals accept a constant integer initializer;
+// pointer globals take null, getptr/getmview/getview over a global, or a
+// string literal instead.
+ptr<int32_t> G = 5;
+
+func main() -> int32_t {
+    return 0;
+}

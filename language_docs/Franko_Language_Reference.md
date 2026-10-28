@@ -71,7 +71,7 @@ Franko is a small statically typed language with:
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
-- struct methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md));
+- struct methods with explicit `self` receivers (`ptr<X> self`, `mview<X> self`, `view<X> self`, see [Methods](26-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
@@ -83,7 +83,7 @@ Franko is a small statically typed language with:
 - `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
 - `print`;
-- string literals as byte-array initializer sugar;
+- string literals as read-only `view<array<byte, N>>` values;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);
   - `arr.init(size)`;
@@ -108,8 +108,8 @@ Franko currently does **not** implement:
 - generics;
 - floating-point types;
 - a distinct boolean type;
-- general string expressions (string literals are initializer sugar only, see [String Literals](23-string-literals.md));
-- implicit numeric conversions except for fluid integer constants (explicit width changes use the `cast<T>(expr)` intrinsic);
+- dedicated string types or a string library (strings are byte-array views, see [String Literals](23-string-literals.md));
+- implicit numeric conversions except for fluid integer constants (explicit width changes use `cast<T>(expr)` for widening and `unsafe_cast<T>(expr)` for checked conversions);
 - cast syntax;
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
@@ -316,7 +316,7 @@ func main() -> int32_t {
     return 0;
 }
 
-func main(ptr<array<array<byte>>> args) -> int32_t {
+func main(view<array<array<byte>>> args) -> int32_t {
     return 0;
 }
 ```
@@ -483,21 +483,24 @@ Nested initializer lists are recursively lowered to nested indexed assignments.
 
 ## 5.4 String Literal Desugaring
 
-String literals are converted to array initializer lists of UTF-8 byte values before ordinary initializer lowering:
+Every string literal is hoisted to a literal-backed global `array<byte, N>`
+holding its UTF-8 bytes (no null terminator is added) and replaced with a
+`getview(...)` expression over that global, of type `view<array<byte, N>>`:
 
 ```franko
-s = "ABC";
+print($("ABC")[0]);
 ```
 
-first becomes:
+first becomes (one global per distinct literal text):
 
 ```franko
-s = [65, 66, 67];
+array<byte, 3> _STR_<hash>;
+print($(getview(_STR_<hash>))[0]);
 ```
 
-and is then lowered to indexed byte assignments. No null terminator is added.
-
-String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](23-string-literals.md).
+Identical literals share one global. Because a string literal is a view
+value, it cannot initialize or assign an array: copy the bytes with
+`memcpy` instead. See [String Literals](23-string-literals.md).
 
 ## 5.5 Braceless Control-Flow Bodies
 
@@ -550,7 +553,7 @@ The `init` and `update` statements go through the ordinary statement desugaring 
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size may be written as `?` when the array is declared with an array-literal or string-literal initializer:
+A static array size may be written as `?` when the array is declared with an array-literal initializer:
 
 ```franko
 array<int32_t, ?> a = [0, 1, 2, 3];
@@ -566,7 +569,7 @@ a[2] = 2;
 a[3] = 3;
 ```
 
-String literals count UTF-8 bytes (`array<byte, ?> s = "hello"` infers `5`), and nested literals infer level by level:
+Nested literals infer level by level:
 
 ```franko
 array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
@@ -576,7 +579,7 @@ becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear
 
 Inference rules:
 
-- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal or a string literal;
+- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal (string literals are `view<array<byte, N>>` values and do not participate);
 - when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
 - when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
 - an empty initializer list cannot infer a size;
@@ -635,7 +638,7 @@ primitive integers
 structs
 dynamic arrays
 static arrays
-typed pointers
+typed pointers (ptr / mview / view)
 function return-only void
 ```
 
@@ -645,7 +648,9 @@ Structs are nominal types: two distinct struct declarations are distinct types e
 
 `void` is not an ordinary value type. It is valid only where the language explicitly permits it, currently as a function return type.
 
-A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal or string-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
+Pointers come in three permission levels — `ptr<T>` (owner), `mview<T>` (mutable view), `view<T>` (read-only view) — one capability model for all of them. See [Pointers](24-pointers.md).
+
+A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
 
 ---
 
@@ -893,14 +898,31 @@ uint64_t mask = 1 << 8
 
 The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, string literals `= "text"`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+**Static address initializers.** A pointer-typed global may be
+initialized with `null`, with `getptr`/`getmview`/`getview` over another
+global variable, or with a string literal (which is a view over a
+hoisted global; see [String Literals](23-string-literals.md)):
+
+```franko
+array<byte, 5> greeting
+view<array<byte, 5>> v = getview(greeting)
+view<array<byte, 5>> s = "hello"
+ptr<array<byte, 5>> p = null
+```
+
+The initializer must be a statically representable address of the right
+type (a permission downgrade is allowed, an upgrade is not).
+
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
 int32_t g = h                     // invalid: the initializer must be constant
 array<int32_t, 3> xs = [1, 2, 3]  // invalid: desugars into indexed assignments
+array<byte, 6> s = "hello"        // invalid: strings cannot initialize arrays
 ```
 
-The constant-initializer form above is the only way to initialize a global at its declaration.
+The constant-initializer and static-address forms above are the only
+ways to initialize a global at its declaration.
 
 ## 11.5 Uninitialized Values
 
@@ -986,17 +1008,26 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 
 A function call is valid if and only if exactly one overload is applicable.
 
-For nonconstant arguments, the argument type must exactly match the parameter type.
-There are no implicit conversions: pass `cast<T>(x)` explicitly to move a
-value across integer widths (see [Casts](16-casts.md)).
+For nonconstant arguments, the argument type must exactly match the
+parameter type, with the single exception of the pointer permission
+downgrade: a `ptr`/`mview`/`view` argument may be passed where a weaker
+permission over an identical referenced type is expected (see
+[Pointers](24-pointers.md)). There are no other implicit conversions: pass
+`cast<T>(x)` explicitly to move a value across integer widths (see
+[Casts](16-casts.md)).
 
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
+
+Overload preference: among applicable overloads, ones matched without any
+permission downgrade win over downgrading ones, and among the rest the
+ones relying on the fewest downgrades win. If several overloads remain
+tied, the call is ambiguous and is rejected.
 
 ## 12.7 Bare Function Names
 
@@ -1043,7 +1074,7 @@ Arrays cannot currently be returned directly.
 
 Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
 
-Struct methods follow the same signature, overload, and return rules with an explicit `ptr<X> self` first parameter; see [Methods](26-methods.md).
+Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](26-methods.md).
 
 ---
 
@@ -1304,31 +1335,43 @@ This distinction matters for:
 
 Franko has no implicit numeric conversions: a value of one integer
 type never silently becomes another (see [Assignment](14-assignment.md)).
-Moving a value across integer widths is always spelled out with the
-explicit `cast<T>(expr)` intrinsic.
+Moving a value across integer widths is always spelled out with one of
+two explicit conversion intrinsics:
+
+- `cast<T>(expr)` — value-preserving **widening** and pointer permission
+  **downgrades**;
+- `unsafe_cast<T>(expr)` — any integer conversion that can lose data
+  (runtime-checked).
 
 ```franko
 uint8_t a = 200;
-uint16_t b = cast<uint16_t>(a);
+uint16_t b = cast<uint16_t>(a);        // widening: plain static_cast
 
 int32_t big = 300;
-uint8_t small = cast<uint8_t>(big);
+uint8_t small = unsafe_cast<uint8_t>(big);   // checked: throws at run time
 ```
 
-Like `$(...)` and `getptr`, `cast<T>` is a compiler intrinsic, not a
-function call: it cannot be overloaded, shadowed, or passed around.
+Like `$(...)` and `getptr`, both are compiler intrinsics, not function
+calls: they cannot be overloaded, shadowed, or passed around.
 
 ## 16.1 Cast Syntax
 
 ```franko
 cast<uint16_t>(a)
+cast<view<array<byte>>>(p)
+unsafe_cast<int32_t>(big)
 ```
 
-The target `T` must be one of the eight primitive integer types
-(`int8_t` … `uint64_t`, including the `int` / `uint` / `byte` aliases).
-Anything else — pointers, arrays, structs, `void` — is rejected at
-parse time. The operand must be an integer expression; casting an
-pointer, array, struct, null, or void value is a compile error.
+`cast<T>` accepts a full type as its target: one of the eight primitive
+integer types, or a pointer type (`ptr<T>`, `mview<T>`, `view<T>`).
+Arrays, structs, and `void` are rejected at check time. The operand must
+match the target category: an integer expression for integer targets, a
+pointer or `null` for pointer targets.
+
+`unsafe_cast<T>` is restricted to the eight primitive integer types
+(`int8_t` … `uint64_t`, including the `int` / `uint` / `byte` aliases);
+a pointer target does not parse. The operand must be an integer
+expression.
 
 A cast is never an lvalue:
 
@@ -1341,7 +1384,7 @@ Casts compose freely with other expressions:
 ```franko
 uint8_t cmp = 1 < 2;
 int32_t wide = cast<int32_t>(cmp);
-print(cast<uint8_t>(wide));
+print(unsafe_cast<uint8_t>(wide));
 ```
 
 ## 16.2 Static (Value-Preserving) Casts
@@ -1356,55 +1399,84 @@ type, the cast is statically safe and compiles to a plain
 - unsigned to signed of strictly greater width:
   `uint8_t -> int16_t`, `uint16_t -> int32_t`, `uint32_t -> int64_t`.
 
-Casting to the type the expression already has is allowed and
-compiles to the value unchanged.
+These are the conversions `cast<T>` performs. Casting to the type the
+expression already has is allowed and compiles to the value unchanged.
 
-## 16.3 Checked Casts
+## 16.3 Checked Casts (`unsafe_cast<T>`)
 
-Every other conversion between distinct types — narrowing, any
-signed-to-unsigned conversion, `uint64_t -> int64_t`, and
-same-width signedness changes — compiles to a runtime-checked
-`franko_safe_cast<T>(expr)` call. The check compares the value
+Every conversion that can lose data — narrowing, any signed-to-unsigned
+conversion, `uint64_t -> int64_t`, and same-width signedness changes —
+must be written `unsafe_cast<T>(expr)`. It compiles to a runtime-checked
+`franko_unsafe_cast<T>(expr)` call. The check compares the value
 against the target type's range and throws on overflow, so a bad
-cast aborts instead of wrapping or truncating.
+conversion aborts instead of wrapping or truncating.
 
 ```franko
 int32_t big = 300;
-uint8_t small = cast<uint8_t>(big);   // throws: 300 does not fit uint8_t
+uint8_t small = unsafe_cast<uint8_t>(big);   // throws: 300 does not fit uint8_t
 ```
 
 A checked cast that fits succeeds normally:
 
 ```franko
 uint32_t w = 70000;
-int32_t s = cast<int32_t>(w);   // valid: 70000 fits int32_t
+int32_t s = unsafe_cast<int32_t>(w);   // valid: 70000 fits int32_t
 print(s);
 ```
 
+Writing `cast<T>` where the conversion can lose data is a compile error
+that points at `unsafe_cast<T>`: the two spellings keep the dangerous
+conversions visibly marked at every call site.
+
 ## 16.4 Constant Casts
 
-A cast of a folded constant expression is validated at compile time:
-the value must fit the target type or compilation fails. There is no
-wraparound, at compile time or at run time.
+A conversion of a folded constant expression is validated at compile
+time: the value must fit the target type or compilation fails. There is
+no wraparound, at compile time or at run time.
 
 ```franko
-uint8_t ok = cast<uint8_t>(200);    // valid
-uint8_t bad = cast<uint8_t>(300);   // invalid: 300 does not fit uint8_t
+uint8_t ok = unsafe_cast<uint8_t>(200);    // valid
+uint8_t bad = unsafe_cast<uint8_t>(300);   // invalid: 300 does not fit uint8_t
 ```
 
-## 16.5 What Casts Do Not Cover
+## 16.5 Pointer Permission Casts
 
-- There are no casts for pointers, arrays, structs, or void. Raw
-  integers cannot be converted to pointers.
+`cast<T>` with a pointer target is an explicit **permission downgrade**
+(see [Pointers](24-pointers.md)): the referenced type must stay
+identical and the permission may only weaken
+(`ptr -> mview -> view`).
+
+```franko
+array<byte> buf;
+buf.init(16);
+ptr<array<byte>> p = getptr(buf);
+view<array<byte>> v = cast<view<array<byte>>>(p);   // explicit downgrade
+mview<array<byte>> m = cast<mview<array<byte>>>(p);
+view<array<byte>> v2 = cast<view<array<byte>>>(m);
+```
+
+Explicit downgrades are never required — the same conversions happen
+implicitly wherever a lower permission is expected — but they can be
+written for clarity. Casting *upwards* (`view` to `mview`/`ptr`) or
+across different pointee types is invalid:
+
+```franko
+ptr<array<byte>> q = cast<ptr<array<byte>>>(v);   // invalid: raises permissions
+```
+
+Raw integers can never be converted to pointers.
+
+## 16.6 What Casts Do Not Cover
+
 - Casts do not appear in constant-expression slots (static array
   sizes, global initializers, struct field defaults): those contexts
   accept only plain integer literals and operators.
 - Calls, returns, assignments, and operators still require exact
-  type equality on their operands; `cast<T>` produces a value of
+  type equality on their operands, with the single exception of the
+  implicit pointer permission downgrades. `cast<T>` produces a value of
   exactly `T`, which is what makes those positions accept it.
-  Since there is no other conversion syntax, a value that must
-  cross widths on the way into a call is cast into a temporary
-  first:
+  A value that must cross widths on the way into a call is converted
+  into a temporary first:
 
 ```franko
 func f(int64_t x) -> int64_t {
@@ -1750,7 +1822,7 @@ Current print limitation: only integer primitives and pointers are printable. Th
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
-Array initializer lists and string literals are not expressions and cannot be printed directly.
+Array initializer lists are not expressions and cannot be printed directly. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -1833,8 +1905,11 @@ The size may be written as `?` to infer it from a declaration initializer (see [
 
 ```franko
 array<int32_t, ?> a = [0, 1, 2, 3];   // ? = 4
-array<byte, ?> s = "hello";           // ? = 5
+array<byte, ?> b = [104, 105];        // ? = 2
 ```
+
+(String literals are `view<array<byte, N>>` values and do not
+participate in `?` inference; see [String Literals](23-string-literals.md).)
 
 The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
@@ -1991,7 +2066,33 @@ x + y
 
 `length()` is read-only, so its receiver may be any array-typed expression; it does not need to be a storage-backed lvalue.
 
-## 21.1 `init`, `init_zero`, and `target(size)`
+## 21.1 Receiver Permissions
+
+The array intrinsics participate in the pointer permission model (see
+[Pointers](24-pointers.md)). When a receiver is reached through a
+pointer dereference, the intrinsic needs that pointer's permission:
+
+| Intrinsic | Required receiver permission |
+|---|---|
+| `init`, `init_zero`, `resize`, `uninit`, `target(size)` | allocation (`ptr`) |
+| `memset`, `memcpy`, `memmove` (as target) | mutation (`mview` or `ptr`) |
+| `length()` and element reads | read (any permission) |
+
+The `memcpy`/`memmove` *source* is only read, so it may be any pointer
+to an array.
+
+```franko
+view<array<byte>> v = getview(buf);
+$(v)[0] = 1;         // blocked: view is read-only
+$(v).memset(0);      // blocked: mutating intrinsic
+$(v).length();       // allowed
+
+mview<array<byte>> m = getmview(dyn);
+$(m)[0] = 1;         // allowed
+$(m).init(10);       // blocked: init needs allocation rights (ptr)
+```
+
+## 21.2 `init`, `init_zero`, and `target(size)`
 
 Dynamic array initialization.
 
@@ -2009,7 +2110,7 @@ Rules:
 
 Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
 
-## 21.2 `resize`
+## 21.3 `resize`
 
 Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements; shrinking destroys the dropped tail elements. Trivial element types skip both.
 
@@ -2023,7 +2124,7 @@ Rules:
   - a positive constant fitting `uint32_t`; or
   - a nonconstant expression of exactly type `uint32_t`.
 
-## 21.3 `uninit`
+## 21.4 `uninit`
 
 Frees a dynamic array's element storage and resets it to the uninitialized state. Constructed elements are destroyed before the buffer is freed; trivially destructible element types skip destruction.
 
@@ -2033,7 +2134,7 @@ Rules:
 - receiver must be a dynamic array;
 - takes exactly zero arguments.
 
-## 21.4 `memset`
+## 21.5 `memset`
 
 Fills an array byte-wise.
 
@@ -2058,7 +2159,7 @@ Rules:
   - nonconstant expressions of exactly type `uint32_t`;
 - for static arrays, constant start/count ranges are checked against the static size at compile time.
 
-## 21.5 Memsetable Element Types
+## 21.6 Memsetable Element Types
 
 Current memsetable types:
 
@@ -2070,7 +2171,7 @@ Current memsetable types:
 | dynamic arrays | no |
 | pointers | no |
 
-## 21.6 `memcpy`
+## 21.7 `memcpy`
 
 Copies array contents byte-wise according to the generated C++ array model.
 
@@ -2095,7 +2196,7 @@ Rules:
   - nonconstant expressions of exactly type `uint32_t`;
 - for static arrays, constant start/count ranges on both the destination and the source are checked against the static sizes at compile time.
 
-## 21.7 `memmove`
+## 21.8 `memmove`
 
 Copies an element range within one array, overlapping ranges included.
 
@@ -2115,7 +2216,7 @@ Rules:
   - nonconstant expressions of exactly type `uint32_t`;
 - for static arrays, constant ranges are checked against the static size at compile time.
 
-## 21.8 Memcpyable Element Types
+## 21.9 Memcpyable Element Types
 
 Current memcpyable types:
 
@@ -2127,7 +2228,7 @@ Current memcpyable types:
 | structs whose fields are all memcpyable, recursively | yes |
 | dynamic arrays | no |
 
-## 21.9 `length`
+## 21.10 `length`
 
 Returns the element count of an array as `uint32_t`.
 
@@ -2216,7 +2317,11 @@ foo([1, 2, 3]);
 return [1, 2, 3];
 ```
 
-String literals are allowed as elements of array initializer lists (see [String Literals](23-string-literals.md)).
+String literals are ordinary `view<array<byte, N>>` values, so they are
+allowed as elements only when the element type is a view (for example
+`array<view<array<byte, 3>>, 2> xs = ["abc", "def"];`). They cannot
+initialize array-typed elements; copy their bytes with `memcpy` instead
+(see [String Literals](23-string-literals.md)).
 
 Array initializer lists are only meaningful in assignment-style contexts where there is an explicit array assignment target.
 
@@ -2474,204 +2579,138 @@ Array initializer lists in Franko are:
 
 # 23. String Literals
 
-Franko supports string literals as **initializer sugar** for byte arrays.
-
-A string literal is written with double quotes:
+Franko string literals are **read-only views of byte arrays**. A string
+literal is an ordinary expression whose type is `view<array<byte, N>>`
+(see [Pointers](24-pointers.md)): a read-only pointer to a static byte
+array of `N` UTF-8 bytes, where `N` is the literal's byte length.
 
 ```franko
-"Franko"
-"Hello, World!"
+"Franko"           // view<array<byte, 6>>
+"Hello, World!"    // view<array<byte, 13>>
 ```
 
-## 23.1 A String Literal Is Not an Expression Value
+## 23.1 A String Literal Is a View Value
 
-A string literal is **not** a general expression value. Like array initializer lists, string literals are meaningful only in assignment/initializer contexts where there is an explicit array target.
+Each distinct literal is hoisted to its own global `array<byte, N>`
+holding the UTF-8 bytes, and the literal expression is `getview(...)`
+over it. Identical literal texts share one global. No null terminator is
+appended: `N` is exactly the number of content bytes.
 
-A string literal may appear:
-
-- as an assignment initializer: `s = "text";`
-- as a declaration initializer: `array<byte, N> s = "text";`
-- as an element of an array initializer list: `rows = ["one", "two"];`
-
-It is invalid in ordinary expression positions such as:
+Because the literal is a pointer, it must be dereferenced with `$(...)`
+to reach the bytes:
 
 ```franko
-print("hi");        // invalid: print arguments are expressions
-foo("hi");          // invalid: function arguments are expressions
-return "hi";        // invalid: return values are expressions
-"hi"                // invalid: a string literal is not an expression statement
+print($("abc").length());   // 3
+print($("abc")[0]);         // 97
 ```
 
-## 23.2 Desugaring to UTF-8 Bytes
-
-A string literal desugars into an array initializer list containing the literal's **UTF-8 bytes** as ordinary integer constants:
+A string literal may appear anywhere an expression may appear:
 
 ```franko
-"ABC"
+view<array<byte, 3>> s = "abc";     // declaration initializer
+s = "xyz";                          // assignment to a view variable
+print($("hi").length());            // print argument
+take("hi");                         // function argument
+return "hi";                        // return value (with a view return type)
 ```
 
-becomes:
+## 23.2 UTF-8 Bytes
+
+A string literal stores the literal's **UTF-8 bytes**: one array element
+per byte. Multi-byte sequences expand accordingly:
 
 ```franko
-[65, 66, 67]
+print($("你好").length());   // 6: 228 189 160 229 165 189
 ```
 
-Multi-byte UTF-8 sequences expand to one element per byte:
+## 23.3 Escapes
+
+The supported escape sequences are `\\ \" \a \b \f \n \r \t \v`.
+`\u`, `\x`, and `\0` are not supported, and a trailing backslash is
+invalid. Any other escape is a lex error.
 
 ```franko
-"你好"
+print($("\t\n\"\\"")[0]);   // 9
 ```
 
-becomes:
+## 23.4 Strings and Byte Buffers
+
+Arrays are value types and are **not assignable from strings**: a
+`view<array<byte, N>>` cannot initialize or assign an array. Copy the
+bytes with the `memcpy` intrinsic instead — a string literal is a valid
+`memcpy` source:
 
 ```franko
-[228, 189, 160, 229, 165, 189]
+array<byte, 6> buf;
+buf.memcpy("hello");      // copies 5 bytes; buf[5] is untouched
+print(buf[0]);            // 104
 ```
 
-**No null terminator is appended.**
-
-## 23.3 String Assignment
-
-Because a string literal is array initializer sugar, this:
+For dynamic arrays, size the buffer first:
 
 ```franko
-array<byte, 6> s;
-s = "ABCDE";
+array<byte> buf;
+buf.init($("hello").length());
+buf.memcpy("hello");
 ```
 
-desugars through the ordinary array initializer lowering to:
+For the same reason `array<byte, ?>` cannot infer its size from a string
+literal; declare the size explicitly or infer from an array literal.
+
+## 23.5 Global String Views
+
+A pointer-typed global may be initialized with a string literal (or with
+`getptr`/`getmview`/`getview` over another global, or `null`):
 
 ```franko
-array<byte, 6> s;
-s[0] = 65;
-s[1] = 66;
-s[2] = 67;
-s[3] = 68;
-s[4] = 69;
-```
+view<array<byte, 5>> GREETING = "hello";
 
-`s[5]` is untouched.
-
-As with other initializer lists:
-
-- the initializer list itself does **not** initialize, allocate, or resize storage;
-- a dynamic array target must already be initialized before string assignment — this requirement is enforced by the runtime, not at compile time (accessing an uninitialized dynamic array aborts with a "Franko_Dynamic_Array not initialized" error);
-- assignment into a static array that is too small is rejected by ordinary static array bounds checking.
-
-The target may be any array whose element type can hold byte constants `0..255` under normal assignment rules. `array<byte, N>` (or `array<uint8_t, N>`) is the idiomatic target, but wider integer element types also accept each byte value.
-
-## 23.4 String Declaration Initializers
-
-```franko
-array<byte, 6> s = "ABCDE";
-```
-
-is ordinary declaration initializer sugar, equivalent to:
-
-```franko
-array<byte, 6> s;
-s = "ABCDE";
-```
-
-which then lowers to the per-byte assignments shown above.
-
-The size may be inferred with `?`; it counts UTF-8 bytes (no null terminator is added):
-
-```franko
-array<byte, ?> t = "hello";   // ? = 5
-```
-
-## 23.5 Strings Inside Array Initializer Lists
-
-String literals may appear as elements of an array initializer list. Each string element becomes a nested byte list:
-
-```franko
-array<array<byte, 3>, 2> m;
-m = ["hi", "ok"];
-```
-
-lowers to:
-
-```franko
-m[0][0] = 104;  // 'h'
-m[0][1] = 105;  // 'i'
-m[1][0] = 111;  // 'o'
-m[1][1] = 107;  // 'k'
-```
-
-The inner target element must itself be an array, and ordinary element assignment rules apply to each generated byte assignment.
-
-## 23.6 Escape Sequences
-
-The lexer accepts the following escapes inside string literals:
-
-| Escape | Meaning |
-|---|---|
-| `\\` | backslash |
-| `\"` | double quote |
-| `\a` | bell |
-| `\b` | backspace |
-| `\f` | form feed |
-| `\n` | line feed |
-| `\r` | carriage return |
-| `\t` | horizontal tab |
-| `\v` | vertical tab |
-
-String literals may also contain:
-
-- raw Unicode characters;
-- literal tabs;
-- literal newlines (multi-line string literals are allowed).
-
-They may **not** contain:
-
-- a raw, unescaped `"`;
-- a raw, unescaped backslash;
-- unsupported escapes such as `\u1234`, `\xFF`, `\0`, or any other `\<char>` not listed above.
-
-There is no string concatenation operator and no interpolation syntax.
-
-## 23.7 Example
-
-```franko
 func main() -> int32_t {
-    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
-    uint i = 0;
-
-    str(200);
-    str.memset(0);
-    str = "Hello,\tWorld!\n\"Franko\"";
-
-    while (i < 22) {
-        print(str[i]);
-        i = i + 1;
-    }
-
-    str.uninit();
+    print($(GREETING).length());   // 5
     return 0;
 }
 ```
 
-See also [Array Initializer Lists](22-array-initializer-lists.md).
+## 23.6 Printing Strings
+
+`print` is unchanged (it is superseded by a future io class): a string
+literal passed to `print` prints as the address of its global byte
+array, like any other pointer. Print individual bytes instead:
+
+```franko
+print($("hi")[0]);   // 104
+print($("hi")[1]);   // 105
+```
+
+## 23.7 Empty Strings
+
+An empty string literal `""` is not supported: a string literal is a
+`view<array<byte, N>>` with `N >= 1`.
 
 ---
 
 # 24. Pointers
 
-Franko has typed pointers:
+Franko has a capability-based pointer system with three pointer types,
+representing strict levels of permission:
 
-```franko
-ptr<T>
-```
+| Type | Meaning | C++ Emission | Allowed Operations |
+|---|---|---|---|
+| `ptr<T>` | Owner | `T*` | Read, Write, Allocate, Free |
+| `mview<T>` | Writer | `T*` | Read, Write |
+| `view<T>` | Reader | `const T*` | Read Only |
 
-An pointer value refers to a storage location containing a value of type `T`.
+(`ptr` = pointer, `mview` = mutable view, `view` = view.) All three are
+thin pointers; the permissions are enforced entirely at compile time.
+
+A pointer value refers to a storage location containing a value of type `T`.
 
 Examples:
 
 ```franko
 ptr<int32_t> p;
-ptr<uint8_t> b;
-ptr<ptr<int32_t>> pp;
+mview<uint8_t> b;
+view<ptr<int32_t>> pp;
 ptr<array<int32_t>> ap;
 ```
 
@@ -2679,29 +2718,74 @@ Pointers are typed, assignable, copyable, dereferenceable, and comparable.
 
 Pointers are not arithmetic values.
 
-`ptr<void>` is invalid because `void` is not an ordinary value type.
+`ptr<void>`, `mview<void>`, and `view<void>` are invalid because `void`
+is not an ordinary value type.
 
-## 24.1 Creating Pointers with `getptr`
+## 24.1 Creating Pointers
 
-The operand must be a storage-backed lvalue.
+Views are created with intrinsics over storage-backed lvalues, in the
+same shape as `getptr`:
 
-If the operand has type `T`, then `getptr(operand)` has type `ptr<T>`.
+- `getptr(expr)` creates a `ptr<T>`.
+- `getmview(expr)` creates an `mview<T>`.
+- `getview(expr)` creates a `view<T>`.
+
+If the operand has type `T`, the result has the corresponding pointer
+type. Creating a pointer demands that the operand's storage carries at
+least the requested permission: `getptr` needs owner access,
+`getmview` needs write access, `getview` always works. This is what
+prevents laundering a `view` into a `ptr`.
 
 ## 24.2 Dereferencing with `$`
 
-If the operand has type `ptr<T>`, then `$(...)` has type `T`.
+If the operand has type `ptr<T>`, `mview<T>`, or `view<T>`, then
+`$(...)` has type `T`.
 
-`$(...)` is also an lvalue.
+`$(...)` is also an lvalue when the pointer carries write permission:
+
+```franko
+$(p)[i] = x;    // array element access (mutating: needs ptr or mview)
+$(v)[i];        // reading an element (any permission)
+$(v).field;     // struct field access
+$(v).length();  // intrinsic over the pointee
+```
 
 ## 24.3 Nested Pointers
 
-Franko supports pointers to pointers.
+Franko supports pointers to pointers, of any permission:
 
-## 24.4 Pointer Assignment
+```franko
+view<ptr<int32_t>> v;   // read-only view of a ptr<int32_t> slot
+```
 
-Pointer assignment requires exact type equality.
+## 24.4 Assignment and Implicit Downgrades
 
-Raw integers cannot be converted to pointers.
+The **only** implicit conversion in Franko is a pointer permission
+downgrade over an identical referenced type:
+
+- `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
+- `mview<T>` implicitly casts to `view<T>`;
+- passing a `view<T>` where an `mview<T>` or `ptr<T>` is expected is a
+  compile error.
+
+```franko
+ptr<array<byte>> p = getptr(buf);
+mview<array<byte>> m = p;          // implicit downgrade
+view<array<byte>> v = p;           // implicit downgrade
+view<array<byte>> v2 = m;          // implicit downgrade
+
+ptr<array<byte>> q = v;            // invalid: raises permissions
+```
+
+Downgrades apply to assignment, return values, and function arguments.
+Every other position requires exact type equality. Raw integers cannot
+be converted to pointers.
+
+Explicit downgrades may be written with `cast` (see [Casts](16-casts.md)):
+
+```franko
+view<array<byte>> v = cast<view<array<byte>>>(p);
+```
 
 ## 24.5 Pointer Comparison
 
@@ -2724,9 +2808,7 @@ Pointers are not integers and do not support arithmetic.
 
 ## 24.7 Pointers of Arrays
 
-Arrays may be pointed to.
-
-Example:
+Arrays may be pointed to:
 
 ```franko
 array<int32_t> arr;
@@ -2755,9 +2837,66 @@ $(p)[1] = 2;
 $(p)[2] = 3;
 ```
 
-## 24.8 The null Literal
+## 24.8 Permission Propagation (Nested Types)
 
-`null` is a literal of type `null`. It is valid only where an pointer is expected:
+Permissions apply to the **value** being pointed to. Because arrays and
+structs are value types, permissions propagate transitively downward
+through them — and they stop at pointer boundaries.
+
+### Rule 1: Value Types Are Transitive
+
+A `view` of a nested array locks every dimension:
+
+```franko
+view<array<array<byte>>> v;
+// $(v)[i] reads are fine; $(v)[i][j] = x is blocked, and so is
+// $(v)[i].init(...): the entire nested structure is read-only.
+```
+
+An `mview` of a nested array may write every level's elements, but the
+lifecycle intrinsics are blocked at *every* level — they need allocation
+rights (`ptr`), and an index or member access never leaves the region the
+pointer dereference created:
+
+```franko
+mview<array<array<byte>>> m;
+$(m)[0][1] = 5;     // allowed: element writes at every level
+$(m)[0].init(2);    // blocked: init needs allocation rights (ptr)
+$(m).init(2);       // blocked: the same rule applies to the outer array
+```
+
+To run lifecycle intrinsics on a nested array, reach it through a `ptr`:
+either hold the outer pointer (`ptr<array<array<byte>>>`) or extract an
+inner `ptr` (Rule 2).
+
+### Rule 2: Pointer Boundaries (Indirection)
+
+If a container holds pointer values, the container's permission governs
+only **the pointer slots** (whether they can be overwritten). The memory
+behind those pointers follows each pointer's own type:
+
+```franko
+mview<array<view<array<byte>>>> v;
+$(v)[0] = getview(x);        // allowed: overwrite the slot
+$($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
+```
+
+```franko
+view<array<ptr<array<byte>>>> v;
+$(v)[0] = getptr(x);         // blocked: the outer view locks its slots
+$($(v)[0])[0] = 5;           // allowed: through the inner ptr
+$($(v)[0]).init(10);         // allowed: full allocation rights on the pointee
+```
+
+Summary: `view` locks down the memory it directly touches. If that
+memory contains raw values (like nested arrays), those values are
+locked. If it contains pointers, the pointer *variables* are locked, but
+the memory they point to follows its own type rules.
+
+## 24.9 The null Literal
+
+`null` is a literal of type `null`. It is valid only where a pointer of
+any permission is expected:
 
 ```franko
 ptr<int32_t> p;
@@ -2767,9 +2906,9 @@ int32_t x = null;       // invalid: null is only valid for pointer types
 p = 0;                  // invalid: 0 is an integer, not null
 ```
 
-`null` and `0` are different values. An pointer cannot be assigned or compared against the integer `0`; use `null` instead.
+`null` and `0` are different values. A pointer cannot be assigned or compared against the integer `0`; use `null` instead.
 
-`null` may be compared with an pointer using equality only:
+`null` may be compared with a pointer using equality only:
 
 ```franko
 if (p == null) {
@@ -2782,11 +2921,12 @@ if (p != null) {
 
 Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`, `>`) of `null` is invalid.
 
-`null` may be passed to `ptr<T>` parameters and returned from `ptr<T>` functions.
+`null` may be passed to pointer parameters and returned from pointer
+functions.
 
 `print(null)` prints the null pointer as a pointer value.
 
-### 24.8.1 Null-Initialized Pointer Declarations
+### 24.9.1 Null-Initialized Pointer Declarations
 
 Pointer declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
 
@@ -2795,11 +2935,14 @@ ptr<int32_t> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
-This guarantee also applies to pointer-typed struct fields.
+This guarantee also applies to pointer-typed struct fields and to
+`mview`/`view` variables.
 
-### 24.8.2 Nullness Certification
+### 24.9.2 Nullness Certification
 
-The compiler tracks whether an pointer variable is null. The only expression that certifies an pointer as non-null is `getptr(...)`:
+The compiler tracks whether a pointer variable is null. The only
+expressions that certify a pointer as non-null are the creation
+intrinsics `getptr(...)`, `getmview(...)`, and `getview(...)`:
 
 ```franko
 ptr<int32_t> p;            // p is null
@@ -2812,11 +2955,15 @@ ptr<int32_t> q = p;        // q copies p's state: non-null
 ptr<int32_t> r = q;        // r copies q's state: non-null
 ```
 
-Assignment from another pointer variable copies that variable's exact state, so a null state propagates through copies and an `getptr` certification propagates transitively.
+Assignment from another pointer variable copies that variable's exact state, so a null state propagates through copies and a certification propagates transitively.
 
 Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
-### 24.8.3 Dereferencing and Warnings
+The analysis is **intra-procedural**: no nullness facts cross function
+boundaries (a returned pointer is always maybe-null at the call site),
+and dangling pointers are not checked.
+
+### 24.9.3 Dereferencing and Warnings
 
 Dereferencing a variable that is **definitely null** is an error.
 
@@ -2834,11 +2981,42 @@ $(p);                   // warning: possibly null
 
 Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.
 
-## 24.9 Pointer Lifetime Limitations
+## 24.10 Capability Linter
+
+To encourage safe, data-oriented design, the compiler tracks the
+highest permission each `ptr`/`mview` local variable and parameter
+actually exercises and emits a non-fatal **warning** recommending a
+downgrade when elevated permissions go unused (global variables are not
+linted: their uses span functions, so no per-use summary would be
+meaningful):
+
+- a `ptr<T>` that never exercises allocation or lifecycle rights
+  (no `init`/`init_zero`/`resize`/`uninit`, no use where a `ptr<T>` is
+  expected):
+
+  > *Warning: 'ptr<T> p' never exercises allocation or lifecycle permissions. Consider downgrading to 'mview<T>' for tighter security.*
+
+- a `ptr<T>` or `mview<T>` that is only ever read from:
+
+  > *Warning: 'mview<T> v' is only ever read from. Consider downgrading to 'view<T>' for maximum safety.*
+
+Exercising *allocation* means lifecycle intrinsics, `getptr` over the
+variable's region, or using it where a `ptr<T>` is expected (argument,
+return, assignment into a `ptr` slot, method `self`). *Mutation* means
+assignment through its region, `memset`/`memcpy`/`memmove`, or use where
+an `mview<T>` is expected. *Read* covers everything else, including
+`length()`.
+
+Because these are warnings, they do not fail the build. They exist to
+passively teach developers to default to immutable, non-owning pointers
+(`view` and `mview`) whenever possible, minimizing the risk of accidental
+memory corruption.
+
+## 24.11 Pointer Lifetime Limitations
 
 Pointer lifetime is not fully tracked.
 
-The compiler does not fully track dangling pointers or aliasing through pointers. An pointer may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.
+The compiler does not fully track dangling pointers or aliasing through pointers. A pointer may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.
 
 ---
 
@@ -3039,7 +3217,7 @@ The C++14 backend:
 
 # 26. Methods
 
-A struct may declare methods: functions bound to the struct whose first parameter is explicitly `ptr<X> self`. Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getptr(receiver)` first argument (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
+A struct may declare methods: functions bound to the struct whose first parameter is explicitly `self` (`ptr<X> self`, `mview<X> self`, or `view<X> self`). Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getptr`/`getmview`/`getview(receiver)` first argument matching the declared `self` type (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
 
 ```franko
 struct X {
@@ -3084,29 +3262,40 @@ Rules:
 
 ## 26.2 The `self` Parameter
 
-The first parameter of every method must be literally `ptr<X> self`, where `X` is the enclosing struct:
+The first parameter of every method must be literally `self`, typed
+`ptr<X> self`, `mview<X> self`, or `view<X> self`, where `X` is the
+enclosing struct. The permission declares what the method does with its
+receiver: an owning `self` may run lifecycle operations, a mutable
+`self` may write, a read-only `self` may only read (see
+[Pointers](24-pointers.md)):
 
 ```franko
 struct X {
     int32_t y = 0
-    func get(ptr<X> self) -> int32_t {
+    func get(view<X> self) -> int32_t {
         return $(self).y
+    }
+    func set(mview<X> self, int32_t v) -> void {
+        $(self).y = v
     }
 }
 ```
 
 Rules:
 
-- A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter`.
+- A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter (also allowed: 'mview<X> self', 'view<X> self')`.
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
-- A method whose `self` parameter does not have type `ptr<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X>`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
+- A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
-- `self` is an ordinary `ptr<X>` variable inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: `self` has type `ptr<X>`, and member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)).
+- Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
+- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
 ## 26.3 Method Calls and Receivers
 
-A method is invoked with member-call syntax. The compiler prepends `getptr(receiver)` as the `self` argument:
+A method is invoked with member-call syntax. The compiler prepends the
+`self` argument, created with `getptr`, `getmview`, or `getview`
+matching the method's declared `self` type:
 
 ```franko
 s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
@@ -3114,6 +3303,14 @@ $(p).increment()       // explicit deref for ptr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
 ```
+
+The creation intrinsic enforces the receiver's permission: calling a
+`ptr<X> self` method through a `view` receiver is rejected
+(`getptr(...) requires allocation rights (ptr) over its target`), while
+a `view<X> self` method is callable through any receiver. When the
+receiver is an lvalue reached through an inner pointer (for example
+`$($(v)[0]).increment()` where the element is a `ptr<X>`), that inner
+pointer's own permission applies.
 
 Rules:
 
@@ -3124,7 +3321,7 @@ Rules:
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
 - Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
-- A method call lowers to `SemanticFunctionCallNode` with a synthesized `getptr(receiver)` first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
+- A method call lowers to `SemanticFunctionCallNode` with a synthesized creation-intrinsic (`getptr`/`getmview`/`getview`) first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
 
 ## 26.4 Fields vs Methods Name Resolution
 
@@ -3155,9 +3352,9 @@ struct Counter {
 
 Rules:
 
-- The implicit `self` parameter (`ptr<X>`) does not distinguish overloads; overloads must differ in their user parameters.
+- The implicit `self` parameter (whatever its permission) does not distinguish overloads; overloads must differ in their user parameters.
 - Duplicate method signatures are rejected: `Duplicate declaration of method 'X.foo(...)' in struct 'X'`.
-- Ambiguous constant arguments are rejected like free-function ambiguity: `Ambiguous call to overloaded method 'X.foo(...)': argument constants fit multiple overloads`.
+- Ambiguous arguments are rejected like free-function ambiguity: `Ambiguous call to overloaded method 'X.foo(...)': multiple overloads match equally well (argument constants fit several signatures, or arguments rely on the same number of pointer permission downgrades)`.
 
 ## 26.6 `self` Is a Reserved Keyword
 
@@ -3189,7 +3386,7 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 `self` is an `ptr<X>` parameter:
 
-- `self` enters pointing: the call synthesizes `getptr(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- `self` enters pointing: the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
 - Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)). The checker is intra-procedural.
 
 ## 26.9 Backend Notes
@@ -3211,7 +3408,7 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 ## 26.10 Restrictions Summary
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
-- Every method must have `ptr<X> self` as its first parameter; only the first parameter may be named `self`.
+- Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.
 - `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
 - Receivers must be struct-valued storage-backed lvalues; `ptr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
@@ -3222,7 +3419,7 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 
 # 27. Memory Safety Checking
 
-After legality checking, the compiler runs a dedicated **pointer null-state pass** (`PointerNullStateChecker`) over pointer-typed variables.
+After legality checking, the compiler runs a dedicated **pointer null-state pass** (`PointerNullStateChecker`) over pointer-typed variables (`ptr`, `mview`, and `view` alike).
 
 The pass tracks one fact per pointer variable: whether it is definitely null, definitely pointing, or possibly null on the current execution path.
 
@@ -3232,7 +3429,7 @@ It checks:
 - dereferencing a possibly-null pointer (a warning);
 - that `null` is only used for pointer types (see [Types](06-types.md)).
 
-The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers.
+The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers, and no facts cross function boundaries (interprocedural nullability is deliberately not attempted).
 
 ## 27.1 Pointer States
 
@@ -3248,10 +3445,10 @@ For each pointer variable the checker tracks one of:
 
 - an ordinary `ptr<T>` declaration is **null-initialized**, so it starts in the null state;
 - assigning the `null` literal makes the target null;
-- assigning `getptr(...)` makes the target pointing; this is the **only** certification of a non-null pointer;
+- assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `ptr<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
 
 ## 27.3 Dereference Checking
 
@@ -3316,6 +3513,13 @@ Current limitations of the pointer checker:
 - checks are intra-procedural; pointer effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
 
+## 27.4 Capability Linting
+
+A second, independent pass (`PointerPermissionChecker`) warns when a
+`ptr`/`mview` local variable or parameter requests permissions it never
+exercises, so developers default to the tightest pointer that fits. See
+the "Capability Linter" section of [Pointers](24-pointers.md).
+
 ---
 
 # 28. Type Equality
@@ -3360,7 +3564,20 @@ array<int32_t, 10>     != array<int32_t, 20>
 
 ## 28.4 Pointer Equality
 
-Pointer types are equal if their referenced types are equal.
+Pointer types are equal if their referenced types are equal **and** their
+permissions match: `ptr<T>`, `mview<T>`, and `view<T>` are three distinct
+types.
+
+```text
+ptr<array<byte>>     == ptr<array<byte>>
+ptr<array<byte>>     != mview<array<byte>>
+mview<array<byte>>   != view<array<byte>>
+view<array<byte, 3>> != view<array<byte, 5>>
+```
+
+A pointer permission downgrade (`ptr<T>` to `mview<T>`/`view<T>`,
+`mview<T>` to `view<T>`) is the single implicit conversion the language
+allows; it does not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
 
@@ -3369,7 +3586,9 @@ Function signatures are equal if they have:
 - the same function identifier;
 - the same ordered list of parameter types.
 
-Return type and parameter names are not part of function signature equality.
+Return type and parameter names are not part of function signature
+equality. For methods, the `self` parameter type is not part of signature
+equality either (see [Methods](26-methods.md)).
 
 ## 28.6 Struct Equality
 
@@ -3467,7 +3686,7 @@ Structs are supported as user-defined aggregate types with named fields, subject
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
 - a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: it can be used only through `ptr<X>`;
-- structs have methods with explicit `ptr<X> self` receivers (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
+- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](25-structs.md).
 
@@ -3483,7 +3702,7 @@ Boolean results use `uint8_t`.
 
 Nonconstant numeric expressions require exact type equality wherever a
 typed value is expected. Moving between integer widths is always
-explicit through the `cast<T>(expr)` intrinsic (see [Casts](16-casts.md)).
+explicit through the `cast<T>(expr)` intrinsic (value-preserving widening) or `unsafe_cast<T>(expr)` (checked conversions that can lose data) (see [Casts](16-casts.md)).
 
 ## 30.7 Arrays Are Not Assignable as Values
 
@@ -3516,7 +3735,7 @@ The compiler does not fully track dangling pointers or ownership.
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
-Array initializer lists and string literals are not expressions and therefore cannot be printed directly.
+Array initializer lists are not expressions and therefore cannot be printed directly. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 ## 30.12 Unsupported Operators
 
@@ -3529,16 +3748,26 @@ The following operators do not exist in the language. The lexer rejects the char
 
 Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=`, `>>=`): assignment has only plain `=` plus the five arithmetic compound forms `+=`, `-=`, `*=`, `/=`, `%=` (see [Assignment](14-assignment.md)).
 
-## 30.13 String Literals Are Initializer-Only
+## 30.13 String Literals Cannot Initialize Arrays
 
-String literals are supported as byte-array initializer sugar (see [String Literals](23-string-literals.md)), but they are not general expression values.
+A string literal is a `view<array<byte, N>>` value, not byte-array
+sugar (see [String Literals](23-string-literals.md)). Arrays are not
+assignable, so a string literal cannot initialize or assign an array;
+copy the bytes with `memcpy` instead.
 
 Invalid:
 
 ```franko
-print("hello");
-foo("hello");
-return "hello";
+array<byte, 6> s = "hello";    // invalid
+s = "hello";                   // invalid
+array<byte, ?> s = "hello";    // invalid: '?' infers from array literals
+```
+
+Valid:
+
+```franko
+array<byte, 6> s;
+s.memcpy("hello");
 ```
 
 ## 30.14 No `switch` or `do`/`do-while`
@@ -3555,7 +3784,7 @@ Executable statements are invalid at global scope.
 
 The following forms do not exist in the grammar:
 
-- C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` intrinsic, and fluid integer constants still convert implicitly when they fit);
+- C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` and `unsafe_cast<T>(expr)` intrinsics, and fluid integer constants still convert implicitly when they fit);
 - the ternary conditional operator (`?:`);
 - multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).
 
@@ -3643,7 +3872,7 @@ Nested initializer lists are lowered recursively.
 
 String literals are converted to byte array literals in the same pass (see [String Literals](23-string-literals.md)).
 
-`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count (strings count as UTF-8 bytes) before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
+`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
 
 Every other `constExpr` slot is also evaluated in this pass: static array sizes, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
 
@@ -3700,7 +3929,7 @@ Struct definitions are emitted after a forward-declaration block (`struct STRUCT
 The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
 
 - `ProgramTemplate.cpp` provides `int main()` and calls the no-args Franko `main` (`FUNC_main_HASH_d8625720`, the hash of `fn()->int32_t`).
-- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_5708d149`, the hash of `fn(ptr<array<array<uint8_t>>>)->int32_t`).
+- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_db73581e`, the hash of `fn(view<array<array<uint8_t>>>)->int32_t`).
 
 The compiler selects the template from the declared entry-point shape; an explicit `-t` template overrides the selection.
 
@@ -3798,12 +4027,17 @@ Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
-FUNC_read_HASH_b155decf            os::posix::read
-FUNC_write_HASH_b155decf           os::posix::write
+FUNC_read_HASH_be149563            os::posix::read
+FUNC_write_HASH_731d748e           os::posix::write
 FUNC_GetStdHandle_HASH_493245c2    os::win32::GetStdHandle
-FUNC_ReadFile_HASH_b1df72ed        os::win32::ReadFile
-FUNC_WriteFile_HASH_b1df72ed       os::win32::WriteFile
+FUNC_ReadFile_HASH_50f286c1        os::win32::ReadFile
+FUNC_WriteFile_HASH_c811d200       os::win32::WriteFile
 ```
+
+(The hashes move whenever the `os.fr` signatures change: they are the
+FNV-1a hash of the canonical signature key, which includes the
+parameter pointer permissions — `read` fills an `mview<array<byte>>`
+while `write` only reads a `view<array<byte>>`.)
 
 Signatures must match the prototypes codegen emits for the `os.fr`
 declarations, including the `NS_os::NS_posix` / `NS_os::NS_win32`
@@ -4092,7 +4326,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.11 String Literal Assignment
+## 33.11 String Literal Bytes
 
 ```franko
 func main() -> int32_t {
@@ -4101,7 +4335,7 @@ func main() -> int32_t {
 
     str(200);
     str.memset(0);
-    str = "Hello,\tWorld!\n\"Franko\"";
+    str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
     while (i < 22) {
         print(str[i]);
@@ -4113,7 +4347,8 @@ func main() -> int32_t {
 }
 ```
 
-See [String Literals](23-string-literals.md).
+A string literal is a `view<array<byte, N>>`; byte buffers receive its
+content through `memcpy`. See [String Literals](23-string-literals.md).
 
 ## 33.12 Nested Static Array Grid
 
@@ -4353,7 +4588,7 @@ func main() -> int32_t {
     array<int32_t, ?> a = [0, 1, 2, 3];
     print(a.length());   // 4
 
-    array<byte, ?> s = "hello";
+    array<byte, ?> s = [104, 101, 108, 108, 111];
     print(s.length());   // 5
 
     array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
@@ -4367,7 +4602,7 @@ func main() -> int32_t {
 ## 33.22 Command-Line Arguments
 
 ```franko
-func main(ptr<array<array<byte>>> args) -> int32_t {
+func main(view<array<array<byte>>> args) -> int32_t {
     uint32_t n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 

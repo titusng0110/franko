@@ -1,0 +1,55 @@
+// ============================================================
+// LANGUAGE TEST: Method self Permissions
+// ============================================================
+// Covers: methods whose self parameter is ptr<X>, mview<X>, or
+// view<X>. The hidden self argument is synthesized with
+// getptr/getmview/getview matching the declaration, so the
+// receiver must carry at least that permission (see
+// failure/pointer_permissions/method_self_*).
+// ============================================================
+
+struct Box {
+    int32_t x = 0
+
+    func bump(ptr<Box> self) -> void {
+        $(self).x = $(self).x + 1;
+    }
+
+    func touch(mview<Box> self) -> void {
+        $(self).x = 7;
+    }
+
+    func peek(view<Box> self) -> int32_t {
+        return $(self).x;
+    }
+}
+
+func main() -> int32_t {
+    Box b;
+
+    // Owner receiver: every self type works.
+    b.bump();
+    print(b.peek());
+
+    // Read-only receiver: only a view<X> self method is callable.
+    view<Box> v = getview(b);
+    print($(v).peek());
+
+    // Mutable receiver: mview<X> self works.
+    mview<Box> m = getmview(b);
+    $(m).touch();
+    print(b.x);
+
+    b.bump();
+    print($(v).peek());
+
+    // A pointer extracted from a view region owns its pointee again.
+    array<ptr<Box>> arr;
+    arr.init(1);
+    arr[0] = getptr(b);
+    view<array<ptr<Box>>> av = getview(arr);
+    $($(av)[0]).bump();
+    print(b.x);
+
+    return 0;
+}
