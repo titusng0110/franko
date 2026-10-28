@@ -2,44 +2,17 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
-// ============================================================
-// Semantic Types
-// ============================================================
-
 abstract class SemanticType {
     public abstract String describe();
 
-    /**
-     * Canonical type key used for C++ name mangling.
-     *
-     * This spells the type exactly as it is written in source:
-     * primitives as `int8_t`/`uint64_t`, `void` as `void`,
-     * `array<E>` / `array<E,N>` (no space, canonical folded decimal
-     * size), `ptr<T>`, and structs by qualified name (`a::b::X`).
-     *
-     * It is independent of describe(), which is diagnostic text and
-     * may drift. Function types have no source spelling as a
-     * parameter or return type and throw here.
-     */
     public abstract String mangleKey();
 
-    /**
-     * Semantic type equality should be structural.
-     *
-     * Subclasses override equals/hashCode so overload resolution,
-     * assignment checking, return checking, and diagnostics can compare
-     * types reliably.
-     */
     @Override
     public abstract boolean equals(Object obj);
 
     @Override
     public abstract int hashCode();
 }
-
-// ============================================================
-// Primitive Types
-// ============================================================
 
 enum SemanticPrimitiveKind {
     INT8,
@@ -93,26 +66,6 @@ final class SemanticPrimitiveType extends SemanticType {
     }
 }
 
-// ============================================================
-// Void Type
-// ============================================================
-
-/**
- * Void is not an ordinary value type.
- *
- * It is valid as a function return type:
- *
- *   func f() -> void { ... }
- *
- * But it should not be accepted for ordinary declarations:
- *
- *   void x;              // invalid
- *   array<void> xs;      // invalid
- *   ptr<void> p;        // invalid
- *
- * The grammar already prevents most of these, but semantic analysis should
- * still treat void specially and defensively.
- */
 final class SemanticVoidType extends SemanticType {
 
     @Override
@@ -135,10 +88,6 @@ final class SemanticVoidType extends SemanticType {
         return Objects.hash(SemanticVoidType.class);
     }
 }
-
-// ============================================================
-// Array Types
-// ============================================================
 
 final class SemanticDynamicArrayType extends SemanticType {
     final SemanticType elementType;
@@ -172,25 +121,9 @@ final class SemanticDynamicArrayType extends SemanticType {
     }
 }
 
-/*
- * Static array size is stored as canonical folded decimal text.
- *
- * Therefore:
- *
- *   array<int32_t, 10>
- *   array<int32_t, 0xA>
- *   array<int32_t, 5 + 5>
- *
- * become the same semantic static array type if all fold to 10.
- *
- * Type equality is structural after unfolding the constant size expression:
- * two static array types are equal iff their element types are equal and
- * their unfolded sizes are numerically equal. The size text is preserved only
- * for diagnostics and for C++ code emission.
- */
 final class SemanticStaticArrayType extends SemanticType {
     final SemanticType elementType;
-    final String sizeLiteral; // canonical folded decimal size
+    final String sizeLiteral;
 
     SemanticStaticArrayType(SemanticType elementType, String sizeLiteral) {
         this.elementType = Objects.requireNonNull(elementType);
@@ -209,11 +142,6 @@ final class SemanticStaticArrayType extends SemanticType {
         return "array<" + elementType.mangleKey() + "," + sizeKey + ">";
     }
 
-    /**
-     * Unfolds the stored size text into a BigInteger, or returns null when the
-     * text is not a plain integer literal (defensive: SemanticAnalyzer always
-     * stores canonical decimal text, which is always parseable).
-     */
     private static BigInteger unfoldedSize(String literal) {
         try {
             String s = literal.trim();
@@ -272,10 +200,6 @@ final class SemanticStaticArrayType extends SemanticType {
     }
 }
 
-// ============================================================
-// Pointer Types
-// ============================================================
-
 final class SemanticPtrType extends SemanticType {
     final SemanticType referencedType;
 
@@ -308,23 +232,6 @@ final class SemanticPtrType extends SemanticType {
     }
 }
 
-// ============================================================
-// Null Type
-// ============================================================
-
-/**
- * The type of the 'null' literal.
- *
- * 'null' is only valid where an pointer type is expected:
- *
- *   ptr<int32_t> p = null;
- *   p == null
- *   p != null
- *   p = null
- *
- * It is not a value type that can be assigned to primitives, arrays,
- * or structs, and it is not the same as integer 0.
- */
 final class SemanticNullType extends SemanticType {
 
     @Override
@@ -359,11 +266,7 @@ final class SemanticStructType extends SemanticType {
 
     @Override
     public String describe() {
-        /*
-         * Qualified: structs with the same simple name in different
-         * namespaces are distinct types, and equality fallbacks and
-         * diagnostics that use describe() must keep them apart.
-         */
+
         return structSymbol.qualifiedName();
     }
 
@@ -387,24 +290,6 @@ final class SemanticStructType extends SemanticType {
     }
 }
 
-// ============================================================
-// Function Types
-// ============================================================
-
-/**
- * SemanticFunctionType represents the type/signature of a callable:
- *
- *   fn(INT32, UINT8) -> VOID
- *
- * This should be kept.
- *
- * However, SemanticFunctionType is not itself the function symbol.
- * FunctionSymbol stores the name, parameter symbols, builtin flag, and this
- * SemanticFunctionType as its type.
- *
- * Raw declaration association is maintained separately by SemanticAnalyzer
- * during analysis.
- */
 final class SemanticFunctionType extends SemanticType {
     final List<SemanticType> parameterTypes;
     final SemanticType returnType;
@@ -441,13 +326,6 @@ final class SemanticFunctionType extends SemanticType {
         );
     }
 
-    /**
-     * Canonical signature key hashed into emitted C++ names:
-     * declared parameter types in order (including `self` for
-     * methods), then the return type, each spelled via mangleKey().
-     *
-     * Example: `fn(int32_t,ptr<std::X>)->void`.
-     */
     public String signatureKey() {
         StringBuilder sb = new StringBuilder();
 

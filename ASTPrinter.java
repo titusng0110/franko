@@ -8,10 +8,6 @@ public class ASTPrinter {
             return;
         }
 
-        // ============================================================
-        // Program / Top-level / Blocks
-        // ============================================================
-
         if (node instanceof ProgramNode n) {
             System.out.println(pad + "Program");
             System.out.println(pad + "  topLevelItems: " + n.topLevelItems.size());
@@ -50,10 +46,6 @@ public class ASTPrinter {
             }
         }
 
-        // ============================================================
-        // Function Declarations
-        // ============================================================
-
         else if (node instanceof FunctionDeclNode n) {
             System.out.println(pad + "FunctionDecl: " + n.name);
             System.out.println(pad + "  returnType: " + typeToString(n.returnType));
@@ -76,10 +68,6 @@ public class ASTPrinter {
                             + n.name
             );
         }
-
-        // ============================================================
-        // Struct Declarations
-        // ============================================================
 
         else if (node instanceof StructDeclNode n) {
             System.out.println(pad + "StructDecl: " + n.name);
@@ -112,10 +100,6 @@ public class ASTPrinter {
             }
         }
 
-        // ============================================================
-        // Global Variable Declarations
-        // ============================================================
-
         else if (node instanceof GlobalVarDeclNode n) {
             System.out.println(
                     pad + "GlobalVarDecl: "
@@ -129,10 +113,6 @@ public class ASTPrinter {
                 print(n.constInitializer, indent + 2);
             }
         }
-
-        // ============================================================
-        // Statements
-        // ============================================================
 
         else if (node instanceof ExprStmtNode n) {
             System.out.println(pad + "ExprStmt");
@@ -285,10 +265,6 @@ public class ASTPrinter {
             }
         }
 
-        // ============================================================
-        // Expressions / Initializer Forms
-        // ============================================================
-
         else if (node instanceof VarNode n) {
             System.out.println(pad + "Var: " + n.name);
         }
@@ -381,10 +357,6 @@ public class ASTPrinter {
             print(n.expr, indent + 2);
         }
 
-        // ============================================================
-        // Type Nodes, useful if printer is called directly on a TypeNode
-        // ============================================================
-
         else if (node instanceof PrimitiveTypeNode n) {
             System.out.println(pad + "PrimitiveType: " + typeToString(n));
         }
@@ -417,10 +389,6 @@ public class ASTPrinter {
         else if (node instanceof TypeNode n) {
             System.out.println(pad + "Type: " + typeToString(n));
         }
-
-        // ============================================================
-        // Fallback
-        // ============================================================
 
         else {
             System.out.println(
@@ -496,16 +464,6 @@ public class ASTPrinter {
         };
     }
 
-    /**
-     * Produces a compact one-line rendering of expression-like AST nodes.
-     *
-     * This is mainly used for type strings such as:
-     *
-     *   array<int32_t, 1 + 2>
-     *
-     * Static array sizes are represented as ASTNode sizeExpr now, not as
-     * raw string literals.
-     */
     private static String exprToInlineString(ASTNode expr) {
         if (expr == null) {
             return "<null-expr>";

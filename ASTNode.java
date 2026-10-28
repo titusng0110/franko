@@ -1,17 +1,8 @@
 import java.util.List;
 
-// ============================================================
-// Base nodes
-// ============================================================
-
 abstract class ASTNode {}
 
-// Expressions and types are also AST nodes
 abstract class TypeNode extends ASTNode {}
-
-// ============================================================
-// Program / top-level / block / statements
-// ============================================================
 
 class ProgramNode extends ASTNode {
     List<ASTNode> topLevelItems;
@@ -37,17 +28,6 @@ class ExprStmtNode extends ASTNode {
     }
 }
 
-// An assignment statement.
-//
-// op is the assignment operator text:
-//
-//   "="  plain assignment
-//   "+=" "-=" "*=" "/=" "%="  compound assignment
-//
-// For compound operators the statement is exactly `target = target <base>
-// value`, but the target is evaluated only once: codegen emits the C++
-// compound assignment directly. `x++` / `x--` arrive here as "+=" / "-="
-// with value 1 (lowered by the Desugarer from IncDecNode).
 class AssignNode extends ASTNode {
     String op;
     ASTNode target;
@@ -64,16 +44,8 @@ class AssignNode extends ASTNode {
     }
 }
 
-// Postfix increment / decrement statements:
-//
-//   x++;
-//   x--;
-//
-// Sugar for `x += 1` / `x -= 1`. The Desugarer lowers this into an
-// AssignNode with the corresponding compound operator, so no later phase
-// sees an IncDecNode.
 class IncDecNode extends ASTNode {
-    String op; // "++" or "--"
+    String op;
     ASTNode target;
 
     IncDecNode(String op, ASTNode target) {
@@ -85,7 +57,7 @@ class IncDecNode extends ASTNode {
 class IfNode extends ASTNode {
     ASTNode condition;
     ASTNode thenBranch;
-    ASTNode elseBranch; // null if absent
+    ASTNode elseBranch;
 
     IfNode(ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
         this.condition = condition;
@@ -98,10 +70,6 @@ class WhileNode extends ASTNode {
     ASTNode condition;
     ASTNode body;
 
-    // Loop epilogue: statements that run at the end of every iteration,
-    // after the body (and before the continue label in codegen). Empty
-    // for a plain while loop; holds the update of a desugared for loop
-    // so that `continue` still runs it.
     List<ASTNode> update;
 
     WhileNode(ASTNode condition, ASTNode body) {
@@ -117,10 +85,6 @@ class WhileNode extends ASTNode {
     }
 }
 
-// break exits one or more enclosing loops. The optional level AST is a
-// constExpr (integer literal, unary, or binary constant expression) that
-// selects how many nested loops to exit; it is null for a plain `break`,
-// which is equivalent to `break 1`.
 class BreakNode extends ASTNode {
     ASTNode level;
 
@@ -129,13 +93,6 @@ class BreakNode extends ASTNode {
     }
 }
 
-// continue targets the innermost enclosing loop and always runs that
-// loop's final body statement(s) (the update of a desugared for loop)
-// before re-testing the condition.
-//
-// level is always null in valid programs: it exists only so that
-// `continue N` can be rejected with a clear semantic error instead of
-// being misparsed as two statements.
 class ContinueNode extends ASTNode {
     ASTNode level;
 
@@ -148,29 +105,10 @@ class ContinueNode extends ASTNode {
     }
 }
 
-// After desugaring, this ASTNode should not exist.
-//
-// for (init; condition; update) body
-//
-// init and update are optional simple statements; condition is a
-// required expression.
-//
-// The desugarer lowers this to:
-//
-//   {
-//       init
-//       while (condition) {
-//           body
-//           update
-//       }
-//   }
-//
-// The wrapping block scopes the loop variable declared by init so it is
-// not visible after the loop.
 class ForNode extends ASTNode {
-    ASTNode init;      // simple statement or null
+    ASTNode init;
     ASTNode condition;
-    ASTNode update;    // simple statement or null
+    ASTNode update;
     ASTNode body;
 
     ForNode(ASTNode init, ASTNode condition, ASTNode update, ASTNode body) {
@@ -190,16 +128,12 @@ class PrintNode extends ASTNode {
 }
 
 class ReturnNode extends ASTNode {
-    ASTNode value; // null for `return;`
+    ASTNode value;
 
     ReturnNode(ASTNode value) {
         this.value = value;
     }
 }
-
-// ============================================================
-// Function declarations
-// ============================================================
 
 class FunctionDeclNode extends ASTNode {
     String name;
@@ -230,17 +164,6 @@ class ParameterNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Struct declarations
-// ============================================================
-//
-// structDecl produces a StructDeclNode holding ordered field
-// declarations and ordered method declarations. Field initializers,
-// when present, are raw constExpr ASTs that the semantic analyzer
-// folds into canonical constants. Method declarations are raw
-// FunctionDeclNode objects whose first parameter must be
-// `ptr<X> self` for the enclosing struct X.
-
 class StructDeclNode extends ASTNode {
     String name;
     List<StructFieldDeclNode> fields;
@@ -264,7 +187,7 @@ class StructDeclNode extends ASTNode {
 class StructFieldDeclNode extends ASTNode {
     TypeNode type;
     String name;
-    ASTNode constInitializer; // null if absent
+    ASTNode constInitializer;
 
     StructFieldDeclNode(TypeNode type, String name, ASTNode constInitializer) {
         this.type = type;
@@ -273,20 +196,10 @@ class StructFieldDeclNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Global variable declarations
-// ============================================================
-//
-// Distinct from VarDeclNode: the Desugarer keys top-level handling off
-// node classes, and global const initializers must never be rewritten
-// into assignment statements. The initializer is a constExpr AST that
-// the desugarer evaluates into a canonical literal before semantic
-// analysis; later phases only validate the resulting value.
-
 class GlobalVarDeclNode extends ASTNode {
     TypeNode type;
     String name;
-    ASTNode constInitializer; // null if absent
+    ASTNode constInitializer;
 
     GlobalVarDeclNode(TypeNode type, String name, ASTNode constInitializer) {
         this.type = type;
@@ -295,25 +208,6 @@ class GlobalVarDeclNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Imports
-// ============================================================
-//
-// import "abc"
-//
-// This node is an import *directive*, not a symbol declaration.
-//
-// It exists only in the raw parser AST. The ImportResolver consumes it
-// before desugaring: it loads and parses the referenced file and
-// splices that file's top-level items into the ProgramNode in place of
-// this node. An ImportNode must therefore never reach the Desugarer.
-//
-// rawPathText holds the escape-decoded literal content without the
-// surrounding quotes, e.g. "lib/util" for the source text "lib/util".
-//
-// Keeping the original path form (instead of a pre-resolved filename)
-// leaves a clean seam for namespace-qualified imports in a later
-// update.
 class ImportNode extends ASTNode {
     String rawPathText;
 
@@ -322,28 +216,6 @@ class ImportNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Namespaces
-// ============================================================
-//
-// namespace util {
-//     struct Point { ... }
-//     int32_t offset = 100
-//     func doubleIt(...) -> ... { ... }
-// }
-//
-// A namespace groups struct, global variable, function, and nested
-// namespace declarations under a qualified name.
-//
-// The name may be a single segment ("util") or a full path ("a::b")
-// when the declaration uses the path header form at the top level.
-// Nested NamespaceNodes inside items always carry a single-segment
-// name; the semantic analyzer prefixes it with the enclosing path
-// and rejects path headers nested inside a body.
-//
-// The same namespace may be declared more than once (same file or
-// across imported files, in either form); the semantic analyzer
-// merges the contents.
 class NamespaceNode extends ASTNode {
     String name;
     List<ASTNode> items;
@@ -354,23 +226,6 @@ class NamespaceNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Qualified name references
-// ============================================================
-//
-// ns::name
-// a::b::c
-//
-// Produced wherever a qualified name is syntactically valid:
-//
-//   - struct type positions:    ptr<util::Point>
-//   - primary expressions:      util::offset
-//   - lvalue positions:         util::offset = 1
-//   - call callees:             util::doubleIt(5)
-//   - nested paths:             a::b::helper(1)
-//
-// The last segment names the referenced symbol; every preceding
-// segment names a namespace along the path from the top level.
 class QualifiedNameNode extends ASTNode {
     List<String> segments;
 
@@ -378,10 +233,6 @@ class QualifiedNameNode extends ASTNode {
         this.segments = segments;
     }
 }
-
-// ============================================================
-// Declarations
-// ============================================================
 
 class VarDeclNode extends ASTNode {
     TypeNode type;
@@ -393,16 +244,6 @@ class VarDeclNode extends ASTNode {
     }
 }
 
-// After desugaring, this ASTNode should not exist.
-//
-// Handles ordinary declaration initializers:
-//
-//   int32_t x = 1 + 2;
-//
-// and array literal declaration initializers:
-//
-//   array<int32_t, 3> xs = [1, 2, 3];
-//
 class VarDeclInitNode extends ASTNode {
     TypeNode type;
     String name;
@@ -415,12 +256,6 @@ class VarDeclInitNode extends ASTNode {
     }
 }
 
-// After desugaring, this ASTNode should not exist.
-//
-// Existing dynamic array initialization sugar:
-//
-//   array<int32_t> xs(3);
-//
 class VarDeclArrayInitNode extends ASTNode {
     TypeNode type;
     String name;
@@ -432,10 +267,6 @@ class VarDeclArrayInitNode extends ASTNode {
         this.size = size;
     }
 }
-
-// ============================================================
-// Types
-// ============================================================
 
 enum PrimitiveKind {
     INT8,
@@ -471,17 +302,6 @@ class DynamicArrayTypeNode extends TypeNode {
 class StaticArrayTypeNode extends TypeNode {
     TypeNode elementType;
 
-    // Static array sizes are now constExpr, not just integerLiteral.
-    //
-    // Examples:
-    //   array<int32_t, 3>
-    //   array<int32_t, 1 + 2>
-    //   array<int32_t, 1 << 3>
-    //
-    // The semantic checker should fold this expression and check:
-    //   - it is valid at compile time
-    //   - it is positive
-    //   - it fits uint32_t
     ASTNode sizeExpr;
 
     StaticArrayTypeNode(TypeNode elementType, ASTNode sizeExpr) {
@@ -498,22 +318,8 @@ class PtrTypeNode extends TypeNode {
     }
 }
 
-// Struct types are parsed as plain identifiers:
-//
-//   struct X { int32_t n }
-//   X x
-//   array<X, 4> xs
-//   ptr<X> p
-//
-// The parser accepts any IDENTIFIER as a possible struct type.
-// Semantic analysis must verify that the identifier actually names
-// a declared struct.
 class StructTypeNode extends TypeNode {
-    /*
-     * Namespace path the struct type is qualified with, e.g. ["util"]
-     * for util::Point or ["a", "b"] for a::b::Point. Empty for an
-     * unqualified struct type name.
-     */
+
     List<String> namespaceSegments;
     String name;
 
@@ -522,10 +328,6 @@ class StructTypeNode extends TypeNode {
         this.name = name;
     }
 }
-
-// ============================================================
-// Primary / atoms
-// ============================================================
 
 class VarNode extends ASTNode {
     String name;
@@ -543,53 +345,9 @@ class IntNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Inferred static array sizes
-// ============================================================
-//
-// InferredSizeNode is a marker for `?` in a static array size:
-//
-//   array<int32_t, ?>
-//
-// It is resolved by the desugarer (only in declarations with an
-// array-literal or string-literal initializer) into an IntNode before
-// semantic analysis. Any InferredSizeNode that survives desugaring is
-// a misplaced `?` and is rejected.
-
 class InferredSizeNode extends ASTNode {
     InferredSizeNode() {}
 }
-
-// ============================================================
-// Array initializer lists
-// ============================================================
-//
-// ArrayLiteralNode represents initializer-list syntax:
-//
-//   [1, 2, 3]
-//   [[1, 2], [3, 4]]
-//
-// It is not an ordinary expression value.
-//
-// It may appear only in assignment/declaration initializer contexts:
-//
-//   xs = [1, 2, 3];
-//   array<int, 3> xs = [1, 2, 3];
-//
-// Desugaring lowers:
-//
-//   target = [a, b, c];
-//
-// into:
-//
-//   target[0] = a;
-//   target[1] = b;
-//   target[2] = c;
-//
-// Nested initializer lists recursively lower to indexed assignments.
-//
-// The initializer list does not allocate, resize, or initialize dynamic
-// array storage.
 
 class ArrayLiteralNode extends ASTNode {
     List<ASTNode> elements;
@@ -614,10 +372,6 @@ class StringLiteralNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Unary / binary expressions
-// ============================================================
-
 class UnaryOpNode extends ASTNode {
     String op;
     ASTNode expr;
@@ -639,10 +393,6 @@ class BinOpNode extends ASTNode {
         this.right = right;
     }
 }
-
-// ============================================================
-// Postfix / access / call
-// ============================================================
 
 class ArrayAccessNode extends ASTNode {
     ASTNode target;
@@ -674,10 +424,6 @@ class CallNode extends ASTNode {
     }
 }
 
-// ============================================================
-// Pointer / pointer-style expressions
-// ============================================================
-
 class GetPtrNode extends ASTNode {
     ASTNode target;
 
@@ -703,10 +449,6 @@ class CastNode extends ASTNode {
         this.expr = expr;
     }
 }
-
-// ============================================================
-// Null literal
-// ============================================================
 
 class NullNode extends ASTNode {
 }

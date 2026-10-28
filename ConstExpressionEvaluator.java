@@ -1,16 +1,5 @@
 import java.math.BigInteger;
 
-/**
- * ============================================================================
- * CONSTANT EXPRESSION EVALUATOR
- * Integer Literal Parsing and Compile-Time Integer Folding
- * ============================================================================
- *
- * This class owns the mechanically foldable integer-expression logic that was
- * previously embedded in SemanticAnalyzer.
- *
- * It deliberately does not perform full semantic legality validation.
- */
 public final class ConstExpressionEvaluator {
 
     private final SymbolTable ctx;
@@ -56,10 +45,6 @@ public final class ConstExpressionEvaluator {
         }
     }
 
-    /**
-     * Pure unary fold. Reports nothing; returns null when the operation
-     * cannot be folded.
-     */
     public static BigInteger tryFoldUnary(String op, BigInteger val) {
         if (val == null) {
             return null;
@@ -72,14 +57,6 @@ public final class ConstExpressionEvaluator {
         };
     }
 
-    /**
-     * Pure binary fold. Reports nothing; returns null for division by
-     * zero, negative shifts, unknown operators, and null operands.
-     *
-     * May throw ArithmeticException for oversized shift amounts;
-     * callers that cannot tolerate that convert it to null or to a
-     * diagnostic.
-     */
     public static BigInteger tryFoldBinary(
             String op,
             BigInteger left,
@@ -94,11 +71,7 @@ public final class ConstExpressionEvaluator {
             case "-" -> left.subtract(right);
             case "*" -> left.multiply(right);
             case "/" -> right.signum() == 0 ? null : left.divide(right);
-            /*
-             * Truncated remainder: BigInteger.remainder keeps the sign of
-             * the dividend, exactly like C++14 integer '%', and pairs with
-             * the truncated '/' above.
-             */
+
             case "%" -> right.signum() == 0 ? null : left.remainder(right);
             case "&" -> left.and(right);
             case "|" -> left.or(right);
@@ -117,14 +90,6 @@ public final class ConstExpressionEvaluator {
         };
     }
 
-    /**
-     * Signals that a constant expression cannot be evaluated.
-     *
-     * Carries a ready-to-report diagnostic for hard failures
-     * (division by zero, arithmetic errors), or null when the shape
-     * is merely not evaluable here (the caller reports a contextual
-     * diagnostic instead).
-     */
     public static final class UnevaluableConstant extends Exception {
         private final String diagnostic;
 
@@ -138,14 +103,6 @@ public final class ConstExpressionEvaluator {
         }
     }
 
-    /**
-     * Quiet compile-time fold of an integer AST expression.
-     *
-     * Covers the constExpr AST subset (integer literals, unary -/!,
-     * binary integer operators). Reports no diagnostics: returns null
-     * when the expression cannot be folded. Used where a caller only
-     * needs to know the value when one exists.
-     */
     public static BigInteger tryFold(ASTNode expr) {
         try {
             return evaluatePure(expr);
@@ -154,14 +111,6 @@ public final class ConstExpressionEvaluator {
         }
     }
 
-    /**
-     * Strict compile-time evaluation of an integer AST expression.
-     *
-     * Returns the folded value, or throws with a diagnostic for hard
-     * failures (division by zero, arithmetic errors). Used by the
-     * desugarer, which evaluates every constExpr slot into a canonical
-     * literal before semantic analysis.
-     */
     public static BigInteger evaluatePure(ASTNode expr) throws UnevaluableConstant {
         if (expr instanceof IntNode n) {
             BigInteger parsed = parseIntegerLiteralPure(n.value);
@@ -209,10 +158,6 @@ public final class ConstExpressionEvaluator {
         throw new UnevaluableConstant(null);
     }
 
-    /**
-     * Pure integer literal parse. Returns null on bad format instead of
-     * reporting a diagnostic.
-     */
     public static BigInteger parseIntegerLiteralPure(String val) {
         try {
             String s = val.trim();

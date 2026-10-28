@@ -6,174 +6,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * ============================================================================
- * CPP14 CODE GENERATOR
- * ============================================================================
- *
- * PURPOSE:
- * Cpp14Codegen emits C++14 code from the fully lowered, type-checked Semantic
- * AST.
- *
- * This generator assumes these phases have already succeeded:
- *
- *   1. Parser
- *   2. AST visitor
- *   3. Desugarer
- *   4. SemanticAnalyzer
- *   5. MasterChecker
- *
- * Therefore, this code generator does not perform legality checking. It trusts
- * that:
- *
- *   - variables are resolved to VariableSymbol objects,
- *   - function calls are resolved to FunctionSymbol overloads,
- *   - expression types are already inferred,
- *   - invalid operators were rejected,
- *   - invalid assignments were rejected,
- *   - invalid pointer arithmetic was rejected,
- *   - invalid array intrinsic usage was rejected,
- *   - invalid function return usage was rejected.
- *
- * ----------------------------------------------------------------------------
- * FUNCTION REPRESENTATION
- * ----------------------------------------------------------------------------
- *
- * Franko:
- *
- *   func main() -> int32_t {
- *       return 0;
- *   }
- *
- * emits as (mangled like every other function):
- *
- *   int32_t FUNC_main_HASH_d8625720()
- *   {
- *       return static_cast<int32_t>(0);
- *   }
- *
- * The generated C++ entry point is a small wrapper in the program
- * template that calls the mangled Franko `main`:
- *
- *   - `ProgramTemplate.cpp` provides `int main()` and calls the
- *     no-args Franko `main`;
- *   - `ProgramTemplateWithRawCArgs.cpp` provides
- *     `int main(int argc, char** argv)`, converts the raw C arguments
- *     into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`,
- *     and calls the args-form Franko `main`.
- *
- * Function prototypes are emitted before function definitions so Franko forward
- * references and mutual recursion compile in C++.
- *
- * Function calls are emitted using the selected FunctionSymbol. Primitive
- * arguments are cast to the selected parameter type to preserve Franko overload
- * resolution in C++.
- *
- * ----------------------------------------------------------------------------
- * POINTER REPRESENTATION
- * ----------------------------------------------------------------------------
- *
- * Franko:
- *
- *   ptr<T>
- *
- * is emitted as:
- *
- *   T*
- *
- * Franko:
- *
- *   getptr(x)
- *
- * is emitted as:
- *
- *   (&x)
- *
- * Franko:
- *
- *   $(p)
- *
- * is emitted as:
- *
- *   (*p)
- *
- * ----------------------------------------------------------------------------
- * ARRAY REPRESENTATION
- * ----------------------------------------------------------------------------
- *
- * Franko dynamic arrays:
- *
- *   array<T>
- *
- * emit as:
- *
- *   Franko_Dynamic_Array<T>
- *
- * Franko static arrays:
- *
- *   array<T, N>
- *
- * emit as:
- *
- *   Franko_Static_Array<T, N>
- *
- * Array intrinsics are lowered by SemanticAnalyzer into expression nodes:
- *
- *   target(size)                         -> SemanticArrayIntrinsicCallNode INIT
- *   target.init(size)                    -> SemanticArrayIntrinsicCallNode INIT
- *   target.init_zero(size)               -> SemanticArrayIntrinsicCallNode INIT_ZERO
- *   target.resize(size)                  -> SemanticArrayIntrinsicCallNode RESIZE
- *   target.uninit()                      -> SemanticArrayIntrinsicCallNode UNINIT
- *   target.memset(value)                 -> SemanticArrayIntrinsicCallNode MEMSET
- *   target.memset(value, start, count)   -> SemanticArrayIntrinsicCallNode MEMSET
- *   target.memcpy(sourcePtr)            -> SemanticArrayIntrinsicCallNode MEMCPY
- *   target.memcpy(sourcePtr, dstStart, srcStart, count)
- *                                      -> SemanticArrayIntrinsicCallNode MEMCPY
- *   target.memmove(dstStart, srcStart, count)
- *                                      -> SemanticArrayIntrinsicCallNode MEMMOVE
- *   target.length()                    -> SemanticArrayIntrinsicCallNode LENGTH
- *
- * Dynamic-array length() calls emit a runtime method call:
- *
- *   xs.length()                        -> xs.length()
- *
- * Static-array length() calls emit the size as a compile-time constant:
- *
- *   ys.length()                        -> static_cast<uint32_t>(3)
- *
- * Because array intrinsics are expressions, status-returning intrinsics such as
- * init/init_zero/resize may appear in value contexts after checking:
- *
- *   status = xs.init(10);
- *
- * Void-returning intrinsics are emitted the same way, but MasterChecker rejects
- * their use in value contexts.
- *
- * ============================================================================
- */
 public class Cpp14Codegen {
 
     private final StringBuilder out = new StringBuilder();
     private int indentLevel = 0;
 
-    // ============================================================
-    // Break / Continue Loop Labels
-    // ============================================================
-
-    /*
-     * break/continue lower to goto statements targeting per-loop labels.
-     *
-     * Each loop gets a unique id. A loop that is the target of a break
-     * emits a label after the loop (`L_brk_<id>`), and a loop that is the
-     * target of a continue emits a label at the end of its body, just
-     * before the epilogue (`L_cont_<id>`), so a continue runs the
-     * epilogue (the desugared for-loop update) and break skips it.
-     *
-     * Labels are only generated when actually targeted:
-     *
-     *   continue        -> goto L_cont_<innermost loop id>
-     *   break N         -> goto L_brk_<id of Nth enclosing loop>
-     */
     private static final class LoopFrame {
         final int id;
 
@@ -185,34 +22,10 @@ public class Cpp14Codegen {
     private final List<LoopFrame> loopStack = new ArrayList<>();
     private int nextLoopId = 0;
 
-    /*
-     * Raw text of import/franko/os.ffi.cpp, or null when the program did
-     * not import "franko/os" through the canonical specifier.
-     *
-     * When active, os::posix / os::win32 intrinsic stub bodies from os.fr
-     * are not emitted (the bridge provides the only definitions), calls to
-     * intrinsics are recorded in usedOsFfiKinds, and generate() prepends
-     * the common block plus one block per used intrinsic.
-     */
     private final String osFfiBridgeText;
 
-    /*
-     * Compilation target for the os::IS_* constants, or null when the
-     * program does not import "franko/os".
-     *
-     * The target drives two backend behaviors: constant-dead `if`
-     * branches are pruned before emission (so wrong-target intrinsic
-     * calls inside them are never emitted or bridged), and live calls
-     * to intrinsics unavailable on the target are rejected here instead
-     * of failing later at the C++ stage.
-     */
     private final TargetInfo target;
 
-    /*
-     * Intrinsic kinds actually called by the program, in first-call order.
-     * Populated during emission (emitFunctionCall) and consumed by
-     * generate() after the whole program is emitted.
-     */
     private final Set<OsFfi.Kind> usedOsFfiKinds = new LinkedHashSet<>();
 
     public Cpp14Codegen() {
@@ -228,15 +41,6 @@ public class Cpp14Codegen {
         this.target = target;
     }
 
-    /*
-     * Full path of the Franko namespace currently being emitted, or
-     * null while emitting at global scope.
-     *
-     * References to symbols from other namespaces are qualified
-     * (NS_a::NS_b::name); references to global-namespace symbols from
-     * inside a namespace block are rooted (::name) so they cannot be
-     * captured by same-named symbols in that namespace.
-     */
     private String currentEmitNamespace = null;
 
     private static final SemanticType UINT8_TYPE =
@@ -245,10 +49,6 @@ public class Cpp14Codegen {
     private static final SemanticType UINT32_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
 
-    /**
-     * Generates the Franko program as C++14 source content intended to replace
-     * __FRANKO_PROGRAM__ inside ProgramTemplate.cpp.
-     */
     public String generate(SemanticASTNode root) {
         if (root == null) {
             throw new IllegalStateException(
@@ -271,10 +71,6 @@ public class Cpp14Codegen {
         return body;
     }
 
-    // ============================================================
-    // Root Dispatch
-    // ============================================================
-
     private void emitNode(SemanticASTNode node) {
         if (node instanceof SemanticProgramNode program) {
             emitProgram(program);
@@ -282,12 +78,7 @@ public class Cpp14Codegen {
         }
 
         if (node instanceof SemanticNamespaceNode namespace) {
-            /*
-             * Defensive: emitProgram partitions namespaces before emission,
-             * so a namespace node reaching emitNode directly only happens
-             * for non-program roots. Emit it as one namespace block with
-             * the same item handling as a program.
-             */
+
             emitProgram(new SemanticProgramNode(List.of(namespace)));
             return;
         }
@@ -318,45 +109,8 @@ public class Cpp14Codegen {
         );
     }
 
-    /**
-     * Emits top-level items.
-     *
-     * Current Franko global-scope rule:
-     *
-     *   global scope may contain only:
-     *
-     *     - struct declarations,
-     *     - global variable declarations,
-     *     - function declarations.
-     *
-     * Codegen emits in dependency-safe C++ order:
-     *
-     *   1. all struct declarations,
-     *   2. all global variable declarations,
-     *   3. all function prototypes,
-     *   4. all function definitions.
-     *
-     * This matters because Franko allows functions to reference global variables
-     * declared later in source order:
-     *
-     *   func main() -> int32_t {
-     *       g = 1
-     *       return 0
-     *   }
-     *
-     *   uint32_t g
-     *
-     * The generated C++ must declare g before main's function body.
-     */
     private void emitProgram(SemanticProgramNode node) {
-        /*
-         * Partition top-level items by namespace.
-         *
-         * SemanticAnalyzer should already ensure only struct declarations,
-         * global variable declarations, function declarations, and
-         * namespace declarations appear here. The fallback error below is
-         * defensive.
-         */
+
         List<SemanticStructDeclNode> globalStructs = new ArrayList<>();
         List<SemanticVarDeclNode> globalGlobals = new ArrayList<>();
         List<SemanticFunctionDeclNode> globalFunctions = new ArrayList<>();
@@ -379,11 +133,6 @@ public class Cpp14Codegen {
             partitionItem(item, globalStructs, globalGlobals, globalFunctions);
         }
 
-        /*
-         * 1. Forward-declare every struct, grouped by namespace, so
-         *    ptr<Struct> fields, global pointer types, and function
-         *    signatures can name structs defined later.
-         */
         for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 continue;
@@ -408,21 +157,6 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        /*
-         * 2. Emit struct definitions in one by-value dependency order
-         *    across all namespaces.
-         *
-         * Structs must be emitted before global variables and functions
-         * because they can be referenced in global variable types and
-         * function signatures. A struct used by value inside another
-         * struct must be defined first, so declarations are topologically
-         * sorted over by-value field dependencies. ptr fields and
-         * dynamic-array fields are pointer-backed and impose no ordering
-         * constraint.
-         *
-         * Each definition opens its own namespace block, so one global
-         * dependency order works across namespaces.
-         */
         List<SemanticStructDeclNode> allStructs = new ArrayList<>();
 
         for (List<SemanticStructDeclNode> structs : nsStructs.values()) {
@@ -439,10 +173,6 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        /*
-         * 3. Emit global variables, namespace by namespace, then the
-         *    global namespace.
-         */
         if (anyNonEmpty(nsGlobals) || !globalGlobals.isEmpty()) {
             for (Map.Entry<String, List<SemanticVarDeclNode>> entry : nsGlobals.entrySet()) {
                 if (entry.getValue().isEmpty()) {
@@ -465,16 +195,6 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        /*
-         * 4. Emit function prototypes.
-         *
-         * This supports forward references, direct recursion, and mutual
-         * recursion across namespaces.
-         *
-         * Methods emit as mangled free functions
-         * (METH_..._OFSTRUCT_..._HASH_...) in the same prototype phase,
-         * after free functions of the same namespace.
-         */
         Map<String, List<SemanticFunctionDeclNode>> nsMethods = collectNamespaceMethods(nsStructs);
         List<SemanticFunctionDeclNode> globalMethods = collectGlobalMethods(globalStructs);
 
@@ -530,12 +250,6 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        /*
-         * 5. Emit function definitions.
-         *
-         * Definitions are emitted in source order relative to other
-         * functions of the same namespace.
-         */
         for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
             List<SemanticFunctionDeclNode> combined = new ArrayList<>(entry.getValue());
             combined.addAll(nsMethods.getOrDefault(entry.getKey(), List.of()));
@@ -615,13 +329,6 @@ public class Cpp14Codegen {
         return out;
     }
 
-    /**
-     * True when any namespace list in the map is non-empty.
-     *
-     * Namespaces are registered in these maps even when they contribute
-     * no items of a given kind, so map emptiness alone would emit empty
-     * namespace blocks.
-     */
     private static boolean anyNonEmpty(Map<String, ? extends List<?>> byNamespace) {
         for (List<?> items : byNamespace.values()) {
             if (!items.isEmpty()) {
@@ -632,15 +339,6 @@ public class Cpp14Codegen {
         return false;
     }
 
-    /**
-     * Guards against emitted-name collisions between distinct callables.
-     *
-     * Overloads of one name differ in parameter types and therefore in
-     * signature keys, so distinct hash suffixes are expected. If two
-     * distinct declarations ever map to the same fully qualified C++
-     * name, that is a 32-bit hash collision: fail loudly instead of
-     * emitting colliding C++.
-     */
     private static void checkEmittedNameCollisions(
             List<SemanticFunctionDeclNode> globalFunctions,
             List<SemanticFunctionDeclNode> globalMethods,
@@ -680,10 +378,6 @@ public class Cpp14Codegen {
         }
     }
 
-    /**
-     * Fully qualified C++ name of a callable, independent of the current
-     * emission context: `NS_a::NS_b::LOCAL` or plain `LOCAL` globally.
-     */
     private static String fullyQualifiedEmittedName(FunctionSymbol symbol) {
         String local;
         String namespace;
@@ -703,10 +397,6 @@ public class Cpp14Codegen {
         return cppNamespacePrefix(namespace) + "::" + local;
     }
 
-    /**
-     * Partitions one namespace's semantic items into its struct, global
-     * variable, and function lists.
-     */
     private void partitionNamespaceItems(
             SemanticNamespaceNode namespace,
             Map<String, List<SemanticStructDeclNode>> nsStructs,
@@ -733,9 +423,6 @@ public class Cpp14Codegen {
         }
     }
 
-    /**
-     * Partitions one semantic item into the given lists.
-     */
     private void partitionItem(
             SemanticASTNode item,
             List<SemanticStructDeclNode> structs,
@@ -769,23 +456,6 @@ public class Cpp14Codegen {
         );
     }
 
-    // ============================================================
-    // Struct Declarations
-    // ============================================================
-
-    /**
-     * Emits a C++ struct definition for a Franko struct declaration.
-     *
-     * Fields are emitted in declaration order. A field's folded const
-     * initializer, when present, becomes a C++ non-static data member
-     * initializer (NSDMI):
-     *
-     *   struct X
-     *   {
-     *       int32_t num = 0;
-     *       int64_t longnum = 3;
-     *   };
-     */
     private void emitStructDecl(SemanticStructDeclNode node) {
         if (node == null || node.symbol == null) {
             throw new IllegalStateException(
@@ -793,11 +463,6 @@ public class Cpp14Codegen {
             );
         }
 
-        /*
-         * A namespace struct is emitted inside its own C++ namespace
-         * block, so struct definitions can be interleaved in one global
-         * by-value dependency order across namespaces.
-         */
         openNamespace(node.symbol.namespace);
 
         emitLine("struct " + emitStructName(node.symbol));
@@ -831,11 +496,7 @@ public class Cpp14Codegen {
             sb.append(" = ");
             sb.append(emitBigIntegerLiteral(field.foldedDefault));
         } else if (field.type instanceof SemanticPtrType) {
-            /*
-             * Pointer fields are guaranteed null-initialized. C++ default
-             * member initializers apply whenever a struct instance is
-             * created without explicit field initialization.
-             */
+
             sb.append(" = nullptr");
         }
 
@@ -844,28 +505,10 @@ public class Cpp14Codegen {
         emitLine(sb.toString());
     }
 
-    /**
-     * Orders struct declarations so that every struct used by value inside
-     * another struct is defined first.
-     *
-     * By-value edges are:
-     *
-     *   - a field whose type is a struct,
-     *   - a field whose type is a static array of structs (recursively).
-     *
-     * ptr fields and dynamic-array fields are pointer-backed and impose no
-     * ordering constraint.
-     *
-     * By-value cycles are rejected by DeclarationChecker before codegen, so a
-     * cycle reaching this method is an internal compiler error.
-     */
     private List<SemanticStructDeclNode> orderStructsByValueDependency(
             List<SemanticStructDeclNode> structs
     ) {
-        /*
-         * Keyed by qualified name: different namespaces may declare
-         * structs with the same simple name.
-         */
+
         Map<String, SemanticStructDeclNode> declByName = new LinkedHashMap<>();
 
         for (SemanticStructDeclNode struct : structs) {
@@ -932,12 +575,6 @@ public class Cpp14Codegen {
         ordered.add(node);
     }
 
-    /**
-     * Collects struct names reachable by value from a field type:
-     *
-     *   - direct struct field types,
-     *   - struct element types of static arrays (recursively).
-     */
     private List<String> byValueStructDependencies(SemanticType type) {
         List<String> names = new ArrayList<>();
 
@@ -953,21 +590,12 @@ public class Cpp14Codegen {
         return names;
     }
 
-    // ============================================================
-    // Functions
-    // ============================================================
-
     private void emitFunctionPrototype(SemanticFunctionDeclNode node) {
         emitLine(emitFunctionHeader(node) + ";");
     }
 
     private void emitFunctionDecl(SemanticFunctionDeclNode node) {
-        /*
-         * os FFI intrinsics are defined by the ffi.cpp bridge, not by the
-         * stub bodies from os.fr. Prototypes are still emitted (they act as
-         * forward declarations); only the stub definition is skipped.
-         * kindOf also rejects any unknown function in the os namespaces.
-         */
+
         if (osFfiBridgeText != null && OsFfi.kindOf(node.symbol) != null) {
             return;
         }
@@ -1016,10 +644,6 @@ public class Cpp14Codegen {
 
         return sb.toString();
     }
-
-    // ============================================================
-    // Statements
-    // ============================================================
 
     private void emitStmt(SemanticStmtNode node) {
         if (node == null) {
@@ -1102,11 +726,6 @@ public class Cpp14Codegen {
         String cppType = emitType(sym.type);
         String name = emitSymbolName(sym);
 
-        /*
-         * Global variable declarations may carry a folded const initializer.
-         * The initializer is emitted as static initialization; it is null for
-         * ordinary locals and for globals without an initializer.
-         */
         String initializer = "";
 
         if (node.foldedConstInitializer != null) {
@@ -1114,10 +733,6 @@ public class Cpp14Codegen {
                     + emitBigIntegerLiteral(node.foldedConstInitializer);
         }
 
-        /*
-         * Pointer declarations are guaranteed null-initialized, unlike
-         * ordinary declarations which are left uninitialized.
-         */
         if (initializer.isEmpty()
                 && sym.type instanceof SemanticPtrType) {
             initializer = " = nullptr";
@@ -1127,18 +742,7 @@ public class Cpp14Codegen {
     }
 
     private void emitAssign(SemanticAssignNode node) {
-        /*
-         * Plain assignment emits `target = value;`.
-         *
-         * Compound assignment emits the C++ compound form directly:
-         *
-         *   x += v;   x -= v;   x *= v;   x /= v;   x %= v;
-         *
-         * so the target (array index, field access, dereference, ...) is
-         * evaluated exactly once. The operand checks already guarantee the
-         * right-hand side has the target's type (or is a constant that
-         * fits it), so the cast matches the plain-assignment form.
-         */
+
         emitLine(
                 emitLValue(node.target)
                         + " "
@@ -1150,17 +754,7 @@ public class Cpp14Codegen {
     }
 
     private void emitIf(SemanticIfNode node) {
-        /*
-         * Constant-dead branches are pruned before emission: a condition
-         * that folded (e.g. `os::IS_WINDOWS == 1`) emits only the taken
-         * branch. Besides the smaller output, this keeps calls inside
-         * the dead branch out of usedOsFfiKinds, so the bridge never
-         * splices a wrong-target intrinsic block (whose ffi.cpp body is
-         * a compile-time #error on this target).
-         *
-         * Both branches are still fully checked by the earlier legality
-         * and memory-safety passes; pruning only affects emission.
-         */
+
         if (node.condition.isConstant()
                 && node.condition.constantValue != null) {
             if (!node.condition.constantValue.equals(BigInteger.ZERO)) {
@@ -1182,14 +776,7 @@ public class Cpp14Codegen {
     }
 
     private void emitWhile(SemanticWhileNode node) {
-        /*
-         * Decide label generation up front: the body block's opening brace
-         * is emitted before the body, but the continue label's position
-         * (and the inner block that makes jumping to it legal C++) depends
-         * on whether any continue targets THIS loop. Break labels are
-         * emitted after the loop, so their usage is known by then, but a
-         * consistent pre-scan keeps the two cases symmetric.
-         */
+
         boolean needsContinueLabel =
                 scanForContinueTarget(node.body, 0);
         boolean needsBreakLabel =
@@ -1203,19 +790,7 @@ public class Cpp14Codegen {
         boolean hasUpdate = !node.update.isEmpty();
 
         if (needsContinueLabel) {
-            /*
-             * Wrap the body in an inner block so the continue label sits
-             * in the outer loop-body block, after the body's declarations
-             * leave scope. A goto may not jump forward past a variable's
-             * initialization within the same scope, so the label must not
-             * share a block with the body's declarations.
-             *
-             *   while (cond) {
-             *       { body }
-             *       L_cont_<id>: ;
-             *       update
-             *   }
-             */
+
             emitLine("{");
             indentLevel++;
 
@@ -1234,13 +809,7 @@ public class Cpp14Codegen {
             indentLevel--;
             emitLine("}");
         } else if (hasUpdate) {
-            /*
-             * No continue targets this loop, so the body and the epilogue
-             * share one block. The body lowers to a block, so its
-             * statements are emitted inline to keep the output identical
-             * to the earlier lowering, where the update was appended to
-             * the body block.
-             */
+
             emitLine("{");
             indentLevel++;
 
@@ -1294,12 +863,6 @@ public class Cpp14Codegen {
         emitLine("goto L_cont_" + target.id + ";");
     }
 
-    /*
-     * Reports whether a continue inside node targets the loop that
-     * contains node. A continue always targets the innermost enclosing
-     * loop, so a continue nested inside another loop (depth > 0 relative
-     * to this one) does not count.
-     */
     private boolean scanForContinueTarget(SemanticStmtNode node, int depth) {
         if (node == null) {
             return false;
@@ -1345,12 +908,6 @@ public class Cpp14Codegen {
         return false;
     }
 
-    /*
-     * Reports whether a break inside node targets the loop that contains
-     * node. `break N` targets the Nth enclosing loop counting outward:
-     * a break counts the loop that contains node as level 1, and each
-     * further enclosing loop increments the level.
-     */
     private boolean scanForBreakTarget(SemanticStmtNode node, int depth) {
         if (node == null) {
             return false;
@@ -1442,10 +999,6 @@ public class Cpp14Codegen {
         emitLine("return " + emitExprAsType(node.value, targetType) + ";");
     }
 
-    // ============================================================
-    // Expressions
-    // ============================================================
-
     private String emitExpr(SemanticExprNode node) {
         if (node == null) {
             throw new IllegalStateException(
@@ -1458,9 +1011,7 @@ public class Cpp14Codegen {
         }
 
         if (node instanceof SemanticNullLiteralNode) {
-            /*
-             * Franko null -> C++ nullptr.
-             */
+
             return "nullptr";
         }
 
@@ -1511,21 +1062,7 @@ public class Cpp14Codegen {
     }
 
     private String emitIntLiteral(SemanticIntLiteralNode node) {
-        /*
-         * Preserve exact source spelling:
-         *
-         *   123
-         *   0b1010
-         *   0xff
-         *
-         * Binary and hexadecimal literals are valid in C++14 and fall back to
-         * unsigned long long when large.
-         *
-         * An unsuffixed decimal literal whose value exceeds LLONG_MAX is
-         * ill-formed in C++14 because decimal literals do not fall back to
-         * unsigned integer types. Append a ULL suffix so the surrounding
-         * static_cast<T>(...) keeps the generated code well-formed.
-         */
+
         String raw = node.rawValue;
 
         if (isPlainDecimal(raw)
@@ -1551,14 +1088,6 @@ public class Cpp14Codegen {
         return true;
     }
 
-    /**
-     * Emits a folded BigInteger constant as a well-formed C++14 integer
-     * literal.
-     *
-     * Plain decimal literals whose magnitude exceeds LLONG_MAX get a ULL
-     * suffix so the literal itself remains well-formed C++14; decimal
-     * literals in C++14 do not fall back to unsigned integer types.
-     */
     private String emitBigIntegerLiteral(BigInteger value) {
         boolean negative = value.signum() < 0;
 
@@ -1574,16 +1103,7 @@ public class Cpp14Codegen {
     }
 
     private String emitUnaryOp(SemanticUnaryOpNode node) {
-        /*
-         * Folded constant expressions are emitted as their folded value
-         * directly. This avoids emitting C++ expressions whose evaluation
-         * would be undefined behavior (for example constant shifts such as
-         * 1 << 40), and matches the Franko BigInteger folding semantics.
-         *
-         * No cast to the node's fallback type is emitted here: constants are
-         * fluid in Franko, and value-consuming contexts cast through
-         * emitExprAsType(...), exactly like emitIntLiteral(...).
-         */
+
         if (node.isConstant() && node.constantValue != null) {
             return emitBigIntegerLiteral(node.constantValue);
         }
@@ -1595,16 +1115,7 @@ public class Cpp14Codegen {
     }
 
     private String emitBinOp(SemanticBinOpNode node) {
-        /*
-         * Folded constant expressions are emitted as their folded value
-         * directly. This avoids emitting C++ expressions whose evaluation
-         * would be undefined behavior (for example constant shifts such as
-         * 1 << 40), and matches the Franko BigInteger folding semantics.
-         *
-         * No cast to the node's fallback type is emitted here: constants are
-         * fluid in Franko, and value-consuming contexts cast through
-         * emitExprAsType(...), exactly like emitIntLiteral(...).
-         */
+
         if (node.isConstant() && node.constantValue != null) {
             return emitBigIntegerLiteral(node.constantValue);
         }
@@ -1637,21 +1148,11 @@ public class Cpp14Codegen {
             );
         }
 
-        /*
-         * Record os FFI intrinsic calls so generate() splices exactly the
-         * bridge blocks the program uses. kindOf cannot throw here: the
-         * declaration already passed through emitFunctionDecl.
-         */
         if (osFfiBridgeText != null) {
             OsFfi.Kind ffiKind = OsFfi.kindOf(fn);
 
             if (ffiKind != null) {
-                /*
-                 * Reject live calls to intrinsics unavailable on the
-                 * target. Constant-dead branches were pruned before any
-                 * call is emitted, so this only fires for calls the
-                 * program can actually reach.
-                 */
+
                 OsFfi.checkTargetAllowed(ffiKind, target);
                 usedOsFfiKinds.add(ffiKind);
             }
@@ -1683,13 +1184,6 @@ public class Cpp14Codegen {
             SemanticExprNode arg = node.args.get(i);
             SemanticType paramType = parameterTypes.get(i);
 
-            /*
-             * This cast is essential for preserving Franko overload resolution.
-             *
-             * Franko has already selected exactly one overload. C++ overload
-             * resolution should not get a chance to reinterpret literal or
-             * folded-constant arguments differently.
-             */
             sb.append(emitExprAsType(arg, paramType));
         }
 
@@ -1731,17 +1225,6 @@ public class Cpp14Codegen {
         return sb.toString();
     }
 
-    /**
-     * Emits a length() intrinsic call.
-     *
-     * Dynamic-array receivers emit a runtime method call:
-     *
-     *   xs.length()
-     *
-     * Static-array receivers emit the size as a compile-time constant:
-     *
-     *   static_cast<uint32_t>(3)
-     */
     private String emitArrayLengthCall(SemanticArrayIntrinsicCallNode node) {
         if (!node.args.isEmpty()) {
             throw new IllegalStateException(
@@ -1787,19 +1270,7 @@ public class Cpp14Codegen {
 
             case MEMCPY -> {
                 if (index == 0) {
-                    /*
-                     * memcpy source is ptr<array<...>>.
-                     *
-                     * Example:
-                     *
-                     *   dst.memcpy(getptr(src))
-                     *
-                     * emits:
-                     *
-                     *   dst.memcpy((&src))
-                     *
-                     * The runtime expects a pointer to the source array object.
-                     */
+
                     yield emitExpr(arg);
                 }
 
@@ -1850,26 +1321,17 @@ public class Cpp14Codegen {
     }
 
     private String emitGetPtr(SemanticGetPtrNode node) {
-        /*
-         * Franko getptr(lvalue) -> C++ &lvalue
-         */
+
         return "(&" + emitLValue(node.target) + ")";
     }
 
     private String emitDeref(SemanticDerefNode node) {
-        /*
-         * Franko $(p) -> C++ (*p)
-         */
+
         return "(*" + emitExpr(node.expr) + ")";
     }
 
     private String emitCast(SemanticCastExprNode node) {
-        /*
-         * Folded constant casts emit their validated value directly,
-         * exactly like other folded constant expressions: the checker
-         * has already rejected out-of-range values, so no runtime
-         * check is needed.
-         */
+
         if (node.isConstant() && node.constantValue != null) {
             return emitBigIntegerLiteral(node.constantValue);
         }
@@ -1877,26 +1339,12 @@ public class Cpp14Codegen {
         String raw = emitExpr(node.expr);
 
         if (!node.checked) {
-            /*
-             * Identity and value-preserving widening: plain static_cast.
-             *
-             * The identity case cannot normally reach here (the analyzer
-             * returns same-type operands unchanged), but a static_cast is
-             * still correct if it ever does.
-             */
+
             return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
         }
 
-        /*
-         * Narrowing and signedness-changing casts: runtime-checked
-         * franko_safe_cast, which throws on out-of-range values.
-         */
         return "franko_safe_cast<" + emitType(node.type) + ">(" + raw + ")";
     }
-
-    // ============================================================
-    // LValues
-    // ============================================================
 
     private String emitLValue(SemanticExprNode node) {
         if (node instanceof SemanticVarExprNode var) {
@@ -1921,19 +1369,9 @@ public class Cpp14Codegen {
         );
     }
 
-    /**
-     * Emits a struct member access:
-     *
-     *   obj.field       ->  obj.field
-     *   $(p).field  ->  (*p).field
-     */
     private String emitMemberAccess(SemanticMemberAccessNode node) {
         return emitExpr(node.target) + "." + node.field.name;
     }
-
-    // ============================================================
-    // Types
-    // ============================================================
 
     private String emitType(SemanticType type) {
         if (type instanceof SemanticVoidType) {
@@ -1963,20 +1401,12 @@ public class Cpp14Codegen {
         }
 
         if (type instanceof SemanticStructType struct) {
-            /*
-             * Struct types are emitted with a "STRUCT_" prefix so a struct
-             * name can never collide with a variable or function name in the
-             * generated C++.
-             */
+
             return emitStructName(struct.structSymbol);
         }
 
         if (type instanceof SemanticNullType) {
-            /*
-             * The null type is the type of the null literal only. It is never
-             * a declared variable, field, parameter, or return type, so it
-             * must not reach type emission.
-             */
+
             throw new IllegalStateException(
                     "Internal compiler error: the null type has no C++ representation"
             );
@@ -2002,24 +1432,8 @@ public class Cpp14Codegen {
         };
     }
 
-    // ============================================================
-    // Symbol / Name Emission
-    // ============================================================
-
     private String emitSymbolName(VariableSymbol symbol) {
-        /*
-         * Variables (locals, globals, parameters) are emitted with a
-         * "VAR_" prefix.
-         *
-         * Franko keeps variables, functions, and struct names in separate
-         * namespaces, but C++ does not: a raw name such as "X" would collide
-         * with a struct type of the same name in the generated code. The kind
-         * prefixes keep every Franko namespace distinct in C++.
-         *
-         * Only namespace-level variables (globals) can need cross-namespace
-         * qualification; locals and parameters are function-scoped and are
-         * never qualified.
-         */
+
         if (symbol == null) {
             throw new IllegalStateException(
                     "Internal compiler error: null symbol in codegen"
@@ -2034,34 +1448,7 @@ public class Cpp14Codegen {
     }
 
     private String emitFunctionName(FunctionSymbol symbol) {
-        /*
-         * Methods are emitted as free C++ functions with a mangled name:
-         *
-         *   METH_<name>_OFSTRUCT_<StructName>_HASH_<8hex>
-         *
-         * qualified by the struct's namespace like FUNC_ names.
-         *
-         * The `self` parameter emits as an ordinary `STRUCT_X* VAR_self`
-         * parameter, and calls emit an explicit `(&receiver)` argument.
-         *
-         * Functions emit as:
-         *
-         *   FUNC_<name>_HASH_<8hex>
-         *
-         * with the 8-hex-digit FNV-1a hash of the canonical signature
-         * key (declared parameter types in order, then the return
-         * type). Overloads of one name therefore emit distinct C++
-         * names without relying on g++ overload resolution.
-         *
-         * The entry-point function `main` emits its mangled name like
-         * every other function. The generated C++ entry point is a
-         * wrapper in the program template: `ProgramTemplate.cpp`
-         * calls the no-args `main`, and
-         * `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv`
-         * into nested dynamic byte arrays before calling the
-         * args-form `main`. Both `main` shapes therefore keep their
-         * hash suffixes.
-         */
+
         if (symbol instanceof MethodSymbol method) {
             return qualify(method.owner.namespace, method.emittedLocalName());
         }
@@ -2069,26 +1456,10 @@ public class Cpp14Codegen {
         return qualify(symbol.namespace, symbol.emittedLocalName());
     }
 
-    /**
-     * Emits a struct type name, qualified when the struct lives in
-     * another namespace than the one currently being emitted.
-     */
     private String emitStructName(StructSymbol symbol) {
         return qualify(symbol.namespace, "STRUCT_" + symbol.name);
     }
 
-    /**
-     * Qualifies a symbol's local C++ name for the emission context.
-     *
-     *   - same namespace as the emission context (or both global):
-     *     the local name is used as-is,
-     *
-     *   - symbol in another namespace: "NS_a::NS_b::" + localName,
-     *
-     *   - global-namespace symbol referenced from inside a namespace
-     *     block: "::" + localName, so the reference cannot be captured
-     *     by a same-named symbol in that namespace.
-     */
     private String qualify(String symbolNamespace, String localName) {
         if (symbolNamespace == null) {
             return currentEmitNamespace == null
@@ -2103,10 +1474,6 @@ public class Cpp14Codegen {
         return cppNamespacePrefix(symbolNamespace) + "::" + localName;
     }
 
-    /**
-     * Maps a Franko namespace path ("a::b") to its C++ namespace
-     * prefix ("NS_a::NS_b").
-     */
     private static String cppNamespacePrefix(String namespacePath) {
         StringBuilder sb = new StringBuilder();
 
@@ -2121,17 +1488,6 @@ public class Cpp14Codegen {
         return sb.toString();
     }
 
-    /**
-     * Opens C++ namespace blocks for one Franko namespace path and
-     * switches the qualification context to it.
-     *
-     * Each emitted C++ namespace is prefixed (NS_name) while
-     * currentEmitNamespace keeps the Franko path, so qualification
-     * comparisons stay in Franko terms.
-     *
-     * Null is a no-op: global-namespace items are emitted at global
-     * scope.
-     */
     private void openNamespace(String namespacePath) {
         if (namespacePath == null) {
             return;
@@ -2146,12 +1502,6 @@ public class Cpp14Codegen {
         currentEmitNamespace = namespacePath;
     }
 
-    /**
-     * Closes the C++ namespace blocks opened by openNamespace and
-     * restores the global emission context.
-     *
-     * Null is a no-op, matching openNamespace.
-     */
     private void closeNamespace(String namespacePath) {
         if (namespacePath == null) {
             return;
@@ -2167,26 +1517,6 @@ public class Cpp14Codegen {
         currentEmitNamespace = null;
     }
 
-    // ============================================================
-    // Casts / Contextual Emission
-    // ============================================================
-
-    /**
-     * Emits an expression in a context that expects targetType.
-     *
-     * This is used for:
-     *
-     *   - assignments,
-     *   - returns,
-     *   - function call arguments,
-     *   - array sizes,
-     *   - array indexes,
-     *   - memset values,
-     *   - ranged memset/memcpy/memmove arguments.
-     *
-     * Primitive casts are emitted explicitly to preserve Franko's contextual
-     * constant typing and overload resolution.
-     */
     private String emitExprAsType(
             SemanticExprNode expr,
             SemanticType targetType
@@ -2194,37 +1524,11 @@ public class Cpp14Codegen {
         String raw = emitExpr(expr);
 
         if (targetType instanceof SemanticPrimitiveType) {
-            /*
-             * Constants are fluid in Franko, so keep contextual casts for them.
-             *
-             * Examples:
-             *
-             *   uint8_t x;
-             *   x = 1;
-             *
-             * should emit:
-             *
-             *   x = static_cast<uint8_t>(1);
-             *
-             * Function call arguments also rely on contextual primitive casts to
-             * preserve Franko overload resolution.
-             */
+
             if (expr.isConstant()) {
                 return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
             }
 
-            /*
-             * If the expression is already semantically the requested primitive
-             * type, do not wrap it again.
-             *
-             * This avoids:
-             *
-             *   static_cast<uint32_t>(static_cast<uint32_t>((x + 1)))
-             *
-             * because emitBinOp(...) already emitted:
-             *
-             *   static_cast<uint32_t>((x + 1))
-             */
             if (sameSemanticType(expr.type, targetType)) {
                 return raw;
             }
@@ -2232,11 +1536,6 @@ public class Cpp14Codegen {
             return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
         }
 
-        /*
-         * Do not cast arrays or pointers unless Franko later defines explicit
-         * conversions for them. Pointer arguments/returns are already strongly
-         * typed and checked exactly.
-         */
         return raw;
     }
 
@@ -2248,25 +1547,14 @@ public class Cpp14Codegen {
             return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
         }
 
-        /*
-         * Do not cast pointers or arrays.
-         */
         return raw;
     }
-
-    // ============================================================
-    // Print Helpers
-    // ============================================================
 
     private String emitPrintableExpr(SemanticExprNode expr) {
         String emitted = emitExpr(expr);
 
         if (expr.type instanceof SemanticPrimitiveType primitive) {
-            /*
-             * int8_t / uint8_t are usually aliases of char-like types.
-             * Unary plus promotes them so std::cout prints a number rather than
-             * a character.
-             */
+
             if (primitive.kind == SemanticPrimitiveKind.INT8
                     || primitive.kind == SemanticPrimitiveKind.UINT8) {
                 return "(+(" + emitted + "))";
@@ -2276,25 +1564,17 @@ public class Cpp14Codegen {
         }
 
         if (expr.type instanceof SemanticPtrType) {
-            /*
-             * Avoid accidental char-pointer string printing for pointers.
-             */
+
             return "static_cast<const void*>(" + emitted + ")";
         }
 
         if (expr instanceof SemanticNullLiteralNode) {
-            /*
-             * print(null) prints the null pointer as a pointer value.
-             */
+
             return "static_cast<const void*>(" + emitted + ")";
         }
 
         return emitted;
     }
-
-    // ============================================================
-    // Output Helpers
-    // ============================================================
 
     private void emitLine(String s) {
         for (int i = 0; i < indentLevel; i++) {

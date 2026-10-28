@@ -1,63 +1,5 @@
 import java.math.BigInteger;
 
-/**
- * ============================================================================
- * STATEMENT CHECKER
- * ============================================================================
- *
- * PURPOSE:
- * StatementChecker validates statement-level Franko legality rules over the
- * fully lowered, symbol-resolved, type-decorated Semantic AST.
- *
- * The SemanticAnalyzer has already:
- *
- *   - resolved variable references to VariableSymbol objects,
- *   - resolved function calls to FunctionSymbol overloads,
- *   - assigned every expression a SemanticType,
- *   - folded integer constants into BigInteger values when possible,
- *   - lowered array intrinsic syntax into dedicated Semantic AST nodes,
- *   - performed structural lvalue checks needed for correct lowering.
- *
- * StatementChecker performs stricter statement-level legality checks:
- *
- *   - assignment target validity,
- *   - assignment type compatibility,
- *   - void-expression rejection in value-producing statement contexts,
- *   - if/while condition validity,
- *   - print argument validity,
- *   - recursive traversal through blocks and nested statements.
- *
- * ----------------------------------------------------------------------------
- * FUNCTION / RETURN NOTE
- * ----------------------------------------------------------------------------
- *
- * Function-level return rules are handled by FunctionChecker, not here.
- *
- * FunctionChecker should intercept SemanticReturnNode before delegating normal
- * statements to StatementChecker.
- *
- * If StatementChecker sees a SemanticReturnNode directly, it reports a defensive
- * error instead of treating it as an unknown node.
- *
- * ----------------------------------------------------------------------------
- * VOID VALUE-CONTEXT RULE
- * ----------------------------------------------------------------------------
- *
- * A void-returning function call is allowed as an expression statement:
- *
- *     logDone();
- *
- * But a void expression is invalid in value-producing contexts:
- *
- *     x = logDone();       invalid
- *     if (logDone()) {}    invalid
- *     print(logDone());    invalid
- *     arr(logDone());      invalid
- *
- * StatementChecker enforces this for statement-level value contexts.
- *
- * ============================================================================
- */
 public class StatementChecker {
     private final DiagnosticBag diagnostics;
     private final DeclarationChecker declarations;
@@ -107,12 +49,12 @@ public class StatementChecker {
         }
 
         if (node instanceof SemanticBreakNode) {
-            /* Fully validated by the SemanticAnalyzer; nothing to check. */
+
             return;
         }
 
         if (node instanceof SemanticContinueNode) {
-            /* Fully validated by the SemanticAnalyzer; nothing to check. */
+
             return;
         }
 
@@ -135,32 +77,12 @@ public class StatementChecker {
                 + node.getClass().getSimpleName());
     }
 
-    // ============================================================
-    // General Statements
-    // ============================================================
-
     private void visitBlock(SemanticBlockNode node) {
         for (SemanticStmtNode stmt : node.statements) {
             checkStmt(stmt);
         }
     }
 
-    /**
-     * Expression statements are allowed even if the expression has void type.
-     *
-     * This is what permits:
-     *
-     *     logDone();
-     *
-     * where logDone returns void.
-     *
-     * Array intrinsics are also checked here because they are now expression
-     * nodes:
-     *
-     *     xs.init(10);
-     *     xs.memset(0);
-     *     dst.memcpy(getptr(src));
-     */
     private void visitExprStmt(SemanticExprStmtNode node) {
         expressions.checkExpr(node.expr);
     }
@@ -197,29 +119,6 @@ public class StatementChecker {
         );
     }
 
-    /**
-     * Validates a compound assignment:
-     *
-     *     x op= v
-     *
-     * is exactly `x = x op v`, except the target is evaluated only once
-     * (the backend emits the C++ compound assignment directly).
-     *
-     * Two requirements, mirroring plain assignment plus the base binary
-     * operator's rules:
-     *
-     *   - assignable: the target is a pointable, non-void storage-backed
-     *     lvalue (already checked by the caller);
-     *
-     *   - addable: the base operator must accept the operand types. The
-     *     same integral rules as `x op v` apply: both operands integers,
-     *     equal types, or a constant that fits the other side. Those rules
-     *     also give the result exactly the target's type, so no separate
-     *     assignability check of the result is needed.
-     *
-     * Constant zero divisors are rejected for `/=` and `%=`, matching the
-     * plain `x / 0` and `x % 0` rule.
-     */
     private void checkCompoundAssign(SemanticAssignNode node) {
         String baseOp = node.baseOp();
 
@@ -287,13 +186,6 @@ public class StatementChecker {
         }
     }
 
-    /**
-     * Return statements should be handled by FunctionChecker because return
-     * legality depends on the enclosing function's declared return type.
-     *
-     * This defensive branch prevents returns from being reported as unknown
-     * statements if they accidentally reach StatementChecker.
-     */
     private void visitReturnOutsideFunctionChecker(SemanticReturnNode node) {
         if (node.value != null) {
             expressions.checkExpr(node.value);
@@ -302,18 +194,6 @@ public class StatementChecker {
         diagnostics.error("Return statement was checked outside FunctionChecker");
     }
 
-    // ============================================================
-    // Value Context Helpers
-    // ============================================================
-
-    /**
-     * Ensures an expression is usable as a value.
-     *
-     * This is where StatementChecker enforces:
-     *
-     *   - void-returning calls are allowed as statements,
-     *   - void-returning calls are not allowed where a value is required.
-     */
     private boolean ensureValueExpression(
             SemanticExprNode expr,
             String where
@@ -331,23 +211,6 @@ public class StatementChecker {
         return true;
     }
 
-    // ============================================================
-    // LValue / Storage Helpers
-    // ============================================================
-
-    /**
-     * Stronger than SemanticExprNode.isLValue().
-     *
-     * Storage-backed lvalues are currently:
-     *
-     *   - variables,
-     *   - dereferenced pointers,
-     *   - array elements whose target is storage-backed,
-     *   - struct field accesses whose base is storage-backed.
-     *
-     * This intentionally rejects synthetic/non-storage lvalues unless their
-     * storage semantics are explicitly added here later.
-     */
     private boolean isStorageBackedLValue(SemanticExprNode expr) {
         if (expr == null || !expr.isLValue()) {
             return false;

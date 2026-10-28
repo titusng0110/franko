@@ -2,29 +2,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Lowers Franko array intrinsics into SemanticArrayIntrinsicCallNode.
- *
- * The lowered node is an expression, not a statement.
- *
- * This is important because some array intrinsics return int32_t:
- *
- *   xs.init(n)
- *   xs.init_zero(n)
- *   xs.resize(n)
- *
- * while others return void:
- *
- *   xs.uninit()
- *   xs.memset(...)
- *   xs.memcpy(...)
- *   xs.memmove(...)
- *
- * and length returns uint32_t:
- *
- *   xs.length()
- *   ys.length()
- */
 public final class ArrayLowerer {
 
     private final SymbolTable ctx;
@@ -38,21 +15,11 @@ public final class ArrayLowerer {
         this.exprAnalyzer = Objects.requireNonNull(exprAnalyzer);
     }
 
-    /**
-     * Attempts to lower an array intrinsic call expression.
-     *
-     * Returns null if the expression is not an array intrinsic.
-     */
     public SemanticArrayIntrinsicCallNode tryLowerIntrinsicCall(ASTNode expr) {
         if (!(expr instanceof CallNode call)) {
             return null;
         }
 
-        /*
-         * Qualified callees (ns::f) are never array intrinsics and never
-         * dynamic-array init shorthand, so skip straight to ordinary
-         * overload resolution.
-         */
         if (call.callee instanceof QualifiedNameNode) {
             return null;
         }
@@ -65,28 +32,11 @@ public final class ArrayLowerer {
                 return intrinsic;
             }
 
-            /*
-             * Not a named array intrinsic. Fall through to the dynamic-array
-             * init shorthand so member receivers work too:
-             *
-             *   b.data(4)   ->  b.data.init(4)
-             *
-             * Non-array member callees fall out of the shorthand as null and
-             * reach the ordinary member-call diagnostic in ExpressionAnalyzer.
-             */
         }
 
         return tryLowerDynamicArrayInitShorthand(call);
     }
 
-    /**
-     * Returns true if the given member name is reserved as a built-in
-     * array intrinsic member.
-     *
-     * ExpressionAnalyzer uses this to avoid emitting a second misleading
-     * "unsupported member call" diagnostic after ArrayLowerer has already
-     * diagnosed an invalid array intrinsic call.
-     */
     public boolean isArrayIntrinsicMemberName(String name) {
         return switch (name) {
             case "init",
@@ -102,16 +52,6 @@ public final class ArrayLowerer {
         };
     }
 
-    /**
-     * Peeks at a member-call receiver to decide intrinsic vs method dispatch.
-     *
-     * A struct-typed receiver means the call is a struct method call, even
-     * when the member name coincides with an array intrinsic name. The peek
-     * analyzes the target once; the chosen lowering path re-analyzes it,
-     * so invalid targets may report duplicate diagnostics. Duplicates are
-     * tolerated: invalid programs are rejected either way, and valid
-     * targets produce no diagnostics on re-analysis.
-     */
     private boolean isStructReceiver(MemberAccessNode mac) {
         SemanticExprNode target = exprAnalyzer.analyzeExpr(mac.target);
 
@@ -119,31 +59,12 @@ public final class ArrayLowerer {
                 && structType.structSymbol != null;
     }
 
-    /**
-     * Returns true when a call that could not be lowered to an array intrinsic
-     * should not fall through to ordinary overload resolution, because doing so
-     * would emit a misleading "no matching overload" diagnostic.
-     *
-     * Covers:
-     *
-     *   - reserved array-intrinsic member names on receivers that are not valid
-     *     intrinsic receivers (the lowering already reported the real problem),
-     *
-     *   - argument-list init shorthand applied to a variable that is not a
-     *     dynamic array (tryLowerDynamicArrayInitShorthand reported the real
-     *     problem).
-     */
     public boolean shouldSuppressCallDiagnostic(CallNode call) {
         if (call.callee instanceof MemberAccessNode mac) {
             if (!isArrayIntrinsicMemberName(mac.memberName)) {
                 return false;
             }
 
-            /*
-             * Struct receivers with intrinsic-coinciding method names fall
-             * through to method resolution, so their diagnostics must not
-             * be suppressed here.
-             */
             return !isStructReceiver(mac);
         }
 
@@ -159,21 +80,11 @@ public final class ArrayLowerer {
         return false;
     }
 
-    // ============================================================
-    // Member Intrinsics
-    // ============================================================
-
     private SemanticArrayIntrinsicCallNode tryLowerMemberIntrinsic(
             CallNode call,
             MemberAccessNode mac
     ) {
-        /*
-         * Type-directed dispatch: a struct-typed receiver is a method call,
-         * never an array intrinsic, even when the member name coincides
-         * with an intrinsic name (e.g. a method named `init`). Return null
-         * silently so method lowering handles it without a spurious
-         * array-receiver diagnostic.
-         */
+
         if (isStructReceiver(mac)) {
             return null;
         }
@@ -219,10 +130,6 @@ public final class ArrayLowerer {
         };
     }
 
-    // ============================================================
-    // init / init_zero / resize
-    // ============================================================
-
     private SemanticArrayIntrinsicCallNode lowerDynamicArrayAlloc(
             CallNode call,
             MemberAccessNode mac,
@@ -256,10 +163,6 @@ public final class ArrayLowerer {
         );
     }
 
-    // ============================================================
-    // uninit
-    // ============================================================
-
     private SemanticArrayIntrinsicCallNode lowerUninit(
             CallNode call,
             MemberAccessNode mac
@@ -286,10 +189,6 @@ public final class ArrayLowerer {
                 List.of()
         );
     }
-
-    // ============================================================
-    // memset
-    // ============================================================
 
     private SemanticArrayIntrinsicCallNode lowerMemset(
             CallNode call,
@@ -336,31 +235,6 @@ public final class ArrayLowerer {
         );
     }
 
-    // ============================================================
-    // memcpy
-    // ============================================================
-
-    /**
-     * Lowers:
-     *
-     *   target.memcpy(sourcePtr)
-     *   target.memcpy(sourcePtr, dstStart, srcStart, count)
-     *
-     * The source argument is intentionally analyzed as a normal expression.
-     *
-     * Franko arrays are not passed as values. Therefore memcpy source should be
-     * an pointer to an array:
-     *
-     *   ptr<array<T>>
-     *   ptr<array<T, N>>
-     *
-     * Example source-level shape:
-     *
-     *   dst.memcpy(getptr(src));
-     *
-     * Full validation that sourcePtr is ptr<array<...>> belongs in
-     * ExpressionChecker.
-     */
     private SemanticArrayIntrinsicCallNode lowerMemcpy(
             CallNode call,
             MemberAccessNode mac
@@ -410,10 +284,6 @@ public final class ArrayLowerer {
         );
     }
 
-    // ============================================================
-    // memmove
-    // ============================================================
-
     private SemanticArrayIntrinsicCallNode lowerMemmove(
             CallNode call,
             MemberAccessNode mac
@@ -454,19 +324,6 @@ public final class ArrayLowerer {
         );
     }
 
-    // ============================================================
-    // length
-    // ============================================================
-
-    /**
-     * Lowers:
-     *
-     *   target.length()
-     *
-     * The receiver only needs an array type. Unlike the mutating
-     * intrinsics, length is read-only, so a plain expression (not
-     * necessarily a storage-backed lvalue) is accepted.
-     */
     private SemanticArrayIntrinsicCallNode lowerLength(
             CallNode call,
             MemberAccessNode mac
@@ -491,22 +348,6 @@ public final class ArrayLowerer {
         );
     }
 
-    // ============================================================
-    // Dynamic Array Init Shorthand
-    // ============================================================
-
-    /**
-     * Lowers:
-     *
-     *   xs(size)
-     *   $(p)(size)
-     *
-     * into:
-     *
-     *   xs.init(size)
-     *
-     * semantically.
-     */
     private SemanticArrayIntrinsicCallNode tryLowerDynamicArrayInitShorthand(
             CallNode call
     ) {
@@ -514,15 +355,6 @@ public final class ArrayLowerer {
             return null;
         }
 
-        /*
-         * Disambiguate ordinary function calls:
-         *
-         *   f(x)
-         *
-         * from dynamic array init shorthand:
-         *
-         *   xs(x)
-         */
         if (call.callee instanceof VarNode calleeVar) {
             VariableSymbol var = ctx.resolve(calleeVar.name);
 
@@ -535,16 +367,6 @@ public final class ArrayLowerer {
             }
         }
 
-        /*
-         * Peek at member-call receivers before analyzing the full callee.
-         *
-         * Analyzing `s.method` as a field access would report "has no field
-         * named 'method'" before method lowering runs, producing a spurious
-         * error alongside the real method resolution. When the receiver is
-         * a struct and the member is not a dynamic-array field, this cannot
-         * be dynamic-array init shorthand, so return early and let method
-         * lowering handle the call without polluting diagnostics.
-         */
         if (call.callee instanceof MemberAccessNode mac) {
             SemanticExprNode targetPeek =
                     exprAnalyzer.analyzeExpr(mac.target);
@@ -568,12 +390,7 @@ public final class ArrayLowerer {
                 exprAnalyzer.analyzeExpr(call.callee);
 
         if (!exprAnalyzer.isDynamicArrayType(receiver.type)) {
-            /*
-             * The callee resolved to a variable that is not a dynamic array, so
-             * this cannot be dynamic-array init shorthand. Report a clear
-             * diagnostic here; ExpressionAnalyzer suppresses the misleading
-             * "no matching overload" fallback for this exact case.
-             */
+
             if (call.callee instanceof VarNode calleeVar
                     && ctx.resolve(calleeVar.name) != null
                     && !ctx.hasAnyFunctionNamed(calleeVar.name)) {

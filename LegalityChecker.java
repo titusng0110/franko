@@ -1,34 +1,5 @@
 import java.util.Objects;
 
-/**
- * ============================================================================
- * MASTER CHECKER
- * ============================================================================
- *
- * PURPOSE:
- * MasterChecker orchestrates the Franko legality checking phase over the fully
- * lowered, symbol-resolved, type-decorated Semantic AST.
- *
- * The SemanticAnalyzer has already produced a SemanticASTNode tree where:
- *
- *   - variable names are resolved to VariableSymbol objects,
- *   - function declarations are resolved to FunctionSymbol objects,
- *   - function calls are resolved to selected overload FunctionSymbol objects,
- *   - types are mechanically inferred/decorated,
- *   - integer constants are folded where possible,
- *   - array intrinsic syntax is lowered into dedicated semantic nodes,
- *   - structural lvalue checks required for lowering have already happened.
- *
- * MasterChecker coordinates the stricter legality checking passes:
- *
- *   - DeclarationChecker validates declared types,
- *   - ExpressionChecker validates expression/operator/pointer/index/call rules,
- *   - StatementChecker validates statement-level rules and array intrinsics,
- *   - FunctionChecker validates function-level rules,
- *   - TypeChecker provides shared type-system utilities.
- *
- * This checker reports all accumulated legality errors at the end of the pass.
- */
 public class LegalityChecker {
 
     private final DiagnosticBag diagnostics;
@@ -46,22 +17,6 @@ public class LegalityChecker {
     public LegalityChecker(DiagnosticBag diagnostics) {
         this.diagnostics = Objects.requireNonNull(diagnostics);
 
-        /*
-         * Option B:
-         *
-         * The legality-checking phase now uses DiagnosticBag directly.
-         *
-         * These constructors assume the sub-checkers are refactored from:
-         *
-         *   SomeChecker(SymbolTable ctx, ...)
-         *
-         * to:
-         *
-         *   SomeChecker(DiagnosticBag diagnostics, ...)
-         *
-         * If the sub-checkers have not been refactored yet, these lines are
-         * expected to be the compile points that guide the next migration step.
-         */
         this.typeChecker = new TypeChecker(diagnostics);
 
         this.expressionChecker =
@@ -92,23 +47,11 @@ public class LegalityChecker {
                 );
     }
 
-    /**
-     * Entry point to validate the semantic legality of the lowered program.
-     *
-     * @param node The fully inferred Semantic AST from SemanticAnalyzer.
-     */
     public void check(SemanticASTNode node) {
         if (node == null) {
             throw new IllegalArgumentException("Cannot check a null AST.");
         }
 
-        /*
-         * Clear previous checker diagnostics.
-         *
-         * DiagnosticBag is now checker-phase-local state. It does not own
-         * scopes, function overload tables, or semantic-analysis registration
-         * metadata.
-         */
         diagnostics.clear();
 
         checkNode(node);
@@ -119,10 +62,6 @@ public class LegalityChecker {
             );
         }
     }
-
-    // ============================================================
-    // Top-Level Dispatch
-    // ============================================================
 
     private void checkNode(SemanticASTNode node) {
         if (node == null) {
@@ -200,12 +139,7 @@ public class LegalityChecker {
             }
 
             if (item instanceof SemanticExprNode expr) {
-                /*
-                 * This should not normally occur in a lowered ProgramNode,
-                 * because expressions should be wrapped in SemanticExprStmtNode
-                 * when used as statements. Still, handling it here makes the
-                 * checker defensive for manually-created test ASTs.
-                 */
+
                 expressionChecker.checkExpr(expr);
                 continue;
             }

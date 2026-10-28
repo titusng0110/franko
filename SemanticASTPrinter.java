@@ -1,38 +1,11 @@
 import java.math.BigInteger;
 
-/**
- * ============================================================================
- * SEMANTIC AST PRINTER
- * ============================================================================
- *
- * PURPOSE:
- * SemanticASTPrinter prints the fully lowered, symbol-resolved, type-decorated
- * Semantic AST for debugging compiler phases.
- *
- * It prints:
- *
- *   - top-level items,
- *   - function declarations,
- *   - function symbols and signatures,
- *   - parameter variables,
- *   - struct declarations and struct field symbols,
- *   - struct member access expressions,
- *   - return statements,
- *   - function call expressions,
- *   - array intrinsic call expressions,
- *   - variable symbols,
- *   - expression types,
- *   - folded constant values,
- *   - lvalue flags.
- *
- * ============================================================================
- */
 public class SemanticASTPrinter {
 
     private static final String INDENT = "  ";
 
     private SemanticASTPrinter() {
-        // Utility class; do not instantiate.
+
     }
 
     public static void print(SemanticASTNode node, int indent) {
@@ -74,10 +47,6 @@ public class SemanticASTPrinter {
         line(indent, "Unknown SemanticASTNode: "
                 + node.getClass().getSimpleName());
     }
-
-    // ============================================================
-    // Program / Top-level
-    // ============================================================
 
     private static void printProgram(SemanticProgramNode node, int indent) {
         line(indent, "SemanticProgramNode");
@@ -124,10 +93,6 @@ public class SemanticASTPrinter {
         line(indent + 1, "body:");
         printBlock(node.body, indent + 2);
     }
-
-    // ============================================================
-    // Struct Declarations
-    // ============================================================
 
     private static void printStructDecl(
             SemanticStructDeclNode node,
@@ -177,10 +142,6 @@ public class SemanticASTPrinter {
         line(indent + 1, "foldedDefault: "
                 + describeConstant(field.foldedDefault));
     }
-
-    // ============================================================
-    // Statements
-    // ============================================================
 
     private static void printStmt(SemanticStmtNode node, int indent) {
         if (node == null) {
@@ -351,10 +312,6 @@ public class SemanticASTPrinter {
         line(indent + 1, "expr:");
         printExpr(node.expr, indent + 2);
     }
-
-    // ============================================================
-    // Expressions
-    // ============================================================
 
     private static void printExpr(SemanticExprNode node, int indent) {
         if (node == null) {
@@ -596,10 +553,6 @@ public class SemanticASTPrinter {
         line(indent + 1, "target:");
         printExpr(node.target, indent + 2);
     }
-
-    // ============================================================
-    // Symbol / Metadata Helpers
-    // ============================================================
 
     private static void printExprMetadata(SemanticExprNode node, int indent) {
         line(indent, "type: " + describeType(node.type));

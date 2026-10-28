@@ -5,48 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * ============================================================================
- * OS FFI INTRINSICS
- * ============================================================================
- *
- * PURPOSE
- *
- * OsFfi owns the compiler side of the `import "franko/os"` foreign-function
- * bridge. The Franko declarations live in import/franko/os.fr (stub bodies
- * only); the real C++ lives in import/franko/os.ffi.cpp as one
- * marker-delimited block per intrinsic, each defining its function under the
- * exact mangled name the backend emits.
- *
- * Responsibilities:
- *
- *   - kindOf: recognize the five intrinsic functions by namespace, name, and
- *     exact parameter/return types. Anything else declared in os::posix or
- *     os::win32 fails loudly: a known intrinsic name with a drifted
- *     signature is an "os.fr/ffi.cpp drift" error, and any other function in
- *     those namespaces is an "unsupported function" error. Stubs must never
- *     compile silently.
- *
- *   - bridge parsing: split ffi.cpp into its `// @@franko-ffi:<block>` units
- *     and assemble the splice text (common block first, then one block per
- *     used intrinsic).
- *
- *   - bridge verification: check that every intrinsic present in the program
- *     has its mangled definition present in ffi.cpp, so a mangling drift
- *     fails at Franko-compile time instead of link time.
- *
- * Current intrinsics:
- *
- *   os::posix::read(int32_t, ptr<array<byte>>, uint64_t) -> int64_t
- *   os::posix::write(int32_t, ptr<array<byte>>, uint64_t) -> int64_t
- *   os::win32::GetStdHandle(uint32_t) -> uint64_t
- *   os::win32::ReadFile(uint64_t, ptr<array<byte>>, uint32_t, ptr<uint32_t>) -> int32_t
- *   os::win32::WriteFile(uint64_t, ptr<array<byte>>, uint32_t, ptr<uint32_t>) -> int32_t
- *
- * Current target constants (namespace os, all byte):
- *
- *   IS_LINUX, IS_WINDOWS, IS_MACOS, IS_X86_64, IS_ARM64
- */
 final class OsFfi {
 
     enum Kind {
@@ -59,15 +17,6 @@ final class OsFfi {
 
     static final String OS_NAMESPACE = "os";
 
-    /**
-     * The os::IS_* compile-time target constants declared in os.fr.
-     *
-     * These start life as zero-initialized placeholder globals. When the
-     * program imports "franko/os", applyTargetConstants rewrites their
-     * initializers to the compilation target's 0/1 values, and
-     * SemanticAnalyzer stamps the matching symbols so every reference
-     * folds into an integer literal.
-     */
     static final List<String> TARGET_CONSTANT_NAMES = List.of(
             "IS_LINUX",
             "IS_WINDOWS",
@@ -86,20 +35,6 @@ final class OsFfi {
     private OsFfi() {
     }
 
-    // ============================================================
-    // Intrinsic Recognition
-    // ============================================================
-
-    /**
-     * Returns the intrinsic kind of a function declared in os::posix or
-     * os::win32, or null for functions outside those namespaces.
-     *
-     * A known intrinsic name with anything but the exact intrinsic
-     * signature throws: os.fr drifted out of sync with ffi.cpp and the
-     * bridge would otherwise miscompile. Any other function name in those
-     * namespaces also throws: those namespaces are compiler-owned, and an
-     * unknown function there would compile its stub body silently.
-     */
     static Kind kindOf(FunctionSymbol fn) {
         if (fn == null || fn.namespace == null) {
             return null;
@@ -219,35 +154,11 @@ final class OsFfi {
                 + " in os::win32 are FFI intrinsics bridged by import/franko/os.ffi.cpp";
     }
 
-    // ============================================================
-    // Target Constants
-    // ============================================================
-
-    /**
-     * Whether a variable is one of the os::IS_* compile-time constants.
-     */
     static boolean isTargetConstantName(String namespacePath, String name) {
         return OS_NAMESPACE.equals(namespacePath)
                 && TARGET_CONSTANT_NAMES.contains(name);
     }
 
-    /**
-     * Rewrites the os::IS_* placeholder initializers in place to the
-     * compilation target's 0/1 values.
-     *
-     * Must run on the import-resolved AST before desugaring, so the
-     * desugarer folds the rewritten initializers and the backend emits
-     * the constants as statically-initialized C++ globals.
-     *
-     * Only the top-level `os` namespace is touched. Every one of the five
-     * constants must be present and declared as `byte`; anything else is
-     * an "os.fr drifted out of sync with the compiler" error, mirroring
-     * the intrinsic drift errors below.
-     *
-     * Call only when the program imports "franko/os" through its
-     * canonical specifier: a user-defined `os` namespace in a program
-     * without that import is left alone.
-     */
     static void applyTargetConstants(ASTNode program, TargetInfo target) {
         if (!(program instanceof ProgramNode root)) {
             return;
@@ -316,17 +227,6 @@ final class OsFfi {
         }
     }
 
-    /**
-     * Rejects a live call to an intrinsic that cannot run on the target.
-     *
-     * Each intrinsic surface is restricted to the targets its bridge
-     * blocks support: the win32 blocks are #error off Windows, the posix
-     * blocks are #error on Windows (there is no _read/_write fallback).
-     * Must be checked at a point where constant-dead branches have
-     * already been pruned, so a call inside a target guard such as
-     * `if os::IS_WINDOWS == 1` never reaches this check when the guard
-     * selects the other target.
-     */
     static void checkTargetAllowed(Kind kind, TargetInfo target) {
         if (target == null) {
             return;
@@ -370,18 +270,6 @@ final class OsFfi {
         };
     }
 
-    // ============================================================
-    // Mangled Names
-    // ============================================================
-
-    /**
-     * The exact C++ definition name each bridge block must provide.
-     *
-     * These are FunctionSymbol.emittedLocalName() values for the intrinsic
-     * signatures above (FNV-1a hash of the canonical signature key),
-     * pinned here so Main can sanity-check ffi.cpp the same way it checks
-     * the program template's entry-point call.
-     */
     static String expectedEmittedName(Kind kind) {
         return switch (kind) {
             case POSIX_READ -> "FUNC_read_HASH_b155decf";
@@ -402,18 +290,6 @@ final class OsFfi {
         };
     }
 
-    // ============================================================
-    // Bridge Parsing
-    // ============================================================
-
-    /**
-     * Splits bridge file text into its marker-delimited blocks.
-     *
-     * A block starts at a line exactly equal to
-     * `// @@franko-ffi:<name>` and runs until the next line exactly equal
-     * to `// @@franko-ffi:end`. Marker lines themselves are excluded.
-     * Duplicate block names are an error.
-     */
     static Map<String, String> parseBlocks(String bridgeText) {
         Map<String, String> blocks = new LinkedHashMap<>();
 
@@ -474,10 +350,6 @@ final class OsFfi {
         return blocks;
     }
 
-    /**
-     * Assembles the splice text for the used intrinsics: the common block
-     * first, then one block per used kind in first-use order.
-     */
     static String buildBridge(String bridgeText, Set<Kind> used) {
         Map<String, String> blocks = parseBlocks(bridgeText);
 
@@ -521,17 +393,6 @@ final class OsFfi {
         return sb.toString();
     }
 
-    // ============================================================
-    // Bridge Verification
-    // ============================================================
-
-    /**
-     * Collects the intrinsic kinds declared anywhere in the semantic
-     * program, in declaration order.
-     *
-     * Throws the same drift/unsupported errors as kindOf, so a bad os
-     * namespace fails fast before codegen.
-     */
     static Set<Kind> collectKinds(SemanticASTNode root) {
         Set<Kind> kinds = new LinkedHashSet<>();
         collectKindsInto(root, kinds);
@@ -584,10 +445,6 @@ final class OsFfi {
         }
     }
 
-    /**
-     * Verifies that every intrinsic declared in the program has its mangled
-     * definition present in the bridge text.
-     */
     static void verifyBridge(SemanticASTNode root, String bridgeText) {
         Set<Kind> kinds = collectKinds(root);
 
