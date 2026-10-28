@@ -67,32 +67,7 @@ array<byte, ?> s = "hello";           // ? = 5
 
 The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 
-## 20.2 `ndarray` Sugar
-
-`ndarray<T, D1, D2, ..., Dn>` is syntactic sugar for nested static arrays:
-
-```franko
-ndarray<byte, 12, 20, 30>
-```
-
-means:
-
-```franko
-array<array<array<byte, 30>, 20>, 12>
-```
-
-Access order follows the dimension list: `arr[i][j][k]` indexes `i` along `12`, `j` along `20`, and `k` along `30`.
-
-Each dimension follows the same static-array size rules above (a positive compile-time integer constant folding to a value that fits `uint32_t`).
-
-Any dimension may be `?` when the `ndarray` is declared with an array-literal initializer; each `?` is inferred independently from the corresponding literal level:
-
-```franko
-ndarray<int32_t, ?, ?> g = [[1, 2, 3], [4, 5, 6]];   // 2 by 3
-ndarray<byte, 2, ?, 3> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
-```
-
-## 20.3 Dynamic Arrays
+## 20.2 Dynamic Arrays
 
 A dynamic array has runtime size:
 
@@ -132,7 +107,7 @@ The call-initialization form is only valid for dynamic arrays:
 int32_t x(5);   // invalid: x is not a dynamic array
 ```
 
-## 20.4 Array Access
+## 20.3 Array Access
 
 Array indexing syntax:
 
@@ -152,7 +127,7 @@ Index rules:
 
 For static arrays, constant indexes are checked against the known static size when possible.
 
-## 20.5 Array Elements as Lvalues
+## 20.4 Array Elements as Lvalues
 
 Array elements are storage-backed lvalues when the array target is storage-backed.
 
@@ -165,7 +140,7 @@ p = getptr(xs[0]);
 
 Nested array elements may also be lvalues when each target is storage-backed.
 
-## 20.6 Array Direct Assignment Is Invalid
+## 20.5 Array Direct Assignment Is Invalid
 
 Arrays cannot be assigned directly as ordinary values.
 
@@ -188,7 +163,7 @@ a.uninit();
 
 Array initializer assignment is not whole-array value assignment.
 
-## 20.7 Array Lifetime Limitations
+## 20.6 Array Lifetime Limitations
 
 The checker validates intrinsic legality, but it does not fully prove:
 

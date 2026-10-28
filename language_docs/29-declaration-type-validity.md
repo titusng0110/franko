@@ -17,7 +17,7 @@ int32_t x;
 X s;
 array<X> xs;
 array<uint8_t, 64> bytes;
-ndarray<byte, 12, 20> grid;   // sugar for array<array<byte, 20>, 12>
+array<array<byte, 20>, 12> grid;
 ptr<int32_t> p;
 ptr<array<int32_t>> ap;
 ```
@@ -31,7 +31,7 @@ ptr<void> p;
 T s;    // invalid when no struct named T is declared
 ```
 
-`ndarray` declarations are valid exactly when their unfolded nested static array type is valid: every dimension must satisfy the static array size rules (see [Arrays](20-arrays.md)).
+Static arrays nest: every level of `array<array<byte, 20>, 12>` must satisfy the static array size rules (see [Arrays](20-arrays.md)).
 
 A function return type has separate rules. It may be:
 

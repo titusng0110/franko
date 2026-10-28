@@ -688,19 +688,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitNdArrayType(FrankoParser.NdArrayTypeContext ctx) {
-        TypeNode elementType = (TypeNode) visit(ctx.type());
-
-        List<ASTNode> dimensions = new ArrayList<>();
-
-        for (FrankoParser.ArraySizeContext dimCtx : ctx.arraySizeList().arraySize()) {
-            dimensions.add(visit(dimCtx));
-        }
-
-        return new NdArrayTypeNode(elementType, dimensions);
-    }
-
-    @Override
     public ASTNode visitPtrType(FrankoParser.PtrTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
         return new PtrTypeNode(referencedType);

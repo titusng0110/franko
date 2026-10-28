@@ -80,11 +80,9 @@ Nested initializer lists are lowered recursively.
 
 String literals are converted to byte array literals in the same pass (see [String Literals](23-string-literals.md)).
 
-`ndarray` types are lowered to nested static arrays before type analysis.
-
 `?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count (strings count as UTF-8 bytes) before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
 
-Every other `constExpr` slot is also evaluated in this pass: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
+Every other `constExpr` slot is also evaluated in this pass: static array sizes, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
 
 The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
 

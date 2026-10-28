@@ -7,7 +7,6 @@ Franko is a small statically typed language with:
 - struct member access using `obj.field` (see [Structs](25-structs.md));
 - dynamic arrays;
 - static arrays;
-- `ndarray<...>` sugar for nested static arrays;
 - typed pointers using `ptr<T>`;
 - explicit pointer operations:
   - `getptr(...)`;

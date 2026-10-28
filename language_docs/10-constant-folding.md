@@ -2,7 +2,7 @@
 
 Franko splits constant handling into evaluation and validation.
 
-**Evaluation** computes the value of a syntactically pure constant expression. This happens before semantic analysis, in the desugarer, for every `constExpr` slot: static array sizes, `ndarray` dimensions, global initializers, and struct field defaults.
+**Evaluation** computes the value of a syntactically pure constant expression. This happens before semantic analysis, in the desugarer, for every `constExpr` slot: static array sizes, global initializers, and struct field defaults.
 
 Examples:
 

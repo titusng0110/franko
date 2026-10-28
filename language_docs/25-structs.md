@@ -50,7 +50,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (including `ndarray<...>` sugar), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -80,14 +80,14 @@ A struct name used in a type position is resolved against the struct namespace:
 
 - Unknown struct names are rejected with an "unknown struct type" error.
 - Field types may reference structs declared anywhere in the program, including structs declared later in the file.
-- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `ndarray<Point, 2, 3> cells` are all valid declared types.
+- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `array<array<Point, 3>, 2> cells` are all valid declared types.
 
 ## 25.5 By-Value Cycles
 
 A struct may not reach itself by value through its fields. The by-value edges are:
 
 - a field whose type is a struct;
-- a field whose type is a static array of structs (recursively, including `ndarray` sugar).
+- a field whose type is a static array of structs (recursively, including nested static arrays).
 
 An infinite by-value chain would have no size, so such cycles are rejected at compile time:
 

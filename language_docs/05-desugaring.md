@@ -76,23 +76,7 @@ and is then lowered to indexed byte assignments. No null terminator is added.
 
 String literals are only valid in assignment/declaration initializer contexts; they are not general expressions. See [String Literals](23-string-literals.md).
 
-## 5.5 `ndarray` Type Desugaring
-
-`ndarray<T, D1, D2, ..., Dn>` is sugar for nested static arrays:
-
-```franko
-ndarray<byte, 12, 20, 30>
-```
-
-desugars to:
-
-```franko
-array<array<array<byte, 30>, 20>, 12>
-```
-
-so that `arr[i][j][k]` indexes `i` along the first dimension (`12`), `j` along the second (`20`), and `k` along the last (`30`). See [Arrays](20-arrays.md).
-
-## 5.6 Braceless Control-Flow Bodies
+## 5.5 Braceless Control-Flow Bodies
 
 `if`, `while`, and `for` bodies may be a single statement without braces:
 
@@ -112,7 +96,7 @@ for (; i < 10; i = i + 1) { print(i); }
 
 This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
 
-## 5.7 For Loop Desugaring
+## 5.6 For Loop Desugaring
 
 A `for` loop is lowered to declaration/assignment statements and a `while` loop:
 
@@ -141,9 +125,9 @@ The `init` and `update` parts are optional simple statements. The condition is r
 
 The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](19-statements.md).
 
-## 5.8 Inferred Static Array Sizes (`?`)
+## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size (or `ndarray` dimension) may be written as `?` when the array is declared with an array-literal or string-literal initializer:
+A static array size may be written as `?` when the array is declared with an array-literal or string-literal initializer:
 
 ```franko
 array<int32_t, ?> a = [0, 1, 2, 3];
@@ -165,7 +149,7 @@ String literals count UTF-8 bytes (`array<byte, ?> s = "hello"` infers `5`), and
 array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
 ```
 
-becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear in any dimension, including middle `ndarray` dimensions.
+becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear at any level of the nest, including middle levels.
 
 Inference rules:
 
@@ -177,7 +161,7 @@ Inference rules:
 
 Misplaced `?` (parameters, return types, struct fields, globals, pointers, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
 
-## 5.9 Constant Expression Evaluation
+## 5.8 Constant Expression Evaluation
 
 Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
 
@@ -189,7 +173,7 @@ struct S {                 // field default becomes 8
 }
 ```
 
-Static array sizes, `ndarray` dimensions, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
+Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
 
 Evaluation failures are desugaring diagnostics:
 
@@ -199,7 +183,7 @@ array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
 
 Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
 
-## 5.10 Increment and Decrement Desugaring
+## 5.9 Increment and Decrement Desugaring
 
 Postfix increment and decrement statements are sugar for compound assignment:
 

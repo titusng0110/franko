@@ -4,7 +4,7 @@
 // Covers:
 //   dynarr.length()      (runtime length, 0 when uninitialized)
 //   staticarr.length()   (compile-time constant)
-//   nested, ndarray, field, element, and deref receivers
+//   nested, field, element, and deref receivers
 //   a struct method named `length` still dispatches as a method
 // ============================================================
 
@@ -44,7 +44,7 @@ func main() -> int32_t {
     print(m[0].length());
     print(m[2][1]);
 
-    ndarray<int32_t, 2, 4> g;
+    array<array<int32_t, 4>, 2> g;
     print(g.length());
     print(g[0].length());
 

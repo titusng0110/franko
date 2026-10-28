@@ -3,7 +3,7 @@
 // ============================================================
 // Covers: every valid declared variable type form from doc 30:
 // struct variable, dynamic array of struct, static array,
-// ndarray (nested static array sugar), ptr<T>, and
+// nested static arrays, ptr<T>, and
 // ptr<array<T>>. Each variable is assigned and read.
 // ============================================================
 
@@ -28,8 +28,8 @@ func main() -> int32_t {
     bytes.memset(5);
     bytes[63] = 9;
 
-    // ndarray sugar for array<array<byte, 20>, 12>.
-    ndarray<byte, 12, 20> grid;
+    // Nested static array: array<array<byte, 20>, 12>.
+    array<array<byte, 20>, 12> grid;
     grid.memset(1);
     grid[11][19] = 4;
 

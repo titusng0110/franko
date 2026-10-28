@@ -256,16 +256,16 @@ func main() -> int32_t {
 
 See [String Literals](23-string-literals.md).
 
-## 33.12 `ndarray` Grid
+## 33.12 Nested Static Array Grid
 
 ```franko
-func fill(ptr<ndarray<byte, 2, 3>> grid) -> void {
+func fill(ptr<array<array<byte, 3>, 2>> grid) -> void {
     $(grid).memset(0);
     $(grid)[0][1] = 7;
 }
 
 func main() -> int32_t {
-    ndarray<byte, 2, 3> grid;
+    array<array<byte, 3>, 2> grid;
 
     fill(getptr(grid));
 
@@ -276,7 +276,7 @@ func main() -> int32_t {
 }
 ```
 
-`ndarray<byte, 2, 3>` is sugar for `array<array<byte, 3>, 2>`.
+`array<array<byte, 3>, 2>` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
 
 ## 33.13 Status-Returning Intrinsics
 
