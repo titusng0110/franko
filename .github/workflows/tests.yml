@@ -26,11 +26,63 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '25'
+      # No setup-java: every runner image ships JDKs preinstalled (though not
+      # on PATH). JDK 25 everywhere; JDK 23 on windows-11-arm, whose image
+      # has no JDK 25 (no aarch64 Temurin 25 exists).
+      - name: Set up preinstalled JDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if ("${{ runner.arch }}" -eq "ARM64") {
+              $jdk = $env:JAVA_HOME_23_AARCH64
+              $release = "23"
+          } else {
+              $jdk = $env:JAVA_HOME_25_X64
+              $release = "25"
+          }
+          if (-not $jdk) {
+              throw "Preinstalled JDK not found (JAVA_HOME_23_AARCH64 / JAVA_HOME_25_X64 unset)"
+          }
+          $javac = Join-Path $jdk "bin\javac.exe"
+          if (-not (Test-Path -LiteralPath $javac)) {
+              throw "javac.exe not found under $jdk\bin"
+          }
+
+          & (Join-Path $jdk "bin\java.exe") -version
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $jdk "bin")
+          # franko_tools reads this (or --java-release) for javac --release.
+          Add-Content -Path $env:GITHUB_ENV -Value "FRANKO_JAVA_RELEASE=$release"
+          Write-Host "Using JDK at $jdk (javac --release $release)"
+
+      - name: Set up preinstalled JDK (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          shopt -s nullglob
+
+          JDK=""
+          # The image env vars are authoritative; the well-known install
+          # locations are fallbacks (macos default java on PATH is 21, and
+          # ubuntu/macOS env var suffixes differ by arch).
+          for candidate in "${JAVA_HOME_25_arm64:-}" "${JAVA_HOME_25_X64:-}" \
+              /usr/lib/jvm/temurin-25-jdk-* \
+              /Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home; do
+            if [[ -n "$candidate" && -x "$candidate/bin/javac" ]]; then
+              JDK="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$JDK" ]]; then
+            echo "Error: preinstalled JDK 25 not found" >&2
+            exit 1
+          fi
+
+          "$JDK/bin/java" -version
+          echo "$JDK/bin" >> "$GITHUB_PATH"
+          echo "Using JDK at $JDK (javac --release 25)"
 
       # The Python runners are stdlib-only; uv just provides the pinned
       # interpreter and the `regex` dependency used by the doc tools.

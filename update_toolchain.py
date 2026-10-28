@@ -11,6 +11,8 @@ The steps are not interactive, so it is also what CI uses to build the
 toolchain.
 """
 
+import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -21,7 +23,18 @@ from franko_tools import ToolError, build_toolchain
 
 
 def main() -> int:
-    build_toolchain()
+    parser = argparse.ArgumentParser(
+        description="Rebuild the Franko compiler toolchain "
+                    "(ANTLR parser + Java classes).",
+    )
+    parser.add_argument(
+        "--java-release",
+        default=os.environ.get("FRANKO_JAVA_RELEASE", "25"),
+        help="javac --release value for the compiler classes "
+             "(default: $FRANKO_JAVA_RELEASE, else 25)",
+    )
+    args = parser.parse_args()
+    build_toolchain(java_release=args.java_release)
     return 0
 
 

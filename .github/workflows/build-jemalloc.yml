@@ -277,6 +277,11 @@ jobs:
 
     env:
       MSYSTEM: ${{ matrix.msystem }}
+      # Without this, the login bash runs MSYS2's /etc/profile, which ends
+      # with `cd "$HOME"` - every step would then start in /home/runneradmin
+      # instead of the checkout (this is what msys2/setup-msys2 sets for its
+      # `msys2 {0}` shell too).
+      CHERE_INVOKING: 1
 
     steps:
       - name: Checkout repository

@@ -308,12 +308,20 @@ def _javac_classpath() -> str:
     return PATH_SEPARATOR.join([*_base_classpath_entries(), str(GENERATED_DIR)])
 
 
-def build_toolchain() -> None:
+def build_toolchain(java_release: str | None = None) -> None:
     """Regenerate the ANTLR parser sources and rebuild the Java classes.
 
     Replaces update_linux-x86_64.sh / update_windows-x64.ps1. It runs the
     steps without prompting, so the same command works locally and in CI.
+
+    JAVA_RELEASE defaults to $FRANKO_JAVA_RELEASE, else "25": the javac
+    --release value for the compiler classes. CI passes 23 on
+    windows-11-arm, whose preinstalled JDK is 23 (no aarch64 Temurin 25
+    exists), and 25 everywhere else.
     """
+    if java_release is None:
+        java_release = os.environ.get("FRANKO_JAVA_RELEASE", "25")
+
     if not ANTLR_JAR.is_file():
         raise ToolError(f"ANTLR jar not found at {ANTLR_JAR}")
 
@@ -340,9 +348,9 @@ def build_toolchain() -> None:
         raise ToolError(f"no Java source files found to compile in {ROOT}")
 
     print()
-    print("[Step 3] compile Java compiler classes")
+    print(f"[Step 3] compile Java compiler classes (--release {java_release})")
     run([
-        javac, "--release", "25", "-Xlint:all,-auxiliaryclass",
+        javac, "--release", java_release, "-Xlint:all,-auxiliaryclass",
         "-cp", _javac_classpath(), "-d", CLASSES_DIR, *sources,
     ])
     print("[Step 3] Done.")
