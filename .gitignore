@@ -6,6 +6,9 @@ build/
 .venv/
 __pycache__/
 .antlr/
+# Extracted jemalloc bundles (build outputs materialised by
+# update_toolchain.py from the per-target zips in third_party/artifacts/).
+third_party/jemalloc/
 programs/*.cpp
 programs/*.testbin
 programs/*.actual

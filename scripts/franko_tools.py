@@ -30,6 +30,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -145,6 +146,48 @@ def jemalloc_paths() -> tuple[Path, Path]:
         )
 
     return include, library
+
+
+# Prebuilt jemalloc bundles are tracked as one small zip per target
+# (produced by build-jemalloc.yml); the extracted tree is a build output.
+JEMALLOC_ZIPS_DIR = ROOT / "third_party" / "artifacts"
+
+
+def ensure_jemalloc_bundle() -> None:
+    """Extract the host's prebuilt jemalloc bundle from its checked-in zip.
+
+    Skips extraction when the header and static library are already in
+    place. Produces exactly the layout jemalloc_paths() consumes:
+    third_party/jemalloc/<target>/{include/jemalloc/jemalloc.h,
+    lib/libjemalloc.a | lib/jemalloc.lib}.
+    """
+    bundle = ROOT / "third_party" / "jemalloc" / host_target()
+    include = bundle / "include" / "jemalloc" / "jemalloc.h"
+    library = bundle / "lib" / ("jemalloc.lib" if IS_WINDOWS else "libjemalloc.a")
+
+    if include.is_file() and library.is_file():
+        return
+
+    archive = JEMALLOC_ZIPS_DIR / f"jemalloc-{host_target()}.zip"
+    if not archive.is_file():
+        raise ToolError(
+            "prebuilt jemalloc bundle zip not found:\n"
+            f"  {archive}\n"
+            "\nThe zips are produced by the 'Build jemalloc static bundles'"
+            " workflow; download jemalloc-<target>.zip from a green run into"
+            " third_party/artifacts/."
+        )
+
+    print(f"extracting {relative(archive)} ...")
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(bundle)
+
+    if not include.is_file() or not library.is_file():
+        raise ToolError(
+            "jemalloc bundle zip did not contain the expected layout:\n"
+            f"  {archive}"
+        )
+    print("jemalloc bundle ready.")
 
 
 def cxx_compile_flags(warnings: str = "basic") -> list[str]:

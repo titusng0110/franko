@@ -97,8 +97,8 @@ jobs:
       # Every Windows runner image ships MSYS2 at C:\msys64 (not on PATH).
       # Reuse that preinstalled MSYS2 instead of installing our own copy:
       #   x64 (windows-2025): UCRT64 g++, matching build-jemalloc.yml and the
-      #     checked-in windows-x86_64 jemalloc bundle (keeps the CRT
-      #     consistent with the static archive).
+      #     jemalloc bundle zip it produces (keeps the CRT consistent with
+      #     the static archive).
       #   arm64 (windows-11-arm): the only native ARM64 MinGW-flavored
       #     toolchain is MSYS2 clangarm64 clang++; the image's gcc is an
       #     x86_64 build running under emulation and cannot produce ARM64
