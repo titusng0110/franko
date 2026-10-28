@@ -16,10 +16,11 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
+          - windows-11-arm
+          - windows-2025
           - macos-26
-          - windows-2022
+          - ubuntu-26.04
+          - ubuntu-26.04-arm
 
     steps:
       - name: Checkout repository
@@ -41,35 +42,76 @@ jobs:
           python-version: '3.13'
           enable-cache: true
 
-      # UCRT64, matching build-jemalloc.yml and the checked-in windows-x86_64
-      # jemalloc bundle (keeps the CRT consistent with the static archive).
-      - name: Setup MSYS2 UCRT64
-        if: runner.os == 'Windows'
-        id: msys2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          pacboy: >-
-            gcc:p
-
-      # The action installs MSYS2 wherever it decides (see its
-      # msys2-location output), so export that exact ucrt64\bin directory:
-      # the runners then find g++.exe through PATH, and it is also where
-      # libwinpthread-1.dll lives for the test binaries. The Python scripts
-      # only look at PATH, so a local Windows checkout needs the MinGW bin
-      # directory on PATH itself (the error message says so).
-      - name: Add MSYS2 g++ to PATH
+      # Every Windows runner image ships MSYS2 at C:\msys64 (not on PATH).
+      # Reuse that preinstalled MSYS2 instead of installing our own copy:
+      #   x64 (windows-2025): UCRT64 g++, matching build-jemalloc.yml and the
+      #     checked-in windows-x86_64 jemalloc bundle (keeps the CRT
+      #     consistent with the static archive).
+      #   arm64 (windows-11-arm): the only native ARM64 MinGW-flavored
+      #     toolchain is MSYS2 clangarm64 clang++; the image's gcc is an
+      #     x86_64 build running under emulation and cannot produce ARM64
+      #     output.
+      # If no toolchain environment is present in C:\msys64 yet, install it
+      # there with pacman.
+      - name: Set up preinstalled MSYS2 C++ toolchain
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $bin = "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin"
-          if (-not (Test-Path -LiteralPath (Join-Path $bin "g++.exe"))) {
-            throw "g++.exe not found under $bin"
+
+          if ("${{ runner.arch }}" -eq "ARM64") {
+              $candidates = @(
+                  "C:\msys64\clangarm64\bin",
+                  "C:\msys64\ucrt64\bin",
+                  "C:\msys64\mingw64\bin"
+              )
+              $packages = "mingw-w64-clang-aarch64-clang"
+          } else {
+              $candidates = @(
+                  "C:\msys64\ucrt64\bin",
+                  "C:\msys64\mingw64\bin",
+                  "C:\msys64\clang64\bin"
+              )
+              $packages = "mingw-w64-ucrt-x86_64-gcc"
           }
-          Add-Content -Path $env:GITHUB_PATH -Value $bin
-          Write-Host "Added $bin to PATH"
+
+          function Find-Toolchain {
+              foreach ($dir in $candidates) {
+                  foreach ($compiler in @("g++.exe", "clang++.exe")) {
+                      if (Test-Path -LiteralPath (Join-Path $dir $compiler)) {
+                          return @{ Dir = $dir; Compiler = $compiler }
+                      }
+                  }
+              }
+              return $null
+          }
+
+          $toolchain = Find-Toolchain
+          if ($null -eq $toolchain) {
+              Write-Host "No C++ toolchain under C:\msys64; installing: $packages"
+              & C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed $packages"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "pacman failed to install $packages (exit code $LASTEXITCODE)"
+              }
+              $toolchain = Find-Toolchain
+              if ($null -eq $toolchain) {
+                  throw "C++ toolchain still missing after installing $packages"
+              }
+          }
+
+          $cxx = Join-Path $toolchain.Dir $toolchain.Compiler
+          & $cxx --version
+
+          # The toolchain bin directory goes on PATH: the Python scripts find
+          # the compiler through PATH alone (the error message says so), and
+          # the test binaries find their runtime DLLs (e.g.
+          # libwinpthread-1.dll) there too.
+          Add-Content -Path $env:GITHUB_PATH -Value $toolchain.Dir
+          # Pin CXX so franko_tools uses this exact compiler: on
+          # windows-11-arm an emulated x86_64 g++ elsewhere on PATH must not
+          # shadow the native clang++.
+          Add-Content -Path $env:GITHUB_ENV -Value "CXX=$cxx"
+          Write-Host "Using $cxx"
 
       - name: Build Franko compiler toolchain
         run: uv run python update_toolchain.py

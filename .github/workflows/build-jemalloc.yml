@@ -242,64 +242,98 @@ jobs:
           retention-days: 30
 
   build-windows:
-    name: Build windows-x86_64
-    runs-on: windows-2022
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86_64
+            os: windows-2022
+            msystem: UCRT64
+            cc: gcc
+            packages: >-
+              mingw-w64-ucrt-x86_64-gcc
+              mingw-w64-ucrt-x86_64-make
+              mingw-w64-ucrt-x86_64-binutils
+
+          - target: windows-arm64
+            os: windows-11-arm
+            msystem: CLANGARM64
+            cc: clang
+            packages: >-
+              mingw-w64-clang-aarch64-clang
+              mingw-w64-clang-aarch64-make
+              mingw-w64-clang-aarch64-llvm-tools
+
+    # Reuse the MSYS2 preinstalled on the image at C:\msys64 instead of
+    # installing a fresh copy: a login bash reads $MSYSTEM and prepends the
+    # matching environment's bin directory to PATH (the same behaviour as
+    # msys2/setup-msys2's `msys2 {0}` shell).
     defaults:
       run:
-        shell: msys2 {0}
+        shell: C:\msys64\usr\bin\bash.exe -leo pipefail {0}
+
+    env:
+      MSYSTEM: ${{ matrix.msystem }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Setup MSYS2 UCRT64
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            autotools
-            bzip2
-            file
-            git
-            tar
-          pacboy: >-
-            make:p
-            gcc:p
-            binutils:p
+      # The image's MSYS2 only guarantees the msys base (bash, pacman, core
+      # utils, tar, bzip2, file); the MinGW toolchain env and autoconf (used
+      # to regenerate jemalloc's configure) may still need installing into
+      # the preinstalled C:\msys64.
+      - name: Set up preinstalled MSYS2 toolchain
+        run: |
+          set -Eeuo pipefail
+
+          if ! command -v "${{ matrix.cc }}" >/dev/null 2>&1; then
+              echo "Installing ${{ matrix.msystem }} toolchain: ${{ matrix.packages }}"
+              pacman -S --noconfirm --needed ${{ matrix.packages }}
+          fi
+
+          if ! command -v autoconf >/dev/null 2>&1; then
+              echo "Installing msys build dependency: autoconf"
+              pacman -S --noconfirm --needed autoconf
+          fi
+
+          "${{ matrix.cc }}" --version
 
       - name: Show build machine info
         run: |
           set -Eeuo pipefail
 
-          echo "Runner OS: Windows"
-          echo "Target:    windows-x86_64"
+          echo "Target:    ${{ matrix.target }}"
+          echo "MSYSTEM:   $MSYSTEM"
           echo
 
           echo "uname -a:"
           uname -a
 
           echo
-          echo "MSYSTEM:"
-          echo "$MSYSTEM"
-
-          echo
-          echo "gcc:"
-          which gcc
-          gcc -v
+          echo "${{ matrix.cc }}:"
+          which "${{ matrix.cc }}"
+          "${{ matrix.cc }}" -v
 
           echo
           echo "ar:"
-          which ar
-          ar --version || true
+          if command -v ar >/dev/null 2>&1; then
+            which ar
+            ar --version || true
+          else
+            which llvm-ar
+            llvm-ar --version || true
+          fi
 
       - name: Build jemalloc static bundle
         run: |
           set -Eeuo pipefail
 
           VERSION="5.3.1"
-          TARGET="windows-x86_64"
+          TARGET="${{ matrix.target }}"
 
           ROOT="$PWD"
           SRC="$ROOT/third_party/src/jemalloc-$VERSION.tar.bz2"
@@ -324,6 +358,13 @@ jobs:
           mkdir -p "$BUILD"
           mkdir -p "$PREFIX"
 
+          # ar comes from binutils (ucrt64); clangarm64 only ships the LLVM
+          # tools, and jemalloc's configure honors $AR/$RANLIB.
+          if ! command -v ar >/dev/null 2>&1; then
+            export AR=llvm-ar
+            export RANLIB=llvm-ranlib
+          fi
+
           tar -xjf "$SRC" -C "$BUILD" --strip-components=1
 
           cd "$BUILD"
@@ -341,7 +382,7 @@ jobs:
             --disable-doc \
             --with-jemalloc-prefix=je_
 
-          # mingw32-make is the "make" command under MSYS2 UCRT64.
+          # mingw32-make is the "make" command of the MinGW environments.
           mingw32-make -j"$(nproc)"
           mingw32-make install
 
@@ -385,13 +426,14 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          TARGET="windows-x86_64"
+          TARGET="${{ matrix.target }}"
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
           ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
-          # MSYS2's pacboy binutils may not expose the cross-prefixed name;
-          # fall back to plain nm (from the same binutils package).
-          NM="$(command -v x86_64-w64-mingw32-nm || command -v nm || true)"
+          # The MinGW environments may not expose the cross-prefixed name,
+          # and clangarm64 only ships llvm-nm; try each before plain nm
+          # (also from the same environment's binutils).
+          NM="$(command -v x86_64-w64-mingw32-nm || command -v aarch64-w64-mingw32-nm || command -v llvm-nm || command -v nm || true)"
           if [[ -z "$NM" ]]; then
             echo "Error: no nm binary found on PATH" >&2
             exit 1
@@ -420,7 +462,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          TARGET="windows-x86_64"
+          TARGET="${{ matrix.target }}"
           PREFIX="$PWD/third_party/jemalloc/$TARGET"
           ARCHIVE="$PREFIX/lib/jemalloc.lib"
 
@@ -451,7 +493,7 @@ jobs:
 
           # Mirror compile.py: the archive is passed by full path
           # (GNU ar archive with a .lib extension, built by MinGW).
-          gcc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -o "$BIN"
+          "${{ matrix.cc }}" -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -o "$BIN"
 
           "$BIN"
 
@@ -461,7 +503,7 @@ jobs:
       - name: Upload jemalloc artifact
         uses: actions/upload-artifact@v7
         with:
-          name: jemalloc-windows-x86_64
-          path: third_party/jemalloc/windows-x86_64
+          name: jemalloc-${{ matrix.target }}
+          path: third_party/jemalloc/${{ matrix.target }}
           if-no-files-found: error
           retention-days: 30
