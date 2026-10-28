@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from franko_tools import ToolError, build_toolchain
+from franko_tools import ToolError, build_toolchain, ensure_jemalloc_bundle
 
 
 def main() -> int:
@@ -34,6 +34,7 @@ def main() -> int:
              "(default: $FRANKO_JAVA_RELEASE, else 25)",
     )
     args = parser.parse_args()
+    ensure_jemalloc_bundle()
     build_toolchain(java_release=args.java_release)
     return 0
 
