@@ -4,20 +4,20 @@
 // Covers: ptr<T>, getptr, deref, and null literals.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // --- Stack variable ---
-    int32_t stackVar = 42;
+    int32 stackVar = 42;
 
     // --- Pointers & dereferencing ---
-    ptr<int32_t> p = getptr(stackVar);
-    int32_t derefVal = $(p);
+    ptr<int32> p = getptr(stackVar);
+    int32 derefVal = $(p);
 
     // --- Writes through an pointer ---
-    ptr<int32_t> stackPtr = getptr(stackVar);
+    ptr<int32> stackPtr = getptr(stackVar);
     $(stackPtr) = 200;
 
     // --- Null pointer ---
-    ptr<int32_t> nullPtr;
+    ptr<int32> nullPtr;
     if (nullPtr == null) {
         print(1);
     }
@@ -27,15 +27,15 @@ func main() -> int32_t {
     }
 
     // --- Pointer of array ---
-    array<int32_t> arr;
+    [int32] arr;
     arr.init(10); // or arr(10)
-    ptr<array<int32_t>> arrPtr = getptr(arr);
+    ptr<[int32]> arrPtr = getptr(arr);
     $(arrPtr)[0] = 1;
-    int32_t arrVal = $(arrPtr)[0];
+    int32 arrVal = $(arrPtr)[0];
 
     // --- Pointer of array with static size ---
-    array<int32_t, 5> staticArr;
-    ptr<array<int32_t, 5>> staticArrPtr = getptr(staticArr);
+    [int32, 5] staticArr;
+    ptr<[int32, 5]> staticArrPtr = getptr(staticArr);
     $(staticArrPtr)[0] = 5;
 
     print(derefVal);

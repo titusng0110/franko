@@ -1,1 +1,1 @@
-resize receiver must have dynamic array type, got array<INT32, 4>
+resize receiver must have dynamic array type, got [int32, 4]

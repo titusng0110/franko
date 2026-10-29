@@ -1,9 +1,9 @@
 // Failure fixture: casts/non_integer_operand
 // The operand of cast<T> must be an integer expression: pointers,
 // arrays, structs, null, and void are rejected.
-func main() -> int32_t {
-    ptr<int32_t> p = null;
-    int32_t x = cast<int32_t>(p);
+func main() -> int32 {
+    ptr<int32> p = null;
+    int32 x = cast<int32>(p);
     print(x);
     return 0;
 }

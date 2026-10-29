@@ -1,7 +1,7 @@
 // Failure fixture: intrinsics/resize_arity_zero
 // resize (doc 21.2) takes exactly one argument; zero arguments are rejected.
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     xs.resize();
     return 0;
 }

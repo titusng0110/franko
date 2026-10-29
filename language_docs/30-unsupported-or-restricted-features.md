@@ -12,7 +12,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - parameter names are not used in overload resolution;
 - return type is not used in overload resolution;
 - arrays cannot be returned by value;
-- arrays cannot be passed as parameters by value; use ptr<array<...>> parameters (see [Functions](12-functions.md));
+- arrays cannot be passed as parameters by value; use ptr<[...]> parameters (see [Functions](12-functions.md));
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
@@ -30,7 +30,7 @@ x.something(1);     // unsupported member call: unknown method
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
-- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
+- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
 - a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: it can be used only through `ptr<X>`;
 - structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
 
@@ -42,7 +42,7 @@ Only integer primitives are supported.
 
 ## 30.5 No Separate Boolean Type
 
-Boolean results use `uint8_t`.
+Boolean results use `uint8`.
 
 ## 30.6 No Implicit Numeric Conversions for Nonconstants
 
@@ -65,8 +65,8 @@ rejected:
 ```franko
 [1, 2, 3];                 // invalid: bare expression statement
 print([1, 2, 3]);          // invalid: print is not an inference context
-foo([1, 2, 3]);            // invalid unless foo's parameter is a view<array<...>>
-return [1, 2, 3];          // invalid unless the return type is a view<array<...>>
+foo([1, 2, 3]);            // invalid unless foo's parameter is a view<[...]>
+return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 ```
 
 Array literal elements must be compile-time constant expressions
@@ -99,7 +99,7 @@ Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=
 
 ## 30.13 String Literals Cannot Initialize Arrays
 
-A string literal is a `view<array<byte, N>>` value, not byte-array
+A string literal is a `view<[byte, N]>` value, not byte-array
 sugar (see [String Literals](23-string-literals.md)). Arrays are not
 assignable, so a string literal cannot initialize or assign an array;
 copy the bytes with `memcpy` instead.
@@ -107,15 +107,15 @@ copy the bytes with `memcpy` instead.
 Invalid:
 
 ```franko
-array<byte, 6> s = "hello";    // invalid
+[byte, 6] s = "hello";    // invalid
 s = "hello";                   // invalid
-array<byte, ?> s = "hello";    // invalid: '?' requires a view declaration
+[byte, ?] s = "hello";    // invalid: '?' requires a view declaration
 ```
 
 Valid:
 
 ```franko
-array<byte, 6> s;
+[byte, 6] s;
 s.memcpy("hello");
 ```
 

@@ -1,1 +1,1 @@
-expected view<array<array<INT32>>>
+expected view<[[int32]]>

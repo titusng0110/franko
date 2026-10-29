@@ -6,8 +6,8 @@
 // is used only inside the block where it is declared.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t outer = 5
+func main() -> int32 {
+    int32 outer = 5
 
     {
         // Inner block reads the outer variable.
@@ -18,7 +18,7 @@ func main() -> int32_t {
         print(outer)
 
         // Inner-scoped variable, used only inside this block.
-        int32_t inner = 7
+        int32 inner = 7
         print(inner)
         inner = inner + outer
         print(inner)

@@ -1,7 +1,7 @@
 // Lifecycle intrinsics need allocation rights: blocked on mview<T>.
-func main() -> int32_t {
-    array<byte> d;
-    mview<array<byte>> m = getmview(d);
+func main() -> int32 {
+    [byte] d;
+    mview<[byte]> m = getmview(d);
     $(m).init(3);
     return 0;
 }

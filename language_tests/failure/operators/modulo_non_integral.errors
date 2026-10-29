@@ -1,2 +1,2 @@
-Left operand of '%' must be an integer, got ptr<INT32>
-Left operand of '%' must be an integer, got array<INT32, 2>
+Left operand of '%' must be an integer, got ptr<int32>
+Left operand of '%' must be an integer, got [int32, 2]

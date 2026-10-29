@@ -2,7 +2,7 @@
 // An array literal needs an assignment, return, or call-argument
 // context to infer its element type, so it cannot stand alone as
 // an expression statement.
-func main() -> int32_t {
+func main() -> int32 {
     [1, 2, 3];
     return 0;
 }

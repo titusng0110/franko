@@ -1,11 +1,11 @@
 // Failure fixture: global_scope/gs_call
 // Function calls are executable statements and are not valid top-level items.
-func f() -> int32_t {
+func f() -> int32 {
     return 1
 }
 
 f();
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

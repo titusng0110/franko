@@ -1,7 +1,7 @@
 // Failure fixture: fluid_consts/uint64_overflow
-// Constant 18446744073709551616 does not fit the uint64_t context (max 18446744073709551615).
-func main() -> int32_t {
-    uint64_t x = 18446744073709551616;
+// Constant 18446744073709551616 does not fit the uint64 context (max 18446744073709551615).
+func main() -> int32 {
+    uint64 x = 18446744073709551616;
 
     print(x)
 

@@ -5,14 +5,14 @@
 // the dividend, exactly like the generated C++. `%` is also a valid
 // constExpr in declaration initializers and array sizes.
 
-int32_t size = 7 % 3
+int32 size = 7 % 3
 
-func main() -> int32_t {
-    array<int32_t, 5 % 3> tiny;
+func main() -> int32 {
+    [int32, 5 % 3] tiny;
     tiny.memcpy([9, 10]);
 
-    int32_t a = 7;
-    int32_t b = 3;
+    int32 a = 7;
+    int32 b = 3;
     print(a % b); // 1
 
     // Folded constants: sign of the dividend.
@@ -22,19 +22,19 @@ func main() -> int32_t {
     print(100 % 7); // 2
 
     // Runtime values, signed truncation.
-    int32_t n = -7;
+    int32 n = -7;
     print(n % 3); // -1
     print(n % -3); // -1
 
     // Unsigned operands.
-    uint8_t u = 17;
+    uint8 u = 17;
     print(u % 5); // 2
-    uint64_t q = 10000000000000000000;
+    uint64 q = 10000000000000000000;
     print(q % 7); // 3
 
     // Both sides nonconstant.
-    int32_t x = 100;
-    int32_t y = 7;
+    int32 x = 100;
+    int32 y = 7;
     print(x % y); // 2
 
     // ConstExpr slots: global initializer and array size.

@@ -1,11 +1,11 @@
 // Failure fixture: type_equality/int32_vs_uint32
-// Assigning a nonconstant int32_t variable to a uint32_t variable violates
-// exact primitive type equality (int32_t != uint32_t, doc 29.1); signedness
+// Assigning a nonconstant int32 variable to a uint32 variable violates
+// exact primitive type equality (int32 != uint32, doc 29.1); signedness
 // differences are not implicit conversions (doc 31.6).
 
-func main() -> int32_t {
-    int32_t a = 5;
-    uint32_t b;
+func main() -> int32 {
+    int32 a = 5;
+    uint32 b;
     b = a;
     return 0;
 }

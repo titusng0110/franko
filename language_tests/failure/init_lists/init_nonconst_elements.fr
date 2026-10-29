@@ -2,12 +2,12 @@
 // Array literal elements must be compile-time constant expressions:
 // a literal is hoisted to a constant global array, like a string
 // literal, so runtime values cannot appear in one.
-func twice(int32_t n) -> int32_t {
+func twice(int32 n) -> int32 {
     return n * 2;
 }
 
-func main() -> int32_t {
-    int32_t v = 5;
-    view<array<int32_t, 3>> t = [v, v * 10 + 1, twice(v)];
+func main() -> int32 {
+    int32 v = 5;
+    view<[int32, 3]> t = [v, v * 10 + 1, twice(v)];
     return 0;
 }

@@ -1,10 +1,10 @@
 // Failure fixture: size_inference/question_in_return
 // `?` is not allowed in return types.
-func f() -> array<int32_t, ?> {
-    array<int32_t, 1> xs;
+func f() -> [int32, ?] {
+    [int32, 1] xs;
     xs = [0];
     return xs;
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

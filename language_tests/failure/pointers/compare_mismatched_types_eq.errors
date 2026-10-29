@@ -1,1 +1,1 @@
-Pointer comparison '==' requires identical pointer types, got ptr<INT32> and ptr<UINT8>
+Pointer comparison '==' requires identical pointer types, got ptr<int32> and ptr<uint8>

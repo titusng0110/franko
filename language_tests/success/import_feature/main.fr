@@ -18,7 +18,7 @@
 import "lib/util"
 import "extra_calls"
 
-func main() -> int32_t {
+func main() -> int32 {
     // Symbols from lib/util.fr.
     print(offset)
     print(doubleIt(21))

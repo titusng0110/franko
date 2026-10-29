@@ -10,20 +10,20 @@
 //     capacity returns -1, grow smaller returns -1, and an
 //     exhausted grown pool reports _END
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::GenerationalSparseSetAllocator a;
     print(a.grow(8));
     print(a.init(2));
     print(a.grow(2));
     print(a.grow(1));
-    uint32_t i = a.new_index();
-    uint32_t j = a.new_index();
+    uint32 i = a.new_index();
+    uint32 j = a.new_index();
     print(a.grow(5));
     print(a.capacity());
     print(a.used());

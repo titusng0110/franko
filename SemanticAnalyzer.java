@@ -556,7 +556,7 @@ public class SemanticAnalyzer {
 
         if (globalMainCount == 0) {
             symbolTable.error(
-                    "No entry-point function 'main' declared: declare either 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t'"
+                    "No entry-point function 'main' declared: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32'"
             );
         }
 
@@ -715,11 +715,11 @@ public class SemanticAnalyzer {
 
             if (globalMainCount > 1) {
                 symbolTable.error(
-                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t', not both"
+                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32', not both"
                 );
             } else if (!returnsInt32 || (!noArgs && !hasArgsShape)) {
                 symbolTable.error(
-                        "The entry-point function 'main' must be declared as 'func main() -> int32_t' or 'func main(view<array<array<byte>>> <name>) -> int32_t'"
+                        "The entry-point function 'main' must be declared as 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32'"
                 );
             } else {
                 entryKind = noArgs ? EntryKind.NO_ARGS : EntryKind.ARGS;

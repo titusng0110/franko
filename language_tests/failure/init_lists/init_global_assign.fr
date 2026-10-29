@@ -1,9 +1,9 @@
 // Failure fixture: init_lists/init_global_assign
 // A global pointer view initialized with an array literal of the
-// wrong length is rejected: the literal has type view<array<T, N>>
+// wrong length is rejected: the literal has type view<[T, N]>
 // with N from the literal, and N must match the declared size.
-view<array<int32_t, 2>> G = [1, 2, 3];
+view<[int32, 2]> G = [1, 2, 3];
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

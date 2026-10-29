@@ -22,8 +22,8 @@ Design rules:
   selects — an element of a dynamic array, a row of a component table —
   belongs to the program; the pool never touches it. `uninit()` frees
   the pool's own tables, never the payload.
-- Status codes are `int32_t`: `0` on success, `-1` on failure. Sizes,
-  indices, and generations are `uint32_t`.
+- Status codes are `int32`: `0` on success, `-1` on failure. Sizes,
+  indices, and generations are `uint32`.
 - `new_index()` and `generation()` report failure with the `_END`
   sentinel (`0xFFFFFFFF`) instead of a status code.
 - Methods are called on a pool lvalue and declare the permission they
@@ -39,7 +39,7 @@ Design rules:
 
 ## Sentinels
 
-Two `uint32_t` sentinel values run through the whole module, spelled as
+Two `uint32` sentinel values run through the whole module, spelled as
 literals in Franko code:
 
 ```franko
@@ -61,7 +61,7 @@ documented once. The signatures below are spelled with
 ### init
 
 ```franko
-func init(ptr<NextAllocator> self, uint32_t C) -> int32_t
+func init(ptr<NextAllocator> self, uint32 C) -> int32
 ```
 
 Prepares `C` slots (`C > 0`), all free, and returns `0`. Returns `-1`
@@ -72,7 +72,7 @@ reset it: the pool keeps its current state and the call fails.
 ### uninit
 
 ```franko
-func uninit(ptr<NextAllocator> self) -> int32_t
+func uninit(ptr<NextAllocator> self) -> int32
 ```
 
 Frees the slot tables and returns the pool to its empty state
@@ -83,7 +83,7 @@ per-slot action — release the payloads yourself before `uninit`.
 ### grow
 
 ```franko
-func grow(ptr<NextAllocator> self, uint32_t newC) -> int32_t
+func grow(ptr<NextAllocator> self, uint32 newC) -> int32
 ```
 
 Enlarges the pool to `newC` slots (`newC > capacity()`). Existing
@@ -95,7 +95,7 @@ cannot be resized. A failed grow leaves the pool at its old capacity.
 ### new_index
 
 ```franko
-func new_index(mview<NextAllocator> self) -> uint32_t
+func new_index(mview<NextAllocator> self) -> uint32
 ```
 
 Takes one free slot and returns its index. Returns `0xFFFFFFFF`
@@ -107,7 +107,7 @@ to `free_index`.
 ### free_index
 
 ```franko
-func free_index(mview<NextAllocator> self, uint32_t idx) -> int32_t
+func free_index(mview<NextAllocator> self, uint32 idx) -> int32
 ```
 
 Returns the live slot `idx` to the pool. Returns `0` on success, `-1`
@@ -118,7 +118,7 @@ already-released indices (double release), and indices beyond
 ### exist
 
 ```franko
-func exist(view<NextAllocator> self, uint32_t idx) -> uint8_t
+func exist(view<NextAllocator> self, uint32 idx) -> uint8
 ```
 
 Returns `1` when slot `idx` is live, `0` otherwise (never allocated,
@@ -128,7 +128,7 @@ and never reads out of bounds.
 ### write_active_indices
 
 ```franko
-func write_active_indices(view<NextAllocator> self, mview<array<uint32_t>> out) -> int32_t
+func write_active_indices(view<NextAllocator> self, mview<[uint32]> out) -> int32
 ```
 
 Writes every live index into `out`, which must hold at least
@@ -139,7 +139,7 @@ order depends on the allocator (see each allocator below).
 ### used
 
 ```franko
-func used(view<NextAllocator> self) -> uint32_t
+func used(view<NextAllocator> self) -> uint32
 ```
 
 Returns the number of live slots. Starts at `0` after `init`, rises on
@@ -149,7 +149,7 @@ every successful `new_index` and falls on every successful
 ### capacity
 
 ```franko
-func capacity(view<NextAllocator> self) -> uint32_t
+func capacity(view<NextAllocator> self) -> uint32
 ```
 
 Returns the number of slots the pool currently holds: `C` after
@@ -162,7 +162,7 @@ The two generational allocators add one method.
 ### generation
 
 ```franko
-func generation(view<GenerationalNextAllocator> self, uint32_t idx) -> uint32_t
+func generation(view<GenerationalNextAllocator> self, uint32 idx) -> uint32
 ```
 
 Returns the generation counter of slot `idx`. A counter starts at `0`
@@ -184,13 +184,13 @@ released index comes back first.
 
 ```franko
 std::NextAllocator a;
-int32_t st = a.init(4);        // 0
-uint32_t idx = a.new_index();  // 0
+int32 st = a.init(4);        // 0
+uint32 idx = a.new_index();  // 0
 st = a.free_index(idx);        // 0
 st = a.uninit();               // 0
 ```
 
-Memory cost: one `uint32_t` per slot, plus one dynamic array.
+Memory cost: one `uint32` per slot, plus one dynamic array.
 
 ## std::SparseSetAllocator
 
@@ -204,14 +204,14 @@ dense entry, so dense order changes as slots are released.
 
 ```franko
 std::SparseSetAllocator a;
-int32_t st = a.init(4);        // 0
-uint32_t i = a.new_index();    // 0
-uint32_t j = a.new_index();    // 1
+int32 st = a.init(4);        // 0
+uint32 i = a.new_index();    // 0
+uint32 j = a.new_index();    // 1
 st = a.free_index(i);          // 0
 st = a.uninit();               // 0
 ```
 
-Memory cost: two `uint32_t` per slot, plus two dynamic arrays.
+Memory cost: two `uint32` per slot, plus two dynamic arrays.
 
 ## std::GenerationalNextAllocator
 
@@ -222,15 +222,15 @@ generation `0`.
 
 ```franko
 std::GenerationalNextAllocator a;
-int32_t st = a.init(4);          // 0
-uint32_t idx = a.new_index();    // 0
-uint32_t gen = a.generation(idx); // 0
+int32 st = a.init(4);          // 0
+uint32 idx = a.new_index();    // 0
+uint32 gen = a.generation(idx); // 0
 st = a.free_index(idx);          // 0
 gen = a.generation(idx);         // 1
 st = a.uninit();                 // 0
 ```
 
-Memory cost: two `uint32_t` per slot, plus two dynamic arrays.
+Memory cost: two `uint32` per slot, plus two dynamic arrays.
 
 ## std::GenerationalSparseSetAllocator
 
@@ -241,15 +241,15 @@ generation `0`.
 
 ```franko
 std::GenerationalSparseSetAllocator a;
-int32_t st = a.init(4);          // 0
-uint32_t idx = a.new_index();    // 0
-uint32_t gen = a.generation(idx); // 0
+int32 st = a.init(4);          // 0
+uint32 idx = a.new_index();    // 0
+uint32 gen = a.generation(idx); // 0
 st = a.free_index(idx);          // 0
 gen = a.generation(idx);         // 1
 st = a.uninit();                 // 0
 ```
 
-Memory cost: three `uint32_t` per slot, plus three dynamic arrays.
+Memory cost: three `uint32` per slot, plus three dynamic arrays.
 
 ## Choosing an allocator
 
@@ -277,23 +277,23 @@ silently reading the new occupant's data.
 ```franko
 import "franko/pool"
 
-func main() -> int32_t {
-    array<int32_t> payload;
+func main() -> int32 {
+    [int32] payload;
     payload.init(8);
 
     std::GenerationalSparseSetAllocator pool;
     pool.init(8);
 
     // Allocate a slot and store data in its payload cell.
-    uint32_t idx = pool.new_index();
-    uint32_t gen = pool.generation(idx);
+    uint32 idx = pool.new_index();
+    uint32 gen = pool.generation(idx);
     payload[idx] = 42;
     print(payload[idx]);
 
     // Release the slot and take a new one: the slot comes back with
     // a bumped generation.
     pool.free_index(idx);
-    uint32_t idx2 = pool.new_index();
+    uint32 idx2 = pool.new_index();
 
     // The handle captured before the release is stale: the index is
     // live again, but the generation no longer matches.

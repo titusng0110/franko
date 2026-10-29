@@ -34,20 +34,20 @@ final class SemanticPrimitiveType extends SemanticType {
 
     @Override
     public String describe() {
-        return kind.name();
+        return kind.name().toLowerCase();
     }
 
     @Override
     public String mangleKey() {
         return switch (kind) {
-            case INT8 -> "int8_t";
-            case INT16 -> "int16_t";
-            case INT32 -> "int32_t";
-            case INT64 -> "int64_t";
-            case UINT8 -> "uint8_t";
-            case UINT16 -> "uint16_t";
-            case UINT32 -> "uint32_t";
-            case UINT64 -> "uint64_t";
+            case INT8 -> "int8";
+            case INT16 -> "int16";
+            case INT32 -> "int32";
+            case INT64 -> "int64";
+            case UINT8 -> "uint8";
+            case UINT16 -> "uint16";
+            case UINT32 -> "uint32";
+            case UINT64 -> "uint64";
         };
     }
 
@@ -98,12 +98,12 @@ final class SemanticDynamicArrayType extends SemanticType {
 
     @Override
     public String describe() {
-        return "array<" + elementType.describe() + ">";
+        return "[" + elementType.describe() + "]";
     }
 
     @Override
     public String mangleKey() {
-        return "array<" + elementType.mangleKey() + ">";
+        return "[" + elementType.mangleKey() + "]";
     }
 
     @Override
@@ -132,14 +132,14 @@ final class SemanticStaticArrayType extends SemanticType {
 
     @Override
     public String describe() {
-        return "array<" + elementType.describe() + ", " + sizeLiteral + ">";
+        return "[" + elementType.describe() + ", " + sizeLiteral + "]";
     }
 
     @Override
     public String mangleKey() {
         BigInteger canonical = unfoldedSize(sizeLiteral);
         String sizeKey = canonical != null ? canonical.toString(10) : sizeLiteral.trim();
-        return "array<" + elementType.mangleKey() + "," + sizeKey + ">";
+        return "[" + elementType.mangleKey() + "," + sizeKey + "]";
     }
 
     private static BigInteger unfoldedSize(String literal) {

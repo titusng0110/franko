@@ -1,8 +1,8 @@
 // Failure fixture: loops/break_level_negative
 // The break level must be strictly greater than 0.
 
-func main() -> int32_t {
-    int32_t i = 0;
+func main() -> int32 {
+    int32 i = 0;
     while (i < 3) {
         break 0 - 1;
     }

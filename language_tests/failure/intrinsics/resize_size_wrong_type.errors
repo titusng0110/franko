@@ -1,1 +1,1 @@
-resize() size: expected uint32_t, got INT32
+resize() size: expected uint32, got int32

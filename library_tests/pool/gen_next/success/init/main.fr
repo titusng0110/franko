@@ -8,13 +8,13 @@
 //   failure paths: init(0) returns -1 (zero capacity), a second
 //     init on a live pool returns -1, and init after uninit works
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::GenerationalNextAllocator a;
     print(a.used());
     print(a.capacity());

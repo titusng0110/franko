@@ -9,13 +9,13 @@
 // linter tells it to become a view (see main.warnings).
 // ============================================================
 
-func main() -> int32_t {
-    array<byte> d;
-    array<ptr<array<byte>>> store;
+func main() -> int32 {
+    [byte] d;
+    [ptr<[byte]>] store;
     store.init(1);
     store[0] = getptr(d);
 
-    ptr<array<ptr<array<byte>>>> v = getptr(store);
+    ptr<[ptr<[byte]>]> v = getptr(store);
     $($(v)[0]).init(2);
     $($(v)[0])[0] = 9;
     print($(store[0]).length());

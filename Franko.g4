@@ -23,9 +23,9 @@ topLevelItem
 // Namespace syntax:
 //
 //   namespace util {
-//       struct Point { int32_t x }
-//       int32_t offset = 100
-//       func doubleIt(int32_t v) -> int32_t { ... }
+//       struct Point { int32 x }
+//       int offset = 100
+//       func doubleIt(int32 v) -> int32 { ... }
 //   }
 //
 // A namespace body may contain only:
@@ -149,8 +149,8 @@ importDecl
 // Simple struct syntax:
 //
 //   struct X {
-//       int32_t num = 0
-//       int64_t longnum = 1 + 2
+//       int32 num = 0
+//       int64 longnum = 1 + 2
 //   }
 //
 // A struct body contains field declarations and method declarations.
@@ -165,17 +165,17 @@ importDecl
 //
 // Valid:
 //   struct X {
-//       int32_t a
-//       int64_t b = 123
-//       array<int32_t, 4> xs
+//       int32 a
+//       int64 b = 123
+//       [int32, 4] xs
 //       func increment(ptr<X> self) -> void { ... }
 //   }
 //
 // Invalid:
 //   struct X {
-//       int32_t a = f()
+//       int32 a = f()
 //       a = 1
-//       func bad(int32_t self) -> void {}
+//       func bad(int32 self) -> void {}
 //   }
 //
 structDecl
@@ -196,19 +196,19 @@ structFieldDecl
 // Global variables may have optional constexpr-style initialization.
 //
 // Valid:
-//   int32_t g
-//   int32_t g = 1 + 2
-//   uint64_t mask = 1 << 8
+//   int32 g
+//   int32 g = 1 + 2
+//   uint64 mask = 1 << 8
 //   X globalStruct
 //   ptr<X> p = null
-//   view<array<byte, 5>> s = "hello"
-//   view<array<int32_t, 4>> v = [1, 2, 3, 4]
-//   ptr<array<byte, 5>> q = getptr(otherGlobal)
+//   view<[byte, 5]> s = "hello"
+//   view<[int32, 4]> v = [1, 2, 3, 4]
+//   ptr<[byte, 5]> q = getptr(otherGlobal)
 //
 // Invalid:
-//   int32_t g = f()
-//   int32_t g = other
-//   int32_t g = arr[0]
+//   int32 g = f()
+//   int32 g = other
+//   int32 g = arr[0]
 //
 // A pointer-typed global may also be initialized with a statically
 // representable address: getptr/getmview/getview over a global variable
@@ -266,7 +266,7 @@ constDeclInitializer
 // void is intentionally NOT part of the normal type rule.
 // This prevents declarations such as:
 //   void x;
-//   array<void> xs;
+//   [void] xs;
 //   ptr<void> p.
 //
 functionDecl
@@ -349,7 +349,7 @@ continueStmt
 //
 // Both init and update are optional simple statements:
 //
-//   for (int32_t i = 0; i < n; i = i + 1) { ... }
+//   for (int32 i = 0; i < n; i = i + 1) { ... }
 //   for (; i < n; i = i + 1) { ... }
 //   for (i = 0; i < n;) { ... }
 //
@@ -403,12 +403,12 @@ simpleStmt
 //
 // Declaration initializer syntax accepts an ordinary expression
 // initializer, including an array literal (which is a view value,
-// so the declared type must accept one: a view<array<...>> type).
+// so the declared type must accept one: a view<[...]> type).
 //
 // Examples:
-//   int32_t x = 1 + 2;
-//   view<array<int32_t, 3>> xs = [1, 2, 3];
-//   view<array<int32_t, ?>> ys = [1, 2, 3];
+//   int32 x = 1 + 2;
+//   view<[int32, 3]> xs = [1, 2, 3];
+//   view<[int32, ?]> ys = [1, 2, 3];
 //
 // Important:
 //   T x = <expr>;
@@ -443,7 +443,7 @@ returnStmt
 //
 //   arr.memcpy([a, b, c]);
 //
-// Note: an array literal is a view<array<T, N>> value, so it cannot be
+// Note: an array literal is a view<[T, N]> value, so it cannot be
 // assigned to an array-typed target; copy the elements with memcpy
 // instead. See the array literal rule below.
 //
@@ -715,15 +715,14 @@ memberName
     | GETMVIEW
     | GETVIEW
     | UNSAFE_CAST
-    | INT8_T
-    | INT16_T
-    | INT32_T
-    | INT64_T
-    | UINT8_T
-    | UINT16_T
-    | UINT32_T
-    | UINT64_T
-    | ARRAY
+    | INT8
+    | INT16
+    | INT32
+    | INT64
+    | UINT8
+    | UINT16
+    | UINT32
+    | UINT64
     ;
 
 // ---------- CONSTANT EXPRESSIONS ----------
@@ -736,8 +735,8 @@ memberName
 // A static array size is either an explicit constant expression or an
 // inferred-size marker `?`:
 //
-//   array<int32_t, 10>   explicit size
-//   array<int32_t, ?>    size inferred from a declaration initializer
+//   [int32, 10]   explicit size
+//   [int32, ?]    size inferred from a declaration initializer
 //
 // `?` is only meaningful in a declaration with an array-literal or
 // string-literal initializer; the desugarer rejects it everywhere else.
@@ -769,7 +768,7 @@ memberName
 //   1 << -1
 //
 // Semantic analysis then performs only contextual validation:
-// positivity, uint32_t range, and fit against the declared type.
+// positivity, uint32 range, and fit against the declared type.
 
 constExpr
     : constLogicalOrExpr
@@ -836,7 +835,7 @@ constPrimary
 // ---------- ARRAY LITERALS ----------
 //
 // Array literals are ordinary expressions: an array literal is a
-// view<array<T, N>> value where T is inferred from the context
+// view<[T, N]> value where T is inferred from the context
 // (assignment, return, or call argument) and N is the literal length.
 // Nested literals are static at every level and therefore must be
 // perfectly rectangular.
@@ -847,7 +846,7 @@ constPrimary
 // to an array-typed target (use memcpy instead).
 //
 // Examples:
-//   view<array<int32_t, 3>> xs = [1, 2, 3];
+//   view<[int32, 3]> xs = [1, 2, 3];
 //   v = [1, 2, 3];
 //   take([1, 2, 3]);
 //   return [1, 2, 3];
@@ -912,14 +911,14 @@ unsafeCastExpr
     ;
 
 primitiveType
-    : INT8_T
-    | INT16_T
-    | INT32_T
-    | INT64_T
-    | UINT8_T
-    | UINT16_T
-    | UINT32_T
-    | UINT64_T
+    : INT8
+    | INT16
+    | INT32
+    | INT64
+    | UINT8
+    | UINT16
+    | UINT32
+    | UINT64
     ;
 
 // ---------- LITERALS ----------
@@ -943,49 +942,49 @@ nullLiteral
 // Static array sizes accept constExpr.
 //
 // Examples:
-//   array<int, 10>
-//   array<int, 1 + 1>
-//   array<int, 2 * 5>
-//   array<array<int, 1 + 1>, 2 + 2>
+//   [int, 10]
+//   [int, 1 + 1]
+//   [int, 2 * 5]
+//   [[int, 1 + 1], 2 + 2]
 //
 // Static arrays nest, so multidimensional arrays are written as
 // nested static array types:
 //
-//   array<array<byte, 20>, 12>
+//   [[byte, 20], 12]
 //
 // Access order follows the nesting:
 //
-//   array<array<byte, C>, R> grid
+//   [[byte, C], R] grid
 //   grid[r][c]
 //
 // Semantic checker should later require that each size expression is:
 //   - a valid compile-time integer constant expression
 //     (or `?`, which the desugarer resolves to a constant before this phase)
 //   - positive
-//   - representable as uint32_t
+//   - representable as uint32
 //
 // Note:
-//   array<int, x>
-//   array<int, f()>
-//   array<int, arr[0]>
+//   [int, x]
+//   [int, f()]
+//   [int, arr[0]]
 //
 // do not parse as static array types because identifiers, calls,
 // and indexing are not constExpr forms. `?` is the only non-constExpr form
 // allowed as a size, and only the desugarer accepts it (in declarations
 // with an array-literal or string-literal initializer).
 type
-    : INT8_T                                   # Int8Type
-    | INT16_T                                  # Int16Type
-    | INT32_T                                  # Int32Type
-    | INT64_T                                  # Int64Type
-    | UINT8_T                                  # Uint8Type
-    | UINT16_T                                 # Uint16Type
-    | UINT32_T                                 # Uint32Type
-    | UINT64_T                                 # Uint64Type
+    : INT8                                   # Int8Type
+    | INT16                                  # Int16Type
+    | INT32                                  # Int32Type
+    | INT64                                  # Int64Type
+    | UINT8                                  # Uint8Type
+    | UINT16                                 # Uint16Type
+    | UINT32                                 # Uint32Type
+    | UINT64                                 # Uint64Type
     | IDENTIFIER                               # StructType
     | qualifiedName                            # QualifiedStructType
-    | ARRAY LT type GT                         # DynamicArrayType
-    | ARRAY LT type COMMA arraySize GT        # StaticArrayType
+    | LBRACK type RBRACK                         # DynamicArrayType
+    | LBRACK type COMMA arraySize RBRACK        # StaticArrayType
     | PTR LT type GT                          # PtrType
     | MVIEW LT type GT                        # MViewType
     | VIEW LT type GT                         # ViewType
@@ -1028,17 +1027,15 @@ NAMESPACE     : 'namespace' ;
 COLONCOLON    : '::' ;
 
 // Primitive / type keywords
-INT8_T   : 'int8_t' ;
-INT16_T  : 'int16_t' ;
-INT32_T  : 'int32_t' | 'int' ;
-INT64_T  : 'int64_t' ;
+INT8   : 'int8' ;
+INT16  : 'int16' ;
+INT32  : 'int32' | 'int' ;
+INT64  : 'int64' ;
 
-UINT8_T  : 'uint8_t' | 'byte' ;
-UINT16_T : 'uint16_t' ;
-UINT32_T : 'uint32_t' | 'uint' ;
-UINT64_T : 'uint64_t' ;
-
-ARRAY    : 'array' ;
+UINT8  : 'uint8' | 'byte' ;
+UINT16 : 'uint16' ;
+UINT32 : 'uint32' | 'uint' ;
+UINT64 : 'uint64' ;
 
 // Operators / punctuation
 EQ      : '==' ;

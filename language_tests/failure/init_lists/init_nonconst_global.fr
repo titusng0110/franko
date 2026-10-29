@@ -2,10 +2,10 @@
 // Array literals are hoisted to constant global arrays, so their
 // elements must be compile-time constant everywhere — a runtime
 // expression in a literal is rejected in global initializers too.
-array<int32_t> d;
+[int32] d;
 
-view<array<uint32_t, 1>> G = [d.length()];
+view<[uint32, 1]> G = [d.length()];
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

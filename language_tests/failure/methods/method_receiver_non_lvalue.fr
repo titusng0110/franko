@@ -1,7 +1,7 @@
 // Failure fixture: methods/method_receiver_non_lvalue
 // Method receivers must be storage-backed lvalues (doc 26.3).
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func foo(ptr<X> self) -> void {
         return
     }
@@ -10,7 +10,7 @@ func bar() -> X {
     X s
     return s
 }
-func main() -> int32_t {
+func main() -> int32 {
     bar().foo()
     return 0
 }

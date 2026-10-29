@@ -1,10 +1,10 @@
 // Failure fixture: functions/missing_return
 // A non-void function must contain at least one return statement somewhere in its body.
 
-func g() -> int32_t {
+func g() -> int32 {
     print(1);
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

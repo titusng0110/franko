@@ -1,3 +1,3 @@
 // Local module: absent from ./search, so the fallback lookup in the
 // importing file's directory must find it.
-int32_t localValue = 30
+int32 localValue = 30

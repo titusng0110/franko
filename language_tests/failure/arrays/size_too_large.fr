@@ -1,6 +1,6 @@
 // Failure fixture: arrays/size_too_large
-// Static array size must fit uint32_t.
-func main() -> int32_t {
-    array<int32_t, 999999999999999999999999999999999> c;
+// Static array size must fit uint32.
+func main() -> int32 {
+    [int32, 999999999999999999999999999999999] c;
     return 0;
 }

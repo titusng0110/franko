@@ -17,10 +17,10 @@ A pointer value refers to a storage location containing a value of type `T`.
 Examples:
 
 ```franko
-ptr<int32_t> p;
-mview<uint8_t> b;
-view<ptr<int32_t>> pp;
-ptr<array<int32_t>> ap;
+ptr<int32> p;
+mview<uint8> b;
+view<ptr<int32>> pp;
+ptr<[int32]> ap;
 ```
 
 Pointers are typed, assignable, copyable, dereferenceable, and comparable.
@@ -64,7 +64,7 @@ $(v).length();  // intrinsic over the pointee
 Franko supports pointers to pointers, of any permission:
 
 ```franko
-view<ptr<int32_t>> v;   // read-only view of a ptr<int32_t> slot
+view<ptr<int32>> v;   // read-only view of a ptr<int32> slot
 ```
 
 ## 24.4 Assignment and Implicit Downgrades
@@ -80,12 +80,12 @@ static-to-dynamic array pointer view decay of
   compile error.
 
 ```franko
-ptr<array<byte>> p = getptr(buf);
-mview<array<byte>> m = p;          // implicit downgrade
-view<array<byte>> v = p;           // implicit downgrade
-view<array<byte>> v2 = m;          // implicit downgrade
+ptr<[byte]> p = getptr(buf);
+mview<[byte]> m = p;          // implicit downgrade
+view<[byte]> v = p;           // implicit downgrade
+view<[byte]> v2 = m;          // implicit downgrade
 
-ptr<array<byte>> q = v;            // invalid: raises permissions
+ptr<[byte]> q = v;            // invalid: raises permissions
 ```
 
 These conversions apply to assignment, return values, and function
@@ -95,7 +95,7 @@ integers cannot be converted to pointers.
 Explicit downgrades may be written with `cast` (see [Casts](16-casts.md)):
 
 ```franko
-view<array<byte>> v = cast<view<array<byte>>>(p);
+view<[byte]> v = cast<view<[byte]>>(p);
 ```
 
 ### 24.4.1 Static-to-Dynamic Array Pointer Views
@@ -103,23 +103,23 @@ view<array<byte>> v = cast<view<array<byte>>>(p);
 A pointer to a **static** array implicitly converts to a pointer to a
 **dynamic** array of the same element type, in the unidirectional form:
 
-- `mview<array<T, N>>` and `view<array<T, N>>` implicitly (and explicitly)
-  cast to `mview<array<T>>` and `view<array<T>>`;
+- `mview<[T, N]>` and `view<[T, N]>` implicitly (and explicitly)
+  cast to `mview<[T]>` and `view<[T]>`;
 - the conversion may carry a permission downgrade in the same step, so
-  `ptr<array<T, N>>` converts to `mview<array<T>>`/`view<array<T>>` and
-  `mview<array<T, N>>` converts to `view<array<T>>`;
+  `ptr<[T, N]>` converts to `mview<[T]>`/`view<[T]>` and
+  `mview<[T, N]>` converts to `view<[T]>`;
 - `T` may itself be a static or dynamic array, but only the **outermost**
-  dimension decays: `view<array<array<int32_t, 2>, 3>>` converts to
-  `view<array<array<int32_t, 2>>>`, never to `view<array<array<int32_t>>>`
+  dimension decays: `view<[[int32, 2], 3]>` converts to
+  `view<[[int32, 2]]>`, never to `view<[[int32]]>`
   (element layouts must stay identical behind the one thin pointer);
 - the reverse direction is invalid, and ownership never decays:
-  `ptr<array<T, N>>` cannot convert to `ptr<array<T>>`.
+  `ptr<[T, N]>` cannot convert to `ptr<[T]>`.
 
 ```franko
-array<int32_t, 4> xs;
-mview<array<int32_t, 4>> m = getmview(xs);
-view<array<int32_t>> v = m;             // implicit decay
-mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);   // explicit
+[int32, 4] xs;
+mview<[int32, 4]> m = getmview(xs);
+view<[int32]> v = m;             // implicit decay
+mview<[int32]> d = cast<mview<[int32]>>(m);   // explicit
 
 print($(v).length());                   // 4
 $(m)[1] = 99;                           // writes hit xs directly
@@ -155,7 +155,7 @@ Both operands must have identical pointer types.
 
 Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
-Pointer comparison produces `uint8_t`.
+Pointer comparison produces `uint8`.
 
 ## 24.6 No Pointer Arithmetic
 
@@ -166,8 +166,8 @@ Pointers are not integers and do not support arithmetic.
 Arrays may be pointed to:
 
 ```franko
-array<int32_t> arr;
-ptr<array<int32_t>> p;
+[int32] arr;
+ptr<[int32]> p;
 
 p = getptr(arr);
 $(p)(10);
@@ -176,8 +176,8 @@ $(p)(10);
 Array initializer assignment through a dereferenced array pointer is valid when the dereference produces a storage-backed array lvalue:
 
 ```franko
-array<int32_t, 3> xs;
-ptr<array<int32_t, 3>> p;
+[int32, 3] xs;
+ptr<[int32, 3]> p;
 
 p = getptr(xs);
 
@@ -203,7 +203,7 @@ through them — and they stop at pointer boundaries.
 A `view` of a nested array locks every dimension:
 
 ```franko
-view<array<array<byte>>> v;
+view<[[byte]]> v;
 // $(v)[i] reads are fine; $(v)[i][j] = x is blocked, and so is
 // $(v)[i].init(...): the entire nested structure is read-only.
 ```
@@ -214,14 +214,14 @@ rights (`ptr`), and an index or member access never leaves the region the
 pointer dereference created:
 
 ```franko
-mview<array<array<byte>>> m;
+mview<[[byte]]> m;
 $(m)[0][1] = 5;     // allowed: element writes at every level
 $(m)[0].init(2);    // blocked: init needs allocation rights (ptr)
 $(m).init(2);       // blocked: the same rule applies to the outer array
 ```
 
 To run lifecycle intrinsics on a nested array, reach it through a `ptr`:
-either hold the outer pointer (`ptr<array<array<byte>>>`) or extract an
+either hold the outer pointer (`ptr<[[byte]]>`) or extract an
 inner `ptr` (Rule 2).
 
 ### Rule 2: Pointer Boundaries (Indirection)
@@ -231,13 +231,13 @@ only **the pointer slots** (whether they can be overwritten). The memory
 behind those pointers follows each pointer's own type:
 
 ```franko
-mview<array<view<array<byte>>>> v;
+mview<[view<[byte]>]> v;
 $(v)[0] = getview(x);        // allowed: overwrite the slot
 $($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
 ```
 
 ```franko
-view<array<ptr<array<byte>>>> v;
+view<[ptr<[byte]>]> v;
 $(v)[0] = getptr(x);         // blocked: the outer view locks its slots
 $($(v)[0])[0] = 5;           // allowed: through the inner ptr
 $($(v)[0]).init(10);         // allowed: full allocation rights on the pointee
@@ -260,10 +260,10 @@ exactly like on the outermost one (`$(m)[0].init(...)` is not).
 any permission is expected:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 p = null;               // valid
 
-int32_t x = null;       // invalid: null is only valid for pointer types
+int32 x = null;       // invalid: null is only valid for pointer types
 p = 0;                  // invalid: 0 is an integer, not null
 ```
 
@@ -292,7 +292,7 @@ functions.
 Pointer declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
 
 ```franko
-ptr<int32_t> p;        // p is null here, guaranteed
+ptr<int32> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
@@ -306,14 +306,14 @@ expressions that certify a pointer as non-null are the creation
 intrinsics `getptr(...)`, `getmview(...)`, and `getview(...)`:
 
 ```franko
-ptr<int32_t> p;            // p is null
+ptr<int32> p;            // p is null
 $(p);                   // error: cannot dereference null
 
 p = getptr(x);             // p is certified non-null
 $(p);                   // valid
 
-ptr<int32_t> q = p;        // q copies p's state: non-null
-ptr<int32_t> r = q;        // r copies q's state: non-null
+ptr<int32> q = p;        // q copies p's state: non-null
+ptr<int32> r = q;        // r copies q's state: non-null
 ```
 
 Assignment from another pointer variable copies that variable's exact state, so a null state propagates through copies and a certification propagates transitively.
@@ -331,7 +331,7 @@ Dereferencing a variable that is **definitely null** is an error.
 Dereferencing a variable that is **possibly null** (null on some path, for example after a branch merge) is a **warning**, not an error:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 if (cond != 0) {
     p = getptr(x);
 } else {

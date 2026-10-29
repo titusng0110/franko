@@ -5,7 +5,7 @@ func v() -> void {
     return;
 }
 
-func main() -> int32_t {
-    int32_t x = v();
+func main() -> int32 {
+    int32 x = v();
     return 0;
 }

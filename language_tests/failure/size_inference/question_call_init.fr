@@ -1,6 +1,6 @@
 // Failure fixture: size_inference/question_call_init
 // `?` cannot be combined with call-style size initialization.
-func main() -> int32_t {
-    view<array<int32_t, ?>> x(4);
+func main() -> int32 {
+    view<[int32, ?]> x(4);
     return x[0];
 }

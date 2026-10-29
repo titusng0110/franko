@@ -2,8 +2,8 @@
 // There is no switch statement in the grammar; only if, while, and for
 // control flow is implemented (doc 31.15).
 
-func main() -> int32_t {
-    int32_t x = 2;
+func main() -> int32 {
+    int32 x = 2;
     switch (x) {
         case 1:
             print(1);

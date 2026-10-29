@@ -1,9 +1,9 @@
 // Failure fixture: casts/cast_between_pointee_types
 // A pointer cast may only change the permission level, never the
 // referenced type.
-func main() -> int32_t {
-    array<int32_t, 4> nums;
-    ptr<array<int32_t, 4>> p = getptr(nums);
-    view<array<byte, 4>> v = cast<view<array<byte, 4>>>(p);
+func main() -> int32 {
+    [int32, 4] nums;
+    ptr<[int32, 4]> p = getptr(nums);
+    view<[byte, 4]> v = cast<view<[byte, 4]>>(p);
     return 0;
 }

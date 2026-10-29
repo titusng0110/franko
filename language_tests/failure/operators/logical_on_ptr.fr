@@ -1,9 +1,9 @@
 // Failure fixture: operators/logical_on_ptr
 // Logical operators require integer operands; pointers are not integers
 // and cannot be used with && or ||.
-func main() -> int32_t {
-    ptr<int32_t> p;
-    ptr<int32_t> q;
+func main() -> int32 {
+    ptr<int32> p;
+    ptr<int32> q;
     print(p && q);
     return 0
 }

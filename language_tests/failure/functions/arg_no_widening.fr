@@ -1,16 +1,16 @@
 // Failure fixture: functions/arg_no_widening
 // There are no implicit numeric conversions (doc 31.6): passing a
-// nonconstant int32_t variable to an int64_t parameter is rejected.
-// Convert explicitly with cast<int64_t>(v) first.
+// nonconstant int32 variable to an int64 parameter is rejected.
+// Convert explicitly with cast<int64>(v) first.
 
-func f(int64_t x) -> int64_t {
+func f(int64 x) -> int64 {
     return x;
 }
 
-func caller(int32_t v) -> int64_t {
+func caller(int32 v) -> int64 {
     return f(v);
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

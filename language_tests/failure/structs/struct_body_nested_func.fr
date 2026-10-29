@@ -1,12 +1,12 @@
 // Failure fixture: structs/struct_body_nested_func
 // A struct body may only contain field declarations; nested function declarations are invalid inside a struct body.
 struct X {
-    int32_t a
-    func f() -> int32_t {
+    int32 a
+    func f() -> int32 {
         return 1;
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

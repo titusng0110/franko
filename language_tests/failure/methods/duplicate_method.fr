@@ -1,7 +1,7 @@
 // Failure fixture: methods/duplicate_method
 // Duplicate method signatures are rejected (doc 26.5).
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func foo(ptr<X> self) -> void {
         return
     }
@@ -9,6 +9,6 @@ struct X {
         return
     }
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

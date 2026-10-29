@@ -6,12 +6,12 @@
 // each type's boundary value.
 // ============================================================
 
-func main() -> int32_t {
-    uint8_t x = 255;
-    int8_t s = -128;
-    int16_t h = 32767;
-    int32_t w = -2147483648;
-    uint64_t q = 18446744073709551615;
+func main() -> int32 {
+    uint8 x = 255;
+    int8 s = -128;
+    int16 h = 32767;
+    int32 w = -2147483648;
+    uint64 q = 18446744073709551615;
 
     print(x);
     print(s);

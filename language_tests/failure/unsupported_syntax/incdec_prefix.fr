@@ -1,8 +1,8 @@
 // Failure fixture: unsupported_syntax/incdec_prefix
 // Only the postfix statement forms `x++` / `x--` exist; prefix `++x` is
 // a syntax error (docs 14, 19).
-func main() -> int32_t {
-    int32_t a = 1;
+func main() -> int32 {
+    int32 a = 1;
     ++a;
     print(a);
     return 0;

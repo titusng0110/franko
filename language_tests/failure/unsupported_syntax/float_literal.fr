@@ -2,8 +2,8 @@
 // Franko has no floating-point types or floating-point literals; only
 // integer primitives are supported (doc 31.4), so `3.14` is rejected.
 
-func main() -> int32_t {
-    int32_t x = 3.14;
+func main() -> int32 {
+    int32 x = 3.14;
     print(x);
     return 0;
 }

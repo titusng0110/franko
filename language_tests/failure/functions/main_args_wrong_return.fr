@@ -1,6 +1,6 @@
 // Failure fixture: functions/main_args_wrong_return
-// The args-form entry point must still return int32_t.
+// The args-form entry point must still return int32.
 
-func main(view<array<array<byte>>> args) -> uint32_t {
+func main(view<[[byte]]> args) -> uint32 {
     return 0
 }

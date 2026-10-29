@@ -12,12 +12,12 @@
 // status only.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // null prints as the null pointer value.
     print(null)
 
     // A null pointer variable prints the same way as the null literal.
-    ptr<int32_t> q
+    ptr<int32> q
     print(q)
 
     return 0

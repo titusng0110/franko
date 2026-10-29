@@ -7,11 +7,11 @@ This means their initial semantic type is not always binding. Instead, when a co
 Example:
 
 ```franko
-func main() -> int32_t {
-    uint8_t x;
+func main() -> int32 {
+    uint8 x;
 
     x = 255; // valid
-    x = 256; // invalid: 256 does not fit uint8_t
+    x = 256; // invalid: 256 does not fit uint8
 
     return 0;
 }

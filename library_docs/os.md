@@ -22,10 +22,10 @@ Design rules:
   Win32 File API (`fileapi.h`) with POSIX-shaped compromises where noted.
 - Only low-level, non-derived primitives are exposed.
 - Buffers are always a pointer to a dynamic byte array, carrying the
-  permission the call needs: `view<array<byte>>` for the read-only
-  surfaces (`write`, `WriteFile`) and `mview<array<byte>>` for the ones
+  permission the call needs: `view<[byte]>` for the read-only
+  surfaces (`write`, `WriteFile`) and `mview<[byte]>` for the ones
   that fill the buffer (`read`, `ReadFile`). The out-parameters
-  (`bytesRead`, `bytesWritten`) are `mview<uint32_t>`: written through,
+  (`bytesRead`, `bytesWritten`) are `mview<uint32>`: written through,
   never allocated, and nullable. The bridge checks `count` against the
   array length and aborts via `franko_panic` when `count` exceeds it,
   so the FFI cannot corrupt memory. A null or uninitialized buffer
@@ -71,13 +71,13 @@ memory-safety-checked.
 ```franko
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> msg;
+func main() -> int32 {
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
 
     if (os::IS_WINDOWS == 1) {
-        uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
         os::win32::WriteFile(h, getview(msg), 5, null);
     } else {
         os::posix::write(os::posix::STDOUT_FILENO, getview(msg), 5);
@@ -99,15 +99,15 @@ call when the target is Windows, so guard it with `os::IS_WINDOWS`
 program must compile for both.
 
 ```franko
-int32_t STDIN_FILENO = 0
-int32_t STDOUT_FILENO = 1
-int32_t STDERR_FILENO = 2
+int32 STDIN_FILENO = 0
+int32 STDOUT_FILENO = 1
+int32 STDERR_FILENO = 2
 ```
 
 ### os::posix::read
 
 ```franko
-func read(int32_t fd, mview<array<byte>> buf, uint64_t count) -> int64_t
+func read(int32 fd, mview<[byte]> buf, uint64 count) -> int64
 ```
 
 Reads up to `count` bytes from file descriptor `fd` into `buf`.
@@ -117,7 +117,7 @@ error or on a null/uninitialized buffer.
 ### os::posix::write
 
 ```franko
-func write(int32_t fd, view<array<byte>> buf, uint64_t count) -> int64_t
+func write(int32 fd, view<[byte]> buf, uint64 count) -> int64
 ```
 
 Writes up to `count` bytes from `buf` to file descriptor `fd`.
@@ -130,11 +130,11 @@ Example:
 ```franko
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> msg;
+func main() -> int32 {
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
-    int64_t n = os::posix::write(os::posix::STDOUT_FILENO, getview(msg), 5);
+    int64 n = os::posix::write(os::posix::STDOUT_FILENO, getview(msg), 5);
     print(n);
     msg.uninit();
     return 0;
@@ -159,15 +159,15 @@ defense. `lpOverlapped` is dropped throughout: the bridge always
 passes `NULL` (synchronous I/O).
 
 ```franko
-uint32_t STD_INPUT_HANDLE = 0xFFFFFFF6
-uint32_t STD_OUTPUT_HANDLE = 0xFFFFFFF5
-uint32_t STD_ERROR_HANDLE = 0xFFFFFFF4
+uint32 STD_INPUT_HANDLE = 0xFFFFFFF6
+uint32 STD_OUTPUT_HANDLE = 0xFFFFFFF5
+uint32 STD_ERROR_HANDLE = 0xFFFFFFF4
 ```
 
 ### os::win32::GetStdHandle
 
 ```franko
-func GetStdHandle(uint32_t nStdHandle) -> uint64_t
+func GetStdHandle(uint32 nStdHandle) -> uint64
 ```
 
 Returns the `HANDLE` for a standard device as a 64-bit value, for use
@@ -178,7 +178,7 @@ constants. Returns `0` (`NULL`) or `0xFFFFFFFFFFFFFFFF`
 ### os::win32::ReadFile
 
 ```franko
-func ReadFile(uint64_t hFile, mview<array<byte>> buf, uint32_t count, mview<uint32_t> bytesRead) -> int32_t
+func ReadFile(uint64 hFile, mview<[byte]> buf, uint32 count, mview<uint32> bytesRead) -> int32
 ```
 
 Reads up to `count` bytes into `buf`. Returns nonzero on success,
@@ -188,7 +188,7 @@ receives the transferred byte count and may be `null`.
 ### os::win32::WriteFile
 
 ```franko
-func WriteFile(uint64_t hFile, view<array<byte>> buf, uint32_t count, mview<uint32_t> bytesWritten) -> int32_t
+func WriteFile(uint64 hFile, view<[byte]> buf, uint32 count, mview<uint32> bytesWritten) -> int32
 ```
 
 Writes up to `count` bytes from `buf`. Returns nonzero on success,
@@ -200,12 +200,12 @@ Example:
 ```franko
 import "franko/os"
 
-func main() -> int32_t {
-    uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-    array<byte> msg;
+func main() -> int32 {
+    uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
-    int32_t ok = os::win32::WriteFile(h, getview(msg), 5, null);
+    int32 ok = os::win32::WriteFile(h, getview(msg), 5, null);
     print(ok);
     msg.uninit();
     return 0;

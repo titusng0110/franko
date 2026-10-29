@@ -11,14 +11,14 @@
 // length() remain allowed all the way down.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // --- mview: element operations at every level stay allowed ---
-    array<array<byte>> grid;
+    [[byte]] grid;
     grid.init(2);
     grid[0].init(3);
     grid[1].init(3);
 
-    mview<array<array<byte>>> m = getmview(grid);
+    mview<[[byte]]> m = getmview(grid);
     $(m)[0][0] = 9;
     $(m)[1].memset(7);
     print($(m).length());
@@ -28,7 +28,7 @@ func main() -> int32_t {
 
     // memcpy through an inner nested array is allowed: mutation
     // rights propagate to the end, unlike allocation rights.
-    array<byte, 3> three;
+    [byte, 3] three;
     three[0] = 1;
     three[1] = 2;
     three[2] = 3;
@@ -38,7 +38,7 @@ func main() -> int32_t {
     print(grid[0][2]);
 
     // --- ptr propagates ownership to the end ---
-    ptr<array<array<byte>>> p = getptr(grid);
+    ptr<[[byte]]> p = getptr(grid);
     $(p)[0].uninit();
     $(p)[0].init(3);
     $(p)[0][0] = 4;
@@ -46,10 +46,10 @@ func main() -> int32_t {
 
     // --- a pointer boundary resets the region: an inner ptr
     // restores full allocation rights on its pointee ---
-    array<byte> owned;
+    [byte] owned;
     owned.init(2);
-    ptr<array<byte>> q = getptr(owned);
-    mview<ptr<array<byte>>> mp = getmview(q);
+    ptr<[byte]> q = getptr(owned);
+    mview<ptr<[byte]>> mp = getmview(q);
     $($(mp)).uninit();
     $($(mp)).init(5);
     print($($(mp)).length());

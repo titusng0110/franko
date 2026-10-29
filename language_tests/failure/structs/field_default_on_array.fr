@@ -1,9 +1,9 @@
 // Failure fixture: structs/field_default_on_array
 // Only primitive fields can have default values; an array-typed field rejects '= constExpr' as a type mismatch.
 struct X {
-    array<int32_t, 4> xs = 7
+    [int32, 4] xs = 7
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

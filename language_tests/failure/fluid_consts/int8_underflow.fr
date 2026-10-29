@@ -1,7 +1,7 @@
 // Failure fixture: fluid_consts/int8_underflow
-// Constant -129 does not fit the int8_t context (min -128).
-func main() -> int32_t {
-    int8_t x = -129;
+// Constant -129 does not fit the int8 context (min -128).
+func main() -> int32 {
+    int8 x = -129;
 
     print(x)
 

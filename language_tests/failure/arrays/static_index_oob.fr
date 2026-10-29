@@ -1,7 +1,7 @@
 // Failure fixture: arrays/static_index_oob
 // Constant indexes are checked against the known static array size.
-func main() -> int32_t {
-    array<int32_t, 3> xs;
+func main() -> int32 {
+    [int32, 3] xs;
     xs[5] = 1;
     return 0;
 }

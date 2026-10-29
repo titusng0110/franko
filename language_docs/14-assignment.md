@@ -39,8 +39,8 @@ Arrays cannot be directly assigned as values.
 Invalid:
 
 ```franko
-array<int32_t> a;
-array<int32_t> b;
+[int32] a;
+[int32] b;
 
 a = b;
 ```
@@ -67,7 +67,7 @@ Valid:
 
 ```franko
 struct X {
-    int32_t n
+    int32 n
     ptr<Y> p
 }
 
@@ -80,7 +80,7 @@ Invalid (struct contains a static array field):
 
 ```franko
 struct W {
-    array<int32_t, 4> xs
+    [int32, 4] xs
 }
 
 W a;
@@ -128,15 +128,15 @@ The backend emits the C++ compound assignment directly, so array indices, field 
 Invalid:
 
 ```franko
-array<int32_t, 3> xs = [1, 2, 3];
+[int32, 3] xs = [1, 2, 3];
 xs += 1;         // arrays are not arithmetic values
 
-int32_t v = 1;
-ptr<int32_t> p = getptr(v);
+int32 v = 1;
+ptr<int32> p = getptr(v);
 p += 1;          // pointers are not arithmetic values
 
-int32_t x = 1;
-int64_t y = 2;
+int32 x = 1;
+int64 y = 2;
 x += y;          // operands must have the same integer type
 ```
 
@@ -161,7 +161,7 @@ x -= 1;
 so every compound-assignment rule above applies unchanged: the target must be an integer, non-void storage-backed lvalue (`xs++` and `p++` are invalid for the same reason `xs += 1` and `p += 1` are invalid).
 
 ```franko
-for (int32_t i = 0; i < n; i++) {
+for (int32 i = 0; i < n; i++) {
     print(i)
 }
 ```

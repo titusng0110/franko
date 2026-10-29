@@ -1,1 +1,1 @@
-expected ptr<array<INT32>>
+expected ptr<[int32]>

@@ -1,8 +1,8 @@
 // Failure fixture: assignment/compound_div_zero
 // A constant zero divisor is rejected for `/=` and `%=`, matching the
 // plain `x / 0` rule (doc 17.3).
-func main() -> int32_t {
-    int32_t x = 5;
+func main() -> int32 {
+    int32 x = 5;
 
     x /= 0;
     x %= 0;

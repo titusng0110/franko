@@ -3,19 +3,19 @@
 //
 // Cell values: 0 open, 1 wall, 2 start, 3 exit, 4 shortest path.
 //
-// Demonstrates nested static arrays array<array<T, C>, R>,
+// Demonstrates nested static arrays [[T, C], R],
 // structs with array fields, methods with explicit ptr<Maze> self
 // receivers, nested array literals, chained indexing grid[r][c],
 // dynamic arrays with init_zero/uninit, getptr() and $(), and
 // parent-pointer path reconstruction.
 
 struct Maze {
-    array<array<uint, 13>, 12> grid
-    array<array<byte, 13>, 12> visited
-    array<array<byte, 13>, 12> path
-    array<array<uint, 13>, 12> dist
-    array<array<uint, 13>, 12> parentR
-    array<array<uint, 13>, 12> parentC
+    [[uint, 13], 12] grid
+    [[byte, 13], 12] visited
+    [[byte, 13], 12] path
+    [[uint, 13], 12] dist
+    [[uint, 13], 12] parentR
+    [[uint, 13], 12] parentC
 
     func initArrays(mview<Maze> self) -> void {
         $(self).grid.memcpy([
@@ -41,7 +41,7 @@ struct Maze {
         return
     }
 
-    func tryVisit(mview<Maze> self, mview<array<uint>> queue, mview<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
+    func tryVisit(mview<Maze> self, mview<[uint]> queue, mview<uint> tail, uint qCap, uint cols, uint r, uint c, uint nr, uint nc) -> void {
         if (($(self).grid[nr][nc] != 1) && ($(self).visited[nr][nc] == 0)) {
             $(self).visited[nr][nc] = 1
             $(self).dist[nr][nc] = $(self).dist[r][c] + 1
@@ -59,7 +59,7 @@ struct Maze {
         return
     }
 
-    func runBfs(mview<Maze> self, mview<array<uint>> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
+    func runBfs(mview<Maze> self, mview<[uint]> queue, uint qCap, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> byte {
         uint head = 0
         uint tail = 0
         uint r = 0
@@ -137,7 +137,7 @@ struct Maze {
         return
     }
 
-    func printSolvedGrid(view<Maze> self, mview<array<uint, 13>> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
+    func printSolvedGrid(view<Maze> self, mview<[uint, 13]> line, uint rows, uint cols, uint startR, uint startC, uint goalR, uint goalC) -> void {
         for (uint r = 0; r < rows; r++) {
             $(line).memcpy(getview($(self).grid[r]))
 
@@ -164,9 +164,9 @@ struct Maze {
 
 func main() -> int {
     Maze maze
-    array<uint, 13> line
+    [uint, 13] line
 
-    array<uint> queue
+    [uint] queue
 
     uint rows = 12
     uint cols = 13

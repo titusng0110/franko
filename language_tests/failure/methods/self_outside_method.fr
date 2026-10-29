@@ -1,6 +1,6 @@
 // Failure fixture: methods/self_outside_method
 // `self` outside a method body is rejected (doc 26.6).
-func main() -> int32_t {
+func main() -> int32 {
     print(self)
     return 0
 }

@@ -10,19 +10,19 @@
 //   failure paths: exist on an out-of-range index returns 0 and
 //     exist before init or after uninit returns 0
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::NextAllocator a;
     print(a.exist(0));
     print(a.init(2));
     print(a.exist(0));
     print(a.exist(5));
-    uint32_t i = a.new_index();
+    uint32 i = a.new_index();
     print(a.exist(i));
     print(a.exist(1));
     print(a.free_index(i));

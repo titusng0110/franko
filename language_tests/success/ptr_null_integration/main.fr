@@ -18,13 +18,13 @@
 // ============================================================
 
 struct Box {
-    int32_t v
-    ptr<int32_t> link
+    int32 v
+    ptr<int32> link
 }
 
-ptr<int32_t> g
+ptr<int32> g
 
-func takePtr(ptr<int32_t> q) -> int32_t {
+func takePtr(ptr<int32> q) -> int32 {
     if (q != null) {
         return $(q)
     }
@@ -32,17 +32,17 @@ func takePtr(ptr<int32_t> q) -> int32_t {
     return -1
 }
 
-func makeNull() -> ptr<int32_t> {
+func makeNull() -> ptr<int32> {
     return null
 }
 
-func main() -> int32_t {
-    int32_t x = 0
+func main() -> int32 {
+    int32 x = 0
 
     print(1)
 
     // Pointer declarations are guaranteed null-initialized.
-    ptr<int32_t> p
+    ptr<int32> p
     print(p == null)
     print(p != null)
 
@@ -54,13 +54,13 @@ func main() -> int32_t {
     print($(p))
 
     // Copying a certified variable keeps it certified.
-    ptr<int32_t> a = p
+    ptr<int32> a = p
     $(a) = 7
     print($(a))
 
     // A null declaration, and a copy of it: the copy is null too.
-    ptr<int32_t> b = null
-    ptr<int32_t> c = b
+    ptr<int32> b = null
+    ptr<int32> c = b
     print(c == null)
 
     // Guard refinement: the deref here is valid on the refined path.
@@ -77,7 +77,7 @@ func main() -> int32_t {
     print(2)
 
     // Loop-guard refinement, and provable null after loop exit.
-    ptr<int32_t> w
+    ptr<int32> w
     w = getptr(x)
     while (w != null) {
         $(w) = $(w) + 1
@@ -106,14 +106,14 @@ func main() -> int32_t {
 
     print(5)
 
-    // ptr<ptr<int32_t>> null handling.
-    ptr<ptr<int32_t>> pp
+    // ptr<ptr<int32>> null handling.
+    ptr<ptr<int32>> pp
     print(pp == null)
     pp = getptr(p)
     print(pp != null)
 
     // Assignment from a certified variable chain stays certified.
-    ptr<int32_t> cn
+    ptr<int32> cn
     cn = g
     print(cn != null)
 
@@ -123,7 +123,7 @@ func main() -> int32_t {
     print(takePtr(null))
     print(takePtr(getptr(x)))
 
-    ptr<int32_t> r = makeNull()
+    ptr<int32> r = makeNull()
     print(r == null)
 
     return 0

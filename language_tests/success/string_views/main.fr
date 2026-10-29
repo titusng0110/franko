@@ -1,27 +1,27 @@
 // ============================================================
 // LANGUAGE TEST: String Literals as Views
 // ============================================================
-// Covers: a string literal is a view<array<byte, N>> over a
+// Covers: a string literal is a view<[byte, N]> over a
 // hoisted global byte array; identical literals share one
 // global; global string views; strings as function arguments;
 // strings in initializer lists of view-typed slots.
 // ============================================================
 
-view<array<byte, 6>> GREETING = "global";
+view<[byte, 6]> GREETING = "global";
 
-func blen(view<array<byte, 3>> s) -> void {
+func blen(view<[byte, 3]> s) -> void {
     print($(s).length());
     print($(s)[0]);
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // Literals are views; reads go through $(...).
     print($("abc").length());
     blen("abc");
 
     // The same literal text shares one hoisted global.
-    view<array<byte, 3>> a = "abc";
-    view<array<byte, 3>> b = "abc";
+    view<[byte, 3]> a = "abc";
+    view<[byte, 3]> b = "abc";
     print(a == b);
 
     // Global string views.
@@ -30,11 +30,11 @@ func main() -> int32_t {
     print($("global")[0]);
 
     // Different content: different globals.
-    view<array<byte, 3>> c = "xyz";
+    view<[byte, 3]> c = "xyz";
     print(a == c);
 
     // Strings in initializer lists of view-typed slots.
-    array<view<array<byte, 3>>, 2> pair;
+    [view<[byte, 3]>, 2] pair;
     pair[0] = "abc";
     pair[1] = "xyz";
     print($(pair[0])[1]);

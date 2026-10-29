@@ -16,13 +16,13 @@
 
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> msg;
+func main() -> int32 {
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
 
     if (os::IS_WINDOWS == 1) {
-        uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
         os::win32::WriteFile(h, getptr(msg), 5, null);
     } else {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(msg), 5);

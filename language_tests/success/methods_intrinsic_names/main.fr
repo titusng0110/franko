@@ -8,19 +8,19 @@
 // ============================================================
 
 struct Counter {
-    int32_t n = 0
-    func init(ptr<Counter> self, int32_t v) -> void {
+    int32 n = 0
+    func init(ptr<Counter> self, int32 v) -> void {
         $(self).n = v
         return
     }
-    func get(ptr<Counter> self) -> int32_t {
+    func get(ptr<Counter> self) -> int32 {
         return $(self).n
     }
 }
 
 struct Box {
-    array<int32_t> data
-    func init(ptr<Box> self, uint32_t n) -> int32_t {
+    [int32] data
+    func init(ptr<Box> self, uint32 n) -> int32 {
         return $(self).data.init(n)
     }
     func uninit(ptr<Box> self) -> void {
@@ -29,7 +29,7 @@ struct Box {
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Counter c
     c.init(7)
     print(c.get())

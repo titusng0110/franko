@@ -1,8 +1,8 @@
 // Failure fixture: intrinsics/resize_size_wrong_type
-// resize (doc 21.2): a nonconstant size must have exactly type uint32_t.
-func main() -> int32_t {
-    int32_t n;
-    array<int32_t> xs;
+// resize (doc 21.2): a nonconstant size must have exactly type uint32.
+func main() -> int32 {
+    int32 n;
+    [int32] xs;
     xs.init(2);
     xs.resize(n);
     xs.uninit();

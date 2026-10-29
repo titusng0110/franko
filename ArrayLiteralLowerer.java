@@ -39,7 +39,7 @@ public final class ArrayLiteralLowerer {
     public SemanticExprNode lower(ArrayLiteralNode lit, SemanticType expectedType) {
         if (lit.elements.isEmpty()) {
             ctx.error("Empty array literals are not supported: an array "
-                    + "literal is a view<array<T, N>> value with N >= 1");
+                    + "literal is a view<[T, N]> value with N >= 1");
             return hoistFallback(lit);
         }
 
@@ -47,9 +47,9 @@ public final class ArrayLiteralLowerer {
 
         if (shape == null) {
             ctx.error("Cannot infer the element type of an array literal here: "
-                    + "array literals are view<array<T, N>> values and need an "
+                    + "array literals are view<[T, N]> values and need an "
                     + "assignment, return, or call-argument context with a "
-                    + "view<array<integer type>> shape");
+                    + "view<[integer type]> shape");
             return hoistFallback(lit);
         }
 
@@ -113,7 +113,7 @@ public final class ArrayLiteralLowerer {
     ) {
         if (lit.elements.isEmpty()) {
             ctx.error("Empty array literals are not supported: an array "
-                    + "literal is a view<array<T, N>> value with N >= 1");
+                    + "literal is a view<[T, N]> value with N >= 1");
             return null;
         }
 

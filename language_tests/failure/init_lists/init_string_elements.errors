@@ -1,1 +1,1 @@
-Array literal elements must be integer expressions, got view<array<UINT8, 2>>
+Array literal elements must be integer expressions, got view<[uint8, 2]>

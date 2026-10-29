@@ -11,11 +11,11 @@ two explicit conversion intrinsics:
   (runtime-checked).
 
 ```franko
-uint8_t a = 200;
-uint16_t b = cast<uint16_t>(a);        // widening: plain static_cast
+uint8 a = 200;
+uint16 b = cast<uint16>(a);        // widening: plain static_cast
 
-int32_t big = 300;
-uint8_t small = unsafe_cast<uint8_t>(big);   // checked: throws at run time
+int32 big = 300;
+uint8 small = unsafe_cast<uint8>(big);   // checked: throws at run time
 ```
 
 Like `$(...)` and `getptr`, both are compiler intrinsics, not function
@@ -24,9 +24,9 @@ calls: they cannot be overloaded, shadowed, or passed around.
 ## 16.1 Cast Syntax
 
 ```franko
-cast<uint16_t>(a)
-cast<view<array<byte>>>(p)
-unsafe_cast<int32_t>(big)
+cast<uint16>(a)
+cast<view<[byte]>>(p)
+unsafe_cast<int32>(big)
 ```
 
 `cast<T>` accepts a full type as its target: one of the eight primitive
@@ -36,22 +36,22 @@ match the target category: an integer expression for integer targets, a
 pointer or `null` for pointer targets.
 
 `unsafe_cast<T>` is restricted to the eight primitive integer types
-(`int8_t` … `uint64_t`, including the `int` / `uint` / `byte` aliases);
+(`int8` … `uint64`, including the `int` / `uint` / `byte` aliases);
 a pointer target does not parse. The operand must be an integer
 expression.
 
 A cast is never an lvalue:
 
 ```franko
-cast<uint16_t>(a) = 5;   // invalid
+cast<uint16>(a) = 5;   // invalid
 ```
 
 Casts compose freely with other expressions:
 
 ```franko
-uint8_t cmp = 1 < 2;
-int32_t wide = cast<int32_t>(cmp);
-print(unsafe_cast<uint8_t>(wide));
+uint8 cmp = 1 < 2;
+int32 wide = cast<int32>(cmp);
+print(unsafe_cast<uint8>(wide));
 ```
 
 ## 16.2 Static (Value-Preserving) Casts
@@ -61,10 +61,10 @@ type, the cast is statically safe and compiles to a plain
 `static_cast` with zero runtime cost:
 
 - strictly wider, same signedness:
-  `uint8_t -> uint16_t -> uint32_t -> uint64_t` and
-  `int8_t -> int16_t -> int32_t -> int64_t`;
+  `uint8 -> uint16 -> uint32 -> uint64` and
+  `int8 -> int16 -> int32 -> int64`;
 - unsigned to signed of strictly greater width:
-  `uint8_t -> int16_t`, `uint16_t -> int32_t`, `uint32_t -> int64_t`.
+  `uint8 -> int16`, `uint16 -> int32`, `uint32 -> int64`.
 
 These are the conversions `cast<T>` performs. Casting to the type the
 expression already has is allowed and compiles to the value unchanged.
@@ -72,22 +72,22 @@ expression already has is allowed and compiles to the value unchanged.
 ## 16.3 Checked Casts (`unsafe_cast<T>`)
 
 Every conversion that can lose data — narrowing, any signed-to-unsigned
-conversion, `uint64_t -> int64_t`, and same-width signedness changes —
+conversion, `uint64 -> int64`, and same-width signedness changes —
 must be written `unsafe_cast<T>(expr)`. It compiles to a runtime-checked
 `franko_unsafe_cast<T>(expr)` call. The check compares the value
 against the target type's range and throws on overflow, so a bad
 conversion aborts instead of wrapping or truncating.
 
 ```franko
-int32_t big = 300;
-uint8_t small = unsafe_cast<uint8_t>(big);   // throws: 300 does not fit uint8_t
+int32 big = 300;
+uint8 small = unsafe_cast<uint8>(big);   // throws: 300 does not fit uint8
 ```
 
 A checked cast that fits succeeds normally:
 
 ```franko
-uint32_t w = 70000;
-int32_t s = unsafe_cast<int32_t>(w);   // valid: 70000 fits int32_t
+uint32 w = 70000;
+int32 s = unsafe_cast<int32>(w);   // valid: 70000 fits int32
 print(s);
 ```
 
@@ -102,8 +102,8 @@ time: the value must fit the target type or compilation fails. There is
 no wraparound, at compile time or at run time.
 
 ```franko
-uint8_t ok = unsafe_cast<uint8_t>(200);    // valid
-uint8_t bad = unsafe_cast<uint8_t>(300);   // invalid: 300 does not fit uint8_t
+uint8 ok = unsafe_cast<uint8>(200);    // valid
+uint8 bad = unsafe_cast<uint8>(300);   // invalid: 300 does not fit uint8
 ```
 
 ## 16.5 Pointer Permission Casts
@@ -114,12 +114,12 @@ identical and the permission may only weaken
 (`ptr -> mview -> view`).
 
 ```franko
-array<byte> buf;
+[byte] buf;
 buf.init(16);
-ptr<array<byte>> p = getptr(buf);
-view<array<byte>> v = cast<view<array<byte>>>(p);   // explicit downgrade
-mview<array<byte>> m = cast<mview<array<byte>>>(p);
-view<array<byte>> v2 = cast<view<array<byte>>>(m);
+ptr<[byte]> p = getptr(buf);
+view<[byte]> v = cast<view<[byte]>>(p);   // explicit downgrade
+mview<[byte]> m = cast<mview<[byte]>>(p);
+view<[byte]> v2 = cast<view<[byte]>>(m);
 ```
 
 Explicit downgrades are never required — the same conversions happen
@@ -128,22 +128,22 @@ written for clarity. Casting *upwards* (`view` to `mview`/`ptr`) or
 across different pointee types is invalid:
 
 ```franko
-ptr<array<byte>> q = cast<ptr<array<byte>>>(v);   // invalid: raises permissions
+ptr<[byte]> q = cast<ptr<[byte]>>(v);   // invalid: raises permissions
 ```
 
 The same `cast` syntax spells the static-to-dynamic array pointer view
-decay: `mview<array<T, N>>`/`view<array<T, N>>` (and downgrade
-combinations from a `ptr` source) cast to `mview<array<T>>`/
-`view<array<T>>`, outermost dimension only
+decay: `mview<[T, N]>`/`view<[T, N]>` (and downgrade
+combinations from a `ptr` source) cast to `mview<[T]>`/
+`view<[T]>`, outermost dimension only
 (see [Pointers](24-pointers.md)):
 
 ```franko
-array<int32_t, 4> xs;
-mview<array<int32_t, 4>> m = getmview(xs);
-mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);
+[int32, 4] xs;
+mview<[int32, 4]> m = getmview(xs);
+mview<[int32]> d = cast<mview<[int32]>>(m);
 ```
 
-Decaying to `ptr<array<T>>` is invalid: the result would claim ownership
+Decaying to `ptr<[T]>` is invalid: the result would claim ownership
 of storage the static array owns.
 
 Raw integers can never be converted to pointers.
@@ -162,13 +162,13 @@ Raw integers can never be converted to pointers.
   into a temporary first:
 
 ```franko
-func f(int64_t x) -> int64_t {
+func f(int64 x) -> int64 {
     return x;
 }
 
-func main() -> int32_t {
-    int32_t v = 5;
-    int64_t r = f(cast<int64_t>(v));
+func main() -> int32 {
+    int32 v = 5;
+    int64 r = f(cast<int64>(v));
     print(r);
     return 0;
 }

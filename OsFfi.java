@@ -289,11 +289,11 @@ final class OsFfi {
 
     static String expectedEmittedName(Kind kind) {
         return switch (kind) {
-            case POSIX_READ -> "FUNC_read_HASH_be149563";
-            case POSIX_WRITE -> "FUNC_write_HASH_731d748e";
-            case WIN32_GETSTDHANDLE -> "FUNC_GetStdHandle_HASH_493245c2";
-            case WIN32_READFILE -> "FUNC_ReadFile_HASH_50f286c1";
-            case WIN32_WRITEFILE -> "FUNC_WriteFile_HASH_c811d200";
+            case POSIX_READ -> "FUNC_read_HASH_247cb6de";
+            case POSIX_WRITE -> "FUNC_write_HASH_3a46712f";
+            case WIN32_GETSTDHANDLE -> "FUNC_GetStdHandle_HASH_31d0af80";
+            case WIN32_READFILE -> "FUNC_ReadFile_HASH_955d9645";
+            case WIN32_WRITEFILE -> "FUNC_WriteFile_HASH_ab68bdd0";
         };
     }
 

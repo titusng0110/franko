@@ -29,7 +29,7 @@ For each pointer variable the checker tracks one of:
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<[[byte]]>` parameter enters pointing, since the template wrapper always passes a live pointer.
 
 ## 27.3 Dereference Checking
 
@@ -62,7 +62,7 @@ Loop termination is not proven; the post-loop state is conservative.
 Inside `if (p == null)` / `if (p != null)` (either operand order), the checker refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 if (p != null) {
     $(p);      // valid: p is refined to pointing inside the guard
 }
@@ -72,7 +72,7 @@ $(p);          // error: p is provably null after the guard fails
 When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 p = getptr(x);
 if (p != null) {
     $(p);      // valid

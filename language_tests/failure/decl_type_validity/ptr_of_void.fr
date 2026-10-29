@@ -2,7 +2,7 @@
 // Pointers require a valid non-void referenced type (doc 30, doc 24), so
 // `ptr<void> p;` is invalid.
 
-func main() -> int32_t {
+func main() -> int32 {
     ptr<void> p;
     return 0;
 }

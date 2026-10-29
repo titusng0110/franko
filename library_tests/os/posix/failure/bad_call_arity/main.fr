@@ -1,10 +1,10 @@
 // Failure fixture: os/posix/bad_call_arity
-// os::posix::write takes exactly (int32_t, ptr<array<byte>>, uint64_t);
+// os::posix::write takes exactly (int32, ptr<[byte]>, uint64);
 // calling it with two arguments matches no overload.
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> msg;
+func main() -> int32 {
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
     os::posix::write(1, getptr(msg));

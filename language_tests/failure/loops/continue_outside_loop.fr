@@ -1,7 +1,7 @@
 // Failure fixture: loops/continue_outside_loop
 // continue is only valid inside a loop.
 
-func main() -> int32_t {
+func main() -> int32 {
     continue;
     return 0;
 }

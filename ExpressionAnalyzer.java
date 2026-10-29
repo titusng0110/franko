@@ -317,7 +317,7 @@ public final class ExpressionAnalyzer {
 
         if (node instanceof StringLiteralNode) {
             ctx.error("String literal is not a valid expression here; a "
-                    + "string literal is a view<array<byte, N>> value");
+                    + "string literal is a view<[byte, N]> value");
 
             return new SemanticIntLiteralNode(
                     FALLBACK_TYPE,

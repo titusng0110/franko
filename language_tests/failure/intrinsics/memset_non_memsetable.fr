@@ -1,7 +1,7 @@
 // Failure fixture: intrinsics/memset_non_memsetable
 // Arrays whose element type is a dynamic array are not memsetable.
-func main() -> int32_t {
-    array<array<int32_t>> n;
+func main() -> int32 {
+    [[int32]] n;
     n.init(2);
     n.memset(0);
     n.uninit();

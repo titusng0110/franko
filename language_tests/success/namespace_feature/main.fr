@@ -21,20 +21,20 @@ import "merge"
 
 // A global-namespace struct used by value inside a namespace struct.
 struct Base {
-    int32_t seed = 9
+    int32 seed = 9
 }
 
 // Unqualified inside namespace math: math::scale shadows nothing, and
 // Base resolves via the global fallback.
 namespace math {
-    int32_t scale = 3
+    int32 scale = 3
 
     struct Scaled {
         Base base
-        int32_t factor = 2
+        int32 factor = 2
     }
 
-    func scaleSeed() -> int32_t {
+    func scaleSeed() -> int32 {
         Base b
         return b.seed + scale
     }
@@ -45,14 +45,14 @@ namespace math {
 // types, and a by-value field may reference util::Point.
 namespace other {
     struct Point {
-        int32_t z = 4
+        int32 z = 4
         util::Point inner
     }
 }
 
-int32_t sharedSeed = 5
+int32 sharedSeed = 5
 
-func main() -> int32_t {
+func main() -> int32 {
     // Qualified struct type at global scope.
     util::Point p
     print(p.x)

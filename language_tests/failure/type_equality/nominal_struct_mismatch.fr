@@ -3,14 +3,14 @@
 // (doc 29.6), so assigning an A value to a B variable is a type error.
 
 struct A {
-    int32_t n
+    int32 n
 }
 
 struct B {
-    int32_t n
+    int32 n
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     A a;
     B b;
     a.n = 1;

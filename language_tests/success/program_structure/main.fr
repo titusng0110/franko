@@ -6,36 +6,36 @@
 // ============================================================
 
 // A global variable declaration.
-int32_t globalCounter = 0;
+int32 globalCounter = 0;
 
 // A struct declaration.
 struct Point {
-    int32_t x
-    int32_t y
+    int32 x
+    int32 y
 }
 
 // A namespace declaration.
 namespace util {
-    int32_t offset = 100
-    func doubleIt(int32_t v) -> int32_t {
+    int32 offset = 100
+    func doubleIt(int32 v) -> int32 {
         return v + v + offset
     }
 }
 
 // A function declaration.
-func main() -> int32_t {
+func main() -> int32 {
     // Mixed separators: newlines and semicolons.
     Point p;
     p.x = 1
     p.y = 2;
 
     // Mixed separators: consecutive separators.
-    int32_t sum = 0;;
+    int32 sum = 0;;
     sum = p.x + p.y;;
 
     // Local block creating a nested scope.
     {
-        int32_t local = 10;
+        int32 local = 10;
         sum = sum + local
     }
 

@@ -78,7 +78,7 @@ The right operand must be an integer. Nonconstant shift counts must have an unsi
 
 ## 17.6 Comparison Operators
 
-Comparison operators produce `uint8_t`.
+Comparison operators produce `uint8`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
@@ -90,7 +90,7 @@ The `null` literal may be compared with an pointer using `==` and `!=` only. `nu
 
 Logical operators: `&&`, `||`, `!`.
 
-Operands must be integers. Results are `uint8_t` values `0` or `1`.
+Operands must be integers. Results are `uint8` values `0` or `1`.
 
 ## 17.8 No Pointer Arithmetic
 
@@ -100,4 +100,4 @@ Pointers are not integers and cannot participate in arithmetic, bitwise, or shif
 
 Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants).
 
-Comparisons and logical operators always produce `uint8_t` regardless of operand types.
+Comparisons and logical operators always produce `uint8` regardless of operand types.

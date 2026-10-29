@@ -1,8 +1,8 @@
 // Failure fixture: comments/block_comment
 // Block comments /* ... */ do not exist in Franko; only // line comments parse.
-func main() -> int32_t {
+func main() -> int32 {
     /* this is not a valid comment */
-    int32_t x = 1
+    int32 x = 1
     print(x)
     return 0
 }

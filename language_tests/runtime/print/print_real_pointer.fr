@@ -4,13 +4,13 @@
 // output. This fixture exercises the print and then aborts at runtime
 // (uninitialized dynamic array access), so the run is judged by exit
 // status only.
-func main() -> int32_t {
-    int32_t x = 1
-    ptr<int32_t> p = getptr(x)
+func main() -> int32 {
+    int32 x = 1
+    ptr<int32> p = getptr(x)
 
     print(p)
 
-    array<int32_t> xs
+    [int32] xs
     print(xs[0])
 
     return 0

@@ -15,15 +15,15 @@ Examples:
 1 << 3      // evaluated to 8
 ```
 
-`array<int32_t, 0x10>` reaches semantic analysis as `array<int32_t, 16>`; `int8_t g = 1 + 2` reaches it as `int8_t g = 3`.
+`[int32, 0x10]` reaches semantic analysis as `[int32, 16]`; `int8 g = 1 + 2` reaches it as `int8 g = 3`.
 
-**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32_t` range for array sizes, fit for global and field initializers, primitive-only field defaults.
+**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32` range for array sizes, fit for global and field initializers, primitive-only field defaults.
 
 Evaluation failures are reported before semantic analysis:
 
 ```franko
-array<int, 10 / 0> bytes;   // invalid: Division by zero in constant expression
-array<int, 10 % 0> bytes;   // invalid: Division by zero in constant expression
+[int, 10 / 0] bytes;   // invalid: Division by zero in constant expression
+[int, 10 % 0] bytes;   // invalid: Division by zero in constant expression
 ```
 
 Modulus folding uses truncated division, so the remainder keeps the sign of the dividend, matching the generated C++ (see [Operators](17-operators.md)).
@@ -35,7 +35,7 @@ Constants are evaluated using arbitrary-precision `BigInteger`, not fixed-width 
 Integer overflow is not applied during evaluation. Range checking happens when the value is used in a concrete type context:
 
 ```franko
-int8_t g = 300;   // evaluated to 300, then rejected: does not fit in INT8
+int8 g = 300;   // evaluated to 300, then rejected: does not fit in int8
 ```
 
 A shift whose constant right operand is negative cannot be evaluated; it is rejected during desugaring as an invalid constant expression. Negative shifts inside ordinary expressions are instead rejected later by the operator rules (see [Operators](17-operators.md)).
@@ -43,7 +43,7 @@ A shift whose constant right operand is negative cannot be evaluated; it is reje
 Constant expressions inside ordinary code (as opposed to `constExpr` slots) are still folded during semantic analysis, when expressions are lowered. Diagnostics there keep their existing wording:
 
 ```franko
-int32_t x = 1 / 0;   // invalid: Division by zero in constant expression
+int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 ```
 
 `?` array size inference uses the same evaluator quietly: it only needs the value when one exists, and reports its own inference diagnostics otherwise (see [Desugaring](05-desugaring.md)).

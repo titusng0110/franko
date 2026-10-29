@@ -8,24 +8,24 @@
 // ============================================================
 
 struct Pair {
-    int32_t first
-    int32_t second = 0
+    int32 first
+    int32 second = 0
 }
 
 // By-value parameter of an assignable struct type.
-func sumOf(Pair p) -> int32_t {
+func sumOf(Pair p) -> int32 {
     return p.first + p.second;
 }
 
 // By-value return of an assignable struct type.
-func makePair(int32_t a, int32_t b) -> Pair {
+func makePair(int32 a, int32 b) -> Pair {
     Pair p;
     p.first = a;
     p.second = b;
     return p;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Pair a;
     Pair b;
     b.first = 3;

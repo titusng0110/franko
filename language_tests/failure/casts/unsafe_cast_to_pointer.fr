@@ -1,8 +1,8 @@
 // Failure fixture: casts/unsafe_cast_to_pointer
 // unsafe_cast<T> is restricted to the eight primitive integer types;
 // a pointer target does not parse.
-func main() -> int32_t {
-    int32_t x = 5;
-    ptr<int32_t> p = unsafe_cast<ptr<int32_t>>(x);
+func main() -> int32 {
+    int32 x = 5;
+    ptr<int32> p = unsafe_cast<ptr<int32>>(x);
     return 0;
 }

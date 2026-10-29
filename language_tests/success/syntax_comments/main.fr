@@ -6,9 +6,9 @@
 // ============================================================
 
 // A whole-line comment before any declaration.
-func main() -> int32_t {
+func main() -> int32 {
     // A whole-line comment inside a function body.
-    int32_t x = 40  // trailing comment after a declaration
+    int32 x = 40  // trailing comment after a declaration
     x = x + 2       // trailing comment after an assignment
 
     print(x)  // trailing comment after a print statement

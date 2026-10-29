@@ -21,19 +21,19 @@ namespace os {
     byte IS_ARM64 = 0
     
     namespace posix {
-        int32_t STDIN_FILENO = 0
-        int32_t STDOUT_FILENO = 1
-        int32_t STDERR_FILENO = 2
+        int32 STDIN_FILENO = 0
+        int32 STDOUT_FILENO = 1
+        int32 STDERR_FILENO = 2
 
         // FFI intrinsics. The bodies below are stubs only: when this module
         // is imported as "franko/os", the compiler replaces them with the
         // bridge definitions from import/franko/os.ffi.cpp. The stubs
         // report failure (-1) so a missing bridge can never look like
         // silent success.
-        func read(int32_t fd, mview<array<byte>> buf, uint64_t count) -> int64_t {
+        func read(int32 fd, mview<[byte]> buf, uint64 count) -> int64 {
             return -1
         }
-        func write(int32_t fd, view<array<byte>> buf, uint64_t count) -> int64_t {
+        func write(int32 fd, view<[byte]> buf, uint64 count) -> int64 {
             return -1
         }
     }
@@ -41,10 +41,10 @@ namespace os {
     namespace win32 {
         // Win32 File API (fileapi.h) standard-handle constants.
         // These are (DWORD)-10/-11/-12, spelled as hex because a
-        // negative literal cannot fit a uint32_t target.
-        uint32_t STD_INPUT_HANDLE = 0xFFFFFFF6
-        uint32_t STD_OUTPUT_HANDLE = 0xFFFFFFF5
-        uint32_t STD_ERROR_HANDLE = 0xFFFFFFF4
+        // negative literal cannot fit a uint32 target.
+        uint32 STD_INPUT_HANDLE = 0xFFFFFFF6
+        uint32 STD_OUTPUT_HANDLE = 0xFFFFFFF5
+        uint32 STD_ERROR_HANDLE = 0xFFFFFFF4
 
         // FFI intrinsics, bridged by import/franko/os.ffi.cpp like the
         // posix functions above. hFile is a HANDLE widened to 64 bits;
@@ -54,13 +54,13 @@ namespace os {
         // buffer is read-only for WriteFile (view) and written in place
         // for ReadFile (mview). The stubs report failure (0) so a
         // missing bridge can never look like silent success.
-        func GetStdHandle(uint32_t nStdHandle) -> uint64_t {
+        func GetStdHandle(uint32 nStdHandle) -> uint64 {
             return 0
         }
-        func ReadFile(uint64_t hFile, mview<array<byte>> buf, uint32_t count, mview<uint32_t> bytesRead) -> int32_t {
+        func ReadFile(uint64 hFile, mview<[byte]> buf, uint32 count, mview<uint32> bytesRead) -> int32 {
             return 0
         }
-        func WriteFile(uint64_t hFile, view<array<byte>> buf, uint32_t count, mview<uint32_t> bytesWritten) -> int32_t {
+        func WriteFile(uint64 hFile, view<[byte]> buf, uint32 count, mview<uint32> bytesWritten) -> int32 {
             return 0
         }
     }

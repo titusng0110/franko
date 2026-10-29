@@ -16,7 +16,7 @@ struct RbNode {
     uint parent = 0xFFFFFFFF
 }
 
-array<RbNode, 64> nodes
+[RbNode, 64] nodes
 std::NextAllocator slots
 uint NIL = 0xFFFFFFFF
 uint root = 0xFFFFFFFF

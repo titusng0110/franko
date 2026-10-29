@@ -1,10 +1,10 @@
 // Failure fixture: pointers/getptr_non_lvalue
 // The getptr operand must be a storage-backed lvalue; literals and
 // arithmetic results are not.
-func main() -> int32_t {
-    int32_t a = 1
-    int32_t b = 2
-    ptr<int32_t> p1 = getptr(5)
-    ptr<int32_t> p2 = getptr(a + b)
+func main() -> int32 {
+    int32 a = 1
+    int32 b = 2
+    ptr<int32> p1 = getptr(5)
+    ptr<int32> p2 = getptr(a + b)
     return 0
 }

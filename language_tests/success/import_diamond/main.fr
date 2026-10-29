@@ -12,7 +12,7 @@
 import "left"
 import "right"
 
-func main() -> int32_t {
+func main() -> int32 {
     print(sharedValue)
     print(leftValue() + rightValue())
 

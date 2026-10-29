@@ -1,10 +1,10 @@
 // Failure fixture: ptr_compare_null/order_ptr
 // Pointer comparison is equality-only: ordering comparison between
 // two pointers is invalid.
-func main() -> int32_t {
-    int32_t x2 = 0
-    ptr<int32_t> p2
-    ptr<int32_t> q2
+func main() -> int32 {
+    int32 x2 = 0
+    ptr<int32> p2
+    ptr<int32> q2
 
     p2 = getptr(x2)
     q2 = getptr(x2)

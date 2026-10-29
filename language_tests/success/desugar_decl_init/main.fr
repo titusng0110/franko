@@ -6,8 +6,8 @@
 // followed by an assignment before semantic checking.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t x = 10;
+func main() -> int32 {
+    int32 x = 10;
     print(x);
 
     // The desugared assignment is an ordinary assignment: x can be

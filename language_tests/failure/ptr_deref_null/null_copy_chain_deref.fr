@@ -1,9 +1,9 @@
 // Failure fixture: ptr_deref_null/null_copy_chain_deref
 // Null state propagates transitively through a copy chain.
-func main() -> int32_t {
-    ptr<int32_t> b4
-    ptr<int32_t> a4
-    ptr<int32_t> c4
+func main() -> int32 {
+    ptr<int32> b4
+    ptr<int32> a4
+    ptr<int32> c4
 
     a4 = b4
     c4 = a4

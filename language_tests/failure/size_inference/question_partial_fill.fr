@@ -1,6 +1,6 @@
 // Failure fixture: size_inference/question_partial_fill
 // When `?` is used, explicit dimensions must fit exactly.
-func main() -> int32_t {
-    view<array<array<int32_t, 3>, ?>> x = [[1, 2], [3, 4]];
+func main() -> int32 {
+    view<[[int32, 3], ?]> x = [[1, 2], [3, 4]];
     return 0;
 }

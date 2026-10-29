@@ -8,29 +8,29 @@
 // ambiguous case).
 // ============================================================
 
-func f(ptr<array<byte, 3>> x) -> void {
+func f(ptr<[byte, 3]> x) -> void {
     print(1);
 }
 
-func f(view<array<byte, 3>> x) -> void {
+func f(view<[byte, 3]> x) -> void {
     print(2);
 }
 
-func g(mview<array<byte, 3>> a, mview<array<byte, 3>> b) -> void {
+func g(mview<[byte, 3]> a, mview<[byte, 3]> b) -> void {
     print(3);
 }
 
-func g(mview<array<byte, 3>> a, view<array<byte, 3>> b) -> void {
+func g(mview<[byte, 3]> a, view<[byte, 3]> b) -> void {
     print(4);
 }
 
-func main() -> int32_t {
-    array<byte, 3> buf;
+func main() -> int32 {
+    [byte, 3] buf;
     buf.memset(0);
 
-    ptr<array<byte, 3>> p = getptr(buf);
-    mview<array<byte, 3>> m = getmview(buf);
-    view<array<byte, 3>> v = getview(buf);
+    ptr<[byte, 3]> p = getptr(buf);
+    mview<[byte, 3]> m = getmview(buf);
+    view<[byte, 3]> v = getview(buf);
 
     f(p);
     f(m);

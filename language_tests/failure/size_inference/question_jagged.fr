@@ -1,6 +1,6 @@
 // Failure fixture: size_inference/question_jagged
 // Inference requires a perfect rectangle.
-func main() -> int32_t {
-    view<array<array<int32_t, ?>, ?>> x = [[1, 2], [3]];
+func main() -> int32 {
+    view<[[int32, ?], ?]> x = [[1, 2], [3]];
     return 0;
 }

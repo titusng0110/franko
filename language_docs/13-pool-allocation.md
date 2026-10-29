@@ -8,7 +8,7 @@ Dynamic arrays are the one kind of storage a program manages explicitly:
 `init`, `init_zero`, `resize`, and `uninit` pair up over a single array.
 
 ```franko
-array<int32_t> xs;
+[int32] xs;
 xs.init(20);
 // ... use xs ...
 xs.uninit();
@@ -27,7 +27,7 @@ import "franko/pool"
 std::SparseSetAllocator pool;
 pool.init(1024);
 
-uint32_t idx = pool.new_index();
+uint32 idx = pool.new_index();
 // ... use idx as a row index into the program's own payload array ...
 pool.free_index(idx);
 

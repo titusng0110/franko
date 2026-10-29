@@ -3,16 +3,16 @@
 // namespace, then the global namespace. Enclosing namespaces are
 // not searched, so `v` declared in `a` is not visible inside `a::b`.
 namespace a {
-    int32_t v = 10
+    int32 v = 10
 
     namespace b {
-        func get() -> int32_t {
+        func get() -> int32 {
             return v
         }
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     print(a::b::get())
     return 0
 }

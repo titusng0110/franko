@@ -6,9 +6,9 @@
 // contexts; 0 means success.
 // ============================================================
 
-func main() -> int32_t {
-    array<int32_t> xs;
-    int32_t status = xs.init(4);
+func main() -> int32 {
+    [int32] xs;
+    int32 status = xs.init(4);
     print(status);
     xs[0] = 42;
     status = xs.resize(8);
@@ -16,12 +16,12 @@ func main() -> int32_t {
     xs[7] = 43;
     print(xs[0], xs[7]);
 
-    array<int32_t> ys;
-    int32_t s2 = ys.init_zero(3);
+    [int32] ys;
+    int32 s2 = ys.init_zero(3);
     print(s2);
 
-    array<int32_t> zs;
-    int32_t s3 = zs(2);
+    [int32] zs;
+    int32 s3 = zs(2);
     print(s3);
 
     ys.uninit();

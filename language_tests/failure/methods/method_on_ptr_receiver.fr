@@ -1,12 +1,12 @@
 // Failure fixture: methods/method_on_ptr_receiver
 // ptr<X> receivers require explicit deref (doc 26.3).
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func foo(ptr<X> self) -> void {
         return
     }
 }
-func main() -> int32_t {
+func main() -> int32 {
     X s
     ptr<X> p
     p = getptr(s)

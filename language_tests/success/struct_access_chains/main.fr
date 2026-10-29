@@ -9,14 +9,14 @@
 
 struct Link {
     ptr<Link> next
-    int32_t val
+    int32 val
 }
 
 struct Cell {
-    int32_t v = 0
+    int32 v = 0
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // s.field on a local struct.
     Cell s;
     s.v = 1;
@@ -39,20 +39,20 @@ func main() -> int32_t {
     print(l1.val, $(l1.next).val);
 
     // xs[i].field on a static array of structs.
-    array<Cell, 3> xs;
+    [Cell, 3] xs;
     xs[0].v = 5;
     xs[1].v = 6;
     xs[2].v = 7;
     print(xs[0].v, xs[1].v, xs[2].v);
 
     // getptr(s.field): write the field through its pointer.
-    ptr<int32_t> fa;
+    ptr<int32> fa;
     fa = getptr(s.v);
     $(fa) = 42;
     print(s.v);
 
     // getptr of an array-element field.
-    ptr<int32_t> fa2;
+    ptr<int32> fa2;
     fa2 = getptr(xs[2].v);
     $(fa2) = 77;
     print(xs[2].v);

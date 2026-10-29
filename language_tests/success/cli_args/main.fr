@@ -2,7 +2,7 @@
 // LANGUAGE TEST: CLI Args
 // ============================================================
 // Covers: the args-form entry point
-// `func main(view<array<array<byte>>> args) -> int32_t` (read-only).
+// `func main(view<[[byte]]> args) -> int32` (read-only).
 //
 // The template wrapper converts raw argc/argv into nested dynamic
 // byte arrays (full argv with no NUL terminator), and the args
@@ -14,13 +14,13 @@
 // `n - 1` and iterating from index 1.
 // ============================================================
 
-func main(view<array<array<byte>>> args) -> int32_t {
-    uint32_t n = $(args).length()
+func main(view<[[byte]]> args) -> int32 {
+    uint32 n = $(args).length()
     print(n - 1)
-    uint32_t i = 1
+    uint32 i = 1
     while (i < n) {
         print($(args)[i].length())
-        uint32_t j = 0
+        uint32 j = 0
         while (j < $(args)[i].length()) {
             print($(args)[i][j])
             j = j + 1

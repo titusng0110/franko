@@ -28,13 +28,13 @@ At global scope, declaration initializer sugar is currently invalid if it desuga
 This:
 
 ```franko
-array<int> arr(20);
+[int] arr(20);
 ```
 
 is desugared to:
 
 ```franko
-array<int> arr;
+[int] arr;
 arr(20);
 ```
 
@@ -42,7 +42,7 @@ The call form itself (`arr(20)`) is later recognized as array intrinsic `init` s
 
 ## 5.3 Array Literal Desugaring
 
-Array literals are not assignment sugar: they are `view<array<T, N>>`
+Array literals are not assignment sugar: they are `view<[T, N]>`
 values over hoisted constant global arrays, exactly like string
 literals. An array literal is never rewritten into statements; its
 element type is inferred from the surrounding assignment, return, or
@@ -51,9 +51,9 @@ call-argument context during semantic analysis. See
 
 ## 5.4 String Literal Desugaring
 
-Every string literal is hoisted to a literal-backed global `array<byte, N>`
+Every string literal is hoisted to a literal-backed global `[byte, N]`
 holding its UTF-8 bytes (no null terminator is added) and replaced with a
-`getview(...)` expression over that global, of type `view<array<byte, N>>`:
+`getview(...)` expression over that global, of type `view<[byte, N]>`:
 
 ```franko
 print($("ABC")[0]);
@@ -62,7 +62,7 @@ print($("ABC")[0]);
 first becomes (one global per distinct literal text):
 
 ```franko
-array<byte, 3> _STR_<hash>;
+[byte, 3] _STR_<hash>;
 print($(getview(_STR_<hash>))[0]);
 ```
 
@@ -95,7 +95,7 @@ This makes braceless and braced bodies scope identically: a declaration inside a
 A `for` loop is lowered to declaration/assignment statements and a `while` loop:
 
 ```franko
-for (int32_t i = 0; i < n; i = i + 1) {
+for (int32 i = 0; i < n; i = i + 1) {
     print(i)
 }
 ```
@@ -104,7 +104,7 @@ becomes:
 
 ```franko
 {
-    int32_t i;
+    int32 i;
     i = 0;
     while (i < n) {
         print(i);
@@ -121,34 +121,34 @@ The `init` and `update` statements go through the ordinary statement desugaring 
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size may be written as `?` in a `view<array<...>>`
+A static array size may be written as `?` in a `view<[...]>`
 declaration with an array-literal initializer:
 
 ```franko
-view<array<int32_t, ?>> v = [0, 1, 2, 3];
+view<[int32, ?]> v = [0, 1, 2, 3];
 ```
 
 During desugaring, each `?` is replaced by the element count of the
 corresponding literal level, so the declaration above becomes
-`view<array<int32_t, 4>> v`. Nested literals infer level by level:
+`view<[int32, 4]> v`. Nested literals infer level by level:
 
 ```franko
-view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
+view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
 ```
 
-becomes `view<array<array<int32_t, 2>, 2>> m`. `?` may appear at any
+becomes `view<[[int32, 2], 2]> m`. `?` may appear at any
 level of the nest, including middle levels.
 
 Inference rules:
 
 - `?` is legal only in a local declaration-assignment statement
-  (`view<array<...>> name = literal;`) whose initializer is an array
-  literal (string literals are `view<array<byte, N>>` values and do not
+  (`view<[...]> name = literal;`) whose initializer is an array
+  literal (string literals are `view<[byte, N]>` values and do not
   participate);
 - the declared type must be a `view`: an array literal is a view value,
   so it never initializes an array declaration;
 - when `?` is used in any dimension, the whole array nest must be static
-  (no dynamic `array<T>` level anywhere);
+  (no dynamic `[T]` level anywhere);
 - when `?` is used in any dimension, the literal must fit exactly at
   every level: a shorter literal is an error (the literal's length is
   its type), and sibling lists at each level must have equal length
@@ -166,19 +166,19 @@ is rejected during desugaring. See [Arrays](20-arrays.md) and
 Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
 
 ```franko
-array<int32_t, 0x10> xs;   // size becomes 16
-int8_t g = 1 + 2;          // initializer becomes 3 (globals)
+[int32, 0x10] xs;   // size becomes 16
+int8 g = 1 + 2;          // initializer becomes 3 (globals)
 struct S {                 // field default becomes 8
-    int32_t n = 1 << 3
+    int32 n = 1 << 3
 }
 ```
 
-Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
+Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32` range, initializer fit) without folding anything again.
 
 Evaluation failures are desugaring diagnostics:
 
 ```franko
-array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
+[int32, 10 / 0] b;   // invalid: Division by zero in constant expression
 ```
 
 Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).

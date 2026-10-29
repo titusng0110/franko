@@ -2,7 +2,7 @@
 // `void` is not an ordinary value type, so `void x;` is an invalid variable
 // declaration (doc 30); the grammar's `type` rule does not even accept VOID.
 
-func main() -> int32_t {
+func main() -> int32 {
     void x;
     return 0;
 }

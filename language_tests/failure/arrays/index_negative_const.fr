@@ -1,7 +1,7 @@
 // Failure fixture: arrays/index_negative_const
 // Constant array index must be nonnegative.
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     xs.init(4);
     xs[-1] = 1;
     xs.uninit();

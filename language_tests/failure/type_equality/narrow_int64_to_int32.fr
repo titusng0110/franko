@@ -1,12 +1,12 @@
 // Failure fixture: type_equality/narrow_int64_to_int32
 // There are no implicit numeric conversions (doc 31.6): assigning a
-// nonconstant int64_t variable to int32_t is rejected. Narrow
-// explicitly with unsafe_cast<int32_t>(big), which throws at run time when
+// nonconstant int64 variable to int32 is rejected. Narrow
+// explicitly with unsafe_cast<int32>(big), which throws at run time when
 // the value does not fit.
 
-func main() -> int32_t {
-    int64_t big = 5;
-    int32_t small;
+func main() -> int32 {
+    int64 big = 5;
+    int32 small;
     small = big;
     return 0;
 }

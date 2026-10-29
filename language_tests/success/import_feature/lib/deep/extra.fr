@@ -7,8 +7,8 @@
 // Its symbols must be visible both in lib/util.fr and in the root
 // program that imported lib/util.
 
-func helper2() -> int32_t {
+func helper2() -> int32 {
     return 77
 }
 
-int32_t deepGlobal = 700
+int32 deepGlobal = 700

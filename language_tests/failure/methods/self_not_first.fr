@@ -1,11 +1,11 @@
 // Failure fixture: methods/self_not_first
 // `self` must be the first parameter (doc 26.2).
 struct X {
-    int32_t y = 0
-    func bad(int32_t v, ptr<X> self) -> void {
+    int32 y = 0
+    func bad(int32 v, ptr<X> self) -> void {
         return
     }
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

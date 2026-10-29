@@ -1,8 +1,8 @@
 // Failure fixture: loops/break_level_too_deep
 // The break level may not exceed the enclosing loop depth.
 
-func main() -> int32_t {
-    int32_t i = 0;
+func main() -> int32 {
+    int32 i = 0;
     while (i < 3) {
         i = i + 1;
     }

@@ -2,9 +2,9 @@
 // Ranged memcpy (doc 21.6): for static arrays the constant ranges are
 // checked against the static sizes at compile time; dstStart 3 with
 // count 2 overruns the 4-element destination.
-func main() -> int32_t {
-    array<int32_t, 4> a;
-    array<int32_t, 4> b;
+func main() -> int32 {
+    [int32, 4] a;
+    [int32, 4] b;
     a.memset(0);
     b.memset(0);
     a.memcpy(getptr(b), 3, 0, 2);

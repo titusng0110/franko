@@ -1,10 +1,10 @@
 // Failure fixture: init_lists/init_in_return
-// An int32_t return type is not an array view, so the literal has
+// An int32 return type is not an array view, so the literal has
 // nothing to infer its element type from.
-func f() -> int32_t {
+func f() -> int32 {
     return [1, 2, 3];
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

@@ -10,7 +10,7 @@
 // reach them as $(self).data.
 
 struct QuickSort {
-    array<int, 50> data
+    [int, 50] data
 
     func printArray(view<QuickSort> self, uint n) -> void {
         for (uint i = 0; i < n; i++) {
@@ -21,7 +21,7 @@ struct QuickSort {
     }
 
     func initData(mview<QuickSort> self) -> void {
-        array<int, 50> source
+        [int, 50] source
 
         source.memcpy([
             42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
@@ -65,8 +65,8 @@ struct QuickSort {
     }
 
     func quicksort(mview<QuickSort> self, uint n) -> void {
-        array<uint, 128> stackLow
-        array<uint, 128> stackHigh
+        [uint, 128] stackLow
+        [uint, 128] stackHigh
 
         uint top = 0
         uint low = 0

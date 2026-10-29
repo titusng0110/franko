@@ -1,7 +1,7 @@
 // Explicit cast cannot decay ownership either.
-func main() -> int32_t {
-    array<int32_t, 3> xs;
-    mview<array<int32_t, 3>> m = getmview(xs);
-    ptr<array<int32_t>> p = cast<ptr<array<int32_t>>>(m);
+func main() -> int32 {
+    [int32, 3] xs;
+    mview<[int32, 3]> m = getmview(xs);
+    ptr<[int32]> p = cast<ptr<[int32]>>(m);
     return 0;
 }

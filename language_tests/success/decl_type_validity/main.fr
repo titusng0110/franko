@@ -4,45 +4,45 @@
 // Covers: every valid declared variable type form from doc 30:
 // struct variable, dynamic array of struct, static array,
 // nested static arrays, ptr<T>, and
-// ptr<array<T>>. Each variable is assigned and read.
+// ptr<[T]>. Each variable is assigned and read.
 // ============================================================
 
 struct X {
-    int32_t n
-    int16_t m
+    int32 n
+    int16 m
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // Struct variable (all fields assignable -> struct is assignable).
     X s;
     s.n = 11;
     s.m = 22;
 
     // Dynamic array of a struct type.
-    array<X> xs;
+    [X] xs;
     xs.init_zero(3);
     xs[1].n = 33;
 
-    // Static array of uint8_t with size 64.
-    array<uint8_t, 64> bytes;
+    // Static array of uint8 with size 64.
+    [uint8, 64] bytes;
     bytes.memset(5);
     bytes[63] = 9;
 
-    // Nested static array: array<array<byte, 20>, 12>.
-    array<array<byte, 20>, 12> grid;
+    // Nested static array: [[byte, 20], 12].
+    [[byte, 20], 12] grid;
     grid.memset(1);
     grid[11][19] = 4;
 
     // Pointer of a primitive.
-    int32_t v = 77;
-    ptr<int32_t> p;
+    int32 v = 77;
+    ptr<int32> p;
     p = getptr(v);
     $(p) = 88;
 
     // Pointer of a dynamic array type.
-    array<int32_t> dyn;
+    [int32] dyn;
     dyn.init_zero(2);
-    ptr<array<int32_t>> ap;
+    ptr<[int32]> ap;
     ap = getptr(dyn);
     $(ap)[1] = 55;
 

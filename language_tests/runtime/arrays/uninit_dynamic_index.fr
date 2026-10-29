@@ -1,8 +1,8 @@
 // Runtime fixture: arrays/uninit_dynamic_index
 // Reading an uninitialized dynamic array aborts at runtime: dynamic
 // array initialization is not statically tracked (docs 20.7, 32.9).
-func main() -> int32_t {
-    array<int32_t> xs
+func main() -> int32 {
+    [int32] xs
     print(xs[0])
     return 0
 }

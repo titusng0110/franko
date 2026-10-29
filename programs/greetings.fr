@@ -17,25 +17,25 @@
 import "franko/os"
 
 func main() -> int {
-    // A string literal is a view<array<byte, N>> over a hoisted
+    // A string literal is a view<[byte, N]> over a hoisted
     // global; the write API needs dynamic arrays, so size them from
     // the literal's length() and memcpy the bytes over.
-    view<array<byte, 18>> promptT = "What's your name? ";
-    array<byte> prompt;
+    view<[byte, 18]> promptT = "What's your name? ";
+    [byte] prompt;
     prompt.init($(promptT).length());
     prompt.memcpy(promptT);
 
-    array<byte> name;
+    [byte] name;
     name.init(32);
     name.memset(0);
 
     if (os::IS_WINDOWS) {
-        uint64_t hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(hOut, getptr(prompt), cast<uint32_t>($(promptT).length()), null);
-        uint64_t hIn = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
+        uint64 hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+        os::win32::WriteFile(hOut, getptr(prompt), cast<uint32>($(promptT).length()), null);
+        uint64 hIn = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
         os::win32::ReadFile(hIn, getptr(name), 32, null);
     } else if (os::IS_LINUX || os::IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, getptr(prompt), cast<uint64_t>($(promptT).length()));
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(prompt), cast<uint64>($(promptT).length()));
         os::posix::read(os::posix::STDIN_FILENO, getptr(name), 32);
     }
 
@@ -55,8 +55,8 @@ func main() -> int {
     }
 
     // "Hello, " template plus up to 32 name bytes plus "~" (126).
-    view<array<byte, 7>> helloT = "Hello, ";
-    array<byte> out;
+    view<[byte, 7]> helloT = "Hello, ";
+    [byte] out;
     out.init($(helloT).length() + 32 + 1);
     out.memset(0);
     out.memcpy(helloT);
@@ -69,10 +69,10 @@ func main() -> int {
     out[greetingLen + len] = 126;
 
     if (os::IS_WINDOWS) {
-        uint64_t hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(hOut, getptr(out), cast<uint32_t>(greetingLen + len + 1), null);
+        uint64 hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+        os::win32::WriteFile(hOut, getptr(out), cast<uint32>(greetingLen + len + 1), null);
     } else if (os::IS_LINUX || os::IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64_t>(greetingLen + len + 1));
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(greetingLen + len + 1));
     }
 
     out.uninit();

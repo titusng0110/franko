@@ -1,10 +1,10 @@
 // Failure fixture: methods/unknown_method_call
 // Unknown methods are rejected (doc 26.3).
 struct X {
-    int32_t a
+    int32 a
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     X s;
     s.a = 1;
     s.foo();

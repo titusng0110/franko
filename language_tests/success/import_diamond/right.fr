@@ -2,8 +2,8 @@
 
 import "shared"
 
-int32_t rightBase = 3
+int32 rightBase = 3
 
-func rightValue() -> int32_t {
+func rightValue() -> int32 {
     return rightBase * sharedValue
 }

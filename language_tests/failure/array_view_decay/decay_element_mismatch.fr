@@ -1,9 +1,9 @@
 // The decay only erases the outermost dimension; the element type must
 // match exactly (the borrowed descriptor points at the same storage, so
 // element layouts have to be identical).
-func main() -> int32_t {
-    array<int32_t, 3> xs;
-    view<array<int32_t, 3>> v = getview(xs);
-    view<array<int64_t>> w = v;
+func main() -> int32 {
+    [int32, 3] xs;
+    view<[int32, 3]> v = getview(xs);
+    view<[int64]> w = v;
     return 0;
 }

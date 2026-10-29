@@ -16,9 +16,9 @@
 
 import "franko/os"
 
-func main() -> int32_t {
-    int32_t osSum = os::IS_LINUX + os::IS_WINDOWS + os::IS_MACOS;
-    int32_t archSum = os::IS_X86_64 + os::IS_ARM64;
+func main() -> int32 {
+    int32 osSum = os::IS_LINUX + os::IS_WINDOWS + os::IS_MACOS;
+    int32 archSum = os::IS_X86_64 + os::IS_ARM64;
     print(osSum);
     print(archSum);
     return 0;

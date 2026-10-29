@@ -1,6 +1,6 @@
 // Failure fixture: declarations/call_init_non_array
 // Call-init declaration sugar `T x(expr)` is only valid for dynamic arrays.
-func main() -> int32_t {
-    int32_t x(5)
+func main() -> int32 {
+    int32 x(5)
     return 0
 }

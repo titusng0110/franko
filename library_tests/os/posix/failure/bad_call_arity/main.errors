@@ -1,1 +1,1 @@
-No matching overload for function call 'os::posix::write(INT32, ptr<array<UINT8>>)'
+No matching overload for function call 'os::posix::write(int32, ptr<[uint8]>)'

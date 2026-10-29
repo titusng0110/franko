@@ -1,6 +1,6 @@
 // Failure fixture: methods/self_as_local_name
 // `self` cannot name a normal variable (doc 26.6).
-func main() -> int32_t {
-    int32_t self = 0
+func main() -> int32 {
+    int32 self = 0
     return 0
 }

@@ -1,8 +1,8 @@
 // Failure fixture: intrinsics/memset_count_negative
 // memset (doc 21.4): count must be a nonnegative constant fitting
-// uint32_t; a negative constant is rejected.
-func main() -> int32_t {
-    array<int32_t, 4> xs;
+// uint32; a negative constant is rejected.
+func main() -> int32 {
+    [int32, 4] xs;
     xs.memset(0, 0, -2);
     return 0;
 }

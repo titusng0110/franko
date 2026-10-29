@@ -1,12 +1,12 @@
 // Failure fixture: type_equality/no_assign_widening
 // There are no implicit numeric conversions (doc 31.6): assigning a
-// nonconstant uint8_t variable to uint16_t is rejected even though
+// nonconstant uint8 variable to uint16 is rejected even though
 // the conversion is value-preserving. Convert explicitly with
-// cast<uint16_t>(a).
+// cast<uint16>(a).
 
-func main() -> int32_t {
-    uint8_t a = 200;
-    uint16_t b;
+func main() -> int32 {
+    uint8 a = 200;
+    uint16 b;
     b = a;
     return 0;
 }

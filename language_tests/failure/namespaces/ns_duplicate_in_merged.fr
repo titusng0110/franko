@@ -2,13 +2,13 @@
 // The same namespace declared twice merges into one namespace; duplicate
 // symbols inside the merged namespace are rejected like global duplicates.
 namespace m {
-    int32_t x = 1
+    int32 x = 1
 }
 
 namespace m {
-    int32_t x = 2
+    int32 x = 2
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

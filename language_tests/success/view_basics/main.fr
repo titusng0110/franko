@@ -9,26 +9,26 @@
 // failure/pointer_permissions.
 // ============================================================
 
-func takePtr(ptr<array<byte, 3>> p) -> void {
+func takePtr(ptr<[byte, 3]> p) -> void {
     $(p)[0] = 1;
 }
 
-func takeMView(mview<array<byte, 3>> m) -> void {
+func takeMView(mview<[byte, 3]> m) -> void {
     $(m)[1] = 2;
 }
 
-func takeView(view<array<byte, 3>> v) -> void {
+func takeView(view<[byte, 3]> v) -> void {
     print($(v)[2]);
 }
 
-func main() -> int32_t {
-    array<byte, 3> buf;
+func main() -> int32 {
+    [byte, 3] buf;
     buf.memset(0);
 
     // Creation intrinsics over storage-backed lvalues.
-    ptr<array<byte, 3>> p = getptr(buf);
-    mview<array<byte, 3>> m = getmview(buf);
-    view<array<byte, 3>> v = getview(buf);
+    ptr<[byte, 3]> p = getptr(buf);
+    mview<[byte, 3]> m = getmview(buf);
+    view<[byte, 3]> v = getview(buf);
 
     // Writes through ptr and mview, reads through view.
     $(p)[0] = 5;
@@ -37,9 +37,9 @@ func main() -> int32_t {
     print($(v)[1]);
 
     // Implicit downgrades on assignment.
-    mview<array<byte, 3>> down1 = p;
-    view<array<byte, 3>> down2 = p;
-    view<array<byte, 3>> down3 = m;
+    mview<[byte, 3]> down1 = p;
+    view<[byte, 3]> down2 = p;
+    view<[byte, 3]> down3 = m;
     print($(down1)[0]);
     print($(down2)[1]);
     print($(down3)[2]);
@@ -55,9 +55,9 @@ func main() -> int32_t {
     print($(v)[1]);
 
     // Explicit permission downgrades via cast<T>.
-    view<array<byte, 3>> explicit1 = cast<view<array<byte, 3>>>(p);
-    mview<array<byte, 3>> explicit2 = cast<mview<array<byte, 3>>>(p);
-    view<array<byte, 3>> explicit3 = cast<view<array<byte, 3>>>(m);
+    view<[byte, 3]> explicit1 = cast<view<[byte, 3]>>(p);
+    mview<[byte, 3]> explicit2 = cast<mview<[byte, 3]>>(p);
+    view<[byte, 3]> explicit3 = cast<view<[byte, 3]>>(m);
     print($(explicit1)[0]);
 
     // length() is a read: allowed through every permission.
@@ -66,7 +66,7 @@ func main() -> int32_t {
     print($(v).length());
 
     // Views are nullable.
-    view<array<byte, 3>> nothing = null;
+    view<[byte, 3]> nothing = null;
     print(nothing == null);
 
     // Reassigning a view variable is fine: the pointer variable itself

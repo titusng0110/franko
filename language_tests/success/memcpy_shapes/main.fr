@@ -8,46 +8,46 @@
 // copies an element range between different positions.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // dynamic <- dynamic: count is the smaller length.
-    array<int32_t> dd
+    [int32] dd
     dd.init_zero(4)
     dd[0] = 1
     dd[1] = 2
     dd[2] = 3
     dd[3] = 4
 
-    array<int32_t> dd2
+    [int32] dd2
     dd2.init_zero(2)
     dd2.memcpy(getptr(dd))
     print(dd2[0], dd2[1])
 
     // static <- static with different lengths.
-    array<int32_t, 5> s5
+    [int32, 5] s5
     s5.memset(0)
     s5[0] = 10
     s5[1] = 20
     s5[2] = 30
 
-    array<int32_t, 2> s2
+    [int32, 2] s2
     s2.memset(0)
     s2.memcpy(getptr(s5))
     print(s2[0], s2[1])
 
     // dynamic <- static.
-    array<int32_t> ds
+    [int32] ds
     ds.init_zero(3)
     ds.memcpy(getptr(s5))
     print(ds[0], ds[1], ds[2])
 
     // static <- dynamic.
-    array<int32_t, 3> sd
+    [int32, 3] sd
     sd.memset(0)
     sd.memcpy(getptr(dd))
     print(sd[0], sd[1], sd[2])
 
     // Ranged memcpy: dst[1..2] = src[2..3].
-    array<int32_t, 4> rd
+    [int32, 4] rd
     rd.memset(0)
     rd.memcpy(getptr(dd), 1, 2, 2)
     print(rd[0], rd[1], rd[2], rd[3])

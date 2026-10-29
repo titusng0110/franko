@@ -5,7 +5,7 @@ func voidF() -> void {
     return
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     print(voidF());
     return 0
 }

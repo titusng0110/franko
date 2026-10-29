@@ -1,15 +1,15 @@
 // Failure fixture: fluid_consts/overload_const_ambiguous
 // A folded constant argument that fits multiple overloads makes the call ambiguous.
-func f(int32_t a) -> int32_t {
+func f(int32 a) -> int32 {
     return a;
 }
 
-func f(int64_t b) -> int32_t {
+func f(int64 b) -> int32 {
     return b + 1;
 }
 
-func main() -> int32_t {
-    int32_t r = f(10);
+func main() -> int32 {
+    int32 r = f(10);
 
     print(r)
 

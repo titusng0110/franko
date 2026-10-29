@@ -2,8 +2,8 @@
 // Only struct methods and built-in array intrinsics use member-call syntax;
 // `x.print()` is rejected because print is a statement keyword (doc 31.2).
 
-func main() -> int32_t {
-    int32_t x = 1;
+func main() -> int32 {
+    int32 x = 1;
     x.print();
     return 0;
 }

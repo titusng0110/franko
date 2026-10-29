@@ -2,14 +2,14 @@
 // A qualified name resolves strictly inside the named namespace path:
 // `a::w` does not find `w` declared in the nested namespace `a::b`.
 namespace a {
-    int32_t v = 1
+    int32 v = 1
 
     namespace b {
-        int32_t w = 2
+        int32 w = 2
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     print(a::w)
     return 0
 }

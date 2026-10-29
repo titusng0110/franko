@@ -3,11 +3,11 @@
 // the binary must exit non-zero.
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> msg;
+func main() -> int32 {
+    [byte] msg;
     msg.init(2);
     msg.memcpy("hi");
-    int64_t n = os::posix::write(1, getptr(msg), 99);
+    int64 n = os::posix::write(1, getptr(msg), 99);
     print(n);
     msg.uninit();
     return 0;

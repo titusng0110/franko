@@ -12,8 +12,8 @@
 // intrinsics with pointers.
 
 struct MergeSorter {
-    array<int, 50> a
-    array<int, 50> b
+    [int, 50] a
+    [int, 50] b
 
     func printArray(view<MergeSorter> self, uint n) -> void {
         for (uint i = 0; i < n; i++) {

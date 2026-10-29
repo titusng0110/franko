@@ -2,9 +2,9 @@
 // Compound assignment applies the base operator's operand rules (docs
 // 14, 17.3): with two nonconstant operands, both sides must have exactly
 // the same integer type.
-func main() -> int32_t {
-    int32_t x = 1;
-    int64_t y = 2;
+func main() -> int32 {
+    int32 x = 1;
+    int64 y = 2;
 
     x += y;
     x -= y;

@@ -1,7 +1,7 @@
 // Failure fixture: intrinsics/memmove_wrong_arity
 // memmove takes exactly three arguments.
-func main() -> int32_t {
-    array<int32_t, 4> xs;
+func main() -> int32 {
+    [int32, 4] xs;
     xs.memmove(0, 1);
     return 0;
 }

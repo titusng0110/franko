@@ -6,14 +6,14 @@
 // ============================================================
 
 struct Conf {
-    int32_t w = 640
-    int32_t h = 480
-    int64_t label
+    int32 w = 640
+    int32 h = 480
+    int64 label
 }
 
 Conf g;
 
-func main() -> int32_t {
+func main() -> int32 {
     // Fields with defaults print their defaults.
     print(g.w, g.h);
 

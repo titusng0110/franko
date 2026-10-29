@@ -8,42 +8,42 @@
 //   - a null state also propagates through copies
 // ============================================================
 
-func main() -> int32_t {
-    int32_t x = 0
+func main() -> int32 {
+    int32 x = 0
 
     // getptr certifies p as pointing, so deref is valid.
-    ptr<int32_t> p
+    ptr<int32> p
     p = getptr(x)
     $(p) = 5
     print($(p))
 
     // The certification propagates through a copy.
-    ptr<int32_t> q
+    ptr<int32> q
     q = p
     $(q) = 6
     print($(q))
     print(x)
 
     // ... and transitively through a copy of the copy.
-    ptr<int32_t> r
+    ptr<int32> r
     r = q
     $(r) = 7
     print($(r))
 
     // Declaration-initializer copies carry the state as well.
-    ptr<int32_t> s = r
+    ptr<int32> s = r
     $(s) = 8
     print($(s))
     print(x)
 
     // A null state propagates through copies too: b is null, and the
     // copies of b are null as well (no dereference of them).
-    ptr<int32_t> b
+    ptr<int32> b
     b = null
-    ptr<int32_t> c
+    ptr<int32> c
     c = b
     print(c == null)
-    ptr<int32_t> d = c
+    ptr<int32> d = c
     print(d == null)
 
     return 0

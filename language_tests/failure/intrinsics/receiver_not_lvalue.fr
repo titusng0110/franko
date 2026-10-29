@@ -1,7 +1,7 @@
 // Failure fixture: intrinsics/receiver_not_lvalue
 // The receiver of an array intrinsic must be a storage-backed array lvalue.
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     getptr(xs).init(4);
     xs.uninit();
     return 0;

@@ -1,7 +1,7 @@
 // Failure fixture: ptr_compare_null/order_null
 // Null may be compared with an pointer using equality only.
-func main() -> int32_t {
-    ptr<int32_t> p3
+func main() -> int32 {
+    ptr<int32> p3
 
     print(p3 < null)
 

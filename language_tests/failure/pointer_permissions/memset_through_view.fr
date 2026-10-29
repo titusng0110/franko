@@ -1,8 +1,8 @@
 // Mutating intrinsics are blocked on view<T> receivers.
-func main() -> int32_t {
-    array<byte, 3> buf;
+func main() -> int32 {
+    [byte, 3] buf;
     buf.memset(0);
-    view<array<byte, 3>> v = getview(buf);
+    view<[byte, 3]> v = getview(buf);
     $(v).memset(1);
     return 0;
 }

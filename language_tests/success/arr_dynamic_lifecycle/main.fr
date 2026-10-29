@@ -5,8 +5,8 @@
 // resize to a larger size (old and new positions), and uninit.
 // ============================================================
 
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     xs.init(4);
     xs[0] = 10;
     xs[1] = 11;
@@ -14,7 +14,7 @@ func main() -> int32_t {
     xs[3] = 13;
 
     // init_zero allocates zeroed element storage
-    array<int32_t> zs;
+    [int32] zs;
     zs.init_zero(3);
     print(zs[0], zs[1], zs[2]);
 

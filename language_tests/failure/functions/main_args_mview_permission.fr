@@ -1,6 +1,6 @@
 // Failure fixture: functions/main_args_mview_permission
-// The raw-args entry point takes view<array<array<byte>>> args; an
+// The raw-args entry point takes view<[[byte]]> args; an
 // mview receiver is not a valid entry point either.
-func main(mview<array<array<byte>>> args) -> int32_t {
+func main(mview<[[byte]]> args) -> int32 {
     return 0
 }

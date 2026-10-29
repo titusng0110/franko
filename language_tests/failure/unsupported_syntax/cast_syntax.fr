@@ -1,12 +1,12 @@
 // Failure fixture: unsupported_syntax/cast_syntax
-// C-style cast syntax `(int32_t)x` does not exist in the grammar.
+// C-style cast syntax `(int32)x` does not exist in the grammar.
 // Explicit conversions use the cast<T>(expr) intrinsic (doc 17);
 // fluid integer constants still convert implicitly when they fit
 // (doc 31.17).
 
-func main() -> int32_t {
-    int32_t x = 65;
-    int32_t y = (int32_t)x;
+func main() -> int32 {
+    int32 x = 65;
+    int32 y = (int32)x;
     print(y);
     return 0;
 }

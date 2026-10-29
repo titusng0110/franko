@@ -3,16 +3,16 @@
 // ============================================================
 // Covers: decimal, hexadecimal (0xFF and 0XFF), and binary
 // (0b1010 and 0B1010) literal forms, plus the maximum
-// uint64_t literal.
+// uint64 literal.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t dec = 123;
-    int32_t hexLower = 0xFF;
-    int32_t hexUpperPrefix = 0XFF;
-    int32_t binLower = 0b1010;
-    int32_t binUpper = 0B1010;
-    uint64_t maxU64 = 18446744073709551615;
+func main() -> int32 {
+    int32 dec = 123;
+    int32 hexLower = 0xFF;
+    int32 hexUpperPrefix = 0XFF;
+    int32 binLower = 0b1010;
+    int32 binUpper = 0B1010;
+    uint64 maxU64 = 18446744073709551615;
 
     print(dec);
     print(hexLower);

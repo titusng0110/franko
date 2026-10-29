@@ -1,10 +1,10 @@
 // uninit() through an inner nested array still needs allocation
 // rights: mview restrictions propagate to the end of the region.
-func main() -> int32_t {
-    array<array<byte>> d;
+func main() -> int32 {
+    [[byte]] d;
     d.init(1);
     d[0].init(2);
-    mview<array<array<byte>>> m = getmview(d);
+    mview<[[byte]]> m = getmview(d);
     $(m)[0].uninit();
     return 0;
 }

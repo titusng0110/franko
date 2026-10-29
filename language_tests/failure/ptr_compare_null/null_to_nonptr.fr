@@ -1,7 +1,7 @@
 // Failure fixture: ptr_compare_null/null_to_nonptr
 // Null is valid only where an pointer is expected.
-func main() -> int32_t {
-    int32_t x6 = null
+func main() -> int32 {
+    int32 x6 = null
 
     return 0
 }

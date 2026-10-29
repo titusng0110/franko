@@ -21,5 +21,5 @@ int main(int argc, char** argv)
         }
     }
 
-    return FUNC_main_HASH_db73581e(&frankoArgs);
+    return FUNC_main_HASH_747cdf98(&frankoArgs);
 }

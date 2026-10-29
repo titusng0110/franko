@@ -3,12 +3,12 @@
 // namespace; a `main` inside a nested namespace is a compile error.
 namespace a {
     namespace b {
-        func main() -> int32_t {
+        func main() -> int32 {
             return 0
         }
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 1
 }

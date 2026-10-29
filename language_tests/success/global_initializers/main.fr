@@ -5,11 +5,11 @@
 // that are folded at compile time (1 + 2 and 1 << 8).
 // ============================================================
 
-int32_t g = 1 + 2
+int32 g = 1 + 2
 
-uint64_t mask = 1 << 8
+uint64 mask = 1 << 8
 
-func main() -> int32_t {
+func main() -> int32 {
     print(g)
     print(mask)
     return 0

@@ -7,7 +7,7 @@
 Valid:
 
 ```franko
-int32_t x;
+int32 x;
 
 if (x) {
     print(x);
@@ -17,7 +17,7 @@ if (x) {
 Invalid:
 
 ```franko
-array<int32_t> arr;
+[int32] arr;
 
 if (arr) {
     print(1);
@@ -27,7 +27,7 @@ if (arr) {
 Invalid:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 
 if (p) {
     print(1);

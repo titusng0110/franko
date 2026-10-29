@@ -5,11 +5,11 @@
 // zero-initialized before main runs (primitives and static arrays).
 // ============================================================
 
-int32_t gz
+int32 gz
 
-array<int32_t, 4> garr
+[int32, 4] garr
 
-func main() -> int32_t {
+func main() -> int32 {
     print(gz)
     print(garr[0])
     print(garr[1])

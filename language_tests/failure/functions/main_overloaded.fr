@@ -2,10 +2,10 @@
 // The entry-point function `main` cannot be overloaded: the no-args and
 // args shapes cannot both be declared.
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }
 
-func main(view<array<array<byte>>> args) -> int32_t {
+func main(view<[[byte]]> args) -> int32 {
     return 0
 }

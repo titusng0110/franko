@@ -7,14 +7,14 @@
 // declared later in the source file.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     print(laterGlobal)
     print(laterFunc(2))
     return 0
 }
 
-int32_t laterGlobal = 41
+int32 laterGlobal = 41
 
-func laterFunc(int32_t v) -> int32_t {
+func laterFunc(int32 v) -> int32 {
     return v * 2
 }

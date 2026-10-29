@@ -1,11 +1,11 @@
 // Failure fixture: methods/self_as_field_name
 // `self` cannot name a struct field (doc 26.6).
 struct X {
-    int32_t self = 0
+    int32 self = 0
     func foo(ptr<X> self) -> void {
         return
     }
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

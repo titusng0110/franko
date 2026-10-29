@@ -1,14 +1,14 @@
 // Failure fixture: functions/wrong_arg_type
-// Nonconstant arguments must exactly match the parameter type: a uint8_t variable does not match an int32_t parameter.
+// Nonconstant arguments must exactly match the parameter type: a uint8 variable does not match an int32 parameter.
 
-func f(int32_t x) -> int32_t {
+func f(int32 x) -> int32 {
     return x;
 }
 
-func caller(uint8_t u) -> int32_t {
+func caller(uint8 u) -> int32 {
     return f(u);
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return caller(1);
 }

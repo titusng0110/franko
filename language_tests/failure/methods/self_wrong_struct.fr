@@ -1,17 +1,17 @@
 // Failure fixture: methods/self_wrong_struct
 // `self` must be ptr<X> for the enclosing struct X (doc 26.2).
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func bad(ptr<X> self) -> void {
         return
     }
 }
 struct Y {
-    int32_t z = 0
+    int32 z = 0
     func bad(ptr<X> self) -> void {
         return
     }
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

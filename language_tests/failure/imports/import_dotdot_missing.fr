@@ -4,6 +4,6 @@
 // exist, so the import fails to resolve (doc 02).
 import "../missing"
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

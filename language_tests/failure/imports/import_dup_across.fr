@@ -5,6 +5,6 @@
 import "lib/dup_a"
 import "lib/dup_b"
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

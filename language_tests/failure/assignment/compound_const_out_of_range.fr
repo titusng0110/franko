@@ -1,9 +1,9 @@
 // Failure fixture: assignment/compound_const_out_of_range
 // The right-hand side of a compound assignment is a fluid constant that
 // must fit the target's type (docs 09, 14).
-func main() -> int32_t {
-    uint8_t u = 0;
-    int32_t i = 0;
+func main() -> int32 {
+    uint8 u = 0;
+    int32 i = 0;
 
     u += 256;
     i *= 3000000000;

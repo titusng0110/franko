@@ -9,16 +9,16 @@
 // those pointers follows each pointer's own type).
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // Rule 2: a view of an array of pointers locks the slots, not
     // the pointees.
-    array<byte> a;
+    [byte] a;
     a.init(4);
-    array<ptr<array<byte>>> store;
+    [ptr<[byte]>] store;
     store.init(1);
     store[0] = getptr(a);
 
-    view<array<ptr<array<byte>>>> v = getview(store);
+    view<[ptr<[byte]>]> v = getview(store);
     $($(v)[0])[0] = 5;
     $($(v)[0]).uninit();
     $($(v)[0]).init(2);
@@ -26,26 +26,26 @@ func main() -> int32_t {
 
     // mview can overwrite the pointer slots; the extracted views stay
     // read-only (see failure/pointer_permissions/nested_inner_view_write).
-    array<byte> t;
+    [byte] t;
     t.init(3);
-    array<view<array<byte>>> slots;
+    [view<[byte]>] slots;
     slots.init(1);
-    mview<array<view<array<byte>>>> m = getmview(slots);
+    mview<[view<[byte]>]> m = getmview(slots);
     $(m)[0] = getview(t);
     print($(slots[0]).length());
 
     // Rule 1: transitive locking of value-typed nesting.
-    array<array<byte, 2>, 2> grid;
+    [[byte, 2], 2] grid;
     grid[0].memset(1);
     grid[1].memset(2);
-    view<array<array<byte, 2>, 2>> g = getview(grid);
+    view<[[byte, 2], 2]> g = getview(grid);
     print($(g)[0][0]);
     print($(g)[1][1]);
     print($(g).length());
     print($(g)[0].length());
 
     // mview of nested arrays: both levels mutable.
-    mview<array<array<byte, 2>, 2>> gm = getmview(grid);
+    mview<[[byte, 2], 2]> gm = getmview(grid);
     $(gm)[0][0] = 9;
     $(gm)[1][1] = 8;
     print(grid[0][0]);

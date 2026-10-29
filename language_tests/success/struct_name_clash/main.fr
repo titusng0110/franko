@@ -8,14 +8,14 @@
 // ============================================================
 
 struct Item {
-    int32_t id = 1
+    int32 id = 1
 }
 
-func Item() -> int32_t {
+func Item() -> int32 {
     return 100;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // Variable named 'Item' of struct type 'Item'.
     Item Item;
     Item.id = 5;

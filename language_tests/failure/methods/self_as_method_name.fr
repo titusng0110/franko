@@ -1,11 +1,11 @@
 // Failure fixture: methods/self_as_method_name
 // `self` cannot name a method (doc 26.6).
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func self(ptr<X> self) -> void {
         return
     }
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

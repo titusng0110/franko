@@ -11,19 +11,19 @@
 
 struct Outer {
     Inner inner
-    int32_t v
+    int32 v
     ptr<Later> link
 }
 
 struct Inner {
-    int32_t x = 1
+    int32 x = 1
 }
 
 struct Later {
-    int32_t tag = 7
+    int32 tag = 7
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Outer o
     o.v = 3
     o.inner.x = 5

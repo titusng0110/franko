@@ -1,9 +1,9 @@
 // Failure fixture: operators/shift_count_signed_nonconst
 // Nonconstant shift counts must have an unsigned integer type; a signed
-// int32_t shift count is rejected.
-func main() -> int32_t {
-    int32_t x = 1;
-    int32_t s = 2;
+// int32 shift count is rejected.
+func main() -> int32 {
+    int32 x = 1;
+    int32 s = 2;
     print(x << s);
     return 0
 }

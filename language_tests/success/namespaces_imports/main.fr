@@ -8,22 +8,22 @@
 
 // --- Namespace declaration ---
 namespace math {
-    int32_t scale = 10
+    int32 scale = 10
 
     struct Vec2 {
-        int32_t x
-        int32_t y
+        int32 x
+        int32 y
     }
 
-    func scaleUp(int32_t v) -> int32_t {
+    func scaleUp(int32 v) -> int32 {
         return v * scale
     }
 }
 
 // --- Global functions and variables ---
-int32_t globalOffset = 100;
+int32 globalOffset = 100;
 
-func main() -> int32_t {
+func main() -> int32 {
     // --- Print statements (dedicated statement, not a function) ---
     print(123);
     print(1, 2, 3);

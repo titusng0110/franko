@@ -1,7 +1,7 @@
 // Command-line arguments: args[0] is the program name, each argument
 // is its raw bytes with no NUL terminator.
 
-func main(view<array<array<byte>>> args) -> int {
+func main(view<[[byte]]> args) -> int {
     uint n = $(args).length()
     print(n - 1)
     uint i = 1

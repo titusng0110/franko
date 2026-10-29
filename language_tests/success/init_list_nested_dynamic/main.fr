@@ -7,8 +7,8 @@
 // uninit runs inner arrays first, then the outer array.
 // ============================================================
 
-func main() -> int32_t {
-    array<array<int32_t>> matrix;
+func main() -> int32 {
+    [[int32]] matrix;
 
     matrix(2);
     matrix[0](3);

@@ -1,6 +1,6 @@
 // Failure fixture: size_inference/question_no_init
 // A bare `?` declaration without an initializer cannot infer a size.
-func main() -> int32_t {
-    array<int32_t, ?> x;
+func main() -> int32 {
+    [int32, ?] x;
     return 0;
 }

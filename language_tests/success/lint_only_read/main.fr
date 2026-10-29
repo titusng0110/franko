@@ -6,15 +6,15 @@
 // build still succeeds and runs.
 // ============================================================
 
-func main() -> int32_t {
-    array<byte, 3> buf;
+func main() -> int32 {
+    [byte, 3] buf;
     buf.memset(9);
 
     // Only reads through the pointer.
-    ptr<array<byte, 3>> p = getptr(buf);
+    ptr<[byte, 3]> p = getptr(buf);
     print($(p)[1]);
 
-    mview<array<byte, 3>> m = getmview(buf);
+    mview<[byte, 3]> m = getmview(buf);
     print($(m)[2]);
 
     return 0;

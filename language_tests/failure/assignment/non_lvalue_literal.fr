@@ -2,7 +2,7 @@
 // The left-hand side of an assignment must be a storage-backed lvalue
 // (docs 14, 15): an integer literal is not storage-backed, so `5 = 1`
 // is rejected.
-func main() -> int32_t {
+func main() -> int32 {
     5 = 1
     return 0
 }

@@ -1,10 +1,10 @@
 // Failure fixture: strings/string_in_return
-// A string literal is a view<array<byte, N>> value; it cannot be
-// returned from a function with an int32_t return type.
-func f() -> int32_t {
+// A string literal is a view<[byte, N]> value; it cannot be
+// returned from a function with an int32 return type.
+func f() -> int32 {
     return "hi";
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

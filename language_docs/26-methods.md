@@ -4,7 +4,7 @@ A struct may declare methods: functions bound to the struct whose first paramete
 
 ```franko
 struct X {
-    int32_t y = 0
+    int32 y = 0
 
     func increment(ptr<X> self) -> void {
         $(self).y = $(self).y + 1
@@ -12,7 +12,7 @@ struct X {
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     X s
     s.y = 41
     s.increment()
@@ -27,7 +27,7 @@ A struct body contains field declarations and method declarations:
 
 ```franko
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func increment(ptr<X> self) -> void {
         $(self).y = $(self).y + 1
         return
@@ -54,11 +54,11 @@ receiver: an owning `self` may run lifecycle operations, a mutable
 
 ```franko
 struct X {
-    int32_t y = 0
-    func get(view<X> self) -> int32_t {
+    int32 y = 0
+    func get(view<X> self) -> int32 {
         return $(self).y
     }
-    func set(mview<X> self, int32_t v) -> void {
+    func set(mview<X> self, int32 v) -> void {
         $(self).y = v
     }
 }
@@ -68,7 +68,7 @@ Rules:
 
 - A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter (also allowed: 'mview<X> self', 'view<X> self')`.
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
-- A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
+- A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32 self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
 - Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
 - `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
@@ -121,12 +121,12 @@ Methods overload exactly like free functions: overload identity is name plus ord
 
 ```franko
 struct Counter {
-    int32_t n = 0
-    func add(ptr<Counter> self, int32_t v) -> void {
+    int32 n = 0
+    func add(ptr<Counter> self, int32 v) -> void {
         $(self).n = $(self).n + v
         return
     }
-    func add(ptr<Counter> self, int32_t a, int32_t b) -> void {
+    func add(ptr<Counter> self, int32 a, int32 b) -> void {
         $(self).n = $(self).n + a + b
         return
     }
@@ -144,7 +144,7 @@ Rules:
 `self` is a lexer keyword, reserved everywhere:
 
 ```franko
-int32_t self = 0          // invalid: parse error
+int32 self = 0          // invalid: parse error
 func self() -> void {}    // invalid: parse error
 struct self {}            // invalid: parse error
 ```
@@ -160,7 +160,7 @@ Rules:
 
 A method body scopes exactly like a free-function body, plus the `self` parameter:
 
-- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32_t y` inside `increment` is unrelated to `$(self).y`).
+- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32 y` inside `increment` is unrelated to `$(self).y`).
 - A method may call other methods on the same object only through an explicit receiver: `$(self).other()`.
 - `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](12-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).

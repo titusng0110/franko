@@ -9,19 +9,19 @@
 //   failure path: used() reports 0 on an uninitialized pool and
 //     after uninit
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::GenerationalNextAllocator a;
     print(a.used());
     print(a.init(4));
     print(a.used());
-    uint32_t i = a.new_index();
-    uint32_t j = a.new_index();
+    uint32 i = a.new_index();
+    uint32 j = a.new_index();
     print(a.used());
     print(a.free_index(i));
     print(a.used());

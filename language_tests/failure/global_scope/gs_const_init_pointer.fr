@@ -2,8 +2,8 @@
 // Only primitive globals accept a constant integer initializer;
 // pointer globals take null, getptr/getmview/getview over a global, or a
 // string literal instead.
-ptr<int32_t> G = 5;
+ptr<int32> G = 5;
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

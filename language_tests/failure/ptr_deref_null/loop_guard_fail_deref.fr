@@ -1,8 +1,8 @@
 // Failure fixture: ptr_deref_null/loop_guard_fail_deref
 // Dereferencing after a loop whose guard fails on exit.
-func main() -> int32_t {
-    int32_t x6 = 0
-    ptr<int32_t> p6
+func main() -> int32 {
+    int32 x6 = 0
+    ptr<int32> p6
 
     p6 = getptr(x6)
 

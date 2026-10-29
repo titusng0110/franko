@@ -1,8 +1,8 @@
 // Failure fixture: methods/self_as_param_name
 // Free functions may not use `self` as a parameter name (doc 26.6).
-func foo(int32_t self) -> void {
+func foo(int32 self) -> void {
     return
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

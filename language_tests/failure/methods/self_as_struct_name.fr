@@ -1,8 +1,8 @@
 // Failure fixture: methods/self_as_struct_name
 // `self` cannot name a struct (doc 26.6).
 struct self {
-    int32_t y = 0
+    int32 y = 0
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

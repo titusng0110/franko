@@ -19,13 +19,13 @@ A namespace groups struct, global variable, and function declarations under a qu
 ```franko
 namespace util {
     struct Point {
-        int32_t x = 1
-        int32_t y = 2
+        int32 x = 1
+        int32 y = 2
     }
 
-    int32_t offset = 100
+    int32 offset = 100
 
-    func doubleIt(int32_t v) -> int32_t {
+    func doubleIt(int32 v) -> int32 {
         return v + v + offset
     }
 }
@@ -37,14 +37,14 @@ Nested namespaces may be written in two equivalent forms:
 
 ```franko
 namespace a::b {
-    int32_t v = 1
+    int32 v = 1
 }
 ```
 
 ```franko
 namespace a {
     namespace b {
-        int32_t v = 1
+        int32 v = 1
     }
 }
 ```
@@ -78,11 +78,11 @@ The entry-point function `main` must be declared in the global namespace. A `mai
 `main` must be declared in one of two shapes, and it cannot be overloaded:
 
 ```franko
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }
 
-func main(view<array<array<byte>>> args) -> int32_t {
+func main(view<[[byte]]> args) -> int32 {
     return 0;
 }
 ```
@@ -115,13 +115,13 @@ Example:
 
 ```franko
 struct Point {
-    int32_t x
-    int32_t y = 0
+    int32 x
+    int32 y = 0
 }
 
-int32_t count = 0
+int32 count = 0
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }
 ```

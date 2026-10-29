@@ -1,12 +1,12 @@
 // Failure fixture: init_lists/init_in_call_arg
-// An array literal is a view value; it cannot initialize an int32_t
+// An array literal is a view value; it cannot initialize an int32
 // parameter, so there is no context to infer the element type from
 // and no matching overload.
-func f(int32_t x) -> void {
+func f(int32 x) -> void {
     print(x);
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     f([1, 2, 3]);
     return 0;
 }
