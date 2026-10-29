@@ -151,13 +151,20 @@ final class InactiveDeclarationPruner {
             changed = false;
 
             for (SemanticVarDeclNode global : globalVarDecls) {
-                if (global.staticInitializer == null
-                        || !keptVariables.contains(global.symbol)) {
+                if (!keptVariables.contains(global.symbol)) {
                     continue;
                 }
 
                 Set<VariableSymbol> refs = newSet();
-                collectExprVariables(global.staticInitializer, refs);
+
+                if (global.staticInitializer != null) {
+                    collectExprVariables(global.staticInitializer, refs);
+                }
+
+                if (global.symbol instanceof GlobalVariableSymbol header
+                        && header.literalHeaderData != null) {
+                    refs.add(header.literalHeaderData);
+                }
 
                 for (VariableSymbol ref : refs) {
                     if (keptVariables.add(ref)) {

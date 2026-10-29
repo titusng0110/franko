@@ -14,8 +14,7 @@ Franko supports the following statements inside function bodies and blocks:
 - `print`;
 - expression statements;
 - function call statements;
-- array intrinsic statement forms;
-- array initializer assignments.
+- array intrinsic statement forms.
 
 Executable statements are not allowed at global scope.
 
@@ -173,7 +172,7 @@ Current print limitation: only integer primitives and pointers are printable. Th
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
-Array initializer lists are not expressions and cannot be printed directly. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
+Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 

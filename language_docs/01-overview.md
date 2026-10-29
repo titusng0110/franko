@@ -37,7 +37,8 @@ Franko is a small statically typed language with:
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
   - `arr.length()`;
-- array initializer lists as array element assignment sugar;
+- array literals as `view<array<T, N>>` values over constant global
+  arrays (element type inferred, see [Array Literals](22-array-literals.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).
 

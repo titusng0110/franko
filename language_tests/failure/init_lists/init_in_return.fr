@@ -1,5 +1,6 @@
 // Failure fixture: init_lists/init_in_return
-// An array initializer list is not an expression, so it cannot be a return value.
+// An int32_t return type is not an array view, so the literal has
+// nothing to infer its element type from.
 func f() -> int32_t {
     return [1, 2, 3];
 }

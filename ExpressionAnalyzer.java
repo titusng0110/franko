@@ -48,7 +48,54 @@ public final class ExpressionAnalyzer {
         this.typeResolver = Objects.requireNonNull(typeResolver);
     }
 
+    private ArrayLiteralLowerer arrayLiteralLowerer = null;
+
+    public void setArrayLiteralLowerer(ArrayLiteralLowerer lowerer) {
+        this.arrayLiteralLowerer = Objects.requireNonNull(lowerer);
+    }
+
+    public SemanticExprNode analyzeExprWithExpectedType(
+            ASTNode node,
+            SemanticType expectedType
+    ) {
+        SemanticExprNode expr;
+
+        if (node instanceof ArrayLiteralNode lit) {
+            expr = lowerArrayLiteral(lit, expectedType);
+        } else {
+            expr = analyzeExpr(node);
+        }
+
+        if (arrayLiteralLowerer == null) {
+            return expr;
+        }
+
+        return arrayLiteralLowerer.resolveImmediateDecay(expr, expectedType);
+    }
+
+    private SemanticExprNode lowerArrayLiteral(
+            ArrayLiteralNode lit,
+            SemanticType expectedType
+    ) {
+        if (arrayLiteralLowerer == null) {
+            ctx.error("Internal compiler error: no array literal lowerer "
+                    + "wired into ExpressionAnalyzer");
+
+            return new SemanticIntLiteralNode(
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        return arrayLiteralLowerer.lower(lit, expectedType);
+    }
+
     public SemanticExprNode analyzeExpr(ASTNode node) {
+        if (node instanceof ArrayLiteralNode lit) {
+            return lowerArrayLiteral(lit, null);
+        }
+
         if (node instanceof IntNode n) {
             BigInteger val = constEval.parseIntegerLiteralSafe(n.value);
             return new SemanticIntLiteralNode(FALLBACK_TYPE, val, n.value);
@@ -233,8 +280,8 @@ public final class ExpressionAnalyzer {
             }
 
             if (n.unsafe
-                    && (!(targetType instanceof SemanticPrimitiveType unsafeTarget)
-                        || !(expr.type instanceof SemanticPrimitiveType unsafeSource))) {
+                    && (!(targetType instanceof SemanticPrimitiveType)
+                        || !(expr.type instanceof SemanticPrimitiveType))) {
                 ctx.error("Operand of 'unsafe_cast' must be an integer "
                         + "expression, got " + expr.type.describe());
 
@@ -265,12 +312,6 @@ public final class ExpressionAnalyzer {
                     null,
                     expr,
                     n.unsafe
-            );
-        }
-
-        if (node instanceof ArrayLiteralNode) {
-            throw new RuntimeException(
-                    "ArrayLiteralNode should not reach ExpressionAnalyzer. Desugarer bug."
             );
         }
 
@@ -447,6 +488,65 @@ public final class ExpressionAnalyzer {
         return new SemanticVarExprNode(sym.type, sym);
     }
 
+    private List<SymbolTable.CallArg> lowerCallArgs(List<ASTNode> rawArgs) {
+        List<SymbolTable.CallArg> out = new ArrayList<>();
+
+        for (ASTNode arg : rawArgs) {
+            if (arg instanceof ArrayLiteralNode lit) {
+                out.add(SymbolTable.CallArg.literal(lit));
+            } else {
+                out.add(SymbolTable.CallArg.lowered(analyzeExpr(arg)));
+            }
+        }
+
+        return out;
+    }
+
+    private List<SemanticExprNode> finalizeCallArgs(
+            List<SymbolTable.CallArg> callArgs,
+            List<SemanticType> parameterTypes
+    ) {
+        List<SemanticExprNode> out = new ArrayList<>();
+
+        for (int i = 0; i < callArgs.size(); i++) {
+            SymbolTable.CallArg callArg = callArgs.get(i);
+
+            if (!callArg.isLiteral()) {
+                SemanticType context = parameterTypes != null
+                        && i < parameterTypes.size()
+                        ? parameterTypes.get(i)
+                        : null;
+
+                out.add(arrayLiteralLowerer == null
+                        ? callArg.lowered
+                        : arrayLiteralLowerer.resolveImmediateDecay(
+                                callArg.lowered,
+                                context));
+
+                continue;
+            }
+
+            SemanticType context = parameterTypes != null
+                    && i < parameterTypes.size()
+                    ? parameterTypes.get(i)
+                    : null;
+
+            out.add(lowerArrayLiteral(callArg.literal, context));
+        }
+
+        return out;
+    }
+
+    private static List<SemanticType> callArgTypes(List<SemanticExprNode> args) {
+        List<SemanticType> out = new ArrayList<>();
+
+        for (SemanticExprNode arg : args) {
+            out.add(arg == null ? null : arg.type);
+        }
+
+        return out;
+    }
+
     private SemanticExprNode analyzeCallExpr(CallNode call) {
         if (arrayLowerer != null) {
             SemanticArrayIntrinsicCallNode intrinsic =
@@ -466,24 +566,32 @@ public final class ExpressionAnalyzer {
         }
 
         if (call.callee instanceof VarNode calleeVar) {
-            List<SemanticExprNode> args = new ArrayList<>();
-            List<SemanticType> argTypes = new ArrayList<>();
+            List<SymbolTable.CallArg> callArgs = lowerCallArgs(call.args);
 
-            for (ASTNode arg : call.args) {
-                SemanticExprNode loweredArg = analyzeExpr(arg);
-                args.add(loweredArg);
-                argTypes.add(loweredArg.type);
-            }
-
-            FunctionSymbol fn = ctx.resolveFunction(
+            FunctionSymbol fn = ctx.resolveFunctionWithLiterals(
                     calleeVar.name,
-                    args
+                    callArgs
             );
 
+            List<SemanticType> parameterTypes =
+                    fn == null ? null : fn.parameterTypes();
+
+            List<SemanticExprNode> args =
+                    finalizeCallArgs(callArgs, parameterTypes);
+
             if (fn == null) {
-                ctx.error("No matching overload for function call '"
-                        + formatCallSignature(calleeVar.name, argTypes)
-                        + "'");
+                FunctionSymbol legacy = ctx.resolveFunction(
+                        calleeVar.name,
+                        args
+                );
+
+                if (legacy == null) {
+                    ctx.error("No matching overload for function call '"
+                            + formatCallSignature(
+                                    calleeVar.name,
+                                    callArgTypes(args))
+                            + "'");
+                }
 
                 FunctionSymbol fallbackFn = new FunctionSymbol(
                         null,
@@ -508,14 +616,7 @@ public final class ExpressionAnalyzer {
         }
 
         if (call.callee instanceof QualifiedNameNode calleeQ) {
-            List<SemanticExprNode> args = new ArrayList<>();
-            List<SemanticType> argTypes = new ArrayList<>();
-
-            for (ASTNode arg : call.args) {
-                SemanticExprNode loweredArg = analyzeExpr(arg);
-                args.add(loweredArg);
-                argTypes.add(loweredArg.type);
-            }
+            List<SymbolTable.CallArg> callArgs = lowerCallArgs(call.args);
 
             List<String> namespaceSegments = calleeQ.segments.subList(
                     0, calleeQ.segments.size() - 1);
@@ -538,19 +639,32 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            FunctionSymbol fn = ctx.resolveFunctionIn(
+            FunctionSymbol fn = ctx.resolveFunctionInWithLiterals(
                     namespace,
                     calleeName,
-                    args
+                    callArgs
             );
 
+            List<SemanticType> parameterTypes =
+                    fn == null ? null : fn.parameterTypes();
+
+            List<SemanticExprNode> args =
+                    finalizeCallArgs(callArgs, parameterTypes);
+
             if (fn == null) {
-                ctx.error("No matching overload for function call '"
-                        + formatCallSignature(
-                                qualifiedCallee,
-                                argTypes
-                        )
-                        + "'");
+                FunctionSymbol legacy = ctx.resolveFunctionIn(
+                        namespace,
+                        calleeName,
+                        args
+                );
+
+                if (legacy == null) {
+                    ctx.error("No matching overload for function call '"
+                            + formatCallSignature(
+                                    qualifiedCallee,
+                                    callArgTypes(args))
+                            + "'");
+                }
 
                 FunctionSymbol fallbackFn = new FunctionSymbol(
                         namespace.name,
@@ -630,16 +744,40 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        List<SemanticExprNode> userArgs = new ArrayList<>();
-        List<SemanticType> userArgTypes = new ArrayList<>();
+        List<SymbolTable.CallArg> callArgs = lowerCallArgs(call.args);
 
-        for (ASTNode arg : call.args) {
-            SemanticExprNode loweredArg = analyzeExpr(arg);
-            userArgs.add(loweredArg);
-            userArgTypes.add(loweredArg.type);
+        MethodSymbol method = ctx.resolveMethodWithLiterals(owner, mac.memberName, callArgs);
+
+        List<SemanticType> userParameterTypes = null;
+
+        if (method != null) {
+            userParameterTypes = new ArrayList<>();
+
+            for (int i = 1; i < method.parameters.size(); i++) {
+                userParameterTypes.add(method.parameters.get(i).type);
+            }
         }
 
-        MethodSymbol method = ctx.resolveMethod(owner, mac.memberName, userArgs);
+        List<SemanticExprNode> userArgs =
+                finalizeCallArgs(callArgs, userParameterTypes);
+
+        if (method == null) {
+            List<SemanticType> userArgTypes = callArgTypes(userArgs);
+
+            MethodSymbol legacy = ctx.resolveMethod(
+                    owner,
+                    mac.memberName,
+                    userArgs
+            );
+
+            if (legacy == null) {
+                ctx.error("No matching overload for method call '"
+                        + owner.qualifiedName()
+                        + "."
+                        + formatCallSignature(mac.memberName, userArgTypes)
+                        + "'");
+            }
+        }
 
         SemanticType selfType = new SemanticPtrType(target.type);
 
@@ -656,12 +794,6 @@ public final class ExpressionAnalyzer {
         fullArgs.addAll(userArgs);
 
         if (method == null) {
-            ctx.error("No matching overload for method call '"
-                    + owner.qualifiedName()
-                    + "."
-                    + formatCallSignature(mac.memberName, userArgTypes)
-                    + "'");
-
             MethodSymbol fallbackFn = new MethodSymbol(
                     owner,
                     mac.memberName,

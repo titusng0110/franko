@@ -30,7 +30,7 @@ func main() -> int32_t {
     print(xs.length());
 
     array<int32_t, 3> ys;
-    ys = [10, 20, 30];
+    ys.memcpy([10, 20, 30]);
     print(ys.length());
     print(ys.length() + xs.length());
 
@@ -39,7 +39,7 @@ func main() -> int32_t {
     print(n);
 
     array<array<int32_t, 2>, 3> m;
-    m = [[1, 2], [3, 4], [5, 6]];
+    m.memcpy([[1, 2], [3, 4], [5, 6]]);
     print(m.length());
     print(m[0].length());
     print(m[2][1]);

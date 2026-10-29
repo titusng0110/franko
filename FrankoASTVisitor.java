@@ -314,6 +314,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.stringLiteral());
         }
 
+        if (ctx.arrayLiteral() != null) {
+            return visit(ctx.arrayLiteral());
+        }
+
         if (ctx.getPtrExpr() != null) {
             return visit(ctx.getPtrExpr());
         }
@@ -514,7 +518,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitAssignStmt(FrankoParser.AssignStmtContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        ASTNode value = visit(ctx.assignmentInitializer());
+        ASTNode value = visit(ctx.expr());
 
         return new AssignNode(target, value);
     }
@@ -538,21 +542,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode target = visit(ctx.lvalue());
 
         return new IncDecNode(ctx.PLUSPLUS() != null ? "++" : "--", target);
-    }
-
-    @Override
-    public ASTNode visitAssignmentInitializer(
-            FrankoParser.AssignmentInitializerContext ctx
-    ) {
-        if (ctx.arrayLiteral() != null) {
-            return visit(ctx.arrayLiteral());
-        }
-
-        if (ctx.expr() != null) {
-            return visit(ctx.expr());
-        }
-
-        throw new RuntimeException("Unknown assignmentInitializer: " + ctx.getText());
     }
 
     @Override
@@ -673,7 +662,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             FrankoParser.DeclAssignInitContext initCtx =
                 (FrankoParser.DeclAssignInitContext) ctx.declSuffix();
 
-            ASTNode init = visit(initCtx.declInitializer());
+            ASTNode init = visit(initCtx.expr());
 
             return new VarDeclInitNode(type, name, init);
         }
@@ -688,19 +677,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         throw new RuntimeException("Unknown declSuffix: " + ctx.declSuffix().getText());
-    }
-
-    @Override
-    public ASTNode visitDeclInitializer(FrankoParser.DeclInitializerContext ctx) {
-        if (ctx.arrayLiteral() != null) {
-            return visit(ctx.arrayLiteral());
-        }
-
-        if (ctx.expr() != null) {
-            return visit(ctx.expr());
-        }
-
-        throw new RuntimeException("Unknown declInitializer: " + ctx.getText());
     }
 
     @Override
@@ -932,6 +908,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.stringLiteral() != null) {
             return visit(ctx.stringLiteral());
+        }
+
+        if (ctx.arrayLiteral() != null) {
+            return visit(ctx.arrayLiteral());
         }
 
         if (ctx.nullLiteral() != null) {

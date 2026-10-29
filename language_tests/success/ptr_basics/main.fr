@@ -48,8 +48,8 @@ func main() -> int32_t {
     ptr<array<int32_t, 3>> sp
     sp = getptr(xs)
 
-    // Equivalent to $(sp)[0] = 1; $(sp)[1] = 2; $(sp)[2] = 3;
-    $(sp) = [1, 2, 3]
+    // Equivalent to copying [1, 2, 3] into the pointee array.
+    $(sp).memcpy([1, 2, 3])
     print($(sp)[0])
     print($(sp)[1])
     print($(sp)[2])

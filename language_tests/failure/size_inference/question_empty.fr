@@ -1,6 +1,6 @@
 // Failure fixture: size_inference/question_empty
 // A size cannot be inferred from an empty initializer list.
 func main() -> int32_t {
-    array<int32_t, ?> x = [];
+    view<array<int32_t, ?>> x = [];
     return 0;
 }

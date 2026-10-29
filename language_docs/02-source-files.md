@@ -30,7 +30,7 @@ func main() -> int32_t {
 }
 ```
 
-Newlines inside parentheses `(...)` and brackets `[...]` are ignored, so expressions, argument lists, and initializer lists may span multiple lines. Newlines inside braces `{...}` are not ignored: they remain statement separators.
+Newlines inside parentheses `(...)` and brackets `[...]` are ignored, so expressions, argument lists, and array literals may span multiple lines. Newlines inside braces `{...}` are not ignored: they remain statement separators.
 
 ## Comments
 

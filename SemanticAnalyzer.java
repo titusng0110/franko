@@ -24,6 +24,15 @@ public class SemanticAnalyzer {
 
     private int loopDepth = 0;
 
+    private final Map<String, GlobalVariableSymbol> hoistedArrayLiteralGlobals =
+            new LinkedHashMap<>();
+
+    private final Map<GlobalVariableSymbol, GlobalVariableSymbol> hoistedLiteralViewHeaders =
+            new IdentityHashMap<>();
+
+    private final List<SemanticVarDeclNode> pendingHoistedArrayLiterals =
+            new ArrayList<>();
+
     private TargetInfo target = null;
 
     public void setTarget(TargetInfo target) {
@@ -52,6 +61,25 @@ public class SemanticAnalyzer {
 
         this.exprAnalyzer.setArrayLowerer(arrayLowerer);
         this.exprAnalyzer.setTypeResolver(this::analyzeNormalType);
+
+        ArrayLiteralLowerer arrayLiteralLowerer =
+                new ArrayLiteralLowerer(symbolTable, exprAnalyzer);
+
+        arrayLiteralLowerer.setHoister(new ArrayLiteralLowerer.Hoister() {
+            @Override
+            public SemanticVarExprNode hoistArrayLiteral(
+                    SemanticStaticArrayType arrayType,
+                    List<BigInteger> values) {
+                return hoistArrayLiteralGlobal(arrayType, values);
+            }
+
+            @Override
+            public SemanticVarExprNode hoistLiteralViewHeader(
+                    GlobalVariableSymbol dataSymbol) {
+                return SemanticAnalyzer.this.hoistLiteralViewHeader(dataSymbol);
+            }
+        });
+        this.exprAnalyzer.setArrayLiteralLowerer(arrayLiteralLowerer);
     }
 
     public List<String> warnings() {
@@ -64,6 +92,9 @@ public class SemanticAnalyzer {
 
     public SemanticASTNode analyze(ASTNode root) {
         symbolTable.clear();
+        hoistedArrayLiteralGlobals.clear();
+        hoistedLiteralViewHeaders.clear();
+        pendingHoistedArrayLiterals.clear();
         symbolTable.pushScope();
         entryKind = EntryKind.NONE;
         globalMainCount = 0;
@@ -95,6 +126,9 @@ public class SemanticAnalyzer {
 
     public List<SemanticStmtNode> analyze(List<ASTNode> nodes) {
         symbolTable.clear();
+        hoistedArrayLiteralGlobals.clear();
+        hoistedLiteralViewHeaders.clear();
+        pendingHoistedArrayLiterals.clear();
         symbolTable.pushScope();
 
         List<SemanticStmtNode> out = new ArrayList<>();
@@ -119,6 +153,100 @@ public class SemanticAnalyzer {
         NamespaceProgramItems(NamespaceSymbol space) {
             this.space = space;
         }
+    }
+
+    SemanticVarExprNode hoistArrayLiteralGlobal(
+            SemanticStaticArrayType arrayType,
+            List<BigInteger> values
+    ) {
+        StringBuilder key = new StringBuilder(arrayType.mangleKey());
+        key.append('|');
+
+        for (BigInteger value : values) {
+            key.append(value.toString(10)).append(',');
+        }
+
+        String keyText = key.toString();
+
+        GlobalVariableSymbol existing =
+                hoistedArrayLiteralGlobals.get(keyText);
+
+        if (existing != null) {
+            return new SemanticVarExprNode(existing.type, existing);
+        }
+
+        String baseName = "_ARR_" + Mangler.hashHex(keyText);
+        String name = baseName;
+        int suffix = 0;
+
+        GlobalVariableSymbol sym;
+
+        while (true) {
+            GlobalVariableSymbol candidate =
+                    new GlobalVariableSymbol(null, name, arrayType);
+
+            if (symbolTable.declareGlobalNamespaceVariable(candidate)) {
+                sym = candidate;
+                break;
+            }
+
+            suffix++;
+            name = baseName + "_" + suffix;
+        }
+
+        sym.literalValues = List.copyOf(values);
+        hoistedArrayLiteralGlobals.put(keyText, sym);
+        pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(sym));
+
+        return new SemanticVarExprNode(sym.type, sym);
+    }
+
+    SemanticVarExprNode hoistLiteralViewHeader(GlobalVariableSymbol dataSymbol) {
+        GlobalVariableSymbol existing =
+                hoistedLiteralViewHeaders.get(dataSymbol);
+
+        if (existing != null) {
+            return new SemanticVarExprNode(existing.type, existing);
+        }
+
+        if (!(dataSymbol.type instanceof SemanticStaticArrayType staticArray)) {
+            symbolTable.error("Internal compiler error: literal view header "
+                    + "requires a static array global");
+            return new SemanticVarExprNode(
+                    new SemanticDynamicArrayType(FALLBACK_TYPE),
+                    new GlobalVariableSymbol(
+                            null,
+                            "<literal-header>",
+                            new SemanticDynamicArrayType(FALLBACK_TYPE)));
+        }
+
+        SemanticType headerType =
+                new SemanticDynamicArrayType(staticArray.elementType);
+
+        String baseName = dataSymbol.name + "_VIEW";
+        String name = baseName;
+        int suffix = 0;
+
+        GlobalVariableSymbol sym;
+
+        while (true) {
+            GlobalVariableSymbol candidate =
+                    new GlobalVariableSymbol(null, name, headerType);
+
+            if (symbolTable.declareGlobalNamespaceVariable(candidate)) {
+                sym = candidate;
+                break;
+            }
+
+            suffix++;
+            name = baseName + "_" + suffix;
+        }
+
+        sym.literalHeaderData = dataSymbol;
+        hoistedLiteralViewHeaders.put(dataSymbol, sym);
+        pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(sym));
+
+        return new SemanticVarExprNode(sym.type, sym);
     }
 
     private SemanticProgramNode analyzeProgram(ProgramNode program) {
@@ -156,6 +284,8 @@ public class SemanticAnalyzer {
         Map<GlobalVarDeclNode, BigInteger> globalInitializers =
                 new IdentityHashMap<>();
         Map<GlobalVarDeclNode, ASTNode> globalStaticInitializers =
+                new IdentityHashMap<>();
+        Map<GlobalVarDeclNode, ArrayLiteralNode> globalArrayLiteralInitializers =
                 new IdentityHashMap<>();
 
         Map<ASTNode, SemanticASTNode> loweredByNode = new IdentityHashMap<>();
@@ -282,7 +412,9 @@ public class SemanticAnalyzer {
                     continue;
                 }
 
-                if (n.constInitializer instanceof GetPtrNode) {
+                if (n.constInitializer instanceof ArrayLiteralNode arrayLiteral) {
+                    globalArrayLiteralInitializers.put(n, arrayLiteral);
+                } else if (n.constInitializer instanceof GetPtrNode) {
                     globalStaticInitializers.put(n, n.constInitializer);
                 } else if (n.constInitializer != null) {
                     globalInitializers.put(n, exprAnalyzer.preEvaluatedConstValue(
@@ -343,7 +475,19 @@ public class SemanticAnalyzer {
 
                         SemanticExprNode loweredStaticInit = staticInit == null
                                 ? null
-                                : exprAnalyzer.analyzeExpr(staticInit);
+                                : exprAnalyzer.analyzeExprWithExpectedType(
+                                        staticInit,
+                                        sym.type);
+
+                        ArrayLiteralNode arrayLiteralInit =
+                                globalArrayLiteralInitializers.get(n);
+
+                        if (arrayLiteralInit != null) {
+                            loweredStaticInit =
+                                    exprAnalyzer.analyzeExprWithExpectedType(
+                                            arrayLiteralInit,
+                                            sym.type);
+                        }
 
                         loweredByNode.put(item, new SemanticVarDeclNode(
                                 sym,
@@ -402,6 +546,10 @@ public class SemanticAnalyzer {
                         loweredItemsOf(space, loweredByNode)
                 ));
             }
+        }
+
+        for (int i = pendingHoistedArrayLiterals.size() - 1; i >= 0; i--) {
+            semanticItems.add(0, pendingHoistedArrayLiterals.get(i));
         }
 
         symbolTable.warnStructNameClashes();
@@ -892,7 +1040,9 @@ public class SemanticAnalyzer {
                     );
 
             SemanticExprNode value =
-                    exprAnalyzer.analyzeExpr(n.value);
+                    exprAnalyzer.analyzeExprWithExpectedType(
+                            n.value,
+                            target.type);
 
             return new SemanticAssignNode(n.op, target, value);
         }
@@ -1013,7 +1163,7 @@ public class SemanticAnalyzer {
                     new SemanticVarExprNode(sym.type, sym);
 
             SemanticExprNode value =
-                    exprAnalyzer.analyzeExpr(n.init);
+                    exprAnalyzer.analyzeExprWithExpectedType(n.init, type);
 
             stmts.add(new SemanticAssignNode(target, value));
         }
@@ -1024,7 +1174,11 @@ public class SemanticAnalyzer {
     private SemanticReturnNode analyzeReturnStmt(ReturnNode n) {
         SemanticExprNode value =
                 n.value != null
-                        ? exprAnalyzer.analyzeExpr(n.value)
+                        ? exprAnalyzer.analyzeExprWithExpectedType(
+                                n.value,
+                                currentFunction == null
+                                        ? null
+                                        : currentFunction.returnType())
                         : null;
 
         if (currentFunction == null) {

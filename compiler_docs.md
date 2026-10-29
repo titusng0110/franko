@@ -95,6 +95,8 @@ flowchart TD
     SemanticAnalyzer --> SymbolTable
     SemanticAnalyzer --> ExpressionAnalyzer
     ExpressionAnalyzer <--> ArrayLowerer
+    ExpressionAnalyzer <--> ArrayLiteralLowerer
+    ArrayLiteralLowerer --> SemanticAnalyzer
     ExpressionAnalyzer --> SymbolTable
     ExpressionAnalyzer --> ConstExpressionEvaluator
     ExpressionAnalyzer --> TypeChecker
@@ -143,9 +145,10 @@ flowchart TD
 | `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `PointerPermissionChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
 | `ImportResolver` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ASTNode` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
-| `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
+| `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ArrayLiteralLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
 | `ExpressionAnalyzer` | `SymbolTable`, `ConstExpressionEvaluator`, `ArrayLowerer` (mutually with), `TypeChecker` (static: `isValuePreservingIntegerWidening`) |
 | `ArrayLowerer` | `ExpressionAnalyzer`, `SymbolTable` |
+| `ArrayLiteralLowerer` | `ExpressionAnalyzer` (element lowering), `TypeChecker` (static `fitsBigIntegerToPrimitive`), `SemanticAnalyzer` (via `Hoister`) |
 | `ConstExpressionEvaluator` | `SymbolTable` (diagnostics only) |
 | `LegalityChecker` | `FunctionChecker`, `DeclarationChecker`, `StatementChecker`, `ExpressionChecker` |
 | `BranchPruner` | reads/writes `SemanticASTNode` trees only (called by `Main`); no other compiler classes |
@@ -200,8 +203,11 @@ forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
 by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening
 or pointer permission downgrade; the target is a full `type`) and
 `unsafe_cast<T>(expr)` (checked integer conversions; target restricted to
-`primitiveType` at parse time). Global initializers accept `constExpr`, a
-string literal, a `getptr`/`getmview`/`getview` over a global, or `null`.
+`primitiveType` at parse time). Array literals are ordinary `primary`
+expressions (an array literal is a `view<array<T, N>>` value, §4.13).
+Global initializers accept `constExpr`, a
+string literal, an array literal, a `getptr`/`getmview`/`getview` over a
+global, or `null`.
 Notable lexer details: `int/byte/uint` keyword aliases for the sized integer
 types, and a `groupingDepth` member on the lexer that suppresses NEWLINE
 tokens inside `(` and `[` (braces are deliberately excluded so newlines stay
@@ -237,11 +243,16 @@ expressions (`VarNode`, `IntNode`, `InferredSizeNode`, `ArrayLiteralNode`,
 `unsafe_cast`), `NullNode`). `GlobalVarDeclNode.literalBytes` is non-null
 only for string-literal globals hoisted by the Desugarer (§4.10): a
 literal-backed `array<byte, N>` whose value is the decoded UTF-8 payload.
+Array-literal globals hoisted during semantic analysis carry
+`GlobalVariableSymbol.literalValues` (row-major flat) instead (§4.13);
+nesting is derived from the declared static array shape.
 The field layout is the ABI between all phases.
 Lifecycle rules that used to live as comments here:
 - `ForNode`, `IncDecNode`, `VarDeclInitNode`, `VarDeclArrayInitNode`,
-  `ImportNode`, `ArrayLiteralNode` are **pre-desugaring sugar**: none may reach
-  `SemanticAnalyzer` (the Desugarer asserts this).
+  `ImportNode` are **pre-desugaring sugar**: none may reach
+  `SemanticAnalyzer` (the Desugarer asserts this). `ArrayLiteralNode` is
+  deliberately NOT sugar: it survives desugaring and is lowered during
+  semantic analysis (§4.13), where its element type is inferred.
 - `GlobalVarDeclNode` is deliberately distinct from `VarDeclNode` because the
   Desugarer keys top-level handling off node classes and global const
   initializers must never be rewritten into assignment statements.
@@ -274,15 +285,17 @@ with the file name.
 #### `Desugarer`
 The desugaring pass (after import resolution, before semantic analysis). Lowers
 syntactic sugar to a small core AST: declaration initializers → decl +
-assignment (or indexed assignments for array initializers), `x++/--` →
+assignment, `x++/--` →
 `x += 1`, `for` → block + `while` (update as while-epilogue so `continue` is
-C-like), `?` array sizes → concrete constants via the rectangle rule (array
+C-like), `?` array sizes in `view<array<...>>` declarations → concrete
+constants via the rectangle rule (array
 literals only), string literals → hoisted literal-backed globals plus a
 `getview(<global>)` expression of type `view<array<byte, N>>` (§4.10), and
 every `constExpr` slot → a canonical decimal `IntNode` via
-`ConstExpressionEvaluator`. Global initializers pass through the statically
-representable forms (`null`, `getptr`/`getmview`/`getview` over a global)
-and reject everything else. Error-recovery style: it accumulates diagnostics in
+`ConstExpressionEvaluator`. Array literals are passed through untouched
+(§4.13). Global initializers pass through the statically
+representable forms (`null`, `getptr`/`getmview`/`getview` over a global,
+an array literal) and reject everything else. Error-recovery style: it accumulates diagnostics in
 a `DiagnosticBag` (placeholder values on failure) and `Main` checks
 `hasErrors()`/`formatErrors()` right after the pass. Private control-flow
 signal: `InferenceFailure` (a `RuntimeException`) for `?`-size failures,
@@ -360,8 +373,14 @@ program template in `Main`, collects non-fatal `warnings()`, and owns the
 `exprAnalyzer.setArrayLowerer(...)` and `analyzeNormalType` is wired in as
 the cast-target type resolver via `exprAnalyzer.setTypeResolver(...)`).
 Globals additionally accept the statically representable initializers
-(`null`, `getptr`/`getmview`/`getview` over a global) and carry the UTF-8
-payload of hoisted string-literal globals on `GlobalVariableSymbol`.
+(`null`, `getptr`/`getmview`/`getview` over a global, a constant array
+literal) and carry the UTF-8
+payload of hoisted string-literal globals on `GlobalVariableSymbol`. It
+also owns array-literal hoisting (`hoistArrayLiteralGlobal`, wired into
+`ArrayLiteralLowerer` through the `Hoister` interface): each distinct
+(element type, values) pair becomes one `_ARR_<hash>` global registered in
+the global-namespace table (no namespace, so calls from any namespace see
+the same global) and prepended to the program items.
 The entry-point signature must remain exactly `view<array<array<byte>>>`
 (read-only) for the raw-args `main`; the template marshals argv behind a
 const pointer, so the program cannot mutate its arguments.
@@ -433,8 +452,9 @@ The symbol hierarchy and mangling policy:
   both a `view<X> self` and an `mview<X> self` method with otherwise
   identical signatures.
 - `GlobalVariableSymbol` — adds `compileTimeConstantValue` (os `IS_*`
-  folding) and `literalBytes` (the UTF-8 payload of a hoisted string-literal
-  global, §4.10).
+  folding), `literalBytes` (the UTF-8 payload of a hoisted string-literal
+  global, §4.10), and `literalValues` (the row-major folded element values
+  of a hoisted array-literal global, §4.13).
 - `FieldSymbol`, `StructSymbol` (ordered fields, per-name method overloads,
   field/method clash detection).
 - `NamespaceSymbol` — parent/children tree with per-namespace tables for
@@ -462,7 +482,12 @@ identity excludes `self`'s type: `resolveMethod` matches name + user
 arguments only, and the caller synthesizes the hidden `self` argument with
 `getptr`/`getmview`/`getview` matching the resolved method's declared self
 type (an under-privileged receiver then fails the ordinary creation-intrinsic
-permission rule); raw-decl→symbol registration maps;
+permission rule); `CallArg` (a lowered expression or a not-yet-lowered
+`ArrayLiteralNode`) so overload resolution can run before a literal
+argument's element type is inferred — a pending literal is applicable to
+a `view<array<...>>` parameter whose shape matches the literal's
+(`isArrayLiteralShapeApplicable`, exact length = exact match, dynamic =
+decay cost 2); raw-decl→symbol registration maps;
 name-clash warnings (struct names live in a separate namespace so clashing
 with variables/functions is legal — the C++ backend's kind prefixes
 `VAR_`/`FUNC_`/`STRUCT_` keep generated names unambiguous); and diagnostic
@@ -489,9 +514,12 @@ type); same-type casts are returned unchanged (no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
 resolver) and `unsafe_cast<T>()` always lowers as a checked cast; the
 legality checkers decide whether a `cast` is a permitted widening,
-permission downgrade, or array-view decay. Rejects leaked
-`ArrayLiteralNode` as a "Desugarer
-bug".
+permission downgrade, or array-view decay. Array literals are delegated
+to `ArrayLiteralLowerer` with an optional expected type (the inference
+context of §4.13: assignment target type, return type, or call parameter
+type); call arguments are lowered in two phases through
+`SymbolTable.CallArg` so a literal argument participates in overload
+resolution before its element type is known (§4.13).
 
 #### `ArrayLowerer`
 Frontend lowering of array-intrinsic call syntax to
@@ -505,7 +533,24 @@ intrinsic name; `shouldSuppressCallDiagnostic` avoids misleading "no matching
 overload" errors when fallthrough would be noise. The shorthand disambiguator
 "peeks" at member-call receivers before full callee analysis to avoid spurious
 errors alongside real method resolution. Mutually coupled with
-`ExpressionAnalyzer` (analyzes intrinsic arguments through it).
+`ExpressionAnalyzer` (analyzes intrinsic arguments through it). Passes the
+receiver's element type as the expected type of `memcpy` sources so an
+array literal argument infers its element type from the target.
+
+#### `ArrayLiteralLowerer`
+Lowers `ArrayLiteralNode` expressions during semantic analysis into
+`view<array<T, N>>` values (§4.13). The element type `T` comes from the
+context passed in by `ExpressionAnalyzer` (an assignment target, return
+type, or call parameter of array shape); sizes come from the literal
+itself. Elements must be compile-time constant expressions of integer
+type: every literal is hoisted to a literal-backed global
+(`GlobalVariableSymbol.literalValues`, deduplicated by element type +
+values, named `_ARR_<hash>`) and lowered to `getview(<global>)` — exactly
+like string literals. Non-constant elements, jagged nested rows, empty
+literals, and context-less literals are diagnostics; on failure it hoists
+a zero-filled fallback global so the rest of the pipeline still sees a
+well-typed view. The hoisting itself is delegated through the `Hoister`
+interface to `SemanticAnalyzer` (which owns global registration).
 
 ### 3.3 Legality checkers
 
@@ -577,8 +622,7 @@ void/array arguments), array intrinsic
 argument rules **and receiver permission rules** (lifecycle intrinsics
 `init`/`init_zero`/`resize`/`uninit` need an OWNER region;
 `memset`/`memcpy`/`memmove` targets need mutation rights; `length()` and
-reads are always fine), constant static-array index bounds
-(this is the rule rejecting over-long initializer lists), cast rules
+reads are always fine), constant static-array index bounds, cast rules
 (`cast` = value-preserving integer widening, pointer permission downgrade
 over an identical referenced type, or the static-to-dynamic array view
 decay — whose to-`ptr` form gets a dedicated "cannot decay ownership"
@@ -609,8 +653,9 @@ delegating wrappers over
 field graphs stay fine while by-value cycles terminate). `ensureAssignable`
 accepts the pointer conversions alongside exact matches and
 also special-cases array targets fed a pointer-to-array source: the error
-suggests `memcpy`, and names string literals explicitly only when the source
-is a hoisted literal view (`getview(<global>)` over a `literalBytes` global).
+suggests `memcpy`, and names string literals or array literals explicitly
+when the source is a hoisted literal view (`getview(<global>)` over a
+`literalBytes`/`literalValues` global).
 It does not traverse the AST.
 
 #### `PointerNullStateChecker`
@@ -848,18 +893,20 @@ silently skip unrecognizable characters, letting programs like `a % b` or
   and `break` skips it — exactly C-like semantics. Codegen places the continue
   label before the epilogue.
 - `x++`/`x--` → `x += 1`/`x -= 1`.
-- `T x = {a,b,c}` and `T x = [a,b,c]` → `x` decl plus `x[0]=a; x[1]=b; x[2]=c;`
-  (recursive for nested arrays; strings become UTF-8 byte assignments).
-- `array<T, ?>` size inference: initializer must be a perfect static rectangle
-  (no partial fill, no jagged); inference failure is an error, with size-1
+- `view<array<...>> x = [a,b,c]` is **not** rewritten: the array literal
+  reaches semantic analysis as an expression and is lowered to a hoisted
+  literal view (§4.13). Assigning a literal to an array is a checked error
+  that suggests `memcpy`.
+- `view<array<T, ?>>` size inference: the literal must be a perfect static
+  rectangle (no jagged); inference failure is an error, with size-1
   placeholder recovery.
 - Every `constExpr` slot (array sizes, global const initializers, field
   defaults, cast constants, break levels) is folded here to a canonical
   decimal `IntNode` — later phases see only integers.
 - String literals are hoisted to literal-backed globals and replaced with
-  `getview(<global>)` everywhere (§4.10). There is no array-initializer
-  sugar for strings: assigning a string to an array is a checked error that
-  suggests `memcpy`.
+  `getview(<global>)` everywhere (§4.10); array literals get the same
+  treatment during semantic analysis (§4.13). Assigning a literal to an
+  array is a checked error that suggests `memcpy`.
 
 ### 4.2 Fluid integer constants
 Integer literals and folded constant expressions are **fluid**: a constant is
@@ -1049,10 +1096,10 @@ a `const Franko_Static_Array<uint8_t, N> = {{…}}` (constant initialization),
 so declaration order and static-init order never matter.
 
 Consequences of strings being views:
-* `s = "text"` / `array<byte, N> s = "text"` / string elements of array
-  initializers targeting arrays are compile errors suggesting
+* `s = "text"` / `array<byte, N> s = "text"` are compile errors suggesting
   `dst.memcpy("text")` — the literal is a valid memcpy source;
-* `?` size inference accepts array literals only;
+* `?` size inference accepts array literals only (in `view` declarations,
+  §4.13);
 * pointer-typed globals may be initialized with `null` or a
   `getptr`/`getmview`/`getview` over a global, enabling
   `view<array<byte, 5>> G = "hello";`;
@@ -1188,6 +1235,70 @@ initialization within the same scope. Loops with no `break` or `continue`
 targeting them emit exactly the code they did before the feature existed:
 no labels, no `goto`, no extra blocks.
 
+## 4.13 Array literal values (ArrayLiteralLowerer)
+
+An array literal `[e1, …, en]` is **not** assignment sugar: it is a value
+of type `view<array<T, N>>` (N = literal length) over a hoisted,
+literal-backed global, exactly like a string literal (§4.10). Nested
+literals type bottom-up to `view<array<array<T, M>, N>>`; they are static
+at every level, so rows must be **perfectly rectangular**. `T` is an
+integer primitive.
+
+**Element type inference.** A literal carries no element type; `T` is
+taken from the context `ExpressionAnalyzer` passes down (the inference
+sites are exactly: assignment RHS — including declaration-initializer
+sugar and global initializers —, `return` expressions, and call arguments
+including `memcpy` sources, whose context is the receiver's element type
+inferred by `ArrayLowerer`). No context (bare statement, `print`,
+operator operand, `$` operand, …) is the "cannot infer" diagnostic. The
+context may also be an array type (so `arr = [1,2,3]` reports the
+memcpy-suggestion error with a well-typed literal) or a non-`view`
+pointer (the literal types, then the ordinary permission rules reject
+the upgrade). Lengths come from the literal itself and are checked by
+type equality or the outermost static→dynamic decay
+(`view<array<T,N>>` → `view<array<T>>`); the decay is one-way and
+outermost-only, which is how a parameter like
+`view<array<array<int32_t, 13>>>` enforces a maze row width.
+
+**Constant elements only.** Every element must be a compile-time constant
+expression (fluid-constant fit against `T` applies). Non-constant
+elements are rejected: a literal is hoisted to a `const` global, so it is
+always safe to return one or to return one from a recursive function —
+there is no statement-scoped storage and no dangling case. Hoisting is
+per (element type, row-major values) pair, so identical literals share
+one `_ARR_<hash>` global. C++ emission is a
+`const Franko_Static_Array<…> = {…}` with fully explicit nested braces
+(each level emits both the struct and the `data[]` braces; brace elision
+is not well-defined past two levels in C++14 aggregate initialization).
+
+**Immediate decay on literals.** When the conversion at an inference
+site is exactly the outermost static→dynamic decay
+(`view<array<T,N>>` → `view<array<T>>`) and the source is a
+literal-backed global (a string or array literal, i.e. the decay applies
+*immediately* on the literal in an assignment, call argument, return, or
+global initializer), no stack header is synthesized. Instead the literal's
+hoisting also hoists a constant dynamic-array header global
+(`Franko_Dynamic_Array<T> _ARR_<hash>_VIEW = {N, data->data, true}`,
+marked `GlobalVariableSymbol.literalHeaderData`, one header per data
+global) and the expression types as `view<array<T>>` pointing at it —
+so the semantics compile the type the literal already "knows" at hoist
+time rather than decaying a stack address. Returning or keeping such a
+view is therefore safe, including from recursive functions; the general
+decay caveat (§4.9, stack header must not outlive its scope) now applies
+only to decays of non-literal sources. `InactiveDeclarationPruner` keeps
+a referenced header's data global transitively; `emitDecayedViewTemp` is
+unchanged and still handles the non-literal case.
+
+**Overload resolution.** Call arguments lower in two phases
+(`SymbolTable.CallArg`): a pending literal matches any `view<array<...>>`
+parameter of compatible shape (exact length = exact match, dynamic outer
+= decay), and is re-lowered with the selected parameter type afterwards;
+if several overloads remain it is an ambiguity error.
+
+**Globals.** A pointer-typed global may be initialized with a constant
+array literal (`view<array<int32_t, 4>> G = [1,2,3,4];`); array-typed
+globals may not (memcpy suggestion, §4.10 parity).
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -1232,3 +1343,4 @@ uv run python library_tests/run_library_tests.py
 | Add an os FFI call | `import/franko/os.fr` + `os.ffi.cpp` block + `OsFfi` signatures |
 | Add/adjust a pointer permission rule | the region rule lives in `PointerPermissions`; enforce it in the relevant checker (`ExpressionChecker`/`StatementChecker`) and teach use-site attribution to `PointerPermissionChecker` (§4.9) |
 | Change how string literals are represented | `Desugarer` (hoisting, §4.10) + `StringLiteralDecoder` + `GlobalVariableSymbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
+| Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `GlobalVariableSymbol.literalValues` + `SymbolTable.CallArg`/`isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |

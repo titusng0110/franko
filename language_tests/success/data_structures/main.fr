@@ -16,7 +16,8 @@ array<byte, 12> grid;
 
 func main() -> int32_t {
     // --- Static Array declaration with array literal initializer ---
-    array<int32_t, 3> staticArr = [1, 2, 3];
+    array<int32_t, 3> staticArr;
+    staticArr.memcpy([1, 2, 3]);
 
     // --- Dynamic Array declaration ---
     array<int32_t> dynArr;
@@ -27,7 +28,7 @@ func main() -> int32_t {
 
     // --- Nested array literal ---
     array<array<int32_t, 2>, 2> matrix;
-    matrix = [[1, 2], [3, 4]];
+    matrix.memcpy([[1, 2], [3, 4]]);
 
     // --- Struct usage ---
     Config cfg;

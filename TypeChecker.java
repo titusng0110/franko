@@ -247,6 +247,11 @@ public class TypeChecker {
                             + expr.type.describe()
                             + " value and cannot be assigned to an array; copy "
                             + "the bytes with '<target>.memcpy(<source>)'");
+                } else if (isArrayLiteralView(expr)) {
+                    diagnostics.error(message + ": an array literal is a "
+                            + expr.type.describe()
+                            + " value and cannot be assigned to an array; copy "
+                            + "the elements with '<target>.memcpy(<source>)'");
                 } else {
                     diagnostics.error(message + ": "
                             + expr.type.describe()
@@ -332,6 +337,13 @@ public class TypeChecker {
                 && get.target instanceof SemanticVarExprNode var
                 && var.symbol instanceof GlobalVariableSymbol global
                 && global.literalBytes != null;
+    }
+
+    private static boolean isArrayLiteralView(SemanticExprNode expr) {
+        return expr instanceof SemanticGetPtrNode get
+                && get.target instanceof SemanticVarExprNode var
+                && var.symbol instanceof GlobalVariableSymbol global
+                && global.literalValues != null;
     }
 
     private void requireAssignableConstant(

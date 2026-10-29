@@ -140,7 +140,7 @@ int64_t y = 2;
 x += y;          // operands must have the same integer type
 ```
 
-The right-hand side may not be an array initializer list (`xs += [1, 2]` does not parse); initializer lists remain plain-`=` sugar only. See [Array Initializer Lists](22-array-initializer-lists.md).
+The right-hand side may not be an array literal (`xs += [1, 2]` is rejected: operands must be integers). See [Array Literals](22-array-literals.md).
 
 ## 14.6 Increment and Decrement
 

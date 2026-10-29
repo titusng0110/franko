@@ -22,7 +22,7 @@
 - [19. Statements](19-statements.md)
 - [20. Arrays](20-arrays.md)
 - [21. Array Intrinsics](21-array-intrinsics.md)
-- [22. Array Initializer Lists](22-array-initializer-lists.md)
+- [22. Array Literals](22-array-literals.md)
 - [23. String Literals](23-string-literals.md)
 - [24. Pointers](24-pointers.md)
 - [25. Structs](25-structs.md)

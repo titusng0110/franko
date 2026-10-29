@@ -5,7 +5,7 @@
 //
 // Demonstrates nested static arrays array<array<T, C>, R>,
 // structs with array fields, methods with explicit ptr<Maze> self
-// receivers, nested initializer lists, chained indexing grid[r][c],
+// receivers, nested array literals, chained indexing grid[r][c],
 // dynamic arrays with init_zero/uninit, getptr() and $(), and
 // parent-pointer path reconstruction.
 
@@ -18,7 +18,7 @@ struct Maze {
     array<array<uint, 13>, 12> parentC
 
     func initArrays(mview<Maze> self) -> void {
-        $(self).grid = [
+        $(self).grid.memcpy([
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1],
@@ -31,7 +31,7 @@ struct Maze {
             [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
             [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 3, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        ]
+        ])
 
         $(self).visited.memset(0)
         $(self).path.memset(0)

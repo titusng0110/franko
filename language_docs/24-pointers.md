@@ -136,7 +136,11 @@ pointer in Franko, a converted view must not outlive the scope it was
 created in — a view that escapes past it (returned, or stored into
 longer-lived storage) is the usual untracked dangling-pointer case of
 [Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations),
-exactly as if it had been created there with `getview`.
+exactly as if it had been created there with `getview`. Literals are the
+exception: when the decay applies directly to an array or string literal
+in one of those positions, the converted view is itself a hoisted constant
+global, so returning or keeping it is always safe (see
+[Array Literals](22-array-literals.md)).
 
 ## 24.5 Pointer Comparison
 

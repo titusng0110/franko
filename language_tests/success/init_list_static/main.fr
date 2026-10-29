@@ -1,24 +1,25 @@
 // ============================================================
-// LANGUAGE TEST: Initializer Lists on Static Arrays
+// LANGUAGE TEST: Array Literals with Static Array Targets
 // ============================================================
-// Covers: assignment-form initializer lists on static arrays
-// and partial assignment: a list shorter than the array leaves
-// unlisted elements untouched.
+// Covers: array literals cannot initialize or assign arrays
+// (they are view values); copy the elements with memcpy.
+// A shorter literal copies a prefix and leaves the rest untouched;
+// memcpy copies min(source, target).
 // ============================================================
 
 func main() -> int32_t {
-    // Full-length assignment form.
+    // Full-length copy form.
     array<int32_t, 3> a;
-    a = [10, 20, 30];
+    a.memcpy([10, 20, 30]);
 
     print(a[0]);
     print(a[1]);
     print(a[2]);
 
-    // Partial assignment: [7, 8] assigns only xs[0] and xs[1].
+    // Partial copy: [7, 8] copies a[0] and a[1].
     array<int32_t, 4> xs;
     xs.memset(0);
-    xs = [7, 8];
+    xs.memcpy([7, 8]);
 
     print(xs[0]);
     print(xs[1]);

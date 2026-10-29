@@ -1,5 +1,7 @@
 // Failure fixture: init_lists/init_in_call_arg
-// An array initializer list is not an expression, so it cannot be passed as a function call argument.
+// An array literal is a view value; it cannot initialize an int32_t
+// parameter, so there is no context to infer the element type from
+// and no matching overload.
 func f(int32_t x) -> void {
     print(x);
 }

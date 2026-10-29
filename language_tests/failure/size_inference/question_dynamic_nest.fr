@@ -1,6 +1,6 @@
 // Failure fixture: size_inference/question_dynamic_nest
 // `?` with a dynamic array level anywhere is rejected.
 func main() -> int32_t {
-    array<array<int32_t>, ?> x = [[1], [2]];
+    view<array<array<int32_t>, ?>> x = [[1], [2]];
     return 0;
 }

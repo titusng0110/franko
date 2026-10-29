@@ -251,6 +251,16 @@ public final class SymbolTable {
         return true;
     }
 
+    public boolean declareGlobalNamespaceVariable(VariableSymbol sym) {
+        if (globalVariables.containsKey(sym.name)) {
+            return false;
+        }
+
+        globalVariables.put(sym.name, sym);
+        globalNamespaceVariableNames.add(sym.name);
+        return true;
+    }
+
     public VariableSymbol resolve(String name) {
         for (Map<String, VariableSymbol> scope : scopes) {
             VariableSymbol sym = scope.get(name);
@@ -387,16 +397,70 @@ public final class SymbolTable {
             String name,
             List<SemanticExprNode> args
     ) {
+        return resolveMethodWithLiterals(owner, name, toCallArgs(args));
+    }
+
+    public MethodSymbol resolveMethodWithLiterals(
+            StructSymbol owner,
+            String name,
+            List<CallArg> userArgs
+    ) {
         List<MethodSymbol> overloads = owner.methods.get(name);
 
-        return resolveMethodFromOverloads(owner, name, overloads, args);
+        return resolveMethodFromOverloads(owner, name, overloads, userArgs);
+    }
+
+    static List<CallArg> toCallArgs(List<SemanticExprNode> args) {
+        List<CallArg> out = new ArrayList<>(args.size());
+
+        for (SemanticExprNode arg : args) {
+            out.add(CallArg.lowered(arg));
+        }
+
+        return out;
+    }
+
+    static final class CallArg {
+        final SemanticExprNode lowered;
+        final ArrayLiteralNode literal;
+
+        private CallArg(SemanticExprNode lowered, ArrayLiteralNode literal) {
+            this.lowered = lowered;
+            this.literal = literal;
+        }
+
+        static CallArg lowered(SemanticExprNode expr) {
+            return new CallArg(Objects.requireNonNull(expr), null);
+        }
+
+        static CallArg literal(ArrayLiteralNode literal) {
+            return new CallArg(null, Objects.requireNonNull(literal));
+        }
+
+        boolean isLiteral() {
+            return literal != null;
+        }
+
+        SemanticType type() {
+            return isLiteral() ? null : lowered.type;
+        }
+
+        String describeForSignature() {
+            if (isLiteral()) {
+                return "[array literal with "
+                        + literal.elements.size()
+                        + " element(s)]";
+            }
+
+            return lowered.type == null ? "<null>" : lowered.type.describe();
+        }
     }
 
     private MethodSymbol resolveMethodFromOverloads(
             StructSymbol owner,
             String name,
             List<MethodSymbol> overloads,
-            List<SemanticExprNode> userArgs
+            List<CallArg> userArgs
     ) {
         if (overloads == null || overloads.isEmpty()) {
             return null;
@@ -419,8 +483,8 @@ public final class SymbolTable {
             return matches.get(0);
         }
 
-        List<SemanticType> argTypes = userArgs.stream()
-                .map(arg -> arg == null ? null : arg.type)
+        List<String> argTypes = userArgs.stream()
+                .map(arg -> arg == null ? "<null>" : arg.describeForSignature())
                 .toList();
 
         if (matches.size() > 1) {
@@ -442,6 +506,13 @@ public final class SymbolTable {
             String name,
             List<SemanticExprNode> args
     ) {
+        return resolveFunctionWithLiterals(name, toCallArgs(args));
+    }
+
+    public FunctionSymbol resolveFunctionWithLiterals(
+            String name,
+            List<CallArg> args
+    ) {
         List<FunctionSymbol> overloads;
 
         if (currentNamespace != null
@@ -459,6 +530,14 @@ public final class SymbolTable {
             String name,
             List<SemanticExprNode> args
     ) {
+        return resolveFunctionInWithLiterals(namespace, name, toCallArgs(args));
+    }
+
+    public FunctionSymbol resolveFunctionInWithLiterals(
+            NamespaceSymbol namespace,
+            String name,
+            List<CallArg> args
+    ) {
         List<FunctionSymbol> overloads = namespace == null
                 ? functions.get(name)
                 : namespace.functions.get(name);
@@ -469,7 +548,7 @@ public final class SymbolTable {
     private FunctionSymbol resolveFromOverloads(
             String name,
             List<FunctionSymbol> overloads,
-            List<SemanticExprNode> args
+            List<CallArg> args
     ) {
         if (overloads == null || overloads.isEmpty()) {
             return null;
@@ -492,8 +571,8 @@ public final class SymbolTable {
             return matches.get(0);
         }
 
-        List<SemanticType> argTypes = args.stream()
-                .map(arg -> arg == null ? null : arg.type)
+        List<String> argTypes = args.stream()
+                .map(arg -> arg == null ? "<null>" : arg.describeForSignature())
                 .toList();
 
         if (matches.size() > 1) {
@@ -740,7 +819,7 @@ public final class SymbolTable {
 
     private static boolean isApplicableFunction(
             FunctionSymbol fn,
-            List<SemanticExprNode> args
+            List<CallArg> args
     ) {
         if (fn.arity() != args.size()) {
             return false;
@@ -750,7 +829,7 @@ public final class SymbolTable {
 
         for (int i = 0; i < args.size(); i++) {
             SemanticType parameterType = parameterTypes.get(i);
-            SemanticExprNode arg = args.get(i);
+            CallArg arg = args.get(i);
 
             if (!isArgumentApplicableToParameter(arg, parameterType)) {
                 return false;
@@ -762,7 +841,7 @@ public final class SymbolTable {
 
     private static boolean isApplicableMethod(
             MethodSymbol method,
-            List<SemanticExprNode> userArgs
+            List<CallArg> userArgs
     ) {
         if (method.parameters.size() != userArgs.size() + 1) {
             return false;
@@ -771,7 +850,7 @@ public final class SymbolTable {
         for (int i = 0; i < userArgs.size(); i++) {
             SemanticType parameterType =
                     method.parameters.get(i + 1).type;
-            SemanticExprNode arg = userArgs.get(i);
+            CallArg arg = userArgs.get(i);
 
             if (!isArgumentApplicableToParameter(arg, parameterType)) {
                 return false;
@@ -782,23 +861,34 @@ public final class SymbolTable {
     }
 
     private static int countPermissionDowngrades(
-            List<SemanticExprNode> args,
+            List<CallArg> args,
             List<SemanticType> parameterTypes
     ) {
         int count = 0;
 
         for (int i = 0; i < args.size(); i++) {
-            SemanticExprNode arg = args.get(i);
+            CallArg arg = args.get(i);
 
-            if (arg == null || arg.type == null) {
+            if (arg == null) {
                 continue;
             }
 
-            if (!sameType(arg.type, parameterTypes.get(i))
-                    && arg.type instanceof SemanticPtrType) {
+            SemanticType parameterType = parameterTypes.get(i);
+
+            if (arg.isLiteral()) {
+                count += arrayLiteralDowngradeCost(arg.literal, parameterType);
+                continue;
+            }
+
+            if (arg.lowered == null || arg.lowered.type == null) {
+                continue;
+            }
+
+            if (!sameType(arg.lowered.type, parameterType)
+                    && arg.lowered.type instanceof SemanticPtrType) {
                 count += PointerPermissions.isStaticArrayViewDecay(
-                        arg.type,
-                        parameterTypes.get(i))
+                        arg.lowered.type,
+                        parameterType)
                         ? 2
                         : 1;
             }
@@ -809,23 +899,32 @@ public final class SymbolTable {
 
     private static int countMethodPermissionDowngrades(
             MethodSymbol method,
-            List<SemanticExprNode> userArgs
+            List<CallArg> userArgs
     ) {
         int count = 0;
 
         for (int i = 0; i < userArgs.size(); i++) {
-            SemanticExprNode arg = userArgs.get(i);
+            CallArg arg = userArgs.get(i);
 
-            if (arg == null || arg.type == null) {
+            if (arg == null) {
                 continue;
             }
 
             SemanticType parameterType = method.parameters.get(i + 1).type;
 
-            if (!sameType(arg.type, parameterType)
-                    && arg.type instanceof SemanticPtrType) {
+            if (arg.isLiteral()) {
+                count += arrayLiteralDowngradeCost(arg.literal, parameterType);
+                continue;
+            }
+
+            if (arg.lowered == null || arg.lowered.type == null) {
+                continue;
+            }
+
+            if (!sameType(arg.lowered.type, parameterType)
+                    && arg.lowered.type instanceof SemanticPtrType) {
                 count += PointerPermissions.isStaticArrayViewDecay(
-                        arg.type,
+                        arg.lowered.type,
                         parameterType)
                         ? 2
                         : 1;
@@ -836,30 +935,145 @@ public final class SymbolTable {
     }
 
     private static boolean isArgumentApplicableToParameter(
-            SemanticExprNode arg,
+            CallArg arg,
             SemanticType parameterType
     ) {
-        if (arg == null || parameterType == null || arg.type == null) {
+        if (arg == null || parameterType == null) {
             return false;
         }
 
-        if (arg.type instanceof SemanticNullType) {
+        if (arg.isLiteral()) {
+            return isArrayLiteralShapeApplicable(arg.literal, parameterType);
+        }
+
+        if (arg.lowered == null || arg.lowered.type == null) {
+            return false;
+        }
+
+        SemanticExprNode lowered = arg.lowered;
+
+        if (lowered.type instanceof SemanticNullType) {
             return parameterType instanceof SemanticPtrType;
         }
 
-        if (arg.isConstant()
+        if (lowered.isConstant()
                 && parameterType instanceof SemanticPrimitiveType primitive) {
             return fitsBigIntegerToPrimitive(
-                    arg.constantValue,
+                    lowered.constantValue,
                     primitive.kind
             );
         }
 
-        if (sameType(arg.type, parameterType)) {
+        if (sameType(lowered.type, parameterType)) {
             return true;
         }
 
-        return PointerPermissions.isPointerConversion(arg.type, parameterType);
+        return PointerPermissions.isPointerConversion(lowered.type, parameterType);
+    }
+
+    static boolean isArrayLiteralShapeApplicable(
+            ArrayLiteralNode literal,
+            SemanticType parameterType
+    ) {
+        if (!(parameterType instanceof SemanticPtrType ptr)
+                || ptr.permission != PtrPermission.READ_ONLY) {
+            return false;
+        }
+
+        SemanticType referenced = ptr.referencedType;
+
+        if (!(referenced instanceof SemanticStaticArrayType)
+                && !(referenced instanceof SemanticDynamicArrayType)) {
+            return false;
+        }
+
+        return arrayLiteralRowsMatch(literal, referenced, true);
+    }
+
+    private static int arrayLiteralDowngradeCost(
+            ArrayLiteralNode literal,
+            SemanticType parameterType
+    ) {
+        if (!(parameterType instanceof SemanticPtrType ptr)
+                || ptr.permission != PtrPermission.READ_ONLY) {
+            return 0;
+        }
+
+        if (!(ptr.referencedType instanceof SemanticStaticArrayType)
+                && !(ptr.referencedType instanceof SemanticDynamicArrayType)) {
+            return 0;
+        }
+
+        if (!arrayLiteralRowsMatch(literal, ptr.referencedType, true)) {
+            return 0;
+        }
+
+        return ptr.referencedType instanceof SemanticDynamicArrayType ? 2 : 0;
+    }
+
+    private static boolean arrayLiteralRowsMatch(
+            ArrayLiteralNode literal,
+            SemanticType arrayType,
+            boolean outermost
+    ) {
+        if (literal == null || literal.elements.isEmpty()) {
+            return false;
+        }
+
+        SemanticType elementShape;
+
+        if (arrayType instanceof SemanticStaticArrayType staticArray) {
+            SemanticStaticArrayType probe = new SemanticStaticArrayType(
+                    staticArray.elementType,
+                    Integer.toString(literal.elements.size())
+            );
+
+            if (!probe.equals(staticArray)) {
+                return false;
+            }
+
+            elementShape = staticArray.elementType;
+        } else if (arrayType instanceof SemanticDynamicArrayType dynamicArray
+                && outermost) {
+            elementShape = dynamicArray.elementType;
+        } else {
+            return false;
+        }
+
+        boolean anyNested = false;
+        boolean anyScalar = false;
+
+        for (ASTNode element : literal.elements) {
+            if (element instanceof ArrayLiteralNode) {
+                anyNested = true;
+            } else {
+                anyScalar = true;
+            }
+        }
+
+        if (anyNested && anyScalar) {
+            return false;
+        }
+
+        if (anyNested) {
+            if (!(elementShape instanceof SemanticStaticArrayType)
+                    && !(elementShape instanceof SemanticDynamicArrayType)) {
+                return false;
+            }
+
+            for (ASTNode element : literal.elements) {
+                if (!arrayLiteralRowsMatch(
+                        (ArrayLiteralNode) element,
+                        elementShape,
+                        false)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return elementShape instanceof SemanticPrimitiveType;
     }
 
     static boolean isPermissionDowngrade(
@@ -920,7 +1134,7 @@ public final class SymbolTable {
 
     private static String formatCallSignature(
             String name,
-            List<SemanticType> argTypes
+            List<String> argTypes
     ) {
         StringBuilder sb = new StringBuilder();
 
@@ -931,8 +1145,8 @@ public final class SymbolTable {
                 sb.append(", ");
             }
 
-            SemanticType type = argTypes.get(i);
-            sb.append(type == null ? "<null>" : type.describe());
+            String type = argTypes.get(i);
+            sb.append(type == null ? "<null>" : type);
         }
 
         sb.append(")");

@@ -1,10 +1,8 @@
 // Runtime fixture: arrays/uninit_dynamic_index
-// A dynamic array declared with initializer-list sugar is not rejected at
-// compile time, but the generated indexed assignment accesses an
-// uninitialized dynamic array and aborts at runtime (docs 20.7, 22.3,
-// 22.5, 32.9).
+// Reading an uninitialized dynamic array aborts at runtime: dynamic
+// array initialization is not statically tracked (docs 20.7, 32.9).
 func main() -> int32_t {
-    array<int32_t> xs = [1, 2, 3]
+    array<int32_t> xs
     print(xs[0])
     return 0
 }

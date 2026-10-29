@@ -29,7 +29,7 @@ The cleaned section ordering is:
 19. Statements
 20. Arrays
 21. Array Intrinsics
-22. Array Initializer Lists
+22. Array Literals
 23. String Literals
 24. Pointers
 25. Structs

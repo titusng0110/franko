@@ -163,7 +163,7 @@ target.memcpy(source, dstStart, srcStart, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`; passing an array value directly is invalid;
+- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`, or an array literal (its element type is inferred from the target); passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;

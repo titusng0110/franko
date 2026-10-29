@@ -1,37 +1,44 @@
 // ============================================================
-// LANGUAGE TEST: Desugaring — Array Initializer Lists
+// LANGUAGE TEST: Array Literals Are view<array<T, N>> Values
 // ============================================================
-// Covers: 05-desugaring.md 5.3 and 21-array-initializer-lists.md.
-//   xs = [1, 2, 3];              lowers to xs[0] = 1; xs[1] = 2; xs[2] = 3;
-//   array<int32_t, 3> ys = [..]  is declaration sugar: declare, then assign
-//                                the initializer list.
-// Nested lists lower recursively to nested indexed assignments.
+// Covers: array literals as ordinary expressions. A literal has
+// type view<array<T, N>> (N is the literal length); the element
+// type T is inferred from an assignment, return, or call-argument
+// context. Literals decay to view<array<T>>; array-typed targets
+// are rejected (copy with memcpy instead).
 // ============================================================
+
+func take(view<array<int32_t>> v) -> int32_t {
+    return $(v)[0] + $(v)[2];
+}
+
+func mk() -> view<array<int32_t, 3>> {
+    return [10, 20, 30];
+}
 
 func main() -> int32_t {
-    // Assignment form.
-    array<int32_t, 3> xs;
-    xs = [1, 2, 3];
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    // Declaration and assignment form.
+    view<array<int32_t, 3>> v = [1, 2, 3];
+    print($(v)[0]);
+    print($(v)[2]);
 
-    // Declaration form.
-    array<int32_t, 3> ys = [4, 5, 6];
-    print(ys[0]);
-    print(ys[1]);
-    print(ys[2]);
+    v = [4, 5, 6];
+    print($(v)[1]);
 
-    // Nested initializer list lowers recursively.
-    array<array<int32_t, 2>, 2> matrix;
-    matrix = [
-        [1, 2],
-        [3, 4]
-    ];
-    print(matrix[0][0]);
-    print(matrix[0][1]);
-    print(matrix[1][0]);
-    print(matrix[1][1]);
+    // memcpy copies literal elements into an array.
+    array<int32_t, 3> buf;
+    buf.memcpy([7, 8, 9]);
+    print(buf[0]);
+    print(buf[2]);
+
+    // Call-argument and return contexts.
+    print(take([100, 200, 300]));
+    view<array<int32_t, 3>> w = mk();
+    print($(w)[2]);
+
+    // Decay to a dynamic view.
+    view<array<int32_t>> d = [1, 2, 3, 4];
+    print($(d)[3]);
 
     return 0;
 }

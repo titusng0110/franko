@@ -755,7 +755,9 @@ public class Cpp14Codegen {
         String qualifier = "";
 
         if (sym instanceof GlobalVariableSymbol global
-                && global.literalBytes != null) {
+                && (global.literalBytes != null
+                    || global.literalValues != null
+                    || global.literalHeaderData != null)) {
             qualifier = "const ";
         }
 
@@ -769,13 +771,33 @@ public class Cpp14Codegen {
         String name = emitSymbolName(sym);
 
         if (sym instanceof GlobalVariableSymbol global
-                && global.literalBytes != null) {
+                && (global.literalBytes != null
+                    || global.literalValues != null
+                    || global.literalHeaderData != null)) {
+            String initializer;
+
+            if (global.literalHeaderData != null) {
+                initializer = emitLiteralViewHeaderInitializer(global);
+            } else if (global.literalBytes != null) {
+                initializer =
+                        emitByteArrayInitializer(global.literalBytes);
+            } else if (sym.type instanceof SemanticStaticArrayType staticArray) {
+                initializer = emitStaticArrayLiteralInitializer(
+                        staticArray,
+                        global.literalValues);
+            } else {
+                throw new IllegalStateException(
+                        "Internal compiler error: array literal global '"
+                                + sym.qualifiedName()
+                                + "' does not have a static array type");
+            }
+
             emitLine("const "
                     + cppType
                     + " "
                     + name
                     + " = "
-                    + emitByteArrayInitializer(global.literalBytes)
+                    + initializer
                     + ";");
             return;
         }
@@ -811,6 +833,122 @@ public class Cpp14Codegen {
 
         flushPrelude();
         emitLine(cppType + " " + name + initializer + ";");
+    }
+
+    private String emitLiteralViewHeaderInitializer(
+            GlobalVariableSymbol global
+    ) {
+        if (!(global.type instanceof SemanticDynamicArrayType dynamicArray)) {
+            throw new IllegalStateException(
+                    "Internal compiler error: literal view header '"
+                            + global.qualifiedName()
+                            + "' does not have a dynamic array type");
+        }
+
+        GlobalVariableSymbol data = global.literalHeaderData;
+
+        if (!(data.type instanceof SemanticStaticArrayType staticArray)) {
+            throw new IllegalStateException(
+                    "Internal compiler error: literal view header '"
+                            + global.qualifiedName()
+                            + "' is not backed by a static array global");
+        }
+
+        return "{"
+                + staticArray.sizeLiteral
+                + ", const_cast<"
+                + emitType(dynamicArray.elementType)
+                + "*>("
+                + emitSymbolName(data)
+                + ".data), true}";
+    }
+
+    private String emitStaticArrayLiteralInitializer(
+            SemanticStaticArrayType type,
+            List<BigInteger> values
+    ) {
+        List<BigInteger> safeValues =
+                values == null ? List.of() : values;
+
+        int[] cursor = new int[]{0};
+
+        return emitStaticArrayLiteralValue(type, safeValues, cursor);
+    }
+
+    private String emitStaticArrayLiteralValue(
+            SemanticStaticArrayType type,
+            List<BigInteger> values,
+            int[] cursor
+    ) {
+        int size = parseStaticArraySize(type.sizeLiteral);
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("{");
+
+        if (type.elementType instanceof SemanticStaticArrayType rowType) {
+            sb.append("{");
+
+            for (int i = 0; i < size; i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+
+                sb.append(emitStaticArrayLiteralValue(
+                        rowType,
+                        values,
+                        cursor));
+            }
+
+            sb.append("}");
+        } else {
+            sb.append("{");
+
+            for (int i = 0; i < size; i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+
+                BigInteger value = cursor[0] < values.size()
+                        ? values.get(cursor[0]++)
+                        : BigInteger.ZERO;
+
+                sb.append(emitBigIntegerLiteral(value));
+            }
+
+            sb.append("}");
+        }
+
+        sb.append("}");
+
+        return sb.toString();
+    }
+
+    private static int parseStaticArraySize(String sizeLiteral) {
+        String text = sizeLiteral == null ? "" : sizeLiteral.trim();
+
+        try {
+            if (text.startsWith("+")) {
+                text = text.substring(1);
+            }
+
+            String lower = text.toLowerCase();
+
+            if (lower.startsWith("0b")) {
+                return new BigInteger(text.substring(2), 2).intValueExact();
+            }
+
+            if (lower.startsWith("0x")) {
+                return new BigInteger(text.substring(2), 16).intValueExact();
+            }
+
+            return new BigInteger(text, 10).intValueExact();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Internal compiler error: invalid static array size "
+                            + "literal for literal emission: "
+                            + sizeLiteral);
+        }
     }
 
     private String emitByteArrayInitializer(List<BigInteger> bytes) {
@@ -1154,6 +1292,7 @@ public class Cpp14Codegen {
         if (node instanceof SemanticGetPtrNode getPtr) {
             return emitGetPtr(getPtr);
         }
+
 
         if (node instanceof SemanticDerefNode deref) {
             return emitDeref(deref);

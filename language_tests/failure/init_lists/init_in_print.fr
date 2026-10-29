@@ -1,5 +1,6 @@
 // Failure fixture: init_lists/init_in_print
-// An array initializer list is not an expression, so it cannot be a print argument.
+// print arguments carry no inference context, so an array literal
+// cannot appear there.
 func main() -> int32_t {
     print([1, 2, 3]);
     return 0;

@@ -1,0 +1,13 @@
+// Failure fixture: init_lists/init_ambiguous_overload
+// The element type is inferred from the parameter type, so a
+// literal matching two overloads is ambiguous.
+func take(view<array<int32_t>> v) -> void {
+}
+
+func take(view<array<uint8_t>> v) -> void {
+}
+
+func main() -> int32_t {
+    take([1, 2]);
+    return 0;
+}

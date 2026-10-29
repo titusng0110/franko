@@ -1,0 +1,13 @@
+// Failure fixture: init_lists/init_nonconst_elements
+// Array literal elements must be compile-time constant expressions:
+// a literal is hoisted to a constant global array, like a string
+// literal, so runtime values cannot appear in one.
+func twice(int32_t n) -> int32_t {
+    return n * 2;
+}
+
+func main() -> int32_t {
+    int32_t v = 5;
+    view<array<int32_t, 3>> t = [v, v * 10 + 1, twice(v)];
+    return 0;
+}

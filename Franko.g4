@@ -202,6 +202,7 @@ structFieldDecl
 //   X globalStruct
 //   ptr<X> p = null
 //   view<array<byte, 5>> s = "hello"
+//   view<array<int32_t, 4>> v = [1, 2, 3, 4]
 //   ptr<array<byte, 5>> q = getptr(otherGlobal)
 //
 // Invalid:
@@ -211,7 +212,9 @@ structFieldDecl
 //
 // A pointer-typed global may also be initialized with a statically
 // representable address: getptr/getmview/getview over a global variable
-// (string literals desugar to getview over a hoisted global).
+// (string literals desugar to getview over a hoisted global), or an
+// array literal with only constant elements (lowered to getview over a
+// hoisted global).
 globalVarDecl
     : type IDENTIFIER globalVarInitializer?
     ;
@@ -223,6 +226,7 @@ globalVarInitializer
 globalVarInitValue
     : constExpr
     | stringLiteral
+    | arrayLiteral
     | getPtrExpr
     | getViewExpr
     | getMViewExpr
@@ -397,38 +401,30 @@ simpleStmt
 
 // ---------- VARIABLE DECLARATION ----------
 //
-// Declaration initializer syntax supports ordinary expression initializers
-// and array initializer-list syntax.
+// Declaration initializer syntax accepts an ordinary expression
+// initializer, including an array literal (which is a view value,
+// so the declared type must accept one: a view<array<...>> type).
 //
 // Examples:
 //   int32_t x = 1 + 2;
-//   array<int32_t, 3> xs = [1, 2, 3];
-//   array<int32_t> ys = [1, 2, 3];
-//   array<array<byte, 12>, 12> grid;
+//   view<array<int32_t, 3>> xs = [1, 2, 3];
+//   view<array<int32_t, ?>> ys = [1, 2, 3];
 //
 // Important:
-//   T x = [ ... ];
+//   T x = <expr>;
 //
 // is declaration sugar for:
 //
 //   T x;
-//   x = [ ... ];
-//
-// The initializer list itself does not allocate, resize, or initialize
-// dynamic array storage. It only lowers to indexed assignments.
+//   x = <expr>;
 //
 varDecl
     : type IDENTIFIER declSuffix?
     ;
 
 declSuffix
-    : ASSIGN declInitializer # DeclAssignInit
+    : ASSIGN expr # DeclAssignInit
     | LPAREN expr RPAREN     # DeclArrayInit
-    ;
-
-declInitializer
-    : arrayLiteral
-    | expr
     ;
 
 // ---------- RETURN ----------
@@ -443,22 +439,13 @@ returnStmt
 
 // ---------- ASSIGNMENT ----------
 //
-// Assignment supports ordinary expression assignment and array initializer-list
-// assignment.
+// Assignment assigns an ordinary expression to an lvalue target:
 //
-// Array initializer assignment:
+//   arr.memcpy([a, b, c]);
 //
-//   arr = [a, b, c];
-//
-// is not whole-array assignment. It is syntactic sugar for:
-//
-//   arr[0] = a;
-//   arr[1] = b;
-//   arr[2] = c;
-//
-// The initializer list does not allocate, resize, or initialize dynamic arrays.
-// Dynamic arrays must already be initialized before the generated indexed
-// assignments are valid.
+// Note: an array literal is a view<array<T, N>> value, so it cannot be
+// assigned to an array-typed target; copy the elements with memcpy
+// instead. See the array literal rule below.
 //
 // ---------- COMPOUND ASSIGNMENT ----------
 //
@@ -478,7 +465,7 @@ returnStmt
 // directly. `x++` and `x--` are equivalent to `x += 1` and `x -= 1`
 // (see incDecStmt and the Desugarer).
 assignStmt
-    : lvalue ASSIGN assignmentInitializer
+    : lvalue ASSIGN expr
     ;
 
 compoundAssignStmt
@@ -505,11 +492,6 @@ compoundAssignOp
 // these operators exist only as statements.
 incDecStmt
     : lvalue (PLUSPLUS | MINUSMINUS)
-    ;
-
-assignmentInitializer
-    : arrayLiteral
-    | expr
     ;
 
 // ---------- PRINT ----------
@@ -586,8 +568,10 @@ exprStmt
 //   unary (- !)
 //   postfix [] () .
 //
-// Array initializer lists are intentionally NOT expressions.
-// They are assignment/declaration initializer forms only.
+// Array literal element type inference needs an assignment, return,
+// or call-argument context, so a literal with no context (bare
+// statement, print argument, operator operand, ...) is rejected
+// during semantic analysis.
 
 expr
     : logicalOrExpr
@@ -652,8 +636,8 @@ unaryExpr
 //   $(p).memset(0)
 //   (foo(x)).bar(y)[z]
 //
-// Does NOT support direct postfixing of array initializer lists:
-//   [1,2,3][0]          invalid
+// Indexing a view is rejected (indexing needs an array):
+//   [1,2,3][0]          invalid; write $([1,2,3])[0]
 //   [[0,0],[1,1]][0][1] invalid
 postfixExpr
     : primary postfixSuffix*
@@ -662,6 +646,7 @@ postfixExpr
 primary
     : integerLiteral
     | stringLiteral
+    | arrayLiteral
     | nullLiteral
     | IDENTIFIER
     | SELF
@@ -848,60 +833,29 @@ constPrimary
     | LPAREN constExpr RPAREN
     ;
 
-// ---------- ARRAY INITIALIZER LISTS ----------
+// ---------- ARRAY LITERALS ----------
 //
-// Array initializer lists are not normal expressions.
+// Array literals are ordinary expressions: an array literal is a
+// view<array<T, N>> value where T is inferred from the context
+// (assignment, return, or call argument) and N is the literal length.
+// Nested literals are static at every level and therefore must be
+// perfectly rectangular.
 //
-// They may appear in assignment initializer contexts:
+// Element type inference needs a context, so a literal with no
+// context (bare statement, print argument, operator operand, ...)
+// is rejected during semantic analysis, as is assigning a literal
+// to an array-typed target (use memcpy instead).
 //
-//   xs = [1, 2, 3];
-//
-// and declaration initializer contexts:
-//
-//   array<int32_t, 3> xs = [1, 2, 3];
-//
-// Declaration form:
-//
-//   T x = [ ... ];
-//
-// first desugars to:
-//
-//   T x;
-//   x = [ ... ];
-//
-// Then:
-//
-//   x = [a, b, c];
-//
-// desugars to:
-//
-//   x[0] = a;
-//   x[1] = b;
-//   x[2] = c;
-//
-// Nested initializer lists recursively lower to indexed assignments:
-//
-//   matrix = [[1, 2], [3, 4]];
-//
-// becomes:
-//
-//   matrix[0][0] = 1;
-//   matrix[0][1] = 2;
-//   matrix[1][0] = 3;
-//   matrix[1][1] = 4;
+// Examples:
+//   view<array<int32_t, 3>> xs = [1, 2, 3];
+//   v = [1, 2, 3];
+//   take([1, 2, 3]);
+//   return [1, 2, 3];
 //
 // Scalar elements are ordinary expressions, not constExpr.
 //
-// Invalid expression examples:
-//   [1, 2, 3];
-//   print([1, 2, 3]);
-//   f([1, 2, 3]);
-//   [1, 2, 3][0];
-//
-// Also invalid as global or struct field initializers:
-//   int32_t g = [1, 2, 3]
-//   struct X { array<int32_t, 3> xs = [1, 2, 3] }
-//
+// Indexing a literal directly is rejected (it is a view, not an
+// array): `[1,2,3][0]` is invalid; write `$([1,2,3])[0]`.
 arrayLiteral
     : LBRACK arrayLiteralElements? RBRACK
     ;

@@ -1,0 +1,2 @@
+Cannot infer the element type of an array literal here
+No matching overload for function call 'f(view<array<INT32, 3>>)'

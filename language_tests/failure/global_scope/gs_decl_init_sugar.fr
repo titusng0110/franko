@@ -1,6 +1,7 @@
 // Failure fixture: global_scope/gs_decl_init_sugar
-// Declaration initializer sugar with an array initializer list desugars
-// into executable indexed assignments, which are not allowed at global scope.
+// An array literal is a view value and cannot initialize an array, at
+// global scope or anywhere else; only pointer-typed globals may be
+// initialized with an array literal.
 array<int32_t, 3> xs = [1, 2, 3];
 
 func main() -> int32_t {

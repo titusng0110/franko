@@ -1,0 +1,8 @@
+// Failure fixture: init_lists/init_string_elements
+// Array literals only support integer element types: string
+// literals are view<array<byte, M>> values and cannot be literal
+// elements.
+func main() -> int32_t {
+    view<array<int32_t, 2>> v = ["hi", "ok"];
+    return 0;
+}

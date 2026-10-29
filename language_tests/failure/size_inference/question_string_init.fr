@@ -3,6 +3,6 @@
 // literal is a view<array<byte, N>> value, so it carries no array
 // initializer list to infer from.
 func main() -> int32_t {
-    array<byte, ?> s = "hello";
+    view<array<byte, ?>> s = "hello";
     return 0;
 }

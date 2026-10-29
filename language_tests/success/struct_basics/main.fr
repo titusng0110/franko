@@ -23,7 +23,7 @@ func main() -> int32_t {
     Mixed m;
     m.a = 10;
     m.b = 20;
-    m.xs = [1, 2, 3, 4];
+    m.xs.memcpy([1, 2, 3, 4]);
 
     // 'tag' is never assigned, so its field default (3) is printed.
     print(m.a, m.b, m.tag);
