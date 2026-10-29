@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Structs Composed with Other Type Constructors
 // ============================================================
@@ -19,7 +21,7 @@ func main() -> int32 {
     dyn[0].x = 1;
     dyn[0].y = 2;
     dyn[1].x = 3;
-    print(dyn[0].x, dyn[0].y, dyn[1].x);
+    print(dyn[0].x, " "); print(dyn[0].y, " "); print(dyn[1].x);
 
     // Static array of structs.
     [Point, 4] grid;
@@ -39,7 +41,7 @@ func main() -> int32 {
     [[Point, 3], 2] cells;
     cells[1][2].x = 8;
     cells[1][2].y = 9;
-    print(cells[1][2].x, cells[1][2].y);
+    print(cells[1][2].x, " "); print(cells[1][2].y);
 
     dyn.uninit();
 

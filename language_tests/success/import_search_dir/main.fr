@@ -16,6 +16,10 @@
 import "shared"
 import "my-lib/mod a"
 import "local"
+// `franko/io` is imported via a file-relative path so this test's -p
+// override (which points at ./search) does not affect stdlib lookup;
+// io's own `./os` import then resolves relative to io.fr itself.
+import "../../../import/franko/io"
 
 func main() -> int32 {
     print(sharedValue)

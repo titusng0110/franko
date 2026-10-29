@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Array Parameters via ptr<[T]>
 // ============================================================
@@ -22,11 +24,11 @@ func main() -> int32 {
     [int32] xs;
     xs.init_zero(4);
     fillDynamic(getptr(xs));
-    print(xs[0], xs[1], xs[2], xs[3]);
+    print(xs[0], " "); print(xs[1], " "); print(xs[2], " "); print(xs[3]);
 
     [int32, 8] grid;
     fillStatic(getptr(grid));
-    print(grid[0], grid[7]);
+    print(grid[0], " "); print(grid[7]);
 
     xs.uninit();
     return 0;

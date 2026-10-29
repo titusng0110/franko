@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Struct Globals
 // ============================================================
@@ -15,12 +17,12 @@ Conf g;
 
 func main() -> int32 {
     // Fields with defaults print their defaults.
-    print(g.w, g.h);
+    print(g.w, " "); print(g.h);
 
     // Assign fields in main.
     g.w = 800;
     g.label = 24;
-    print(g.w, g.label);
+    print(g.w, " "); print(g.label);
 
     return 0;
 }

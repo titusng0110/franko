@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: scoping/undeclared_var
 // Referencing an identifier that was never declared is illegal.
 func main() -> int32 {

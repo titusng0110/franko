@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: fluid_consts/uint16_overflow
 // Constant 65536 does not fit the uint16 context (max 65535).
 func main() -> int32 {

@@ -479,6 +479,8 @@ public final class SymbolTable {
                 m -> countMethodPermissionDowngrades(m, userArgs)
         );
 
+        matches = preferConstantFitMethods(matches, userArgs);
+
         if (matches.size() == 1) {
             return matches.get(0);
         }
@@ -492,9 +494,9 @@ public final class SymbolTable {
                     + owner.qualifiedName()
                     + "."
                     + formatCallSignature(name, argTypes)
-                    + "': multiple overloads match equally well (argument "
-                    + "constants fit several signatures, or arguments rely "
-                    + "on the same number of pointer permission downgrades)");
+                    + "': multiple overloads match equally well (no single "
+                    + "overload has the lowest constant-fit and "
+                    + "permission-downgrade costs)");
 
             return matches.get(0);
         }
@@ -567,6 +569,8 @@ public final class SymbolTable {
                 fn -> countPermissionDowngrades(args, fn.parameterTypes())
         );
 
+        matches = preferConstantFitFunctions(matches, args);
+
         if (matches.size() == 1) {
             return matches.get(0);
         }
@@ -578,9 +582,9 @@ public final class SymbolTable {
         if (matches.size() > 1) {
             error("Ambiguous call to overloaded function '"
                     + formatCallSignature(name, argTypes)
-                    + "': multiple overloads match equally well (argument "
-                    + "constants fit several signatures, or arguments rely "
-                    + "on the same number of pointer permission downgrades)");
+                    + "': multiple overloads match equally well (no single "
+                    + "overload has the lowest constant-fit and "
+                    + "permission-downgrade costs)");
 
             return matches.get(0);
         }
@@ -611,6 +615,112 @@ public final class SymbolTable {
         }
 
         return preferred;
+    }
+
+    private static List<FunctionSymbol> preferConstantFitFunctions(
+            List<FunctionSymbol> matches,
+            List<CallArg> args
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (FunctionSymbol fn : matches) {
+            best = Math.min(
+                    best,
+                    totalConstantFitCost(args, fn.parameterTypes()));
+        }
+
+        List<FunctionSymbol> preferred = new ArrayList<>();
+
+        for (FunctionSymbol fn : matches) {
+            if (totalConstantFitCost(args, fn.parameterTypes()) == best) {
+                preferred.add(fn);
+            }
+        }
+
+        return preferred;
+    }
+
+    private static List<MethodSymbol> preferConstantFitMethods(
+            List<MethodSymbol> matches,
+            List<CallArg> userArgs
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (MethodSymbol m : matches) {
+            best = Math.min(best, totalMethodConstantFitCost(m, userArgs));
+        }
+
+        List<MethodSymbol> preferred = new ArrayList<>();
+
+        for (MethodSymbol m : matches) {
+            if (totalMethodConstantFitCost(m, userArgs) == best) {
+                preferred.add(m);
+            }
+        }
+
+        return preferred;
+    }
+
+    private static int totalConstantFitCost(
+            List<CallArg> args,
+            List<SemanticType> parameterTypes
+    ) {
+        int total = 0;
+
+        for (int i = 0; i < args.size(); i++) {
+            total += constantFitCost(args.get(i), parameterTypes.get(i));
+        }
+
+        return total;
+    }
+
+    private static int totalMethodConstantFitCost(
+            MethodSymbol method,
+            List<CallArg> userArgs
+    ) {
+        int total = 0;
+
+        for (int i = 0; i < userArgs.size(); i++) {
+            SemanticType parameterType =
+                    method.parameters.get(i + 1).type;
+            total += constantFitCost(userArgs.get(i), parameterType);
+        }
+
+        return total;
+    }
+
+    private static int constantFitCost(
+            CallArg arg,
+            SemanticType parameterType
+    ) {
+        if (arg == null || arg.isLiteral()) {
+            return 0;
+        }
+
+        if (arg.lowered == null || !arg.lowered.isConstant()) {
+            return 0;
+        }
+
+        if (!(parameterType instanceof SemanticPrimitiveType primitive)) {
+            return 0;
+        }
+
+        if (sameType(arg.lowered.type, parameterType)) {
+            return 0;
+        }
+
+        int bits = bitWidth(primitive.kind);
+        int unsignedPenalty = isSigned(primitive.kind) ? 0 : 1;
+
+        return 1 + 2 * bits + unsignedPenalty;
     }
 
     public boolean hasAnyFunctionNamed(String name) {

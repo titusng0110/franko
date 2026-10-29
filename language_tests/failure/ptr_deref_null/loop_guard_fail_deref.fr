@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_deref_null/loop_guard_fail_deref
 // Dereferencing after a loop whose guard fails on exit.
 func main() -> int32 {

@@ -166,6 +166,6 @@ for (int32 i = 0; i < n; i++) {
 }
 ```
 
-Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`print(x++)`, `x = y++`) are syntax errors: `x++` never produces a value. See [Statements](19-statements.md).
+Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `print(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](19-statements.md).
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](25-structs.md) for the full assignability rules.

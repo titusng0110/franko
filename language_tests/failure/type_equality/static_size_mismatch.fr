@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: type_equality/static_size_mismatch
 // Passing an [int32, 20] pointer where [int32, 10] is required
 // violates static array equality: sizes must be numerically equal (doc 29.3);

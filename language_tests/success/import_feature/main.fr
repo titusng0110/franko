@@ -17,6 +17,7 @@
 
 import "lib/util"
 import "extra_calls"
+import "franko/io"
 
 func main() -> int32 {
     // Symbols from lib/util.fr.

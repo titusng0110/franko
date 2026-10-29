@@ -11,6 +11,7 @@
 // ============================================================
 
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);

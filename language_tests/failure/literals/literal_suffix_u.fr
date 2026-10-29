@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: literals/literal_suffix_u
 // Integer literals carry no suffixes such as 'u', 'L', or 'ULL'.
 func main() -> int32 {

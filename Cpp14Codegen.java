@@ -712,11 +712,6 @@ public class Cpp14Codegen {
             return;
         }
 
-        if (node instanceof SemanticPrintNode print) {
-            emitPrint(print);
-            return;
-        }
-
         if (node instanceof SemanticReturnNode ret) {
             emitReturn(ret);
             return;
@@ -1208,29 +1203,6 @@ public class Cpp14Codegen {
         indentLevel++;
         emitStmt(node);
         indentLevel--;
-    }
-
-    private void emitPrint(SemanticPrintNode node) {
-        if (node.args == null || node.args.isEmpty()) {
-            emitLine("std::cout << '\\n';");
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder("std::cout");
-
-        for (int i = 0; i < node.args.size(); i++) {
-            if (i > 0) {
-                sb.append(" << ' '");
-            }
-
-            SemanticExprNode arg = node.args.get(i);
-            sb.append(" << ").append(emitPrintableExpr(arg));
-        }
-
-        sb.append(" << '\\n';");
-
-        flushPrelude();
-        emitLine(sb.toString());
     }
 
     private void emitReturn(SemanticReturnNode node) {
@@ -1849,32 +1821,6 @@ public class Cpp14Codegen {
         }
 
         return raw;
-    }
-
-    private String emitPrintableExpr(SemanticExprNode expr) {
-        String emitted = emitExpr(expr);
-
-        if (expr.type instanceof SemanticPrimitiveType primitive) {
-
-            if (primitive.kind == SemanticPrimitiveKind.INT8
-                    || primitive.kind == SemanticPrimitiveKind.UINT8) {
-                return "(+(" + emitted + "))";
-            }
-
-            return emitted;
-        }
-
-        if (expr.type instanceof SemanticPtrType) {
-
-            return "static_cast<const void*>(" + emitted + ")";
-        }
-
-        if (expr instanceof SemanticNullLiteralNode) {
-
-            return "static_cast<const void*>(" + emitted + ")";
-        }
-
-        return emitted;
     }
 
     private void emitLine(String s) {

@@ -8,6 +8,7 @@
 // ============================================================
 
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     [byte] msg;

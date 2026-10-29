@@ -1,5 +1,8 @@
+import "franko/io"
+
 // Failure fixture: global_scope/gs_print
-// `print` is an executable statement and is not a valid top-level item.
+// Call statements are not valid top-level items: only struct, function,
+// global, import, and namespace declarations may appear at top level.
 print(1);
 
 func main() -> int32 {

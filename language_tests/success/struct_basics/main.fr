@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Struct Basics
 // ============================================================
@@ -26,7 +28,7 @@ func main() -> int32 {
     m.xs.memcpy([1, 2, 3, 4]);
 
     // 'tag' is never assigned, so its field default (3) is printed.
-    print(m.a, m.b, m.tag);
+    print(m.a, " "); print(m.b, " "); print(m.tag);
     print(m.xs[0] + m.xs[1] + m.xs[2] + m.xs[3]);
 
     Tiny t;

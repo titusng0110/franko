@@ -129,6 +129,7 @@ Example:
 
 ```franko
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     [byte] msg;
@@ -141,10 +142,7 @@ func main() -> int32 {
 }
 ```
 
-Note: raw fd writes bypass the `std::cout` buffer that `print` uses,
-so interleaving several raw writes with `print` calls orders the bytes
-surprisingly (the same is true in C). Prefer a single write per
-output section in golden-tested programs.
+Note: `print` (from `franko/io`) goes through the same OS bridge as raw fd writes, so interleaved output appears in program order.
 
 ## os::win32
 
@@ -199,6 +197,7 @@ Example:
 
 ```franko
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);

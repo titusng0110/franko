@@ -4,6 +4,7 @@
 // starts with capacity 2, so pushing 5 values grows it 2 -> 4 -> 8.
 
 import "franko/vector"
+import "franko/io"
 
 // The nested-block form declares the same namespace as
 // `namespace app::stats { ... }`.
@@ -42,9 +43,9 @@ func main() -> int {
 
     int top = 0
     st = s.pop(getmview(top))
-    print(st, top)
+    print(st, " "); print(top)
     st = s.pop(getmview(top))
-    print(st, top)
+    print(st, " "); print(top)
 
     print(app::stats::remaining(getview(s)))
     n = s.length()

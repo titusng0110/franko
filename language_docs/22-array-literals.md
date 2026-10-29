@@ -37,7 +37,6 @@ rejected:
 
 ```franko
 [1, 2, 3];              // invalid: bare expression statement
-print([1, 2, 3]);       // invalid: print is not an inference context
 take([1, 2, 3]);        // valid when take's parameter is
                         // view<[int32]> (or view<[T, ...]>)
 ```

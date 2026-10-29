@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: const_folding/div_zero_const
 // Division by zero in a foldable constant expression is rejected.
 func main() -> int32 {

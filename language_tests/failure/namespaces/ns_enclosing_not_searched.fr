@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: namespaces/ns_enclosing_not_searched
 // Unqualified lookup inside a nested namespace searches that
 // namespace, then the global namespace. Enclosing namespaces are

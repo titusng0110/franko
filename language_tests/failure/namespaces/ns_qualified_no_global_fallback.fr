@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: namespaces/ns_qualified_no_global_fallback
 // A qualified name resolves strictly inside the named namespace; `n::g`
 // cannot fall back to the global symbol `g`.

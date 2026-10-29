@@ -120,14 +120,6 @@ class ForNode extends ASTNode {
     }
 }
 
-class PrintNode extends ASTNode {
-    List<ASTNode> args;
-
-    PrintNode(List<ASTNode> args) {
-        this.args = args;
-    }
-}
-
 class ReturnNode extends ASTNode {
     ASTNode value;
 

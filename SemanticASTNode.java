@@ -202,14 +202,6 @@ class SemanticBreakNode extends SemanticStmtNode {
 class SemanticContinueNode extends SemanticStmtNode {
 }
 
-class SemanticPrintNode extends SemanticStmtNode {
-    public final List<SemanticExprNode> args;
-
-    public SemanticPrintNode(List<SemanticExprNode> args) {
-        this.args = List.copyOf(args);
-    }
-}
-
 class SemanticReturnNode extends SemanticStmtNode {
     public final FunctionSymbol function;
     public final SemanticExprNode value;

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: assignment/compound_const_out_of_range
 // The right-hand side of a compound assignment is a fluid constant that
 // must fit the target's type (docs 09, 14).

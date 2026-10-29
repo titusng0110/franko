@@ -1,3 +1,5 @@
+import "franko/io"
+
 // String literals as byte-array initializer sugar.
 //
 // Each test stores a literal into a TextBuf field and prints exactly

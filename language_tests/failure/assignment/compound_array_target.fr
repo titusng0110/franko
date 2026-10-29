@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: assignment/compound_array_target
 // Arrays are not arithmetic values: `xs += 1` is rejected exactly like
 // `xs + 1` (docs 17.3, 20).

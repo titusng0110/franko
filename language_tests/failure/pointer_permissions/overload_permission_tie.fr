@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: pointer_permissions/overload_permission_tie
 // When applicable overloads rely on the same number of pointer
 // permission downgrades, overload resolution cannot prefer one and the

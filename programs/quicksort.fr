@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Iterative quicksort of 50 elements using an explicit stack.
 //
 // Demonstrates structs with a static-array field, methods with

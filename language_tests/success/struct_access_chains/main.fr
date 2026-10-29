@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Struct Member Access Chains
 // ============================================================
@@ -36,14 +38,14 @@ func main() -> int32 {
     l2.val = 200;
     l1.next = getptr(l2);
     $(l1.next).val = 222;
-    print(l1.val, $(l1.next).val);
+    print(l1.val, " "); print($(l1.next).val);
 
     // xs[i].field on a static array of structs.
     [Cell, 3] xs;
     xs[0].v = 5;
     xs[1].v = 6;
     xs[2].v = 7;
-    print(xs[0].v, xs[1].v, xs[2].v);
+    print(xs[0].v, " "); print(xs[1].v, " "); print(xs[2].v);
 
     // getptr(s.field): write the field through its pointer.
     ptr<int32> fa;

@@ -18,6 +18,7 @@
 
 import "lib/util"
 import "merge"
+import "franko/io"
 
 // A global-namespace struct used by value inside a namespace struct.
 struct Base {

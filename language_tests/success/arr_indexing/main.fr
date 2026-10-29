@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Array Indexing
 // ============================================================
@@ -19,13 +21,13 @@ func main() -> int32 {
     uint32 j = 2;
     da[j] = 12;
 
-    print(sa[0], sa[i], sa[4]);
-    print(da[0], da[j], da[3]);
+    print(sa[0], " "); print(sa[i], " "); print(sa[4]);
+    print(da[0], " "); print(da[j], " "); print(da[3]);
 
     for (uint32 k = 0; k < 4; k = k + 1) {
         da[k] = da[k] + 1;
     }
-    print(da[0], da[1], da[2], da[3]);
+    print(da[0], " "); print(da[1], " "); print(da[2], " "); print(da[3]);
 
     da.uninit();
 

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/float_literal
 // Franko has no floating-point types or floating-point literals; only
 // integer primitives are supported (doc 31.4), so `3.14` is rejected.

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: pointers/compare_mismatched_types_eq
 // Pointer comparison requires identical pointer types (docs 17.6, 24.5):
 // ptr<int32> and ptr<uint8> are different pointer types, so '=='

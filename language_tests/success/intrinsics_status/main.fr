@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Intrinsic Status Values
 // ============================================================
@@ -14,7 +16,7 @@ func main() -> int32 {
     status = xs.resize(8);
     print(status);
     xs[7] = 43;
-    print(xs[0], xs[7]);
+    print(xs[0], " "); print(xs[7]);
 
     [int32] ys;
     int32 s2 = ys.init_zero(3);

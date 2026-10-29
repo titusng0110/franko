@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: conditions/cond_ptr
 // if/while/for conditions must be integer expressions; an ptr<T> is not
 // a valid condition (compare pointers with == or != instead).

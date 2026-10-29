@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Runtime fixture: arrays/uninit_dynamic_index
 // Reading an uninitialized dynamic array aborts at runtime: dynamic
 // array initialization is not statically tracked (docs 20.7, 32.9).

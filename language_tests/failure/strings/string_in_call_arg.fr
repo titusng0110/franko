@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: strings/string_in_call_arg
 // A string literal is a view<[byte, N]> value; it cannot be passed
 // as an argument to an int32 parameter.

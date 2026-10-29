@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Sieve of Eratosthenes: prints all primes <= n.
 //
 // Demonstrates structs with a dynamic-array field, methods with

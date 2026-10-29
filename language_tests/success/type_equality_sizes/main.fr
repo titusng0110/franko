@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Type Equality - Static Array Size Comparison
 // ============================================================

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // BFS through a 12 x 13 maze: finds the shortest path from the start
 // cell to the exit and prints the solved grid.
 //
@@ -155,7 +157,7 @@ struct Maze {
                 $(line)[goalC] = 3
             }
 
-            print($(line)[0], $(line)[1], $(line)[2], $(line)[3], $(line)[4], $(line)[5], $(line)[6], $(line)[7], $(line)[8], $(line)[9], $(line)[10], $(line)[11], $(line)[12])
+            print($(line)[0], " "); print($(line)[1], " "); print($(line)[2], " "); print($(line)[3], " "); print($(line)[4], " "); print($(line)[5], " "); print($(line)[6], " "); print($(line)[7], " "); print($(line)[8], " "); print($(line)[9], " "); print($(line)[10], " "); print($(line)[11], " "); print($(line)[12])
         }
 
         return

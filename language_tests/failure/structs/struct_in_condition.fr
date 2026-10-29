@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: structs/struct_in_condition
 // Structs are not integers: if/while conditions reject whole structs; conditions require integer expressions.
 struct X {

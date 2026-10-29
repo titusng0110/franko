@@ -7,6 +7,7 @@
 // drops the key when the pool is exhausted.
 
 import "franko/pool"
+import "franko/io"
 
 struct RbNode {
     int key = 0
@@ -193,7 +194,7 @@ func walk(uint n) -> void {
         return
     }
     walk(nodes[n].left)
-    print(nodes[n].key, nodes[n].red)
+    print(nodes[n].key, " "); print(nodes[n].red)
     walk(nodes[n].right)
     return
 }
@@ -283,8 +284,8 @@ func main() -> int {
 
     print(4305)
 
-    print(nodes[root].key, nodes[root].red)
-    print(nodes[1].key, nodes[1].red)
+    print(nodes[root].key, " "); print(nodes[root].red)
+    print(nodes[1].key, " "); print(nodes[1].red)
     print(nodes[root].red)
 
     slots.uninit()

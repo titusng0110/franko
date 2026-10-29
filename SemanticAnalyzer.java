@@ -1108,16 +1108,6 @@ public class SemanticAnalyzer {
             return new SemanticContinueNode();
         }
 
-        if (node instanceof PrintNode n) {
-            List<SemanticExprNode> args = new ArrayList<>();
-
-            for (ASTNode arg : n.args) {
-                args.add(exprAnalyzer.analyzeExpr(arg));
-            }
-
-            return new SemanticPrintNode(args);
-        }
-
         if (node instanceof ReturnNode n) {
             return analyzeReturnStmt(n);
         }

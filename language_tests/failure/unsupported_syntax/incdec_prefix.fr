@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/incdec_prefix
 // Only the postfix statement forms `x++` / `x--` exist; prefix `++x` is
 // a syntax error (docs 14, 19).

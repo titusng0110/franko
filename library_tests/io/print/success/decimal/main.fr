@@ -1,0 +1,15 @@
+import "franko/io"
+
+func main() -> int32 {
+    print(0)
+    print(255)
+    print(256)
+    print(-1)
+    print(-128)
+    print(2147483647)
+    print(-2147483648)
+    print(9223372036854775807)
+    print(-9223372036854775808)
+    print(18446744073709551615)
+    return 0
+}

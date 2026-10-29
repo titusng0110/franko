@@ -66,8 +66,7 @@ topLevelItem
 // Members are referenced with the '::' qualifier:
 //
 //   util::Point p
-//   print(util::offset)
-//   print(util::doubleIt(5))
+//   util::doubleIt(5)
 //   a::b::helper(x)
 //
 // Inside a namespace, an unqualified name resolves in that namespace
@@ -395,7 +394,6 @@ simpleStmt
     | assignStmt
     | compoundAssignStmt
     | incDecStmt
-    | printStmt
     | exprStmt
     ;
 
@@ -488,32 +486,10 @@ compoundAssignOp
 //   x--;
 //
 // Both are sugar for `x += 1` and `x -= 1`, lowered by the Desugarer.
-// Prefix forms (`++x`) and value uses (`print(x++)`) are syntax errors:
+// Prefix forms (`++x`) and value uses (`x++ + 1`) are syntax errors:
 // these operators exist only as statements.
 incDecStmt
     : lvalue (PLUSPLUS | MINUSMINUS)
-    ;
-
-// ---------- PRINT ----------
-//
-// Keeping print as a dedicated statement for now.
-//
-// `obj.print()` does NOT work: `print` is a lexer keyword, so although a
-// `.print()` member suffix parses syntactically, the semantic analyzer
-// rejects ordinary member calls on non-struct receivers (and `print` can
-// never be a struct method name a program can declare, since method names
-// are IDENTIFIERs). Use the print(...)
-// statement form instead.
-//
-// If you later want global user-defined function print(...),
-// you should consider removing this statement form too and
-// treating print as a builtin or normal function resolved semantically.
-printStmt
-    : PRINT LPAREN exprList? RPAREN
-    ;
-
-exprList
-    : expr (COMMA expr)*
     ;
 
 // ---------- LVALUES ----------
@@ -570,7 +546,7 @@ exprStmt
 //
 // Array literal element type inference needs an assignment, return,
 // or call-argument context, so a literal with no context (bare
-// statement, print argument, operator operand, ...) is rejected
+// statement, operator operand, ...) is rejected
 // during semantic analysis.
 
 expr
@@ -685,15 +661,15 @@ memberSuffix
 // ---------- MEMBER NAMES ----------
 //
 // Important:
-// Some words such as 'print', 'if', 'while', and type names are lexer
+// Some words such as 'if', 'while', and type names are lexer
 // keywords in this grammar, so they do NOT tokenize as IDENTIFIER.
 //
 // If such words should be syntactically allowed after '.', the parser
 // must explicitly allow those keyword tokens here.
 //
-// Ordinary words such as 'memset', 'memcpy', and 'uninit' are no longer
-// lexer keywords. They tokenize as IDENTIFIER and therefore work through
-// the IDENTIFIER alternative below.
+// Ordinary words such as 'print', 'memset', 'memcpy', and 'uninit' are
+// ordinary identifiers. They tokenize as IDENTIFIER and therefore work
+// through the IDENTIFIER alternative below.
 memberName
     : IDENTIFIER
     | SELF
@@ -701,7 +677,6 @@ memberName
     | RETURN
     | VOID
     | STRUCT
-    | PRINT
     | IF
     | ELSE
     | WHILE
@@ -841,7 +816,7 @@ constPrimary
 // perfectly rectangular.
 //
 // Element type inference needs a context, so a literal with no
-// context (bare statement, print argument, operator operand, ...)
+// context (bare statement, operator operand, ...)
 // is rejected during semantic analysis, as is assigning a literal
 // to an array-typed target (use memcpy instead).
 //
@@ -999,7 +974,9 @@ VOID   : 'void' ;
 STRUCT : 'struct' ;
 
 // Keywords
-PRINT   : 'print' ;
+// NOTE: `print` is intentionally not a keyword. It is an ordinary
+// identifier so `franko/io` can declare overloaded `print(...)`
+// functions resolved by the normal overload rules.
 IF      : 'if' ;
 ELSE    : 'else' ;
 WHILE   : 'while' ;

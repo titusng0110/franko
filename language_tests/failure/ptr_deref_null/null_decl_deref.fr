@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_deref_null/null_decl_deref
 // Dereferencing an pointer variable that the checker proves is null:
 // an ordinary ptr<T> declaration is null-initialized.

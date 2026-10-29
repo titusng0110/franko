@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: array_length/length_on_ptr
 // An pointer is not an array; deref first.
 func main() -> int32 {

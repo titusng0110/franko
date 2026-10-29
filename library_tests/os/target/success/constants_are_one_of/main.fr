@@ -15,6 +15,7 @@
 // ============================================================
 
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     int32 osSum = os::IS_LINUX + os::IS_WINDOWS + os::IS_MACOS;

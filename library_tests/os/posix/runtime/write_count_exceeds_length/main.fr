@@ -2,6 +2,7 @@
 // A count larger than the buffer length aborts via franko_panic;
 // the binary must exit non-zero.
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     [byte] msg;

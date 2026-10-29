@@ -1,6 +1,9 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/member_call_print
 // Only struct methods and built-in array intrinsics use member-call syntax;
-// `x.print()` is rejected because print is a statement keyword (doc 31.2).
+// `x.print()` parses (`print` is an ordinary identifier) but member calls
+// require struct receivers, so an `int32` receiver is rejected.
 
 func main() -> int32 {
     int32 x = 1;

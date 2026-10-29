@@ -157,13 +157,6 @@ public final class PointerNullStateChecker {
             return;
         }
 
-        if (node instanceof SemanticPrintNode n) {
-            for (SemanticExprNode arg : n.args) {
-                collectSymbolsFromExpr(arg);
-            }
-            return;
-        }
-
         if (node instanceof SemanticReturnNode n) {
             collectSymbolsFromExpr(n.value);
             return;
@@ -529,13 +522,6 @@ public final class PointerNullStateChecker {
         if (node instanceof SemanticContinueNode) {
             recordJumpState(1, true);
             return true;
-        }
-
-        if (node instanceof SemanticPrintNode n) {
-            for (SemanticExprNode arg : n.args) {
-                checkExpr(arg);
-            }
-            return false;
         }
 
         if (node instanceof SemanticReturnNode n) {

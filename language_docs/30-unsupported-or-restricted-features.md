@@ -21,7 +21,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 Struct methods and the built-in array intrinsics use member-call syntax (see [Methods](26-methods.md) and [Array Intrinsics](21-array-intrinsics.md)). All other member calls are rejected, including:
 
 ```franko
-x.print();          // unsupported member call: print is a statement keyword
+x.print();          // unsupported member call: no such struct method
 x.something(1);     // unsupported member call: unknown method
 ```
 
@@ -64,7 +64,6 @@ rejected:
 
 ```franko
 [1, 2, 3];                 // invalid: bare expression statement
-print([1, 2, 3]);          // invalid: print is not an inference context
 foo([1, 2, 3]);            // invalid unless foo's parameter is a view<[...]>
 return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 ```
@@ -80,11 +79,9 @@ The checker validates intrinsic legality, but it does not fully prove dynamic ar
 
 The compiler does not fully track dangling pointers or ownership.
 
-## 30.11 Print Checking Is Loose
+## 30.11 Output Is a Library Function
 
-The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
-
-Array literals cannot be printed: `print` is not an inference context. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
+Output is provided by `franko/io`, not by the compiler. The overloaded `print(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](19-statements.md) and [franko/io](../library_docs/io.md).
 
 ## 30.12 Unsupported Operators
 

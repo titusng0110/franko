@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: casts/cast_int_to_pointer
 // A pointer cast target requires a pointer or null operand: casting an
 // integer to ptr<int32> is rejected by the semantic analyzer.

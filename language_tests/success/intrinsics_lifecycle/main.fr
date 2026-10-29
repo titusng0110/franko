@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Array Intrinsics Lifecycle
 // ============================================================
@@ -13,32 +15,32 @@ func main() -> int32 {
     // memset whole static array
     [int32, 4] a;
     a.memset(7);
-    print(a[0], a[1], a[2], a[3]);
+    print(a[0], " "); print(a[1], " "); print(a[2], " "); print(a[3]);
 
     // memset element range on a static array
     [int32, 4] b;
     b.memset(0);
     b.memset(9, 1, 2);
-    print(b[0], b[1], b[2], b[3]);
+    print(b[0], " "); print(b[1], " "); print(b[2], " "); print(b[3]);
 
     // memset on a dynamic array
     [int32] d;
     d.init(3);
     d.memset(5);
-    print(d[0], d[1], d[2]);
+    print(d[0], " "); print(d[1], " "); print(d[2]);
 
     // memcpy static -> dynamic
     [int32] e;
     e.init_zero(4);
     e.memcpy(getptr(a));
-    print(e[0], e[1], e[2], e[3]);
+    print(e[0], " "); print(e[1], " "); print(e[2], " "); print(e[3]);
     e.uninit();
 
     // memcpy dynamic -> static
     [int32, 3] f;
     f.memset(0);
     f.memcpy(getptr(d));
-    print(f[0], f[1], f[2]);
+    print(f[0], " "); print(f[1], " "); print(f[2]);
 
     // memmove with overlapping ranges inside one array
     [int32, 4] g;
@@ -47,7 +49,7 @@ func main() -> int32 {
     g[1] = 2;
     g[2] = 3;
     g.memmove(1, 0, 3);
-    print(g[0], g[1], g[2], g[3]);
+    print(g[0], " "); print(g[1], " "); print(g[2], " "); print(g[3]);
 
     d.uninit();
 

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: operators/shift_count_too_large
 // Constant shift counts must fit the unsigned variant of the left operand's
 // primitive type; 4294967296 does not fit uint32.

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_deref_null/null_guard_inside_deref
 // Dereferencing inside a null guard after a branch merge:
 // inside `if (p7 == null)` the state is definitely null.

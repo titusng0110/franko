@@ -1,0 +1,196 @@
+import "./os"
+
+// franko/io — user-level output.
+//
+// `print` is an ordinary overloaded function (not a statement).
+// Single-argument `print(x)` writes `x` followed by `\n`.
+// Two-argument `print(x, end)` writes `x` followed by `end` verbatim
+// (a null or empty `end` means no suffix, so no newline either).
+// `print()` writes a bare newline.
+// `print(str)` writes the UTF-8 bytes verbatim followed by `\n`;
+// a null or empty view prints nothing.
+//
+// Output goes through the OS bridge (posix `write` on linux/macos,
+// `WriteFile` on windows), so it shares a channel with raw fd writes.
+
+func ioWriteBytes(view<[byte]> buf, uint64 count) -> void {
+    if (count == 0) {
+        return
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, buf, unsafe_cast<uint32>(count), null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, buf, count)
+    }
+}
+
+func ioWriteEnd(view<[uint8]> end) -> void {
+    if (end == null) {
+        return
+    }
+    uint32 n = $(end).length()
+    if (n == 0) {
+        return
+    }
+    ioWriteBytes(end, cast<uint64>(n))
+}
+
+func ioWriteNewline() -> void {
+    [byte, 1] nl
+    nl[0] = 10
+    ioWriteBytes(getptr(nl), 1)
+}
+
+func ioWriteU64Raw(uint64 num) -> void {
+    [byte, 20] rev
+    uint32 len = 0
+    if (num == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = num
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    ioWriteBytes(getptr(out), cast<uint64>(len))
+}
+
+func ioWriteI64Raw(int64 num) -> void {
+    if (num == 0) {
+        [byte, 1] zero
+        zero[0] = 48
+        ioWriteBytes(getptr(zero), 1)
+        return
+    }
+    if (num < 0) {
+        [byte, 1] minus
+        minus[0] = 45
+        ioWriteBytes(getptr(minus), 1)
+        [byte, 20] rev
+        uint32 len = 0
+        int64 n = num
+        while (n != 0) {
+            int64 r = n % 10
+            int64 d = 0 - r
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+        [byte, 20] out
+        uint32 j = 0
+        while (j < len) {
+            out[j] = rev[len - 1 - j]
+            j = j + 1
+        }
+        ioWriteBytes(getptr(out), cast<uint64>(len))
+        return
+    }
+    ioWriteU64Raw(unsafe_cast<uint64>(num))
+}
+
+func print() -> void {
+    ioWriteNewline()
+}
+
+func print(uint8 num) -> void {
+    ioWriteU64Raw(cast<uint64>(num))
+    ioWriteNewline()
+}
+
+func print(uint16 num) -> void {
+    ioWriteU64Raw(cast<uint64>(num))
+    ioWriteNewline()
+}
+
+func print(uint32 num) -> void {
+    ioWriteU64Raw(cast<uint64>(num))
+    ioWriteNewline()
+}
+
+func print(uint64 num) -> void {
+    ioWriteU64Raw(num)
+    ioWriteNewline()
+}
+
+func print(int8 num) -> void {
+    ioWriteI64Raw(cast<int64>(num))
+    ioWriteNewline()
+}
+
+func print(int16 num) -> void {
+    ioWriteI64Raw(cast<int64>(num))
+    ioWriteNewline()
+}
+
+func print(int32 num) -> void {
+    ioWriteI64Raw(cast<int64>(num))
+    ioWriteNewline()
+}
+
+func print(int64 num) -> void {
+    ioWriteI64Raw(num)
+    ioWriteNewline()
+}
+
+func print(view<[uint8]> utf8str) -> void {
+    if (utf8str == null) {
+        return
+    }
+    uint32 n = $(utf8str).length()
+    if (n == 0) {
+        return
+    }
+    ioWriteBytes(utf8str, cast<uint64>(n))
+    ioWriteNewline()
+}
+
+func print(uint8 num, view<[uint8]> end) -> void {
+    ioWriteU64Raw(cast<uint64>(num))
+    ioWriteEnd(end)
+}
+
+func print(uint16 num, view<[uint8]> end) -> void {
+    ioWriteU64Raw(cast<uint64>(num))
+    ioWriteEnd(end)
+}
+
+func print(uint32 num, view<[uint8]> end) -> void {
+    ioWriteU64Raw(cast<uint64>(num))
+    ioWriteEnd(end)
+}
+
+func print(uint64 num, view<[uint8]> end) -> void {
+    ioWriteU64Raw(num)
+    ioWriteEnd(end)
+}
+
+func print(int8 num, view<[uint8]> end) -> void {
+    ioWriteI64Raw(cast<int64>(num))
+    ioWriteEnd(end)
+}
+
+func print(int16 num, view<[uint8]> end) -> void {
+    ioWriteI64Raw(cast<int64>(num))
+    ioWriteEnd(end)
+}
+
+func print(int32 num, view<[uint8]> end) -> void {
+    ioWriteI64Raw(cast<int64>(num))
+    ioWriteEnd(end)
+}
+
+func print(int64 num, view<[uint8]> end) -> void {
+    ioWriteI64Raw(num)
+    ioWriteEnd(end)
+}

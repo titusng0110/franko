@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Struct Methods Core
 // ============================================================
@@ -97,6 +99,6 @@ func main() -> int32 {
     Big b
     b.set(0, 11)
     b.set(3, 44)
-    print(b.get(0), b.get(3))
+    print(b.get(0), " "); print(b.get(3))
     return 0
 }

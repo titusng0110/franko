@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: operators/modulo_div_zero_divisor
 // A nonconstant dividend with a constant zero divisor is rejected before
 // codegen, exactly like `y / 0` (docs 10, 17.3).

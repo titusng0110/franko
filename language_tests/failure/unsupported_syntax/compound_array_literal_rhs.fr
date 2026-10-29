@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/compound_array_literal_rhs
 // The right-hand side of a compound assignment must be an integer;
 // an array literal is a view value and is rejected there (docs 14, 22).

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: casts/cast_to_array_target
 // cast<T> targets must be primitive integer types or pointer types.
 func main() -> int32 {

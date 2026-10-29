@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: structs/unknown_field_access
 // Member access must name a declared field of the struct; 'nope' is not a field of X.
 struct X {

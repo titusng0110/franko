@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: assignment/compound_type_mismatch
 // Compound assignment applies the base operator's operand rules (docs
 // 14, 17.3): with two nonconstant operands, both sides must have exactly
