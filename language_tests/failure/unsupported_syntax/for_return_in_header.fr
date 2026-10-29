@@ -1,0 +1,8 @@
+// Failure fixture: unsupported_syntax/for_return_in_header
+// `return` is a simple statement but not a loop-header statement:
+// returning from a `for` init or update position is a syntax error.
+func main() -> int32 {
+    for (return 0; 1; 1) {
+    }
+    return 0
+}

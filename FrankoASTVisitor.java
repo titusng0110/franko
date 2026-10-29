@@ -465,7 +465,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode init = null;
 
         if (ctx.forInit() != null) {
-            init = visit(ctx.forInit().simpleStmt());
+            init = visit(ctx.forInit().forHeaderStmt());
         }
 
         ASTNode condition = visit(ctx.expr());
@@ -473,7 +473,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode update = null;
 
         if (ctx.forUpdate() != null) {
-            update = visit(ctx.forUpdate().simpleStmt());
+            update = visit(ctx.forUpdate().forHeaderStmt());
         }
 
         ASTNode body = visit(ctx.statement());
