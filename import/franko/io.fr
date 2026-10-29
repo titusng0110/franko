@@ -3,46 +3,551 @@ import "./os"
 // franko/io — user-level output.
 //
 // `print` is an ordinary overloaded function (not a statement).
-// Single-argument `print(x)` writes `x` followed by `\n`.
-// Two-argument `print(x, end)` writes `x` followed by `end` verbatim
-// (a null or empty `end` means no suffix, so no newline either).
-// `print()` writes a bare newline.
-// `print(str)` writes the UTF-8 bytes verbatim followed by `\n`;
-// a null or empty view prints nothing.
+// Single-argument `print(x)` writes `x` followed by `\n` in a single
+// write. Two-argument `print(x, end)` writes `x` followed by `end`
+// verbatim (a null or empty `end` means no suffix, so no newline
+// either). `print()` writes a bare newline. `print(str)` writes the
+// UTF-8 bytes verbatim followed by `\n`; a null or empty view prints
+// nothing.
 //
 // Output goes through the OS bridge (posix `write` on linux/macos,
 // `WriteFile` on windows), so it shares a channel with raw fd writes.
+//
+// Each overload is self-contained: integer digits are converted with
+// repeated `% 10` / `/ 10` (negatives stay negative throughout so
+// `INT64_MIN` needs no overflow-prone negation) and emitted with the
+// suffix in as few writes as possible.
 
-func ioWriteBytes(view<[byte]> buf, uint64 count) -> void {
-    if (count == 0) {
+func print() -> void {
+    [byte, 1] nl
+    nl[0] = 10
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(nl), 1, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(nl), 1)
+    }
+}
+
+func print(uint8 num) -> void {
+    uint64 v = cast<uint64>(num)
+    [byte, 20] rev
+    uint32 len = 0
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(uint16 num) -> void {
+    uint64 v = cast<uint64>(num)
+    [byte, 20] rev
+    uint32 len = 0
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(uint32 num) -> void {
+    uint64 v = cast<uint64>(num)
+    [byte, 20] rev
+    uint32 len = 0
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(uint64 num) -> void {
+    [byte, 20] rev
+    uint32 len = 0
+    if (num == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = num
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(int8 num) -> void {
+    int64 w = cast<int64>(num)
+    if (w < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = w
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 22] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        kout[klen + 1] = 10
+        uint32 ktotal = klen + 2
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(w)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(int16 num) -> void {
+    int64 w = cast<int64>(num)
+    if (w < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = w
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 22] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        kout[klen + 1] = 10
+        uint32 ktotal = klen + 2
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(w)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(int32 num) -> void {
+    int64 w = cast<int64>(num)
+    if (w < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = w
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 22] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        kout[klen + 1] = 10
+        uint32 ktotal = klen + 2
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(w)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(int64 num) -> void {
+    if (num < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = num
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 22] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        kout[klen + 1] = 10
+        uint32 ktotal = klen + 2
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(num)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 22] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    out[len] = 10
+    uint32 total = len + 1
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), total, null)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
+    }
+}
+
+func print(view<[uint8]> utf8str) -> void {
+    if (utf8str == null) {
+        return
+    }
+    uint32 n = $(utf8str).length()
+    if (n == 0) {
         return
     }
     if (os::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
-        os::win32::WriteFile(h, buf, unsafe_cast<uint32>(count), null)
+        os::win32::WriteFile(h, utf8str, n, null)
+        [byte, 1] nl
+        nl[0] = 10
+        os::win32::WriteFile(h, getptr(nl), 1, null)
     } else if (os::IS_LINUX || os::IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, buf, count)
+        os::posix::write(os::posix::STDOUT_FILENO, utf8str, cast<uint64>(n))
+        [byte, 1] nl
+        nl[0] = 10
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(nl), 1)
     }
 }
 
-func ioWriteEnd(view<[uint8]> end) -> void {
-    if (end == null) {
-        return
+func print(uint8 num, view<[uint8]> end) -> void {
+    uint64 v = cast<uint64>(num)
+    [byte, 20] rev
+    uint32 len = 0
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
     }
-    uint32 n = $(end).length()
-    if (n == 0) {
-        return
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
     }
-    ioWriteBytes(end, cast<uint64>(n))
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
 }
 
-func ioWriteNewline() -> void {
-    [byte, 1] nl
-    nl[0] = 10
-    ioWriteBytes(getptr(nl), 1)
+func print(uint16 num, view<[uint8]> end) -> void {
+    uint64 v = cast<uint64>(num)
+    [byte, 20] rev
+    uint32 len = 0
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
 }
 
-func ioWriteU64Raw(uint64 num) -> void {
+func print(uint32 num, view<[uint8]> end) -> void {
+    uint64 v = cast<uint64>(num)
+    [byte, 20] rev
+    uint32 len = 0
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
+}
+
+func print(uint64 num, view<[uint8]> end) -> void {
     [byte, 20] rev
     uint32 len = 0
     if (num == 0) {
@@ -63,134 +568,349 @@ func ioWriteU64Raw(uint64 num) -> void {
         out[j] = rev[len - 1 - j]
         j = j + 1
     }
-    ioWriteBytes(getptr(out), cast<uint64>(len))
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
 }
 
-func ioWriteI64Raw(int64 num) -> void {
-    if (num == 0) {
-        [byte, 1] zero
-        zero[0] = 48
-        ioWriteBytes(getptr(zero), 1)
+func print(int8 num, view<[uint8]> end) -> void {
+    int64 w = cast<int64>(num)
+    if (w < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = w
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 21] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        uint32 ktotal = klen + 1
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::win32::WriteFile(kh, end, km, null)
+                }
+            }
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(km))
+                }
+            }
+        }
         return
     }
-    if (num < 0) {
-        [byte, 1] minus
-        minus[0] = 45
-        ioWriteBytes(getptr(minus), 1)
-        [byte, 20] rev
-        uint32 len = 0
-        int64 n = num
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(w)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
         while (n != 0) {
-            int64 r = n % 10
-            int64 d = 0 - r
+            uint64 d = n % 10
             rev[len] = unsafe_cast<byte>(d + 48)
             len = len + 1
             n = n / 10
         }
-        [byte, 20] out
-        uint32 j = 0
-        while (j < len) {
-            out[j] = rev[len - 1 - j]
-            j = j + 1
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
         }
-        ioWriteBytes(getptr(out), cast<uint64>(len))
-        return
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
     }
-    ioWriteU64Raw(unsafe_cast<uint64>(num))
-}
-
-func print() -> void {
-    ioWriteNewline()
-}
-
-func print(uint8 num) -> void {
-    ioWriteU64Raw(cast<uint64>(num))
-    ioWriteNewline()
-}
-
-func print(uint16 num) -> void {
-    ioWriteU64Raw(cast<uint64>(num))
-    ioWriteNewline()
-}
-
-func print(uint32 num) -> void {
-    ioWriteU64Raw(cast<uint64>(num))
-    ioWriteNewline()
-}
-
-func print(uint64 num) -> void {
-    ioWriteU64Raw(num)
-    ioWriteNewline()
-}
-
-func print(int8 num) -> void {
-    ioWriteI64Raw(cast<int64>(num))
-    ioWriteNewline()
-}
-
-func print(int16 num) -> void {
-    ioWriteI64Raw(cast<int64>(num))
-    ioWriteNewline()
-}
-
-func print(int32 num) -> void {
-    ioWriteI64Raw(cast<int64>(num))
-    ioWriteNewline()
-}
-
-func print(int64 num) -> void {
-    ioWriteI64Raw(num)
-    ioWriteNewline()
-}
-
-func print(view<[uint8]> utf8str) -> void {
-    if (utf8str == null) {
-        return
-    }
-    uint32 n = $(utf8str).length()
-    if (n == 0) {
-        return
-    }
-    ioWriteBytes(utf8str, cast<uint64>(n))
-    ioWriteNewline()
-}
-
-func print(uint8 num, view<[uint8]> end) -> void {
-    ioWriteU64Raw(cast<uint64>(num))
-    ioWriteEnd(end)
-}
-
-func print(uint16 num, view<[uint8]> end) -> void {
-    ioWriteU64Raw(cast<uint64>(num))
-    ioWriteEnd(end)
-}
-
-func print(uint32 num, view<[uint8]> end) -> void {
-    ioWriteU64Raw(cast<uint64>(num))
-    ioWriteEnd(end)
-}
-
-func print(uint64 num, view<[uint8]> end) -> void {
-    ioWriteU64Raw(num)
-    ioWriteEnd(end)
-}
-
-func print(int8 num, view<[uint8]> end) -> void {
-    ioWriteI64Raw(cast<int64>(num))
-    ioWriteEnd(end)
 }
 
 func print(int16 num, view<[uint8]> end) -> void {
-    ioWriteI64Raw(cast<int64>(num))
-    ioWriteEnd(end)
+    int64 w = cast<int64>(num)
+    if (w < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = w
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 21] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        uint32 ktotal = klen + 1
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::win32::WriteFile(kh, end, km, null)
+                }
+            }
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(km))
+                }
+            }
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(w)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
 }
 
 func print(int32 num, view<[uint8]> end) -> void {
-    ioWriteI64Raw(cast<int64>(num))
-    ioWriteEnd(end)
+    int64 w = cast<int64>(num)
+    if (w < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = w
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 21] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        uint32 ktotal = klen + 1
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::win32::WriteFile(kh, end, km, null)
+                }
+            }
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(km))
+                }
+            }
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(w)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
 }
 
 func print(int64 num, view<[uint8]> end) -> void {
-    ioWriteI64Raw(num)
-    ioWriteEnd(end)
+    if (num < 0) {
+        [byte, 20] krev
+        uint32 klen = 0
+        int64 kn = num
+        while (kn != 0) {
+            int64 kr = kn % 10
+            int64 kd = 0 - kr
+            krev[klen] = unsafe_cast<byte>(kd + 48)
+            klen = klen + 1
+            kn = kn / 10
+        }
+        [byte, 21] kout
+        kout[0] = 45
+        uint32 kj = 0
+        while (kj < klen) {
+            kout[kj + 1] = krev[klen - 1 - kj]
+            kj = kj + 1
+        }
+        uint32 ktotal = klen + 1
+        if (os::IS_WINDOWS) {
+            uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+            os::win32::WriteFile(kh, getptr(kout), ktotal, null)
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::win32::WriteFile(kh, end, km, null)
+                }
+            }
+        } else if (os::IS_LINUX || os::IS_MACOS) {
+            os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
+            if (end != null) {
+                uint32 km = $(end).length()
+                if (km != 0) {
+                    os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(km))
+                }
+            }
+        }
+        return
+    }
+    [byte, 20] rev
+    uint32 len = 0
+    uint64 v = unsafe_cast<uint64>(num)
+    if (v == 0) {
+        rev[0] = 48
+        len = 1
+    } else {
+        uint64 n = v
+        while (n != 0) {
+            uint64 d = n % 10
+            rev[len] = unsafe_cast<byte>(d + 48)
+            len = len + 1
+            n = n / 10
+        }
+    }
+    [byte, 20] out
+    uint32 j = 0
+    while (j < len) {
+        out[j] = rev[len - 1 - j]
+        j = j + 1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+        os::win32::WriteFile(h, getptr(out), len, null)
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::win32::WriteFile(h, end, m, null)
+            }
+        }
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
+        if (end != null) {
+            uint32 m = $(end).length()
+            if (m != 0) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
+    }
 }
