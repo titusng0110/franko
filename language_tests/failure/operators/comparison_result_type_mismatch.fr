@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: operators/comparison_result_type_mismatch
 // Comparisons always produce uint8 (docs 17.6, 17.9), and there are no
 // implicit numeric conversions for nonconstants (doc 31.6), so a

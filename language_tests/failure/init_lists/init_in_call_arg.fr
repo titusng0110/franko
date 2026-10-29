@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: init_lists/init_in_call_arg
 // An array literal is a view value; it cannot initialize an int32
 // parameter, so there is no context to infer the element type from

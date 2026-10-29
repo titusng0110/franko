@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/unary_plus_op
 // The unary plus operator `+x` does not exist in the grammar; only `!x` and
 // unary minus are supported unary operators (docs 17.2, 30.13).

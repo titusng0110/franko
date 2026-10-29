@@ -81,7 +81,6 @@ Franko is a small statically typed language with:
 - `for`;
 - `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
-- `print`;
 - string literals as read-only `view<[byte, N]>` values;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);
@@ -293,10 +292,8 @@ Namespace members are referenced with `::`:
 
 ```franko
 util::Point p
-print(util::offset)
-print(util::doubleIt(5))
 util::offset = 5
-print(a::b::helper(x))
+a::b::helper(x)
 ```
 
 A qualified name always resolves strictly inside the named namespace path, starting from the top level; there is no fallback to the global namespace, no search of enclosing namespaces, and no relative resolution through the current namespace. `a::w` does not find a symbol declared only in `a::b`, and `a::b::x` requires both `a` and `a::b` to be declared namespaces.
@@ -330,7 +327,6 @@ Executable statements are **not** currently allowed in global scope.
 Invalid global-scope items include:
 
 - assignments;
-- `print`;
 - function calls;
 - `if`;
 - `while`;
@@ -752,6 +748,8 @@ func main() -> int32 {
 
 Fluid constants also participate in function overload resolution. A folded integer constant may match a primitive integer parameter if its `BigInteger` value fits that parameter type.
 
+When a constant fits several overloads, the call is resolved by a constant-fit preference, not rejected: the overload whose parameter type equals the constant's own type wins when the value fits there; otherwise the narrowest fitting type wins, with signed preferred over unsigned at equal width. For example, `print(1)` selects `print(int32)` (a literal's own type), `print(5000000000)` selects `print(int64)`, and `print(100)` selects `print(int16)` over `print(uint16)` when `int32` is not among the overloads. A call is ambiguous only if several overloads tie on both permission-downgrade and constant-fit costs.
+
 ---
 
 # 10. Constant Folding
@@ -1030,12 +1028,12 @@ where `mview`/`view` of `[T]` is expected; see
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](16-casts.md)).
 
-For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
+For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. When a constant fits several overloads, the constant-fit preference applies: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type wins (signed before unsigned at equal width). See [Fluid Integer Constants](09-fluid-integer-constants.md).
 
 Overload preference: among applicable overloads, ones matched without any
 conversion win over converting ones, and among the rest the ones relying
 on the fewest conversions win, with a decay counted heavier than a pure
-permission downgrade. If several overloads remain
+permission downgrade. Constant arguments then prefer the lowest constant-fit cost (own type, then narrowest, signed first). If several overloads remain
 tied, the call is ambiguous and is rejected.
 
 ## 12.7 Bare Function Names
@@ -1301,7 +1299,7 @@ for (int32 i = 0; i < n; i++) {
 }
 ```
 
-Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`print(x++)`, `x = y++`) are syntax errors: `x++` never produces a value. See [Statements](19-statements.md).
+Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `print(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](19-statements.md).
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](25-structs.md) for the full assignability rules.
 
@@ -1682,14 +1680,13 @@ Franko supports the following statements inside function bodies and blocks:
 - `while`;
 - `for`;
 - `return`;
-- `print`;
 - expression statements;
 - function call statements;
 - array intrinsic statement forms.
 
 Executable statements are not allowed at global scope.
 
-Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so `print(x++)` does not parse. See [Assignment](14-assignment.md).
+Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so it cannot appear as a call argument (for example, `print(x++)` does not parse). See [Assignment](14-assignment.md).
 
 ## 19.1 Blocks
 
@@ -1824,26 +1821,28 @@ A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 19.7 Print Statements
+## 19.7 Output (`franko/io`)
 
-`print` is a dedicated statement, not a function and not a member method:
+Output is a library function, not a statement. Import `franko/io` and call the overloaded `print(...)` functions (see [franko/io](../library_docs/io.md) for the full API):
 
 ```franko
-print(x);
-print(a, b, c);      // multiple arguments printed space-separated
-print();              // prints a bare newline
+import "franko/io"
+
+func main() -> int32 {
+    print(42)        // `42` followed by a newline
+    print("hi")      // text followed by a newline
+    print(1, " ")    // `1` followed by a space (no newline)
+    print(2)         // `2` followed by a newline
+    print()          // bare newline
+    return 0
+}
 ```
 
-The checker validates print arguments as expressions usable where a value is required (in particular, `void` expressions are rejected), but it does not impose a strict printable-type policy.
+A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(x, end)` writes `x` followed by `end` verbatim (a null or empty `end` means no suffix and no newline). `print()` writes a bare newline. Overloads exist for all eight integer types and for `view<[uint8]>` text; a null or empty view prints nothing.
 
-Current print limitation: only integer primitives and pointers are printable. The C++14 backend can print:
+`print` has no overloads for pointers, arrays, or structs. Print individual elements, fields, or bytes instead: `print(xs[0])`, `print(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `print(s[0])`.
 
-- integer primitives (with `int8`/`uint8` promoted so a number is shown rather than a character);
-- pointers, including the `null` pointer (printed through `const void*`).
-
-Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
-
-Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<[byte, N]>`), but `print` shows their global's address rather than the text; print individual bytes instead.
+Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](12-functions.md).
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -2333,7 +2332,6 @@ rejected:
 
 ```franko
 [1, 2, 3];              // invalid: bare expression statement
-print([1, 2, 3]);       // invalid: print is not an inference context
 take([1, 2, 3]);        // valid when take's parameter is
                         // view<[int32]> (or view<[T, ...]>)
 ```
@@ -2624,13 +2622,14 @@ func main() -> int32 {
 
 ## 23.6 Printing Strings
 
-`print` is unchanged (it is superseded by a future io class): a string
-literal passed to `print` prints as the address of its global byte
-array, like any other pointer. Print individual bytes instead:
+`print` (from `franko/io`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `print(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
 
 ```franko
-print($("hi")[0]);   // 104
-print($("hi")[1]);   // 105
+import "franko/io"
+
+print("hi")          // writes `hi` + newline
+print($("hi")[0])    // 104
+print($("hi")[1])    // 105
 ```
 
 ## 23.7 Empty Strings
@@ -2927,7 +2926,7 @@ Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`
 `null` may be passed to pointer parameters and returned from pointer
 functions.
 
-`print(null)` prints the null pointer as a pointer value.
+`print(null)` matches the `print(view<[uint8]>)` overload and prints nothing (a null view is treated as empty).
 
 ### 24.9.1 Null-Initialized Pointer Declarations
 
@@ -3152,7 +3151,7 @@ Consequences:
 
 Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
-Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
+Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` has no overload for a whole struct (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
 
 ## 25.7 Member Access and Field Lvalues
 
@@ -3208,7 +3207,7 @@ The C++14 backend:
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](26-methods.md)).
-- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` cannot print a whole struct — print individual fields instead.
+- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` has no struct overload — print individual fields instead.
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
@@ -3374,7 +3373,7 @@ Rules:
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
 - `self` as an expression (`self`, `getptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
-- `x.self` parses (member names accept keywords) but always fails resolution, like `x.print`.
+- `x.self` parses (member names accept keywords) but always fails resolution. A method named `print` is an ordinary method like any other.
 
 ## 26.7 Scope Inside Method Bodies
 
@@ -3680,7 +3679,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 Struct methods and the built-in array intrinsics use member-call syntax (see [Methods](26-methods.md) and [Array Intrinsics](21-array-intrinsics.md)). All other member calls are rejected, including:
 
 ```franko
-x.print();          // unsupported member call: print is a statement keyword
+x.print();          // unsupported member call: no such struct method
 x.something(1);     // unsupported member call: unknown method
 ```
 
@@ -3723,7 +3722,6 @@ rejected:
 
 ```franko
 [1, 2, 3];                 // invalid: bare expression statement
-print([1, 2, 3]);          // invalid: print is not an inference context
 foo([1, 2, 3]);            // invalid unless foo's parameter is a view<[...]>
 return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 ```
@@ -3739,11 +3737,9 @@ The checker validates intrinsic legality, but it does not fully prove dynamic ar
 
 The compiler does not fully track dangling pointers or ownership.
 
-## 30.11 Print Checking Is Loose
+## 30.11 Output Is a Library Function
 
-The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
-
-Array literals cannot be printed: `print` is not an inference context. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
+Output is provided by `franko/io`, not by the compiler. The overloaded `print(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](19-statements.md) and [franko/io](../library_docs/io.md).
 
 ## 30.12 Unsupported Operators
 
@@ -3926,6 +3922,8 @@ for programs that import the module through its canonical specifier.
 # 32. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
+
+Examples that print assume `import "franko/io"` at the top of the file.
 
 ## 32.1 Basic Integers
 

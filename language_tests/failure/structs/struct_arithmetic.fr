@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: structs/struct_arithmetic
 // Structs are not integers: operators reject whole structs; arithmetic on a whole struct is invalid.
 struct X {

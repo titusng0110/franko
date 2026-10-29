@@ -285,7 +285,7 @@ Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`
 `null` may be passed to pointer parameters and returned from pointer
 functions.
 
-`print(null)` prints the null pointer as a pointer value.
+`print(null)` matches the `print(view<[uint8]>)` overload and prints nothing (a null view is treated as empty).
 
 ### 24.9.1 Null-Initialized Pointer Declarations
 

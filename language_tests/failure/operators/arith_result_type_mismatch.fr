@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: operators/arith_result_type_mismatch
 // Operator result types are exact (docs 17.9, 28.1, 30.6): an arithmetic
 // expression with a nonconstant uint32 operand takes the nonconstant

@@ -59,10 +59,8 @@ Namespace members are referenced with `::`:
 
 ```franko
 util::Point p
-print(util::offset)
-print(util::doubleIt(5))
 util::offset = 5
-print(a::b::helper(x))
+a::b::helper(x)
 ```
 
 A qualified name always resolves strictly inside the named namespace path, starting from the top level; there is no fallback to the global namespace, no search of enclosing namespaces, and no relative resolution through the current namespace. `a::w` does not find a symbol declared only in `a::b`, and `a::b::x` requires both `a` and `a::b` to be declared namespaces.
@@ -96,7 +94,6 @@ Executable statements are **not** currently allowed in global scope.
 Invalid global-scope items include:
 
 - assignments;
-- `print`;
 - function calls;
 - `if`;
 - `while`;

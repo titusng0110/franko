@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: fluid_consts/negative_to_unsigned
 // Negative constant -1 does not fit an unsigned uint8 context.
 func main() -> int32 {

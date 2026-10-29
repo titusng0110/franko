@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: casts/cast_narrowing_hint
 // cast<T> only performs value-preserving widening; a conversion that
 // can lose data must be written with unsafe_cast<T>.

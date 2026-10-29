@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: comments/block_comment
 // Block comments /* ... */ do not exist in Franko; only // line comments parse.
 func main() -> int32 {

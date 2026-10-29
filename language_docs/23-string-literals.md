@@ -96,13 +96,14 @@ func main() -> int32 {
 
 ## 23.6 Printing Strings
 
-`print` is unchanged (it is superseded by a future io class): a string
-literal passed to `print` prints as the address of its global byte
-array, like any other pointer. Print individual bytes instead:
+`print` (from `franko/io`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `print(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
 
 ```franko
-print($("hi")[0]);   // 104
-print($("hi")[1]);   // 105
+import "franko/io"
+
+print("hi")          // writes `hi` + newline
+print($("hi")[0])    // 104
+print($("hi")[1])    // 105
 ```
 
 ## 23.7 Empty Strings

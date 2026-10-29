@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/bitwise_not_op
 // The bitwise NOT operator '~' does not exist in the language; the lexer
 // must reject it outright (docs: unsupported operators).

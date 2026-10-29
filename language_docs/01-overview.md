@@ -25,7 +25,6 @@ Franko is a small statically typed language with:
 - `for`;
 - `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
-- `print`;
 - string literals as read-only `view<[byte, N]>` values;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);

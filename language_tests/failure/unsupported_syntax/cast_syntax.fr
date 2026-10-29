@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/cast_syntax
 // C-style cast syntax `(int32)x` does not exist in the grammar.
 // Explicit conversions use the cast<T>(expr) intrinsic (doc 17);

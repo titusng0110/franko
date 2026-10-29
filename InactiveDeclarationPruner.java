@@ -552,14 +552,6 @@ final class InactiveDeclarationPruner {
             return;
         }
 
-        if (stmt instanceof SemanticPrintNode print) {
-            for (SemanticExprNode arg : print.args) {
-                collectExprCalls(arg, out);
-            }
-
-            return;
-        }
-
         if (stmt instanceof SemanticReturnNode returnNode) {
 
             if (returnNode.value != null) {
@@ -673,14 +665,6 @@ final class InactiveDeclarationPruner {
 
             for (SemanticStmtNode update : whileNode.update) {
                 collectVariables(update, out);
-            }
-
-            return;
-        }
-
-        if (stmt instanceof SemanticPrintNode print) {
-            for (SemanticExprNode arg : print.args) {
-                collectExprVariables(arg, out);
             }
 
             return;
@@ -815,15 +799,6 @@ final class InactiveDeclarationPruner {
 
             for (SemanticStmtNode update : whileNode.update) {
                 collectExprTypes(update);
-            }
-
-            return;
-        }
-
-        if (stmt instanceof SemanticPrintNode print) {
-            for (SemanticExprNode arg : print.args) {
-                markType(arg.type);
-                collectExprTypeExprs(arg);
             }
 
             return;

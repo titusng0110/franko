@@ -102,7 +102,7 @@ public class ImportResolver {
             );
         }
 
-        if (pathText.equals("franko/os.fr")) {
+        if (pathText.equals("franko/os.fr") || isFrankoOsModuleTarget(target)) {
             importedBuiltinModules.add("franko/os");
 
             if (frankoOsModuleFile == null) {
@@ -111,6 +111,12 @@ public class ImportResolver {
         }
 
         collectFile(target, out);
+    }
+
+    private static boolean isFrankoOsModuleTarget(Path target) {
+        String normalized = target.toAbsolutePath().normalize().toString().replace('\\', '/');
+
+        return normalized.endsWith("franko/os.fr");
     }
 
     private void collectFile(Path file, List<ASTNode> out) {

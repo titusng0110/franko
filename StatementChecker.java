@@ -58,11 +58,6 @@ public class StatementChecker {
             return;
         }
 
-        if (node instanceof SemanticPrintNode n) {
-            visitPrint(n);
-            return;
-        }
-
         if (node instanceof SemanticReturnNode n) {
             visitReturnOutsideFunctionChecker(n);
             return;
@@ -178,17 +173,6 @@ public class StatementChecker {
 
         for (SemanticStmtNode updateStmt : node.update) {
             checkStmt(updateStmt);
-        }
-    }
-
-    private void visitPrint(SemanticPrintNode node) {
-        for (SemanticExprNode arg : node.args) {
-            expressions.checkExpr(arg);
-
-            ensureValueExpression(
-                    arg,
-                    "print argument"
-            );
         }
     }
 

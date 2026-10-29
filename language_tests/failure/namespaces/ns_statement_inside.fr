@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: namespaces/ns_statement_inside
 // Namespace bodies allow only struct, global-var, and function declarations;
 // an executable statement inside a namespace body is a syntax error.

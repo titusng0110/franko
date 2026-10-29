@@ -1,3 +1,5 @@
+import "franko/io"
+
 // The modulus operator `%`.
 //
 // Integer operands only, same rules as `/`. Compile-time constant

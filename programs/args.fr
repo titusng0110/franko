@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Command-line arguments: args[0] is the program name, each argument
 // is its raw bytes with no NUL terminator.
 

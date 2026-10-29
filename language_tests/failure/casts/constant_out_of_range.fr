@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: casts/constant_out_of_range
 // Folded constant unsafe_casts are validated at compile time: an
 // out-of-range constant value is an error, never a silent wraparound.

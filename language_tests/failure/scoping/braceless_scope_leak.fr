@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: scoping/braceless_scope_leak
 // A braceless if body is wrapped in an implicit block, so a variable
 // declared inside it is not visible after the if.

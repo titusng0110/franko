@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: fluid_consts/int8_overflow
 // Constant 128 does not fit the int8 context (max 127).
 func main() -> int32 {

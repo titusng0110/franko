@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_compare_null/null_to_int
 // Null may not be compared with a non-pointer value.
 func main() -> int32 {

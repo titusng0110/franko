@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Nested Dynamic Array Construction
 // ============================================================
@@ -11,31 +13,31 @@
 func main() -> int32 {
     [[int32]] m;
     m.init(2);
-    print(m[0].length(), m[1].length());
+    print(m[0].length(), " "); print(m[1].length());
 
     m[0].init(2);
     m[1].init_zero(2);
     m[0][0] = 1;
     m[0][1] = 2;
     m[1][0] = 3;
-    print(m[0][0], m[0][1], m[1][0], m[1][1]);
+    print(m[0][0], " "); print(m[0][1], " "); print(m[1][0], " "); print(m[1][1]);
 
     // resize larger: old positions keep their values and the grown
     // element is constructed (length 0, ready for init).
     m.resize(3);
-    print(m[0][0], m[1][0], m[2].length());
+    print(m[0][0], " "); print(m[1][0], " "); print(m[2].length());
     m[2].init(1);
     m[2][0] = 5;
     print(m[2][0]);
 
     // resize smaller: dropped elements are destroyed, survivors kept.
     m.resize(1);
-    print(m.length(), m[0][0], m[0][1]);
+    print(m.length(), " "); print(m[0][0], " "); print(m[0][1]);
 
     // init_zero also constructs nested elements.
     [[int32]] z;
     z.init_zero(2);
-    print(z[0].length(), z[1].length());
+    print(z[0].length(), " "); print(z[1].length());
     z[0].init(1);
     z[0][0] = 9;
     print(z[0][0]);

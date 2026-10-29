@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Runtime fixture: cast_overflow/narrow_throws
 // A narrowing unsafe_cast whose value does not fit the target
 // throws via franko_unsafe_cast; the binary must exit non-zero.

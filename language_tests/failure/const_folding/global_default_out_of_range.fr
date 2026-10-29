@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: const_folding/global_default_out_of_range
 // Global initializer 300 is a folded constant out of range for int8.
 int8 g = 300;

@@ -3,6 +3,7 @@
 // before the syscall runs (so this never blocks on stdin); the binary
 // must exit non-zero. Also covers splicing the posix.read bridge block.
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     [byte] buf;

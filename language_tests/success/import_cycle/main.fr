@@ -10,6 +10,7 @@
 // ============================================================
 
 import "a"
+import "franko/io"
 
 func main() -> int32 {
     print(aValue())

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Passing a view<T> where an mview<T> is expected is not allowed.
 func needsMView(mview<[byte, 3]> m) -> void {
     print($(m)[0]);

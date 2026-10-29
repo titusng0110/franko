@@ -1,6 +1,8 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/incdec_as_expression
 // `++` and `--` are statement forms only: they never produce a value, so
-// `print(x++)` does not parse (docs 14, 19).
+// `a++` cannot appear as a call argument and `print(a++)` does not parse.
 func main() -> int32 {
     int32 a = 1;
     print(a++);

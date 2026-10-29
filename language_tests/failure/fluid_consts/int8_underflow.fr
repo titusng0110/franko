@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: fluid_consts/int8_underflow
 // Constant -129 does not fit the int8 context (min -128).
 func main() -> int32 {

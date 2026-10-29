@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Static Array Sizes
 // ============================================================
@@ -24,9 +26,9 @@ func main() -> int32 {
     d[2] = 43;
 
     print(a[0]);
-    print(b[0], b[0xF]);
-    print(c[0], c[0b111]);
-    print(d[0], d[1], d[2]);
+    print(b[0], " "); print(b[0xF]);
+    print(c[0], " "); print(c[0b111]);
+    print(d[0], " "); print(d[1], " "); print(d[2]);
 
     return 0;
 }

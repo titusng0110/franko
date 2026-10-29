@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/ndarray_type
 // The ndarray<T, D1, ..., Dn> type sugar does not exist in the grammar.
 // Multidimensional static arrays are written as nested static arrays:

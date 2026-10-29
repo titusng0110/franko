@@ -809,17 +809,6 @@ public class Desugarer {
             return new ExprStmtNode(desugarExpr(n.expr));
         }
 
-        if (stmt instanceof PrintNode) {
-            PrintNode n = (PrintNode) stmt;
-            List<ASTNode> args = new ArrayList<>();
-
-            for (ASTNode arg : n.args) {
-                args.add(desugarExpr(arg));
-            }
-
-            return new PrintNode(args);
-        }
-
         if (stmt instanceof ReturnNode) {
             ReturnNode n = (ReturnNode) stmt;
 

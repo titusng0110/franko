@@ -11,14 +11,13 @@ Franko supports the following statements inside function bodies and blocks:
 - `while`;
 - `for`;
 - `return`;
-- `print`;
 - expression statements;
 - function call statements;
 - array intrinsic statement forms.
 
 Executable statements are not allowed at global scope.
 
-Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so `print(x++)` does not parse. See [Assignment](14-assignment.md).
+Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so it cannot appear as a call argument (for example, `print(x++)` does not parse). See [Assignment](14-assignment.md).
 
 ## 19.1 Blocks
 
@@ -153,26 +152,28 @@ A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 19.7 Print Statements
+## 19.7 Output (`franko/io`)
 
-`print` is a dedicated statement, not a function and not a member method:
+Output is a library function, not a statement. Import `franko/io` and call the overloaded `print(...)` functions (see [franko/io](../library_docs/io.md) for the full API):
 
 ```franko
-print(x);
-print(a, b, c);      // multiple arguments printed space-separated
-print();              // prints a bare newline
+import "franko/io"
+
+func main() -> int32 {
+    print(42)        // `42` followed by a newline
+    print("hi")      // text followed by a newline
+    print(1, " ")    // `1` followed by a space (no newline)
+    print(2)         // `2` followed by a newline
+    print()          // bare newline
+    return 0
+}
 ```
 
-The checker validates print arguments as expressions usable where a value is required (in particular, `void` expressions are rejected), but it does not impose a strict printable-type policy.
+A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(x, end)` writes `x` followed by `end` verbatim (a null or empty `end` means no suffix and no newline). `print()` writes a bare newline. Overloads exist for all eight integer types and for `view<[uint8]>` text; a null or empty view prints nothing.
 
-Current print limitation: only integer primitives and pointers are printable. The C++14 backend can print:
+`print` has no overloads for pointers, arrays, or structs. Print individual elements, fields, or bytes instead: `print(xs[0])`, `print(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `print(s[0])`.
 
-- integer primitives (with `int8`/`uint8` promoted so a number is shown rather than a character);
-- pointers, including the `null` pointer (printed through `const void*`).
-
-Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
-
-Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<[byte, N]>`), but `print` shows their global's address rather than the text; print individual bytes instead.
+Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](12-functions.md).
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 

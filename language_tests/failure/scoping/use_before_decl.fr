@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: scoping/use_before_decl
 // A local variable must be declared before it is used within its lexical scope.
 func main() -> int32 {

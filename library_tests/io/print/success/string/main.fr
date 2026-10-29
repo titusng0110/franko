@@ -1,0 +1,13 @@
+import "franko/io"
+
+func main() -> int32 {
+    print("hi")
+    print(1, "!")
+    print(2)
+    print(3, null)
+    print(4)
+    print()
+    print(5, " ")
+    print(6)
+    return 0
+}

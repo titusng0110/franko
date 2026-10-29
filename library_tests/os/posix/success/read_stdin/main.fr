@@ -6,12 +6,13 @@
 // count and the first three bytes, then writes those three bytes
 // back to stdout and prints that count.
 //
-// Raw fd writes bypass the std::cout buffer that print uses, so the
-// echoed "ABC" reaches the output before the buffered print lines:
-// stdout is exactly "ABC4\n65\n66\n67\n3\n" on every platform.
+// `print` goes through the same OS bridge as raw fd writes, so output
+// appears in program order: stdout is exactly "4\n65\n66\n67\nABC3\n"
+// on every platform.
 // ============================================================
 
 import "franko/os"
+import "franko/io"
 
 func main() -> int32 {
     [byte] buf;

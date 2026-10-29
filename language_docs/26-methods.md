@@ -154,7 +154,7 @@ Rules:
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
 - `self` as an expression (`self`, `getptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
-- `x.self` parses (member names accept keywords) but always fails resolution, like `x.print`.
+- `x.self` parses (member names accept keywords) but always fails resolution. A method named `print` is an ordinary method like any other.
 
 ## 26.7 Scope Inside Method Bodies
 

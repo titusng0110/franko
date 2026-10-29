@@ -1,3 +1,5 @@
+import "franko/io"
+
 // ============================================================
 // LANGUAGE TEST: Dynamic Array Lifecycle
 // ============================================================
@@ -16,14 +18,14 @@ func main() -> int32 {
     // init_zero allocates zeroed element storage
     [int32] zs;
     zs.init_zero(3);
-    print(zs[0], zs[1], zs[2]);
+    print(zs[0], " "); print(zs[1], " "); print(zs[2]);
 
     // resize larger: old positions keep their values
     xs.resize(6);
     xs[4] = 14;
     xs[5] = 15;
-    print(xs[0], xs[1], xs[2], xs[3]);
-    print(xs[4], xs[5]);
+    print(xs[0], " "); print(xs[1], " "); print(xs[2], " "); print(xs[3]);
+    print(xs[4], " "); print(xs[5]);
 
     xs.uninit();
     zs.uninit();

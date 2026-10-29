@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: namespaces/ns_qualified_no_parent_fallback
 // A qualified name resolves strictly inside the named namespace path:
 // `a::w` does not find `w` declared in the nested namespace `a::b`.

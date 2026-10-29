@@ -1,0 +1,7 @@
+import "franko/io"
+
+func main() -> int32 {
+    print(null)
+    print(7)
+    return 0
+}

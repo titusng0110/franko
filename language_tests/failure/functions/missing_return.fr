@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: functions/missing_return
 // A non-void function must contain at least one return statement somewhere in its body.
 

@@ -228,7 +228,7 @@ Called by `Main` (root) and `ImportResolver.collectFile` (imports); calls
 All raw AST node classes in one file (package-private, constructors only):
 `ProgramNode`, `BlockNode`, `ExprStmtNode`; statements (`AssignNode`,
 `IncDecNode`, `IfNode`, `WhileNode` with its desugared-for update epilogue,
-`BreakNode`/`ContinueNode` with optional const level, `ForNode`, `PrintNode`,
+`BreakNode`/`ContinueNode` with optional const level, `ForNode`,
 `ReturnNode`); declarations (`FunctionDeclNode`, `ParameterNode`,
 `StructDeclNode`, `StructFieldDeclNode`, `GlobalVarDeclNode`, `VarDeclNode`,
 `VarDeclInitNode`, `VarDeclArrayInitNode`, `ImportNode`, `NamespaceNode`,
@@ -392,7 +392,7 @@ nodes, `SemanticFunctionDeclNode` (symbol + parameter variables + body),
 initializer), statements (`SemanticAssignNode` with op text and
 `isCompound()/baseOp()`, `SemanticIfNode`, `SemanticWhileNode` with the
 desugared-for update epilogue, `SemanticBreakNode` with levels,
-`SemanticContinueNode`, `SemanticPrintNode`, `SemanticReturnNode` carrying the
+`SemanticContinueNode`, `SemanticReturnNode` carrying the
 owning `FunctionSymbol`), the array-intrinsic vocabulary
 (`SemanticArrayIntrinsicKind`: INIT, INIT_ZERO, RESIZE, UNINIT, MEMSET, MEMCPY,
 MEMMOVE, LENGTH — with `returnType()`/`returnsVoid()`;
@@ -476,7 +476,11 @@ type applicability, constant-fluid arguments may widen, nonconstants must
 match exactly **or be a pointer conversion** (permission downgrade or
 array-view decay), ambiguity is an
 error; among applicable overloads exact permission matches win over
-downgrading ones, then pure downgrades, then decays, then ambiguity —
+downgrading ones, then pure downgrades, then decays, then a constant-fit
+preference (the parameter matching the constant's own type wins when the
+value fits, otherwise the narrowest fitting type, signed before unsigned
+at equal width — so `print(1)` selects `print(int32)` and
+`print(5000000000)` selects `print(int64)`), then ambiguity —
 the fewest-downgrades tally weights a decay twice a pure downgrade). Method overload
 identity excludes `self`'s type: `resolveMethod` matches name + user
 arguments only, and the caller synthesizes the hidden `self` argument with
@@ -604,7 +608,7 @@ allowed); assignment through an lvalue path requires **mutation rights** over
 the target's storage region (§4.9 blocks writes through `view`); compound-assign
 rules with
 constant-zero-divisor rejection; `if`/`while` conditions must be non-void
-integral expressions; `print` argument validity; and the void-value-context
+integral expressions; and the void-value-context
 rule: a void call may not appear where a value is required (`x = logDone();`,
 `if (logDone()) {}`). Break/continue are no-ops here (already validated by
 `SemanticAnalyzer`); a stray `SemanticReturnNode` triggers a defensive error
@@ -820,8 +824,8 @@ variables (globals and locals alike) emit `= nullptr`, implementing the
 guaranteed null-initialization rule. Statement lowering: `if` with constant-dead-
 branch pruning, `while` with goto-based `L_brk_<id>`/`L_cont_<id>` labels plus
 the desugared for-update epilogue (continue label placed *before* the
-epilogue so `continue` runs the update and `break` skips it), `std::cout`
-print. Expression lowering is structural (`ptr<T>`/`mview<T>`→`T*`,
+epilogue so `continue` runs the update and `break` skips it).
+Expression lowering is structural (`ptr<T>`/`mview<T>`→`T*`,
 `view<T>`→`T const*`, `getptr`/`getmview`/`getview(x)`→`(&x)`,
 `$(p)`→`(*p)`, arrays → `Franko_Dynamic_Array<T>` /
 `Franko_Static_Array<T,N>`, pre-folded constants emitted directly, contextual
@@ -1103,8 +1107,7 @@ Consequences of strings being views:
 * pointer-typed globals may be initialized with `null` or a
   `getptr`/`getmview`/`getview` over a global, enabling
   `view<[byte, 5]> G = "hello";`;
-* `print("hi")` prints the global's address (print is unchanged pending the
-  io class).
+* `print("hi")` prints the text `hi` through the `franko/io` overload for `view<[uint8]>`.
 
 ## 4.11 Runtime array and allocation semantics
 
@@ -1162,10 +1165,10 @@ remain well-formed C++14: an unsuffixed decimal literal whose value
 exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because
 decimal literals in C++14 do not fall back to unsigned integer types.
 
-**Print.** `print` arguments are emitted as `std::cout` insertions: plain
-integer primitives are inserted directly; `int8`/`uint8` values are
-promoted with unary `+` so a number is printed rather than a character;
-pointers are cast to `const void*` to avoid accidental string printing.
+**Output.** There is no builtin print statement: output is provided by the
+`franko/io` library, whose overloaded `print(...)` functions write through
+the `franko/os` bridge (`os::posix::write` / `os::win32::WriteFile`).
+Generated C++ contains no `std::cout` insertions.
 
 **Mangling key spelling.** The 8-hex-digit suffix is the FNV-1a 32-bit
 hash of the canonical signature key: declared parameter types in order
@@ -1249,7 +1252,7 @@ taken from the context `ExpressionAnalyzer` passes down (the inference
 sites are exactly: assignment RHS — including declaration-initializer
 sugar and global initializers —, `return` expressions, and call arguments
 including `memcpy` sources, whose context is the receiver's element type
-inferred by `ArrayLowerer`). No context (bare statement, `print`,
+inferred by `ArrayLowerer`). No context (bare statement,
 operator operand, `$` operand, …) is the "cannot infer" diagnostic. The
 context may also be an array type (so `arr = [1,2,3]` reports the
 memcpy-suggestion error with a well-typed literal) or a non-`view`

@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_compare_null/order_null
 // Null may be compared with an pointer using equality only.
 func main() -> int32 {

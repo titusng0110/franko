@@ -16,6 +16,7 @@
 // ============================================================
 
 import "franko/pool"
+import "franko/io"
 
 func main() -> int32 {
     std::GenerationalNextAllocator a;

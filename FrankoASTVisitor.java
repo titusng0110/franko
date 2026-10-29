@@ -415,7 +415,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         if (ctx.assignStmt() != null) return visit(ctx.assignStmt());
         if (ctx.compoundAssignStmt() != null) return visit(ctx.compoundAssignStmt());
         if (ctx.incDecStmt() != null) return visit(ctx.incDecStmt());
-        if (ctx.printStmt() != null) return visit(ctx.printStmt());
         if (ctx.exprStmt() != null) return visit(ctx.exprStmt());
 
         throw new RuntimeException("Unknown simpleStmt: " + ctx.getText());
@@ -542,19 +541,6 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode target = visit(ctx.lvalue());
 
         return new IncDecNode(ctx.PLUSPLUS() != null ? "++" : "--", target);
-    }
-
-    @Override
-    public ASTNode visitPrintStmt(FrankoParser.PrintStmtContext ctx) {
-        List<ASTNode> args = new ArrayList<>();
-
-        if (ctx.exprList() != null) {
-            for (FrankoParser.ExprContext exprCtx : ctx.exprList().expr()) {
-                args.add(visit(exprCtx));
-            }
-        }
-
-        return new PrintNode(args);
     }
 
     @Override

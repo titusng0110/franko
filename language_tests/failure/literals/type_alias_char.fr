@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: literals/type_alias_char
 // No 'char' type alias exists; only int/uint/byte are aliased.
 func main() -> int32 {

@@ -249,16 +249,6 @@ public class ASTPrinter {
             print(n.body, indent + 2);
         }
 
-        else if (node instanceof PrintNode n) {
-            System.out.println(pad + "Print");
-            System.out.println(pad + "  args: " + n.args.size());
-
-            for (int i = 0; i < n.args.size(); i++) {
-                System.out.println(pad + "  [" + i + "]");
-                print(n.args.get(i), indent + 2);
-            }
-        }
-
         else if (node instanceof ReturnNode n) {
             System.out.println(pad + "Return");
 

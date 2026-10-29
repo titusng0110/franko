@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: global_scope/gs_block
 // A bare block is an executable statement and is not a valid top-level item.
 { print(1) }

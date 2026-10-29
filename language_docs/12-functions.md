@@ -68,12 +68,12 @@ where `mview`/`view` of `[T]` is expected; see
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](16-casts.md)).
 
-For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
+For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. When a constant fits several overloads, the constant-fit preference applies: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type wins (signed before unsigned at equal width). See [Fluid Integer Constants](09-fluid-integer-constants.md).
 
 Overload preference: among applicable overloads, ones matched without any
 conversion win over converting ones, and among the rest the ones relying
 on the fewest conversions win, with a decay counted heavier than a pure
-permission downgrade. If several overloads remain
+permission downgrade. Constant arguments then prefer the lowest constant-fit cost (own type, then narrowest, signed first). If several overloads remain
 tied, the call is ambiguous and is rejected.
 
 ## 12.7 Bare Function Names

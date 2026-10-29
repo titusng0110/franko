@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: scoping/param_body_duplicate
 // Function body braces do not create an extra scope, so a body-level
 // declaration reusing a parameter name is a duplicate-declaration error.

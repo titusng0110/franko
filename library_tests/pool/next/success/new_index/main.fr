@@ -15,6 +15,7 @@
 // ============================================================
 
 import "franko/pool"
+import "franko/io"
 
 func main() -> int32 {
     std::NextAllocator a;
@@ -23,7 +24,7 @@ func main() -> int32 {
     uint32 i = a.new_index();
     uint32 j = a.new_index();
     uint32 k = a.new_index();
-    print(i, j, k);
+    print(i, " "); print(j, " "); print(k);
     print(a.new_index());
     print(a.used());
     print(a.free_index(j));

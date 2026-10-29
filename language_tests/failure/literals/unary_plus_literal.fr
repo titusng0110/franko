@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: literals/unary_plus_literal
 // There is no unary '+' operator and no '+123' literal form.
 func main() -> int32 {

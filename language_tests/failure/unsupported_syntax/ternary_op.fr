@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/ternary_op
 // The ternary conditional operator `?:` does not exist in the grammar
 // (doc 31.17); use if/else statements instead.

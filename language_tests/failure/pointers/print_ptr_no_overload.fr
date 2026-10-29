@@ -1,0 +1,11 @@
+// Failure fixture: pointers/print_ptr_no_overload
+// There is no print overload for pointers: a non-byte pointer has no
+// matching overload (print(null) takes the view overload and prints
+// nothing, but ptr<int32> matches nothing).
+import "franko/io"
+
+func main() -> int32 {
+    ptr<int32> q
+    print(q)
+    return 0
+}

@@ -4,9 +4,8 @@
 // import "franko/os" plus the os::IS_* compile-time constants select
 // the API per target, so this program compiles for every target: on
 // Windows only the win32 calls are emitted (and bridged), on
-// linux/macos only the posix ones. Deliberately print-free: raw fd
-// writes bypass the std::cout buffer, so every byte goes through the
-// selected OS API.
+// linux/macos only the posix ones. Deliberately print-free: it uses raw
+// fd writes directly instead of going through `franko/io`.
 //
 // Input line endings depend on how stdin is wired, so the scan
 // tolerates both "\r\n" (interactive Windows console) and "\n"

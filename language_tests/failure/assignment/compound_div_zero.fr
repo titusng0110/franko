@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: assignment/compound_div_zero
 // A constant zero divisor is rejected for `/=` and `%=`, matching the
 // plain `x / 0` rule (doc 17.3).

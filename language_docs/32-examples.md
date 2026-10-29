@@ -2,6 +2,8 @@
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
+Examples that print assume `import "franko/io"` at the top of the file.
+
 ## 32.1 Basic Integers
 
 ```franko

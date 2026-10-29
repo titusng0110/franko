@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_deref_null/null_assigned_deref
 // Dereferencing an pointer after an explicit null assignment.
 func main() -> int32 {

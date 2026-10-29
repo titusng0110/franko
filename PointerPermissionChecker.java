@@ -181,13 +181,6 @@ public final class PointerPermissionChecker {
             return;
         }
 
-        if (node instanceof SemanticPrintNode n) {
-            for (SemanticExprNode arg : n.args) {
-                markValue(arg, PtrPermission.READ_ONLY);
-            }
-            return;
-        }
-
         if (node instanceof SemanticReturnNode n) {
             if (n.value != null) {
                 markValue(

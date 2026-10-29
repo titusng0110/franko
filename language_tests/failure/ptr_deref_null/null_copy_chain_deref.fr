@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: ptr_deref_null/null_copy_chain_deref
 // Null state propagates transitively through a copy chain.
 func main() -> int32 {

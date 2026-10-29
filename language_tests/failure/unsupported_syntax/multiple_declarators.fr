@@ -1,3 +1,5 @@
+import "franko/io"
+
 // Failure fixture: unsupported_syntax/multiple_declarators
 // Multiple declarators in one declaration (`int32 a, b;`) do not exist in
 // the grammar; each variable must be declared separately (doc 31.17).

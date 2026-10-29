@@ -184,11 +184,6 @@ public class SemanticASTPrinter {
             return;
         }
 
-        if (node instanceof SemanticPrintNode n) {
-            printPrint(n, indent);
-            return;
-        }
-
         if (node instanceof SemanticReturnNode n) {
             printReturn(n, indent);
             return;
@@ -285,16 +280,6 @@ public class SemanticASTPrinter {
 
     private static void printContinue(SemanticContinueNode node, int indent) {
         line(indent, "SemanticContinueNode");
-    }
-
-    private static void printPrint(SemanticPrintNode node, int indent) {
-        line(indent, "SemanticPrintNode");
-        line(indent + 1, "args: " + node.args.size());
-
-        for (int i = 0; i < node.args.size(); i++) {
-            line(indent + 1, "[" + i + "]");
-            printExpr(node.args.get(i), indent + 2);
-        }
     }
 
     private static void printReturn(SemanticReturnNode node, int indent) {
