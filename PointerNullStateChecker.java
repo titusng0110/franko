@@ -244,6 +244,7 @@ public final class PointerNullStateChecker {
         if (expr instanceof SemanticCastExprNode n) {
             collectSymbolsFromExpr(n.expr);
         }
+
     }
 
     private void addPointerSymbolIfNeeded(VariableSymbol symbol) {
@@ -1013,6 +1014,7 @@ public final class PointerNullStateChecker {
         if (expr instanceof SemanticCastExprNode n) {
             checkExpr(n.expr);
         }
+
     }
 
     private int snapshot() {

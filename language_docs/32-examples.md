@@ -18,13 +18,16 @@ func main() -> int32_t {
 }
 ```
 
-## 32.2 Static Array Initializer Assignment
+## 32.2 Static Array Copy From a Literal
+
+An array literal is a `view<array<T, N>>` value, so arrays receive its
+elements through `memcpy` (see [Array Literals](22-array-literals.md)):
 
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
 
-    xs = [1, 2, 3];
+    xs.memcpy([1, 2, 3]);
 
     print(xs[0]);
     print(xs[1]);
@@ -52,21 +55,22 @@ func main() -> int32_t {
 }
 ```
 
-## 32.3 Static Partial Initializer Assignment
+## 32.3 Static Partial Copy From a Literal
 
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
 
-    xs = [1, 2];
+    xs.memset(0);
+    xs.memcpy([1, 2]);
 
     return 0;
 }
 ```
 
-`xs[2]` is untouched.
+`xs[2]` is untouched: memcpy copies `min(source, target)` elements.
 
-## 32.4 Dynamic Array Initializer Assignment
+## 32.4 Dynamic Array Copy From a Literal
 
 ```franko
 func main() -> int32_t {
@@ -74,7 +78,7 @@ func main() -> int32_t {
 
     xs(3);
 
-    xs = [10, 20, 30];
+    xs.memcpy([10, 20, 30]);
 
     print(xs[0]);
     print(xs[1]);
@@ -86,40 +90,34 @@ func main() -> int32_t {
 }
 ```
 
-## 32.5 Runtime Expressions Inside Initializer Lists
+## 32.5 Constant Expressions Inside Array Literals
 
 ```franko
-func getValue() -> int32_t {
-    return 10;
-}
-
 func main() -> int32_t {
-    int32_t x;
+    view<array<int32_t, 4>> v = [1, 5, 10, 1 + 2];
 
-    x = 5;
-
-    array<int32_t> xs;
-
-    xs(4);
-
-    xs = [1, x, getValue(), 1 + 2];
-
-    xs.uninit();
+    print($(v)[0]);
+    print($(v)[1]);
+    print($(v)[2]);
+    print($(v)[3]);
 
     return 0;
 }
 ```
 
-## 32.6 Nested Static Arrays
+Elements are compile-time constant expressions; runtime values are
+rejected because a literal is hoisted to a constant global array.
+
+## 32.6 Nested Static Array Literals
 
 ```franko
 func main() -> int32_t {
     array<array<int32_t, 2>, 2> matrix;
 
-    matrix = [
+    matrix.memcpy([
         [1, 2],
         [3, 4]
-    ];
+    ]);
 
     print(matrix[0][0]);
     print(matrix[1][1]);
@@ -128,7 +126,12 @@ func main() -> int32_t {
 }
 ```
 
+Nested literals are rectangular and static at every level.
+
 ## 32.7 Nested Dynamic Arrays
+
+A nested literal has static rows, so dynamic rows are filled one at a
+time:
 
 ```franko
 func main() -> int32_t {
@@ -138,10 +141,8 @@ func main() -> int32_t {
     matrix[0](3);
     matrix[1](3);
 
-    matrix = [
-        [1, 2, 3],
-        [4, 5, 6]
-    ];
+    matrix[0].memcpy([1, 2, 3]);
+    matrix[1].memcpy([4, 5, 6]);
 
     matrix[0].uninit();
     matrix[1].uninit();
@@ -151,49 +152,45 @@ func main() -> int32_t {
 }
 ```
 
-## 32.8 Declaration Initializer with Static Array
+## 32.8 Declaration Initializer With an Array Literal
+
+A `view` declaration accepts a literal directly; its element type and
+length are inferred from the literal and checked against the declared
+type:
 
 ```franko
 func main() -> int32_t {
-    array<int32_t, 3> xs = [1, 2, 3];
+    view<array<int32_t, 3>> v = [1, 2, 3];
+    view<array<int32_t, ?>> w = [4, 5, 6, 7];
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    print($(v)[0]);
+    print($(w).length());    // 4
 
     return 0;
 }
 ```
 
-## 32.9 Dynamic Array Declaration Initializer Without Initialization
+## 32.9 Dynamic View Decay From a Literal
+
+A literal decays to `view<array<T>>` wherever a dynamic view is
+expected:
 
 ```franko
+func take(view<array<int32_t>> v) -> int32_t {
+    return $(v)[0];
+}
+
 func main() -> int32_t {
-    array<int32_t> xs = [1, 2, 3];
+    view<array<int32_t>> d = [1, 2, 3];
+
+    print($(d)[2]);
+    print(take([4, 5, 6]));
 
     return 0;
 }
 ```
 
-This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with a "Franko_Dynamic_Array not initialized" error.
-
-Correct:
-
-```franko
-func main() -> int32_t {
-    array<int32_t> xs;
-
-    xs(3);
-
-    xs = [1, 2, 3];
-
-    xs.uninit();
-
-    return 0;
-}
-```
-
-## 32.10 Array Initializer Through Pointer
+## 32.10 Array Copy Through Pointer
 
 ```franko
 func main() -> int32_t {
@@ -202,7 +199,7 @@ func main() -> int32_t {
 
     p = getptr(xs);
 
-    $(p) = [1, 2, 3];
+    $(p).memcpy([1, 2, 3]);
 
     print(xs[0]);
     print(xs[1]);

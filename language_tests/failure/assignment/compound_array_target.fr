@@ -2,7 +2,8 @@
 // Arrays are not arithmetic values: `xs += 1` is rejected exactly like
 // `xs + 1` (docs 17.3, 20).
 func main() -> int32_t {
-    array<int32_t, 3> xs = [1, 2, 3];
+    array<int32_t, 3> xs;
+    xs.memcpy([1, 2, 3]);
 
     xs += 1;
     xs *= 2;

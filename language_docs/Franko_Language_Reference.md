@@ -40,7 +40,7 @@ It documents both intended language behavior and important current implementatio
 19. [Statements](19-statements.md)
 20. [Arrays](20-arrays.md)
 21. [Array Intrinsics](21-array-intrinsics.md)
-22. [Array Initializer Lists](22-array-initializer-lists.md)
+22. [Array Literals](22-array-literals.md)
 23. [String Literals](23-string-literals.md)
 24. [Pointers](24-pointers.md)
 25. [Structs](25-structs.md)
@@ -93,7 +93,8 @@ Franko is a small statically typed language with:
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
   - `arr.length()`;
-- array initializer lists as array element assignment sugar;
+- array literals as `view<array<T, N>>` values over constant global
+  arrays (element type inferred, see [Array Literals](22-array-literals.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).
 
@@ -150,7 +151,7 @@ func main() -> int32_t {
 }
 ```
 
-Newlines inside parentheses `(...)` and brackets `[...]` are ignored, so expressions, argument lists, and initializer lists may span multiple lines. Newlines inside braces `{...}` are not ignored: they remain statement separators.
+Newlines inside parentheses `(...)` and brackets `[...]` are ignored, so expressions, argument lists, and array literals may span multiple lines. Newlines inside braces `{...}` are not ignored: they remain statement separators.
 
 ## Comments
 
@@ -462,23 +463,14 @@ arr(20);
 
 The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](21-array-intrinsics.md).
 
-## 5.3 Array Initializer List Desugaring
+## 5.3 Array Literal Desugaring
 
-This:
-
-```franko
-xs = [1, 2, 3];
-```
-
-is desugared to:
-
-```franko
-xs[0] = 1;
-xs[1] = 2;
-xs[2] = 3;
-```
-
-Nested initializer lists are recursively lowered to nested indexed assignments.
+Array literals are not assignment sugar: they are `view<array<T, N>>`
+values over hoisted constant global arrays, exactly like string
+literals. An array literal is never rewritten into statements; its
+element type is inferred from the surrounding assignment, return, or
+call-argument context during semantic analysis. See
+[Array Literals](22-array-literals.md).
 
 ## 5.4 String Literal Desugaring
 
@@ -552,39 +544,45 @@ The `init` and `update` statements go through the ordinary statement desugaring 
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size may be written as `?` when the array is declared with an array-literal initializer:
+A static array size may be written as `?` in a `view<array<...>>`
+declaration with an array-literal initializer:
 
 ```franko
-array<int32_t, ?> a = [0, 1, 2, 3];
+view<array<int32_t, ?>> v = [0, 1, 2, 3];
 ```
 
-During desugaring, each `?` is replaced by the element count of the corresponding initializer level, so the declaration above becomes:
+During desugaring, each `?` is replaced by the element count of the
+corresponding literal level, so the declaration above becomes
+`view<array<int32_t, 4>> v`. Nested literals infer level by level:
 
 ```franko
-array<int32_t, 4> a;
-a[0] = 0;
-a[1] = 1;
-a[2] = 2;
-a[3] = 3;
+view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
 ```
 
-Nested literals infer level by level:
-
-```franko
-array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
-```
-
-becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear at any level of the nest, including middle levels.
+becomes `view<array<array<int32_t, 2>, 2>> m`. `?` may appear at any
+level of the nest, including middle levels.
 
 Inference rules:
 
-- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal (string literals are `view<array<byte, N>>` values and do not participate);
-- when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
-- when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
-- an empty initializer list cannot infer a size;
-- without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
+- `?` is legal only in a local declaration-assignment statement
+  (`view<array<...>> name = literal;`) whose initializer is an array
+  literal (string literals are `view<array<byte, N>>` values and do not
+  participate);
+- the declared type must be a `view`: an array literal is a view value,
+  so it never initializes an array declaration;
+- when `?` is used in any dimension, the whole array nest must be static
+  (no dynamic `array<T>` level anywhere);
+- when `?` is used in any dimension, the literal must fit exactly at
+  every level: a shorter literal is an error (the literal's length is
+  its type), and sibling lists at each level must have equal length
+  (perfect rectangle);
+- an empty array literal is invalid in general, so it cannot infer a
+  size.
 
-Misplaced `?` (parameters, return types, struct fields, globals, pointers, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
+Misplaced `?` (parameters, return types, struct fields, globals,
+pointers, call-style `arr(4)` initialization, non-literal initializers)
+is rejected during desugaring. See [Arrays](20-arrays.md) and
+[Array Literals](22-array-literals.md).
 
 ## 5.8 Constant Expression Evaluation
 
@@ -912,16 +910,24 @@ ptr<array<byte, 5>> p = null
 The initializer must be a statically representable address of the right
 type (a permission downgrade is allowed, an upgrade is not).
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+An array literal may initialize a pointer-typed global (it is a
+`view<array<T, N>>` value over a constant global, like a string
+literal):
+
+```franko
+view<array<int32_t, 4>> G = [1, 2, 3, 4]   // valid
+```
+
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
 int32_t g = h                     // invalid: the initializer must be constant
-array<int32_t, 3> xs = [1, 2, 3]  // invalid: desugars into indexed assignments
+array<int32_t, 3> xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
 array<byte, 6> s = "hello"        // invalid: strings cannot initialize arrays
 ```
 
-The constant-initializer and static-address forms above are the only
-ways to initialize a global at its declaration.
+The constant-initializer, static-address, and array-literal forms above
+are the only ways to initialize a global at its declaration.
 
 ## 11.5 Uninitialized Values
 
@@ -1269,7 +1275,7 @@ int64_t y = 2;
 x += y;          // operands must have the same integer type
 ```
 
-The right-hand side may not be an array initializer list (`xs += [1, 2]` does not parse); initializer lists remain plain-`=` sugar only. See [Array Initializer Lists](22-array-initializer-lists.md).
+The right-hand side may not be an array literal (`xs += [1, 2]` is rejected: operands must be integers). See [Array Literals](22-array-literals.md).
 
 ## 14.6 Increment and Decrement
 
@@ -1329,8 +1335,7 @@ This distinction matters for:
 - compound assignment targets and `x++` / `x--` targets;
 - `getptr(...)` operands;
 - array intrinsic receivers;
-- `memcpy` sources;
-- array initializer assignment targets.
+- `memcpy` sources.
 
 ---
 
@@ -1680,8 +1685,7 @@ Franko supports the following statements inside function bodies and blocks:
 - `print`;
 - expression statements;
 - function call statements;
-- array intrinsic statement forms;
-- array initializer assignments.
+- array intrinsic statement forms.
 
 Executable statements are not allowed at global scope.
 
@@ -1839,7 +1843,7 @@ Current print limitation: only integer primitives and pointers are printable. Th
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
-Array initializer lists are not expressions and cannot be printed directly. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
+Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -1883,7 +1887,7 @@ array<array<int32_t, 4>, 8> matrix;
 
 Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
 
-However, Franko supports **array initializer lists** as assignment sugar for assigning individual elements into an existing array target. See [Array Initializer Lists](22-array-initializer-lists.md).
+However, Franko supports **array literals** as `view<array<T, N>>` values over constant global arrays; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
 
 ## 20.1 Static Arrays
 
@@ -2024,7 +2028,8 @@ a.memset(0);
 a.uninit();
 ```
 
-Array initializer assignment is not whole-array value assignment.
+An array literal is not an array value; arrays receive literal
+elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 ## 20.6 Array Lifetime Limitations
 
@@ -2202,7 +2207,7 @@ target.memcpy(source, dstStart, srcStart, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`; passing an array value directly is invalid;
+- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`, or an array literal (its element type is inferred from the target); passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
@@ -2289,308 +2294,235 @@ print(m[0].length());   // 2
 
 ---
 
-# 22. Array Initializer Lists
+# 22. Array Literals
 
-Franko supports **array initializer lists** as array element assignment sugar.
+Franko **array literals** are read-only views of static arrays, exactly
+like [string literals](23-string-literals.md) are views of byte arrays.
 
-An array initializer list is written with square brackets:
+An array literal is written with square brackets:
 
 ```franko
 [1, 2, 3]
 ```
 
-An array initializer list is **not** a standalone array value.
-
-It is **not** a general expression.
-
-It is a compact syntax for assigning listed elements into an existing array target.
-
-The core rule is:
+An array literal is an **ordinary expression** whose type is
+`view<array<T, N>>` (see [Pointers](24-pointers.md)): a read-only
+pointer to a static array of `N` elements, where `N` is the number of
+elements written and `T` is the **inferred element type**.
 
 ```franko
-target = [a, b, c];
+[1, 2, 3]        // view<array<int32_t, 3>> when T is inferred as int32_t
+[0, 255]         // view<array<uint8_t, 2>> when T is inferred as uint8_t
 ```
 
-is equivalent to:
+## 22.1 Element Type Inference
+
+The element type `T` is always an integer primitive type. It is
+**inferred from the surrounding code** — a literal carries no element
+type of its own:
+
+- **assignment**: the target's element type (a `view<array<T, ...>>`
+  variable, or an array target whose element type guides the inference
+  before the assignment is rejected — see 22.5);
+- **returns**: the function's return type;
+- **call arguments**: the parameter type (function, method, or array
+  intrinsic parameters such as `memcpy`'s source).
+
+Outside these contexts a literal has nothing to infer from and is
+rejected:
 
 ```franko
-target[0] = a;
-target[1] = b;
-target[2] = c;
+[1, 2, 3];              // invalid: bare expression statement
+print([1, 2, 3]);       // invalid: print is not an inference context
+take([1, 2, 3]);        // valid when take's parameter is
+                        // view<array<int32_t>> (or view<array<T, ...>>)
 ```
 
-No allocation, resizing, or dynamic array initialization is performed by the initializer list itself.
-
-## 22.1 Array Initializer Lists Are Not General Expression Values
-
-Array initializer lists do not have standalone types.
-
-Invalid:
+Constants in a literal are fluid like everywhere else: each element is
+checked against the inferred `T`'s range.
 
 ```franko
-[1, 2, 3];
-print([1, 2, 3]);
-foo([1, 2, 3]);
-return [1, 2, 3];
+view<array<uint8_t, 3>> b = [0, 127, 256];   // invalid: 256 does not fit
 ```
 
-String literals are ordinary `view<array<byte, N>>` values, so they are
-allowed as elements only when the element type is a view (for example
-`array<view<array<byte, 3>>, 2> xs = ["abc", "def"];`). They cannot
-initialize array-typed elements; copy their bytes with `memcpy` instead
-(see [String Literals](23-string-literals.md)).
+## 22.2 Constant Elements Only
 
-Array initializer lists are only meaningful in assignment-style contexts where there is an explicit array assignment target.
-
-## 22.2 Array Initializer Assignment
-
-An array initializer list may appear on the right-hand side of an assignment:
+Every element must be a **compile-time constant expression** (integer
+literals and operators over them). A literal is hoisted to a constant
+global array — one per distinct content and element type, shared by all
+uses, so returning a literal or calling a function that returns one is
+always safe, including recursively:
 
 ```franko
-arr = [1, 2, 3];
+func first() -> view<array<int32_t, 3>> {
+    return [1, 2, 3];       // backed by one constant global
+}
+
+view<array<int32_t, 3>> a = [1 + 1, 2 * 3, 1 << 3];   // constant expressions
 ```
 
-This is not whole-array assignment. It is recursively desugared into indexed element assignments:
+Runtime values cannot appear in a literal:
 
 ```franko
-arr[0] = 1;
-arr[1] = 2;
-arr[2] = 3;
+int32_t v = 5;
+view<array<int32_t, 3>> t = [v, v + 1, 2];   // invalid: v is not constant
 ```
 
-The normal expression, assignment, indexing, and array-use rules apply to the generated statements.
+Compute runtime values into a declared array with ordinary element
+assignments, or copy a constant literal and modify it.
 
-Initializer elements are ordinary expressions. They do not need to be compile-time constants.
+## 22.3 Length and Type
 
-## 22.3 Declaration Initializer Form
-
-Array initializer lists may also appear in declaration-assignment syntax:
+A literal has exactly as many elements as written: `[1, 2, 3]` is
+`view<array<int32_t, 3>>`, never a shorter or longer array. An empty
+literal `[]` is not supported (like `""`, `N >= 1`).
 
 ```franko
-array<int32_t, 3> xs = [1, 2, 3];
+view<array<int32_t, 2>> v = [1, 2, 3];   // invalid: lengths 2 and 3 differ
+view<array<int32_t, 3>> v = [1, 2, 3];   // valid
 ```
 
-This is treated as ordinary declaration initializer sugar:
+Because the literal is a pointer, elements are reached through a
+dereference of a view variable:
 
 ```franko
-array<int32_t, 3> xs;
-xs = [1, 2, 3];
+view<array<int32_t, 3>> v = [1, 2, 3];
+print($(v)[0]);            // 1
 ```
 
-which then lowers to:
+Indexing a literal directly is not supported: `[1, 2, 3][0]` is
+rejected — and a bare literal under `$` has no inference context
+either. Assign the literal to a `view` variable first and index
+through that.
+
+## 22.4 Nested Array Literals
+
+Nested literals are static at **every** level and therefore must be
+**perfectly rectangular**: all rows at each level have the same length.
 
 ```franko
-array<int32_t, 3> xs;
-xs[0] = 1;
-xs[1] = 2;
-xs[2] = 3;
+view<array<array<int32_t, 2>, 2>> m = [[1, 2], [3, 4]];   // valid
+view<array<array<int32_t, 2>, 2>> m = [[1, 2], [3]];      // invalid: jagged
 ```
 
-For dynamic arrays, the initializer list still does **not** initialize storage.
+The type is `view<array<array<T, M>, N>>`: `N` rows of `M` elements.
+Each row is itself a literal of type `view<array<T, M>>` when separated,
+so a row length mismatch is a type error.
 
-Using the initializer list on a freshly declared dynamic array without first initializing it:
+When the literal decays to a dynamic view (22.6), only the outermost
+dimension becomes dynamic; inner dimensions stay static:
 
 ```franko
-array<int32_t> dyn = [1, 2, 3];
+func solve(view<array<array<int32_t, 13>>> maze) -> void {
+    // rows are exactly 13 cells wide: the width is enforced by the type
+}
+
+solve([[1, 2, 3]]);            // invalid: rows are 3 wide, not 13
+solve(grid);                   // valid for a view<array<array<int32_t, 13>, 12>>
 ```
 
-is **not rejected at compile time**. The generated indexed assignments then access an uninitialized dynamic array, and the runtime aborts with a "Franko_Dynamic_Array not initialized" error. Dynamic array initialization is not statically tracked; see [Arrays](20-arrays.md).
+This one-way decay is how a function enforces a required row width or
+maze size: a caller can decay *down* to `view<array<array<T, M>>>`, but
+nothing with a different `M` can ever reach it.
 
-Correct:
+## 22.5 Arrays Are Not Assignable From Literals
+
+Arrays are value types; an array literal is a view. A literal cannot
+initialize or assign an array — copy the elements with `memcpy`
+instead, exactly as with string literals:
+
+```franko
+array<int32_t, 3> buf;
+buf.memcpy([1, 2, 3]);       // copies 3 elements
+array<int32_t, 4> xs;
+xs.memset(0);
+xs.memcpy([7, 8]);           // copies 2 elements; xs[2], xs[3] untouched
+```
+
+For dynamic arrays, size the storage first:
 
 ```franko
 array<int32_t> dyn;
 dyn(3);
-dyn = [1, 2, 3];
-dyn.uninit();
+dyn.memcpy([1, 2, 3]);
 ```
 
-The initializer list itself never emits `dyn(3)`.
+A shorter literal copies a prefix; `memcpy` copies
+`min(source, target)` elements at runtime.
 
-## 22.4 Static Arrays
+## 22.6 Views of Literals
 
-For static arrays, initializer lists lower to indexed assignments.
-
-If the initializer list is shorter than the static array length, only the listed elements are assigned. Unlisted elements are untouched.
-
-If the initializer list is longer than the static array length, the generated indexed assignment is rejected by ordinary static array bounds checking.
-
-There is no special “initializer length must exactly match static length” rule. The ordinary generated assignments determine validity.
-
-Exception: when a `?` inferred size is used in any dimension of the declaration, the initializer must fit exactly at every level. A shorter list is a desugaring error (partial fill is not allowed with `?`), sibling lists must have equal length, and an empty list cannot infer a size. See [Desugaring](05-desugaring.md).
-
-## 22.5 Dynamic Arrays
-
-Array initializer lists do not initialize, allocate, resize, or reallocate dynamic arrays.
-
-Correct:
+The literal's own type is `view<array<T, N>>`. The ordinary static→
+dynamic view decay (see [Pointers](24-pointers.md) 24.4) applies, so
+it is assignable wherever a `view<array<T>>` is expected:
 
 ```franko
-array<int32_t> dyn;
-dyn(3);
-dyn = [1, 2, 3];
-dyn.uninit();
+func take(view<array<int32_t>> v) -> int32_t {
+    return $(v)[0];
+}
+
+take([1, 2, 3]);                        // decays to view<array<int32_t>>
+view<array<int32_t>> d = [1, 2, 3, 4];  // decay in a declaration
 ```
 
-Incorrect:
+When the decay applies directly to a literal in one of these positions,
+the converted view is itself a hoisted constant global (a
+dynamic-array header over the literal's constant storage), not a
+statement-scoped temporary. Returning or keeping such a view is therefore
+always safe — including from recursive functions — unlike a decay of an
+ordinary local, which must not outlive its scope (see
+[Pointers](24-pointers.md) 24.4.1).
+
+Permissions never upgrade: a literal (read-only) cannot initialize an
+`mview` or `ptr` variable.
+
+## 22.7 `?` Size Inference
+
+A static size may be written `?` in a `view<array<...>>` declaration
+with an array-literal initializer; the size is the literal's length at
+that level:
 
 ```franko
-array<int32_t> dyn;
-dyn = [1, 2, 3];
+view<array<int32_t, ?>> v = [1, 2, 3];              // view<array<int32_t, 3>>
+view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
 ```
 
-This lowers to indexed assignments without first initializing `dyn`. It is not a compile-time error; the generated code accesses an uninitialized dynamic array and fails at runtime.
+The rules are the same as for other `?` inference (see
+[Desugaring](05-desugaring.md)): `?` is only allowed in a local
+declaration with an array-literal initializer, the array nest must be
+static at every level, and the fit must be exact when `?` is used.
 
-## 22.6 Element Expressions
+## 22.8 Global Literals
 
-Initializer list elements are ordinary expressions.
-
-If an element expression is invalid, or if its value cannot be assigned to the array element type, the ordinary expression or assignment checker rejects the generated assignment.
-
-Example:
+A pointer-typed global may be initialized with an array literal of
+constant elements, like a string literal:
 
 ```franko
-array<uint8_t, 3> bytes;
-bytes = [0, 127, 256];
+view<array<int32_t, 4>> G = [1, 2, 3, 4];
+
+func main() -> int32_t {
+    print($(G)[3]);         // 4
+    return 0;
+}
 ```
 
-lowers to:
+Array-typed globals are not assignable from literals (22.5); use
+element assignments in an initializer function.
 
-```franko
-bytes[0] = 0;
-bytes[1] = 127;
-bytes[2] = 256;
-```
+## 22.9 Summary
 
-The assignment checker rejects `bytes[2] = 256` because `256` does not fit `uint8_t`.
+Array literals in Franko are:
 
-## 22.7 Nested Initializer Lists
-
-Nested initializer lists represent recursive indexed assignment into nested arrays.
-
-Example:
-
-```franko
-array<array<int32_t, 2>, 2> matrix;
-
-matrix = [
-    [1, 2],
-    [3, 4]
-];
-```
-
-is equivalent to:
-
-```franko
-matrix[0][0] = 1;
-matrix[0][1] = 2;
-matrix[1][0] = 3;
-matrix[1][1] = 4;
-```
-
-A nested initializer list is only meaningful when the corresponding target element is itself an array.
-
-## 22.8 Nested Dynamic Arrays
-
-Initializer lists do not allocate nested dynamic arrays.
-
-Correct:
-
-```franko
-array<array<int32_t>> matrix;
-
-matrix(2);
-matrix[0](3);
-matrix[1](3);
-
-matrix = [
-    [1, 2, 3],
-    [4, 5, 6]
-];
-
-matrix[0].uninit();
-matrix[1].uninit();
-matrix.uninit();
-```
-
-Incorrect:
-
-```franko
-array<array<int32_t>> matrix;
-
-matrix(2);
-
-matrix = [
-    [1, 2, 3],
-    [4, 5, 6]
-];
-```
-
-because the outer dynamic array is initialized, but `matrix[0]` and `matrix[1]` are not. This is not rejected at compile time; the first generated indexed assignment into the uninitialized inner arrays aborts at runtime.
-
-The rule is simple:
-
-> Initializer lists assign elements. They never allocate dynamic array storage at any level.
-
-## 22.9 Empty Initializer Lists
-
-An empty initializer list emits no assignments.
-
-Example:
-
-```franko
-array<int32_t, 3> xs;
-xs = [];
-```
-
-No elements are assigned.
-
-For dynamic arrays:
-
-```franko
-array<int32_t> xs;
-xs = [];
-```
-
-also emits no assignments and does not initialize `xs`.
-
-The assignment target is still resolved and checked even though no indexed
-assignments are generated: the target expression must be a valid, declared
-expression, and an undeclared or otherwise invalid target is still diagnosed.
-
-## 22.10 Array Initializer Lists and Global Scope
-
-Array initializer lists are assignment sugar.
-
-Therefore, they are only valid where the resulting assignment statements are valid.
-
-At global scope, executable statements are not allowed.
-
-Invalid:
-
-```franko
-array<int32_t, 3> xs;
-xs = [1, 2, 3];
-```
-
-Declaration initializer sugar at global scope is also invalid if it desugars into executable statements (assignments, expression-statement calls, or indexed element assignments).
-
-## 22.11 Summary of Array Initializer Lists
-
-Array initializer lists in Franko are:
-
-- not general expressions;
-- not array values;
-- allowed as assignment initializer syntax;
-- allowed in declaration initializers through ordinary declaration-assignment sugar;
-- lowered to recursive indexed assignments;
-- allowed to contain ordinary expressions;
-- not required to contain compile-time constants;
-- partial when shorter than the target array (unless `?` inference is used, which requires an exact fit);
-- rejected for static arrays only when generated indexes are out of bounds;
-- not responsible for allocating, resizing, or initializing dynamic arrays;
-- intended for dynamic arrays only when the target dynamic storage already exists (this is not enforced at compile time; missing initialization fails at runtime);
-- recursively applicable to nested arrays.
+- ordinary expressions of type `view<array<T, N>>`;
+- element type `T` inferred from assignment, return, or call-argument
+  contexts (integer primitives only);
+- compile-time constant expressions only, hoisted to shared constant
+  global arrays (recursion-safe, like string literals);
+- exactly as long as written (`N >= 1`);
+- rectangular when nested, with inner dimensions static;
+- decayable to `view<array<T>>` (outermost dimension only);
+- never assignable to arrays — copy with `memcpy`;
+- inferrable in size via `?` in `view` declarations.
 
 ---
 
@@ -2672,7 +2604,9 @@ buf.memcpy("hello");
 ```
 
 For the same reason `array<byte, ?>` cannot infer its size from a string
-literal; declare the size explicitly or infer from an array literal.
+literal; declare the size explicitly. (`?` size inference works in
+`view<array<...>>` declarations with an array literal; see
+[Array Literals](22-array-literals.md).)
 
 ## 23.5 Global String Views
 
@@ -2844,7 +2778,11 @@ pointer in Franko, a converted view must not outlive the scope it was
 created in — a view that escapes past it (returned, or stored into
 longer-lived storage) is the usual untracked dangling-pointer case of
 [Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations),
-exactly as if it had been created there with `getview`.
+exactly as if it had been created there with `getview`. Literals are the
+exception: when the decay applies directly to an array or string literal
+in one of those positions, the converted view is itself a hoisted constant
+global, so returning or keeping it is always safe (see
+[Array Literals](22-array-literals.md)).
 
 ## 24.5 Pointer Comparison
 
@@ -3773,22 +3711,25 @@ explicit through the `cast<T>(expr)` intrinsic (value-preserving widening) or `u
 
 ## 30.7 Arrays Are Not Assignable as Values
 
-Arrays cannot be assigned directly as ordinary values.
+Arrays cannot be assigned directly as ordinary values, including from
+array literals: copy literal elements with `memcpy` (see
+[Array Literals](22-array-literals.md)).
 
-Array initializer assignment is an exception only in syntax shape, not in value semantics.
+## 30.8 Array Literals Need an Inference Context
 
-## 30.8 Array Initializer Lists Are Not General Values
-
-Array initializer lists are not first-class values.
-
-Invalid:
+An array literal's element type is inferred from an assignment,
+return, or call-argument context. Without one, the literal is
+rejected:
 
 ```franko
-[1, 2, 3];
-print([1, 2, 3]);
-foo([1, 2, 3]);
-return [1, 2, 3];
+[1, 2, 3];                 // invalid: bare expression statement
+print([1, 2, 3]);          // invalid: print is not an inference context
+foo([1, 2, 3]);            // invalid unless foo's parameter is a view<array<...>>
+return [1, 2, 3];          // invalid unless the return type is a view<array<...>>
 ```
+
+Array literal elements must be compile-time constant expressions
+(runtime values cannot appear in one).
 
 ## 30.9 No Full Dynamic Array Lifetime Checking
 
@@ -3802,7 +3743,7 @@ The compiler does not fully track dangling pointers or ownership.
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
-Array initializer lists are not expressions and therefore cannot be printed directly. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
+Array literals cannot be printed: `print` is not an inference context. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 ## 30.12 Unsupported Operators
 
@@ -3827,7 +3768,7 @@ Invalid:
 ```franko
 array<byte, 6> s = "hello";    // invalid
 s = "hello";                   // invalid
-array<byte, ?> s = "hello";    // invalid: '?' infers from array literals
+array<byte, ?> s = "hello";    // invalid: '?' requires a view declaration
 ```
 
 Valid:
@@ -4002,13 +3943,16 @@ func main() -> int32_t {
 }
 ```
 
-## 32.2 Static Array Initializer Assignment
+## 32.2 Static Array Copy From a Literal
+
+An array literal is a `view<array<T, N>>` value, so arrays receive its
+elements through `memcpy` (see [Array Literals](22-array-literals.md)):
 
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
 
-    xs = [1, 2, 3];
+    xs.memcpy([1, 2, 3]);
 
     print(xs[0]);
     print(xs[1]);
@@ -4036,21 +3980,22 @@ func main() -> int32_t {
 }
 ```
 
-## 32.3 Static Partial Initializer Assignment
+## 32.3 Static Partial Copy From a Literal
 
 ```franko
 func main() -> int32_t {
     array<int32_t, 3> xs;
 
-    xs = [1, 2];
+    xs.memset(0);
+    xs.memcpy([1, 2]);
 
     return 0;
 }
 ```
 
-`xs[2]` is untouched.
+`xs[2]` is untouched: memcpy copies `min(source, target)` elements.
 
-## 32.4 Dynamic Array Initializer Assignment
+## 32.4 Dynamic Array Copy From a Literal
 
 ```franko
 func main() -> int32_t {
@@ -4058,7 +4003,7 @@ func main() -> int32_t {
 
     xs(3);
 
-    xs = [10, 20, 30];
+    xs.memcpy([10, 20, 30]);
 
     print(xs[0]);
     print(xs[1]);
@@ -4070,40 +4015,34 @@ func main() -> int32_t {
 }
 ```
 
-## 32.5 Runtime Expressions Inside Initializer Lists
+## 32.5 Constant Expressions Inside Array Literals
 
 ```franko
-func getValue() -> int32_t {
-    return 10;
-}
-
 func main() -> int32_t {
-    int32_t x;
+    view<array<int32_t, 4>> v = [1, 5, 10, 1 + 2];
 
-    x = 5;
-
-    array<int32_t> xs;
-
-    xs(4);
-
-    xs = [1, x, getValue(), 1 + 2];
-
-    xs.uninit();
+    print($(v)[0]);
+    print($(v)[1]);
+    print($(v)[2]);
+    print($(v)[3]);
 
     return 0;
 }
 ```
 
-## 32.6 Nested Static Arrays
+Elements are compile-time constant expressions; runtime values are
+rejected because a literal is hoisted to a constant global array.
+
+## 32.6 Nested Static Array Literals
 
 ```franko
 func main() -> int32_t {
     array<array<int32_t, 2>, 2> matrix;
 
-    matrix = [
+    matrix.memcpy([
         [1, 2],
         [3, 4]
-    ];
+    ]);
 
     print(matrix[0][0]);
     print(matrix[1][1]);
@@ -4112,7 +4051,12 @@ func main() -> int32_t {
 }
 ```
 
+Nested literals are rectangular and static at every level.
+
 ## 32.7 Nested Dynamic Arrays
+
+A nested literal has static rows, so dynamic rows are filled one at a
+time:
 
 ```franko
 func main() -> int32_t {
@@ -4122,10 +4066,8 @@ func main() -> int32_t {
     matrix[0](3);
     matrix[1](3);
 
-    matrix = [
-        [1, 2, 3],
-        [4, 5, 6]
-    ];
+    matrix[0].memcpy([1, 2, 3]);
+    matrix[1].memcpy([4, 5, 6]);
 
     matrix[0].uninit();
     matrix[1].uninit();
@@ -4135,49 +4077,45 @@ func main() -> int32_t {
 }
 ```
 
-## 32.8 Declaration Initializer with Static Array
+## 32.8 Declaration Initializer With an Array Literal
+
+A `view` declaration accepts a literal directly; its element type and
+length are inferred from the literal and checked against the declared
+type:
 
 ```franko
 func main() -> int32_t {
-    array<int32_t, 3> xs = [1, 2, 3];
+    view<array<int32_t, 3>> v = [1, 2, 3];
+    view<array<int32_t, ?>> w = [4, 5, 6, 7];
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    print($(v)[0]);
+    print($(w).length());    // 4
 
     return 0;
 }
 ```
 
-## 32.9 Dynamic Array Declaration Initializer Without Initialization
+## 32.9 Dynamic View Decay From a Literal
+
+A literal decays to `view<array<T>>` wherever a dynamic view is
+expected:
 
 ```franko
+func take(view<array<int32_t>> v) -> int32_t {
+    return $(v)[0];
+}
+
 func main() -> int32_t {
-    array<int32_t> xs = [1, 2, 3];
+    view<array<int32_t>> d = [1, 2, 3];
+
+    print($(d)[2]);
+    print(take([4, 5, 6]));
 
     return 0;
 }
 ```
 
-This desugars to indexed assignments without initializing dynamic storage. It is not rejected at compile time; the generated code accesses an uninitialized dynamic array and the runtime aborts with a "Franko_Dynamic_Array not initialized" error.
-
-Correct:
-
-```franko
-func main() -> int32_t {
-    array<int32_t> xs;
-
-    xs(3);
-
-    xs = [1, 2, 3];
-
-    xs.uninit();
-
-    return 0;
-}
-```
-
-## 32.10 Array Initializer Through Pointer
+## 32.10 Array Copy Through Pointer
 
 ```franko
 func main() -> int32_t {
@@ -4186,7 +4124,7 @@ func main() -> int32_t {
 
     p = getptr(xs);
 
-    $(p) = [1, 2, 3];
+    $(p).memcpy([1, 2, 3]);
 
     print(xs[0]);
     print(xs[1]);

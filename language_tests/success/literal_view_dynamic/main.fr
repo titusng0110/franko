@@ -1,0 +1,49 @@
+// ============================================================
+// LANGUAGE TEST: Literal Decay to Dynamic Views
+// ============================================================
+// Covers: a literal (or string literal) consumed at view<array<T>>
+// in an assignment, call argument, or return is hoisted as a global
+// dynamic-array header over the literal's constant storage — never
+// a stack temporary. Returning one (including recursively) is safe.
+// ============================================================
+
+func take(view<array<int32_t>> v) -> int32_t {
+    return $(v)[0] + $(v)[2];
+}
+
+func mk(int32_t n) -> view<array<int32_t, 3>> {
+    if (n == 0) {
+        return [7, 8, 9];
+    }
+    return mk(n - 1);
+}
+
+func mdyn(int32_t n) -> view<array<byte>> {
+    if (n == 0) {
+        return [1, 2, 3];
+    }
+    return mdyn(n - 1);
+}
+
+func mstr() -> view<array<byte>> {
+    return "abc";
+}
+
+func main() -> int32_t {
+    // Assignment decay.
+    view<array<int32_t>> d = [1, 2, 3, 4];
+    print($(d)[3]);
+
+    // Call-argument decay.
+    print(take([10, 20, 30]));
+
+    // Return decay, recursive.
+    view<array<int32_t, 3>> w = mk(5);
+    print($(w)[0]);
+    view<array<byte>> b = mdyn(5);
+    print($(b)[2]);
+    view<array<byte>> s = mstr();
+    print($(s)[2]);
+
+    return 0;
+}

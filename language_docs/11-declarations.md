@@ -100,16 +100,24 @@ ptr<array<byte, 5>> p = null
 The initializer must be a statically representable address of the right
 type (a permission downgrade is allowed, an upgrade is not).
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, array initializer lists `= [ ... ]`, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment, an expression-statement call, or indexed element assignments). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+An array literal may initialize a pointer-typed global (it is a
+`view<array<T, N>>` value over a constant global, like a string
+literal):
+
+```franko
+view<array<int32_t, 4>> G = [1, 2, 3, 4]   // valid
+```
+
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
 int32_t g = h                     // invalid: the initializer must be constant
-array<int32_t, 3> xs = [1, 2, 3]  // invalid: desugars into indexed assignments
+array<int32_t, 3> xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
 array<byte, 6> s = "hello"        // invalid: strings cannot initialize arrays
 ```
 
-The constant-initializer and static-address forms above are the only
-ways to initialize a global at its declaration.
+The constant-initializer, static-address, and array-literal forms above
+are the only ways to initialize a global at its declaration.
 
 ## 11.5 Uninitialized Values
 

@@ -39,7 +39,8 @@ func main() -> int32_t {
     u--;
     print(u); // 255
 
-    array<int32_t, 3> xs = [0, 0, 0];
+    array<int32_t, 3> xs;
+    xs.memcpy([0, 0, 0]);
     xs[0]++;
     xs[0]++;
     print(xs[0]); // 2

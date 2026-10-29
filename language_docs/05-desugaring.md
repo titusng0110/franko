@@ -40,23 +40,14 @@ arr(20);
 
 The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](21-array-intrinsics.md).
 
-## 5.3 Array Initializer List Desugaring
+## 5.3 Array Literal Desugaring
 
-This:
-
-```franko
-xs = [1, 2, 3];
-```
-
-is desugared to:
-
-```franko
-xs[0] = 1;
-xs[1] = 2;
-xs[2] = 3;
-```
-
-Nested initializer lists are recursively lowered to nested indexed assignments.
+Array literals are not assignment sugar: they are `view<array<T, N>>`
+values over hoisted constant global arrays, exactly like string
+literals. An array literal is never rewritten into statements; its
+element type is inferred from the surrounding assignment, return, or
+call-argument context during semantic analysis. See
+[Array Literals](22-array-literals.md).
 
 ## 5.4 String Literal Desugaring
 
@@ -130,39 +121,45 @@ The `init` and `update` statements go through the ordinary statement desugaring 
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size may be written as `?` when the array is declared with an array-literal initializer:
+A static array size may be written as `?` in a `view<array<...>>`
+declaration with an array-literal initializer:
 
 ```franko
-array<int32_t, ?> a = [0, 1, 2, 3];
+view<array<int32_t, ?>> v = [0, 1, 2, 3];
 ```
 
-During desugaring, each `?` is replaced by the element count of the corresponding initializer level, so the declaration above becomes:
+During desugaring, each `?` is replaced by the element count of the
+corresponding literal level, so the declaration above becomes
+`view<array<int32_t, 4>> v`. Nested literals infer level by level:
 
 ```franko
-array<int32_t, 4> a;
-a[0] = 0;
-a[1] = 1;
-a[2] = 2;
-a[3] = 3;
+view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
 ```
 
-Nested literals infer level by level:
-
-```franko
-array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
-```
-
-becomes `array<array<int32_t, 2>, 2> m` with indexed assignments. `?` may appear at any level of the nest, including middle levels.
+becomes `view<array<array<int32_t, 2>, 2>> m`. `?` may appear at any
+level of the nest, including middle levels.
 
 Inference rules:
 
-- `?` is legal only in a local declaration-assignment statement (`T name = literal;`) whose initializer is an array literal (string literals are `view<array<byte, N>>` values and do not participate);
-- when `?` is used in any dimension, the whole array nest must be static (no dynamic `array<T>` level anywhere);
-- when `?` is used in any dimension, the initializer must fit exactly at every level: a shorter list is an error (no partial fill), and sibling lists at each level must have equal length (perfect rectangle);
-- an empty initializer list cannot infer a size;
-- without `?`, the existing lenient rules are unchanged: shorter lists partially fill, and jagged lists are allowed.
+- `?` is legal only in a local declaration-assignment statement
+  (`view<array<...>> name = literal;`) whose initializer is an array
+  literal (string literals are `view<array<byte, N>>` values and do not
+  participate);
+- the declared type must be a `view`: an array literal is a view value,
+  so it never initializes an array declaration;
+- when `?` is used in any dimension, the whole array nest must be static
+  (no dynamic `array<T>` level anywhere);
+- when `?` is used in any dimension, the literal must fit exactly at
+  every level: a shorter literal is an error (the literal's length is
+  its type), and sibling lists at each level must have equal length
+  (perfect rectangle);
+- an empty array literal is invalid in general, so it cannot infer a
+  size.
 
-Misplaced `?` (parameters, return types, struct fields, globals, pointers, call-style `arr(4)` initialization, non-literal initializers) is rejected during desugaring. See [Arrays](20-arrays.md) and [Array Initializer Lists](22-array-initializer-lists.md).
+Misplaced `?` (parameters, return types, struct fields, globals,
+pointers, call-style `arr(4)` initialization, non-literal initializers)
+is rejected during desugaring. See [Arrays](20-arrays.md) and
+[Array Literals](22-array-literals.md).
 
 ## 5.8 Constant Expression Evaluation
 

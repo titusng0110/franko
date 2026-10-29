@@ -112,6 +112,7 @@ public class ASTPrinter {
                 System.out.println(pad + "  literalBytes: " + n.literalBytes);
             }
 
+
             if (n.constInitializer != null) {
                 System.out.println(pad + "  init:");
                 print(n.constInitializer, indent + 2);

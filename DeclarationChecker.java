@@ -7,7 +7,6 @@ import java.util.Set;
 
 public class DeclarationChecker {
     private final DiagnosticBag diagnostics;
-    @SuppressWarnings("unused")
     private final ExpressionChecker expressions;
     private final TypeChecker types;
 

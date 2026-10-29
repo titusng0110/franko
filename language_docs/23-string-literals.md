@@ -76,7 +76,9 @@ buf.memcpy("hello");
 ```
 
 For the same reason `array<byte, ?>` cannot infer its size from a string
-literal; declare the size explicitly or infer from an array literal.
+literal; declare the size explicitly. (`?` size inference works in
+`view<array<...>>` declarations with an array literal; see
+[Array Literals](22-array-literals.md).)
 
 ## 23.5 Global String Views
 

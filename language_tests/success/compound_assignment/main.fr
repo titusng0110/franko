@@ -25,7 +25,8 @@ func main() -> int32_t {
     x %= 4;
     print(x); // ((10 + 5 - 3) * 4 / 2) % 4 = 0
 
-    array<int32_t, 4> xs = [1, 2, 3, 4];
+    array<int32_t, 4> xs;
+    xs.memcpy([1, 2, 3, 4]);
     xs[idx()] += 10;
     print(xs[1]); // marker once, then 12
 

@@ -2,7 +2,7 @@
 // LANGUAGE TEST: Inferred Static Array Sizes (`?`)
 // ============================================================
 // Covers:
-//   `?` from array literals,
+//   `?` in view<array<...>> declarations with array literals,
 //   nested static arrays (including middle dimensions),
 //   mixed explicit/inferred sizes.
 //   (String literals are view<array<byte, N>> values and no
@@ -10,41 +10,41 @@
 // ============================================================
 
 func main() -> int32_t {
-    array<int32_t, ?> a = [0, 1, 2, 3];
-    print(a.length());
-    print(a[0]);
-    print(a[3]);
+    view<array<int32_t, ?>> a = [0, 1, 2, 3];
+    print($(a).length());
+    print($(a)[0]);
+    print($(a)[3]);
 
-    array<byte, ?> s = [104, 101, 108, 108, 111];
-    print(s.length());
-    print(s[0]);
-    print(s[4]);
+    view<array<byte, ?>> s = [104, 101, 108, 108, 111];
+    print($(s).length());
+    print($(s)[0]);
+    print($(s)[4]);
 
-    array<byte, ?> u = [104, 195, 169, 108, 108, 111];
-    print(u.length());
+    view<array<byte, ?>> u = [104, 195, 169, 108, 108, 111];
+    print($(u).length());
 
-    array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
-    print(m.length());
-    print(m[0].length());
-    print(m[1][1]);
+    view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
+    print($(m).length());
+    print($(m)[0].length());
+    print($(m)[1][1]);
 
-    array<array<int32_t, 2>, 2> p = [[1, 2], [3, 4]];
-    print(p.length());
-    print(p[0].length());
+    view<array<array<int32_t, 2>, 2>> p = [[1, 2], [3, 4]];
+    print($(p).length());
+    print($(p)[0].length());
 
-    array<array<int32_t, ?>, ?> g = [[1, 2, 3], [4, 5, 6]];
-    print(g.length());
-    print(g[0].length());
-    print(g[1][2]);
+    view<array<array<int32_t, ?>, ?>> g = [[1, 2, 3], [4, 5, 6]];
+    print($(g).length());
+    print($(g)[0].length());
+    print($(g)[1][2]);
 
-    array<array<array<byte, 3>, ?>, 2> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
-    print(h.length());
-    print(h[0].length());
-    print(h[0][0].length());
-    print(h[1][1][2]);
+    view<array<array<array<byte, 3>, ?>, 2>> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
+    print($(h).length());
+    print($(h)[0].length());
+    print($(h)[0][0].length());
+    print($(h)[1][1][2]);
 
-    array<int32_t, 1 + 2> e = [1, 2, 3];
-    print(e.length());
+    view<array<int32_t, 1 + 2>> e = [1, 2, 3];
+    print($(e).length());
 
     return 0;
 }

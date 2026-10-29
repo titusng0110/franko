@@ -894,8 +894,7 @@ public class ExpressionChecker {
                 + " here");
     }
 
-    private void visitDeref(SemanticDerefNode node) {
-        checkExpr(node.expr);
+    private void visitDeref(SemanticDerefNode node) {        checkExpr(node.expr);
 
         if (!ensureValueExpression(node.expr, "Operand of '$'")) {
             return;

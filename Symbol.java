@@ -55,6 +55,10 @@ class GlobalVariableSymbol extends VariableSymbol {
 
     List<BigInteger> literalBytes = null;
 
+    List<BigInteger> literalValues = null;
+
+    GlobalVariableSymbol literalHeaderData = null;
+
     GlobalVariableSymbol(String namespace, String name, SemanticType type) {
         super(namespace, name, type);
     }

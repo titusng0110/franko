@@ -1,0 +1,1 @@
+Variable 'G' initializer has type view<array<INT32, 3>>, expected view<array<INT32, 2>>

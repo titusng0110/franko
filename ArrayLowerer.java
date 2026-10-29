@@ -256,7 +256,9 @@ public final class ArrayLowerer {
         );
 
         SemanticExprNode sourcePtr =
-                exprAnalyzer.analyzeExpr(call.args.get(0));
+                exprAnalyzer.analyzeExprWithExpectedType(
+                        call.args.get(0),
+                        memcpySourceContext(receiver.type));
 
         List<SemanticExprNode> args = new ArrayList<>();
 
@@ -281,6 +283,24 @@ public final class ArrayLowerer {
                 SemanticArrayIntrinsicKind.MEMCPY,
                 receiver,
                 args
+        );
+    }
+
+    private static SemanticType memcpySourceContext(SemanticType receiverType) {
+        SemanticType elementType = null;
+
+        if (receiverType instanceof SemanticDynamicArrayType dynamicArray) {
+            elementType = dynamicArray.elementType;
+        } else if (receiverType instanceof SemanticStaticArrayType staticArray) {
+            elementType = staticArray.elementType;
+        }
+
+        if (elementType == null) {
+            return null;
+        }
+
+        return new SemanticViewType(
+                new SemanticDynamicArrayType(elementType)
         );
     }
 

@@ -8,7 +8,8 @@
 int32_t size = 7 % 3
 
 func main() -> int32_t {
-    array<int32_t, 5 % 3> tiny = [9, 10];
+    array<int32_t, 5 % 3> tiny;
+    tiny.memcpy([9, 10]);
 
     int32_t a = 7;
     int32_t b = 3;

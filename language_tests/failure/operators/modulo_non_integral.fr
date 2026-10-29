@@ -4,7 +4,8 @@
 func main() -> int32_t {
     int32_t v = 1;
     ptr<int32_t> p = getptr(v);
-    array<int32_t, 2> xs = [1, 2];
+    array<int32_t, 2> xs;
+    xs.memcpy([1, 2]);
 
     print(p % 3);
     print(xs % 3);

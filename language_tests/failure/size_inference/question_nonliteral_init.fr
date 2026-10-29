@@ -3,6 +3,6 @@
 func main() -> int32_t {
     int32_t n;
     n = 3;
-    array<int32_t, ?> x = n;
+    view<array<int32_t, ?>> x = n;
     return 0;
 }

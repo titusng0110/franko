@@ -1,0 +1,1 @@
+only pointer-typed globals may be initialized with an array literal

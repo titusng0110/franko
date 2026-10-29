@@ -23,7 +23,7 @@ array<array<int32_t, 4>, 8> matrix;
 
 Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
 
-However, Franko supports **array initializer lists** as assignment sugar for assigning individual elements into an existing array target. See [Array Initializer Lists](22-array-initializer-lists.md).
+However, Franko supports **array literals** as `view<array<T, N>>` values over constant global arrays; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
 
 ## 20.1 Static Arrays
 
@@ -164,7 +164,8 @@ a.memset(0);
 a.uninit();
 ```
 
-Array initializer assignment is not whole-array value assignment.
+An array literal is not an array value; arrays receive literal
+elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 ## 20.6 Array Lifetime Limitations
 

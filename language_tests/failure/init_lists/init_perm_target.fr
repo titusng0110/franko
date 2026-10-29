@@ -1,0 +1,7 @@
+// Failure fixture: init_lists/init_perm_target
+// An array literal is a read-only view value: it cannot initialize
+// an mview (that would raise permissions).
+func main() -> int32_t {
+    mview<array<int32_t>> m = [1, 2, 3];
+    return 0;
+}

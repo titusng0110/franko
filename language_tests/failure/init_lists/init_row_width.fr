@@ -1,0 +1,11 @@
+// Failure fixture: init_lists/init_row_width
+// Outer decay never changes inner dimensions: a 3-wide row cannot
+// reach a view<array<array<int32_t, 2>>> parameter. Declaring maze
+// parameters as view<array<array<T, WIDTH>>> enforces the width.
+func solve(view<array<array<int32_t, 2>>> maze) -> void {
+}
+
+func main() -> int32_t {
+    solve([[1, 2, 3]]);
+    return 0;
+}

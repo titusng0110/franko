@@ -1,0 +1,26 @@
+// ============================================================
+// LANGUAGE TEST: Array Literals with Constant Expression Elements
+// ============================================================
+// Covers: literal elements are ordinary compile-time constant
+// expressions (arithmetic and shifts fold exactly like constExpr
+// slots), not just bare integer literals. A literal is hoisted to
+// a constant global array, so every element must be constant.
+// ============================================================
+
+func main() -> int32_t {
+    array<int32_t> dyn;
+    dyn(3);
+    dyn.memcpy([5 * 2, 1 + 4, 3 * 3 + 1]);
+
+    print(dyn[0]);
+    print(dyn[1]);
+    print(dyn[2]);
+
+    view<array<int32_t, 3>> t = [10 - 5, 2 * 3, 1 << 3];
+    print($(t)[0]);
+    print($(t)[1]);
+    print($(t)[2]);
+
+    dyn.uninit();
+    return 0;
+}

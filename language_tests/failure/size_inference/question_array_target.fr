@@ -1,0 +1,7 @@
+// Failure fixture: size_inference/question_array_target
+// `?` with an array-literal initializer requires a view declaration:
+// an array literal is a view value and cannot fill an array.
+func main() -> int32_t {
+    array<int32_t, ?> x = [1, 2, 3];
+    return 0;
+}

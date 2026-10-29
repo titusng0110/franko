@@ -52,22 +52,25 @@ explicit through the `cast<T>(expr)` intrinsic (value-preserving widening) or `u
 
 ## 30.7 Arrays Are Not Assignable as Values
 
-Arrays cannot be assigned directly as ordinary values.
+Arrays cannot be assigned directly as ordinary values, including from
+array literals: copy literal elements with `memcpy` (see
+[Array Literals](22-array-literals.md)).
 
-Array initializer assignment is an exception only in syntax shape, not in value semantics.
+## 30.8 Array Literals Need an Inference Context
 
-## 30.8 Array Initializer Lists Are Not General Values
-
-Array initializer lists are not first-class values.
-
-Invalid:
+An array literal's element type is inferred from an assignment,
+return, or call-argument context. Without one, the literal is
+rejected:
 
 ```franko
-[1, 2, 3];
-print([1, 2, 3]);
-foo([1, 2, 3]);
-return [1, 2, 3];
+[1, 2, 3];                 // invalid: bare expression statement
+print([1, 2, 3]);          // invalid: print is not an inference context
+foo([1, 2, 3]);            // invalid unless foo's parameter is a view<array<...>>
+return [1, 2, 3];          // invalid unless the return type is a view<array<...>>
 ```
+
+Array literal elements must be compile-time constant expressions
+(runtime values cannot appear in one).
 
 ## 30.9 No Full Dynamic Array Lifetime Checking
 
@@ -81,7 +84,7 @@ The compiler does not fully track dangling pointers or ownership.
 
 The checker validates print arguments as expressions but does not enforce a strict printable-type set. Only integer primitives and pointers (including `null`) are actually printable. Arrays and structs cannot be printed: the checker accepts them, but the generated C++ does not compile because the backend has no output form for them. See [Statements](19-statements.md).
 
-Array initializer lists are not expressions and therefore cannot be printed directly. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
+Array literals cannot be printed: `print` is not an inference context. String literals are expressions (read-only views), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 ## 30.12 Unsupported Operators
 
@@ -106,7 +109,7 @@ Invalid:
 ```franko
 array<byte, 6> s = "hello";    // invalid
 s = "hello";                   // invalid
-array<byte, ?> s = "hello";    // invalid: '?' infers from array literals
+array<byte, ?> s = "hello";    // invalid: '?' requires a view declaration
 ```
 
 Valid:

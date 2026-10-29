@@ -10,7 +10,7 @@ func main() -> int32_t {
 
     print(p)
 
-    array<int32_t> xs = [1, 2]
+    array<int32_t> xs
     print(xs[0])
 
     return 0

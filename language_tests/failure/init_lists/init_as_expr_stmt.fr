@@ -1,5 +1,7 @@
 // Failure fixture: init_lists/init_as_expr_stmt
-// An array initializer list is not an expression, so it cannot stand alone as an expression statement.
+// An array literal needs an assignment, return, or call-argument
+// context to infer its element type, so it cannot stand alone as
+// an expression statement.
 func main() -> int32_t {
     [1, 2, 3];
     return 0;

@@ -1,18 +1,27 @@
 // ============================================================
-// LANGUAGE TEST: Nested Initializer Lists
+// LANGUAGE TEST: Nested Array Literals
 // ============================================================
-// Covers: nested initializer lists recursively lower to
-// indexed assignments into nested arrays.
+// Covers: nested array literals are view<array<array<T, M>, N>>
+// values over hoisted static arrays. memcpy copies them into a
+// matching static array; the receiver and the literal must have
+// identical element types.
 // ============================================================
+
+func show(view<array<array<int32_t, 2>>> m) -> void {
+    print($(m)[0][1]);
+    print($(m)[2][0]);
+}
 
 func main() -> int32_t {
     array<array<int32_t, 2>, 2> matrix;
-    matrix = [[1, 2], [3, 4]];
+    matrix.memcpy([[1, 2], [3, 4]]);
 
     print(matrix[0][0]);
     print(matrix[0][1]);
     print(matrix[1][0]);
     print(matrix[1][1]);
+
+    show([[5, 6], [7, 8], [9, 10]]);
 
     return 0;
 }

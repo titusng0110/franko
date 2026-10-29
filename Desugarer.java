@@ -192,6 +192,23 @@ public class Desugarer {
             return new GlobalVarDeclNode(type, n.name, hoisted);
         }
 
+        if (init instanceof ArrayLiteralNode) {
+            if (!(type instanceof PtrTypeNode)) {
+                diagnostics.error("Global variable '"
+                    + n.name
+                    + "': only pointer-typed globals may be initialized with "
+                    + "an array literal");
+
+                return new GlobalVarDeclNode(type, n.name, null);
+            }
+
+            return new GlobalVarDeclNode(
+                type,
+                n.name,
+                desugarExpr(init)
+            );
+        }
+
         if (init instanceof GetPtrNode) {
             if (!(type instanceof PtrTypeNode)) {
                 diagnostics.error("Global variable '"
@@ -377,15 +394,6 @@ public class Desugarer {
 
         ASTNode target = new VarNode(n.name);
 
-        if (rawInit instanceof ArrayLiteralNode) {
-            appendArrayInitializerAssignments(
-                target,
-                (ArrayLiteralNode) rawInit,
-                out
-            );
-            return;
-        }
-
         out.add(new AssignNode(
             target,
             desugarExpr(rawInit)
@@ -469,7 +477,22 @@ public class Desugarer {
     }
 
     private TypeNode inferStaticSizes(TypeNode declared, ASTNode init, String varName) {
-        if (!isFullyStaticArrayNest(declared)) {
+        if (!(declared instanceof PtrTypeNode p)
+                || p.kind != PtrPermission.READ_ONLY
+                || !(p.referencedType instanceof StaticArrayTypeNode)) {
+            diagnostics.error("'?' array size for '"
+                + varName
+                + "' requires a 'view<array<...>>' declaration with an "
+                + "array-literal initializer, e.g. 'view<array<int32_t, ?>> "
+                + varName
+                + " = [...]'");
+
+            return desugarType(replaceInferredSizesWithFallback(declared));
+        }
+
+        TypeNode nest = p.referencedType;
+
+        if (!isFullyStaticArrayNest(nest)) {
             diagnostics.error("'?' size inference for '"
                 + varName
                 + "' requires a fully static array type");
@@ -500,7 +523,10 @@ public class Desugarer {
         }
 
         try {
-            return desugarType(inferLevel(declared, literal, varName));
+            return new PtrTypeNode(
+                PtrPermission.READ_ONLY,
+                desugarType(inferLevel(nest, literal, varName))
+            );
         } catch (InferenceFailure f) {
             diagnostics.error(f.getMessage());
 
@@ -672,30 +698,10 @@ public class Desugarer {
     ) {
         ASTNode target = desugarLValue(n.target);
 
-        if (!"=".equals(n.op)) {
-            out.add(new AssignNode(
-                n.op,
-                target,
-                desugarExpr(n.value)
-            ));
-            return;
-        }
-
-        ASTNode value = n.value;
-
-        if (value instanceof ArrayLiteralNode) {
-            appendArrayInitializerAssignments(
-                target,
-                (ArrayLiteralNode) value,
-                out
-            );
-            return;
-        }
-
         out.add(new AssignNode(
             n.op,
             target,
-            desugarExpr(value)
+            desugarExpr(n.value)
         ));
     }
 
@@ -725,27 +731,10 @@ public class Desugarer {
         if (stmt instanceof AssignNode) {
             AssignNode n = (AssignNode) stmt;
 
-            if (!"=".equals(n.op)) {
-
-                return new AssignNode(
-                    n.op,
-                    desugarLValue(n.target),
-                    desugarExpr(n.value)
-                );
-            }
-
-            ASTNode value = n.value;
-
-            if (value instanceof ArrayLiteralNode) {
-                List<ASTNode> lowered = new ArrayList<>();
-                appendDesugaredAssign(n, lowered);
-                return new BlockNode(lowered);
-            }
-
             return new AssignNode(
                 n.op,
                 desugarLValue(n.target),
-                desugarExpr(value)
+                desugarExpr(n.value)
             );
         }
 
@@ -898,42 +887,6 @@ public class Desugarer {
         return new BlockNode(outer);
     }
 
-    private void appendArrayInitializerAssignments(
-        ASTNode target,
-        ArrayLiteralNode literal,
-        List<ASTNode> out
-    ) {
-        ASTNode loweredTarget = desugarLValue(target);
-
-        if (literal.elements.isEmpty()) {
-            out.add(new ExprStmtNode(loweredTarget));
-            return;
-        }
-
-        for (int i = 0; i < literal.elements.size(); i++) {
-            ASTNode element = literal.elements.get(i);
-
-            ASTNode indexedTarget = new ArrayAccessNode(
-                cloneLValue(loweredTarget),
-                new IntNode(Integer.toString(i))
-            );
-
-            if (element instanceof ArrayLiteralNode) {
-                appendArrayInitializerAssignments(
-                    indexedTarget,
-                    (ArrayLiteralNode) element,
-                    out
-                );
-                continue;
-            }
-
-            out.add(new AssignNode(
-                indexedTarget,
-                desugarExpr(element)
-            ));
-        }
-    }
-
     private ASTNode desugarExpr(ASTNode expr) {
         if (expr == null) return null;
 
@@ -1036,10 +989,14 @@ public class Desugarer {
             );
         }
 
-        if (expr instanceof ArrayLiteralNode) {
-            throw new RuntimeException(
-                "ArrayLiteralNode cannot be desugared as an ordinary expression"
-            );
+        if (expr instanceof ArrayLiteralNode n) {
+            List<ASTNode> elements = new ArrayList<>();
+
+            for (ASTNode element : n.elements) {
+                elements.add(desugarExpr(element));
+            }
+
+            return new ArrayLiteralNode(elements);
         }
 
         throw new RuntimeException(
@@ -1104,47 +1061,6 @@ public class Desugarer {
 
         throw new RuntimeException(
             "Unsupported lvalue in desugarer: " + node.getClass().getSimpleName()
-        );
-    }
-
-    private ASTNode cloneLValue(ASTNode node) {
-        if (node == null) return null;
-
-        if (node instanceof VarNode) {
-            VarNode n = (VarNode) node;
-            return new VarNode(n.name);
-        }
-
-        if (node instanceof QualifiedNameNode) {
-            return node;
-        }
-
-        if (node instanceof DerefNode) {
-            DerefNode n = (DerefNode) node;
-            return new DerefNode(desugarExpr(n.expr));
-        }
-
-        if (node instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) node;
-
-            return new ArrayAccessNode(
-                cloneLValue(n.target),
-                desugarExpr(n.index)
-            );
-        }
-
-        if (node instanceof MemberAccessNode) {
-            MemberAccessNode n = (MemberAccessNode) node;
-
-            return new MemberAccessNode(
-                cloneLValue(n.target),
-                n.memberName
-            );
-        }
-
-        throw new RuntimeException(
-            "Unsupported lvalue clone in desugarer: "
-            + node.getClass().getSimpleName()
         );
     }
 

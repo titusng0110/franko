@@ -24,13 +24,13 @@ struct MergeSorter {
     }
 
     func initData(mview<MergeSorter> self) -> void {
-        $(self).a = [
+        $(self).a.memcpy([
             42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
             21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
             8, 65, 27, 44, 6, 99, 31, 58, 16, 82,
             24, 70, 11, 47, 35, 94, 29, 63, 18, 76,
             4, 53, 68, 10, 97, 26, 41, 80, 22, 56
-        ]
+        ])
 
         $(self).b.memset(0)
         return
