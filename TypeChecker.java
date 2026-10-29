@@ -290,7 +290,8 @@ public class TypeChecker {
             return;
         }
 
-        if (isPermissionDowngrade(expr.type, targetType)) {
+        if (isPermissionDowngrade(expr.type, targetType)
+                || isStaticArrayViewDecay(expr.type, targetType)) {
             return;
         }
 
@@ -307,6 +308,23 @@ public class TypeChecker {
             SemanticType targetType
     ) {
         return PointerPermissions.isPermissionDowngrade(sourceType, targetType);
+    }
+
+    public boolean isStaticArrayViewDecay(
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        return PointerPermissions.isStaticArrayViewDecay(
+                sourceType,
+                targetType
+        );
+    }
+
+    public boolean isPointerConversion(
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        return PointerPermissions.isPointerConversion(sourceType, targetType);
     }
 
     private static boolean isStringLiteralView(SemanticExprNode expr) {

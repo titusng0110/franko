@@ -33,6 +33,39 @@ final class PointerPermissions {
                 && source.permission.allows(target.permission);
     }
 
+    static boolean isStaticArrayViewDecay(
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        if (!(sourceType instanceof SemanticPtrType source)
+                || !(targetType instanceof SemanticPtrType target)) {
+            return false;
+        }
+
+        if (target.permission == PtrPermission.OWNER) {
+            return false;
+        }
+
+        if (!source.permission.allows(target.permission)) {
+            return false;
+        }
+
+        if (!(source.referencedType instanceof SemanticStaticArrayType staticArray)
+                || !(target.referencedType instanceof SemanticDynamicArrayType dynamicArray)) {
+            return false;
+        }
+
+        return staticArray.elementType.equals(dynamicArray.elementType);
+    }
+
+    static boolean isPointerConversion(
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        return isPermissionDowngrade(sourceType, targetType)
+                || isStaticArrayViewDecay(sourceType, targetType);
+    }
+
     static String creationIntrinsic(PtrPermission permission) {
         return switch (permission) {
             case OWNER -> "getptr";

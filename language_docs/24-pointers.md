@@ -69,8 +69,10 @@ view<ptr<int32_t>> v;   // read-only view of a ptr<int32_t> slot
 
 ## 24.4 Assignment and Implicit Downgrades
 
-The **only** implicit conversion in Franko is a pointer permission
-downgrade over an identical referenced type:
+The implicit conversions in Franko are pointer conversions: the
+permission downgrades below over an identical referenced type, and the
+static-to-dynamic array pointer view decay of
+[§24.4.1](#2441-static-to-dynamic-array-pointer-views):
 
 - `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
 - `mview<T>` implicitly casts to `view<T>`;
@@ -86,15 +88,55 @@ view<array<byte>> v2 = m;          // implicit downgrade
 ptr<array<byte>> q = v;            // invalid: raises permissions
 ```
 
-Downgrades apply to assignment, return values, and function arguments.
-Every other position requires exact type equality. Raw integers cannot
-be converted to pointers.
+These conversions apply to assignment, return values, and function
+arguments. Every other position requires exact type equality. Raw
+integers cannot be converted to pointers.
 
 Explicit downgrades may be written with `cast` (see [Casts](16-casts.md)):
 
 ```franko
 view<array<byte>> v = cast<view<array<byte>>>(p);
 ```
+
+### 24.4.1 Static-to-Dynamic Array Pointer Views
+
+A pointer to a **static** array implicitly converts to a pointer to a
+**dynamic** array of the same element type, in the unidirectional form:
+
+- `mview<array<T, N>>` and `view<array<T, N>>` implicitly (and explicitly)
+  cast to `mview<array<T>>` and `view<array<T>>`;
+- the conversion may carry a permission downgrade in the same step, so
+  `ptr<array<T, N>>` converts to `mview<array<T>>`/`view<array<T>>` and
+  `mview<array<T, N>>` converts to `view<array<T>>`;
+- `T` may itself be a static or dynamic array, but only the **outermost**
+  dimension decays: `view<array<array<int32_t, 2>, 3>>` converts to
+  `view<array<array<int32_t, 2>>>`, never to `view<array<array<int32_t>>>`
+  (element layouts must stay identical behind the one thin pointer);
+- the reverse direction is invalid, and ownership never decays:
+  `ptr<array<T, N>>` cannot convert to `ptr<array<T>>`.
+
+```franko
+array<int32_t, 4> xs;
+mview<array<int32_t, 4>> m = getmview(xs);
+view<array<int32_t>> v = m;             // implicit decay
+mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);   // explicit
+
+print($(v).length());                   // 4
+$(m)[1] = 99;                           // writes hit xs directly
+```
+
+The conversion is safe because permissions are propagated to the
+result: `.init`, `.init_zero`, `.resize`, and `.uninit` are forbidden on
+`mview`/`view` results (and on a decayed `ptr` — which is why `ptr` never
+decays), so the storage behind the converted view is never reallocated
+or freed through it. The conversion is allowed in the same positions as
+permission downgrades: assignment, return values, and function arguments.
+Comparing pointers still requires identical pointer types. Like every
+pointer in Franko, a converted view must not outlive the scope it was
+created in — a view that escapes past it (returned, or stored into
+longer-lived storage) is the usual untracked dangling-pointer case of
+[Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations),
+exactly as if it had been created there with `getview`.
 
 ## 24.5 Pointer Comparison
 
@@ -201,6 +243,12 @@ Summary: `view` locks down the memory it directly touches. If that
 memory contains raw values (like nested arrays), those values are
 locked. If it contains pointers, the pointer *variables* are locked, but
 the memory they point to follows its own type rules.
+
+These rules hold at **every** level of nesting: through an `mview`,
+`memset`/`memcpy`/`memmove` and element writes on an *inner* nested
+array are allowed (`$(m)[0].memcpy(src)` is fine), while `init`/
+`init_zero`/`resize`/`uninit` on an inner nested array are blocked
+exactly like on the outermost one (`$(m)[0].init(...)` is not).
 
 ## 24.9 The null Literal
 

@@ -1,0 +1,7 @@
+// The decay is unidirectional: a dynamic view cannot become a static view.
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    view<array<int32_t>> d = getview(xs);
+    view<array<int32_t, 3>> s = d;
+    return 0;
+}

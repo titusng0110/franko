@@ -89,7 +89,7 @@ func main(view<array<array<byte>>> args) -> int32_t {
 
 Any other shape (parameters of another type, a different return type) is a compile error.
 
-In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Compiler Internals](../compiler_docs.md)).
 
 Executable statements are **not** currently allowed in global scope.
 

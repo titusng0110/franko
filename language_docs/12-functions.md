@@ -58,9 +58,12 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the
-parameter type, with the single exception of the pointer permission
-downgrade: a `ptr`/`mview`/`view` argument may be passed where a weaker
-permission over an identical referenced type is expected (see
+parameter type, with the single exception of the pointer conversions:
+permission downgrades over an identical referenced type (`ptr`/`mview`/
+`view` may pass where a weaker permission is expected), and the
+static-to-dynamic array pointer view decay (`mview`/`view` of
+`array<T, N>`, or a `ptr` source downgraded in the same step, may pass
+where `mview`/`view` of `array<T>` is expected; see
 [Pointers](24-pointers.md)). There are no other implicit conversions: pass
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](16-casts.md)).
@@ -68,8 +71,9 @@ permission over an identical referenced type is expected (see
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
 
 Overload preference: among applicable overloads, ones matched without any
-permission downgrade win over downgrading ones, and among the rest the
-ones relying on the fewest downgrades win. If several overloads remain
+conversion win over converting ones, and among the rest the ones relying
+on the fewest conversions win, with a decay counted heavier than a pure
+permission downgrade. If several overloads remain
 tied, the call is ambiguous and is rejected.
 
 ## 12.7 Bare Function Names

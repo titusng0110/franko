@@ -1,0 +1,11 @@
+// uninit() through a decayed view is blocked twice over: the view region
+// is read-only, and the borrowed descriptor must never be freed anyway.
+func main() -> int32_t {
+    array<array<int32_t>, 2> g;
+    g[0].init(2);
+    g[1].init(2);
+    view<array<array<int32_t>, 2>> v = getview(g);
+    view<array<array<int32_t>>> d = v;
+    $(d)[0].uninit();
+    return 0;
+}

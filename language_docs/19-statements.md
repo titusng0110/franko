@@ -148,8 +148,6 @@ for (int32_t a = 0; a < 3; a = a + 1) {
 
 `break` and `continue` are reserved keywords. They are only valid inside a loop; using either outside every loop is an error. They may not appear in a `for` header's `init` or `update` positions.
 
-On the generated-C++ level, `break` and `continue` lower to `goto` statements targeting per-loop labels, and labels are only generated for loops that are actually targeted. See [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
-
 ## 19.6 Return Statements
 
 A bare `return` is valid only in a `void` function.

@@ -22,6 +22,9 @@ public class Cpp14Codegen {
     private final List<LoopFrame> loopStack = new ArrayList<>();
     private int nextLoopId = 0;
 
+    private final List<String> pendingPrelude = new ArrayList<>();
+    private int nextDecayTempId = 0;
+
     private final String osFfiBridgeText;
 
     private final TargetInfo target;
@@ -59,6 +62,8 @@ public class Cpp14Codegen {
         out.setLength(0);
         indentLevel = 0;
         usedOsFfiKinds.clear();
+        pendingPrelude.clear();
+        nextDecayTempId = 0;
 
         emitNode(root);
 
@@ -718,7 +723,9 @@ public class Cpp14Codegen {
         }
 
         if (node instanceof SemanticExprStmtNode exprStmt) {
-            emitLine(emitExpr(exprStmt.expr) + ";");
+            String expr = emitExpr(exprStmt.expr);
+            flushPrelude();
+            emitLine(expr + ";");
             return;
         }
 
@@ -781,7 +788,20 @@ public class Cpp14Codegen {
         }
 
         if (node.staticInitializer != null) {
-            initializer = " = " + emitExpr(node.staticInitializer);
+            String raw = emitExpr(node.staticInitializer);
+
+            if (PointerPermissions.isStaticArrayViewDecay(
+                    node.staticInitializer.type,
+                    sym.type)) {
+                initializer = " = "
+                        + emitDecayedViewTemp(
+                                raw,
+                                node.staticInitializer.type,
+                                sym.type
+                        );
+            } else {
+                initializer = " = " + raw;
+            }
         }
 
         if (initializer.isEmpty()
@@ -789,6 +809,7 @@ public class Cpp14Codegen {
             initializer = " = nullptr";
         }
 
+        flushPrelude();
         emitLine(cppType + " " + name + initializer + ";");
     }
 
@@ -812,19 +833,25 @@ public class Cpp14Codegen {
 
     private void emitAssign(SemanticAssignNode node) {
 
+        String target = emitLValue(node.target);
+        String value = emitExprAsType(node.value, node.target.type);
+        flushPrelude();
+
         emitLine(
-                emitLValue(node.target)
+                target
                         + " "
                         + node.op
                         + " "
-                        + emitExprAsType(node.value, node.target.type)
+                        + value
                         + ";"
         );
     }
 
     private void emitIf(SemanticIfNode node) {
 
-        emitLine("if (" + emitExpr(node.condition) + ")");
+        String condition = emitExpr(node.condition);
+        flushPrelude();
+        emitLine("if (" + condition + ")");
         emitControlledStmt(node.thenBranch);
 
         if (node.elseBranch != null) {
@@ -843,7 +870,30 @@ public class Cpp14Codegen {
         LoopFrame frame = new LoopFrame(nextLoopId++);
         loopStack.add(frame);
 
-        emitLine("while (" + emitExpr(node.condition) + ")");
+        String condition = emitExpr(node.condition);
+
+        if (!pendingPrelude.isEmpty()) {
+            emitLine("L_top_" + frame.id + ": ;");
+            flushPrelude();
+            emitLine("if (!(" + condition + ")) goto L_brk_" + frame.id + ";");
+            emitStmt(node.body);
+
+            if (needsContinueLabel) {
+                emitLine("L_cont_" + frame.id + ": ;");
+            }
+
+            for (SemanticStmtNode updateStmt : node.update) {
+                emitStmt(updateStmt);
+            }
+
+            emitLine("goto L_top_" + frame.id + ";");
+            emitLine("L_brk_" + frame.id + ": ;");
+
+            loopStack.remove(loopStack.size() - 1);
+            return;
+        }
+
+        emitLine("while (" + condition + ")");
 
         boolean hasUpdate = !node.update.isEmpty();
 
@@ -1041,6 +1091,7 @@ public class Cpp14Codegen {
 
         sb.append(" << '\\n';");
 
+        flushPrelude();
         emitLine(sb.toString());
     }
 
@@ -1054,7 +1105,10 @@ public class Cpp14Codegen {
                 ? node.function.returnType()
                 : node.value.type;
 
-        emitLine("return " + emitExprAsType(node.value, targetType) + ";");
+        String value = emitExprAsType(node.value, targetType);
+        flushPrelude();
+
+        emitLine("return " + value + ";");
     }
 
     private String emitExpr(SemanticExprNode node) {
@@ -1396,6 +1450,10 @@ public class Cpp14Codegen {
 
         String raw = emitExpr(node.expr);
 
+        if (PointerPermissions.isStaticArrayViewDecay(node.expr.type, node.type)) {
+            return emitDecayedViewTemp(raw, node.expr.type, node.type);
+        }
+
         if (!node.checked) {
 
             return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
@@ -1598,7 +1656,49 @@ public class Cpp14Codegen {
             return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
         }
 
+        if (PointerPermissions.isStaticArrayViewDecay(expr.type, targetType)) {
+            return emitDecayedViewTemp(raw, expr.type, targetType);
+        }
+
         return raw;
+    }
+
+    private String emitDecayedViewTemp(
+            String raw,
+            SemanticType sourceType,
+            SemanticType targetType
+    ) {
+        SemanticStaticArrayType staticArray = (SemanticStaticArrayType)
+                ((SemanticPtrType) sourceType).referencedType;
+        SemanticDynamicArrayType dynamicArray = (SemanticDynamicArrayType)
+                ((SemanticPtrType) targetType).referencedType;
+
+        String elementType = emitType(dynamicArray.elementType);
+        String name = "_TMP_VIEW_" + (nextDecayTempId++);
+
+        pendingPrelude.add(
+                "Franko_Dynamic_Array<"
+                        + elementType
+                        + "> "
+                        + name
+                        + " = {"
+                        + staticArray.sizeLiteral
+                        + ", const_cast<"
+                        + elementType
+                        + "*>("
+                        + raw
+                        + "->data), true};"
+        );
+
+        return "(&" + name + ")";
+    }
+
+    private void flushPrelude() {
+        for (String line : pendingPrelude) {
+            emitLine(line);
+        }
+
+        pendingPrelude.clear();
     }
 
     private String castToSemanticExprTypeIfNeeded(

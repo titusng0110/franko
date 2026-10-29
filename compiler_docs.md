@@ -13,7 +13,9 @@ about the compiler design should reside here.
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain.
-- **Runtime**: `include/FrankoRuntime.hpp` (arrays, `franko_unsafe_cast`),
+- **Runtime**: `include/FrankoRuntime.hpp` (arrays, `franko_unsafe_cast`,
+  the `borrowed` marker that keeps compiler-synthesized view-decay headers
+  from freeing their storage),
   optional jemalloc (`third_party/`).
 
 ---
@@ -451,9 +453,11 @@ Scope/symbol environment for semantic analysis (refactored out of an earlier
 (`resolveStruct`) vs strict (`resolveStructIn`); function/method overload
 registration and resolution (`resolveFunction/resolveMethod` — arity +
 type applicability, constant-fluid arguments may widen, nonconstants must
-match exactly **or be a pointer permission downgrade**, ambiguity is an
+match exactly **or be a pointer conversion** (permission downgrade or
+array-view decay), ambiguity is an
 error; among applicable overloads exact permission matches win over
-downgrading ones, then fewest downgrades, then ambiguity). Method overload
+downgrading ones, then pure downgrades, then decays, then ambiguity —
+the fewest-downgrades tally weights a decay twice a pure downgrade). Method overload
 identity excludes `self`'s type: `resolveMethod` matches name + user
 arguments only, and the caller synthesizes the hidden `self` argument with
 `getptr`/`getmview`/`getview` matching the resolved method's declared self
@@ -484,8 +488,9 @@ integer literals; `inferBinaryResultType` implements the fluid-constant rule
 type); same-type casts are returned unchanged (no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
 resolver) and `unsafe_cast<T>()` always lowers as a checked cast; the
-legality checkers decide whether a `cast` is a permitted widening or
-permission downgrade. Rejects leaked `ArrayLiteralNode` as a "Desugarer
+legality checkers decide whether a `cast` is a permitted widening,
+permission downgrade, or array-view decay. Rejects leaked
+`ArrayLiteralNode` as a "Desugarer
 bug".
 
 #### `ArrayLowerer`
@@ -522,7 +527,7 @@ assignable value types), method `self` shape (`ptr<X>`/`mview<X>`/`view<X>
 self` must be the first parameter and no other parameter may be named
 `self`), return statement rules
 (`return;` only in void functions; `return expr;` must be assignable to the
-return type, permission downgrades allowed), and **presence-based
+return type, pointer conversions allowed), and **presence-based
 missing-return detection**: a non-void
 function must syntactically contain a return somewhere in its body (recursing
 through blocks/ifs/whiles; the desugared for-update epilogue runs inside the
@@ -542,13 +547,14 @@ elements because those live behind a pointer), method names must not collide
 with field names, and folded const initializers/field defaults must fit their
 primitive type. Pointer globals initialized with a statically representable
 address (`getptr`/`getmview`/`getview` over a global) are validated here:
-the initializer must be a pointer type match or permission downgrade.
+the initializer must be a pointer type match or pointer conversion
+(permission downgrade or array-view decay).
 
 #### `StatementChecker`
 Statement-level legality: assignment targets must be storage-backed lvalues
 (storage semantics: variables, derefs, and array/member accesses rooted at
 storage — stronger than `SemanticExprNode.isLValue()`), non-void LHS, exact/
-fitting RHS per `TypeChecker.ensureAssignable` (pointer permission downgrades
+fitting RHS per `TypeChecker.ensureAssignable` (pointer conversions
 allowed); assignment through an lvalue path requires **mutation rights** over
 the target's storage region (§4.9 blocks writes through `view`); compound-assign
 rules with
@@ -566,14 +572,17 @@ fitting constant; comparisons/logical allow mixed integrals with constant fit;
 shifts need a non-negative constant or unsigned right operand), pointer/null
 comparisons (only `==`/`!=`, matching pointer types), function-call argument
 revalidation (constants must fit, non-constants match exactly or are a
-pointer permission downgrade, no void/array arguments), array intrinsic
+pointer conversion — permission downgrade or array-view decay —, no
+void/array arguments), array intrinsic
 argument rules **and receiver permission rules** (lifecycle intrinsics
 `init`/`init_zero`/`resize`/`uninit` need an OWNER region;
 `memset`/`memcpy`/`memmove` targets need mutation rights; `length()` and
 reads are always fine), constant static-array index bounds
 (this is the rule rejecting over-long initializer lists), cast rules
-(`cast` = value-preserving integer widening or pointer permission downgrade
-over an identical referenced type; `unsafe_cast` = checked integer
+(`cast` = value-preserving integer widening, pointer permission downgrade
+over an identical referenced type, or the static-to-dynamic array view
+decay — whose to-`ptr` form gets a dedicated "cannot decay ownership"
+error; `unsafe_cast` = checked integer
 conversion with compile-time constant range checks), creation-intrinsic
 legality (`getptr`/`getmview`/`getview` need an equally strong storage
 region, §4.9), deref legality, and void-in-value-context rules. Carries
@@ -591,12 +600,14 @@ constant-fit machinery (`requireConstantFitsType`, static
 `fitsBigIntegerToPrimitive`, `bitWidth`, `isSigned`,
 `unsignedVariantOf`/`signedVariantOf`, static
 `isValuePreservingIntegerWidening` — which also drives cast selection in
-`ExpressionAnalyzer`), pointer permission downgrades
-(`isPermissionDowngrade`, a delegating wrapper over
-`PointerPermissions.isPermissionDowngrade`), literal parsing (`parseIntegerLiteral`:
+`ExpressionAnalyzer`), pointer conversions
+(`isPermissionDowngrade`, `isStaticArrayViewDecay`, `isPointerConversion` —
+delegating wrappers over
+`PointerPermissions`), literal parsing (`parseIntegerLiteral`:
 0b/0x/decimal), and memset/memcpy element rules (`isMemsetable`,
 `isMemcpyable` — recursive with path-scoped cycle detection so diamond-shaped
 field graphs stay fine while by-value cycles terminate). `ensureAssignable`
+accepts the pointer conversions alongside exact matches and
 also special-cases array targets fed a pointer-to-array source: the error
 suggests `memcpy`, and names string literals explicitly only when the source
 is a hoisted literal view (`getview(<global>)` over a `literalBytes` global).
@@ -770,7 +781,11 @@ print. Expression lowering is structural (`ptr<T>`/`mview<T>`→`T*`,
 `$(p)`→`(*p)`, arrays → `Franko_Dynamic_Array<T>` /
 `Franko_Static_Array<T,N>`, pre-folded constants emitted directly, contextual
 `static_cast` via `emitExprAsType` to preserve Franko's constant typing and
-already-chosen overloads, `franko_unsafe_cast` for `unsafe_cast`). Literal-
+already-chosen overloads, `franko_unsafe_cast` for `unsafe_cast`). A
+static-to-dynamic array view decay (implicit at the `emitExprAsType`
+positions, explicit in `emitCast`, and at global static initializers)
+buffers a hidden borrowed-header declaration via statement lookback and
+emits the header's address (§4.9). Literal-
 backed string globals emit as `const Franko_Static_Array<uint8_t, N>
 VAR__STR_<hash> = {{…}}` (constant initialization, so static-init order is
 irrelevant), and pointer globals with static address initializers emit the
@@ -969,20 +984,54 @@ level: `$(m)[0].init(...)` through an `mview` is blocked exactly like
 `$(m).init(...)`; only an extracted `ptr` (Rule 2) restores allocation
 rights. `PointerPermissions` is the single home of the permission rules:
 `regionPermission` (the region rule above), `isPermissionDowngrade` (the
-conversion rule below), and `creationIntrinsic` (which of
+identical-referenced-type downgrade), `isStaticArrayViewDecay` (the
+outermost-dimension static-to-dynamic array decay), `isPointerConversion`
+(their union: the full implicit-conversion predicate), and
+`creationIntrinsic` (which of
 `getptr`/`getmview`/`getview` creates a given permission level, used in
 diagnostics); the checkers, `SymbolTable`, `TypeChecker`
-(whose `isPermissionDowngrade` is a delegating wrapper), and
+(whose three conversion predicates are delegating wrappers), and
 `PointerPermissionChecker` all share it.
 
-**Conversions.** The **only** implicit conversion in all of Franko is a
-pointer permission downgrade over an identical referenced type
-(`ptr→mview`, `ptr→view`, `mview→view`), allowed in assignments, returns,
-and argument passing (overload resolution prefers exact matches over
-downgrading ones). Everything else is exact. Explicit downgrades may be
+**Conversions.** The **only** implicit conversions in all of Franko are
+pointer conversions, allowed in assignments, returns, and argument
+passing (overload resolution prefers exact matches, then pure permission
+downgrades, then decays — see below):
+- a pointer permission downgrade over an identical referenced type
+  (`ptr→mview`, `ptr→view`, `mview→view`);
+- the **static-to-dynamic array pointer view decay**: `mview<array<T,N>>`/
+  `view<array<T,N>>` (source `mview`/`view`, or a `ptr` source combined
+  with a downgrade) convert to `mview<array<T>>`/`view<array<T>>`. Only
+  the outermost dimension decays (`T` must match exactly, and `T` may
+  itself be a static or dynamic array), the direction is unidirectional,
+  and the target is never `ptr` (ownership could free the borrowed
+  storage). Explicit form: `cast<mview<array<T>>>(m)`.
+
+Everything else is exact. Explicit downgrades may be
 written `cast<view<T>>(p)`; casting upwards or across pointee types is an
 error. Integer `cast` is value-preserving widening only; `unsafe_cast`
 carries the checked conversions (`franko_unsafe_cast`).
+
+**Decay implementation.** A decayed value is a hidden
+`Franko_Dynamic_Array<T>` header (`{count = N, data = the static array's
+storage, borrowed = true}`) synthesized at the conversion site.
+`Cpp14Codegen` uses statement lookback: while a statement's expressions
+are emitted, each decay buffers a header declaration, and the buffered
+declarations are emitted as C++ statements immediately before the
+statement — `Franko_Dynamic_Array<T> _TMP_VIEW_k = {N,
+const_cast<T*>(src->data), true};` with the conversion becoming
+`(&_TMP_VIEW_k)`. The header lives in the enclosing scope, so it stays
+valid for the whole statement and everything the callees do with it; a
+converted view must not outlive that scope — past it, it is the ordinary
+untracked dangling-pointer case (returning one is the same class as
+returning `getview` of a local). A loop condition containing a decay is
+rewritten to the goto form (`L_top` / declarations / `if (!(cond)) goto
+L_brk` / body / update / `goto L_top` / `L_brk`) so the header is rebuilt
+on every iteration. The `borrowed` flag on `Franko_Dynamic_Array` makes
+its destructor skip `destroy_elements`/`je_free` for these headers, so
+borrowed storage is never freed — including at the end of each loop
+iteration. Lifecycle intrinsics stay blocked on the result (the region
+rule), and `ptr` never decays.
 
 **Method `self`.** `self` may be `ptr<X> self`, `mview<X> self`, or
 `view<X> self`. The hidden self argument at a call site is synthesized as
@@ -1009,6 +1058,135 @@ Consequences of strings being views:
   `view<array<byte, 5>> G = "hello";`;
 * `print("hi")` prints the global's address (print is unchanged pending the
   io class).
+
+## 4.11 Runtime array and allocation semantics
+
+The generated code allocates through bundled jemalloc (`je_malloc`,
+`je_calloc`, `je_realloc`, `je_free`).
+
+Dynamic array element buffers are allocated by the array runtime methods
+and freed by `uninit()` or by the array object's destructor (never for
+`borrowed` headers, §4.9).
+
+Element construction follows the C++ type of the elements: buffers for
+trivially default-constructible element types keep raw storage, while any
+other element type is default-constructed (placement new) when the buffer
+is allocated. `uninit()` and the array destructor destroy constructed
+elements before freeing the buffer. Trivially destructible element types
+skip destruction entirely. Element lifetime in the dynamic array runtime:
+
+- `init(n)` and `init_zero(n)` default-construct all `n` elements when the
+  element type needs construction; trivially constructible element types
+  keep raw (`init`) or zeroed (`init_zero`) storage with no per-element
+  work.
+- `resize(n)` default-constructs the grown tail when growing and destroys
+  the dropped tail when shrinking; trivial element types skip both.
+- `uninit()` and the array destructor destroy all `count` elements before
+  freeing the buffer; trivially destructible element types skip
+  destruction.
+- `je_realloc` byte-moves the existing elements on `resize`, which is fine
+  for the runtime's trivially-relocatable element types.
+
+Array `memcpy` is designed to support the combinations
+`Static<T,N>.memcpy(Static<T,M>)`, `Static<T,N>.memcpy(Dynamic<T>)`,
+`Dynamic<T>.memcpy(Dynamic<T>)`, `Dynamic<T>.memcpy(Static<T,M>)`.
+Static array sizes must be greater than zero because generated C++ uses
+fixed-size arrays, and zero-length C++ arrays are not standard. Static and
+dynamic arrays runtime-check indexes and intrinsics and raise
+`std::runtime_error` (via `franko_panic`) on violations such as
+out-of-bounds access, use of an uninitialized dynamic array, double
+initialization, or zero-size allocation.
+
+The dynamic array length is stored in a `count` field with a `length()`
+accessor returning `uint32_t` (a field and method may not share a name in
+C++). Reading `length()` on an uninitialized dynamic array returns `0`
+and never aborts; every other uninitialized access still aborts. Static
+arrays keep plain contiguous `T data[N]` storage with no length field or
+method: `staticarr.length()` in Franko source is emitted as a constant,
+never as a runtime call. Zero length and uninitialized coincide exactly:
+`init(0)` and `resize(0)` abort, and `uninit()` restores
+`data == nullptr, count == 0`, so `length() == 0` holds exactly when the
+array is uninitialized — there is no initialized empty array.
+
+## 4.12 Emission details
+
+**Integer literals.** Large integer literals are emitted so that they
+remain well-formed C++14: an unsuffixed decimal literal whose value
+exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because
+decimal literals in C++14 do not fall back to unsigned integer types.
+
+**Print.** `print` arguments are emitted as `std::cout` insertions: plain
+integer primitives are inserted directly; `int8_t`/`uint8_t` values are
+promoted with unary `+` so a number is printed rather than a character;
+pointers are cast to `const void*` to avoid accidental string printing.
+
+**Mangling key spelling.** The 8-hex-digit suffix is the FNV-1a 32-bit
+hash of the canonical signature key: declared parameter types in order
+(including `self` for methods), then the return type, each exactly as
+written in source (`int32_t`, `uint64_t`, `void`, `array<T>`,
+`array<T,N>` with canonical folded decimal size and no space, `ptr<T>`,
+qualified struct names such as `a::b::X`), joined as
+`fn(P1,P2,...)->R` (§4.3). When a variable or function shares its name
+with a declared struct, semantic analysis emits a warning (the program
+still compiles):
+
+```text
+==== Warnings ====
+  - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
+```
+
+Struct definitions are emitted after a forward-declaration block
+(`struct STRUCT_X;` for every declared struct), so `ptr<X>` fields and
+pointer references may name structs declared later in source order.
+
+**Entry-point wrapper and argv.** The generated C++ entry point is not the
+Franko `main` itself: the Franko `main` emits its mangled name like every
+other function, and a small wrapper in the program template owns the real
+C++ `int main` (§3.6). The argv conversion follows these rules:
+`args.length()` equals `argc`, with `args[0]` holding the program name;
+each argument is its raw bytes with **no** NUL terminator appended
+(consistent with string literals, which also append no terminator); each
+inner array is default-constructed by the runtime `init` into the
+uninitialized Franko state (`length()` `0`), so an empty argument simply
+stays uninitialized; after the Franko `main` returns, the outer array's
+destructor destroys the converted inner arrays and frees both levels —
+inner and outer arrays the program already released with `uninit()` are
+skipped safely.
+
+**Break / continue lowering.** `break` and `continue` lower to `goto`
+statements targeting per-loop labels, so multi-level `break N` works
+uniformly and the same scheme serves `while` and desugared `for` loops.
+Each loop receives a unique label id, and labels are only generated for
+loops that are actually targeted:
+
+- `continue` emits `goto L_cont_<id>;` where `L_cont_<id>: ;` sits at the
+  end of the loop body, immediately before the loop's epilogue (the
+  desugared `for` update), so the label runs the epilogue, matching C's
+  `for` semantics.
+- `break` emits `goto L_brk_<id>;` where `L_brk_<id>: ;` is placed
+  immediately after the loop, so the epilogue is skipped.
+- `break N` targets the label of the Nth enclosing loop; `continue` always
+  targets the innermost loop.
+
+When a `continue` targets a loop, the body is emitted inside an inner
+block with the label after it:
+
+```cpp
+while (cond)
+{
+    {
+        /* body */
+    }
+    L_cont_0: ;
+    /* update */
+}
+```
+
+The inner block keeps the label out of the scope of the body's
+declarations: a C++ `goto` may not jump forward past a variable's
+initialization within the same scope. Loops with no `break` or `continue`
+targeting them emit exactly the code they did before the feature existed:
+no labels, no `goto`, no extra blocks.
 
 ## 5. Build & test quick reference
 

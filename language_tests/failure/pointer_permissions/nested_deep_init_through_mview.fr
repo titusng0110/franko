@@ -1,0 +1,11 @@
+// Allocation rights are blocked at every nesting level through an
+// mview, not just the outermost array.
+func main() -> int32_t {
+    array<array<array<byte>>> d;
+    d.init(1);
+    d[0].init(1);
+    d[0][0].init(2);
+    mview<array<array<array<byte>>>> m = getmview(d);
+    $(m)[0][0].init(3);
+    return 0;
+}
