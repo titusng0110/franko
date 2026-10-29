@@ -2,8 +2,8 @@
 // The left-hand side of an assignment must be a storage-backed lvalue
 // (docs 14, 15): a getptr(...) result is not storage-backed, so
 // `getptr(a) = 5` is rejected.
-func main() -> int32_t {
-    int32_t a = 1
+func main() -> int32 {
+    int32 a = 1
 
     getptr(a) = 5
 

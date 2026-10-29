@@ -1,9 +1,9 @@
 // Failure fixture: unsupported_syntax/multiple_declarators
-// Multiple declarators in one declaration (`int32_t a, b;`) do not exist in
+// Multiple declarators in one declaration (`int32 a, b;`) do not exist in
 // the grammar; each variable must be declared separately (doc 31.17).
 
-func main() -> int32_t {
-    int32_t a, b;
+func main() -> int32 {
+    int32 a, b;
     a = 1;
     b = 2;
     print(a);

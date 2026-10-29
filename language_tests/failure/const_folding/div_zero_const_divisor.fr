@@ -1,8 +1,8 @@
 // Failure fixture: const_folding/div_zero_const_divisor
 // Dividing a nonconstant variable by constant zero is rejected.
-func main() -> int32_t {
-    int32_t y = 5;
-    int32_t x = y / 0;
+func main() -> int32 {
+    int32 y = 5;
+    int32 x = y / 0;
 
     print(x)
 

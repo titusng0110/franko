@@ -1,8 +1,8 @@
 // Failure fixture: ptr_deref_null/null_assigned_deref
 // Dereferencing an pointer after an explicit null assignment.
-func main() -> int32_t {
-    int32_t x2 = 0
-    ptr<int32_t> p2
+func main() -> int32 {
+    int32 x2 = 0
+    ptr<int32> p2
 
     p2 = getptr(x2)
     p2 = null

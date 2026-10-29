@@ -5,11 +5,11 @@
 // and constant expressions; element assignment and printing.
 // ============================================================
 
-func main() -> int32_t {
-    array<int32_t, 1> a;
-    array<int32_t, 0x10> b;
-    array<int32_t, 0b1000> c;
-    array<int32_t, 1 + 2> d;
+func main() -> int32 {
+    [int32, 1] a;
+    [int32, 0x10] b;
+    [int32, 0b1000] c;
+    [int32, 1 + 2] d;
 
     a[0] = 11;
 

@@ -2,6 +2,6 @@
 // `print` is an executable statement and is not a valid top-level item.
 print(1);
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

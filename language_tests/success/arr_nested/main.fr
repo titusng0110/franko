@@ -6,9 +6,9 @@
 // reverse order (inner arrays first, then the outer array).
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // static array of static arrays
-    array<array<int32_t, 4>, 8> m;
+    [[int32, 4], 8] m;
     m[0][0] = 1;
     m[0][3] = 4;
     m[7][0] = 71;
@@ -16,7 +16,7 @@ func main() -> int32_t {
     print(m[0][0], m[0][3], m[7][0], m[7][3]);
 
     // dynamic array of dynamic arrays
-    array<array<int32_t>> n;
+    [[int32]] n;
     n.init(3);
     n[0].init_zero(2);
     n[1].init_zero(2);

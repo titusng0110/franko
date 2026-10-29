@@ -8,22 +8,22 @@
 
 namespace util {
     struct Counter {
-        int32_t n = 0
+        int32 n = 0
         func bump(ptr<Counter> self) -> void {
             $(self).n = $(self).n + 1
             return
         }
-        func value(ptr<Counter> self) -> int32_t {
+        func value(ptr<Counter> self) -> int32 {
             return $(self).n
         }
     }
 }
 
-func readIt(ptr<util::Counter> p) -> int32_t {
+func readIt(ptr<util::Counter> p) -> int32 {
     return $(p).value()
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     util::Counter c
     c.bump()
     c.bump()

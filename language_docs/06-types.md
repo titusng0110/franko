@@ -11,7 +11,7 @@ typed pointers (ptr / mview / view)
 function return-only void
 ```
 
-There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8_t`.
+There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8`.
 
 Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical. See [Type Equality](28-type-equality.md), [Declarations](11-declarations.md), and the complete struct reference in [Structs](25-structs.md).
 
@@ -19,4 +19,4 @@ Structs are nominal types: two distinct struct declarations are distinct types e
 
 Pointers come in three permission levels — `ptr<T>` (owner), `mview<T>` (mutable view), `view<T>` (read-only view) — one capability model for all of them. See [Pointers](24-pointers.md).
 
-A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
+A static array size may be the inferred-size marker `?` (for example `[int32, ?]`) in source text, but only in a local declaration with an array-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.

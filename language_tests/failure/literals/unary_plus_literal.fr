@@ -1,7 +1,7 @@
 // Failure fixture: literals/unary_plus_literal
 // There is no unary '+' operator and no '+123' literal form.
-func main() -> int32_t {
-    int32_t x = +123;
+func main() -> int32 {
+    int32 x = +123;
 
     print(x)
 

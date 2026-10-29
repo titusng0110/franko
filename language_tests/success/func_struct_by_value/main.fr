@@ -7,8 +7,8 @@
 // ============================================================
 
 struct Pair {
-    int32_t a = 0
-    int32_t b = 0
+    int32 a = 0
+    int32 b = 0
 }
 
 func bump(Pair p) -> void {
@@ -16,14 +16,14 @@ func bump(Pair p) -> void {
     p.b = p.b + 200;
 }
 
-func makePair(int32_t seed) -> Pair {
+func makePair(int32 seed) -> Pair {
     Pair q;
     q.a = seed;
     q.b = seed * 2;
     return q;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Pair p;
     p.a = 1;
     p.b = 2;

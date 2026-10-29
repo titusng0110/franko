@@ -1,8 +1,8 @@
 // Failure fixture: intrinsics/memcpy_elem_mismatch
 // memcpy target and source element types must match exactly.
-func main() -> int32_t {
-    array<int32_t, 4> a;
-    array<uint8_t, 4> b;
+func main() -> int32 {
+    [int32, 4] a;
+    [uint8, 4] b;
     a.memcpy(getptr(b));
     return 0;
 }

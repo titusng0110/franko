@@ -1,24 +1,24 @@
 // ============================================================
-// LANGUAGE TEST: Array Literals Are view<array<T, N>> Values
+// LANGUAGE TEST: Array Literals Are view<[T, N]> Values
 // ============================================================
 // Covers: array literals as ordinary expressions. A literal has
-// type view<array<T, N>> (N is the literal length); the element
+// type view<[T, N]> (N is the literal length); the element
 // type T is inferred from an assignment, return, or call-argument
-// context. Literals decay to view<array<T>>; array-typed targets
+// context. Literals decay to view<[T]>; array-typed targets
 // are rejected (copy with memcpy instead).
 // ============================================================
 
-func take(view<array<int32_t>> v) -> int32_t {
+func take(view<[int32]> v) -> int32 {
     return $(v)[0] + $(v)[2];
 }
 
-func mk() -> view<array<int32_t, 3>> {
+func mk() -> view<[int32, 3]> {
     return [10, 20, 30];
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // Declaration and assignment form.
-    view<array<int32_t, 3>> v = [1, 2, 3];
+    view<[int32, 3]> v = [1, 2, 3];
     print($(v)[0]);
     print($(v)[2]);
 
@@ -26,18 +26,18 @@ func main() -> int32_t {
     print($(v)[1]);
 
     // memcpy copies literal elements into an array.
-    array<int32_t, 3> buf;
+    [int32, 3] buf;
     buf.memcpy([7, 8, 9]);
     print(buf[0]);
     print(buf[2]);
 
     // Call-argument and return contexts.
     print(take([100, 200, 300]));
-    view<array<int32_t, 3>> w = mk();
+    view<[int32, 3]> w = mk();
     print($(w)[2]);
 
     // Decay to a dynamic view.
-    view<array<int32_t>> d = [1, 2, 3, 4];
+    view<[int32]> d = [1, 2, 3, 4];
     print($(d)[3]);
 
     return 0;

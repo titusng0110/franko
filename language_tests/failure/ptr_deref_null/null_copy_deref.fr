@@ -1,8 +1,8 @@
 // Failure fixture: ptr_deref_null/null_copy_deref
 // Null state propagates through a copy; the copy is dereferenced.
-func main() -> int32_t {
-    ptr<int32_t> b3
-    ptr<int32_t> a3
+func main() -> int32 {
+    ptr<int32> b3
+    ptr<int32> a3
 
     a3 = b3
 

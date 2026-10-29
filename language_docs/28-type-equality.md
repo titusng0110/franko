@@ -7,20 +7,20 @@ Franko uses exact, structural semantic type equality in many places. Type equali
 Primitive types are equal only if they have the same kind.
 
 ```text
-uint8_t  != uint16_t
-int32_t  != uint32_t
-int32_t  == int32_t
+uint8  != uint16
+int32  != uint32
+int32  == int32
 ```
 
-The aliases `int`, `uint`, and `byte` canonicalize to `int32_t`, `uint32_t`, and `uint8_t` respectively.
+The aliases `int`, `uint`, and `byte` canonicalize to `int32`, `uint32`, and `uint8` respectively.
 
 ## 28.2 Dynamic Array Equality
 
 Dynamic arrays are equal if their element types are equal.
 
 ```text
-array<int32_t> == array<int32_t>
-array<int32_t> != array<uint8_t>
+[int32] == [int32]
+[int32] != [uint8]
 ```
 
 ## 28.3 Static Array Equality
@@ -33,9 +33,9 @@ Static arrays are equal if:
 The size comparison is numeric, not textual:
 
 ```text
-array<int32_t, 10>     == array<int32_t, 0xA>
-array<int32_t, 5 + 5>  == array<int32_t, 10>
-array<int32_t, 10>     != array<int32_t, 20>
+[int32, 10]     == [int32, 0xA]
+[int32, 5 + 5]  == [int32, 10]
+[int32, 10]     != [int32, 20]
 ```
 
 ## 28.4 Pointer Equality
@@ -45,16 +45,16 @@ permissions match: `ptr<T>`, `mview<T>`, and `view<T>` are three distinct
 types.
 
 ```text
-ptr<array<byte>>     == ptr<array<byte>>
-ptr<array<byte>>     != mview<array<byte>>
-mview<array<byte>>   != view<array<byte>>
-view<array<byte, 3>> != view<array<byte, 5>>
+ptr<[byte]>     == ptr<[byte]>
+ptr<[byte]>     != mview<[byte]>
+mview<[byte]>   != view<[byte]>
+view<[byte, 3]> != view<[byte, 5]>
 ```
 
 The pointer conversions — permission downgrades (`ptr<T>` to
 `mview<T>`/`view<T>`, `mview<T>` to `view<T>`) and the static-to-dynamic
-array pointer view decay (`mview`/`view` of `array<T, N>` to `mview`/
-`view` of `array<T>`) — are the only implicit conversions the language
+array pointer view decay (`mview`/`view` of `[T, N]` to `mview`/
+`view` of `[T]`) — are the only implicit conversions the language
 allows; they do not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
@@ -73,8 +73,8 @@ equality either (see [Methods](26-methods.md)).
 Struct types are nominal: two struct declarations are distinct types even when their field layouts are identical.
 
 ```text
-struct X { int32_t n }
-struct Y { int32_t n }
+struct X { int32 n }
+struct Y { int32 n }
 
 X != Y
 X == X

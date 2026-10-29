@@ -1,8 +1,8 @@
 // Failure fixture: intrinsics/memset_value_wrong_type
-// Nonconstant memset fill value must have exactly type uint8_t.
-func main() -> int32_t {
-    array<int32_t, 4> xs;
-    int32_t v = 1;
+// Nonconstant memset fill value must have exactly type uint8.
+func main() -> int32 {
+    [int32, 4] xs;
+    int32 v = 1;
     xs.memset(v);
     return 0;
 }

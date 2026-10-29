@@ -3,8 +3,8 @@
 // `import "extra_calls"` has no directory prefix and no extension, so
 // it resolves to ./extra_calls.fr relative to the importing file.
 
-int32_t extraGlobal = 11
+int32 extraGlobal = 11
 
-func extraHelper() -> int32_t {
+func extraHelper() -> int32 {
     return 55
 }

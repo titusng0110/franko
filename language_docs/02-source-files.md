@@ -5,8 +5,8 @@ Franko source files commonly use the `.fr` extension.
 Example:
 
 ```franko
-func main() -> int32_t {
-    int32_t x;
+func main() -> int32 {
+    int32 x;
     x = 1;
 
     print(x);
@@ -22,8 +22,8 @@ Statements are terminated by a semicolon (`;`) or by one or more newlines. Both 
 Example (newline-separated, no semicolons):
 
 ```franko
-func main() -> int32_t {
-    int32_t x
+func main() -> int32 {
+    int32 x
     x = 1
     print(x)
     return 0
@@ -38,7 +38,7 @@ Line comments start with `//` and run to the end of the line:
 
 ```franko
 // a whole-line comment
-int32_t x  // a comment may follow code on the same line
+int32 x  // a comment may follow code on the same line
 ```
 
 There are no block comments.

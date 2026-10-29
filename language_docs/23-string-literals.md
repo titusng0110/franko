@@ -1,18 +1,18 @@
 # 23. String Literals
 
 Franko string literals are **read-only views of byte arrays**. A string
-literal is an ordinary expression whose type is `view<array<byte, N>>`
+literal is an ordinary expression whose type is `view<[byte, N]>`
 (see [Pointers](24-pointers.md)): a read-only pointer to a static byte
 array of `N` UTF-8 bytes, where `N` is the literal's byte length.
 
 ```franko
-"Franko"           // view<array<byte, 6>>
-"Hello, World!"    // view<array<byte, 13>>
+"Franko"           // view<[byte, 6]>
+"Hello, World!"    // view<[byte, 13]>
 ```
 
 ## 23.1 A String Literal Is a View Value
 
-Each distinct literal is hoisted to its own global `array<byte, N>`
+Each distinct literal is hoisted to its own global `[byte, N]`
 holding the UTF-8 bytes, and the literal expression is `getview(...)`
 over it. Identical literal texts share one global. No null terminator is
 appended: `N` is exactly the number of content bytes.
@@ -28,7 +28,7 @@ print($("abc")[0]);         // 97
 A string literal may appear anywhere an expression may appear:
 
 ```franko
-view<array<byte, 3>> s = "abc";     // declaration initializer
+view<[byte, 3]> s = "abc";     // declaration initializer
 s = "xyz";                          // assignment to a view variable
 print($("hi").length());            // print argument
 take("hi");                         // function argument
@@ -57,12 +57,12 @@ print($("\t\n\"\\"")[0]);   // 9
 ## 23.4 Strings and Byte Buffers
 
 Arrays are value types and are **not assignable from strings**: a
-`view<array<byte, N>>` cannot initialize or assign an array. Copy the
+`view<[byte, N]>` cannot initialize or assign an array. Copy the
 bytes with the `memcpy` intrinsic instead — a string literal is a valid
 `memcpy` source:
 
 ```franko
-array<byte, 6> buf;
+[byte, 6] buf;
 buf.memcpy("hello");      // copies 5 bytes; buf[5] is untouched
 print(buf[0]);            // 104
 ```
@@ -70,14 +70,14 @@ print(buf[0]);            // 104
 For dynamic arrays, size the buffer first:
 
 ```franko
-array<byte> buf;
+[byte] buf;
 buf.init($("hello").length());
 buf.memcpy("hello");
 ```
 
-For the same reason `array<byte, ?>` cannot infer its size from a string
+For the same reason `[byte, ?]` cannot infer its size from a string
 literal; declare the size explicitly. (`?` size inference works in
-`view<array<...>>` declarations with an array literal; see
+`view<[...]>` declarations with an array literal; see
 [Array Literals](22-array-literals.md).)
 
 ## 23.5 Global String Views
@@ -86,9 +86,9 @@ A pointer-typed global may be initialized with a string literal (or with
 `getptr`/`getmview`/`getview` over another global, or `null`):
 
 ```franko
-view<array<byte, 5>> GREETING = "hello";
+view<[byte, 5]> GREETING = "hello";
 
-func main() -> int32_t {
+func main() -> int32 {
     print($(GREETING).length());   // 5
     return 0;
 }
@@ -108,4 +108,4 @@ print($("hi")[1]);   // 105
 ## 23.7 Empty Strings
 
 An empty string literal `""` is not supported: a string literal is a
-`view<array<byte, N>>` with `N >= 1`.
+`view<[byte, N]>` with `N >= 1`.

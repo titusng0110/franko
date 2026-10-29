@@ -5,15 +5,15 @@
 namespace a {
     namespace b {
         namespace c {
-            int32_t w = 5
+            int32 w = 5
         }
     }
-    func read() -> int32_t {
+    func read() -> int32 {
         return b::c::w
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     print(a::read())
     return 0
 }

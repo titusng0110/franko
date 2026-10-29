@@ -2,7 +2,7 @@
 // The entry-point function `main` must be declared in the global namespace;
 // a `main` inside a namespace is a compile error.
 namespace app {
-    func main() -> int32_t {
+    func main() -> int32 {
         return 0
     }
 }

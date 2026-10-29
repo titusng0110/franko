@@ -1,8 +1,8 @@
 // Failure fixture: unsupported_syntax/compound_array_literal_rhs
 // The right-hand side of a compound assignment must be an integer;
 // an array literal is a view value and is rejected there (docs 14, 22).
-func main() -> int32_t {
-    array<int32_t, 3> xs;
+func main() -> int32 {
+    [int32, 3] xs;
     xs.memcpy([1, 2, 3]);
     xs += [4, 5, 6];
     print(xs[0]);

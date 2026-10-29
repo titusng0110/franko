@@ -5,41 +5,41 @@
 // for-loop updates, and while-loop updates.
 
 struct Box {
-    int32_t n
+    int32 n
 }
 
-func main() -> int32_t {
-    int32_t a = 1;
+func main() -> int32 {
+    int32 a = 1;
     a++;
     print(a); // 2
     a--;
     a--;
     print(a); // 0
 
-    int32_t i = 0;
+    int32 i = 0;
     while (i != 3) {
         i++;
     }
     print(i); // 3
 
-    int32_t total = 0;
-    for (int32_t j = 0; j < 5; j++) {
+    int32 total = 0;
+    for (int32 j = 0; j < 5; j++) {
         total += j;
     }
     print(total); // 10
 
-    for (int32_t k = 3; k > 0; k--) {
+    for (int32 k = 3; k > 0; k--) {
         print(k); // 3, 2, 1
     }
 
     // Unsigned wraparound follows the same modular rules as `x -= 1`.
-    uint8_t u = 255;
+    uint8 u = 255;
     u++;
     print(u); // 0
     u--;
     print(u); // 255
 
-    array<int32_t, 3> xs;
+    [int32, 3] xs;
     xs.memcpy([0, 0, 0]);
     xs[0]++;
     xs[0]++;
@@ -55,8 +55,8 @@ func main() -> int32_t {
     print(b.n); // 41
 
     // Postfix increment inside a while-update position.
-    int32_t count = 0;
-    int32_t rounds = 0;
+    int32 count = 0;
+    int32 rounds = 0;
     while (count != 2) {
         count++;
         rounds++;

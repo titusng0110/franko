@@ -10,27 +10,27 @@
 //     shorter than used() returns -1, a null buffer returns -1,
 //     and an uninitialized pool after uninit returns -1
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::GenerationalSparseSetAllocator a;
-    array<uint32_t> out;
+    [uint32] out;
     out.init(4);
     print(a.write_active_indices(getptr(out)));
     print(a.init(4));
-    uint32_t i = a.new_index();
-    uint32_t j = a.new_index();
-    uint32_t k = a.new_index();
+    uint32 i = a.new_index();
+    uint32 j = a.new_index();
+    uint32 k = a.new_index();
     print(a.write_active_indices(getptr(out)));
     print(out[0], out[1], out[2]);
     print(a.free_index(i));
     print(a.write_active_indices(getptr(out)));
     print(out[0], out[1]);
-    array<uint32_t> small;
+    [uint32] small;
     small.init(1);
     print(a.write_active_indices(getptr(small)));
     print(a.write_active_indices(null));

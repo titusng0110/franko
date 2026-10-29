@@ -6,16 +6,16 @@
 // nearest declaration in the current scope stack.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t x = 1
+func main() -> int32 {
+    int32 x = 1
     print(x)          // outermost x
 
     {
-        int32_t x = 2  // depth-1 shadow
+        int32 x = 2  // depth-1 shadow
         print(x)
 
         {
-            int32_t x = 3  // depth-2 shadow
+            int32 x = 3  // depth-2 shadow
             print(x)
             x = 30          // assigns the depth-2 x only
             print(x)

@@ -9,13 +9,13 @@
 //     if (p != null) before dereferencing keeps the program clean
 // ============================================================
 
-func main() -> int32_t {
-    int32_t x = 0
+func main() -> int32 {
+    int32 x = 0
 
     // A definitely-null variable guarded by p != null: the guard path
     // is infeasible at runtime, but the deref inside is accepted
     // because the guard refines the state on that path.
-    ptr<int32_t> z
+    ptr<int32> z
     if (z != null) {
         $(z) = 1
         print($(z))
@@ -25,8 +25,8 @@ func main() -> int32_t {
 
     // Branch merge: m is pointing on one path and null on the other,
     // so after the merge it is possibly null.
-    uint32_t pick = 1
-    ptr<int32_t> m
+    uint32 pick = 1
+    ptr<int32> m
     if (pick != 0) {
         m = getptr(x)
     } else {

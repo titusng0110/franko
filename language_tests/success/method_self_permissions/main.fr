@@ -9,7 +9,7 @@
 // ============================================================
 
 struct Box {
-    int32_t x = 0
+    int32 x = 0
 
     func bump(ptr<Box> self) -> void {
         $(self).x = $(self).x + 1;
@@ -19,12 +19,12 @@ struct Box {
         $(self).x = 7;
     }
 
-    func peek(view<Box> self) -> int32_t {
+    func peek(view<Box> self) -> int32 {
         return $(self).x;
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Box b;
 
     // Owner receiver: every self type works.
@@ -44,10 +44,10 @@ func main() -> int32_t {
     print($(v).peek());
 
     // A pointer extracted from a view region owns its pointee again.
-    array<ptr<Box>> arr;
+    [ptr<Box>] arr;
     arr.init(1);
     arr[0] = getptr(b);
-    view<array<ptr<Box>>> av = getview(arr);
+    view<[ptr<Box>]> av = getview(arr);
     $($(av)[0]).bump();
     print(b.x);
 

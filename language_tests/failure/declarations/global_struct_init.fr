@@ -2,12 +2,12 @@
 // Only primitive globals may have `= constExpr` initializers; a struct-typed
 // global rejects the initializer as a type mismatch.
 struct Point {
-    int32_t x
-    int32_t y
+    int32 x
+    int32 y
 }
 
 Point gp = 1 + 2
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

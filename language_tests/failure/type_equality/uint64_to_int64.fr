@@ -1,12 +1,12 @@
 // Failure fixture: type_equality/uint64_to_int64
 // There are no implicit numeric conversions (doc 31.6): a nonconstant
-// uint64_t variable does not assign to int64_t. Convert explicitly
-// with unsafe_cast<int64_t>(big), which throws at run time when the value
+// uint64 variable does not assign to int64. Convert explicitly
+// with unsafe_cast<int64>(big), which throws at run time when the value
 // does not fit.
 
-func main() -> int32_t {
-    uint64_t big = 5;
-    int64_t signedTarget;
+func main() -> int32 {
+    uint64 big = 5;
+    int64 signedTarget;
     signedTarget = big;
     return 0;
 }

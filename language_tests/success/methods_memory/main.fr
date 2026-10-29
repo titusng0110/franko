@@ -7,15 +7,15 @@
 // ============================================================
 
 struct Buf {
-    array<int32_t> data
-    func setup(ptr<Buf> self, uint32_t n) -> int32_t {
+    [int32] data
+    func setup(ptr<Buf> self, uint32 n) -> int32 {
         return $(self).data.init_zero(n)
     }
-    func set(ptr<Buf> self, uint32_t i, int32_t v) -> void {
+    func set(ptr<Buf> self, uint32 i, int32 v) -> void {
         $(self).data[i] = v
         return
     }
-    func get(ptr<Buf> self, uint32_t i) -> int32_t {
+    func get(ptr<Buf> self, uint32 i) -> int32 {
         return $(self).data[i]
     }
     func teardown(ptr<Buf> self) -> void {
@@ -24,7 +24,7 @@ struct Buf {
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Buf b
     b.setup(3)
     b.set(0, 11)

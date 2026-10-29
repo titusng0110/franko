@@ -54,11 +54,11 @@ for (init; condition; update) {
 Valid:
 
 ```franko
-for (int32_t i = 0; i < 5; i = i + 1) {
+for (int32 i = 0; i < 5; i = i + 1) {
     print(i)
 }
 
-for (int32_t i = 0; i < 5; i++) {
+for (int32 i = 0; i < 5; i++) {
     print(i)
 }
 
@@ -75,7 +75,7 @@ for (i = 0; i < 5;) {
 The loop is desugared before semantic analysis:
 
 ```franko
-for (int32_t i = 0; i < 5; i = i + 1) {
+for (int32 i = 0; i < 5; i = i + 1) {
     print(i)
 }
 ```
@@ -84,7 +84,7 @@ becomes:
 
 ```franko
 {
-    int32_t i;
+    int32 i;
     i = 0;
     while (i < 5) {
         print(i);
@@ -117,7 +117,7 @@ while (i < 10) {
 In a `for` loop, `continue` still runs the `update` (the loop's final body statement), and `break` skips it, matching C's `for` semantics:
 
 ```franko
-for (int32_t i = 0; i < 5; i = i + 1) {
+for (int32 i = 0; i < 5; i = i + 1) {
     if (i == 2) {
         continue;    // i = i + 1 still runs
     }
@@ -131,8 +131,8 @@ for (int32_t i = 0; i < 5; i = i + 1) {
 `break` accepts an optional integer constant expression `N` that selects how many nested loops to exit. `N` must be strictly greater than 0 and no larger than the enclosing loop depth. A plain `break` is equivalent to `break 1`:
 
 ```franko
-for (int32_t a = 0; a < 3; a = a + 1) {
-    for (int32_t b = 0; b < 3; b = b + 1) {
+for (int32 a = 0; a < 3; a = a + 1) {
+    for (int32 b = 0; b < 3; b = b + 1) {
         if (b == 1) {
             break 2;    // exits both loops
         }
@@ -167,12 +167,12 @@ The checker validates print arguments as expressions usable where a value is req
 
 Current print limitation: only integer primitives and pointers are printable. The C++14 backend can print:
 
-- integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
+- integer primitives (with `int8`/`uint8` promoted so a number is shown rather than a character);
 - pointers, including the `null` pointer (printed through `const void*`).
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
-Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
+Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<[byte, N]>`), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 

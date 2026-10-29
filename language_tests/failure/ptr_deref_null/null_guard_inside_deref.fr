@@ -1,9 +1,9 @@
 // Failure fixture: ptr_deref_null/null_guard_inside_deref
 // Dereferencing inside a null guard after a branch merge:
 // inside `if (p7 == null)` the state is definitely null.
-func main() -> int32_t {
-    int32_t x7 = 0
-    ptr<int32_t> p7
+func main() -> int32 {
+    int32 x7 = 0
+    ptr<int32> p7
 
     if (x7 != 0) {
         p7 = getptr(x7)

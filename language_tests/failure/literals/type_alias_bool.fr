@@ -1,6 +1,6 @@
 // Failure fixture: literals/type_alias_bool
-// No 'bool' type alias exists; boolean-like results use uint8_t.
-func main() -> int32_t {
+// No 'bool' type alias exists; boolean-like results use uint8.
+func main() -> int32 {
     bool b;
 
     b = 1;

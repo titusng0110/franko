@@ -1,1 +1,1 @@
-memset() count: expected uint32_t, got UINT16
+memset() count: expected uint32, got uint16

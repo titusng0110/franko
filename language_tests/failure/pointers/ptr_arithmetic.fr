@@ -1,8 +1,8 @@
 // Failure fixture: pointers/ptr_arithmetic
 // Pointers are not arithmetic values: p + 1 is invalid.
-func main() -> int32_t {
-    int32_t x = 0
-    ptr<int32_t> p = getptr(x)
+func main() -> int32 {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
     print(p + 1)
     return 0
 }

@@ -1,10 +1,10 @@
 // Failure fixture: structs/duplicate_field_name
 // Duplicate field names within one struct are rejected.
 struct X {
-    int32_t a
-    int32_t a
+    int32 a
+    int32 a
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

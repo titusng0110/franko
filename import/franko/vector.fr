@@ -1,11 +1,11 @@
 // ============================================================
-// Franko Vector of int32_t — dynamic-array-backed struct
+// Franko Vector of int32 — dynamic-array-backed struct
 //
 // Import with:
 //
 //   import "franko/vector"
 //
-// No generics yet: this is a vector of int32_t only.
+// No generics yet: this is a vector of int32 only.
 //
 // Everything lives in namespace std. From global scope:
 //
@@ -17,9 +17,9 @@
 // Storage:
 //
 //   struct Vector {
-//       array<int32_t> data
-//       uint32_t len
-//       uint32_t cap
+//       [int32] data
+//       uint32 len
+//       uint32 cap
 //   }
 //
 // Ownership:
@@ -39,17 +39,17 @@
 
 namespace std {
     struct Vector {
-        array<int32_t> data
-        uint32_t len = 0
-        uint32_t cap = 0
+        [int32] data
+        uint32 len = 0
+        uint32 cap = 0
 
         // Allocate `capacity` slots. Returns 0 on success, -1 on failure.
         // A zero capacity is rejected without touching the array.
-        func init(ptr<Vector> self, uint32_t capacity) -> int32_t {
+        func init(ptr<Vector> self, uint32 capacity) -> int32 {
             if (capacity == 0) {
                 return -1
             }
-            int32_t st = $(self).data.init(capacity)
+            int32 st = $(self).data.init(capacity)
             if (st != 0) {
                 return -1
             }
@@ -61,13 +61,13 @@ namespace std {
         // Push one value, growing the storage when full (4 slots first,
         // then doubling). Works even if init was never called.
         // Returns 0 on success, -1 on allocation failure.
-        func push(ptr<Vector> self, int32_t value) -> int32_t {
+        func push(ptr<Vector> self, int32 value) -> int32 {
             if ($(self).len >= $(self).cap) {
-                uint32_t newCap = 4
+                uint32 newCap = 4
                 if ($(self).cap != 0) {
                     newCap = $(self).cap * 2
                 }
-                int32_t st = 0
+                int32 st = 0
                 if ($(self).cap == 0) {
                     st = $(self).data.init(newCap)
                 } else {
@@ -85,7 +85,7 @@ namespace std {
 
         // Pop the top value into `out`. Returns 0 on success, -1 when the
         // vector is empty or `out` is null.
-        func pop(mview<Vector> self, mview<int32_t> out) -> int32_t {
+        func pop(mview<Vector> self, mview<int32> out) -> int32 {
             if (out == null) {
                 return -1
             }
@@ -98,23 +98,23 @@ namespace std {
         }
 
         // Read element `index`. The caller must ensure index < len.
-        func get(view<Vector> self, uint32_t index) -> int32_t {
+        func get(view<Vector> self, uint32 index) -> int32 {
             return $(self).data[index]
         }
 
         // Write element `index`. The caller must ensure index < len.
-        func set(mview<Vector> self, uint32_t index, int32_t value) -> void {
+        func set(mview<Vector> self, uint32 index, int32 value) -> void {
             $(self).data[index] = value
             return
         }
 
         // Number of live elements.
-        func length(view<Vector> self) -> uint32_t {
+        func length(view<Vector> self) -> uint32 {
             return $(self).len
         }
 
         // Number of allocated slots.
-        func capacity(view<Vector> self) -> uint32_t {
+        func capacity(view<Vector> self) -> uint32 {
             return $(self).cap
         }
 

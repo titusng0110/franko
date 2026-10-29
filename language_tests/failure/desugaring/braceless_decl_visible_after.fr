@@ -1,9 +1,9 @@
 // Failure fixture: desugaring/braceless_decl_visible_after
 // A braceless if body is wrapped in an implicit block during desugaring,
 // so a variable declared inside it is not visible after the if.
-func main() -> int32_t {
-    int32_t x = 1;
-    if (x) int32_t y = 5;
+func main() -> int32 {
+    int32 x = 1;
+    if (x) int32 y = 5;
     print(y);
     return 0;
 }

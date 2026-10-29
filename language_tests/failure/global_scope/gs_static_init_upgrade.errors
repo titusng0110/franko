@@ -1,2 +1,2 @@
 initializer has type
-expected ptr<array<UINT8, 5>>
+expected ptr<[uint8, 5]>

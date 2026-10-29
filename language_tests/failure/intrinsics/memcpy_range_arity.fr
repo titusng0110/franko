@@ -1,9 +1,9 @@
 // Failure fixture: intrinsics/memcpy_range_arity
 // The ranged memcpy form (doc 21.6) takes exactly four arguments
 // (source, dstStart, srcStart, count); three arguments are rejected.
-func main() -> int32_t {
-    array<int32_t, 4> a;
-    array<int32_t, 4> b;
+func main() -> int32 {
+    [int32, 4] a;
+    [int32, 4] b;
     a.memset(0);
     b.memset(0);
     a.memcpy(getptr(b), 0, 0);

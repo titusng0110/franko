@@ -6,15 +6,15 @@
 // parentheses, and multiple statements on one line with ';'.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // Newline-separated statements (no semicolons at all).
-    int32_t a = 1
-    int32_t b = 2
+    int32 a = 1
+    int32 b = 2
     print(a)
     print(b)
 
     // Several statements on one line separated by ';'.
-    int32_t c = 3; int32_t d = 4; print(c + d)
+    int32 c = 3; int32 d = 4; print(c + d)
 
     // Consecutive separators: ';;' and runs of blank lines.
     a = 10;;

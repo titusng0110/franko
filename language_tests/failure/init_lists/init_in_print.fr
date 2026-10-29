@@ -1,7 +1,7 @@
 // Failure fixture: init_lists/init_in_print
 // print arguments carry no inference context, so an array literal
 // cannot appear there.
-func main() -> int32_t {
+func main() -> int32 {
     print([1, 2, 3]);
     return 0;
 }

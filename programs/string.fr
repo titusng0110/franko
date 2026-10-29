@@ -5,7 +5,7 @@
 // the output rather than by comments.
 
 struct TextBuf {
-    array<byte> buf
+    [byte] buf
 
     func init(ptr<TextBuf> self, uint capacity) -> int {
         return $(self).buf.init(capacity)

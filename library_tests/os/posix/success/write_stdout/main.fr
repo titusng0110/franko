@@ -2,18 +2,18 @@
 // LIBRARY TEST (os/posix): write to stdout
 // ============================================================
 // Covers: import "franko/os", os::posix::STDOUT_FILENO, and
-// os::posix::write(fd, ptr<array<byte>>, count). The write emits
+// os::posix::write(fd, ptr<[byte]>, count). The write emits
 // "hello" with no newline; print(n) then emits the byte count 5,
 // so stdout is exactly "hello5\n".
 // ============================================================
 
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> msg;
+func main() -> int32 {
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
-    int64_t n = os::posix::write(os::posix::STDOUT_FILENO, getptr(msg), 5);
+    int64 n = os::posix::write(os::posix::STDOUT_FILENO, getptr(msg), 5);
     print(n);
     msg.uninit();
     return 0;

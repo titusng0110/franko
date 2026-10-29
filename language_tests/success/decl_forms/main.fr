@@ -1,38 +1,38 @@
 // ============================================================
 // LANGUAGE TEST: Declaration forms
 // ============================================================
-// Covers: primitive declarations (int, int32_t, uint8_t, uint32_t),
+// Covers: primitive declarations (int, int32, uint8, uint32),
 // dynamic and static array declarations, ptr<T> declarations with
 // getptr/deref, and call-init sugar.
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // Primitive locals, assigned before any read.
     int x
     x = 5
 
-    int32_t y
+    int32 y
     y = -123456
 
-    uint8_t b
+    uint8 b
     b = 200
 
-    uint32_t i
+    uint32 i
     i = 4000000000
 
     // Dynamic array: declared empty, then initialized before indexed use.
-    array<int> xs
+    [int] xs
     xs.init(4)
     xs[0] = 7
     xs[3] = 10
 
     // Static array with a constExpr size.
-    array<uint8_t, 128> buffer
+    [uint8, 128] buffer
     buffer[0] = 255
     buffer[127] = 1
 
     // Pointer: null-initialized, then certified with getptr of a local.
-    ptr<int32_t> p
+    ptr<int32> p
     print(p == null)
     p = getptr(y)
     $(p) = 99

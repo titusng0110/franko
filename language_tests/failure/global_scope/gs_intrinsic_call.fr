@@ -1,10 +1,10 @@
 // Failure fixture: global_scope/gs_intrinsic_call
 // Array intrinsic calls (xs(10)) are executable statement forms and are
 // not valid top-level items.
-array<int32_t> xs
+[int32] xs
 
 xs(10);
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

@@ -2,48 +2,48 @@
 // LANGUAGE TEST: Inferred Static Array Sizes (`?`)
 // ============================================================
 // Covers:
-//   `?` in view<array<...>> declarations with array literals,
+//   `?` in view<[...]> declarations with array literals,
 //   nested static arrays (including middle dimensions),
 //   mixed explicit/inferred sizes.
-//   (String literals are view<array<byte, N>> values and no
+//   (String literals are view<[byte, N]> values and no
 //   longer participate in `?` inference.)
 // ============================================================
 
-func main() -> int32_t {
-    view<array<int32_t, ?>> a = [0, 1, 2, 3];
+func main() -> int32 {
+    view<[int32, ?]> a = [0, 1, 2, 3];
     print($(a).length());
     print($(a)[0]);
     print($(a)[3]);
 
-    view<array<byte, ?>> s = [104, 101, 108, 108, 111];
+    view<[byte, ?]> s = [104, 101, 108, 108, 111];
     print($(s).length());
     print($(s)[0]);
     print($(s)[4]);
 
-    view<array<byte, ?>> u = [104, 195, 169, 108, 108, 111];
+    view<[byte, ?]> u = [104, 195, 169, 108, 108, 111];
     print($(u).length());
 
-    view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
+    view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
     print($(m).length());
     print($(m)[0].length());
     print($(m)[1][1]);
 
-    view<array<array<int32_t, 2>, 2>> p = [[1, 2], [3, 4]];
+    view<[[int32, 2], 2]> p = [[1, 2], [3, 4]];
     print($(p).length());
     print($(p)[0].length());
 
-    view<array<array<int32_t, ?>, ?>> g = [[1, 2, 3], [4, 5, 6]];
+    view<[[int32, ?], ?]> g = [[1, 2, 3], [4, 5, 6]];
     print($(g).length());
     print($(g)[0].length());
     print($(g)[1][2]);
 
-    view<array<array<array<byte, 3>, ?>, 2>> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
+    view<[[[byte, 3], ?], 2]> h = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]];
     print($(h).length());
     print($(h)[0].length());
     print($(h)[0][0].length());
     print($(h)[1][1][2]);
 
-    view<array<int32_t, 1 + 2>> e = [1, 2, 3];
+    view<[int32, 1 + 2]> e = [1, 2, 3];
     print($(e).length());
 
     return 0;

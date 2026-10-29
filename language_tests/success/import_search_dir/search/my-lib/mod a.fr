@@ -1,2 +1,2 @@
 // Search-directory module whose path contains a hyphen and a space.
-int32_t spaceValue = 20
+int32 spaceValue = 20

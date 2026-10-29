@@ -1,13 +1,13 @@
 // Failure fixture: pointers/compare_mismatched_types_ne
 // Pointer comparison requires identical pointer types (docs 17.6, 24.5):
-// ptr<int32_t> and ptr<uint8_t> are different pointer types, so '!='
+// ptr<int32> and ptr<uint8> are different pointer types, so '!='
 // rejects the comparison.
-func main() -> int32_t {
-    int32_t x = 0
-    uint8_t b = 0
+func main() -> int32 {
+    int32 x = 0
+    uint8 b = 0
 
-    ptr<int32_t> p = getptr(x)
-    ptr<uint8_t> q = getptr(b)
+    ptr<int32> p = getptr(x)
+    ptr<uint8> q = getptr(b)
 
     print(p != q)
 

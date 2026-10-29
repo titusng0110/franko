@@ -7,9 +7,9 @@
 //   uv run python library_tests/run_library_tests.py
 //
 // Covers: import "franko/os", os::win32::STD_OUTPUT_HANDLE,
-// os::win32::GetStdHandle(nStdHandle) -> uint64_t (HANDLE widened),
-// and os::win32::WriteFile(hFile, ptr<array<byte>>, count,
-// bytesWritten) -> int32_t with a null out-param.
+// os::win32::GetStdHandle(nStdHandle) -> uint64 (HANDLE widened),
+// and os::win32::WriteFile(hFile, ptr<[byte]>, count,
+// bytesWritten) -> int32 with a null out-param.
 //
 // Expected stdout is exactly "hello1\n": "hello" from WriteFile (no
 // newline) plus print(ok) with ok = 1.
@@ -17,12 +17,12 @@
 
 import "franko/os"
 
-func main() -> int32_t {
-    uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-    array<byte> msg;
+func main() -> int32 {
+    uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+    [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
-    int32_t ok = os::win32::WriteFile(h, getptr(msg), 5, null);
+    int32 ok = os::win32::WriteFile(h, getptr(msg), 5, null);
     print(ok);
     msg.uninit();
     return 0;

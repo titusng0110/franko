@@ -1,8 +1,8 @@
 // Failure fixture: arrays/init_size_wrong_type
-// Nonconstant dynamic array init size must have exactly type uint32_t.
-func main() -> int32_t {
-    int32_t n = 4;
-    array<int32_t> xs;
+// Nonconstant dynamic array init size must have exactly type uint32.
+func main() -> int32 {
+    int32 n = 4;
+    [int32] xs;
     xs.init(n);
     xs.uninit();
     return 0;

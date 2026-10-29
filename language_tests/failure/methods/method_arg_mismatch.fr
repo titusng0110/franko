@@ -1,15 +1,15 @@
 // Failure fixture: methods/method_arg_mismatch
 // Calling a method with an incompatible argument type is rejected (doc 26.3).
 struct X {
-    int32_t y = 0
-    func foo(ptr<X> self, int32_t a) -> void {
+    int32 y = 0
+    func foo(ptr<X> self, int32 a) -> void {
         return
     }
 }
 struct Y {
-    int32_t z = 0
+    int32 z = 0
 }
-func main() -> int32_t {
+func main() -> int32 {
     X s
     Y t
     s.foo(t)

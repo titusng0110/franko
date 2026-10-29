@@ -4,11 +4,11 @@
 // must exit non-zero. Also covers splicing the posix.read bridge block.
 import "franko/os"
 
-func main() -> int32_t {
-    array<byte> buf;
+func main() -> int32 {
+    [byte] buf;
     buf.init(4);
     buf.memset(0);
-    int64_t n = os::posix::read(0, getptr(buf), 99);
+    int64 n = os::posix::read(0, getptr(buf), 99);
     print(n);
     buf.uninit();
     return 0;

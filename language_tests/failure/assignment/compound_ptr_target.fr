@@ -1,9 +1,9 @@
 // Failure fixture: assignment/compound_ptr_target
 // Pointers are not arithmetic values: `p += 1` is rejected the same way
 // as `p + 1` (docs 17.3, 24).
-func main() -> int32_t {
-    int32_t v = 1;
-    ptr<int32_t> p = getptr(v);
+func main() -> int32 {
+    int32 v = 1;
+    ptr<int32> p = getptr(v);
 
     p += 1;
 

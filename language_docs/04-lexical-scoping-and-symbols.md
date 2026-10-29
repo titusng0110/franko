@@ -39,8 +39,8 @@ The braces of a function body do not create an additional scope. Parameters and 
 Therefore a body-level declaration that reuses a parameter name is a duplicate-declaration error:
 
 ```franko
-func f(int32_t x) -> int32_t {
-    int32_t x;   // invalid: duplicate declaration of 'x'
+func f(int32 x) -> int32 {
+    int32 x;   // invalid: duplicate declaration of 'x'
     return x;
 }
 ```

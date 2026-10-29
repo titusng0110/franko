@@ -1,14 +1,14 @@
 // ============================================================
 // LANGUAGE TEST: String Basics
 // ============================================================
-// Covers: string literals as view<array<byte, N>> values over a
+// Covers: string literals as view<[byte, N]> values over a
 // hoisted global byte array, copied into destination buffers with
 // memcpy; no null terminator is appended.
 // ============================================================
 
-func main() -> int32_t {
-    // A string literal is a view<array<byte, 5>>; memcpy its bytes.
-    array<byte, 6> s;
+func main() -> int32 {
+    // A string literal is a view<[byte, 5]>; memcpy its bytes.
+    [byte, 6] s;
     s.memset(0);
     s.memcpy("ABCDE");
 
@@ -21,7 +21,7 @@ func main() -> int32_t {
     print(s[5]);
 
     // memcpy form with a shorter destination tail.
-    array<byte, 6> t;
+    [byte, 6] t;
     t.memcpy("XYZ");
 
     print(t[0]);

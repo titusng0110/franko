@@ -2,18 +2,18 @@
 // When applicable overloads rely on the same number of pointer
 // permission downgrades, overload resolution cannot prefer one and the
 // call is ambiguous.
-func f(mview<array<byte, 3>> x) -> void {
+func f(mview<[byte, 3]> x) -> void {
     $(x)[0] = 1;
 }
 
-func f(view<array<byte, 3>> x) -> void {
+func f(view<[byte, 3]> x) -> void {
     print($(x)[0]);
 }
 
-func main() -> int32_t {
-    array<byte, 3> b;
+func main() -> int32 {
+    [byte, 3] b;
     b.memset(0);
-    ptr<array<byte, 3>> p = getptr(b);
+    ptr<[byte, 3]> p = getptr(b);
     f(p);
     return 0;
 }

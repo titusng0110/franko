@@ -8,13 +8,13 @@
 // order does not matter).
 // ============================================================
 
-view<array<byte, 5>> v = getview(greeting);
-ptr<array<byte, 5>> p = getptr(greeting);
-mview<array<byte, 5>> m = getmview(greeting);
-view<array<byte, 5>> s = "hello";
-array<byte, 5> greeting;
+view<[byte, 5]> v = getview(greeting);
+ptr<[byte, 5]> p = getptr(greeting);
+mview<[byte, 5]> m = getmview(greeting);
+view<[byte, 5]> s = "hello";
+[byte, 5] greeting;
 
-func main() -> int32_t {
+func main() -> int32 {
     greeting.memset(7);
 
     print($(v).length());

@@ -8,17 +8,17 @@
 // allocation rights, so it is not warned about either.
 // ============================================================
 
-ptr<array<byte>> G;
+ptr<[byte]> G;
 
-func alloc(ptr<array<byte>> p) -> void {
+func alloc(ptr<[byte]> p) -> void {
     $(p).init(3);
     $(p)[0] = 1;
     $(p)[1] = 2;
     $(p)[2] = 3;
 }
 
-func main() -> int32_t {
-    array<byte> b;
+func main() -> int32 {
+    [byte] b;
     G = getptr(b);
     alloc(G);
 

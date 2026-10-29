@@ -244,8 +244,8 @@ public class Main {
 
         if (!explicitTemplate) {
             String expectedEntryCall = switch (sema.entryKind()) {
-                case ARGS -> "FUNC_main_HASH_db73581e";
-                case NO_ARGS -> "FUNC_main_HASH_d8625720";
+                case ARGS -> "FUNC_main_HASH_747cdf98";
+                case NO_ARGS -> "FUNC_main_HASH_d7d11c43";
                 case NONE -> throw new RuntimeException(
                     "Internal compiler error: no entry-point function 'main' after successful analysis"
                 );

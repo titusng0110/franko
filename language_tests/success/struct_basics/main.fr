@@ -10,16 +10,16 @@
 // Fields separated by a mix of ';' and newlines; 'xs' is a
 // static-array field; 'b' has no default.
 struct Mixed {
-    int32_t a = 7;
-    int64_t b
-    array<int32_t, 4> xs;
-    uint8_t tag = 3
+    int32 a = 7;
+    int64 b
+    [int32, 4] xs;
+    uint8 tag = 3
 }
 
 // No separator between the last field and the closing brace.
-struct Tiny { int32_t v = 5 }
+struct Tiny { int32 v = 5 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Mixed m;
     m.a = 10;
     m.b = 20;

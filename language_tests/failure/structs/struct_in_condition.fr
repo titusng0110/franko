@@ -1,10 +1,10 @@
 // Failure fixture: structs/struct_in_condition
 // Structs are not integers: if/while conditions reject whole structs; conditions require integer expressions.
 struct X {
-    int32_t a
+    int32 a
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     X s;
 
     s.a = 1;

@@ -3,10 +3,10 @@
 // inside a namespace body must use a single name.
 namespace a {
     namespace b::c {
-        int32_t v = 1
+        int32 v = 1
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

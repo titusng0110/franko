@@ -1,8 +1,8 @@
 // Failure fixture: operators/modulo_div_zero_const
 // A fully constant `% 0` expression is division by zero and fails during
 // constant folding, exactly like `7 / 0` (docs 10, 17.3).
-func main() -> int32_t {
-    int32_t a = 7 % 0;
+func main() -> int32 {
+    int32 a = 7 % 0;
 
     print(a);
 

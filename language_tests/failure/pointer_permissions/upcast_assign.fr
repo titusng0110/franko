@@ -1,7 +1,7 @@
 // view<T> cannot be assigned to an mview<T> target: no implicit upcasts.
-func main() -> int32_t {
-    array<byte, 3> buf;
-    view<array<byte, 3>> v = getview(buf);
-    mview<array<byte, 3>> m = v;
+func main() -> int32 {
+    [byte, 3] buf;
+    view<[byte, 3]> v = getview(buf);
+    mview<[byte, 3]> m = v;
     return 0;
 }

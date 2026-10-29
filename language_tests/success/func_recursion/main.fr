@@ -5,28 +5,28 @@
 // (isEven/isOdd) enabled by forward reference registration.
 // ============================================================
 
-func factorial(int32_t n) -> int32_t {
+func factorial(int32 n) -> int32 {
     if (n <= 1) {
         return 1;
     }
     return n * factorial(n - 1);
 }
 
-func isEven(int32_t n) -> int32_t {
+func isEven(int32 n) -> int32 {
     if (n == 0) {
         return 1;
     }
     return isOdd(n - 1);
 }
 
-func isOdd(int32_t n) -> int32_t {
+func isOdd(int32 n) -> int32 {
     if (n == 0) {
         return 0;
     }
     return isEven(n - 1);
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     print(factorial(5));
     print(isEven(4));
     print(isEven(7));

@@ -1,8 +1,8 @@
 // The decay carries permission downgrades, never upgrades: a view source
 // cannot become an mview target.
-func main() -> int32_t {
-    array<int32_t, 3> xs;
-    view<array<int32_t, 3>> v = getview(xs);
-    mview<array<int32_t>> m = v;
+func main() -> int32 {
+    [int32, 3] xs;
+    view<[int32, 3]> v = getview(xs);
+    mview<[int32]> m = v;
     return 0;
 }

@@ -2,9 +2,9 @@
 // Arrays cannot be assigned directly as ordinary values (docs 14.3, 20.6,
 // 30.7): `a = b` between two arrays is invalid. Use memcpy/memset/uninit
 // or an initializer list instead.
-func main() -> int32_t {
-    array<int32_t> a;
-    array<int32_t> b;
+func main() -> int32 {
+    [int32] a;
+    [int32] b;
 
     a = b;
 

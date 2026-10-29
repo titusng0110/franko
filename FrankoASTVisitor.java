@@ -1010,21 +1010,21 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     private static PrimitiveKind primitiveKindOf(
             FrankoParser.PrimitiveTypeContext target
     ) {
-        if (target.INT8_T() != null) {
+        if (target.INT8() != null) {
             return PrimitiveKind.INT8;
-        } else if (target.INT16_T() != null) {
+        } else if (target.INT16() != null) {
             return PrimitiveKind.INT16;
-        } else if (target.INT32_T() != null) {
+        } else if (target.INT32() != null) {
             return PrimitiveKind.INT32;
-        } else if (target.INT64_T() != null) {
+        } else if (target.INT64() != null) {
             return PrimitiveKind.INT64;
-        } else if (target.UINT8_T() != null) {
+        } else if (target.UINT8() != null) {
             return PrimitiveKind.UINT8;
-        } else if (target.UINT16_T() != null) {
+        } else if (target.UINT16() != null) {
             return PrimitiveKind.UINT16;
-        } else if (target.UINT32_T() != null) {
+        } else if (target.UINT32() != null) {
             return PrimitiveKind.UINT32;
-        } else if (target.UINT64_T() != null) {
+        } else if (target.UINT64() != null) {
             return PrimitiveKind.UINT64;
         }
 

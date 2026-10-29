@@ -389,7 +389,7 @@ public class ExpressionChecker {
             diagnostics.error("Argument " + (index + 1)
                     + " of call to '"
                     + function.signatureString()
-                    + "' passes array value directly; use getptr(...) and an ptr<array<...>> parameter");
+                    + "' passes array value directly; use getptr(...) and an ptr<[...]> parameter");
             return;
         }
 
@@ -962,7 +962,7 @@ public class ExpressionChecker {
             types.requireConstantFitsPrimitive(
                     node.constantValue,
                     targetPrimitive.kind,
-                    "Cast to " + targetPrimitive.kind.name()
+                    "Cast to " + targetPrimitive.kind.name().toLowerCase()
             );
         }
     }
@@ -1004,7 +1004,7 @@ public class ExpressionChecker {
                             + types.describeSafe(node.type)
                             + "; the static array's storage is borrowed by a "
                             + "hidden dynamic-array descriptor, so only "
-                            + "mview<array<T>> and view<array<T>> accept the "
+                            + "mview<[T]> and view<[T]> accept the "
                             + "decay");
                     return;
                 }
@@ -1027,8 +1027,8 @@ public class ExpressionChecker {
                     + types.describeSafe(node.expr.type)
                     + ", expected "
                     + types.describeSafe(node.type)
-                    + "; only mview<array<T,N>>/view<array<T,N>> decay to "
-                    + "mview<array<T>>/view<array<T>> (T must match)");
+                    + "; only mview<[T,N]>/view<[T,N]> decay to "
+                    + "mview<[T]>/view<[T]> (T must match)");
             return;
         }
 
@@ -1147,7 +1147,7 @@ public class ExpressionChecker {
                     expr.constantValue,
                     SemanticPrimitiveKind.UINT32
             )) {
-                diagnostics.error(message + ": value does not fit in uint32_t");
+                diagnostics.error(message + ": value does not fit in uint32");
             }
 
             return;
@@ -1155,7 +1155,7 @@ public class ExpressionChecker {
 
         if (!(expr.type instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT32)) {
-            diagnostics.error(message + ": expected uint32_t, got "
+            diagnostics.error(message + ": expected uint32, got "
                     + types.describeSafe(expr.type));
         }
     }
@@ -1227,7 +1227,7 @@ public class ExpressionChecker {
 
         if (!(value.type instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT8)) {
-            diagnostics.error("memset() fill value must be uint8_t/char, got "
+            diagnostics.error("memset() fill value must be uint8/char, got "
                     + types.describeSafe(value.type));
         }
     }

@@ -2,9 +2,9 @@
 // The unary plus operator `+x` does not exist in the grammar; only `!x` and
 // unary minus are supported unary operators (docs 17.2, 30.13).
 
-func main() -> int32_t {
-    int32_t a = 7;
-    int32_t x = 0;
+func main() -> int32 {
+    int32 a = 7;
+    int32 x = 0;
     x = +a;
     print(x);
     return 0;

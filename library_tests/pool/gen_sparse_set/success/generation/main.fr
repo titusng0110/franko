@@ -11,17 +11,17 @@
 //     _END (4294967295), an out-of-range index returns _END, and
 //     a failed double release leaves the counter unchanged
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::GenerationalSparseSetAllocator a;
     print(a.generation(0));
     print(a.init(3));
-    uint32_t i = a.new_index();
+    uint32 i = a.new_index();
     print(a.generation(i));
     print(a.generation(2));
     print(a.generation(9));
@@ -29,7 +29,7 @@ func main() -> int32_t {
     print(a.generation(i));
     print(a.free_index(i));
     print(a.generation(i));
-    uint32_t j = a.new_index();
+    uint32 j = a.new_index();
     print(j);
     print(a.generation(j));
     print(a.free_index(j));

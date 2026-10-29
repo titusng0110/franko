@@ -2,11 +2,11 @@
 // The left-hand side of an assignment must be a storage-backed lvalue
 // (docs 14, 15): a function-call result is not storage-backed, so
 // `f() = 4` is rejected.
-func f() -> int32_t {
+func f() -> int32 {
     return 1
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     f() = 4
     return 0
 }

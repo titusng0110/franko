@@ -9,14 +9,14 @@
 // runs cleanly.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t x = 5
+func main() -> int32 {
+    int32 x = 5
 
-    ptr<int32_t> p
+    ptr<int32> p
 
     // Branch merge: pointing on one path, null on the other, so p is
     // possibly null after the if.
-    uint32_t pick = 1
+    uint32 pick = 1
     if (pick != 0) {
         p = getptr(x)
     } else {

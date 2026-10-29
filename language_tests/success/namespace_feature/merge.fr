@@ -4,7 +4,7 @@
 // can call util::doubleIt (declared in lib/util.fr) unqualified.
 
 namespace util {
-    func tripleIt(int32_t v) -> int32_t {
+    func tripleIt(int32 v) -> int32 {
         return doubleIt(v) + v
     }
 }

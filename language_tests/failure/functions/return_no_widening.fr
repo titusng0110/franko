@@ -1,12 +1,12 @@
 // Failure fixture: functions/return_no_widening
 // There are no implicit numeric conversions (doc 31.6): returning a
-// nonconstant int32_t variable from an int64_t function is rejected.
-// Convert explicitly with cast<int64_t>(x) first.
+// nonconstant int32 variable from an int64 function is rejected.
+// Convert explicitly with cast<int64>(x) first.
 
-func f(int32_t x) -> int64_t {
+func f(int32 x) -> int64 {
     return x;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

@@ -1,14 +1,14 @@
 // A ptr<X> self method synthesizes getptr(receiver): a view receiver
 // does not carry allocation rights.
 struct Box {
-    int32_t x
+    int32 x
 
     func bump(ptr<Box> self) -> void {
         $(self).x = $(self).x + 1;
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Box b;
     view<Box> v = getview(b);
     $(v).bump();

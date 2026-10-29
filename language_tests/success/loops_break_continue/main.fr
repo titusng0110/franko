@@ -12,8 +12,8 @@
 //   - braceless loop bodies.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t i = 0;
+func main() -> int32 {
+    int32 i = 0;
 
     // break in a while loop.
     i = 0;
@@ -47,8 +47,8 @@ func main() -> int32_t {
 
     // continue in a for loop still runs the update: without the update
     // this loop would never terminate.
-    int32_t sum = 0;
-    for (int32_t j = 0; j < 5; j = j + 1) {
+    int32 sum = 0;
+    for (int32 j = 0; j < 5; j = j + 1) {
         if (j == 2) {
             continue;
         }
@@ -57,7 +57,7 @@ func main() -> int32_t {
     print(sum);
 
     // break in a for loop skips the update.
-    for (int32_t k = 0; k < 100; k = k + 1) {
+    for (int32 k = 0; k < 100; k = k + 1) {
         if (k == 3) {
             break;
         }
@@ -65,9 +65,9 @@ func main() -> int32_t {
     }
 
     // break 2 exits two nested loops.
-    int32_t rounds = 0;
-    for (int32_t a = 0; a < 3; a = a + 1) {
-        for (int32_t b = 0; b < 3; b = b + 1) {
+    int32 rounds = 0;
+    for (int32 a = 0; a < 3; a = a + 1) {
+        for (int32 b = 0; b < 3; b = b + 1) {
             if (b == 1) {
                 break 2;
             }
@@ -87,11 +87,11 @@ func main() -> int32_t {
     print(i);
 
     // continue targets the innermost loop only.
-    int32_t outer = 0;
-    int32_t innerTotal = 0;
+    int32 outer = 0;
+    int32 innerTotal = 0;
     while (outer < 3) {
         outer = outer + 1;
-        int32_t b2 = 0;
+        int32 b2 = 0;
         while (b2 < 3) {
             b2 = b2 + 1;
             if (b2 == 2) {
@@ -108,9 +108,9 @@ func main() -> int32_t {
     while (i < 100) break;
     print(i);
 
-    int32_t m = 0;
-    for (int32_t n = 0; n < 10; n = n + 1) continue;
-    for (int32_t n2 = 0; n2 < 4; n2 = n2 + 1) {
+    int32 m = 0;
+    for (int32 n = 0; n < 10; n = n + 1) continue;
+    for (int32 n2 = 0; n2 < 4; n2 = n2 + 1) {
         m = m + n2;
     }
     print(m);

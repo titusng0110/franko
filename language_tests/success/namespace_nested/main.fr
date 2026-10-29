@@ -19,27 +19,27 @@
 
 namespace a::b {
     struct Point {
-        int32_t x = 3
-        int32_t y = 4
+        int32 x = 3
+        int32 y = 4
     }
 
-    int32_t limit = 100
+    int32 limit = 100
 
-    func add(int32_t v) -> int32_t {
+    func add(int32 v) -> int32 {
         // Unqualified: resolves to a::b::limit.
         return v + limit
     }
 }
 
 namespace a {
-    int32_t tag = 7
+    int32 tag = 7
 
     namespace b {
-        int32_t extra = 5
+        int32 extra = 5
     }
 
     namespace c {
-        func describe() -> int32_t {
+        func describe() -> int32 {
             // Absolute paths from inside a namespace.
             return a::tag + a::b::limit
         }
@@ -49,16 +49,16 @@ namespace a {
 // The path-header form and the nested-block form below declare the
 // same namespace; their contents merge into one namespace.
 namespace m::n {
-    int32_t p = 1
+    int32 p = 1
 }
 
 namespace m {
     namespace n {
-        int32_t q = 2
+        int32 q = 2
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // Qualified struct type at global scope.
     a::b::Point pt
     print(pt.x)

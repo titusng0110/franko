@@ -1,8 +1,8 @@
 // Failure fixture: size_inference/question_nonliteral_init
 // `?` requires an array-literal or string-literal initializer.
-func main() -> int32_t {
-    int32_t n;
+func main() -> int32 {
+    int32 n;
     n = 3;
-    view<array<int32_t, ?>> x = n;
+    view<[int32, ?]> x = n;
     return 0;
 }

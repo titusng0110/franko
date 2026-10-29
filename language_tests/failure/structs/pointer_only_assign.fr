@@ -1,10 +1,10 @@
 // Failure fixture: structs/pointer_only_assign
 // Whole-value assignment a = b is rejected for an pointer-only struct; a struct containing an array field is not assignable.
 struct W {
-    array<int32_t, 4> xs
+    [int32, 4] xs
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     W a;
     W b;
 

@@ -1,9 +1,9 @@
 // Failure fixture: unsupported_syntax/ndarray_type
 // The ndarray<T, D1, ..., Dn> type sugar does not exist in the grammar.
 // Multidimensional static arrays are written as nested static arrays:
-// array<array<byte, 20>, 12> instead of ndarray<byte, 12, 20>.
+// [[byte, 20], 12] instead of ndarray<byte, 12, 20>.
 
-func main() -> int32_t {
+func main() -> int32 {
     ndarray<byte, 12, 20> grid;
     grid[0][0] = 1;
     print(grid[0][0]);

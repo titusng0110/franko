@@ -10,10 +10,10 @@
 //   - dereferencing a certified pointer on the break path is accepted.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t x = 7;
-    ptr<int32_t> p = getptr(x);
-    int32_t i = 0;
+func main() -> int32 {
+    int32 x = 7;
+    ptr<int32> p = getptr(x);
+    int32 i = 0;
 
     // p is certified POINTING by the guard; the break path leaves with
     // that certification intact, so $(p) after the loop is accepted.
@@ -27,8 +27,8 @@ func main() -> int32_t {
 
     // continue path: the guard certification flows around the back
     // edge, so $(p) inside the loop body is accepted on every path.
-    ptr<int32_t> q = getptr(x);
-    int32_t j = 0;
+    ptr<int32> q = getptr(x);
+    int32 j = 0;
     while (q != null) {
         j = j + 1;
         if (j == 2) {
@@ -41,7 +41,7 @@ func main() -> int32_t {
 
     // The loop may exit with q null (guard-fail) or via the condition
     // failing after q = null, so q is maybe-null here: no deref.
-    int32_t seen = 0;
+    int32 seen = 0;
     if (q != null) {
         seen = $(q);
     }

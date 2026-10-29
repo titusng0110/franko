@@ -8,46 +8,46 @@
 
 struct Node {
     ptr<Node> next
-    int32_t val
+    int32 val
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // --- Primitive signed types ---
-    int8_t i8 = 127;
-    int16_t i16 = 32767;
-    int32_t i32 = 2147483647;
-    int64_t i64 = 9223372036854775807;
+    int8 i8 = 127;
+    int16 i16 = 32767;
+    int32 i32 = 2147483647;
+    int64 i64 = 9223372036854775807;
 
     // --- Primitive unsigned types ---
-    uint8_t u8 = 255;
-    uint16_t u16 = 65535;
-    uint32_t u32 = 4294967295;
-    uint64_t u64 = 18446744073709551615;
+    uint8 u8 = 255;
+    uint16 u16 = 65535;
+    uint32 u32 = 4294967295;
+    uint64 u64 = 18446744073709551615;
 
     // --- Type aliases ---
-    int32_t aliasInt = 100;
-    uint32_t aliasUint = 100;
-    uint8_t aliasByte = 100;
+    int32 aliasInt = 100;
+    uint32 aliasUint = 100;
+    uint8 aliasByte = 100;
 
     // --- Negative literals (unary negation) ---
-    int32_t negVal = -128;
-    int64_t negVal64 = -9223372036854775808;
+    int32 negVal = -128;
+    int64 negVal64 = -9223372036854775808;
 
     // --- Integer literals (decimal, binary, hex) ---
-    int32_t dec = 123;
-    int32_t bin = 0b1010;
-    int32_t hex = 0xFF;
-    int32_t hexUpperPrefix = 0XFF;
+    int32 dec = 123;
+    int32 bin = 0b1010;
+    int32 hex = 0xFF;
+    int32 hexUpperPrefix = 0XFF;
 
-    // --- String literals (view<array<byte, N>> over a hoisted global) ---
-    array<byte, 5> str;
+    // --- String literals (view<[byte, N]> over a hoisted global) ---
+    [byte, 5] str;
     str.memcpy("hello");
 
     // --- Array types ---
-    array<int32_t> dynArray;
-    array<int32_t, 10> staticArray;
-    array<array<byte, 12>, 12> nestedArray;
-    ptr<int32_t> ptrInt;
+    [int32] dynArray;
+    [int32, 10] staticArray;
+    [[byte, 12], 12] nestedArray;
+    ptr<int32> ptrInt;
     ptr<Node> ptrStruct;
 
     print(i8);

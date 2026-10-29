@@ -1,5 +1,5 @@
 // Failure fixture: functions/main_wrong_return
-// The entry-point function `main` must return int32_t.
+// The entry-point function `main` must return int32.
 
 func main() -> void {
     return;

@@ -1,7 +1,7 @@
 // Failure fixture: structs/pointer_only_return
 // A function return type must be void, a primitive, an pointer, or an assignable struct; an pointer-only struct (it contains an array field) cannot be returned by value.
 struct W {
-    array<int32_t, 4> xs
+    [int32, 4] xs
 }
 
 func f() -> W {
@@ -9,6 +9,6 @@ func f() -> W {
     return s;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

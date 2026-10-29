@@ -1,4 +1,4 @@
 // Helper for imports/import_dup_across (not run as a fixture itself:
 // the runner only picks up language_tests/failure/*/*.fr). Declares 'clash' again,
 // which must be reported as a duplicate when both files are imported.
-int32_t clash = 2
+int32 clash = 2

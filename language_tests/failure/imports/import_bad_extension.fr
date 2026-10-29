@@ -3,6 +3,6 @@
 // rejected (doc 02): the import must reference a .fr file.
 import "notes.txt"
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

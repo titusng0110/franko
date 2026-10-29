@@ -27,10 +27,10 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
-- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<array<int32_t>>`, `ptr<array<int32_t, 8>>`, and `ptr<ptr<int32_t>>` are all passable; or
+- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `ptr<[int32, 8]>`, and `ptr<ptr<int32>>` are all passable; or
 - a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass `ptr<X>` and `getptr(s)` instead. See [Structs](25-structs.md).
 
-Bare array types are not passable. To pass an array to a function, declare an `ptr<array<T>>` (or `ptr<array<T, N>>`) parameter and pass `getptr(array)` at the call site.
+Bare array types are not passable. To pass an array to a function, declare an `ptr<[T]>` (or `ptr<[T, N]>`) parameter and pass `getptr(array)` at the call site.
 
 `void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
 
@@ -51,7 +51,7 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32`, `uint64`, `void`, `[T]`, `[T,N]`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 
@@ -62,8 +62,8 @@ parameter type, with the single exception of the pointer conversions:
 permission downgrades over an identical referenced type (`ptr`/`mview`/
 `view` may pass where a weaker permission is expected), and the
 static-to-dynamic array pointer view decay (`mview`/`view` of
-`array<T, N>`, or a `ptr` source downgraded in the same step, may pass
-where `mview`/`view` of `array<T>` is expected; see
+`[T, N]`, or a `ptr` source downgraded in the same step, may pass
+where `mview`/`view` of `[T]` is expected; see
 [Pointers](24-pointers.md)). There are no other implicit conversions: pass
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](16-casts.md)).
@@ -83,7 +83,7 @@ Variables and functions live in separate namespaces.
 A bare function name is not a value. An identifier used as a value resolves to a variable first; if the identifier only matches a function name, it is rejected:
 
 ```franko
-func f() -> int32_t {
+func f() -> int32 {
     return 1;
 }
 

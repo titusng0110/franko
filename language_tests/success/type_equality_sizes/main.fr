@@ -3,24 +3,24 @@
 // ============================================================
 // Covers: static array sizes compare numerically after unfolding
 // the size expression (doc 29.3): 10 == 0xA == 5 + 5.
-// The parameter uses ptr<array<int32_t, 10>> because bare array
+// The parameter uses ptr<[int32, 10]> because bare array
 // parameters are not passable (doc 12.3); pointer equality is
 // defined by the referenced type's equality (doc 29.4), so the
 // hex and arithmetic size spellings must still match exactly.
 // ============================================================
 
-func first(ptr<array<int32_t, 10>> xs) -> int32_t {
+func first(ptr<[int32, 10]> xs) -> int32 {
     if (xs != null) {
         return $(xs)[0];
     }
     return 0;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     // Hex spelling of 10 matches the parameter's decimal 10.
-    array<int32_t, 0xA> a;
+    [int32, 0xA] a;
     // Arithmetic size expression unfolds to 10.
-    array<int32_t, 5 + 5> b;
+    [int32, 5 + 5] b;
     a.memset(0);
     b.memset(0);
     a[0] = 42;

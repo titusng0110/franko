@@ -1,11 +1,11 @@
 // Failure fixture: functions/bare_name_value
 // A bare function name is not a value: an identifier that only matches a function is rejected in value position.
 
-func f() -> int32_t {
+func f() -> int32 {
     return 1;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     f;
     return 0;
 }

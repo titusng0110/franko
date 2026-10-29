@@ -1,14 +1,14 @@
 // Failure fixture: structs/pointer_only_param
 // A parameter type must be a passable type; an pointer-only struct (it contains an array field) cannot be passed by value.
 struct W {
-    array<int32_t, 4> xs
+    [int32, 4] xs
 }
 
-func f(W w) -> int32_t {
+func f(W w) -> int32 {
     return 0;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     W s;
 
     f(s);

@@ -57,7 +57,7 @@ public class Desugarer {
 
         if (bytes.isEmpty()) {
             diagnostics.error("Empty string literals are not supported: "
-                + "a string literal is a view<array<byte, N>> value with "
+                + "a string literal is a view<[byte, N]> value with "
                 + "N >= 1");
             bytes = new ArrayList<>();
             bytes.add(BigInteger.ZERO);
@@ -183,7 +183,7 @@ public class Desugarer {
             if (!(type instanceof PtrTypeNode)) {
                 diagnostics.error("Global variable '"
                     + n.name
-                    + "': a string literal is a view<array<byte, N>> value "
+                    + "': a string literal is a view<[byte, N]> value "
                     + "and cannot initialize a non-pointer global");
 
                 return new GlobalVarDeclNode(type, n.name, null);
@@ -482,8 +482,8 @@ public class Desugarer {
                 || !(p.referencedType instanceof StaticArrayTypeNode)) {
             diagnostics.error("'?' array size for '"
                 + varName
-                + "' requires a 'view<array<...>>' declaration with an "
-                + "array-literal initializer, e.g. 'view<array<int32_t, ?>> "
+                + "' requires a 'view<[...]>' declaration with an "
+                + "array-literal initializer, e.g. 'view<[int32, ?]> "
                 + varName
                 + " = [...]'");
 
@@ -504,7 +504,7 @@ public class Desugarer {
             diagnostics.error("'?' array size for '"
                 + varName
                 + "' cannot be inferred from a string literal: a string "
-                + "literal is a view<array<byte, N>> value; declare the size "
+                + "literal is a view<[byte, N]> value; declare the size "
                 + "explicitly and copy the bytes with '"
                 + varName
                 + ".memcpy(\"...\")'");

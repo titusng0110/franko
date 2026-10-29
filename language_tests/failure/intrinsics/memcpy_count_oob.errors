@@ -1,2 +1,2 @@
-memcpy() destination range is out of bounds for array<INT32, 4> with size 4: start 0, count 5
-memcpy() source range is out of bounds for array<INT32, 4> with size 4: start 0, count 5
+memcpy() destination range is out of bounds for [int32, 4] with size 4: start 0, count 5
+memcpy() source range is out of bounds for [int32, 4] with size 4: start 0, count 5

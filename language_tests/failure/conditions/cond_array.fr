@@ -1,8 +1,8 @@
 // Failure fixture: conditions/cond_array
 // if/while/for conditions must be integer expressions; an array is not
 // a valid condition.
-func main() -> int32_t {
-    array<int32_t> arr;
+func main() -> int32 {
+    [int32] arr;
 
     if (arr) {
         print(1);

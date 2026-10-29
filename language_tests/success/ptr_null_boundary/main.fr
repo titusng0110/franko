@@ -8,38 +8,38 @@
 //   - p = null assignment makes a certified pointer null again
 // ============================================================
 
-func checkPtr(ptr<int32_t> q) -> int32_t {
+func checkPtr(ptr<int32> q) -> int32 {
     if (q == null) {
         return -1
     }
     return $(q)
 }
 
-func pickPtr(uint32_t which, ptr<int32_t> a) -> ptr<int32_t> {
+func pickPtr(uint32 which, ptr<int32> a) -> ptr<int32> {
     if (which != 0) {
         return a
     }
     return null
 }
 
-func main() -> int32_t {
-    int32_t x = 20
+func main() -> int32 {
+    int32 x = 20
 
     // null as an argument: the callee checks and returns a marker.
     print(checkPtr(null))
     print(checkPtr(getptr(x)))
 
     // null returned from an ptr<T> function.
-    ptr<int32_t> r1 = pickPtr(0, getptr(x))
+    ptr<int32> r1 = pickPtr(0, getptr(x))
     print(r1 == null)
-    ptr<int32_t> r2 = pickPtr(1, getptr(x))
+    ptr<int32> r2 = pickPtr(1, getptr(x))
     print(r2 == null)
     if (r2 != null) {
         print($(r2))
     }
 
     // p = null makes a certified pointer null again.
-    ptr<int32_t> p
+    ptr<int32> p
     p = getptr(x)
     print(p != null)
     p = null

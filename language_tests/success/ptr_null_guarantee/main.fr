@@ -8,15 +8,15 @@
 // ============================================================
 
 struct Box {
-    int32_t v
-    ptr<int32_t> link
+    int32 v
+    ptr<int32> link
 }
 
-ptr<int32_t> g
+ptr<int32> g
 
-func main() -> int32_t {
+func main() -> int32 {
     // Local pointer declaration: null, guaranteed.
-    ptr<int32_t> local
+    ptr<int32> local
     print(local == null)
 
     // Global pointer variable: null before any assignment.

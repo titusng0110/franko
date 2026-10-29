@@ -8,17 +8,17 @@
 import "deep/extra"
 
 struct Point {
-    int32_t x = 1
-    int32_t y = 2
+    int32 x = 1
+    int32 y = 2
 }
 
-int32_t offset = 100
+int32 offset = 100
 
-func doubleIt(int32_t v) -> int32_t {
+func doubleIt(int32 v) -> int32 {
     return v + v
 }
 
-func makePointSum() -> int32_t {
+func makePointSum() -> int32 {
     Point p
     return p.x + p.y + offset + deepGlobal
 }

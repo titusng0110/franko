@@ -4,8 +4,8 @@ A struct is a user-defined aggregate type with named, ordered fields:
 
 ```franko
 struct Point {
-    int32_t x
-    int32_t y = 0
+    int32 x
+    int32 y = 0
 }
 
 Point p;
@@ -22,9 +22,9 @@ Struct declarations are top-level items, alongside global variable declarations 
 
 ```franko
 struct X {
-    int32_t a
-    int64_t b = 123
-    array<int32_t, 4> xs
+    int32 a
+    int64 b = 123
+    [int32, 4] xs
 }
 ```
 
@@ -43,8 +43,8 @@ A field declaration uses the same `type name` syntax as a variable declaration, 
 
 ```franko
 struct Buffer {
-    array<int32_t> data
-    int32_t size = 0
+    [int32] data
+    int32 size = 0
 }
 ```
 
@@ -63,8 +63,8 @@ A field may declare a default value with `= constExpr`:
 
 ```franko
 struct Counter {
-    int32_t count = 0
-    uint32_t limit = 100
+    int32 count = 0
+    uint32 limit = 100
 }
 ```
 
@@ -72,7 +72,7 @@ Rules:
 
 - Defaults must be constant expressions (`constExpr`) and are folded at compile time (see [Constant Folding](10-constant-folding.md)).
 - Only primitive fields can have default values. Struct, array, and ptr fields reject `= constExpr` as a type mismatch.
-- A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8_t x = 300`).
+- A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8 x = 300`).
 
 ## 25.4 Using Struct Types
 
@@ -80,7 +80,7 @@ A struct name used in a type position is resolved against the struct namespace:
 
 - Unknown struct names are rejected with an "unknown struct type" error.
 - Field types may reference structs declared anywhere in the program, including structs declared later in the file.
-- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `array<array<Point, 3>, 2> cells` are all valid declared types.
+- Struct types compose with the other type constructors: `Point p`, `[Point] xs`, `[Point, 4] grid`, `ptr<Point> pp`, and `[[Point, 3], 2] cells` are all valid declared types.
 
 ## 25.5 By-Value Cycles
 
@@ -93,8 +93,8 @@ An infinite by-value chain would have no size, so such cycles are rejected at co
 
 ```franko
 struct Node {
-    int32_t v
-    array<Node, 4> kids    // invalid: static array of Node inside Node
+    int32 v
+    [Node, 4] kids    // invalid: static array of Node inside Node
 }
 ```
 
@@ -102,9 +102,9 @@ Indirection breaks the cycle and is allowed:
 
 ```franko
 struct Node {
-    int32_t v
+    int32 v
     ptr<Node> next        // valid: pointer edge
-    array<Node> kids       // valid: dynamic array edge
+    [Node] kids       // valid: dynamic array edge
 }
 ```
 
@@ -125,7 +125,7 @@ Consequences:
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
-Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
+Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
 Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
 
@@ -158,12 +158,12 @@ A struct-typed global is declared like any other global:
 
 ```franko
 struct Point {
-    int32_t x = 0
-    int32_t y = 0
+    int32 x = 0
+    int32 y = 0
 }
 
 Point origin;
-int32_t scale = 2;
+int32 scale = 2;
 ```
 
 - Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch.
@@ -175,7 +175,7 @@ The C++14 backend:
 
 - emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so pointers may reference structs declared later in source order;
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`ptr` and dynamic-array fields impose no ordering constraint);
-- emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
+- emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32 num = 0;`;
 - emits member access as `target.field`.
 - emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](26-methods.md).
 

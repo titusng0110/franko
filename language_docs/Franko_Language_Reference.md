@@ -59,7 +59,7 @@ It documents both intended language behavior and important current implementatio
 Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
-- structs with named fields (`struct X { int32_t n }`);
+- structs with named fields (`struct X { int32 n }`);
 - struct member access using `obj.field` (see [Structs](25-structs.md));
 - dynamic arrays;
 - static arrays;
@@ -82,7 +82,7 @@ Franko is a small statically typed language with:
 - `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
 - `print`;
-- string literals as read-only `view<array<byte, N>>` values;
+- string literals as read-only `view<[byte, N]>` values;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);
   - `arr.init(size)`;
@@ -93,7 +93,7 @@ Franko is a small statically typed language with:
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
   - `arr.length()`;
-- array literals as `view<array<T, N>>` values over constant global
+- array literals as `view<[T, N]>` values over constant global
   arrays (element type inferred, see [Array Literals](22-array-literals.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).
@@ -126,8 +126,8 @@ Franko source files commonly use the `.fr` extension.
 Example:
 
 ```franko
-func main() -> int32_t {
-    int32_t x;
+func main() -> int32 {
+    int32 x;
     x = 1;
 
     print(x);
@@ -143,8 +143,8 @@ Statements are terminated by a semicolon (`;`) or by one or more newlines. Both 
 Example (newline-separated, no semicolons):
 
 ```franko
-func main() -> int32_t {
-    int32_t x
+func main() -> int32 {
+    int32 x
     x = 1
     print(x)
     return 0
@@ -159,7 +159,7 @@ Line comments start with `//` and run to the end of the line:
 
 ```franko
 // a whole-line comment
-int32_t x  // a comment may follow code on the same line
+int32 x  // a comment may follow code on the same line
 ```
 
 There are no block comments.
@@ -253,13 +253,13 @@ A namespace groups struct, global variable, and function declarations under a qu
 ```franko
 namespace util {
     struct Point {
-        int32_t x = 1
-        int32_t y = 2
+        int32 x = 1
+        int32 y = 2
     }
 
-    int32_t offset = 100
+    int32 offset = 100
 
-    func doubleIt(int32_t v) -> int32_t {
+    func doubleIt(int32 v) -> int32 {
         return v + v + offset
     }
 }
@@ -271,14 +271,14 @@ Nested namespaces may be written in two equivalent forms:
 
 ```franko
 namespace a::b {
-    int32_t v = 1
+    int32 v = 1
 }
 ```
 
 ```franko
 namespace a {
     namespace b {
-        int32_t v = 1
+        int32 v = 1
     }
 }
 ```
@@ -312,11 +312,11 @@ The entry-point function `main` must be declared in the global namespace. A `mai
 `main` must be declared in one of two shapes, and it cannot be overloaded:
 
 ```franko
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }
 
-func main(view<array<array<byte>>> args) -> int32_t {
+func main(view<[[byte]]> args) -> int32 {
     return 0;
 }
 ```
@@ -349,13 +349,13 @@ Example:
 
 ```franko
 struct Point {
-    int32_t x
-    int32_t y = 0
+    int32 x
+    int32 y = 0
 }
 
-int32_t count = 0
+int32 count = 0
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }
 ```
@@ -403,8 +403,8 @@ The braces of a function body do not create an additional scope. Parameters and 
 Therefore a body-level declaration that reuses a parameter name is a duplicate-declaration error:
 
 ```franko
-func f(int32_t x) -> int32_t {
-    int32_t x;   // invalid: duplicate declaration of 'x'
+func f(int32 x) -> int32 {
+    int32 x;   // invalid: duplicate declaration of 'x'
     return x;
 }
 ```
@@ -451,13 +451,13 @@ At global scope, declaration initializer sugar is currently invalid if it desuga
 This:
 
 ```franko
-array<int> arr(20);
+[int] arr(20);
 ```
 
 is desugared to:
 
 ```franko
-array<int> arr;
+[int] arr;
 arr(20);
 ```
 
@@ -465,7 +465,7 @@ The call form itself (`arr(20)`) is later recognized as array intrinsic `init` s
 
 ## 5.3 Array Literal Desugaring
 
-Array literals are not assignment sugar: they are `view<array<T, N>>`
+Array literals are not assignment sugar: they are `view<[T, N]>`
 values over hoisted constant global arrays, exactly like string
 literals. An array literal is never rewritten into statements; its
 element type is inferred from the surrounding assignment, return, or
@@ -474,9 +474,9 @@ call-argument context during semantic analysis. See
 
 ## 5.4 String Literal Desugaring
 
-Every string literal is hoisted to a literal-backed global `array<byte, N>`
+Every string literal is hoisted to a literal-backed global `[byte, N]`
 holding its UTF-8 bytes (no null terminator is added) and replaced with a
-`getview(...)` expression over that global, of type `view<array<byte, N>>`:
+`getview(...)` expression over that global, of type `view<[byte, N]>`:
 
 ```franko
 print($("ABC")[0]);
@@ -485,7 +485,7 @@ print($("ABC")[0]);
 first becomes (one global per distinct literal text):
 
 ```franko
-array<byte, 3> _STR_<hash>;
+[byte, 3] _STR_<hash>;
 print($(getview(_STR_<hash>))[0]);
 ```
 
@@ -518,7 +518,7 @@ This makes braceless and braced bodies scope identically: a declaration inside a
 A `for` loop is lowered to declaration/assignment statements and a `while` loop:
 
 ```franko
-for (int32_t i = 0; i < n; i = i + 1) {
+for (int32 i = 0; i < n; i = i + 1) {
     print(i)
 }
 ```
@@ -527,7 +527,7 @@ becomes:
 
 ```franko
 {
-    int32_t i;
+    int32 i;
     i = 0;
     while (i < n) {
         print(i);
@@ -544,34 +544,34 @@ The `init` and `update` statements go through the ordinary statement desugaring 
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
-A static array size may be written as `?` in a `view<array<...>>`
+A static array size may be written as `?` in a `view<[...]>`
 declaration with an array-literal initializer:
 
 ```franko
-view<array<int32_t, ?>> v = [0, 1, 2, 3];
+view<[int32, ?]> v = [0, 1, 2, 3];
 ```
 
 During desugaring, each `?` is replaced by the element count of the
 corresponding literal level, so the declaration above becomes
-`view<array<int32_t, 4>> v`. Nested literals infer level by level:
+`view<[int32, 4]> v`. Nested literals infer level by level:
 
 ```franko
-view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
+view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
 ```
 
-becomes `view<array<array<int32_t, 2>, 2>> m`. `?` may appear at any
+becomes `view<[[int32, 2], 2]> m`. `?` may appear at any
 level of the nest, including middle levels.
 
 Inference rules:
 
 - `?` is legal only in a local declaration-assignment statement
-  (`view<array<...>> name = literal;`) whose initializer is an array
-  literal (string literals are `view<array<byte, N>>` values and do not
+  (`view<[...]> name = literal;`) whose initializer is an array
+  literal (string literals are `view<[byte, N]>` values and do not
   participate);
 - the declared type must be a `view`: an array literal is a view value,
   so it never initializes an array declaration;
 - when `?` is used in any dimension, the whole array nest must be static
-  (no dynamic `array<T>` level anywhere);
+  (no dynamic `[T]` level anywhere);
 - when `?` is used in any dimension, the literal must fit exactly at
   every level: a shorter literal is an error (the literal's length is
   its type), and sibling lists at each level must have equal length
@@ -589,19 +589,19 @@ is rejected during desugaring. See [Arrays](20-arrays.md) and
 Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
 
 ```franko
-array<int32_t, 0x10> xs;   // size becomes 16
-int8_t g = 1 + 2;          // initializer becomes 3 (globals)
+[int32, 0x10] xs;   // size becomes 16
+int8 g = 1 + 2;          // initializer becomes 3 (globals)
 struct S {                 // field default becomes 8
-    int32_t n = 1 << 3
+    int32 n = 1 << 3
 }
 ```
 
-Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32_t` range, initializer fit) without folding anything again.
+Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32` range, initializer fit) without folding anything again.
 
 Evaluation failures are desugaring diagnostics:
 
 ```franko
-array<int32_t, 10 / 0> b;   // invalid: Division by zero in constant expression
+[int32, 10 / 0] b;   // invalid: Division by zero in constant expression
 ```
 
 Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
@@ -639,7 +639,7 @@ typed pointers (ptr / mview / view)
 function return-only void
 ```
 
-There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8_t`.
+There is currently no separate semantic boolean type. Boolean-like results are represented as `uint8`.
 
 Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical. See [Type Equality](28-type-equality.md), [Declarations](11-declarations.md), and the complete struct reference in [Structs](25-structs.md).
 
@@ -647,7 +647,7 @@ Structs are nominal types: two distinct struct declarations are distinct types e
 
 Pointers come in three permission levels — `ptr<T>` (owner), `mview<T>` (mutable view), `view<T>` (read-only view) — one capability model for all of them. See [Pointers](24-pointers.md).
 
-A static array size may be the inferred-size marker `?` (for example `array<int32_t, ?>`) in source text, but only in a local declaration with an array-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
+A static array size may be the inferred-size marker `?` (for example `[int32, ?]`) in source text, but only in a local declaration with an array-literal initializer; the desugarer evaluates every size (inferred or explicit) into a canonical constant before semantic analysis, so semantic types only ever carry evaluated sizes.
 
 ---
 
@@ -657,22 +657,22 @@ Franko supports fixed-width signed and unsigned integer types.
 
 | Type | Meaning | Range |
 |---|---|---|
-| `int8_t` | signed 8-bit integer | `-128` to `127` |
-| `int16_t` | signed 16-bit integer | `-32768` to `32767` |
-| `int32_t` | signed 32-bit integer | `-2147483648` to `2147483647` |
-| `int64_t` | signed 64-bit integer | `-9223372036854775808` to `9223372036854775807` |
-| `uint8_t` | unsigned 8-bit integer | `0` to `255` |
-| `uint16_t` | unsigned 16-bit integer | `0` to `65535` |
-| `uint32_t` | unsigned 32-bit integer | `0` to `4294967295` |
-| `uint64_t` | unsigned 64-bit integer | `0` to `18446744073709551615` |
+| `int8` | signed 8-bit integer | `-128` to `127` |
+| `int16` | signed 16-bit integer | `-32768` to `32767` |
+| `int32` | signed 32-bit integer | `-2147483648` to `2147483647` |
+| `int64` | signed 64-bit integer | `-9223372036854775808` to `9223372036854775807` |
+| `uint8` | unsigned 8-bit integer | `0` to `255` |
+| `uint16` | unsigned 16-bit integer | `0` to `65535` |
+| `uint32` | unsigned 32-bit integer | `0` to `4294967295` |
+| `uint64` | unsigned 64-bit integer | `0` to `18446744073709551615` |
 
 ## 7.1 Integer Type Aliases
 
 | Alias | Canonical type |
 |---|---|
-| `int` | `int32_t` |
-| `uint` | `uint32_t` |
-| `byte` | `uint8_t` |
+| `int` | `int32` |
+| `uint` | `uint32` |
+| `byte` | `uint8` |
 
 No other aliases (such as `char` or `bool`) are currently defined.
 
@@ -680,7 +680,7 @@ No other aliases (such as `char` or `bool`) are currently defined.
 
 Franko currently does not have a separate `bool` type.
 
-Boolean-like results from comparison and logical operators use `uint8_t`, with:
+Boolean-like results from comparison and logical operators use `uint8`, with:
 
 ```text
 0 = false
@@ -740,11 +740,11 @@ This means their initial semantic type is not always binding. Instead, when a co
 Example:
 
 ```franko
-func main() -> int32_t {
-    uint8_t x;
+func main() -> int32 {
+    uint8 x;
 
     x = 255; // valid
-    x = 256; // invalid: 256 does not fit uint8_t
+    x = 256; // invalid: 256 does not fit uint8
 
     return 0;
 }
@@ -771,15 +771,15 @@ Examples:
 1 << 3      // evaluated to 8
 ```
 
-`array<int32_t, 0x10>` reaches semantic analysis as `array<int32_t, 16>`; `int8_t g = 1 + 2` reaches it as `int8_t g = 3`.
+`[int32, 0x10]` reaches semantic analysis as `[int32, 16]`; `int8 g = 1 + 2` reaches it as `int8 g = 3`.
 
-**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32_t` range for array sizes, fit for global and field initializers, primitive-only field defaults.
+**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32` range for array sizes, fit for global and field initializers, primitive-only field defaults.
 
 Evaluation failures are reported before semantic analysis:
 
 ```franko
-array<int, 10 / 0> bytes;   // invalid: Division by zero in constant expression
-array<int, 10 % 0> bytes;   // invalid: Division by zero in constant expression
+[int, 10 / 0] bytes;   // invalid: Division by zero in constant expression
+[int, 10 % 0] bytes;   // invalid: Division by zero in constant expression
 ```
 
 Modulus folding uses truncated division, so the remainder keeps the sign of the dividend, matching the generated C++ (see [Operators](17-operators.md)).
@@ -791,7 +791,7 @@ Constants are evaluated using arbitrary-precision `BigInteger`, not fixed-width 
 Integer overflow is not applied during evaluation. Range checking happens when the value is used in a concrete type context:
 
 ```franko
-int8_t g = 300;   // evaluated to 300, then rejected: does not fit in INT8
+int8 g = 300;   // evaluated to 300, then rejected: does not fit in int8
 ```
 
 A shift whose constant right operand is negative cannot be evaluated; it is rejected during desugaring as an invalid constant expression. Negative shifts inside ordinary expressions are instead rejected later by the operator rules (see [Operators](17-operators.md)).
@@ -799,7 +799,7 @@ A shift whose constant right operand is negative cannot be evaluated; it is reje
 Constant expressions inside ordinary code (as opposed to `constExpr` slots) are still folded during semantic analysis, when expressions are lowered. Diagnostics there keep their existing wording:
 
 ```franko
-int32_t x = 1 / 0;   // invalid: Division by zero in constant expression
+int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 ```
 
 `?` array size inference uses the same evaluator quietly: it only needs the value when one exists, and reports its own inference diagnostics otherwise (see [Desugaring](05-desugaring.md)).
@@ -816,34 +816,34 @@ Basic declaration syntax:
 
 ```franko
 int x;
-int32_t y;
-uint8_t b;
-uint32_t i;
+int32 y;
+uint8 b;
+uint32 i;
 ```
 
 Array and pointer declarations:
 
 ```franko
-array<int> xs;
-array<int32_t> ys;
-array<uint8_t, 128> buffer;
-array<array<byte, 20>, 12> grid;
+[int] xs;
+[int32] ys;
+[uint8, 128] buffer;
+[[byte, 20], 12] grid;
 
 ptr<int> p;
-ptr<int32_t> q;
-ptr<array<int>> arrayPtr;
+ptr<int32> q;
+ptr<[int]> arrayPtr;
 ```
 
 Declaration initializers are syntax sugar:
 
 ```franko
-int32_t x = 1;
+int32 x = 1;
 ```
 
 is equivalent to:
 
 ```franko
-int32_t x;
+int32 x;
 x = 1;
 ```
 
@@ -852,20 +852,20 @@ The initializer must obey normal assignment rules and is only valid where the re
 Dynamic array call-init declaration sugar:
 
 ```franko
-array<int32_t> d(10);
+[int32] d(10);
 ```
 
 is equivalent to:
 
 ```franko
-array<int32_t> d;
+[int32] d;
 d(10);
 ```
 
 The call form is only valid for dynamic arrays. Using it on a non-array declaration is an error:
 
 ```franko
-int32_t x(5);   // invalid: x is not a dynamic array
+int32 x(5);   // invalid: x is not a dynamic array
 ```
 
 ## 11.1 Duplicate Declarations
@@ -889,8 +889,8 @@ Two different initializer forms exist for declarations, and they follow differen
 **Constant initializers.** A global declaration may end with `= constExpr`:
 
 ```franko
-int32_t g = 1 + 2
-uint64_t mask = 1 << 8
+int32 g = 1 + 2
+uint64 mask = 1 << 8
 ```
 
 The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
@@ -901,29 +901,29 @@ global variable, or with a string literal (which is a view over a
 hoisted global; see [String Literals](23-string-literals.md)):
 
 ```franko
-array<byte, 5> greeting
-view<array<byte, 5>> v = getview(greeting)
-view<array<byte, 5>> s = "hello"
-ptr<array<byte, 5>> p = null
+[byte, 5] greeting
+view<[byte, 5]> v = getview(greeting)
+view<[byte, 5]> s = "hello"
+ptr<[byte, 5]> p = null
 ```
 
 The initializer must be a statically representable address of the right
 type (a permission downgrade is allowed, an upgrade is not).
 
 An array literal may initialize a pointer-typed global (it is a
-`view<array<T, N>>` value over a constant global, like a string
+`view<[T, N]>` value over a constant global, like a string
 literal):
 
 ```franko
-view<array<int32_t, 4>> G = [1, 2, 3, 4]   // valid
+view<[int32, 4]> G = [1, 2, 3, 4]   // valid
 ```
 
 **Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
-int32_t g = h                     // invalid: the initializer must be constant
-array<int32_t, 3> xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
-array<byte, 6> s = "hello"        // invalid: strings cannot initialize arrays
+int32 g = h                     // invalid: the initializer must be constant
+[int32, 3] xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
+[byte, 6] s = "hello"        // invalid: strings cannot initialize arrays
 ```
 
 The constant-initializer, static-address, and array-literal forms above
@@ -948,8 +948,8 @@ Struct fields are declared with the same `type name` syntax as variables, inside
 
 ```franko
 struct X {
-    int32_t num = 0
-    array<int32_t, 4> xs
+    int32 num = 0
+    [int32, 4] xs
     ptr<Y> next
 }
 ```
@@ -989,10 +989,10 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
-- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<array<int32_t>>`, `ptr<array<int32_t, 8>>`, and `ptr<ptr<int32_t>>` are all passable; or
+- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `ptr<[int32, 8]>`, and `ptr<ptr<int32>>` are all passable; or
 - a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass `ptr<X>` and `getptr(s)` instead. See [Structs](25-structs.md).
 
-Bare array types are not passable. To pass an array to a function, declare an `ptr<array<T>>` (or `ptr<array<T, N>>`) parameter and pass `getptr(array)` at the call site.
+Bare array types are not passable. To pass an array to a function, declare an `ptr<[T]>` (or `ptr<[T, N]>`) parameter and pass `getptr(array)` at the call site.
 
 `void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
 
@@ -1013,7 +1013,7 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32`, `uint64`, `void`, `[T]`, `[T,N]`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
 
 ## 12.6 Function Call Resolution
 
@@ -1024,8 +1024,8 @@ parameter type, with the single exception of the pointer conversions:
 permission downgrades over an identical referenced type (`ptr`/`mview`/
 `view` may pass where a weaker permission is expected), and the
 static-to-dynamic array pointer view decay (`mview`/`view` of
-`array<T, N>`, or a `ptr` source downgraded in the same step, may pass
-where `mview`/`view` of `array<T>` is expected; see
+`[T, N]`, or a `ptr` source downgraded in the same step, may pass
+where `mview`/`view` of `[T]` is expected; see
 [Pointers](24-pointers.md)). There are no other implicit conversions: pass
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](16-casts.md)).
@@ -1045,7 +1045,7 @@ Variables and functions live in separate namespaces.
 A bare function name is not a value. An identifier used as a value resolves to a variable first; if the identifier only matches a function name, it is rejected:
 
 ```franko
-func f() -> int32_t {
+func f() -> int32 {
     return 1;
 }
 
@@ -1097,7 +1097,7 @@ Dynamic arrays are the one kind of storage a program manages explicitly:
 `init`, `init_zero`, `resize`, and `uninit` pair up over a single array.
 
 ```franko
-array<int32_t> xs;
+[int32] xs;
 xs.init(20);
 // ... use xs ...
 xs.uninit();
@@ -1116,7 +1116,7 @@ import "franko/pool"
 std::SparseSetAllocator pool;
 pool.init(1024);
 
-uint32_t idx = pool.new_index();
+uint32 idx = pool.new_index();
 // ... use idx as a row index into the program's own payload array ...
 pool.free_index(idx);
 
@@ -1174,8 +1174,8 @@ Arrays cannot be directly assigned as values.
 Invalid:
 
 ```franko
-array<int32_t> a;
-array<int32_t> b;
+[int32] a;
+[int32] b;
 
 a = b;
 ```
@@ -1202,7 +1202,7 @@ Valid:
 
 ```franko
 struct X {
-    int32_t n
+    int32 n
     ptr<Y> p
 }
 
@@ -1215,7 +1215,7 @@ Invalid (struct contains a static array field):
 
 ```franko
 struct W {
-    array<int32_t, 4> xs
+    [int32, 4] xs
 }
 
 W a;
@@ -1263,15 +1263,15 @@ The backend emits the C++ compound assignment directly, so array indices, field 
 Invalid:
 
 ```franko
-array<int32_t, 3> xs = [1, 2, 3];
+[int32, 3] xs = [1, 2, 3];
 xs += 1;         // arrays are not arithmetic values
 
-int32_t v = 1;
-ptr<int32_t> p = getptr(v);
+int32 v = 1;
+ptr<int32> p = getptr(v);
 p += 1;          // pointers are not arithmetic values
 
-int32_t x = 1;
-int64_t y = 2;
+int32 x = 1;
+int64 y = 2;
 x += y;          // operands must have the same integer type
 ```
 
@@ -1296,7 +1296,7 @@ x -= 1;
 so every compound-assignment rule above applies unchanged: the target must be an integer, non-void storage-backed lvalue (`xs++` and `p++` are invalid for the same reason `xs += 1` and `p += 1` are invalid).
 
 ```franko
-for (int32_t i = 0; i < n; i++) {
+for (int32 i = 0; i < n; i++) {
     print(i)
 }
 ```
@@ -1352,11 +1352,11 @@ two explicit conversion intrinsics:
   (runtime-checked).
 
 ```franko
-uint8_t a = 200;
-uint16_t b = cast<uint16_t>(a);        // widening: plain static_cast
+uint8 a = 200;
+uint16 b = cast<uint16>(a);        // widening: plain static_cast
 
-int32_t big = 300;
-uint8_t small = unsafe_cast<uint8_t>(big);   // checked: throws at run time
+int32 big = 300;
+uint8 small = unsafe_cast<uint8>(big);   // checked: throws at run time
 ```
 
 Like `$(...)` and `getptr`, both are compiler intrinsics, not function
@@ -1365,9 +1365,9 @@ calls: they cannot be overloaded, shadowed, or passed around.
 ## 16.1 Cast Syntax
 
 ```franko
-cast<uint16_t>(a)
-cast<view<array<byte>>>(p)
-unsafe_cast<int32_t>(big)
+cast<uint16>(a)
+cast<view<[byte]>>(p)
+unsafe_cast<int32>(big)
 ```
 
 `cast<T>` accepts a full type as its target: one of the eight primitive
@@ -1377,22 +1377,22 @@ match the target category: an integer expression for integer targets, a
 pointer or `null` for pointer targets.
 
 `unsafe_cast<T>` is restricted to the eight primitive integer types
-(`int8_t` … `uint64_t`, including the `int` / `uint` / `byte` aliases);
+(`int8` … `uint64`, including the `int` / `uint` / `byte` aliases);
 a pointer target does not parse. The operand must be an integer
 expression.
 
 A cast is never an lvalue:
 
 ```franko
-cast<uint16_t>(a) = 5;   // invalid
+cast<uint16>(a) = 5;   // invalid
 ```
 
 Casts compose freely with other expressions:
 
 ```franko
-uint8_t cmp = 1 < 2;
-int32_t wide = cast<int32_t>(cmp);
-print(unsafe_cast<uint8_t>(wide));
+uint8 cmp = 1 < 2;
+int32 wide = cast<int32>(cmp);
+print(unsafe_cast<uint8>(wide));
 ```
 
 ## 16.2 Static (Value-Preserving) Casts
@@ -1402,10 +1402,10 @@ type, the cast is statically safe and compiles to a plain
 `static_cast` with zero runtime cost:
 
 - strictly wider, same signedness:
-  `uint8_t -> uint16_t -> uint32_t -> uint64_t` and
-  `int8_t -> int16_t -> int32_t -> int64_t`;
+  `uint8 -> uint16 -> uint32 -> uint64` and
+  `int8 -> int16 -> int32 -> int64`;
 - unsigned to signed of strictly greater width:
-  `uint8_t -> int16_t`, `uint16_t -> int32_t`, `uint32_t -> int64_t`.
+  `uint8 -> int16`, `uint16 -> int32`, `uint32 -> int64`.
 
 These are the conversions `cast<T>` performs. Casting to the type the
 expression already has is allowed and compiles to the value unchanged.
@@ -1413,22 +1413,22 @@ expression already has is allowed and compiles to the value unchanged.
 ## 16.3 Checked Casts (`unsafe_cast<T>`)
 
 Every conversion that can lose data — narrowing, any signed-to-unsigned
-conversion, `uint64_t -> int64_t`, and same-width signedness changes —
+conversion, `uint64 -> int64`, and same-width signedness changes —
 must be written `unsafe_cast<T>(expr)`. It compiles to a runtime-checked
 `franko_unsafe_cast<T>(expr)` call. The check compares the value
 against the target type's range and throws on overflow, so a bad
 conversion aborts instead of wrapping or truncating.
 
 ```franko
-int32_t big = 300;
-uint8_t small = unsafe_cast<uint8_t>(big);   // throws: 300 does not fit uint8_t
+int32 big = 300;
+uint8 small = unsafe_cast<uint8>(big);   // throws: 300 does not fit uint8
 ```
 
 A checked cast that fits succeeds normally:
 
 ```franko
-uint32_t w = 70000;
-int32_t s = unsafe_cast<int32_t>(w);   // valid: 70000 fits int32_t
+uint32 w = 70000;
+int32 s = unsafe_cast<int32>(w);   // valid: 70000 fits int32
 print(s);
 ```
 
@@ -1443,8 +1443,8 @@ time: the value must fit the target type or compilation fails. There is
 no wraparound, at compile time or at run time.
 
 ```franko
-uint8_t ok = unsafe_cast<uint8_t>(200);    // valid
-uint8_t bad = unsafe_cast<uint8_t>(300);   // invalid: 300 does not fit uint8_t
+uint8 ok = unsafe_cast<uint8>(200);    // valid
+uint8 bad = unsafe_cast<uint8>(300);   // invalid: 300 does not fit uint8
 ```
 
 ## 16.5 Pointer Permission Casts
@@ -1455,12 +1455,12 @@ identical and the permission may only weaken
 (`ptr -> mview -> view`).
 
 ```franko
-array<byte> buf;
+[byte] buf;
 buf.init(16);
-ptr<array<byte>> p = getptr(buf);
-view<array<byte>> v = cast<view<array<byte>>>(p);   // explicit downgrade
-mview<array<byte>> m = cast<mview<array<byte>>>(p);
-view<array<byte>> v2 = cast<view<array<byte>>>(m);
+ptr<[byte]> p = getptr(buf);
+view<[byte]> v = cast<view<[byte]>>(p);   // explicit downgrade
+mview<[byte]> m = cast<mview<[byte]>>(p);
+view<[byte]> v2 = cast<view<[byte]>>(m);
 ```
 
 Explicit downgrades are never required — the same conversions happen
@@ -1469,22 +1469,22 @@ written for clarity. Casting *upwards* (`view` to `mview`/`ptr`) or
 across different pointee types is invalid:
 
 ```franko
-ptr<array<byte>> q = cast<ptr<array<byte>>>(v);   // invalid: raises permissions
+ptr<[byte]> q = cast<ptr<[byte]>>(v);   // invalid: raises permissions
 ```
 
 The same `cast` syntax spells the static-to-dynamic array pointer view
-decay: `mview<array<T, N>>`/`view<array<T, N>>` (and downgrade
-combinations from a `ptr` source) cast to `mview<array<T>>`/
-`view<array<T>>`, outermost dimension only
+decay: `mview<[T, N]>`/`view<[T, N]>` (and downgrade
+combinations from a `ptr` source) cast to `mview<[T]>`/
+`view<[T]>`, outermost dimension only
 (see [Pointers](24-pointers.md)):
 
 ```franko
-array<int32_t, 4> xs;
-mview<array<int32_t, 4>> m = getmview(xs);
-mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);
+[int32, 4] xs;
+mview<[int32, 4]> m = getmview(xs);
+mview<[int32]> d = cast<mview<[int32]>>(m);
 ```
 
-Decaying to `ptr<array<T>>` is invalid: the result would claim ownership
+Decaying to `ptr<[T]>` is invalid: the result would claim ownership
 of storage the static array owns.
 
 Raw integers can never be converted to pointers.
@@ -1503,13 +1503,13 @@ Raw integers can never be converted to pointers.
   into a temporary first:
 
 ```franko
-func f(int64_t x) -> int64_t {
+func f(int64 x) -> int64 {
     return x;
 }
 
-func main() -> int32_t {
-    int32_t v = 5;
-    int64_t r = f(cast<int64_t>(v));
+func main() -> int32 {
+    int32 v = 5;
+    int64 r = f(cast<int64>(v));
     print(r);
     return 0;
 }
@@ -1597,7 +1597,7 @@ The right operand must be an integer. Nonconstant shift counts must have an unsi
 
 ## 17.6 Comparison Operators
 
-Comparison operators produce `uint8_t`.
+Comparison operators produce `uint8`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
@@ -1609,7 +1609,7 @@ The `null` literal may be compared with an pointer using `==` and `!=` only. `nu
 
 Logical operators: `&&`, `||`, `!`.
 
-Operands must be integers. Results are `uint8_t` values `0` or `1`.
+Operands must be integers. Results are `uint8` values `0` or `1`.
 
 ## 17.8 No Pointer Arithmetic
 
@@ -1619,7 +1619,7 @@ Pointers are not integers and cannot participate in arithmetic, bitwise, or shif
 
 Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants).
 
-Comparisons and logical operators always produce `uint8_t` regardless of operand types.
+Comparisons and logical operators always produce `uint8` regardless of operand types.
 
 ---
 
@@ -1632,7 +1632,7 @@ Comparisons and logical operators always produce `uint8_t` regardless of operand
 Valid:
 
 ```franko
-int32_t x;
+int32 x;
 
 if (x) {
     print(x);
@@ -1642,7 +1642,7 @@ if (x) {
 Invalid:
 
 ```franko
-array<int32_t> arr;
+[int32] arr;
 
 if (arr) {
     print(1);
@@ -1652,7 +1652,7 @@ if (arr) {
 Invalid:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 
 if (p) {
     print(1);
@@ -1725,11 +1725,11 @@ for (init; condition; update) {
 Valid:
 
 ```franko
-for (int32_t i = 0; i < 5; i = i + 1) {
+for (int32 i = 0; i < 5; i = i + 1) {
     print(i)
 }
 
-for (int32_t i = 0; i < 5; i++) {
+for (int32 i = 0; i < 5; i++) {
     print(i)
 }
 
@@ -1746,7 +1746,7 @@ for (i = 0; i < 5;) {
 The loop is desugared before semantic analysis:
 
 ```franko
-for (int32_t i = 0; i < 5; i = i + 1) {
+for (int32 i = 0; i < 5; i = i + 1) {
     print(i)
 }
 ```
@@ -1755,7 +1755,7 @@ becomes:
 
 ```franko
 {
-    int32_t i;
+    int32 i;
     i = 0;
     while (i < 5) {
         print(i);
@@ -1788,7 +1788,7 @@ while (i < 10) {
 In a `for` loop, `continue` still runs the `update` (the loop's final body statement), and `break` skips it, matching C's `for` semantics:
 
 ```franko
-for (int32_t i = 0; i < 5; i = i + 1) {
+for (int32 i = 0; i < 5; i = i + 1) {
     if (i == 2) {
         continue;    // i = i + 1 still runs
     }
@@ -1802,8 +1802,8 @@ for (int32_t i = 0; i < 5; i = i + 1) {
 `break` accepts an optional integer constant expression `N` that selects how many nested loops to exit. `N` must be strictly greater than 0 and no larger than the enclosing loop depth. A plain `break` is equivalent to `break 1`:
 
 ```franko
-for (int32_t a = 0; a < 3; a = a + 1) {
-    for (int32_t b = 0; b < 3; b = b + 1) {
+for (int32 a = 0; a < 3; a = a + 1) {
+    for (int32 b = 0; b < 3; b = b + 1) {
         if (b == 1) {
             break 2;    // exits both loops
         }
@@ -1838,12 +1838,12 @@ The checker validates print arguments as expressions usable where a value is req
 
 Current print limitation: only integer primitives and pointers are printable. The C++14 backend can print:
 
-- integer primitives (with `int8_t`/`uint8_t` promoted so a number is shown rather than a character);
+- integer primitives (with `int8`/`uint8` promoted so a number is shown rather than a character);
 - pointers, including the `null` pointer (printed through `const void*`).
 
 Arrays and structs cannot be printed. They are accepted by the checker, but the generated C++ does not compile because the backend has no output form for them. Print individual elements and fields instead: `print(xs[0])`, `print(s.x)`.
 
-Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<array<byte, N>>`), but `print` shows their global's address rather than the text; print individual bytes instead.
+Array literals need an assignment, return, or call-argument context to infer their element type, so they cannot appear as print arguments. String literals are expressions (`view<[byte, N]>`), but `print` shows their global's address rather than the text; print individual bytes instead.
 
 Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -1867,57 +1867,57 @@ arr.uninit();
 Franko supports two array categories:
 
 ```franko
-array<T>      // dynamic array
-array<T, N>   // static array
+[T]      // dynamic array
+[T, N]   // static array
 ```
 
 Examples:
 
 ```franko
-array<int32_t> dynamicInts;
-array<uint8_t, 128> staticBytes;
+[int32] dynamicInts;
+[uint8, 128] staticBytes;
 ```
 
 Arrays may be nested:
 
 ```franko
-array<array<int32_t>> nestedDynamic;
-array<array<int32_t, 4>, 8> matrix;
+[[int32]] nestedDynamic;
+[[int32, 4], 8] matrix;
 ```
 
 Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
 
-However, Franko supports **array literals** as `view<array<T, N>>` values over constant global arrays; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
+However, Franko supports **array literals** as `view<[T, N]>` values over constant global arrays; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
 
 ## 20.1 Static Arrays
 
 A static array has a compile-time size:
 
 ```franko
-array<int32_t, 10> xs;
+[int32, 10] xs;
 ```
 
 Static array size rules:
 
 - size must be a compile-time integer constant;
 - size must be greater than zero;
-- size must fit `uint32_t`.
+- size must fit `uint32`.
 
 Valid:
 
 ```franko
-array<int32_t, 1> a;
-array<int32_t, 0x10> b;
-array<int32_t, 0b1000> c;
-array<int32_t, 1 + 2> d;
+[int32, 1] a;
+[int32, 0x10] b;
+[int32, 0b1000] c;
+[int32, 1 + 2] d;
 ```
 
 Invalid:
 
 ```franko
-array<int32_t, 0> a;
-array<int32_t, -1> b;
-array<int32_t, 999999999999999999999999999999999> c;
+[int32, 0] a;
+[int32, -1] b;
+[int32, 999999999999999999999999999999999] c;
 ```
 
 Static arrays do not use `arr(size)` initialization.
@@ -1925,11 +1925,11 @@ Static arrays do not use `arr(size)` initialization.
 The size may be written as `?` to infer it from a declaration initializer (see [Desugaring](05-desugaring.md)):
 
 ```franko
-array<int32_t, ?> a = [0, 1, 2, 3];   // ? = 4
-array<byte, ?> b = [104, 105];        // ? = 2
+[int32, ?] a = [0, 1, 2, 3];   // ? = 4
+[byte, ?] b = [104, 105];        // ? = 2
 ```
 
-(String literals are `view<array<byte, N>>` values and do not
+(String literals are `view<[byte, N]>` values and do not
 participate in `?` inference; see [String Literals](23-string-literals.md).)
 
 The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
@@ -1939,7 +1939,7 @@ The current element count of any array is available through the `length()` intri
 A dynamic array has runtime size:
 
 ```franko
-array<int32_t> xs;
+[int32] xs;
 ```
 
 Dynamic arrays are initialized with the array intrinsic `init` (or one of its aliases):
@@ -1955,10 +1955,10 @@ Rules for dynamic array initialization:
 - target must be a storage-backed lvalue;
 - target must be a dynamic array;
 - exactly one argument is required;
-- size must be compatible with `uint32_t`;
+- size must be compatible with `uint32`;
 - constant sizes must be greater than zero;
-- constant sizes must fit `uint32_t`;
-- nonconstant sizes must have exactly type `uint32_t`.
+- constant sizes must fit `uint32`;
+- nonconstant sizes must have exactly type `uint32`.
 
 An initialized dynamic array may be resized with `resize`. See [Array Intrinsics](21-array-intrinsics.md).
 
@@ -1971,7 +1971,7 @@ An initialized dynamic array owns constructed elements: for element types that n
 The call-initialization form is only valid for dynamic arrays:
 
 ```franko
-int32_t x(5);   // invalid: x is not a dynamic array
+int32 x(5);   // invalid: x is not a dynamic array
 ```
 
 ## 20.3 Array Access
@@ -1988,9 +1988,9 @@ Index rules:
 
 - constant index:
   - must be nonnegative;
-  - must fit `uint32_t`;
+  - must fit `uint32`;
 - nonconstant index:
-  - must have exactly type `uint32_t`.
+  - must have exactly type `uint32`.
 
 For static arrays, constant indexes are checked against the known static size when possible.
 
@@ -2001,7 +2001,7 @@ Array elements are storage-backed lvalues when the array target is storage-backe
 Array elements may be pointed to:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 p = getptr(xs[0]);
 ```
 
@@ -2014,8 +2014,8 @@ Arrays cannot be assigned directly as ordinary values.
 Invalid:
 
 ```franko
-array<int32_t> a;
-array<int32_t> b;
+[int32] a;
+[int32] b;
 
 a = b;
 ```
@@ -2049,7 +2049,7 @@ Array operations are written using call syntax but lowered into special semantic
 Intrinsics are **expressions**, not statement-only forms. Status-returning intrinsics may be used in value contexts:
 
 ```franko
-int32_t status;
+int32 status;
 status = xs.init(10);
 ```
 
@@ -2057,16 +2057,16 @@ Void-returning intrinsics are invalid in value contexts.
 
 | Intrinsic | Receiver | Returns | Status |
 |---|---|---|---|
-| `target(size)`, `target.init(size)` | dynamic array | `int32_t` | `0` on success, `-1` on allocation failure |
-| `target.init_zero(size)` | dynamic array | `int32_t` | `0` on success, `-1` on allocation failure |
-| `target.resize(size)` | dynamic array | `int32_t` | `0` on success, `-1` on allocation failure |
+| `target(size)`, `target.init(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
+| `target.init_zero(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
+| `target.resize(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.uninit()` | dynamic array | `void` | — |
 | `target.memset(value)` | any array | `void` | — |
 | `target.memset(value, start, count)` | any array | `void` | — |
 | `target.memcpy(source)` | any array | `void` | — |
 | `target.memcpy(source, dstStart, srcStart, count)` | any array | `void` | — |
 | `target.memmove(dstStart, srcStart, count)` | any array | `void` | — |
-| `target.length()` | any array | `uint32_t` | — |
+| `target.length()` | any array | `uint32` | — |
 
 The receiver of a mutating array intrinsic must be a storage-backed array lvalue.
 
@@ -2104,12 +2104,12 @@ The `memcpy`/`memmove` *source* is only read, so it may be any pointer
 to an array.
 
 ```franko
-view<array<byte>> v = getview(buf);
+view<[byte]> v = getview(buf);
 $(v)[0] = 1;         // blocked: view is read-only
 $(v).memset(0);      // blocked: mutating intrinsic
 $(v).length();       // allowed
 
-mview<array<byte>> m = getmview(dyn);
+mview<[byte]> m = getmview(dyn);
 $(m)[0] = 1;         // allowed
 $(m).init(10);       // blocked: init needs allocation rights (ptr)
 ```
@@ -2125,8 +2125,8 @@ Rules:
 - target must have dynamic array type;
 - exactly one argument is required;
 - size must be:
-  - a positive constant fitting `uint32_t`; or
-  - a nonconstant expression of exactly type `uint32_t`.
+  - a positive constant fitting `uint32`; or
+  - a nonconstant expression of exactly type `uint32`.
 
 `init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage. `target(size)` is shorthand for `target.init(size)`.
 
@@ -2143,8 +2143,8 @@ Rules:
 - target must be a dynamic array;
 - exactly one argument is required;
 - size must be:
-  - a positive constant fitting `uint32_t`; or
-  - a nonconstant expression of exactly type `uint32_t`.
+  - a positive constant fitting `uint32`; or
+  - a nonconstant expression of exactly type `uint32`.
 
 ## 21.4 `uninit`
 
@@ -2174,11 +2174,11 @@ Rules:
 - receiver element type must be memsetable;
 - the whole-array form takes exactly one argument; the ranged form takes exactly three;
 - fill value must be:
-  - a constant fitting `uint8_t`; or
-  - a nonconstant expression of exactly type `uint8_t`;
+  - a constant fitting `uint8`; or
+  - a nonconstant expression of exactly type `uint8`;
 - `start` and `count` must be:
-  - nonnegative constants fitting `uint32_t`; or
-  - nonconstant expressions of exactly type `uint32_t`;
+  - nonnegative constants fitting `uint32`; or
+  - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant start/count ranges are checked against the static size at compile time.
 
 ## 21.6 Memsetable Element Types
@@ -2207,15 +2207,15 @@ target.memcpy(source, dstStart, srcStart, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be an **pointer to an array** (`ptr<array<T>>` or `ptr<array<T, N>>`), typically produced with `getptr(...)`, or an array literal (its element type is inferred from the target); passing an array value directly is invalid;
+- source must be an **pointer to an array** (`ptr<[T]>` or `ptr<[T, N]>`), typically produced with `getptr(...)`, or an array literal (its element type is inferred from the target); passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
 - static lengths do not need to match;
 - target and source element types must be memcpyable;
 - `dstStart`, `srcStart`, and `count` must be:
-  - nonnegative constants fitting `uint32_t`; or
-  - nonconstant expressions of exactly type `uint32_t`;
+  - nonnegative constants fitting `uint32`; or
+  - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant start/count ranges on both the destination and the source are checked against the static sizes at compile time.
 
 ## 21.8 `memmove`
@@ -2234,8 +2234,8 @@ Rules:
 - takes exactly three arguments;
 - receiver element type must be memcpyable;
 - `dstStart`, `srcStart`, and `count` must be:
-  - nonnegative constants fitting `uint32_t`; or
-  - nonconstant expressions of exactly type `uint32_t`;
+  - nonnegative constants fitting `uint32`; or
+  - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges are checked against the static size at compile time.
 
 ## 21.9 Memcpyable Element Types
@@ -2252,7 +2252,7 @@ Current memcpyable types:
 
 ## 21.10 `length`
 
-Returns the element count of an array as `uint32_t`.
+Returns the element count of an array as `uint32`.
 
 Form:
 
@@ -2270,7 +2270,7 @@ Rules:
 Dynamic arrays report their runtime length. A dynamic array that has never been initialized, or that has been uninitialized with `uninit()`, reports `0`; `length()` never aborts:
 
 ```franko
-array<int32_t> xs;
+[int32] xs;
 print(xs.length());   // 0
 xs.init(4);
 print(xs.length());   // 4
@@ -2280,12 +2280,12 @@ xs.uninit();
 print(xs.length());   // 0
 ```
 
-Static arrays report their size as a compile-time constant: `ys.length()` for `array<int32_t, 3> ys` compiles to the constant `3`, with no runtime read.
+Static arrays report their size as a compile-time constant: `ys.length()` for `[int32, 3] ys` compiles to the constant `3`, with no runtime read.
 
 Nested receivers report the outermost dimension; index first for inner dimensions:
 
 ```franko
-array<array<int32_t, 2>, 3> m;
+[[int32, 2], 3] m;
 print(m.length());      // 3
 print(m[0].length());   // 2
 ```
@@ -2306,13 +2306,13 @@ An array literal is written with square brackets:
 ```
 
 An array literal is an **ordinary expression** whose type is
-`view<array<T, N>>` (see [Pointers](24-pointers.md)): a read-only
+`view<[T, N]>` (see [Pointers](24-pointers.md)): a read-only
 pointer to a static array of `N` elements, where `N` is the number of
 elements written and `T` is the **inferred element type**.
 
 ```franko
-[1, 2, 3]        // view<array<int32_t, 3>> when T is inferred as int32_t
-[0, 255]         // view<array<uint8_t, 2>> when T is inferred as uint8_t
+[1, 2, 3]        // view<[int32, 3]> when T is inferred as int32
+[0, 255]         // view<[uint8, 2]> when T is inferred as uint8
 ```
 
 ## 22.1 Element Type Inference
@@ -2321,7 +2321,7 @@ The element type `T` is always an integer primitive type. It is
 **inferred from the surrounding code** — a literal carries no element
 type of its own:
 
-- **assignment**: the target's element type (a `view<array<T, ...>>`
+- **assignment**: the target's element type (a `view<[T, ...]>`
   variable, or an array target whose element type guides the inference
   before the assignment is rejected — see 22.5);
 - **returns**: the function's return type;
@@ -2335,14 +2335,14 @@ rejected:
 [1, 2, 3];              // invalid: bare expression statement
 print([1, 2, 3]);       // invalid: print is not an inference context
 take([1, 2, 3]);        // valid when take's parameter is
-                        // view<array<int32_t>> (or view<array<T, ...>>)
+                        // view<[int32]> (or view<[T, ...]>)
 ```
 
 Constants in a literal are fluid like everywhere else: each element is
 checked against the inferred `T`'s range.
 
 ```franko
-view<array<uint8_t, 3>> b = [0, 127, 256];   // invalid: 256 does not fit
+view<[uint8, 3]> b = [0, 127, 256];   // invalid: 256 does not fit
 ```
 
 ## 22.2 Constant Elements Only
@@ -2354,18 +2354,18 @@ uses, so returning a literal or calling a function that returns one is
 always safe, including recursively:
 
 ```franko
-func first() -> view<array<int32_t, 3>> {
+func first() -> view<[int32, 3]> {
     return [1, 2, 3];       // backed by one constant global
 }
 
-view<array<int32_t, 3>> a = [1 + 1, 2 * 3, 1 << 3];   // constant expressions
+view<[int32, 3]> a = [1 + 1, 2 * 3, 1 << 3];   // constant expressions
 ```
 
 Runtime values cannot appear in a literal:
 
 ```franko
-int32_t v = 5;
-view<array<int32_t, 3>> t = [v, v + 1, 2];   // invalid: v is not constant
+int32 v = 5;
+view<[int32, 3]> t = [v, v + 1, 2];   // invalid: v is not constant
 ```
 
 Compute runtime values into a declared array with ordinary element
@@ -2374,19 +2374,19 @@ assignments, or copy a constant literal and modify it.
 ## 22.3 Length and Type
 
 A literal has exactly as many elements as written: `[1, 2, 3]` is
-`view<array<int32_t, 3>>`, never a shorter or longer array. An empty
+`view<[int32, 3]>`, never a shorter or longer array. An empty
 literal `[]` is not supported (like `""`, `N >= 1`).
 
 ```franko
-view<array<int32_t, 2>> v = [1, 2, 3];   // invalid: lengths 2 and 3 differ
-view<array<int32_t, 3>> v = [1, 2, 3];   // valid
+view<[int32, 2]> v = [1, 2, 3];   // invalid: lengths 2 and 3 differ
+view<[int32, 3]> v = [1, 2, 3];   // valid
 ```
 
 Because the literal is a pointer, elements are reached through a
 dereference of a view variable:
 
 ```franko
-view<array<int32_t, 3>> v = [1, 2, 3];
+view<[int32, 3]> v = [1, 2, 3];
 print($(v)[0]);            // 1
 ```
 
@@ -2401,28 +2401,28 @@ Nested literals are static at **every** level and therefore must be
 **perfectly rectangular**: all rows at each level have the same length.
 
 ```franko
-view<array<array<int32_t, 2>, 2>> m = [[1, 2], [3, 4]];   // valid
-view<array<array<int32_t, 2>, 2>> m = [[1, 2], [3]];      // invalid: jagged
+view<[[int32, 2], 2]> m = [[1, 2], [3, 4]];   // valid
+view<[[int32, 2], 2]> m = [[1, 2], [3]];      // invalid: jagged
 ```
 
-The type is `view<array<array<T, M>, N>>`: `N` rows of `M` elements.
-Each row is itself a literal of type `view<array<T, M>>` when separated,
+The type is `view<[[T, M], N]>`: `N` rows of `M` elements.
+Each row is itself a literal of type `view<[T, M]>` when separated,
 so a row length mismatch is a type error.
 
 When the literal decays to a dynamic view (22.6), only the outermost
 dimension becomes dynamic; inner dimensions stay static:
 
 ```franko
-func solve(view<array<array<int32_t, 13>>> maze) -> void {
+func solve(view<[[int32, 13]]> maze) -> void {
     // rows are exactly 13 cells wide: the width is enforced by the type
 }
 
 solve([[1, 2, 3]]);            // invalid: rows are 3 wide, not 13
-solve(grid);                   // valid for a view<array<array<int32_t, 13>, 12>>
+solve(grid);                   // valid for a view<[[int32, 13], 12]>
 ```
 
 This one-way decay is how a function enforces a required row width or
-maze size: a caller can decay *down* to `view<array<array<T, M>>>`, but
+maze size: a caller can decay *down* to `view<[[T, M]]>`, but
 nothing with a different `M` can ever reach it.
 
 ## 22.5 Arrays Are Not Assignable From Literals
@@ -2432,9 +2432,9 @@ initialize or assign an array — copy the elements with `memcpy`
 instead, exactly as with string literals:
 
 ```franko
-array<int32_t, 3> buf;
+[int32, 3] buf;
 buf.memcpy([1, 2, 3]);       // copies 3 elements
-array<int32_t, 4> xs;
+[int32, 4] xs;
 xs.memset(0);
 xs.memcpy([7, 8]);           // copies 2 elements; xs[2], xs[3] untouched
 ```
@@ -2442,7 +2442,7 @@ xs.memcpy([7, 8]);           // copies 2 elements; xs[2], xs[3] untouched
 For dynamic arrays, size the storage first:
 
 ```franko
-array<int32_t> dyn;
+[int32] dyn;
 dyn(3);
 dyn.memcpy([1, 2, 3]);
 ```
@@ -2452,17 +2452,17 @@ A shorter literal copies a prefix; `memcpy` copies
 
 ## 22.6 Views of Literals
 
-The literal's own type is `view<array<T, N>>`. The ordinary static→
+The literal's own type is `view<[T, N]>`. The ordinary static→
 dynamic view decay (see [Pointers](24-pointers.md) 24.4) applies, so
-it is assignable wherever a `view<array<T>>` is expected:
+it is assignable wherever a `view<[T]>` is expected:
 
 ```franko
-func take(view<array<int32_t>> v) -> int32_t {
+func take(view<[int32]> v) -> int32 {
     return $(v)[0];
 }
 
-take([1, 2, 3]);                        // decays to view<array<int32_t>>
-view<array<int32_t>> d = [1, 2, 3, 4];  // decay in a declaration
+take([1, 2, 3]);                        // decays to view<[int32]>
+view<[int32]> d = [1, 2, 3, 4];  // decay in a declaration
 ```
 
 When the decay applies directly to a literal in one of these positions,
@@ -2478,13 +2478,13 @@ Permissions never upgrade: a literal (read-only) cannot initialize an
 
 ## 22.7 `?` Size Inference
 
-A static size may be written `?` in a `view<array<...>>` declaration
+A static size may be written `?` in a `view<[...]>` declaration
 with an array-literal initializer; the size is the literal's length at
 that level:
 
 ```franko
-view<array<int32_t, ?>> v = [1, 2, 3];              // view<array<int32_t, 3>>
-view<array<array<int32_t, ?>, ?>> m = [[1, 2], [3, 4]];
+view<[int32, ?]> v = [1, 2, 3];              // view<[int32, 3]>
+view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
 ```
 
 The rules are the same as for other `?` inference (see
@@ -2498,9 +2498,9 @@ A pointer-typed global may be initialized with an array literal of
 constant elements, like a string literal:
 
 ```franko
-view<array<int32_t, 4>> G = [1, 2, 3, 4];
+view<[int32, 4]> G = [1, 2, 3, 4];
 
-func main() -> int32_t {
+func main() -> int32 {
     print($(G)[3]);         // 4
     return 0;
 }
@@ -2513,14 +2513,14 @@ element assignments in an initializer function.
 
 Array literals in Franko are:
 
-- ordinary expressions of type `view<array<T, N>>`;
+- ordinary expressions of type `view<[T, N]>`;
 - element type `T` inferred from assignment, return, or call-argument
   contexts (integer primitives only);
 - compile-time constant expressions only, hoisted to shared constant
   global arrays (recursion-safe, like string literals);
 - exactly as long as written (`N >= 1`);
 - rectangular when nested, with inner dimensions static;
-- decayable to `view<array<T>>` (outermost dimension only);
+- decayable to `view<[T]>` (outermost dimension only);
 - never assignable to arrays — copy with `memcpy`;
 - inferrable in size via `?` in `view` declarations.
 
@@ -2529,18 +2529,18 @@ Array literals in Franko are:
 # 23. String Literals
 
 Franko string literals are **read-only views of byte arrays**. A string
-literal is an ordinary expression whose type is `view<array<byte, N>>`
+literal is an ordinary expression whose type is `view<[byte, N]>`
 (see [Pointers](24-pointers.md)): a read-only pointer to a static byte
 array of `N` UTF-8 bytes, where `N` is the literal's byte length.
 
 ```franko
-"Franko"           // view<array<byte, 6>>
-"Hello, World!"    // view<array<byte, 13>>
+"Franko"           // view<[byte, 6]>
+"Hello, World!"    // view<[byte, 13]>
 ```
 
 ## 23.1 A String Literal Is a View Value
 
-Each distinct literal is hoisted to its own global `array<byte, N>`
+Each distinct literal is hoisted to its own global `[byte, N]`
 holding the UTF-8 bytes, and the literal expression is `getview(...)`
 over it. Identical literal texts share one global. No null terminator is
 appended: `N` is exactly the number of content bytes.
@@ -2556,7 +2556,7 @@ print($("abc")[0]);         // 97
 A string literal may appear anywhere an expression may appear:
 
 ```franko
-view<array<byte, 3>> s = "abc";     // declaration initializer
+view<[byte, 3]> s = "abc";     // declaration initializer
 s = "xyz";                          // assignment to a view variable
 print($("hi").length());            // print argument
 take("hi");                         // function argument
@@ -2585,12 +2585,12 @@ print($("\t\n\"\\"")[0]);   // 9
 ## 23.4 Strings and Byte Buffers
 
 Arrays are value types and are **not assignable from strings**: a
-`view<array<byte, N>>` cannot initialize or assign an array. Copy the
+`view<[byte, N]>` cannot initialize or assign an array. Copy the
 bytes with the `memcpy` intrinsic instead — a string literal is a valid
 `memcpy` source:
 
 ```franko
-array<byte, 6> buf;
+[byte, 6] buf;
 buf.memcpy("hello");      // copies 5 bytes; buf[5] is untouched
 print(buf[0]);            // 104
 ```
@@ -2598,14 +2598,14 @@ print(buf[0]);            // 104
 For dynamic arrays, size the buffer first:
 
 ```franko
-array<byte> buf;
+[byte] buf;
 buf.init($("hello").length());
 buf.memcpy("hello");
 ```
 
-For the same reason `array<byte, ?>` cannot infer its size from a string
+For the same reason `[byte, ?]` cannot infer its size from a string
 literal; declare the size explicitly. (`?` size inference works in
-`view<array<...>>` declarations with an array literal; see
+`view<[...]>` declarations with an array literal; see
 [Array Literals](22-array-literals.md).)
 
 ## 23.5 Global String Views
@@ -2614,9 +2614,9 @@ A pointer-typed global may be initialized with a string literal (or with
 `getptr`/`getmview`/`getview` over another global, or `null`):
 
 ```franko
-view<array<byte, 5>> GREETING = "hello";
+view<[byte, 5]> GREETING = "hello";
 
-func main() -> int32_t {
+func main() -> int32 {
     print($(GREETING).length());   // 5
     return 0;
 }
@@ -2636,7 +2636,7 @@ print($("hi")[1]);   // 105
 ## 23.7 Empty Strings
 
 An empty string literal `""` is not supported: a string literal is a
-`view<array<byte, N>>` with `N >= 1`.
+`view<[byte, N]>` with `N >= 1`.
 
 ---
 
@@ -2659,10 +2659,10 @@ A pointer value refers to a storage location containing a value of type `T`.
 Examples:
 
 ```franko
-ptr<int32_t> p;
-mview<uint8_t> b;
-view<ptr<int32_t>> pp;
-ptr<array<int32_t>> ap;
+ptr<int32> p;
+mview<uint8> b;
+view<ptr<int32>> pp;
+ptr<[int32]> ap;
 ```
 
 Pointers are typed, assignable, copyable, dereferenceable, and comparable.
@@ -2706,7 +2706,7 @@ $(v).length();  // intrinsic over the pointee
 Franko supports pointers to pointers, of any permission:
 
 ```franko
-view<ptr<int32_t>> v;   // read-only view of a ptr<int32_t> slot
+view<ptr<int32>> v;   // read-only view of a ptr<int32> slot
 ```
 
 ## 24.4 Assignment and Implicit Downgrades
@@ -2722,12 +2722,12 @@ static-to-dynamic array pointer view decay of
   compile error.
 
 ```franko
-ptr<array<byte>> p = getptr(buf);
-mview<array<byte>> m = p;          // implicit downgrade
-view<array<byte>> v = p;           // implicit downgrade
-view<array<byte>> v2 = m;          // implicit downgrade
+ptr<[byte]> p = getptr(buf);
+mview<[byte]> m = p;          // implicit downgrade
+view<[byte]> v = p;           // implicit downgrade
+view<[byte]> v2 = m;          // implicit downgrade
 
-ptr<array<byte>> q = v;            // invalid: raises permissions
+ptr<[byte]> q = v;            // invalid: raises permissions
 ```
 
 These conversions apply to assignment, return values, and function
@@ -2737,7 +2737,7 @@ integers cannot be converted to pointers.
 Explicit downgrades may be written with `cast` (see [Casts](16-casts.md)):
 
 ```franko
-view<array<byte>> v = cast<view<array<byte>>>(p);
+view<[byte]> v = cast<view<[byte]>>(p);
 ```
 
 ### 24.4.1 Static-to-Dynamic Array Pointer Views
@@ -2745,23 +2745,23 @@ view<array<byte>> v = cast<view<array<byte>>>(p);
 A pointer to a **static** array implicitly converts to a pointer to a
 **dynamic** array of the same element type, in the unidirectional form:
 
-- `mview<array<T, N>>` and `view<array<T, N>>` implicitly (and explicitly)
-  cast to `mview<array<T>>` and `view<array<T>>`;
+- `mview<[T, N]>` and `view<[T, N]>` implicitly (and explicitly)
+  cast to `mview<[T]>` and `view<[T]>`;
 - the conversion may carry a permission downgrade in the same step, so
-  `ptr<array<T, N>>` converts to `mview<array<T>>`/`view<array<T>>` and
-  `mview<array<T, N>>` converts to `view<array<T>>`;
+  `ptr<[T, N]>` converts to `mview<[T]>`/`view<[T]>` and
+  `mview<[T, N]>` converts to `view<[T]>`;
 - `T` may itself be a static or dynamic array, but only the **outermost**
-  dimension decays: `view<array<array<int32_t, 2>, 3>>` converts to
-  `view<array<array<int32_t, 2>>>`, never to `view<array<array<int32_t>>>`
+  dimension decays: `view<[[int32, 2], 3]>` converts to
+  `view<[[int32, 2]]>`, never to `view<[[int32]]>`
   (element layouts must stay identical behind the one thin pointer);
 - the reverse direction is invalid, and ownership never decays:
-  `ptr<array<T, N>>` cannot convert to `ptr<array<T>>`.
+  `ptr<[T, N]>` cannot convert to `ptr<[T]>`.
 
 ```franko
-array<int32_t, 4> xs;
-mview<array<int32_t, 4>> m = getmview(xs);
-view<array<int32_t>> v = m;             // implicit decay
-mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);   // explicit
+[int32, 4] xs;
+mview<[int32, 4]> m = getmview(xs);
+view<[int32]> v = m;             // implicit decay
+mview<[int32]> d = cast<mview<[int32]>>(m);   // explicit
 
 print($(v).length());                   // 4
 $(m)[1] = 99;                           // writes hit xs directly
@@ -2797,7 +2797,7 @@ Both operands must have identical pointer types.
 
 Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
-Pointer comparison produces `uint8_t`.
+Pointer comparison produces `uint8`.
 
 ## 24.6 No Pointer Arithmetic
 
@@ -2808,8 +2808,8 @@ Pointers are not integers and do not support arithmetic.
 Arrays may be pointed to:
 
 ```franko
-array<int32_t> arr;
-ptr<array<int32_t>> p;
+[int32] arr;
+ptr<[int32]> p;
 
 p = getptr(arr);
 $(p)(10);
@@ -2818,8 +2818,8 @@ $(p)(10);
 Array initializer assignment through a dereferenced array pointer is valid when the dereference produces a storage-backed array lvalue:
 
 ```franko
-array<int32_t, 3> xs;
-ptr<array<int32_t, 3>> p;
+[int32, 3] xs;
+ptr<[int32, 3]> p;
 
 p = getptr(xs);
 
@@ -2845,7 +2845,7 @@ through them — and they stop at pointer boundaries.
 A `view` of a nested array locks every dimension:
 
 ```franko
-view<array<array<byte>>> v;
+view<[[byte]]> v;
 // $(v)[i] reads are fine; $(v)[i][j] = x is blocked, and so is
 // $(v)[i].init(...): the entire nested structure is read-only.
 ```
@@ -2856,14 +2856,14 @@ rights (`ptr`), and an index or member access never leaves the region the
 pointer dereference created:
 
 ```franko
-mview<array<array<byte>>> m;
+mview<[[byte]]> m;
 $(m)[0][1] = 5;     // allowed: element writes at every level
 $(m)[0].init(2);    // blocked: init needs allocation rights (ptr)
 $(m).init(2);       // blocked: the same rule applies to the outer array
 ```
 
 To run lifecycle intrinsics on a nested array, reach it through a `ptr`:
-either hold the outer pointer (`ptr<array<array<byte>>>`) or extract an
+either hold the outer pointer (`ptr<[[byte]]>`) or extract an
 inner `ptr` (Rule 2).
 
 ### Rule 2: Pointer Boundaries (Indirection)
@@ -2873,13 +2873,13 @@ only **the pointer slots** (whether they can be overwritten). The memory
 behind those pointers follows each pointer's own type:
 
 ```franko
-mview<array<view<array<byte>>>> v;
+mview<[view<[byte]>]> v;
 $(v)[0] = getview(x);        // allowed: overwrite the slot
 $($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
 ```
 
 ```franko
-view<array<ptr<array<byte>>>> v;
+view<[ptr<[byte]>]> v;
 $(v)[0] = getptr(x);         // blocked: the outer view locks its slots
 $($(v)[0])[0] = 5;           // allowed: through the inner ptr
 $($(v)[0]).init(10);         // allowed: full allocation rights on the pointee
@@ -2902,10 +2902,10 @@ exactly like on the outermost one (`$(m)[0].init(...)` is not).
 any permission is expected:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 p = null;               // valid
 
-int32_t x = null;       // invalid: null is only valid for pointer types
+int32 x = null;       // invalid: null is only valid for pointer types
 p = 0;                  // invalid: 0 is an integer, not null
 ```
 
@@ -2934,7 +2934,7 @@ functions.
 Pointer declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
 
 ```franko
-ptr<int32_t> p;        // p is null here, guaranteed
+ptr<int32> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
@@ -2948,14 +2948,14 @@ expressions that certify a pointer as non-null are the creation
 intrinsics `getptr(...)`, `getmview(...)`, and `getview(...)`:
 
 ```franko
-ptr<int32_t> p;            // p is null
+ptr<int32> p;            // p is null
 $(p);                   // error: cannot dereference null
 
 p = getptr(x);             // p is certified non-null
 $(p);                   // valid
 
-ptr<int32_t> q = p;        // q copies p's state: non-null
-ptr<int32_t> r = q;        // r copies q's state: non-null
+ptr<int32> q = p;        // q copies p's state: non-null
+ptr<int32> r = q;        // r copies q's state: non-null
 ```
 
 Assignment from another pointer variable copies that variable's exact state, so a null state propagates through copies and a certification propagates transitively.
@@ -2973,7 +2973,7 @@ Dereferencing a variable that is **definitely null** is an error.
 Dereferencing a variable that is **possibly null** (null on some path, for example after a branch merge) is a **warning**, not an error:
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 if (cond != 0) {
     p = getptr(x);
 } else {
@@ -3029,8 +3029,8 @@ A struct is a user-defined aggregate type with named, ordered fields:
 
 ```franko
 struct Point {
-    int32_t x
-    int32_t y = 0
+    int32 x
+    int32 y = 0
 }
 
 Point p;
@@ -3047,9 +3047,9 @@ Struct declarations are top-level items, alongside global variable declarations 
 
 ```franko
 struct X {
-    int32_t a
-    int64_t b = 123
-    array<int32_t, 4> xs
+    int32 a
+    int64 b = 123
+    [int32, 4] xs
 }
 ```
 
@@ -3068,8 +3068,8 @@ A field declaration uses the same `type name` syntax as a variable declaration, 
 
 ```franko
 struct Buffer {
-    array<int32_t> data
-    int32_t size = 0
+    [int32] data
+    int32 size = 0
 }
 ```
 
@@ -3088,8 +3088,8 @@ A field may declare a default value with `= constExpr`:
 
 ```franko
 struct Counter {
-    int32_t count = 0
-    uint32_t limit = 100
+    int32 count = 0
+    uint32 limit = 100
 }
 ```
 
@@ -3097,7 +3097,7 @@ Rules:
 
 - Defaults must be constant expressions (`constExpr`) and are folded at compile time (see [Constant Folding](10-constant-folding.md)).
 - Only primitive fields can have default values. Struct, array, and ptr fields reject `= constExpr` as a type mismatch.
-- A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8_t x = 300`).
+- A folded default must fit the field's primitive type; an out-of-range default is rejected (for example `int8 x = 300`).
 
 ## 25.4 Using Struct Types
 
@@ -3105,7 +3105,7 @@ A struct name used in a type position is resolved against the struct namespace:
 
 - Unknown struct names are rejected with an "unknown struct type" error.
 - Field types may reference structs declared anywhere in the program, including structs declared later in the file.
-- Struct types compose with the other type constructors: `Point p`, `array<Point> xs`, `array<Point, 4> grid`, `ptr<Point> pp`, and `array<array<Point, 3>, 2> cells` are all valid declared types.
+- Struct types compose with the other type constructors: `Point p`, `[Point] xs`, `[Point, 4] grid`, `ptr<Point> pp`, and `[[Point, 3], 2] cells` are all valid declared types.
 
 ## 25.5 By-Value Cycles
 
@@ -3118,8 +3118,8 @@ An infinite by-value chain would have no size, so such cycles are rejected at co
 
 ```franko
 struct Node {
-    int32_t v
-    array<Node, 4> kids    // invalid: static array of Node inside Node
+    int32 v
+    [Node, 4] kids    // invalid: static array of Node inside Node
 }
 ```
 
@@ -3127,9 +3127,9 @@ Indirection breaks the cycle and is allowed:
 
 ```franko
 struct Node {
-    int32_t v
+    int32 v
     ptr<Node> next        // valid: pointer edge
-    array<Node> kids       // valid: dynamic array edge
+    [Node] kids       // valid: dynamic array edge
 }
 ```
 
@@ -3150,7 +3150,7 @@ Consequences:
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
-Arrays of structs follow the usual element rules: `array<X, N>` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
+Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
 Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` cannot print a whole struct — the checker accepts it, but the generated C++ does not compile (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
 
@@ -3183,12 +3183,12 @@ A struct-typed global is declared like any other global:
 
 ```franko
 struct Point {
-    int32_t x = 0
-    int32_t y = 0
+    int32 x = 0
+    int32 y = 0
 }
 
 Point origin;
-int32_t scale = 2;
+int32 scale = 2;
 ```
 
 - Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch.
@@ -3200,7 +3200,7 @@ The C++14 backend:
 
 - emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so pointers may reference structs declared later in source order;
 - orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`ptr` and dynamic-array fields impose no ordering constraint);
-- emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32_t num = 0;`;
+- emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32 num = 0;`;
 - emits member access as `target.field`.
 - emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](26-methods.md).
 
@@ -3224,7 +3224,7 @@ A struct may declare methods: functions bound to the struct whose first paramete
 
 ```franko
 struct X {
-    int32_t y = 0
+    int32 y = 0
 
     func increment(ptr<X> self) -> void {
         $(self).y = $(self).y + 1
@@ -3232,7 +3232,7 @@ struct X {
     }
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     X s
     s.y = 41
     s.increment()
@@ -3247,7 +3247,7 @@ A struct body contains field declarations and method declarations:
 
 ```franko
 struct X {
-    int32_t y = 0
+    int32 y = 0
     func increment(ptr<X> self) -> void {
         $(self).y = $(self).y + 1
         return
@@ -3274,11 +3274,11 @@ receiver: an owning `self` may run lifecycle operations, a mutable
 
 ```franko
 struct X {
-    int32_t y = 0
-    func get(view<X> self) -> int32_t {
+    int32 y = 0
+    func get(view<X> self) -> int32 {
         return $(self).y
     }
-    func set(mview<X> self, int32_t v) -> void {
+    func set(mview<X> self, int32 v) -> void {
         $(self).y = v
     }
 }
@@ -3288,7 +3288,7 @@ Rules:
 
 - A method with no parameters is rejected: `Method 'X.foo' must have 'ptr<X> self' as its first parameter (also allowed: 'mview<X> self', 'view<X> self')`.
 - A method whose first parameter is not named `self` is rejected with the same diagnostic.
-- A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32_t self`, and `ptr<Y> self` for a different struct `Y`.
+- A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32 self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
 - Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
 - `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](24-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
@@ -3341,12 +3341,12 @@ Methods overload exactly like free functions: overload identity is name plus ord
 
 ```franko
 struct Counter {
-    int32_t n = 0
-    func add(ptr<Counter> self, int32_t v) -> void {
+    int32 n = 0
+    func add(ptr<Counter> self, int32 v) -> void {
         $(self).n = $(self).n + v
         return
     }
-    func add(ptr<Counter> self, int32_t a, int32_t b) -> void {
+    func add(ptr<Counter> self, int32 a, int32 b) -> void {
         $(self).n = $(self).n + a + b
         return
     }
@@ -3364,7 +3364,7 @@ Rules:
 `self` is a lexer keyword, reserved everywhere:
 
 ```franko
-int32_t self = 0          // invalid: parse error
+int32 self = 0          // invalid: parse error
 func self() -> void {}    // invalid: parse error
 struct self {}            // invalid: parse error
 ```
@@ -3380,7 +3380,7 @@ Rules:
 
 A method body scopes exactly like a free-function body, plus the `self` parameter:
 
-- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32_t y` inside `increment` is unrelated to `$(self).y`).
+- Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32 y` inside `increment` is unrelated to `$(self).y`).
 - A method may call other methods on the same object only through an explicit receiver: `$(self).other()`.
 - `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](12-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).
@@ -3451,7 +3451,7 @@ For each pointer variable the checker tracks one of:
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<array<array<byte>>>` parameter enters pointing, since the template wrapper always passes a live pointer.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<[[byte]]>` parameter enters pointing, since the template wrapper always passes a live pointer.
 
 ## 27.3 Dereference Checking
 
@@ -3484,7 +3484,7 @@ Loop termination is not proven; the post-loop state is conservative.
 Inside `if (p == null)` / `if (p != null)` (either operand order), the checker refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 if (p != null) {
     $(p);      // valid: p is refined to pointing inside the guard
 }
@@ -3494,7 +3494,7 @@ $(p);          // error: p is provably null after the guard fails
 When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
 
 ```franko
-ptr<int32_t> p;
+ptr<int32> p;
 p = getptr(x);
 if (p != null) {
     $(p);      // valid
@@ -3534,20 +3534,20 @@ Franko uses exact, structural semantic type equality in many places. Type equali
 Primitive types are equal only if they have the same kind.
 
 ```text
-uint8_t  != uint16_t
-int32_t  != uint32_t
-int32_t  == int32_t
+uint8  != uint16
+int32  != uint32
+int32  == int32
 ```
 
-The aliases `int`, `uint`, and `byte` canonicalize to `int32_t`, `uint32_t`, and `uint8_t` respectively.
+The aliases `int`, `uint`, and `byte` canonicalize to `int32`, `uint32`, and `uint8` respectively.
 
 ## 28.2 Dynamic Array Equality
 
 Dynamic arrays are equal if their element types are equal.
 
 ```text
-array<int32_t> == array<int32_t>
-array<int32_t> != array<uint8_t>
+[int32] == [int32]
+[int32] != [uint8]
 ```
 
 ## 28.3 Static Array Equality
@@ -3560,9 +3560,9 @@ Static arrays are equal if:
 The size comparison is numeric, not textual:
 
 ```text
-array<int32_t, 10>     == array<int32_t, 0xA>
-array<int32_t, 5 + 5>  == array<int32_t, 10>
-array<int32_t, 10>     != array<int32_t, 20>
+[int32, 10]     == [int32, 0xA]
+[int32, 5 + 5]  == [int32, 10]
+[int32, 10]     != [int32, 20]
 ```
 
 ## 28.4 Pointer Equality
@@ -3572,16 +3572,16 @@ permissions match: `ptr<T>`, `mview<T>`, and `view<T>` are three distinct
 types.
 
 ```text
-ptr<array<byte>>     == ptr<array<byte>>
-ptr<array<byte>>     != mview<array<byte>>
-mview<array<byte>>   != view<array<byte>>
-view<array<byte, 3>> != view<array<byte, 5>>
+ptr<[byte]>     == ptr<[byte]>
+ptr<[byte]>     != mview<[byte]>
+mview<[byte]>   != view<[byte]>
+view<[byte, 3]> != view<[byte, 5]>
 ```
 
 The pointer conversions — permission downgrades (`ptr<T>` to
 `mview<T>`/`view<T>`, `mview<T>` to `view<T>`) and the static-to-dynamic
-array pointer view decay (`mview`/`view` of `array<T, N>` to `mview`/
-`view` of `array<T>`) — are the only implicit conversions the language
+array pointer view decay (`mview`/`view` of `[T, N]` to `mview`/
+`view` of `[T]`) — are the only implicit conversions the language
 allows; they do not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
@@ -3600,8 +3600,8 @@ equality either (see [Methods](26-methods.md)).
 Struct types are nominal: two struct declarations are distinct types even when their field layouts are identical.
 
 ```text
-struct X { int32_t n }
-struct Y { int32_t n }
+struct X { int32 n }
+struct Y { int32 n }
 
 X != Y
 X == X
@@ -3624,27 +3624,27 @@ A declared variable type is valid if it is one of:
 Valid:
 
 ```franko
-struct X { int32_t n }
+struct X { int32 n }
 
-int32_t x;
+int32 x;
 X s;
-array<X> xs;
-array<uint8_t, 64> bytes;
-array<array<byte, 20>, 12> grid;
-ptr<int32_t> p;
-ptr<array<int32_t>> ap;
+[X] xs;
+[uint8, 64] bytes;
+[[byte, 20], 12] grid;
+ptr<int32> p;
+ptr<[int32]> ap;
 ```
 
 Invalid:
 
 ```franko
 void x;
-array<void> xs;
+[void] xs;
 ptr<void> p;
 T s;    // invalid when no struct named T is declared
 ```
 
-Static arrays nest: every level of `array<array<byte, 20>, 12>` must satisfy the static array size rules (see [Arrays](20-arrays.md)).
+Static arrays nest: every level of `[[byte, 20], 12]` must satisfy the static array size rules (see [Arrays](20-arrays.md)).
 
 A function return type has separate rules. It may be:
 
@@ -3671,7 +3671,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - parameter names are not used in overload resolution;
 - return type is not used in overload resolution;
 - arrays cannot be returned by value;
-- arrays cannot be passed as parameters by value; use ptr<array<...>> parameters (see [Functions](12-functions.md));
+- arrays cannot be passed as parameters by value; use ptr<[...]> parameters (see [Functions](12-functions.md));
 - `void` calls cannot be used in value-producing contexts;
 - full path-sensitive return analysis is not currently performed.
 
@@ -3689,7 +3689,7 @@ x.something(1);     // unsupported member call: unknown method
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
-- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `array<Node>` (dynamic array) fields break the cycle and are allowed;
+- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
 - a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: it can be used only through `ptr<X>`;
 - structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
 
@@ -3701,7 +3701,7 @@ Only integer primitives are supported.
 
 ## 30.5 No Separate Boolean Type
 
-Boolean results use `uint8_t`.
+Boolean results use `uint8`.
 
 ## 30.6 No Implicit Numeric Conversions for Nonconstants
 
@@ -3724,8 +3724,8 @@ rejected:
 ```franko
 [1, 2, 3];                 // invalid: bare expression statement
 print([1, 2, 3]);          // invalid: print is not an inference context
-foo([1, 2, 3]);            // invalid unless foo's parameter is a view<array<...>>
-return [1, 2, 3];          // invalid unless the return type is a view<array<...>>
+foo([1, 2, 3]);            // invalid unless foo's parameter is a view<[...]>
+return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 ```
 
 Array literal elements must be compile-time constant expressions
@@ -3758,7 +3758,7 @@ Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=
 
 ## 30.13 String Literals Cannot Initialize Arrays
 
-A string literal is a `view<array<byte, N>>` value, not byte-array
+A string literal is a `view<[byte, N]>` value, not byte-array
 sugar (see [String Literals](23-string-literals.md)). Arrays are not
 assignable, so a string literal cannot initialize or assign an array;
 copy the bytes with `memcpy` instead.
@@ -3766,15 +3766,15 @@ copy the bytes with `memcpy` instead.
 Invalid:
 
 ```franko
-array<byte, 6> s = "hello";    // invalid
+[byte, 6] s = "hello";    // invalid
 s = "hello";                   // invalid
-array<byte, ?> s = "hello";    // invalid: '?' requires a view declaration
+[byte, ?] s = "hello";    // invalid: '?' requires a view declaration
 ```
 
 Valid:
 
 ```franko
-array<byte, 6> s;
+[byte, 6] s;
 s.memcpy("hello");
 ```
 
@@ -3859,17 +3859,17 @@ for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
-FUNC_read_HASH_be149563            os::posix::read
-FUNC_write_HASH_731d748e           os::posix::write
-FUNC_GetStdHandle_HASH_493245c2    os::win32::GetStdHandle
-FUNC_ReadFile_HASH_50f286c1        os::win32::ReadFile
-FUNC_WriteFile_HASH_c811d200       os::win32::WriteFile
+FUNC_read_HASH_247cb6de            os::posix::read
+FUNC_write_HASH_3a46712f           os::posix::write
+FUNC_GetStdHandle_HASH_31d0af80    os::win32::GetStdHandle
+FUNC_ReadFile_HASH_955d9645        os::win32::ReadFile
+FUNC_WriteFile_HASH_ab68bdd0       os::win32::WriteFile
 ```
 
 (The hashes move whenever the `os.fr` signatures change: they are the
 FNV-1a hash of the canonical signature key, which includes the
-parameter pointer permissions — `read` fills an `mview<array<byte>>`
-while `write` only reads a `view<array<byte>>`.)
+parameter pointer permissions — `read` fills an `mview<[byte]>`
+while `write` only reads a `view<[byte]>`.)
 
 Signatures must match the prototypes codegen emits for the `os.fr`
 declarations, including the `NS_os::NS_posix` / `NS_os::NS_win32`
@@ -3930,9 +3930,9 @@ Most executable examples should be placed inside a function body, typically `mai
 ## 32.1 Basic Integers
 
 ```franko
-func main() -> int32_t {
-    int32_t x;
-    int32_t y;
+func main() -> int32 {
+    int32 x;
+    int32 y;
 
     x = 10;
     y = x + 5;
@@ -3945,12 +3945,12 @@ func main() -> int32_t {
 
 ## 32.2 Static Array Copy From a Literal
 
-An array literal is a `view<array<T, N>>` value, so arrays receive its
+An array literal is a `view<[T, N]>` value, so arrays receive its
 elements through `memcpy` (see [Array Literals](22-array-literals.md)):
 
 ```franko
-func main() -> int32_t {
-    array<int32_t, 3> xs;
+func main() -> int32 {
+    [int32, 3] xs;
 
     xs.memcpy([1, 2, 3]);
 
@@ -3965,8 +3965,8 @@ func main() -> int32_t {
 Equivalent core form:
 
 ```franko
-func main() -> int32_t {
-    array<int32_t, 3> xs;
+func main() -> int32 {
+    [int32, 3] xs;
 
     xs[0] = 1;
     xs[1] = 2;
@@ -3983,8 +3983,8 @@ func main() -> int32_t {
 ## 32.3 Static Partial Copy From a Literal
 
 ```franko
-func main() -> int32_t {
-    array<int32_t, 3> xs;
+func main() -> int32 {
+    [int32, 3] xs;
 
     xs.memset(0);
     xs.memcpy([1, 2]);
@@ -3998,8 +3998,8 @@ func main() -> int32_t {
 ## 32.4 Dynamic Array Copy From a Literal
 
 ```franko
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
 
     xs(3);
 
@@ -4018,8 +4018,8 @@ func main() -> int32_t {
 ## 32.5 Constant Expressions Inside Array Literals
 
 ```franko
-func main() -> int32_t {
-    view<array<int32_t, 4>> v = [1, 5, 10, 1 + 2];
+func main() -> int32 {
+    view<[int32, 4]> v = [1, 5, 10, 1 + 2];
 
     print($(v)[0]);
     print($(v)[1]);
@@ -4036,8 +4036,8 @@ rejected because a literal is hoisted to a constant global array.
 ## 32.6 Nested Static Array Literals
 
 ```franko
-func main() -> int32_t {
-    array<array<int32_t, 2>, 2> matrix;
+func main() -> int32 {
+    [[int32, 2], 2] matrix;
 
     matrix.memcpy([
         [1, 2],
@@ -4059,8 +4059,8 @@ A nested literal has static rows, so dynamic rows are filled one at a
 time:
 
 ```franko
-func main() -> int32_t {
-    array<array<int32_t>> matrix;
+func main() -> int32 {
+    [[int32]] matrix;
 
     matrix(2);
     matrix[0](3);
@@ -4084,9 +4084,9 @@ length are inferred from the literal and checked against the declared
 type:
 
 ```franko
-func main() -> int32_t {
-    view<array<int32_t, 3>> v = [1, 2, 3];
-    view<array<int32_t, ?>> w = [4, 5, 6, 7];
+func main() -> int32 {
+    view<[int32, 3]> v = [1, 2, 3];
+    view<[int32, ?]> w = [4, 5, 6, 7];
 
     print($(v)[0]);
     print($(w).length());    // 4
@@ -4097,16 +4097,16 @@ func main() -> int32_t {
 
 ## 32.9 Dynamic View Decay From a Literal
 
-A literal decays to `view<array<T>>` wherever a dynamic view is
+A literal decays to `view<[T]>` wherever a dynamic view is
 expected:
 
 ```franko
-func take(view<array<int32_t>> v) -> int32_t {
+func take(view<[int32]> v) -> int32 {
     return $(v)[0];
 }
 
-func main() -> int32_t {
-    view<array<int32_t>> d = [1, 2, 3];
+func main() -> int32 {
+    view<[int32]> d = [1, 2, 3];
 
     print($(d)[2]);
     print(take([4, 5, 6]));
@@ -4118,9 +4118,9 @@ func main() -> int32_t {
 ## 32.10 Array Copy Through Pointer
 
 ```franko
-func main() -> int32_t {
-    array<int32_t, 3> xs;
-    ptr<array<int32_t, 3>> p;
+func main() -> int32 {
+    [int32, 3] xs;
+    ptr<[int32, 3]> p;
 
     p = getptr(xs);
 
@@ -4137,9 +4137,9 @@ func main() -> int32_t {
 Equivalent core form:
 
 ```franko
-func main() -> int32_t {
-    array<int32_t, 3> xs;
-    ptr<array<int32_t, 3>> p;
+func main() -> int32 {
+    [int32, 3] xs;
+    ptr<[int32, 3]> p;
 
     p = getptr(xs);
 
@@ -4158,8 +4158,8 @@ func main() -> int32_t {
 ## 32.11 String Literal Bytes
 
 ```franko
-func main() -> int32_t {
-    array<byte> str;     // dynamic array: str(200) and str.uninit() require one
+func main() -> int32 {
+    [byte] str;     // dynamic array: str(200) and str.uninit() require one
     uint i = 0;
 
     str(200);
@@ -4176,19 +4176,19 @@ func main() -> int32_t {
 }
 ```
 
-A string literal is a `view<array<byte, N>>`; byte buffers receive its
+A string literal is a `view<[byte, N]>`; byte buffers receive its
 content through `memcpy`. See [String Literals](23-string-literals.md).
 
 ## 32.12 Nested Static Array Grid
 
 ```franko
-func fill(ptr<array<array<byte, 3>, 2>> grid) -> void {
+func fill(ptr<[[byte, 3], 2]> grid) -> void {
     $(grid).memset(0);
     $(grid)[0][1] = 7;
 }
 
-func main() -> int32_t {
-    array<array<byte, 3>, 2> grid;
+func main() -> int32 {
+    [[byte, 3], 2] grid;
 
     fill(getptr(grid));
 
@@ -4199,14 +4199,14 @@ func main() -> int32_t {
 }
 ```
 
-`array<array<byte, 3>, 2>` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
+`[[byte, 3], 2]` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
 
 ## 32.13 Status-Returning Intrinsics
 
 ```franko
-func main() -> int32_t {
-    array<int32_t> xs;
-    int32_t status = 0;
+func main() -> int32 {
+    [int32] xs;
+    int32 status = 0;
 
     status = xs.init_zero(4);
 
@@ -4232,11 +4232,11 @@ func main() -> int32_t {
 
 ```franko
 struct Point {
-    int32_t x;
-    int32_t y
+    int32 x;
+    int32 y
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Point p;
 
     p.x = 10;
@@ -4257,11 +4257,11 @@ Field defaults are constant expressions; only primitive fields can have them.
 
 ```franko
 struct Counter {
-    int32_t count = 0;
-    uint32_t limit = 100
+    int32 count = 0;
+    uint32 limit = 100
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Counter c;
 
     print(c.count);   // 0
@@ -4277,11 +4277,11 @@ A struct is assignable as a whole value only if all of its fields are assignable
 
 ```franko
 struct Pair {
-    int32_t a;
-    int32_t b
+    int32 a;
+    int32 b
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Pair p;
     Pair q;
 
@@ -4303,11 +4303,11 @@ Assignable structs may be passed and returned by value; pointer-only structs mus
 
 ```franko
 struct Point {
-    int32_t x;
-    int32_t y
+    int32 x;
+    int32 y
 }
 
-func dist2(Point p) -> int32_t {
+func dist2(Point p) -> int32 {
     return p.x * p.x + p.y * p.y;
 }
 
@@ -4316,7 +4316,7 @@ func move(ptr<Point> p) -> void {
     $(p).y = $(p).y + 1;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Point p;
 
     p.x = 3;
@@ -4339,11 +4339,11 @@ An array field makes the struct non-assignable: the struct is pointer-only and i
 
 ```franko
 struct Buffer {
-    array<int32_t> data;
-    int32_t size = 0
+    [int32] data;
+    int32 size = 0
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     Buffer b;
 
     b.data(4);          // allocate the dynamic array field
@@ -4369,14 +4369,14 @@ Global variable declarations accept constant initializers.
 
 ```franko
 struct Point {
-    int32_t x = 0;
-    int32_t y = 0
+    int32 x = 0;
+    int32 y = 0
 }
 
-int32_t scale = 2;
+int32 scale = 2;
 Point origin;
 
-func main() -> int32_t {
+func main() -> int32 {
     origin.x = scale;
 
     print(origin.x);   // 2
@@ -4391,16 +4391,16 @@ Global declarations are checked before `main` runs; executable statements remain
 ## 32.20 Array `length()`
 
 ```franko
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     xs.init(4);
     print(xs.length());   // 4
 
-    array<int32_t, 3> ys;
+    [int32, 3] ys;
     ys = [10, 20, 30];
     print(ys.length());   // 3 (compile-time constant)
 
-    for (uint32_t i = 0; i < ys.length(); i = i + 1) {
+    for (uint32 i = 0; i < ys.length(); i = i + 1) {
         print(ys[i]);     // 10 20 30
     }
 
@@ -4413,14 +4413,14 @@ func main() -> int32_t {
 ## 32.21 Inferred Static Array Sizes (`?`)
 
 ```franko
-func main() -> int32_t {
-    array<int32_t, ?> a = [0, 1, 2, 3];
+func main() -> int32 {
+    [int32, ?] a = [0, 1, 2, 3];
     print(a.length());   // 4
 
-    array<byte, ?> s = [104, 101, 108, 108, 111];
+    [byte, ?] s = [104, 101, 108, 108, 111];
     print(s.length());   // 5
 
-    array<array<int32_t, ?>, ?> m = [[1, 2], [3, 4]];
+    [[int32, ?], ?] m = [[1, 2], [3, 4]];
     print(m.length());      // 2
     print(m[0].length());   // 2
 
@@ -4431,11 +4431,11 @@ func main() -> int32_t {
 ## 32.22 Command-Line Arguments
 
 ```franko
-func main(view<array<array<byte>>> args) -> int32_t {
-    uint32_t n = $(args).length();
+func main(view<[[byte]]> args) -> int32 {
+    uint32 n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
-    uint32_t i = 1;
+    uint32 i = 1;
     while (i < n) {
         print($(args)[i].length());   // byte length of argument i
         i = i + 1;

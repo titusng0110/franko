@@ -1,7 +1,7 @@
 // Failure fixture: arrays/size_nonconst
 // Static array size must be a compile-time constant, not a variable.
-func main() -> int32_t {
-    int32_t n = 4;
-    array<int32_t, n> a;
+func main() -> int32 {
+    int32 n = 4;
+    [int32, n] a;
     return 0;
 }

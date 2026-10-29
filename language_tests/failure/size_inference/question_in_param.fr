@@ -1,8 +1,8 @@
 // Failure fixture: size_inference/question_in_param
 // `?` is not allowed in parameter types.
-func f(array<int32_t, ?> xs) -> int32_t {
+func f([int32, ?] xs) -> int32 {
     return 0;
 }
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

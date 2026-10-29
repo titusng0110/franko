@@ -413,14 +413,14 @@ public class ASTPrinter {
 
         if (type instanceof PrimitiveTypeNode t) {
             return switch (t.kind) {
-                case INT8 -> "int8_t";
-                case INT16 -> "int16_t";
-                case INT32 -> "int32_t";
-                case INT64 -> "int64_t";
-                case UINT8 -> "uint8_t";
-                case UINT16 -> "uint16_t";
-                case UINT32 -> "uint32_t";
-                case UINT64 -> "uint64_t";
+                case INT8 -> "int8";
+                case INT16 -> "int16";
+                case INT32 -> "int32";
+                case INT64 -> "int64";
+                case UINT8 -> "uint8";
+                case UINT16 -> "uint16";
+                case UINT32 -> "uint32";
+                case UINT64 -> "uint64";
             };
         }
 
@@ -429,15 +429,15 @@ public class ASTPrinter {
         }
 
         if (type instanceof DynamicArrayTypeNode t) {
-            return "array<" + typeToString(t.elementType) + ">";
+            return "[" + typeToString(t.elementType) + "]";
         }
 
         if (type instanceof StaticArrayTypeNode t) {
-            return "array<"
+            return "["
                     + typeToString(t.elementType)
                     + ", "
                     + exprToInlineString(t.sizeExpr)
-                    + ">";
+                    + "]";
         }
 
         if (type instanceof PtrTypeNode t) {

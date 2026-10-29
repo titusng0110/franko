@@ -6,28 +6,28 @@
 // ============================================================
 
 struct Config {
-    int32_t id
-    int32_t size = 0
-    array<int32_t, 4> data
+    int32 id
+    int32 size = 0
+    [int32, 4] data
 }
 
 // --- Static array of bytes ---
-array<byte, 12> grid;
+[byte, 12] grid;
 
-func main() -> int32_t {
+func main() -> int32 {
     // --- Static Array declaration with array literal initializer ---
-    array<int32_t, 3> staticArr;
+    [int32, 3] staticArr;
     staticArr.memcpy([1, 2, 3]);
 
     // --- Dynamic Array declaration ---
-    array<int32_t> dynArr;
+    [int32] dynArr;
 
     // --- Array access & assignment ---
     staticArr[0] = 100;
-    int32_t val = staticArr[0];
+    int32 val = staticArr[0];
 
     // --- Nested array literal ---
-    array<array<int32_t, 2>, 2> matrix;
+    [[int32, 2], 2] matrix;
     matrix.memcpy([[1, 2], [3, 4]]);
 
     // --- Struct usage ---
@@ -38,7 +38,7 @@ func main() -> int32_t {
     cfg.data[1] = 12;
 
     // --- Struct field array access ---
-    int32_t cfgVal = cfg.data[0];
+    int32 cfgVal = cfg.data[0];
 
     print(val);
     print(cfgVal);

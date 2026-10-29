@@ -1,1 +1,1 @@
-Invalid assignment: expected mview<array<INT32>>, got view<array<INT32, 3>>
+Invalid assignment: expected mview<[int32]>, got view<[int32, 3]>

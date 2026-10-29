@@ -4,6 +4,6 @@
 // locations that were tried (doc 02).
 import "definitely-missing"
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

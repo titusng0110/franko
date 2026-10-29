@@ -8,7 +8,7 @@
 
 import "franko/os"
 
-func main() -> int32_t {
+func main() -> int32 {
     os::IS_LINUX = 1;
     return 0;
 }

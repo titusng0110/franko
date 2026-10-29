@@ -1,9 +1,9 @@
 // Failure fixture: structs/field_default_on_ptr
 // Only primitive fields can have default values; an ptr-typed field rejects '= constExpr' as a type mismatch.
 struct X {
-    ptr<int32_t> p = 3
+    ptr<int32> p = 3
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

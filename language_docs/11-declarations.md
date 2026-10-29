@@ -6,34 +6,34 @@ Basic declaration syntax:
 
 ```franko
 int x;
-int32_t y;
-uint8_t b;
-uint32_t i;
+int32 y;
+uint8 b;
+uint32 i;
 ```
 
 Array and pointer declarations:
 
 ```franko
-array<int> xs;
-array<int32_t> ys;
-array<uint8_t, 128> buffer;
-array<array<byte, 20>, 12> grid;
+[int] xs;
+[int32] ys;
+[uint8, 128] buffer;
+[[byte, 20], 12] grid;
 
 ptr<int> p;
-ptr<int32_t> q;
-ptr<array<int>> arrayPtr;
+ptr<int32> q;
+ptr<[int]> arrayPtr;
 ```
 
 Declaration initializers are syntax sugar:
 
 ```franko
-int32_t x = 1;
+int32 x = 1;
 ```
 
 is equivalent to:
 
 ```franko
-int32_t x;
+int32 x;
 x = 1;
 ```
 
@@ -42,20 +42,20 @@ The initializer must obey normal assignment rules and is only valid where the re
 Dynamic array call-init declaration sugar:
 
 ```franko
-array<int32_t> d(10);
+[int32] d(10);
 ```
 
 is equivalent to:
 
 ```franko
-array<int32_t> d;
+[int32] d;
 d(10);
 ```
 
 The call form is only valid for dynamic arrays. Using it on a non-array declaration is an error:
 
 ```franko
-int32_t x(5);   // invalid: x is not a dynamic array
+int32 x(5);   // invalid: x is not a dynamic array
 ```
 
 ## 11.1 Duplicate Declarations
@@ -79,8 +79,8 @@ Two different initializer forms exist for declarations, and they follow differen
 **Constant initializers.** A global declaration may end with `= constExpr`:
 
 ```franko
-int32_t g = 1 + 2
-uint64_t mask = 1 << 8
+int32 g = 1 + 2
+uint64 mask = 1 << 8
 ```
 
 The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
@@ -91,29 +91,29 @@ global variable, or with a string literal (which is a view over a
 hoisted global; see [String Literals](23-string-literals.md)):
 
 ```franko
-array<byte, 5> greeting
-view<array<byte, 5>> v = getview(greeting)
-view<array<byte, 5>> s = "hello"
-ptr<array<byte, 5>> p = null
+[byte, 5] greeting
+view<[byte, 5]> v = getview(greeting)
+view<[byte, 5]> s = "hello"
+ptr<[byte, 5]> p = null
 ```
 
 The initializer must be a statically representable address of the right
 type (a permission downgrade is allowed, an upgrade is not).
 
 An array literal may initialize a pointer-typed global (it is a
-`view<array<T, N>>` value over a constant global, like a string
+`view<[T, N]>` value over a constant global, like a string
 literal):
 
 ```franko
-view<array<int32_t, 4>> G = [1, 2, 3, 4]   // valid
+view<[int32, 4]> G = [1, 2, 3, 4]   // valid
 ```
 
 **Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
-int32_t g = h                     // invalid: the initializer must be constant
-array<int32_t, 3> xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
-array<byte, 6> s = "hello"        // invalid: strings cannot initialize arrays
+int32 g = h                     // invalid: the initializer must be constant
+[int32, 3] xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
+[byte, 6] s = "hello"        // invalid: strings cannot initialize arrays
 ```
 
 The constant-initializer, static-address, and array-literal forms above
@@ -138,8 +138,8 @@ Struct fields are declared with the same `type name` syntax as variables, inside
 
 ```franko
 struct X {
-    int32_t num = 0
-    array<int32_t, 4> xs
+    int32 num = 0
+    [int32, 4] xs
     ptr<Y> next
 }
 ```

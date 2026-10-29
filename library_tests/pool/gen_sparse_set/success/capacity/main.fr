@@ -9,13 +9,13 @@
 //     return -1 without changing capacity, and capacity() is 0
 //     before init and after uninit
 //
-// Every line below is asserted exactly: status codes are int32_t
+// Every line below is asserted exactly: status codes are int32
 // 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
 // ============================================================
 
 import "franko/pool"
 
-func main() -> int32_t {
+func main() -> int32 {
     std::GenerationalSparseSetAllocator a;
     print(a.capacity());
     print(a.init(3));

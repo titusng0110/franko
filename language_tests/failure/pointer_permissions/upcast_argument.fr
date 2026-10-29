@@ -1,11 +1,11 @@
 // Passing a view<T> where an mview<T> is expected is not allowed.
-func needsMView(mview<array<byte, 3>> m) -> void {
+func needsMView(mview<[byte, 3]> m) -> void {
     print($(m)[0]);
 }
 
-func main() -> int32_t {
-    array<byte, 3> buf;
-    view<array<byte, 3>> v = getview(buf);
+func main() -> int32 {
+    [byte, 3] buf;
+    view<[byte, 3]> v = getview(buf);
     needsMView(v);
     return 0;
 }

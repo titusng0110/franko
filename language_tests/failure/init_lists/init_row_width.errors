@@ -1,2 +1,2 @@
 Cannot infer the element type of an array literal here
-No matching overload for function call 'solve(view<array<array<INT32, 3>, 1>>)'
+No matching overload for function call 'solve(view<[[int32, 3], 1]>)'

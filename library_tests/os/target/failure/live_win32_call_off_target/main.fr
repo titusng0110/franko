@@ -12,8 +12,8 @@
 
 import "franko/os"
 
-func main() -> int32_t {
-    uint64_t h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+func main() -> int32 {
+    uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
     print(h);
     return 0;
 }

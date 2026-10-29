@@ -1,11 +1,11 @@
 // Rule 2: a view of an array of pointers forbids overwriting the
 // pointer slots themselves.
-func main() -> int32_t {
-    array<byte> a;
+func main() -> int32 {
+    [byte] a;
     a.init(4);
-    array<ptr<array<byte>>> store;
+    [ptr<[byte]>] store;
     store.init(1);
-    view<array<ptr<array<byte>>>> v = getview(store);
+    view<[ptr<[byte]>]> v = getview(store);
     $(v)[0] = getptr(a);
     return 0;
 }

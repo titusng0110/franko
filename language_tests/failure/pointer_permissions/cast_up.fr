@@ -1,7 +1,7 @@
 // Explicit casts may only downgrade permissions.
-func main() -> int32_t {
-    array<byte, 3> buf;
-    view<array<byte, 3>> v = getview(buf);
-    mview<array<byte, 3>> m = cast<mview<array<byte, 3>>>(v);
+func main() -> int32 {
+    [byte, 3] buf;
+    view<[byte, 3]> v = getview(buf);
+    mview<[byte, 3]> m = cast<mview<[byte, 3]>>(v);
     return 0;
 }

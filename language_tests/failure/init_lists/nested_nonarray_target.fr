@@ -1,7 +1,7 @@
 // Failure fixture: init_lists/nested_nonarray_target
 // A nested literal needs an array element type at every level: the
-// context element here is int32_t, so the inner lists are rejected.
-func main() -> int32_t {
-    view<array<int32_t, 2>> xs = [[1, 2], [3, 4]];
+// context element here is int32, so the inner lists are rejected.
+func main() -> int32 {
+    view<[int32, 2]> xs = [[1, 2], [3, 4]];
     return 0;
 }

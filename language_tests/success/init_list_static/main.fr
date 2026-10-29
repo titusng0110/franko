@@ -7,9 +7,9 @@
 // memcpy copies min(source, target).
 // ============================================================
 
-func main() -> int32_t {
+func main() -> int32 {
     // Full-length copy form.
-    array<int32_t, 3> a;
+    [int32, 3] a;
     a.memcpy([10, 20, 30]);
 
     print(a[0]);
@@ -17,7 +17,7 @@ func main() -> int32_t {
     print(a[2]);
 
     // Partial copy: [7, 8] copies a[0] and a[1].
-    array<int32_t, 4> xs;
+    [int32, 4] xs;
     xs.memset(0);
     xs.memcpy([7, 8]);
 

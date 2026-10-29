@@ -1,8 +1,8 @@
 // Failure fixture: init_lists/init_elem_type_mismatch
-// Initializer element 256 does not fit uint8_t: the literal has a
-// view<array<uint8_t, 3>> context, and the constant is rejected
+// Initializer element 256 does not fit uint8: the literal has a
+// view<[uint8, 3]> context, and the constant is rejected
 // against the inferred element type.
-func main() -> int32_t {
-    view<array<uint8_t, 3>> bytes = [0, 127, 256];
+func main() -> int32 {
+    view<[uint8, 3]> bytes = [0, 127, 256];
     return 0;
 }

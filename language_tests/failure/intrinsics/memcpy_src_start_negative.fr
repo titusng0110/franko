@@ -1,9 +1,9 @@
 // Failure fixture: intrinsics/memcpy_src_start_negative
 // Ranged memcpy (doc 21.6): srcStart must be a nonnegative constant
-// fitting uint32_t; a negative constant is rejected.
-func main() -> int32_t {
-    array<int32_t, 4> a;
-    array<int32_t, 4> b;
+// fitting uint32; a negative constant is rejected.
+func main() -> int32 {
+    [int32, 4] a;
+    [int32, 4] b;
     a.memset(0);
     b.memset(0);
     a.memcpy(getptr(b), 0, -2, 1);

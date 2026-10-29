@@ -1,0 +1,67 @@
+// ============================================================
+// LANGUAGE TEST: Bracket Array Type Syntax
+// ============================================================
+// Covers the bracket array type spellings: [T] declares a dynamic
+// array, [T, N] declares a static array of size N (constExpr or ?),
+// and both nest inside each other and inside ptr<...>/view<...>/mview<...>.
+//
+//   [int] dyn;          dynamic array declaration + init
+//   [int] dyn(10);      call-initialization form
+//   [uint8, 3000] buf;  static array declaration
+// ============================================================
+
+func sum(view<[int32]> v) -> int32 {
+    return $(v)[0] + $(v)[1] + $(v)[2];
+}
+
+func main() -> int32 {
+    // Dynamic declaration, then init.
+    [int] dyn;
+    dyn.init(3);
+    dyn[0] = 10;
+    dyn[1] = 20;
+    dyn[2] = 30;
+    print(sum(getview(dyn)));
+
+    // Call-initialization form.
+    [int] sized(3);
+    sized.memcpy(getptr(dyn));
+    print(sized[2]);
+
+    // Static declaration, nested static, nested dynamic.
+    [uint8, 3000] buffer;
+    buffer[2999] = 77;
+    print(buffer[2999]);
+    [[int32, 2], 2] matrix;
+    matrix[1][1] = 42;
+    print(matrix[1][1]);
+    [[int32]] nested;
+    nested.init_zero(1);
+    nested[0].init_zero(2);
+    nested[0][1] = 9;
+    print(nested[0][1]);
+    nested[0].uninit();
+    nested.uninit();
+
+    // Views and pointers over bracket arrays.
+    [int32, 3] fixed;
+    fixed[0] = 1;
+    fixed[1] = 2;
+    fixed[2] = 3;
+    view<[int32, 3]> fv = getview(fixed);
+    print($(fv)[2]);
+    mview<[int32, 3]> mv = getmview(fixed);
+    $(mv)[0] = 100;
+    print(fixed[0]);
+    ptr<[int32, 3]> p = getptr(fixed);
+    print($(p)[1]);
+
+    // Inferred size from an array literal.
+    view<[int32, ?]> inferred = [4, 5, 6];
+    print($(inferred).length());
+    print(sum(inferred));
+
+    dyn.uninit();
+    sized.uninit();
+    return 0;
+}

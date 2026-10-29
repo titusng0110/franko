@@ -1,1 +1,1 @@
-'?' array size for 'x' requires a 'view<array<...>>' declaration with an array-literal initializer
+'?' array size for 'x' requires a 'view<[...]>' declaration with an array-literal initializer

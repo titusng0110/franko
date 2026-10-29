@@ -1,9 +1,9 @@
 // Failure fixture: intrinsics/memset_start_type
-// memset (doc 21.4): nonconstant starts must have exactly type uint32_t;
-// an int32_t start is rejected.
-func main() -> int32_t {
-    array<int32_t, 4> xs;
-    int32_t s = 0;
+// memset (doc 21.4): nonconstant starts must have exactly type uint32;
+// an int32 start is rejected.
+func main() -> int32 {
+    [int32, 4] xs;
+    int32 s = 0;
     xs.memset(0, s, 1);
     return 0;
 }

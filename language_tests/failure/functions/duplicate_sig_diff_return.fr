@@ -1,14 +1,14 @@
 // Failure fixture: functions/duplicate_sig_diff_return
 // Two functions with the same name and same ordered parameter types conflict even when their return types differ.
 
-func g(int32_t x) -> int32_t {
+func g(int32 x) -> int32 {
     return x;
 }
 
-func g(int32_t x) -> int64_t {
+func g(int32 x) -> int64 {
     return 0;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

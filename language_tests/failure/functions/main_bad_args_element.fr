@@ -1,6 +1,6 @@
 // Failure fixture: functions/main_bad_args_element
-// The entry-point args must be byte arrays: ptr<array<array<int32_t>>> is not a valid main shape.
+// The entry-point args must be byte arrays: ptr<[[int32]]> is not a valid main shape.
 
-func main(view<array<array<int32_t>>> args) -> int32_t {
+func main(view<[[int32]]> args) -> int32 {
     return 0
 }

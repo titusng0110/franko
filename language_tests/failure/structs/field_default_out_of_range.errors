@@ -1,1 +1,1 @@
-field 'x' default value 300 does not fit in INT8
+field 'x' default value 300 does not fit in int8

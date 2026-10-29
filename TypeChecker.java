@@ -550,7 +550,7 @@ public class TypeChecker {
             diagnostics.error(message + ": constant value "
                     + value
                     + " does not fit in "
-                    + kind.name());
+                    + kind.name().toLowerCase());
         }
     }
 

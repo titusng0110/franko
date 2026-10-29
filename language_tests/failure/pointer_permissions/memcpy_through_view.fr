@@ -1,10 +1,10 @@
 // memcpy() targets need mutation rights: blocked on view<T> receivers.
-func main() -> int32_t {
-    array<byte, 3> src;
+func main() -> int32 {
+    [byte, 3] src;
     src.memset(1);
-    array<byte, 3> dst;
+    [byte, 3] dst;
     dst.memset(2);
-    view<array<byte, 3>> v = getview(dst);
+    view<[byte, 3]> v = getview(dst);
     $(v).memcpy(getptr(src));
     return 0;
 }

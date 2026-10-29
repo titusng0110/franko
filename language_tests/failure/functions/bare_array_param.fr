@@ -1,10 +1,10 @@
 // Failure fixture: functions/bare_array_param
-// Bare array types are not passable: an array parameter must use ptr<array<T>> and getptr at the call site.
+// Bare array types are not passable: an array parameter must use ptr<[T]> and getptr at the call site.
 
-func f(array<int32_t> xs) -> void {
+func f([int32] xs) -> void {
     return;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

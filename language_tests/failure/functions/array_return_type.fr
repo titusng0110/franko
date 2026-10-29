@@ -1,11 +1,11 @@
 // Failure fixture: functions/array_return_type
 // Arrays cannot be returned directly: a function return type may not be an array type.
 
-func f() -> array<int32_t> {
-    array<int32_t> xs;
+func f() -> [int32] {
+    [int32] xs;
     return xs;
 }
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0;
 }

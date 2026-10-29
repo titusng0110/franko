@@ -3,7 +3,7 @@
 Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
-- structs with named fields (`struct X { int32_t n }`);
+- structs with named fields (`struct X { int32 n }`);
 - struct member access using `obj.field` (see [Structs](25-structs.md));
 - dynamic arrays;
 - static arrays;
@@ -26,7 +26,7 @@ Franko is a small statically typed language with:
 - `break` and `continue` (with an optional `break N` level, see [Statements](19-statements.md));
 - `return`;
 - `print`;
-- string literals as read-only `view<array<byte, N>>` values;
+- string literals as read-only `view<[byte, N]>` values;
 - array intrinsics:
   - `arr(size)` (shorthand for `arr.init(size)`);
   - `arr.init(size)`;
@@ -37,7 +37,7 @@ Franko is a small statically typed language with:
   - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
   - `arr.memmove(dstStart, srcStart, count)`;
   - `arr.length()`;
-- array literals as `view<array<T, N>>` values over constant global
+- array literals as `view<[T, N]>` values over constant global
   arrays (element type inferred, see [Array Literals](22-array-literals.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md)).

@@ -3,6 +3,6 @@
 // a syntax error (doc 02).
 import abc
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

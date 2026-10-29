@@ -1,7 +1,7 @@
 // Failure fixture: arrays/init_wrong_arg_count
 // Dynamic array init takes exactly one argument.
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     xs.init(1, 2);
     xs.uninit();
     return 0;

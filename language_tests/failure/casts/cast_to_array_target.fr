@@ -1,8 +1,8 @@
 // Failure fixture: casts/cast_to_array_target
 // cast<T> targets must be primitive integer types or pointer types.
-func main() -> int32_t {
-    int32_t x = 5;
-    int32_t y = cast<array<int32_t, 3>>(x);
+func main() -> int32 {
+    int32 x = 5;
+    int32 y = cast<[int32, 3]>(x);
     print(y);
     return 0;
 }

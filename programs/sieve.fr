@@ -6,7 +6,7 @@
 // (init / memset / uninit), uint arithmetic, and strided for loops.
 
 struct Sieve {
-    array<byte> isPrime
+    [byte] isPrime
     uint n = 0
 
     func init(ptr<Sieve> self, uint limit) -> int {

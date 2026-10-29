@@ -2,10 +2,10 @@
 // A global constant initializer must be a constant expression (doc 11.4):
 // referencing another global variable is not a constant, so the
 // initializer is rejected.
-int32_t base = 5
+int32 base = 5
 
-int32_t derived = base + 1
+int32 derived = base + 1
 
-func main() -> int32_t {
+func main() -> int32 {
     return 0
 }

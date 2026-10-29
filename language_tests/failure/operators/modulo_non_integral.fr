@@ -1,10 +1,10 @@
 // Failure fixture: operators/modulo_non_integral
 // `%` requires integer operands exactly like the other arithmetic
 // operators: pointers and arrays are rejected (doc 17.3).
-func main() -> int32_t {
-    int32_t v = 1;
-    ptr<int32_t> p = getptr(v);
-    array<int32_t, 2> xs;
+func main() -> int32 {
+    int32 v = 1;
+    ptr<int32> p = getptr(v);
+    [int32, 2] xs;
     xs.memcpy([1, 2]);
 
     print(p % 3);

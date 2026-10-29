@@ -1,4 +1,4 @@
 // Shadowed copy next to main.fr. It must NOT be imported: the
 // search-directory match wins. Declaring a different value (and the
 // same symbol name as the search copy) proves which file was chosen.
-int32_t sharedValue = 999
+int32 sharedValue = 999

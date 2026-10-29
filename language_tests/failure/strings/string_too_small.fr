@@ -1,8 +1,8 @@
 // Failure fixture: strings/string_too_small
-// A string literal is a view<array<byte, N>> value; arrays cannot be
+// A string literal is a view<[byte, N]> value; arrays cannot be
 // assigned from one. Copy the bytes with the memcpy intrinsic instead.
-func main() -> int32_t {
-    array<byte, 2> s;
+func main() -> int32 {
+    [byte, 2] s;
     s = "ABC";
     return 0;
 }

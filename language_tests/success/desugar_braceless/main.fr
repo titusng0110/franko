@@ -7,22 +7,22 @@
 // a braced body.
 // ============================================================
 
-func main() -> int32_t {
-    int32_t total = 0;
+func main() -> int32 {
+    int32 total = 0;
 
     // Braceless if bodies.
-    int32_t flag = 1;
+    int32 flag = 1;
     if (flag) print(1);
     if (!flag) print(999);
     if (flag) total = total + 1;
 
     // Braceless while body.
-    int32_t i = 0;
+    int32 i = 0;
     while (i < 3) i = i + 1;
     print(i);
 
     // Braceless for bodies.
-    for (int32_t k = 0; k < 4; k = k + 1) print(k);
+    for (int32 k = 0; k < 4; k = k + 1) print(k);
     for (i = 0; i < 2; i = i + 1) total = total + 10;
 
     print(total);

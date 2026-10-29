@@ -1,1 +1,1 @@
-memcpy() destination start: expected uint32_t, got INT32
+memcpy() destination start: expected uint32, got int32

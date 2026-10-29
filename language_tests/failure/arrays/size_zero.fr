@@ -1,6 +1,6 @@
 // Failure fixture: arrays/size_zero
 // Static array size must be greater than zero.
-func main() -> int32_t {
-    array<int32_t, 0> a;
+func main() -> int32 {
+    [int32, 0] a;
     return 0;
 }

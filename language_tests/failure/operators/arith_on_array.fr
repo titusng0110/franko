@@ -1,8 +1,8 @@
 // Failure fixture: operators/arith_on_array
 // Arrays are not arithmetic values; arithmetic operators require integer
 // operands.
-func main() -> int32_t {
-    array<int32_t> xs;
+func main() -> int32 {
+    [int32] xs;
     print(xs + xs);
     return 0
 }

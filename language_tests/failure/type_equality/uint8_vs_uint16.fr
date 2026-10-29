@@ -1,11 +1,11 @@
 // Failure fixture: type_equality/uint8_vs_uint16
-// Assigning a nonconstant uint16_t variable to a uint8_t variable violates
-// exact primitive type equality (uint8_t != uint16_t, doc 29.1); there are no
+// Assigning a nonconstant uint16 variable to a uint8 variable violates
+// exact primitive type equality (uint8 != uint16, doc 29.1); there are no
 // implicit numeric conversions for nonconstants (doc 31.6).
 
-func main() -> int32_t {
-    uint16_t big = 300;
-    uint8_t small;
+func main() -> int32 {
+    uint16 big = 300;
+    uint8 small;
     small = big;
     return 0;
 }

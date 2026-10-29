@@ -8,8 +8,8 @@
 // uninit destroys elements before freeing the outer buffer.
 // ============================================================
 
-func main() -> int32_t {
-    array<array<int32_t>> m;
+func main() -> int32 {
+    [[int32]] m;
     m.init(2);
     print(m[0].length(), m[1].length());
 
@@ -33,7 +33,7 @@ func main() -> int32_t {
     print(m.length(), m[0][0], m[0][1]);
 
     // init_zero also constructs nested elements.
-    array<array<int32_t>> z;
+    [[int32]] z;
     z.init_zero(2);
     print(z[0].length(), z[1].length());
     z[0].init(1);

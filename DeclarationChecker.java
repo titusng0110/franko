@@ -338,7 +338,7 @@ public class DeclarationChecker {
             )) {
                 diagnostics.error(where + " has invalid static array size "
                     + literal
-                    + ": size does not fit uint32_t");
+                    + ": size does not fit uint32");
             }
         } catch (Exception e) {
             diagnostics.error(where + " has invalid static array size literal: "

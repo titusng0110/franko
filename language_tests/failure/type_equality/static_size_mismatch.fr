@@ -1,18 +1,18 @@
 // Failure fixture: type_equality/static_size_mismatch
-// Passing an array<int32_t, 20> pointer where array<int32_t, 10> is required
+// Passing an [int32, 20] pointer where [int32, 10] is required
 // violates static array equality: sizes must be numerically equal (doc 29.3);
 // the mismatch propagates through ptr<> because pointer equality requires
 // equal referenced types (doc 29.4).
 
-func first(ptr<array<int32_t, 10>> xs) -> int32_t {
+func first(ptr<[int32, 10]> xs) -> int32 {
     if (xs != null) {
         return $(xs)[0];
     }
     return 0;
 }
 
-func main() -> int32_t {
-    array<int32_t, 20> big;
+func main() -> int32 {
+    [int32, 20] big;
     big.memset(0);
     print(first(getptr(big)));
     return 0;
