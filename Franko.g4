@@ -346,7 +346,9 @@ continueStmt
 //
 //   for (init; condition; update) body
 //
-// Both init and update are optional simple statements:
+// Both init and update are optional header statements. They accept the
+// simple-statement forms except `return` (returning from inside a loop
+// header is rejected at parse time):
 //
 //   for (int32 i = 0; i < n; i = i + 1) { ... }
 //   for (; i < n; i = i + 1) { ... }
@@ -365,11 +367,20 @@ forStmt
     ;
 
 forInit
-    : simpleStmt
+    : forHeaderStmt
     ;
 
 forUpdate
-    : simpleStmt
+    : forHeaderStmt
+    ;
+
+// Header statements: every simple statement except `return`.
+forHeaderStmt
+    : varDecl
+    | assignStmt
+    | compoundAssignStmt
+    | incDecStmt
+    | exprStmt
     ;
 
 // ---------- SIMPLE STATEMENTS ----------

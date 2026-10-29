@@ -534,7 +534,7 @@ becomes:
 
 The whole loop becomes a block, so a loop variable declared in `init` is scoped to the loop and is not visible after it.
 
-The `init` and `update` parts are optional simple statements. The condition is required. When present, the `update` runs at the end of every iteration, including the last. It is carried as the desugared `while` loop's epilogue rather than being appended to the body block, so `continue` runs it and `break` skips it, matching C's `for` semantics. See [Statements](19-statements.md).
+The `init` and `update` parts are optional header statements (every simple-statement form except `return`). The condition is required. When present, the `update` runs at the end of every iteration, including the last. It is carried as the desugared `while` loop's epilogue rather than being appended to the body block, so `continue` runs it and `break` skips it, matching C's `for` semantics. See [Statements](19-statements.md).
 
 The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](19-statements.md).
 
@@ -1716,7 +1716,7 @@ for (init; condition; update) {
 }
 ```
 
-- `init` and `update` are optional simple statements (declarations, assignments, compound assignments, increments, expression statements, and similar);
+- `init` and `update` are optional header statements: declarations, assignments, compound assignments, increments, and expression statements. `return` is not allowed in either position;
 - the condition is required and must be an integer expression.
 
 Valid:

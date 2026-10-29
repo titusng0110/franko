@@ -47,7 +47,7 @@ for (init; condition; update) {
 }
 ```
 
-- `init` and `update` are optional simple statements (declarations, assignments, compound assignments, increments, expression statements, and similar);
+- `init` and `update` are optional header statements: declarations, assignments, compound assignments, increments, and expression statements. `return` is not allowed in either position;
 - the condition is required and must be an integer expression.
 
 Valid:
