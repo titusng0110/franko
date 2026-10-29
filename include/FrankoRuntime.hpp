@@ -7,7 +7,6 @@
 #include <new>       // for placement new
 #include <stdexcept> // for std::runtime_error
 #include <type_traits> // for std::is_integral, std::is_signed, std::make_unsigned
-#include <iostream>  // for std::cout
 #include <jemalloc/jemalloc.h> // for je_malloc, je_calloc, je_realloc, je_free
 
 [[noreturn]] inline void franko_panic(const char* message) {
