@@ -14,7 +14,7 @@ p.y = 4;
 print(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](33-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](32-examples.md).
 
 ## 25.1 Declaring a Struct
 
@@ -33,7 +33,7 @@ Rules:
 - `struct` declarations may only appear at global scope; they cannot be declared inside functions.
 - Separators between fields are optional, matching block syntax: a trailing separator before `}` is not required, and `;` and newlines may be mixed freely.
 - Duplicate struct names are rejected. Each struct name denotes exactly one declared type.
-- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes and the generated C++ uses kind-prefixed names, so the generated code is unambiguous (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes.
 
 A struct body contains field declarations and method declarations (see [Methods](26-methods.md)). Assignments, statements, nested functions outside methods, and nested struct declarations are invalid inside a struct body.
 

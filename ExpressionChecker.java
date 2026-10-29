@@ -422,7 +422,7 @@ public class ExpressionChecker {
         }
 
         if (types.sameType(parameterType, arg.type)
-                || types.isPermissionDowngrade(arg.type, parameterType)) {
+                || types.isPointerConversion(arg.type, parameterType)) {
             return;
         }
 
@@ -993,11 +993,43 @@ public class ExpressionChecker {
 
         if (!sourcePointer.referencedType.equals(
                 targetPointer.referencedType)) {
+            if (sourcePointer.referencedType
+                            instanceof SemanticStaticArrayType sourceStatic
+                    && targetPointer.referencedType
+                            instanceof SemanticDynamicArrayType targetDynamic
+                    && sourceStatic.elementType.equals(targetDynamic.elementType)) {
+                if (targetPointer.permission == PtrPermission.OWNER) {
+                    diagnostics.error("'cast' cannot decay ownership: "
+                            + types.describeSafe(node.expr.type)
+                            + " cannot be cast to "
+                            + types.describeSafe(node.type)
+                            + "; the static array's storage is borrowed by a "
+                            + "hidden dynamic-array descriptor, so only "
+                            + "mview<array<T>> and view<array<T>> accept the "
+                            + "decay");
+                    return;
+                }
+
+                if (!sourcePointer.permission.allows(targetPointer.permission)) {
+                    diagnostics.error("'cast' cannot raise pointer "
+                            + "permissions: "
+                            + types.describeSafe(node.expr.type)
+                            + " cannot be cast to "
+                            + types.describeSafe(node.type)
+                            + "; permissions only downgrade (ptr -> mview -> view)");
+                    return;
+                }
+
+                return;
+            }
+
             diagnostics.error("'cast' cannot convert between different "
                     + "pointee types: got "
                     + types.describeSafe(node.expr.type)
                     + ", expected "
-                    + types.describeSafe(node.type));
+                    + types.describeSafe(node.type)
+                    + "; only mview<array<T,N>>/view<array<T,N>> decay to "
+                    + "mview<array<T>>/view<array<T>> (T must match)");
             return;
         }
 

@@ -1,0 +1,9 @@
+// Ownership never decays: the borrowed dynamic-array descriptor must not
+// be handed to a ptr, which could init/uninit/resize it and free the
+// static array's storage.
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    mview<array<int32_t, 3>> m = getmview(xs);
+    ptr<array<int32_t>> p = m;
+    return 0;
+}

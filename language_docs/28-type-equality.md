@@ -51,9 +51,11 @@ mview<array<byte>>   != view<array<byte>>
 view<array<byte, 3>> != view<array<byte, 5>>
 ```
 
-A pointer permission downgrade (`ptr<T>` to `mview<T>`/`view<T>`,
-`mview<T>` to `view<T>`) is the single implicit conversion the language
-allows; it does not make the types equal (see [Pointers](24-pointers.md)).
+The pointer conversions — permission downgrades (`ptr<T>` to
+`mview<T>`/`view<T>`, `mview<T>` to `view<T>`) and the static-to-dynamic
+array pointer view decay (`mview`/`view` of `array<T, N>` to `mview`/
+`view` of `array<T>`) — are the only implicit conversions the language
+allows; they do not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
 

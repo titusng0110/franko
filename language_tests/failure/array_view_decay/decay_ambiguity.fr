@@ -1,0 +1,14 @@
+// Two decay overloads that need the same number of conversion steps are
+// ambiguous.
+func h(mview<array<int32_t>> x) -> uint32_t {
+    return 1;
+}
+func h(view<array<int32_t>> x) -> uint32_t {
+    return 2;
+}
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    mview<array<int32_t, 3>> m = getmview(xs);
+    print(h(m));
+    return 0;
+}

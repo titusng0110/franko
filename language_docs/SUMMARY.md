@@ -31,6 +31,5 @@
 - [28. Type Equality](28-type-equality.md)
 - [29. Declaration Type Validity](29-declaration-type-validity.md)
 - [30. Unsupported or Restricted Features](30-unsupported-or-restricted-features.md)
-- [31. Runtime and Backend Notes](31-runtime-and-backend-notes.md)
-- [32. Foreign Function Interface](32-foreign-function-interface.md)
-- [33. Examples](33-examples.md)
+- [31. Foreign Function Interface](31-foreign-function-interface.md)
+- [32. Examples](32-examples.md)

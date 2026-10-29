@@ -64,7 +64,7 @@ public class DeclarationChecker {
         }
 
         if (!types.sameType(type, node.staticInitializer.type)
-                && !types.isPermissionDowngrade(
+                && !types.isPointerConversion(
                         node.staticInitializer.type,
                         type)) {
             diagnostics.error("Variable '"

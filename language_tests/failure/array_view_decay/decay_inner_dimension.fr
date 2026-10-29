@@ -1,0 +1,8 @@
+// Only the outermost dimension decays: array<array<int32_t, 2>, 3> may
+// become array<array<int32_t, 2>> but never array<array<int32_t>>.
+func main() -> int32_t {
+    array<array<int32_t, 2>, 3> g;
+    view<array<array<int32_t, 2>, 3>> v = getview(g);
+    view<array<array<int32_t>>> w = v;
+    return 0;
+}

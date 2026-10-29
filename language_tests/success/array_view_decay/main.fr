@@ -1,0 +1,118 @@
+// ============================================================
+// LANGUAGE TEST: Static-to-Dynamic Array Pointer View Decay
+// ============================================================
+// Covers the unidirectional implicit/explicit conversion
+// mview<array<T,N>> / view<array<T,N>> -> mview<array<T>> /
+// view<array<T>>, including permission downgrades combined in
+// the same step (ptr<array<T,N>> -> mview<array<T>> ->
+// view<array<T>>). The compiler secretly constructs a
+// Franko_Dynamic_Array descriptor (Franko_Borrowed_Dynamic_Array)
+// over the static storage; .init/.uninit/.resize stay blocked on
+// the result (see failure/array_view_decay). T may itself be a
+// static or dynamic array; only the outermost dimension decays.
+// ============================================================
+
+func take_view(view<array<int32_t>> v) -> uint32_t {
+    return $(v).length();
+}
+
+func take_mview(mview<array<int32_t>> m) -> uint32_t {
+    return $(m).length();
+}
+
+func ret_decay(mview<array<int32_t, 4>> m) -> view<array<int32_t>> {
+    return m;
+}
+
+func f(view<array<int32_t, 4>> x) -> int32_t {
+    return $(x)[0] - 9;
+}
+
+func f(view<array<int32_t>> x) -> int32_t {
+    return 2;
+}
+
+array<int32_t, 3> G_XS;
+mview<array<int32_t>> G_M = getmview(G_XS);
+
+func main() -> int32_t {
+    array<int32_t, 4> xs;
+    xs[0] = 10;
+    xs[1] = 20;
+    xs[2] = 30;
+    xs[3] = 40;
+
+    // implicit decay, same permission
+    mview<array<int32_t>> m = getmview(xs);
+    view<array<int32_t>> v = getview(xs);
+    print($(m).length());
+    print($(v)[2]);
+
+    // writes through the decayed mview hit the original storage
+    $(m)[1] = 99;
+    print(xs[1]);
+
+    // downgrade combos from a ptr source
+    ptr<array<int32_t, 4>> p = getptr(xs);
+    mview<array<int32_t>> m2 = p;
+    view<array<int32_t>> v2 = p;
+    print($(m2)[0]);
+    print($(v2).length());
+
+    // argument conversions
+    print(take_view(p));
+    print(take_mview(p));
+    print(take_view(m));
+    print(take_view(v));
+
+    // return conversion: a converted view must not outlive its scope (the
+    // same untracked dangling class as returning getview of a local), so
+    // the call result is intentionally not consumed here
+    ret_decay(getmview(xs));
+
+    // explicit casts, including combos
+    view<array<int32_t>> c = cast<view<array<int32_t>>>(getview(xs));
+    mview<array<int32_t>> c2 = cast<mview<array<int32_t>>>(p);
+    view<array<int32_t>> c3 = cast<view<array<int32_t>>>(p);
+    print($(c)[0]);
+    print($(c2)[3]);
+    print($(c3).length());
+
+    // T can be a static array: outermost dimension only
+    array<array<int32_t, 2>, 3> g;
+    g[0][0] = 1;
+    g[2][1] = 6;
+    view<array<array<int32_t, 2>>> gv = getview(g);
+    print($(gv).length());
+    print($(gv)[2][1]);
+    print($(gv)[0].length());
+
+    // T can be a dynamic array
+    array<array<int32_t>, 2> dg;
+    dg[0].init(2);
+    dg[1].init(2);
+    mview<array<array<int32_t>>> dgv = cast<mview<array<array<int32_t>>>>(getmview(dg));
+    $(dgv)[0][0] = 5;
+    print(dg[0][0]);
+    print($(dgv)[1].length());
+
+    // overload preference: exact wins, downgrade beats decay
+    print(f(getview(xs)));
+    print(f(getmview(xs)));
+    print(take_view(getmview(xs)));
+
+    // decay inside a while condition: descriptor rebuilt per iteration
+    uint32_t i = 0;
+    while (take_view(getview(xs)) == 4 && i < 2) {
+        i += 1;
+    }
+    print(i);
+
+    // decay in a global initializer
+    G_XS[0] = 7;
+    $(G_M)[0] = 8;
+    print(G_XS[0]);
+    print($(G_M).length());
+
+    return 0;
+}

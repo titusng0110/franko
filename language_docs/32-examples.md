@@ -1,8 +1,8 @@
-# 33. Examples
+# 32. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-## 33.1 Basic Integers
+## 32.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -18,7 +18,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.2 Static Array Initializer Assignment
+## 32.2 Static Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -52,7 +52,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.3 Static Partial Initializer Assignment
+## 32.3 Static Partial Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -66,7 +66,7 @@ func main() -> int32_t {
 
 `xs[2]` is untouched.
 
-## 33.4 Dynamic Array Initializer Assignment
+## 32.4 Dynamic Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -86,7 +86,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.5 Runtime Expressions Inside Initializer Lists
+## 32.5 Runtime Expressions Inside Initializer Lists
 
 ```franko
 func getValue() -> int32_t {
@@ -110,7 +110,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.6 Nested Static Arrays
+## 32.6 Nested Static Arrays
 
 ```franko
 func main() -> int32_t {
@@ -128,7 +128,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.7 Nested Dynamic Arrays
+## 32.7 Nested Dynamic Arrays
 
 ```franko
 func main() -> int32_t {
@@ -151,7 +151,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.8 Declaration Initializer with Static Array
+## 32.8 Declaration Initializer with Static Array
 
 ```franko
 func main() -> int32_t {
@@ -165,7 +165,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.9 Dynamic Array Declaration Initializer Without Initialization
+## 32.9 Dynamic Array Declaration Initializer Without Initialization
 
 ```franko
 func main() -> int32_t {
@@ -193,7 +193,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.10 Array Initializer Through Pointer
+## 32.10 Array Initializer Through Pointer
 
 ```franko
 func main() -> int32_t {
@@ -233,7 +233,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.11 String Literal Bytes
+## 32.11 String Literal Bytes
 
 ```franko
 func main() -> int32_t {
@@ -257,7 +257,7 @@ func main() -> int32_t {
 A string literal is a `view<array<byte, N>>`; byte buffers receive its
 content through `memcpy`. See [String Literals](23-string-literals.md).
 
-## 33.12 Nested Static Array Grid
+## 32.12 Nested Static Array Grid
 
 ```franko
 func fill(ptr<array<array<byte, 3>, 2>> grid) -> void {
@@ -279,7 +279,7 @@ func main() -> int32_t {
 
 `array<array<byte, 3>, 2>` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
 
-## 33.13 Status-Returning Intrinsics
+## 32.13 Status-Returning Intrinsics
 
 ```franko
 func main() -> int32_t {
@@ -306,7 +306,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.14 Struct Declaration and Field Access
+## 32.14 Struct Declaration and Field Access
 
 ```franko
 struct Point {
@@ -329,7 +329,7 @@ func main() -> int32_t {
 
 The separator before `}` is optional.
 
-## 33.15 Struct Field Defaults
+## 32.15 Struct Field Defaults
 
 Field defaults are constant expressions; only primitive fields can have them.
 
@@ -349,7 +349,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.16 Whole-Struct Assignment
+## 32.16 Whole-Struct Assignment
 
 A struct is assignable as a whole value only if all of its fields are assignable, recursively.
 
@@ -375,7 +375,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.17 Structs Passed by Value and by Pointer
+## 32.17 Structs Passed by Value and by Pointer
 
 Assignable structs may be passed and returned by value; pointer-only structs must go through `ptr<X>`.
 
@@ -411,7 +411,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.18 Structs with Array Fields
+## 32.18 Structs with Array Fields
 
 An array field makes the struct non-assignable: the struct is pointer-only and its arrays are managed through the usual intrinsics.
 
@@ -441,7 +441,7 @@ func main() -> int32_t {
 
 Dynamic array fields are not part of the struct declaration; allocate them explicitly with `field(n)` as above.
 
-## 33.19 Struct Globals
+## 32.19 Struct Globals
 
 Global variable declarations accept constant initializers.
 
@@ -466,7 +466,7 @@ func main() -> int32_t {
 
 Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
 
-## 33.20 Array `length()`
+## 32.20 Array `length()`
 
 ```franko
 func main() -> int32_t {
@@ -488,7 +488,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.21 Inferred Static Array Sizes (`?`)
+## 32.21 Inferred Static Array Sizes (`?`)
 
 ```franko
 func main() -> int32_t {
@@ -506,7 +506,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.22 Command-Line Arguments
+## 32.22 Command-Line Arguments
 
 ```franko
 func main(view<array<array<byte>>> args) -> int32_t {
@@ -523,4 +523,4 @@ func main(view<array<array<byte>>> args) -> int32_t {
 }
 ```
 
-Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Compiler Internals](../compiler_docs.md)).

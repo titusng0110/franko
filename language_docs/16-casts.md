@@ -131,6 +131,21 @@ across different pointee types is invalid:
 ptr<array<byte>> q = cast<ptr<array<byte>>>(v);   // invalid: raises permissions
 ```
 
+The same `cast` syntax spells the static-to-dynamic array pointer view
+decay: `mview<array<T, N>>`/`view<array<T, N>>` (and downgrade
+combinations from a `ptr` source) cast to `mview<array<T>>`/
+`view<array<T>>`, outermost dimension only
+(see [Pointers](24-pointers.md)):
+
+```franko
+array<int32_t, 4> xs;
+mview<array<int32_t, 4>> m = getmview(xs);
+mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);
+```
+
+Decaying to `ptr<array<T>>` is invalid: the result would claim ownership
+of storage the static array owns.
+
 Raw integers can never be converted to pointers.
 
 ## 16.6 What Casts Do Not Cover
@@ -140,7 +155,8 @@ Raw integers can never be converted to pointers.
   accept only plain integer literals and operators.
 - Calls, returns, assignments, and operators still require exact
   type equality on their operands, with the single exception of the
-  implicit pointer permission downgrades. `cast<T>` produces a value of
+  implicit pointer conversions (permission downgrades and the
+  static-to-dynamic array pointer view decay). `cast<T>` produces a value of
   exactly `T`, which is what makes those positions accept it.
   A value that must cross widths on the way into a call is converted
   into a temporary first:

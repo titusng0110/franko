@@ -1,0 +1,13 @@
+// Propagation walks member accesses too: init() on a struct field
+// of a dynamic array through an mview needs allocation rights.
+struct Holder {
+    array<byte> data;
+}
+
+func main() -> int32_t {
+    Holder h;
+    h.data.init(2);
+    mview<Holder> m = getmview(h);
+    $(m).data.init(3);
+    return 0;
+}

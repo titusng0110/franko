@@ -796,7 +796,11 @@ public final class SymbolTable {
 
             if (!sameType(arg.type, parameterTypes.get(i))
                     && arg.type instanceof SemanticPtrType) {
-                count++;
+                count += PointerPermissions.isStaticArrayViewDecay(
+                        arg.type,
+                        parameterTypes.get(i))
+                        ? 2
+                        : 1;
             }
         }
 
@@ -820,7 +824,11 @@ public final class SymbolTable {
 
             if (!sameType(arg.type, parameterType)
                     && arg.type instanceof SemanticPtrType) {
-                count++;
+                count += PointerPermissions.isStaticArrayViewDecay(
+                        arg.type,
+                        parameterType)
+                        ? 2
+                        : 1;
             }
         }
 
@@ -851,7 +859,7 @@ public final class SymbolTable {
             return true;
         }
 
-        return isPermissionDowngrade(arg.type, parameterType);
+        return PointerPermissions.isPointerConversion(arg.type, parameterType);
     }
 
     static boolean isPermissionDowngrade(

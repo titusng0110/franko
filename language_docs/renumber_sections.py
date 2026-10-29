@@ -314,13 +314,14 @@ def cmd_check():
         text = path.read_text(encoding="utf-8")
         lines[name] = list(split_fences(text))
 
-    # 3. Every markdown link resolves to an existing file.
+    # 3. Every markdown link resolves to an existing file (a section file,
+    #    or a real path outside the set such as ../compiler_docs.md).
     for name, pairs in lines.items():
         for line, in_fence in pairs:
             if in_fence:
                 continue
             for target in LINK.findall(line):
-                if target not in files:
+                if target not in files and not (ROOT / target).exists():
                     problems.append(f"{name}: broken link target '{target}'")
 
     # 4. Content files carry a numbered H1 that matches the filename number.

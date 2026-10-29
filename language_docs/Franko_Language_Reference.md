@@ -49,9 +49,8 @@ It documents both intended language behavior and important current implementatio
 28. [Type Equality](28-type-equality.md)
 29. [Declaration Type Validity](29-declaration-type-validity.md)
 30. [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md)
-31. [Runtime and Backend Notes](31-runtime-and-backend-notes.md)
-32. [Foreign Function Interface](32-foreign-function-interface.md)
-33. [Examples](33-examples.md)
+31. [Foreign Function Interface](31-foreign-function-interface.md)
+32. [Examples](32-examples.md)
 
 ---
 
@@ -227,7 +226,7 @@ Importing certain modules through their canonical specifier (currently
 only `import "franko/os"`) additionally activates compiler FFI
 behavior: declared functions are given C++ definitions from a bridge
 file instead of their Franko bodies. See [Foreign Function
-Interface](32-foreign-function-interface.md) for the activation rule,
+Interface](31-foreign-function-interface.md) for the activation rule,
 the bridge layout, and the verification checks.
 
 ---
@@ -323,7 +322,7 @@ func main(view<array<array<byte>>> args) -> int32_t {
 
 Any other shape (parameters of another type, a different return type) is a compile error.
 
-In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Compiler Internals](../compiler_docs.md)).
 
 Executable statements are **not** currently allowed in global scope.
 
@@ -730,7 +729,7 @@ There is no unary `+` operator and no `+123` literal form:
 
 There is no documented octal literal syntax. Decimal literals with leading zeros (for example `075`) are currently passed to the C++14 backend verbatim, where they may be interpreted as octal by the C++ compiler; avoid leading zeros in decimal literals.
 
-The backend emits very large decimal literals with a trailing `ULL` suffix so they remain well-formed C++14 (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+The backend emits very large decimal literals with a trailing `ULL` suffix so they remain well-formed C++14 (see [Compiler Internals](../compiler_docs.md)).
 
 ---
 
@@ -1015,9 +1014,12 @@ Emitted C++ names carry the return type even though overload resolution does not
 A function call is valid if and only if exactly one overload is applicable.
 
 For nonconstant arguments, the argument type must exactly match the
-parameter type, with the single exception of the pointer permission
-downgrade: a `ptr`/`mview`/`view` argument may be passed where a weaker
-permission over an identical referenced type is expected (see
+parameter type, with the single exception of the pointer conversions:
+permission downgrades over an identical referenced type (`ptr`/`mview`/
+`view` may pass where a weaker permission is expected), and the
+static-to-dynamic array pointer view decay (`mview`/`view` of
+`array<T, N>`, or a `ptr` source downgraded in the same step, may pass
+where `mview`/`view` of `array<T>` is expected; see
 [Pointers](24-pointers.md)). There are no other implicit conversions: pass
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](16-casts.md)).
@@ -1025,8 +1027,9 @@ permission over an identical referenced type is expected (see
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. If a constant argument fits the parameter types of multiple overloads, the call is ambiguous and is rejected.
 
 Overload preference: among applicable overloads, ones matched without any
-permission downgrade win over downgrading ones, and among the rest the
-ones relying on the fewest downgrades win. If several overloads remain
+conversion win over converting ones, and among the rest the ones relying
+on the fewest conversions win, with a decay counted heavier than a pure
+permission downgrade. If several overloads remain
 tied, the call is ambiguous and is rejected.
 
 ## 12.7 Bare Function Names
@@ -1464,6 +1467,21 @@ across different pointee types is invalid:
 ptr<array<byte>> q = cast<ptr<array<byte>>>(v);   // invalid: raises permissions
 ```
 
+The same `cast` syntax spells the static-to-dynamic array pointer view
+decay: `mview<array<T, N>>`/`view<array<T, N>>` (and downgrade
+combinations from a `ptr` source) cast to `mview<array<T>>`/
+`view<array<T>>`, outermost dimension only
+(see [Pointers](24-pointers.md)):
+
+```franko
+array<int32_t, 4> xs;
+mview<array<int32_t, 4>> m = getmview(xs);
+mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);
+```
+
+Decaying to `ptr<array<T>>` is invalid: the result would claim ownership
+of storage the static array owns.
+
 Raw integers can never be converted to pointers.
 
 ## 16.6 What Casts Do Not Cover
@@ -1473,7 +1491,8 @@ Raw integers can never be converted to pointers.
   accept only plain integer literals and operators.
 - Calls, returns, assignments, and operators still require exact
   type equality on their operands, with the single exception of the
-  implicit pointer permission downgrades. `cast<T>` produces a value of
+  implicit pointer conversions (permission downgrades and the
+  static-to-dynamic array pointer view decay). `cast<T>` produces a value of
   exactly `T`, which is what makes those positions accept it.
   A value that must cross widths on the way into a call is converted
   into a temporary first:
@@ -1794,8 +1813,6 @@ for (int32_t a = 0; a < 3; a = a + 1) {
 `continue` does not take a level: `continue 2` is invalid, and `continue` always targets the innermost loop.
 
 `break` and `continue` are reserved keywords. They are only valid inside a loop; using either outside every loop is an error. They may not appear in a `for` header's `init` or `update` positions.
-
-On the generated-C++ level, `break` and `continue` lower to `goto` statements targeting per-loop labels, and labels are only generated for loops that are actually targeted. See [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
 
 ## 19.6 Return Statements
 
@@ -2760,8 +2777,10 @@ view<ptr<int32_t>> v;   // read-only view of a ptr<int32_t> slot
 
 ## 24.4 Assignment and Implicit Downgrades
 
-The **only** implicit conversion in Franko is a pointer permission
-downgrade over an identical referenced type:
+The implicit conversions in Franko are pointer conversions: the
+permission downgrades below over an identical referenced type, and the
+static-to-dynamic array pointer view decay of
+[§24.4.1](#2441-static-to-dynamic-array-pointer-views):
 
 - `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
 - `mview<T>` implicitly casts to `view<T>`;
@@ -2777,15 +2796,55 @@ view<array<byte>> v2 = m;          // implicit downgrade
 ptr<array<byte>> q = v;            // invalid: raises permissions
 ```
 
-Downgrades apply to assignment, return values, and function arguments.
-Every other position requires exact type equality. Raw integers cannot
-be converted to pointers.
+These conversions apply to assignment, return values, and function
+arguments. Every other position requires exact type equality. Raw
+integers cannot be converted to pointers.
 
 Explicit downgrades may be written with `cast` (see [Casts](16-casts.md)):
 
 ```franko
 view<array<byte>> v = cast<view<array<byte>>>(p);
 ```
+
+### 24.4.1 Static-to-Dynamic Array Pointer Views
+
+A pointer to a **static** array implicitly converts to a pointer to a
+**dynamic** array of the same element type, in the unidirectional form:
+
+- `mview<array<T, N>>` and `view<array<T, N>>` implicitly (and explicitly)
+  cast to `mview<array<T>>` and `view<array<T>>`;
+- the conversion may carry a permission downgrade in the same step, so
+  `ptr<array<T, N>>` converts to `mview<array<T>>`/`view<array<T>>` and
+  `mview<array<T, N>>` converts to `view<array<T>>`;
+- `T` may itself be a static or dynamic array, but only the **outermost**
+  dimension decays: `view<array<array<int32_t, 2>, 3>>` converts to
+  `view<array<array<int32_t, 2>>>`, never to `view<array<array<int32_t>>>`
+  (element layouts must stay identical behind the one thin pointer);
+- the reverse direction is invalid, and ownership never decays:
+  `ptr<array<T, N>>` cannot convert to `ptr<array<T>>`.
+
+```franko
+array<int32_t, 4> xs;
+mview<array<int32_t, 4>> m = getmview(xs);
+view<array<int32_t>> v = m;             // implicit decay
+mview<array<int32_t>> d = cast<mview<array<int32_t>>>(m);   // explicit
+
+print($(v).length());                   // 4
+$(m)[1] = 99;                           // writes hit xs directly
+```
+
+The conversion is safe because permissions are propagated to the
+result: `.init`, `.init_zero`, `.resize`, and `.uninit` are forbidden on
+`mview`/`view` results (and on a decayed `ptr` — which is why `ptr` never
+decays), so the storage behind the converted view is never reallocated
+or freed through it. The conversion is allowed in the same positions as
+permission downgrades: assignment, return values, and function arguments.
+Comparing pointers still requires identical pointer types. Like every
+pointer in Franko, a converted view must not outlive the scope it was
+created in — a view that escapes past it (returned, or stored into
+longer-lived storage) is the usual untracked dangling-pointer case of
+[Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations),
+exactly as if it had been created there with `getview`.
 
 ## 24.5 Pointer Comparison
 
@@ -2892,6 +2951,12 @@ Summary: `view` locks down the memory it directly touches. If that
 memory contains raw values (like nested arrays), those values are
 locked. If it contains pointers, the pointer *variables* are locked, but
 the memory they point to follows its own type rules.
+
+These rules hold at **every** level of nesting: through an `mview`,
+`memset`/`memcpy`/`memmove` and element writes on an *inner* nested
+array are allowed (`$(m)[0].memcpy(src)` is fine), while `init`/
+`init_zero`/`resize`/`uninit` on an inner nested array are blocked
+exactly like on the outermost one (`$(m)[0].init(...)` is not).
 
 ## 24.9 The null Literal
 
@@ -3036,7 +3101,7 @@ p.y = 4;
 print(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](33-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](28-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](32-examples.md).
 
 ## 25.1 Declaring a Struct
 
@@ -3055,7 +3120,7 @@ Rules:
 - `struct` declarations may only appear at global scope; they cannot be declared inside functions.
 - Separators between fields are optional, matching block syntax: a trailing separator before `}` is not required, and `;` and newlines may be mixed freely.
 - Duplicate struct names are rejected. Each struct name denotes exactly one declared type.
-- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes and the generated C++ uses kind-prefixed names, so the generated code is unambiguous (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+- Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes.
 
 A struct body contains field declarations and method declarations (see [Methods](26-methods.md)). Assignments, statements, nested functions outside methods, and nested struct declarations are invalid inside a struct body.
 
@@ -3398,7 +3463,7 @@ Methods emit as free C++ functions with a mangled name:
 | method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | method `self` parameter | `VAR_self` (`STRUCT_X*`) |
 
-The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Compiler Internals](../compiler_docs.md).
 
 - The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
 - `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
@@ -3513,7 +3578,7 @@ Current limitations of the pointer checker:
 - checks are intra-procedural; pointer effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
 
-## 27.4 Capability Linting
+## 27.8 Capability Linting
 
 A second, independent pass (`PointerPermissionChecker`) warns when a
 `ptr`/`mview` local variable or parameter requests permissions it never
@@ -3575,9 +3640,11 @@ mview<array<byte>>   != view<array<byte>>
 view<array<byte, 3>> != view<array<byte, 5>>
 ```
 
-A pointer permission downgrade (`ptr<T>` to `mview<T>`/`view<T>`,
-`mview<T>` to `view<T>`) is the single implicit conversion the language
-allows; it does not make the types equal (see [Pointers](24-pointers.md)).
+The pointer conversions — permission downgrades (`ptr<T>` to
+`mview<T>`/`view<T>`, `mview<T>` to `view<T>`) and the static-to-dynamic
+array pointer view decay (`mview`/`view` of `array<T, N>` to `mview`/
+`view` of `array<T>`) — are the only implicit conversions the language
+allows; they do not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
 
@@ -3790,183 +3857,7 @@ The following forms do not exist in the grammar:
 
 ---
 
-# 31. Runtime and Backend Notes
-
-The current compiler targets C++14.
-
-## 31.1 Pipeline Order
-
-```text
-Franko source
-  -> lexer + parser
-  -> parser AST
-  -> Desugarer (sugar lowering, `?` inference, constExpr evaluation)
-  -> SemanticAnalyzer (validation of evaluated values, no re-folding, entry-point selection)
-  -> LegalityChecker
-  -> PointerNullStateChecker
-  -> C++14 code generation
-  -> program template wrapper (entry-point call + argv conversion)
-```
-
-## 31.2 Memory Allocation
-
-The generated code allocates through bundled jemalloc (`je_malloc`, `je_calloc`, `je_realloc`, `je_free`).
-
-Dynamic array element buffers are allocated by the array runtime methods and freed by `uninit()` or by the array object's destructor.
-
-Element construction follows the C++ type of the elements: buffers for trivially default-constructible element types keep raw storage, while any other element type is default-constructed (placement new) when the buffer is allocated. `uninit()` and the array destructor destroy constructed elements before freeing the buffer. Trivially destructible element types skip destruction entirely.
-
-## 31.3 Array Representation
-
-Some Franko rules mirror the generated C++ representation, especially array behavior.
-
-For example, array `memcpy` is designed to support combinations such as:
-
-```text
-Static<T, N>.memcpy(Static<T, M>)
-Static<T, N>.memcpy(Dynamic<T>)
-Dynamic<T>.memcpy(Dynamic<T>)
-Dynamic<T>.memcpy(Static<T, M>)
-```
-
-Static array sizes must be greater than zero because generated C++ uses fixed-size arrays, and zero-length C++ arrays are not standard.
-
-Static and dynamic arrays runtime-check indexes and intrinsics and raise `std::runtime_error` (via the runtime panic helper) on violations such as out-of-bounds access, use of an uninitialized dynamic array, double initialization, or zero-size allocation.
-
-The dynamic array length is stored in a `count` field with a `length()` accessor returning `uint32_t`. The field was renamed from `length` because C++ does not allow a field and a method with the same name. Reading `length()` on an uninitialized dynamic array returns `0` and never aborts; every other uninitialized access still aborts. Static arrays keep plain contiguous `T data[N]` storage with no length field or method: `staticarr.length()` in Franko source is emitted by the compiler as a constant, never as a runtime call.
-
-Zero length and uninitialized coincide exactly: `init(0)` and `resize(0)` abort, and `uninit()` restores `data == nullptr, count == 0`, so `length() == 0` holds exactly when the array is uninitialized — there is no initialized empty array.
-
-Element lifetime in the dynamic array runtime:
-
-- `init(n)` and `init_zero(n)` default-construct all `n` elements when the element type needs construction; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
-- `resize(n)` default-constructs the grown tail when growing and destroys the dropped tail when shrinking; trivial element types skip both.
-- `uninit()` and the array destructor destroy all `count` elements before freeing the buffer; trivially destructible element types skip destruction.
-- `je_realloc` byte-moves the existing elements on `resize`, which is fine for the runtime's trivially-relocatable element types.
-
-## 31.4 Ordering of Top-Level Analysis
-
-Function signatures are registered before function bodies are analyzed so that forward references, direct recursion, and mutual recursion can be resolved.
-
-Global variable declarations are also registered before function bodies are analyzed, so functions can reference globals declared later in source order.
-
-## 31.5 Desugaring Before Checking
-
-Array initializer lists are lowered before ordinary semantic checking.
-
-For example:
-
-```franko
-xs = [1, 2, 3];
-```
-
-is lowered to:
-
-```franko
-xs[0] = 1;
-xs[1] = 2;
-xs[2] = 3;
-```
-
-Nested initializer lists are lowered recursively.
-
-String literals are converted to byte array literals in the same pass (see [String Literals](23-string-literals.md)).
-
-`?` static array sizes are inferred during the same pass: each marker is replaced by the corresponding initializer level's element count before type analysis, so the backend only ever sees folded constant sizes. Static `length()` calls are likewise emitted as constants.
-
-Every other `constExpr` slot is also evaluated in this pass: static array sizes, global initializers, and struct field defaults become canonical decimal literals before semantic analysis (see [Constant Folding](10-constant-folding.md)). Semantic analysis validates the resulting values (positivity, range, fit) without re-folding them. Evaluation failures such as division by zero are reported here, as desugaring diagnostics.
-
-The backend does not need to implement initializer lists or strings as runtime values because they are not values in Franko.
-
-## 31.6 Integer Literal Emission
-
-Large integer literals are emitted so that they remain well-formed C++14. In particular, an unsuffixed decimal literal whose value exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because decimal literals in C++14 do not fall back to unsigned integer types.
-
-## 31.7 Print Emission
-
-`print` arguments are emitted as `std::cout` insertions:
-
-- plain integer primitives are inserted directly;
-- `int8_t`/`uint8_t` values are promoted with unary `+` so a number is printed rather than a character;
-- pointers are cast to `const void*` to avoid accidental string printing.
-
-See [Statements](19-statements.md) for which types are meaningfully printable.
-
-## 31.8 Identifier Emission and Name Clashes
-
-Franko keeps struct type names, variable names, and function names in separate namespaces, but C++14 does not. To keep the generated code unambiguous, every declared identifier is emitted with a kind prefix:
-
-| Franko construct | Generated C++ name |
-|---|---|
-| struct type `X` | `STRUCT_X` |
-| variable `x` (local, global, parameter) | `VAR_x` |
-| function `f` | `FUNC_f_HASH_<8hex>` |
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
-| namespace `n` | `NS_n` |
-| the entry-point function `main` | `FUNC_main_HASH_<8hex>` like every other function (called by the template wrapper) |
-
-So a declaration `X s;` is emitted as `STRUCT_X VAR_s;`.
-
-Because of the prefixes, a variable, function, and struct may share one source name without colliding in the generated C++.
-
-Each function and method name carries an 8-hex-digit suffix: the FNV-1a 32-bit hash of its canonical signature key. The key spells the declared parameter types in order (including `self` for methods), then the return type, each exactly as written in source (`int32_t`, `uint64_t`, `void`, `array<T>`, `array<T,N>` with canonical folded decimal size and no space, `ptr<T>`, qualified struct names such as `a::b::X`), joined as `fn(P1,P2,...)->R`. For example `func f(int32_t x) -> int32_t` hashes the key `fn(int32_t)->int32_t`. Overloads of one name therefore emit distinct C++ names without relying on g++ overload resolution.
-
-Method names mangle with both the method and the owning struct (`METH_f_OFSTRUCT_X_HASH_<8hex>`), so methods on different structs never collide; `self` emits as an ordinary `VAR_self` parameter of type `STRUCT_X*`.
-
-Namespaces are emitted as C++ namespaces with the `NS_` prefix, so a Franko reference `n::f` becomes e.g. `NS_n::FUNC_f_HASH_<8hex>`. Unqualified references inside a namespace stay unqualified, and global-namespace symbols referenced from inside a namespace are rooted with `::`.
-
-When a variable or function shares its name with a declared struct, the compiler emits a **warning** during semantic analysis (the program still compiles):
-
-```text
-==== Warnings ====
-  - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
-```
-
-Struct definitions are emitted after a forward-declaration block (`struct STRUCT_X;` for every declared struct), so `ptr<X>` fields and pointer references may name structs declared later in source order.
-
-## 31.9 Entry-Point Wrapper and Command-Line Arguments
-
-The generated C++ entry point is not the Franko `main` itself. The Franko `main` emits its mangled name like every other function, and a small wrapper in the program template owns the real C++ `int main`:
-
-- `ProgramTemplate.cpp` provides `int main()` and calls the no-args Franko `main` (`FUNC_main_HASH_d8625720`, the hash of `fn()->int32_t`).
-- `ProgramTemplateWithRawCArgs.cpp` provides `int main(int argc, char** argv)`, converts the raw C arguments into a `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>`, and calls the args-form Franko `main` (`FUNC_main_HASH_db73581e`, the hash of `fn(view<array<array<uint8_t>>>)->int32_t`).
-
-The compiler selects the template from the declared entry-point shape; an explicit `-t` template overrides the selection.
-
-The argv conversion follows these rules:
-
-- `args.length()` equals `argc`, with `args[0]` holding the program name;
-- each argument is its raw bytes with **no** NUL terminator appended (consistent with string literals, which also append no terminator);
-- each inner array is default-constructed by the runtime `init` into the uninitialized Franko state (`length()` `0`), so an empty argument simply stays uninitialized;
-- after the Franko `main` returns, the outer array's destructor destroys the converted inner arrays and frees both levels; inner and outer arrays the program already released with `uninit()` are skipped safely.
-## 31.10 Break / Continue Lowering
-
-`break` and `continue` lower to `goto` statements targeting per-loop labels, so multi-level `break N` works uniformly and the same scheme serves `while` and desugared `for` loops. Each loop receives a unique label id, and labels are only generated for loops that are actually targeted:
-
-- `continue` emits `goto L_cont_<id>;` where `L_cont_<id>: ;` sits at the end of the loop body, immediately before the loop's epilogue (the desugared `for` update). The label therefore runs the epilogue, matching C's `for` semantics.
-- `break` emits `goto L_brk_<id>;` where `L_brk_<id>: ;` is placed immediately after the loop, so the epilogue is skipped.
-- `break N` targets the label of the Nth enclosing loop; `continue` always targets the innermost loop.
-
-When a `continue` targets a loop, the body is emitted inside an inner block with the label after it:
-
-```cpp
-while (cond)
-{
-    {
-        /* body */
-    }
-    L_cont_0: ;
-    /* update */
-}
-```
-
-The inner block keeps the label out of the scope of the body's declarations: a C++ `goto` may not jump forward past a variable's initialization within the same scope.
-
-Loops with no `break` or `continue` targeting them emit exactly the code they did before the feature existed: no labels, no `goto`, no extra blocks.
-
----
-
-# 32. Foreign Function Interface
+# 31. Foreign Function Interface
 
 Franko has no general native-call syntax. Operating-system access goes
 through FFI intrinsics: functions that are *declared* in Franko and
@@ -3976,7 +3867,7 @@ its API is documented separately in `library_docs/os.md`. This chapter
 describes the mechanics: how the compiler detects the module, where
 the C++ lives, and which mistakes fail loudly instead of miscompiling.
 
-## 32.1 Activation
+## 31.1 Activation
 
 FFI behavior switches on only when the program imports the module
 through its canonical specifier:
@@ -3992,7 +3883,7 @@ ordinary Franko file: the stub bodies compile as written and no bridge
 is loaded. See [Source Files](02-source-files.md) for the general
 import path rules.
 
-## 32.2 Declaration File
+## 31.2 Declaration File
 
 `import/franko/os.fr` declares the module API with stub bodies only.
 Every compiler phase between import resolution and code generation
@@ -4003,7 +3894,7 @@ return failure values (`-1` for posix calls, `0` for win32 calls), so
 if the bridge ever fails to attach, the program reports failure
 instead of silently succeeding.
 
-## 32.3 Bridge File
+## 31.3 Bridge File
 
 The real definitions live in `import/franko/os.ffi.cpp`, next to the
 module. A `.cpp` file can sit there safely because imports only allow
@@ -4022,8 +3913,8 @@ The file is split into marker-delimited splice units:
 
 Each unit ends with `// @@franko-ffi:end`. Every intrinsic block
 defines its function under the exact mangled C++ name the backend
-emits for the Franko declaration (see [Runtime and Backend
-Notes](31-runtime-and-backend-notes.md) for the mangling rule): the
+emits for the Franko declaration (see [Compiler Internals](../compiler_docs.md)
+for the mangling rule): the
 same trick the program templates use to call the mangled `main`.
 
 ```text
@@ -4045,7 +3936,7 @@ namespace nesting. The bridge is spliced after the program template's
 `#include "FrankoRuntime.hpp"`, so `Franko_Dynamic_Array`,
 `franko_panic`, and the fixed-width integer types are available.
 
-## 32.4 Splicing
+## 31.4 Splicing
 
 Codegen emits prototypes for every intrinsic (they act as forward
 declarations) but never emits the stub bodies; the bridge provides the
@@ -4055,7 +3946,7 @@ Merely importing `franko/os` without calling anything adds zero C++
 to the output, and an unused intrinsic leaves only its harmless
 prototype behind.
 
-## 32.5 Verification
+## 31.5 Verification
 
 Three mistakes fail at Franko-compile time instead of C++ link time:
 
@@ -4072,7 +3963,7 @@ Three mistakes fail at Franko-compile time instead of C++ link time:
   function error. Stubs in those namespaces must never compile
   silently.
 
-## 32.6 Runtime Contract
+## 31.6 Runtime Contract
 
 The bridge checks `count` against the buffer's array length before
 every transfer: `count` beyond the end aborts via `franko_panic`,
@@ -4082,7 +3973,7 @@ failure value instead of crashing. The win32 blocks compile to a
 `#error` off Windows, so a win32 call built for the wrong target
 fails with a clear message at the C++ stage.
 
-## 32.7 Namespace Ownership
+## 31.7 Namespace Ownership
 
 The ownership rule in 32.5 applies only while the module is active.
 Without `import "franko/os"`, `os::posix` and `os::win32` are
@@ -4091,11 +3982,11 @@ for programs that import the module through its canonical specifier.
 
 ---
 
-# 33. Examples
+# 32. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-## 33.1 Basic Integers
+## 32.1 Basic Integers
 
 ```franko
 func main() -> int32_t {
@@ -4111,7 +4002,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.2 Static Array Initializer Assignment
+## 32.2 Static Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -4145,7 +4036,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.3 Static Partial Initializer Assignment
+## 32.3 Static Partial Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -4159,7 +4050,7 @@ func main() -> int32_t {
 
 `xs[2]` is untouched.
 
-## 33.4 Dynamic Array Initializer Assignment
+## 32.4 Dynamic Array Initializer Assignment
 
 ```franko
 func main() -> int32_t {
@@ -4179,7 +4070,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.5 Runtime Expressions Inside Initializer Lists
+## 32.5 Runtime Expressions Inside Initializer Lists
 
 ```franko
 func getValue() -> int32_t {
@@ -4203,7 +4094,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.6 Nested Static Arrays
+## 32.6 Nested Static Arrays
 
 ```franko
 func main() -> int32_t {
@@ -4221,7 +4112,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.7 Nested Dynamic Arrays
+## 32.7 Nested Dynamic Arrays
 
 ```franko
 func main() -> int32_t {
@@ -4244,7 +4135,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.8 Declaration Initializer with Static Array
+## 32.8 Declaration Initializer with Static Array
 
 ```franko
 func main() -> int32_t {
@@ -4258,7 +4149,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.9 Dynamic Array Declaration Initializer Without Initialization
+## 32.9 Dynamic Array Declaration Initializer Without Initialization
 
 ```franko
 func main() -> int32_t {
@@ -4286,7 +4177,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.10 Array Initializer Through Pointer
+## 32.10 Array Initializer Through Pointer
 
 ```franko
 func main() -> int32_t {
@@ -4326,7 +4217,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.11 String Literal Bytes
+## 32.11 String Literal Bytes
 
 ```franko
 func main() -> int32_t {
@@ -4350,7 +4241,7 @@ func main() -> int32_t {
 A string literal is a `view<array<byte, N>>`; byte buffers receive its
 content through `memcpy`. See [String Literals](23-string-literals.md).
 
-## 33.12 Nested Static Array Grid
+## 32.12 Nested Static Array Grid
 
 ```franko
 func fill(ptr<array<array<byte, 3>, 2>> grid) -> void {
@@ -4372,7 +4263,7 @@ func main() -> int32_t {
 
 `array<array<byte, 3>, 2>` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
 
-## 33.13 Status-Returning Intrinsics
+## 32.13 Status-Returning Intrinsics
 
 ```franko
 func main() -> int32_t {
@@ -4399,7 +4290,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.14 Struct Declaration and Field Access
+## 32.14 Struct Declaration and Field Access
 
 ```franko
 struct Point {
@@ -4422,7 +4313,7 @@ func main() -> int32_t {
 
 The separator before `}` is optional.
 
-## 33.15 Struct Field Defaults
+## 32.15 Struct Field Defaults
 
 Field defaults are constant expressions; only primitive fields can have them.
 
@@ -4442,7 +4333,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.16 Whole-Struct Assignment
+## 32.16 Whole-Struct Assignment
 
 A struct is assignable as a whole value only if all of its fields are assignable, recursively.
 
@@ -4468,7 +4359,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.17 Structs Passed by Value and by Pointer
+## 32.17 Structs Passed by Value and by Pointer
 
 Assignable structs may be passed and returned by value; pointer-only structs must go through `ptr<X>`.
 
@@ -4504,7 +4395,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.18 Structs with Array Fields
+## 32.18 Structs with Array Fields
 
 An array field makes the struct non-assignable: the struct is pointer-only and its arrays are managed through the usual intrinsics.
 
@@ -4534,7 +4425,7 @@ func main() -> int32_t {
 
 Dynamic array fields are not part of the struct declaration; allocate them explicitly with `field(n)` as above.
 
-## 33.19 Struct Globals
+## 32.19 Struct Globals
 
 Global variable declarations accept constant initializers.
 
@@ -4559,7 +4450,7 @@ func main() -> int32_t {
 
 Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
 
-## 33.20 Array `length()`
+## 32.20 Array `length()`
 
 ```franko
 func main() -> int32_t {
@@ -4581,7 +4472,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.21 Inferred Static Array Sizes (`?`)
+## 32.21 Inferred Static Array Sizes (`?`)
 
 ```franko
 func main() -> int32_t {
@@ -4599,7 +4490,7 @@ func main() -> int32_t {
 }
 ```
 
-## 33.22 Command-Line Arguments
+## 32.22 Command-Line Arguments
 
 ```franko
 func main(view<array<array<byte>>> args) -> int32_t {
@@ -4616,4 +4507,4 @@ func main(view<array<array<byte>>> args) -> int32_t {
 }
 ```
 
-Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Runtime and Backend Notes](31-runtime-and-backend-notes.md)).
+Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Compiler Internals](../compiler_docs.md)).

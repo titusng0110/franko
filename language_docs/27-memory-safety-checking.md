@@ -94,7 +94,7 @@ Current limitations of the pointer checker:
 - checks are intra-procedural; pointer effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
 
-## 27.4 Capability Linting
+## 27.8 Capability Linting
 
 A second, independent pass (`PointerPermissionChecker`) warns when a
 `ptr`/`mview` local variable or parameter requests permissions it never

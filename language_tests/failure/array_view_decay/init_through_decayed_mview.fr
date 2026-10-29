@@ -1,0 +1,12 @@
+// Lifecycle intrinsics never survive the decay: the borrowed dynamic-
+// array descriptor must not be init()ed (it would allocate over storage
+// the static array owns).
+func main() -> int32_t {
+    array<array<int32_t>, 2> g;
+    g[0].init(2);
+    g[1].init(2);
+    mview<array<array<int32_t>, 2>> m = getmview(g);
+    mview<array<array<int32_t>>> d = m;
+    $(d)[0].init(5);
+    return 0;
+}

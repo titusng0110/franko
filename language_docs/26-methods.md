@@ -181,7 +181,7 @@ Methods emit as free C++ functions with a mangled name:
 | method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
 | method `self` parameter | `VAR_self` (`STRUCT_X*`) |
 
-The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Runtime and Backend Notes](31-runtime-and-backend-notes.md).
+The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Compiler Internals](../compiler_docs.md).
 
 - The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
 - `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.

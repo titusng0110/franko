@@ -239,11 +239,16 @@ template <typename T>
 struct Franko_Dynamic_Array {
     uint32_t count = 0;
     T* data = nullptr;
+    // False for every real array. The compiler sets it true on the hidden
+    // borrowed headers it synthesizes for static-to-dynamic array pointer
+    // view decays: their data points at storage owned by a
+    // Franko_Static_Array, so destruction must not free it.
+    bool borrowed = false;
 
     uint32_t length() const { return count; }
 
     ~Franko_Dynamic_Array() {
-        if (data != nullptr) {
+        if (!borrowed && data != nullptr) {
             destroy_elements(data, count);
             je_free(data);
             data = nullptr;

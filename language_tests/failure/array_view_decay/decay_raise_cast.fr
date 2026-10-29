@@ -1,0 +1,7 @@
+// Explicit cast cannot raise permissions through the decay.
+func main() -> int32_t {
+    array<int32_t, 3> xs;
+    view<array<int32_t, 3>> v = getview(xs);
+    mview<array<int32_t>> m = cast<mview<array<int32_t>>>(v);
+    return 0;
+}
