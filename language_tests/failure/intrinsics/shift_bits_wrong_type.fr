@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/shift_bits_wrong_type
+// Shift counts must be uint64 (or fitting constants).
+func main() -> int32 {
+    [byte, 4] a;
+    uint32 n = 1;
+    a.shift_bits_left(n);
+    return 0;
+}

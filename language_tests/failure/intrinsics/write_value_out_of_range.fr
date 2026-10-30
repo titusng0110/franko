@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/write_value_out_of_range
+// Constant write values must fit the accessor's integer type.
+func main() -> int32 {
+    [byte, 8] a;
+    a.write_int16_LE(0, 40000);
+    return 0;
+}

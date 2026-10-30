@@ -38,18 +38,7 @@ public final class ArrayLowerer {
     }
 
     public boolean isArrayIntrinsicMemberName(String name) {
-        return switch (name) {
-            case "init",
-                 "init_zero",
-                 "resize",
-                 "uninit",
-                 "memset",
-                 "memcpy",
-                 "memmove",
-                 "length" -> true;
-
-            default -> false;
-        };
+        return SemanticArrayIntrinsicKind.fromRuntimeName(name) != null;
     }
 
     private boolean isStructReceiver(MemberAccessNode mac) {
@@ -126,8 +115,67 @@ public final class ArrayLowerer {
             case "length" ->
                     lowerLength(call, mac);
 
-            default -> null;
+            default -> lowerSignatureIntrinsic(call, mac);
         };
+    }
+
+    private SemanticArrayIntrinsicCallNode lowerSignatureIntrinsic(
+            CallNode call,
+            MemberAccessNode mac
+    ) {
+        SemanticArrayIntrinsicKind kind =
+                SemanticArrayIntrinsicKind.fromRuntimeName(mac.memberName);
+
+        if (kind == null) {
+            return null;
+        }
+
+        if (!kind.acceptsArity(call.args.size())) {
+            ctx.error("Array intrinsic '"
+                    + kind.runtimeName
+                    + "' expects "
+                    + kind.arityDescription()
+                    + " arguments, got "
+                    + call.args.size());
+            return null;
+        }
+
+        SemanticExprNode receiver = kind.requiresStorageLValue()
+                ? exprAnalyzer.analyzeRequiredLValueExpr(
+                        mac.target,
+                        kind.runtimeName + " receiver"
+                )
+                : exprAnalyzer.analyzeExpr(mac.target);
+
+        exprAnalyzer.requireArrayType(
+                receiver,
+                kind.runtimeName + "() receiver"
+        );
+
+        List<SemanticExprNode> args = new ArrayList<>();
+
+        for (int i = 0; i < call.args.size(); i++) {
+            SemanticIntrinsicArgKind argKind = kind.argKind(i);
+
+            SemanticExprNode arg;
+
+            if (argKind.isPointer()) {
+                arg = exprAnalyzer.analyzeExprWithExpectedType(
+                        call.args.get(i),
+                        memcpySourceContext(receiver.type)
+                );
+            } else {
+                arg = exprAnalyzer.analyzeExpr(call.args.get(i));
+            }
+
+            args.add(arg);
+        }
+
+        return new SemanticArrayIntrinsicCallNode(
+                kind,
+                receiver,
+                args
+        );
     }
 
     private SemanticArrayIntrinsicCallNode lowerDynamicArrayAlloc(

@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/bit_mask_wrong_type
+// Bit masks must be byte values.
+func main() -> int32 {
+    [byte, 4] a;
+    a.bitwise_xor_mask(256);
+    return 0;
+}

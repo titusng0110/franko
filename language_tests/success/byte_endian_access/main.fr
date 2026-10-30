@@ -1,0 +1,87 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Byte Endian Accessors
+// ============================================================
+// Covers all twenty-four read_/write_ endian accessors (doc 21.14):
+// uint16/uint32/uint64 and int16/int32/int64, both byte orders,
+// static and dynamic receivers, byte-order layout on the wire, and
+// read-only access through a view.
+// ============================================================
+
+func main() -> int32 {
+    [byte, 16] buf
+    buf.memset(0)
+
+    buf.write_uint16_LE(0, 0x1234)
+    print(buf.read_uint16_LE(0))
+    print(buf.read_uint16_BE(0))
+    buf.write_uint16_BE(0, 0x1234)
+    print(buf.read_uint16_BE(0))
+    print(buf.read_uint16_LE(0))
+
+    buf.write_uint32_LE(0, 0x89ABCDEF)
+    print(buf.read_uint32_LE(0))
+    print(buf.read_uint32_BE(0))
+    buf.write_uint32_BE(0, 0x01020304)
+    print(buf.read_uint32_BE(0))
+    print(buf.read_uint32_LE(0))
+
+    buf.write_uint64_LE(0, 0x0102030405060708)
+    print(buf.read_uint64_LE(0))
+    print(buf.read_uint64_BE(0))
+    buf.write_uint64_BE(0, 0x1122334455667788)
+    print(buf.read_uint64_BE(0))
+    print(buf.read_uint64_LE(0))
+
+    buf.write_int16_LE(0, -2)
+    print(buf.read_int16_LE(0))
+    print(buf.read_int16_BE(0))
+    buf.write_int16_BE(0, -3)
+    print(buf.read_int16_BE(0))
+    print(buf.read_int16_LE(0))
+
+    buf.write_int32_LE(0, -100000)
+    print(buf.read_int32_LE(0))
+    print(buf.read_int32_BE(0))
+    buf.write_int32_BE(0, -100000)
+    print(buf.read_int32_BE(0))
+    print(buf.read_int32_LE(0))
+
+    buf.write_int64_LE(0, -10000000000)
+    print(buf.read_int64_LE(0))
+    print(buf.read_int64_BE(0))
+    buf.write_int64_BE(0, -10000000000)
+    print(buf.read_int64_BE(0))
+    print(buf.read_int64_LE(0))
+
+    // Wire layout: LE stores low byte first, BE high byte first.
+    buf.memset(0)
+    buf.write_uint16_LE(0, 0x1234)
+    print(buf[0])
+    print(buf[1])
+    buf.write_uint16_BE(2, 0x1234)
+    print(buf[2])
+    print(buf[3])
+
+    // Unaligned access at a non-zero offset.
+    buf.write_uint32_LE(3, 0xC0DE1234)
+    print(buf.read_uint32_LE(3))
+    print(buf.read_uint32_BE(3))
+
+    // Dynamic receiver.
+    [byte] dyn
+    dyn.init_zero(8)
+    dyn.write_uint32_BE(2, 0xAABBCCDD)
+    print(dyn.read_uint32_BE(2))
+    print(dyn.read_uint32_LE(2))
+    dyn.write_int64_LE(0, -1)
+    print(dyn.read_int64_LE(0))
+    dyn.uninit()
+
+    // Read-only access through a view.
+    view<[byte, 16]> ro = getview(buf)
+    print($(ro).read_uint16_BE(2))
+
+    return 0
+}

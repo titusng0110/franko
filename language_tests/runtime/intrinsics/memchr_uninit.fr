@@ -1,0 +1,9 @@
+import "franko/io"
+
+// Runtime fixture: intrinsics/memchr_uninit
+// Searching an uninitialized dynamic byte array aborts.
+func main() -> int32 {
+    [byte] buf;
+    print(buf.memchr(0));
+    return 0;
+}

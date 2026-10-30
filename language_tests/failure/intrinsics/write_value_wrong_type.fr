@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/write_value_wrong_type
+// The write value must be exactly the accessor's integer type (or a fitting constant).
+func main() -> int32 {
+    [byte, 8] a;
+    uint32 v = 1;
+    a.write_uint16_LE(0, v);
+    return 0;
+}

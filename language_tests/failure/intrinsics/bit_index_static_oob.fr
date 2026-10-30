@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/bit_index_static_oob
+// Constant bit indexes must be below 8 * static size.
+func main() -> int32 {
+    [byte, 2] a;
+    a.write_bit(16, 1);
+    return 0;
+}

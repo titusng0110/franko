@@ -1,0 +1,85 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Byte Bit Intrinsics
+// ============================================================
+// Covers the bit intrinsics (doc 21.15): read_bit/write_bit/
+// flip_bit across byte boundaries, the bitwise_*_mask operators,
+// shift_bits_left/shift_bits_right (including shifts at and beyond
+// the total bit count), count_set_bits, dynamic receivers, and
+// read-only access through a view.
+// ============================================================
+
+func main() -> int32 {
+    [byte, 2] f
+    f.memset(0)
+    f.write_bit(0, 1)
+    f.write_bit(9, 1)
+    print(f.read_bit(0))
+    print(f.read_bit(1))
+    print(f.read_bit(9))
+    print(f.count_set_bits())
+
+    f.flip_bit(1)
+    print(f.read_bit(1))
+    print(f.count_set_bits())
+
+    f.flip_bit(9)
+    print(f.read_bit(9))
+
+    // A nonzero write_bit value sets the bit.
+    f.write_bit(4, 7)
+    print(f.read_bit(4))
+    f.write_bit(4, 0)
+    print(f.read_bit(4))
+
+    // Masks apply to every byte.
+    [byte, 4] m
+    m.memset(0)
+    m.bitwise_or_mask(0x0F)
+    print(m[0])
+    print(m[3])
+    print(m.count_set_bits())
+
+    m.bitwise_and_mask(0x03)
+    print(m[0])
+    print(m.count_set_bits())
+
+    m.bitwise_xor_mask(0xFF)
+    print(m[0])
+    m.bitwise_not_mask()
+    print(m[0])
+    print(m.count_set_bits())
+
+    // Shifts move the whole bit string across byte boundaries.
+    [byte, 4] s
+    s.memset(0)
+    s.write_bit(0, 1)
+    s.shift_bits_left(8)
+    print(s[0])
+    print(s[1])
+    s.shift_bits_left(9)
+    print(s[1])
+    print(s[2])
+    s.shift_bits_right(9)
+    print(s[1])
+    s.shift_bits_left(32)
+    print(s.count_set_bits())
+
+    // Dynamic receiver.
+    [byte] dyn
+    dyn.init_zero(1)
+    dyn.write_bit(7, 1)
+    print(dyn.read_bit(7))
+    print(dyn.count_set_bits())
+    dyn.shift_bits_right(1)
+    print(dyn[0])
+    dyn.uninit()
+
+    // Read-only receiver through a view.
+    view<[byte, 4]> ro = getview(m)
+    print($(ro).count_set_bits())
+    print($(ro).read_bit(2))
+
+    return 0
+}

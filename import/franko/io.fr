@@ -955,6 +955,12 @@ func print(int64 num, view<[uint8]> end) -> void {
 // bytes read, 0 at end of input, or -1 on error (a null `buf`, or
 // `count` larger than the buffer). A short result is normal: the
 // return value may be smaller than `count` even before end of input.
+//
+// On Windows, reading a stdin pipe whose writer has closed makes
+// ReadFile report failure (ERROR_BROKEN_PIPE) with zero bytes instead
+// of succeeding with 0 bytes as POSIX read does. The os::win32 bridge
+// stays a thin ReadFile wrapper, so that end-of-input normalization
+// lives here.
 func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
     if (buf == null) {
         return -1
@@ -964,10 +970,17 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
     }
     if (os::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
+        // GetStdHandle returns NULL or INVALID_HANDLE_VALUE on failure.
+        if (h == 0 || h == 0xFFFFFFFFFFFFFFFF) {
+            return -1
+        }
         uint32 n = 0
         int32 ok = os::win32::ReadFile(h, buf, count, getmview(n))
-        if (ok == 0) {
-            return -1
+        if (ok == 0 && n == 0) {
+            // A failed read that delivered no bytes: on Windows a closed
+            // stdin pipe is reported this way (ERROR_BROKEN_PIPE) rather
+            // than as a successful zero-byte read, so treat it as EOF.
+            return 0
         }
         return cast<int64>(n)
     } else if (os::IS_LINUX || os::IS_MACOS) {

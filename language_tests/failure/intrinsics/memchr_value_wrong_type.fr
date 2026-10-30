@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/memchr_value_wrong_type
+// The memchr value must be a byte (constant fits uint8).
+func main() -> int32 {
+    [byte, 4] a;
+    a.memchr(300);
+    return 0;
+}

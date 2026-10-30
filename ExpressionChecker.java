@@ -450,13 +450,30 @@ public class ExpressionChecker {
                     node.kind.runtimeName + "()"
             );
 
-            case MEMSET, MEMCPY, MEMMOVE -> ensureRegionPermission(
+            case MEMSET, MEMCPY, MEMMOVE,
+                 WRITE_UINT16_LE, WRITE_UINT16_BE,
+                 WRITE_UINT32_LE, WRITE_UINT32_BE,
+                 WRITE_UINT64_LE, WRITE_UINT64_BE,
+                 WRITE_INT16_LE, WRITE_INT16_BE,
+                 WRITE_INT32_LE, WRITE_INT32_BE,
+                 WRITE_INT64_LE, WRITE_INT64_BE,
+                 WRITE_BIT, FLIP_BIT,
+                 BITWISE_NOT_MASK, BITWISE_XOR_MASK,
+                 BITWISE_AND_MASK, BITWISE_OR_MASK,
+                 SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT -> ensureRegionPermission(
                     node.receiver,
                     PtrPermission.MUTABLE,
                     node.kind.runtimeName + "()"
             );
 
-            case LENGTH -> { }
+            case LENGTH, MEMCMP, MEMCHR, MEMMEM,
+                 READ_UINT16_LE, READ_UINT16_BE,
+                 READ_UINT32_LE, READ_UINT32_BE,
+                 READ_UINT64_LE, READ_UINT64_BE,
+                 READ_INT16_LE, READ_INT16_BE,
+                 READ_INT32_LE, READ_INT32_BE,
+                 READ_INT64_LE, READ_INT64_BE,
+                 READ_BIT, COUNT_SET_BITS -> { }
         }
 
         switch (node.kind) {
@@ -466,6 +483,334 @@ public class ExpressionChecker {
             case MEMCPY -> visitArrayMemcpyIntrinsic(node);
             case MEMMOVE -> visitArrayMemmoveIntrinsic(node);
             case LENGTH -> visitArrayLengthIntrinsic(node);
+
+            case MEMCMP -> visitArrayMemcmpIntrinsic(node);
+            case MEMCHR -> visitArrayMemchrIntrinsic(node);
+            case MEMMEM -> visitArrayMemmemIntrinsic(node);
+
+            case READ_UINT16_LE, READ_UINT16_BE,
+                 READ_UINT32_LE, READ_UINT32_BE,
+                 READ_UINT64_LE, READ_UINT64_BE,
+                 READ_INT16_LE, READ_INT16_BE,
+                 READ_INT32_LE, READ_INT32_BE,
+                 READ_INT64_LE, READ_INT64_BE -> visitArrayReadIntrinsic(node);
+
+            case WRITE_UINT16_LE, WRITE_UINT16_BE,
+                 WRITE_UINT32_LE, WRITE_UINT32_BE,
+                 WRITE_UINT64_LE, WRITE_UINT64_BE,
+                 WRITE_INT16_LE, WRITE_INT16_BE,
+                 WRITE_INT32_LE, WRITE_INT32_BE,
+                 WRITE_INT64_LE, WRITE_INT64_BE -> visitArrayWriteIntrinsic(node);
+
+            case READ_BIT, WRITE_BIT, FLIP_BIT,
+                 BITWISE_NOT_MASK, BITWISE_XOR_MASK,
+                 BITWISE_AND_MASK, BITWISE_OR_MASK,
+                 SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT,
+                 COUNT_SET_BITS -> visitArrayBitIntrinsic(node);
+        }
+    }
+
+    private void visitArrayMemcmpIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1 && node.args.size() != 4) {
+            diagnostics.error("Array intrinsic 'memcmp' expects either 1 or 4 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        checkNewIntrinsicReceiver(node);
+
+        SemanticExprNode sourcePtr = node.args.get(0);
+        checkExpr(sourcePtr);
+
+        SemanticType sourceArrayType = null;
+
+        if (ensureValueExpression(
+                sourcePtr,
+                "memcmp() source pointer"
+        )) {
+            if (!(sourcePtr.type instanceof SemanticPtrType ptr)) {
+                diagnostics.error("memcmp() source must be an pointer to an array, got "
+                        + types.describeSafe(sourcePtr.type));
+            } else if (!types.isArrayType(ptr.referencedType)) {
+                diagnostics.error("memcmp() source must be an pointer to an array, got ptr<"
+                        + types.describeSafe(ptr.referencedType)
+                        + ">");
+            } else {
+                sourceArrayType = ptr.referencedType;
+            }
+        }
+
+        SemanticType targetArrayType = node.receiver.type;
+
+        if (sourceArrayType != null) {
+            SemanticType targetElem = types.elementTypeOfArray(targetArrayType);
+            SemanticType sourceElem = types.elementTypeOfArray(sourceArrayType);
+
+            if (targetElem != null && sourceElem != null
+                    && !types.sameType(targetElem, sourceElem)) {
+                diagnostics.error("memcmp() requires source and target arrays to have identical element types, got "
+                        + targetElem.describe()
+                        + " and "
+                        + sourceElem.describe());
+            }
+
+            if (sourceElem != null && !types.isCopiable(sourceElem)) {
+                diagnostics.error("memcmp() source array element type is not copiable: "
+                        + sourceElem.describe());
+            }
+        }
+
+        if (node.args.size() == 4) {
+            SemanticExprNode dstStart = node.args.get(1);
+            SemanticExprNode srcStart = node.args.get(2);
+            SemanticExprNode count = node.args.get(3);
+
+            ensureUInt32Compatible(dstStart, "memcmp() destination start", true);
+            ensureUInt32Compatible(srcStart, "memcmp() source start", true);
+            ensureUInt32Compatible(count, "memcmp() count", true);
+
+            ensureStaticArrayRangeInBounds(
+                    targetArrayType,
+                    dstStart,
+                    count,
+                    "memcmp() destination range"
+            );
+
+            ensureStaticArrayRangeInBounds(
+                    sourceArrayType,
+                    srcStart,
+                    count,
+                    "memcmp() source range"
+            );
+        }
+
+        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+    }
+
+    private void visitArrayMemchrIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1 && node.args.size() != 3) {
+            diagnostics.error("Array intrinsic 'memchr' expects either 1 or 3 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        checkNewIntrinsicReceiver(node);
+
+        ensureScalarCompatible(
+                node.args.get(0),
+                SemanticPrimitiveKind.UINT8,
+                "memchr() value"
+        );
+
+        if (node.args.size() == 3) {
+            ensureUInt32Compatible(node.args.get(1), "memchr() start", true);
+            ensureUInt32Compatible(node.args.get(2), "memchr() count", true);
+
+            ensureStaticArrayRangeInBounds(
+                    node.receiver.type,
+                    node.args.get(1),
+                    node.args.get(2),
+                    "memchr() range"
+            );
+        }
+
+        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+    }
+
+    private void visitArrayMemmemIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1 && node.args.size() != 3) {
+            diagnostics.error("Array intrinsic 'memmem' expects either 1 or 3 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        checkNewIntrinsicReceiver(node);
+
+        SemanticExprNode needle = node.args.get(0);
+        checkExpr(needle);
+
+        if (ensureValueExpression(needle, "memmem() needle pointer")) {
+            if (!(needle.type instanceof SemanticPtrType ptr)) {
+                diagnostics.error("memmem() needle must be an pointer to an array, got "
+                        + types.describeSafe(needle.type));
+            } else if (!types.isArrayType(ptr.referencedType)) {
+                diagnostics.error("memmem() needle must be an pointer to an array, got ptr<"
+                        + types.describeSafe(ptr.referencedType)
+                        + ">");
+            } else {
+                SemanticType needleElem =
+                        types.elementTypeOfArray(ptr.referencedType);
+
+                if (needleElem != null && !types.isByteType(needleElem)) {
+                    diagnostics.error("memmem() needle array element type must be byte, got "
+                            + types.describeSafe(needleElem));
+                }
+            }
+        }
+
+        if (node.args.size() == 3) {
+            ensureUInt32Compatible(node.args.get(1), "memmem() start", true);
+            ensureUInt32Compatible(node.args.get(2), "memmem() count", true);
+
+            ensureStaticArrayRangeInBounds(
+                    node.receiver.type,
+                    node.args.get(1),
+                    node.args.get(2),
+                    "memmem() range"
+            );
+        }
+
+        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+    }
+
+    private void visitArrayReadIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 1) {
+            diagnostics.error("Array intrinsic '"
+                    + node.kind.runtimeName
+                    + "' expects exactly 1 argument, got "
+                    + node.args.size());
+            return;
+        }
+
+        checkNewIntrinsicReceiver(node);
+
+        SemanticExprNode offset = node.args.get(0);
+
+        ensureUInt32Compatible(
+                offset,
+                node.kind.runtimeName + "() offset",
+                true
+        );
+
+        ensureStaticArrayByteAccessInBounds(
+                node.receiver.type,
+                offset,
+                TypeChecker.bitWidth(node.kind.returnKind) / 8,
+                node.kind.runtimeName + "() offset"
+        );
+
+        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+    }
+
+    private void visitArrayWriteIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (node.args.size() != 2) {
+            diagnostics.error("Array intrinsic '"
+                    + node.kind.runtimeName
+                    + "' expects exactly 2 arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        checkNewIntrinsicReceiver(node);
+
+        SemanticExprNode offset = node.args.get(0);
+
+        ensureUInt32Compatible(
+                offset,
+                node.kind.runtimeName + "() offset",
+                true
+        );
+
+        ensureStaticArrayByteAccessInBounds(
+                node.receiver.type,
+                offset,
+                TypeChecker.bitWidth(node.kind.argKind(1).primitiveKind) / 8,
+                node.kind.runtimeName + "() offset"
+        );
+
+        SemanticIntrinsicArgKind valueKind = node.kind.argKind(1);
+
+        ensureScalarCompatible(
+                node.args.get(1),
+                valueKind.primitiveKind,
+                node.kind.runtimeName + "() value"
+        );
+
+        ensureArrayIntrinsicReturnType(node, new SemanticVoidType());
+    }
+
+    private void visitArrayBitIntrinsic(SemanticArrayIntrinsicCallNode node) {
+        if (!node.kind.acceptsArity(node.args.size())) {
+            diagnostics.error("Array intrinsic '"
+                    + node.kind.runtimeName
+                    + "' expects "
+                    + node.kind.arityDescription()
+                    + " arguments, got "
+                    + node.args.size());
+            return;
+        }
+
+        checkNewIntrinsicReceiver(node);
+
+        for (int i = 0; i < node.args.size(); i++) {
+            SemanticIntrinsicArgKind argKind = node.kind.argKind(i);
+
+            ensureScalarCompatible(
+                    node.args.get(i),
+                    argKind.primitiveKind,
+                    node.kind.runtimeName + "() argument " + (i + 1)
+            );
+        }
+
+        if (node.kind == SemanticArrayIntrinsicKind.READ_BIT
+                || node.kind == SemanticArrayIntrinsicKind.WRITE_BIT
+                || node.kind == SemanticArrayIntrinsicKind.FLIP_BIT) {
+            ensureStaticArrayBitIndexInBounds(
+                    node.receiver.type,
+                    node.args.get(0),
+                    node.kind.runtimeName + "() bit index"
+            );
+        }
+
+        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+    }
+
+    private void checkNewIntrinsicReceiver(SemanticArrayIntrinsicCallNode node) {
+        if (node.kind.requiresStorageLValue()
+                && !isStorageBackedLValue(node.receiver)) {
+            diagnostics.error(node.kind.runtimeName
+                    + "() receiver must be a storage-backed lvalue");
+        }
+
+        if (!types.isArrayType(node.receiver.type)) {
+            diagnostics.error(node.kind.runtimeName
+                    + "() receiver must be an array, got "
+                    + types.describeSafe(node.receiver.type));
+            return;
+        }
+
+        SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
+
+        if (elementType == null) {
+            return;
+        }
+
+        switch (node.kind.elementRule) {
+            case NONE -> { }
+
+            case TRIVIAL -> {
+                if (!types.isTrivial(elementType)) {
+                    diagnostics.error(node.kind.runtimeName
+                            + "() receiver element type is not trivial: "
+                            + elementType.describe());
+                }
+            }
+
+            case COPIABLE -> {
+                if (!types.isCopiable(elementType)) {
+                    diagnostics.error(node.kind.runtimeName
+                            + "() receiver element type is not copiable: "
+                            + elementType.describe());
+                }
+            }
+
+            case BYTE -> {
+                if (!types.isByteType(elementType)) {
+                    diagnostics.error(node.kind.runtimeName
+                            + "() receiver element type must be byte, got "
+                            + types.describeSafe(elementType));
+                }
+            }
         }
     }
 
@@ -540,8 +885,8 @@ public class ExpressionChecker {
 
         SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
 
-        if (elementType != null && !types.isMemsetable(elementType)) {
-            diagnostics.error("memset() receiver element type is not memsetable: "
+        if (elementType != null && !types.isTrivial(elementType)) {
+            diagnostics.error("memset() receiver element type is not trivial: "
                     + elementType.describe());
         }
 
@@ -634,13 +979,13 @@ public class ExpressionChecker {
                         + sourceElem.describe());
             }
 
-            if (targetElem != null && !types.isMemcpyable(targetElem)) {
-                diagnostics.error("memcpy() target array element type is not memcpyable: "
+            if (targetElem != null && !types.isCopiable(targetElem)) {
+                diagnostics.error("memcpy() target array element type is not copiable: "
                         + targetElem.describe());
             }
 
-            if (sourceElem != null && !types.isMemcpyable(sourceElem)) {
-                diagnostics.error("memcpy() source array element type is not memcpyable: "
+            if (sourceElem != null && !types.isCopiable(sourceElem)) {
+                diagnostics.error("memcpy() source array element type is not copiable: "
                         + sourceElem.describe());
             }
         }
@@ -708,8 +1053,8 @@ public class ExpressionChecker {
         SemanticType receiverElem =
                 types.elementTypeOfArray(node.receiver.type);
 
-        if (receiverElem != null && !types.isMemcpyable(receiverElem)) {
-            diagnostics.error("memmove() receiver array element type is not memmoveable: "
+        if (receiverElem != null && !types.isCopiable(receiverElem)) {
+            diagnostics.error("memmove() receiver array element type is not copiable: "
                     + receiverElem.describe());
         }
 
@@ -1157,6 +1502,129 @@ public class ExpressionChecker {
                 && pt.kind == SemanticPrimitiveKind.UINT32)) {
             diagnostics.error(message + ": expected uint32, got "
                     + types.describeSafe(expr.type));
+        }
+    }
+
+    private void ensureScalarCompatible(
+            SemanticExprNode expr,
+            SemanticPrimitiveKind kind,
+            String message
+    ) {
+        if (expr == null) {
+            diagnostics.error(message + ": expression cannot be null");
+            return;
+        }
+
+        checkExpr(expr);
+
+        if (!ensureValueExpression(expr, message)) {
+            return;
+        }
+
+        if (expr.isConstant()) {
+            types.requireConstantFitsPrimitive(
+                    expr.constantValue,
+                    kind,
+                    message
+            );
+            return;
+        }
+
+        if (!(expr.type instanceof SemanticPrimitiveType pt
+                && pt.kind == kind)) {
+            diagnostics.error(message + ": expected "
+                    + kind.name().toLowerCase()
+                    + ", got "
+                    + types.describeSafe(expr.type));
+        }
+    }
+
+    private void ensureStaticArrayByteAccessInBounds(
+            SemanticType arrayType,
+            SemanticExprNode offsetExpr,
+            int byteWidth,
+            String message
+    ) {
+        if (!(arrayType instanceof SemanticStaticArrayType staticArray)) {
+            return;
+        }
+
+        if (offsetExpr == null
+                || !offsetExpr.isConstant()
+                || offsetExpr.constantValue == null) {
+            return;
+        }
+
+        BigInteger offset = offsetExpr.constantValue;
+
+        if (offset.signum() < 0) {
+            return;
+        }
+
+        BigInteger size = staticArraySize(staticArray);
+
+        if (size == null) {
+            return;
+        }
+
+        if (offset.add(BigInteger.valueOf(byteWidth)).compareTo(size) > 0) {
+            diagnostics.error(message
+                    + " is out of bounds for "
+                    + staticArray.describe()
+                    + " with size "
+                    + size
+                    + ": byte offset "
+                    + offset
+                    + ", width "
+                    + byteWidth);
+        }
+    }
+
+    private void ensureStaticArrayBitIndexInBounds(
+            SemanticType arrayType,
+            SemanticExprNode bitIndexExpr,
+            String message
+    ) {
+        if (!(arrayType instanceof SemanticStaticArrayType staticArray)) {
+            return;
+        }
+
+        if (bitIndexExpr == null
+                || !bitIndexExpr.isConstant()
+                || bitIndexExpr.constantValue == null) {
+            return;
+        }
+
+        BigInteger bitIndex = bitIndexExpr.constantValue;
+
+        if (bitIndex.signum() < 0) {
+            return;
+        }
+
+        BigInteger size = staticArraySize(staticArray);
+
+        if (size == null) {
+            return;
+        }
+
+        BigInteger totalBits = size.multiply(BigInteger.valueOf(8));
+
+        if (bitIndex.compareTo(totalBits) >= 0) {
+            diagnostics.error(message
+                    + " is out of bounds for "
+                    + staticArray.describe()
+                    + " with "
+                    + totalBits
+                    + " bits: bit index "
+                    + bitIndex);
+        }
+    }
+
+    private BigInteger staticArraySize(SemanticStaticArrayType staticArray) {
+        try {
+            return types.parseIntegerLiteral(staticArray.sizeLiteral);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

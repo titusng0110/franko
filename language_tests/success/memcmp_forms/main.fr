@@ -1,0 +1,80 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: memcmp Forms
+// ============================================================
+// Covers memcmp (doc 21.11): whole-array and ranged forms, every
+// static/dynamic shape combination, length ordering on an equal
+// shared prefix, array-literal sources, view receivers/sources, and
+// struct element types.
+// ============================================================
+
+struct Pair {
+    int32 first
+    int32 second
+}
+
+func main() -> int32 {
+    [int32, 3] a
+    [int32, 3] b
+    a[0] = 1
+    a[1] = 2
+    a[2] = 3
+    b[0] = 1
+    b[1] = 2
+    b[2] = 3
+
+    // Equal arrays.
+    print(a.memcmp(getptr(b)) == 0)
+
+    // Byte-wise ordering: 3 < 4.
+    b[2] = 4
+    print(a.memcmp(getptr(b)) < 0)
+    print(b.memcmp(getptr(a)) > 0)
+
+    // Equal shared prefix orders by length (shorter is less).
+    [int32, 2] shorter
+    shorter[0] = 1
+    shorter[1] = 2
+    print(shorter.memcmp(getptr(a)) < 0)
+    print(a.memcmp(getptr(shorter)) > 0)
+
+    // Dynamic <-> static shapes.
+    [int32] d
+    d.init_zero(3)
+    d[0] = 1
+    d[1] = 2
+    d[2] = 3
+    print(d.memcmp(getptr(a)) == 0)
+    print(a.memcmp(getptr(d)) == 0)
+
+    // Array-literal source.
+    print(a.memcmp([1, 2, 3]) == 0)
+    print(a.memcmp([1, 2, 9]) < 0)
+
+    // Ranged form: equal prefix, then a difference at index 2.
+    print(a.memcmp(getptr(b), 0, 0, 2) == 0)
+    d[2] = 9
+    print(a.memcmp(getptr(d), 2, 2, 1) < 0)
+    print(d.memcmp(getptr(a), 2, 2, 1) > 0)
+
+    // View receiver and view source.
+    view<[int32, 3]> va = getview(a)
+    print($(va).memcmp(getview(b)) < 0)
+
+    // Struct elements are copiable.
+    [Pair, 2] ps
+    [Pair, 2] pt
+    ps[0].first = 1
+    ps[0].second = 2
+    ps[1].first = 3
+    ps[1].second = 4
+    pt[0].first = 1
+    pt[0].second = 2
+    pt[1].first = 3
+    pt[1].second = 5
+    print(ps.memcmp(getptr(pt)) < 0)
+
+    d.uninit()
+    return 0
+}

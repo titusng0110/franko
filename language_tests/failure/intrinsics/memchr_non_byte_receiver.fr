@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/memchr_non_byte_receiver
+// memchr exists only for byte arrays.
+func main() -> int32 {
+    [int32, 4] a;
+    a.memchr(1);
+    return 0;
+}

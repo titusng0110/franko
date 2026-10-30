@@ -1,0 +1,11 @@
+import "franko/io"
+
+// Runtime fixture: intrinsics/memcmp_uninit_source
+// Comparing against an uninitialized dynamic array aborts.
+func main() -> int32 {
+    [int32, 4] a;
+    a.memset(0);
+    [int32] b;
+    print(a.memcmp(getptr(b)));
+    return 0;
+}

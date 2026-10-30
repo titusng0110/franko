@@ -90,7 +90,7 @@ def main() -> int:
                 results.fail_case(f"{label} (Franko compile failed)")
                 continue
 
-            if native_compile(out_cpp, out_bin, mode=mode, warnings="basic",
+            if native_compile(out_cpp, out_bin, mode=mode, warnings=True,
                                echo=True) != 0:
                 results.fail_case(f"{label} (C++ compile failed)")
                 continue

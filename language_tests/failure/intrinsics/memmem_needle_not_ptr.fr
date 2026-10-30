@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/memmem_needle_not_ptr
+// The memmem needle must be a pointer to a byte array, not an array value.
+func main() -> int32 {
+    [byte, 4] hay;
+    hay.memmem(hay);
+    return 0;
+}

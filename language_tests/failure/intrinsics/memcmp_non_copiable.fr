@@ -1,0 +1,11 @@
+// Failure fixture: intrinsics/memcmp_non_copiable
+// memcmp requires a copiable element type; dynamic arrays are not copiable.
+func main() -> int32 {
+    [[int32], 2] a;
+    a[0].init(2);
+    a[1].init(2);
+    a.memcmp(getptr(a));
+    a[0].uninit();
+    a[1].uninit();
+    return 0;
+}

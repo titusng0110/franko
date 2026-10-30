@@ -1,0 +1,9 @@
+import "franko/io"
+
+// Failure fixture: intrinsics/read_static_oob
+// Constant accessor offsets must leave room for the access width.
+func main() -> int32 {
+    [byte, 4] a;
+    print(a.read_uint32_LE(1));
+    return 0;
+}

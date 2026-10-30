@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/memmem_needle_non_byte
+// The memmem needle element type must be byte.
+func main() -> int32 {
+    [byte, 4] hay;
+    [int32, 2] needle;
+    hay.memmem(getptr(needle));
+    return 0;
+}

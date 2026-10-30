@@ -1,0 +1,7 @@
+// Runtime fixture: intrinsics/bitwise_uninit
+// Byte-mask intrinsics abort on an uninitialized dynamic array.
+func main() -> int32 {
+    [byte] buf;
+    buf.bitwise_not_mask();
+    return 0;
+}

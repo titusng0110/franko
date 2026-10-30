@@ -1,0 +1,1 @@
+memcmp() requires source and target arrays to have identical element types

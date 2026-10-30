@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/byte_writer_in_value_ctx
+// Void byte intrinsics are invalid in value contexts.
+func main() -> int32 {
+    [byte, 4] a;
+    int32 s = a.write_bit(0, 1);
+    a.memset(0);
+    return 0;
+}

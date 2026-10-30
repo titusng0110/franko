@@ -1,0 +1,56 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: memchr and memmem
+// ============================================================
+// Covers the byte-array search intrinsics (doc 21.13): whole-array
+// and ranged forms, static and dynamic receivers, the
+// 0xFFFFFFFF not-found sentinel, string/array-literal and pointer
+// needles, and read-only access through a view.
+// ============================================================
+
+func main() -> int32 {
+    [byte, 8] hay
+    hay.memset(0)
+    hay[0] = 65
+    hay[1] = 66
+    hay[2] = 67
+    hay[3] = 66
+    hay[4] = 67
+
+    print(hay.memchr(65))
+    print(hay.memchr(66))
+    print(hay.memchr(68))
+    print(hay.memchr(66, 2, 4))
+    print(hay.memchr(66, 2, 1))
+    print(hay.memchr(65, 0, 0))
+
+    print(hay.memmem("BC"))
+    print(hay.memmem("BCD"))
+
+    [byte, 2] needle
+    needle[0] = 67
+    needle[1] = 66
+    print(hay.memmem(getptr(needle)))
+    print(hay.memmem(getptr(needle), 2, 6))
+    print(hay.memmem(getptr(needle), 0, 2))
+
+    // Read-only receiver through a view.
+    view<[byte, 8]> ro = getview(hay)
+    print($(ro).memchr(67))
+    print($(ro).memmem("CB"))
+
+    // Dynamic receiver.
+    [byte] dyn
+    dyn.init_zero(4)
+    dyn[0] = 1
+    dyn[1] = 2
+    dyn[2] = 3
+    dyn[3] = 2
+    print(dyn.memchr(2))
+    print(dyn.memmem([3, 2]))
+    print(dyn.memmem([2, 3]))
+    dyn.uninit()
+
+    return 0
+}

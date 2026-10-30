@@ -249,9 +249,9 @@ locked. If it contains pointers, the pointer *variables* are locked, but
 the memory they point to follows its own type rules.
 
 These rules hold at **every** level of nesting: through an `mview`,
-`memset`/`memcpy`/`memmove` and element writes on an *inner* nested
-array are allowed (`$(m)[0].memcpy(src)` is fine), while `init`/
-`init_zero`/`resize`/`uninit` on an inner nested array are blocked
+`memset`/`memcpy`/`memmove`, the byte/bit mutators, and element writes on an
+*inner* nested array are allowed (`$(m)[0].memcpy(src)` is fine), while
+`init`/`init_zero`/`resize`/`uninit` on an inner nested array are blocked
 exactly like on the outermost one (`$(m)[0].init(...)` is not).
 
 ## 24.9 The null Literal
@@ -364,9 +364,11 @@ meaningful):
 Exercising *allocation* means lifecycle intrinsics, `getptr` over the
 variable's region, or using it where a `ptr<T>` is expected (argument,
 return, assignment into a `ptr` slot, method `self`). *Mutation* means
-assignment through its region, `memset`/`memcpy`/`memmove`, or use where
-an `mview<T>` is expected. *Read* covers everything else, including
-`length()`.
+assignment through its region, `memset`/`memcpy`/`memmove`, the byte/bit
+mutators (`write_*`, `write_bit`, `flip_bit`, `bitwise_*_mask`,
+`shift_bits_*`), or use where an `mview<T>` is expected. *Read* covers
+everything else, including `length()`, `memcmp`, `memchr`, `memmem`, the
+`read_*` accessors, `read_bit`, and `count_set_bits`.
 
 Because these are warnings, they do not fail the build. They exist to
 passively teach developers to default to immutable, non-owning pointers

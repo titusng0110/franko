@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/bit_index_wrong_type
+// Bit indexes must be uint64 (or fitting constants).
+func main() -> int32 {
+    [byte, 4] a;
+    int32 idx = 0;
+    a.read_bit(idx);
+    return 0;
+}
