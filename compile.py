@@ -8,11 +8,14 @@ command works on Linux, macOS and Windows:
     uv run python compile.py -O programs/bfs.fr
 
 Without -O the default is an unoptimised debug build with
-AddressSanitizer (-O0 -fsanitize=address -static-libasan) using the
+AddressSanitizer (-O0 -fsanitize=address) using the
 system allocator (malloc/free via FrankoRuntimeWithAsan.hpp); with -O
-it is an optimized build (-O3) using the bundled jemalloc. The -O flag
-is passed through to the Franko compiler, which selects the matching
-runtime header.
+it is an optimized build (-O3) using the bundled jemalloc; with -Omax
+it is the same optimized build but against FrankoRuntimeMax.hpp,
+which strips bounds checking and unsafe_cast range checking for speed
+(out-of-range access is then undefined behavior). The flag is passed
+through to the Franko compiler, which selects the matching runtime
+header.
 
 It runs the Franko compiler (Franko -> C++14), then links the generated
 C++ against the bundled jemalloc for the host platform. Output is written
@@ -57,11 +60,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Compile a Franko (.fr) program into a native executable.",
     )
     parser.add_argument("source", help="path to the .fr source file")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "-O", "--optimize",
         action="store_true",
         help="optimized build with -O3 (default without -O: "
              "-O0 with AddressSanitizer)",
+    )
+    mode.add_argument(
+        "-Omax",
+        action="store_true",
+        help="maximum-speed build like -O but with the checked runtime "
+             "replaced by FrankoRuntimeMax.hpp (no bounds or unsafe_cast "
+             "checking; out-of-range access is undefined behavior)",
     )
     return parser.parse_args(argv)
 
@@ -83,10 +94,11 @@ def main(argv: list[str] | None = None) -> int:
     cxx = find_cxx()
     ensure_toolchain()
 
-    # The optimized build links the bundled jemalloc for the host; the
-    # default ASan build uses the system allocator instead and needs no
-    # jemalloc bundle at all.
-    include, jemalloc_lib = (jemalloc_paths() if args.optimize else (None, None))
+    # The optimized builds (-O / -Omax) link the bundled jemalloc for the
+    # host; the default ASan build uses the system allocator instead and
+    # needs no jemalloc bundle at all.
+    optimized = args.optimize or args.Omax
+    include, jemalloc_lib = (jemalloc_paths() if optimized else (None, None))
 
     target = host_target()
 
@@ -100,13 +112,17 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Source: {relative(source)}")
     print(f"Generated C++: {relative(cpp_out)}")
     print(f"Binary output: {relative(bin_out)}")
-    if args.optimize:
+    if args.Omax:
+        print("Build mode: max-speed (-O3, jemalloc, no bounds/unsafe_cast checks)")
+        print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
+        print(f"jemalloc static library: {relative(jemalloc_lib)}")
+    elif args.optimize:
         print("Build mode: optimized (-O3, jemalloc)")
         print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
         print(f"jemalloc static library: {relative(jemalloc_lib)}")
     else:
         print("Build mode: debug + AddressSanitizer "
-              "(-O0 -fsanitize=address -static-libasan, system allocator)")
+              "(-O0 -fsanitize=address, system allocator)")
     print()
 
     # ------------------------------------------------------------
@@ -116,7 +132,9 @@ def main(argv: list[str] | None = None) -> int:
         java, "-cp", franko_classpath(), "Main",
         source, "-o", cpp_out, "-p", IMPORT_DIR, "--target", target,
     ]
-    if args.optimize:
+    if args.Omax:
+        franko_cmd.append("-Omax")
+    elif args.optimize:
         franko_cmd.append("-O")
     run(franko_cmd)
     print()
@@ -132,17 +150,15 @@ def main(argv: list[str] | None = None) -> int:
     #
     compile_flags = cxx_compile_flags(
         "basic",
-        optimize="3" if args.optimize else "0",
-        sanitize=not args.optimize,
+        optimize="3" if optimized else "0",
+        sanitize=not optimized,
     )
     command = [
         cxx,
         *compile_flags,
-        f"-I{INCLUDE_DIR}",
-        *([f"-I{include}"] if args.optimize else []),
-        cpp_out,
-        *([jemalloc_lib] if args.optimize else []),
-        *link_flags(sanitize=not args.optimize),
+        f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimized else []),
+        cpp_out, *([jemalloc_lib] if optimized else []),
+        *link_flags(sanitize=not optimized),
         "-o",
         bin_out,
     ]
@@ -151,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"Successfully compiled to binary output: {relative(bin_out)}")
     print()
-    if args.optimize:
+    if optimized:
         print("✅ Compilation finished with statically linked jemalloc.")
     else:
         print("✅ Compilation finished with system allocator + AddressSanitizer.")

@@ -19,6 +19,7 @@ public class Main {
         boolean verbose = false;
         String targetSpec = null;
         boolean optimize = false;
+        boolean maxOptimize = false;
 
         if (args.length > 0) {
             sourceFile = args[0];
@@ -53,7 +54,17 @@ public class Main {
                     break;
 
                 case "-O":
+                    if (maxOptimize) {
+                        throw new IllegalArgumentException("-O and -Omax are mutually exclusive");
+                    }
                     optimize = true;
+                    break;
+
+                case "-Omax":
+                    if (optimize) {
+                        throw new IllegalArgumentException("-O and -Omax are mutually exclusive");
+                    }
+                    maxOptimize = true;
                     break;
 
                 case "--target":
@@ -249,10 +260,14 @@ public class Main {
 
         // Without -O the program uses the system allocator (malloc/free)
         // so AddressSanitizer instrumentation applies; with -O it uses
-        // the bundled jemalloc header. Custom -t templates that pin their
-        // own runtime #include keep working: the splice only fires when
-        // the placeholder is present, but stock templates must carry it.
-        String runtimeHeader = optimize ? "FrankoRuntime.hpp" : "FrankoRuntimeWithAsan.hpp";
+        // the bundled jemalloc header; with -Omax it uses the jemalloc
+        // header variant with bounds and unsafe_cast checking stripped.
+        // Custom -t templates that pin their own runtime #include keep
+        // working: the splice only fires when the placeholder is present,
+        // but stock templates must carry it.
+        String runtimeHeader = maxOptimize ? "FrankoRuntimeMax.hpp"
+                : optimize ? "FrankoRuntime.hpp"
+                : "FrankoRuntimeWithAsan.hpp";
         if (!explicitTemplate && !template.contains("__FRANKO_RUNTIME_HEADER__")) {
             throw new RuntimeException("Template does not contain __FRANKO_RUNTIME_HEADER__ placeholder.");
         }

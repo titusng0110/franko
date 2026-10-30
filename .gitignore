@@ -30,6 +30,16 @@ library_tests/**/*.bin
 library_tests/**/*.actual
 library_tests/**/*.compile.log
 
+# Benchmark artifacts (fixtures keep *.fr, *_cpp.cpp sources,
+# benchmark.py, *.md; generated .cpp/.out/.bin are ignored).
+benchmark/**/*.cpp
+!benchmark/AVL_cpp.cpp
+benchmark/**/*.out
+benchmark/**/*.exe
+benchmark/**/*.bin
+benchmark/**/*.actual
+benchmark/**/*.compile.log
+
 # Dual-mode ASan build artifacts (the .asan-suffixed parallels of the
 # blocks above; kept after a failing case for inspection).
 **/*.asan.cpp
