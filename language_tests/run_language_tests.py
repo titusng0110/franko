@@ -46,7 +46,7 @@ Generated artifacts (.cpp, .bin, .actual, compiler logs) are removed after
 a passing case and kept for inspection after a failure.
 
 Every build-backed case runs twice: once in ASan/system-allocator mode
-(Franko without -O, C++ -O0 + AddressSanitizer) and once in optimized
+(Franko without -O, C++ -O1 + AddressSanitizer) and once in optimized
 mode (Franko -O, C++ -O3 + jemalloc). The optimized build keeps the
 historical artifact names; the ASan build uses .asan-suffixed ones so
 the modes never share failure evidence.
@@ -61,6 +61,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from franko_tools import (
     INCLUDE_DIR,
     JAVA_HINT,
+    ASAN_OPTIMIZE,
     BUILD_MODES,
     Results,
     ToolError,
@@ -183,7 +184,7 @@ def main() -> int:
                 continue
 
             failed = run(
-                [cxx, *cxx_compile_flags("full", optimize="3" if optimize else "0",
+                [cxx, *cxx_compile_flags("full", optimize="3" if optimize else ASAN_OPTIMIZE,
                                           sanitize=not optimize),
                  f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
                  out_cpp, *([jemalloc_lib] if optimize else []),
@@ -245,7 +246,7 @@ def main() -> int:
                 continue
 
             failed = run(
-                [cxx, *cxx_compile_flags("none", optimize="3" if optimize else "0",
+                [cxx, *cxx_compile_flags("none", optimize="3" if optimize else ASAN_OPTIMIZE,
                                           sanitize=not optimize),
                  f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
                  out_cpp, *([jemalloc_lib] if optimize else []),

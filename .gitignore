@@ -33,7 +33,7 @@ library_tests/**/*.compile.log
 # Benchmark artifacts (fixtures keep *.fr, *_cpp.cpp sources,
 # benchmark.py, *.md; generated .cpp/.out/.bin are ignored).
 benchmark/**/*.cpp
-!benchmark/AVL_cpp.cpp
+!benchmark/*_cpp.cpp
 benchmark/**/*.out
 benchmark/**/*.exe
 benchmark/**/*.bin
@@ -46,4 +46,4 @@ benchmark/**/*.compile.log
 **/*.asan.bin
 **/*.asan.testbin
 **/*.asan.actual
-**/*.asan.log
+**/*.asan.compile.log

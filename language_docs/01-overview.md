@@ -69,7 +69,7 @@ uv run python compile.py programs/bfs.fr
 ```
 
 This is the default debug mode: the generated code is compiled with
-`-O0` plus AddressSanitizer (including leak checking) and uses the
+`-O1` plus AddressSanitizer (including leak checking) and uses the
 system allocator. For an optimized binary, pass `-O`:
 
 ```bash

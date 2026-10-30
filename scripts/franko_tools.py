@@ -201,8 +201,9 @@ def cxx_compile_flags(
                                                  old compile_* scripts),
       "none"  no warning flags                  (test runtime builds).
 
-    OPTIMIZE is the -O level ("3" or "0"). SANITIZE adds AddressSanitizer
-    (-fsanitize=address plus debug info) for unoptimised debug builds; the
+    OPTIMIZE is the -O level ("3" for optimized builds, ASAN_OPTIMIZE
+    for sanitizer builds). SANITIZE adds AddressSanitizer
+    (-fsanitize=address plus debug info) for debug builds; the
     matching link flags come from link_flags(sanitize=True), since the
     suites and compile.py build and link in a single driver invocation.
     """
@@ -227,9 +228,18 @@ BUILD_MODES = ("asan", "opt")
 
 "asan" is the default debug mode: the Franko compiler runs without -O
 (selecting the system-allocator runtime header) and the C++ step uses
--O0 + AddressSanitizer with no jemalloc. "opt" is the optimized mode:
+-O1 + AddressSanitizer with no jemalloc. "opt" is the optimized mode:
 the compiler runs with -O (jemalloc header) and the C++ step uses -O3
 with the bundled jemalloc.
+"""
+
+
+ASAN_OPTIMIZE = "1"
+"""-O level for the default ASan/debug builds.
+
+-O1 (not -O0) keeps full sanitizer coverage while recovering most of
+-O0's overhead; -g -fno-omit-frame-pointer (added by cxx_compile_flags
+with sanitize=True) keep the reports readable.
 """
 
 
@@ -245,26 +255,36 @@ def java_mode_flags(mode: str) -> list[str]:
 def mode_artifact(path: Path, mode: str) -> Path:
     """Map a status-quo artifact PATH to its per-mode path.
 
-    "opt" keeps the path unchanged; "asan" inserts ".asan" before the
-    final suffix (main.cpp -> main.asan.cpp), so the two modes never
+    "opt" keeps the path unchanged; "asan" inserts ".asan" after the
+    filename stem, before all suffixes (main.cpp -> main.asan.cpp,
+    main.compile.log -> main.asan.compile.log), so the two modes never
     share - and can never clobber - build artifacts or failure evidence.
+    Splitting at the first dot (not the last) keeps the infix position
+    identical on every platform: main.bin -> main.asan.bin on POSIX and
+    main.asan.bin.exe (not main.bin.asan.exe) on Windows.
     """
     if mode == "opt":
         return path
     if mode == "asan":
-        return path.with_name(f"{path.stem}.asan{path.suffix}")
+        head, dot, tail = path.name.partition(".")
+        if not dot:
+            return path.with_name(f"{path.name}.asan")
+        return path.with_name(f"{head}.asan.{tail}")
     raise ValueError(f"unknown build mode: {mode!r}")
 
 
 def link_flags(sanitize: bool = False) -> list[str]:
     """Link flags for a native binary, per host OS.
 
-    Linux needs pthread/dl (jemalloc is linked statically and references
-    both symbol groups; they only matter for glibc < 2.34, where libdl and
-    libpthread are not merged into libc yet), macOS needs pthread only (dl
-    lives in libSystem), MinGW needs neither. The static libstdc++/libgcc
-    pair (Linux/Windows only) keeps binaries independent of the system's
-    GCC runtimes; Apple's clang has no libstdc++ to link.
+    Linux keeps pthread/dl and macOS keeps pthread in every mode: the
+    statically linked jemalloc references both symbol groups on Linux
+    (they only matter for glibc < 2.34, where libdl and libpthread are
+    not merged into libc yet; dl lives in libSystem on macOS), and the
+    AddressSanitizer runtime wants pthread too, so sanitize builds keep
+    the same thread flags even though they link no jemalloc. MinGW needs
+    neither. The static libstdc++/libgcc pair (Linux/Windows only) keeps
+    binaries independent of the system's GCC runtimes; Apple's clang
+    has no libstdc++ to link.
 
     SANITIZE adds -fsanitize=address (required at link time as well as
     compile time). It also drops -s: stripping a sanitizer build would

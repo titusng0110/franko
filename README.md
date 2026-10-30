@@ -66,7 +66,7 @@ Windows):
 
 There are two build modes plus an unchecked max-speed mode:
 
-* **default** — `-O0` with AddressSanitizer (including leak checking)
+* **default** — `-O1` with AddressSanitizer (including leak checking)
   and the system allocator. Use this while developing and testing: it
   reports memory errors and leaks (for example a missing `arr.uninit()`)
   at run time.
