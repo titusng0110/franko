@@ -9,7 +9,9 @@ command works on Linux, macOS and Windows:
 
 Without -O the default is an unoptimised debug build with
 AddressSanitizer (-O1 -fsanitize=address) using the
-system allocator (malloc/free via FrankoRuntimeWithAsan.hpp); with -O
+system allocator (malloc/free via FrankoRuntimeWithAsan.hpp), except
+on Windows where AddressSanitizer is unsupported and the default is
+already the optimized build below; with -O
 it is an optimized build (-O3) using the bundled jemalloc; with -Omax
 it is the same optimized build but against FrankoRuntimeMax.hpp,
 which strips bounds checking and unsafe_cast range checking for speed
@@ -39,6 +41,7 @@ from franko_tools import (
     ASAN_OPTIMIZE,
     IMPORT_DIR,
     INCLUDE_DIR,
+    IS_WINDOWS,
     JAVA_HINT,
     ToolError,
     cxx_compile_flags,
@@ -65,8 +68,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     mode.add_argument(
         "-O", "--optimize",
         action="store_true",
-        help="optimized build with -O3 (default without -O: "
-             "-O1 with AddressSanitizer)",
+        help="optimized build with -O3 (default without -O on Linux/macOS: "
+             "-O1 with AddressSanitizer; on Windows the default is "
+             "already optimized, so this is a no-op there)",
     )
     mode.add_argument(
         "-Omax",
@@ -95,10 +99,15 @@ def main(argv: list[str] | None = None) -> int:
     cxx = find_cxx()
     ensure_toolchain()
 
-    # The optimized builds (-O / -Omax) link the bundled jemalloc for the
-    # host; the default ASan build uses the system allocator instead and
-    # needs no jemalloc bundle at all.
-    optimized = args.optimize or args.Omax
+    # The optimized builds (-O / -Omax, plus the Windows default which is
+    # already -O because AddressSanitizer is unsupported there) link the
+    # bundled jemalloc for the host; the default ASan build on Linux/macOS
+    # uses the system allocator instead and needs no jemalloc bundle at all.
+    # On Windows without -O/-Omax we still pass -O to the Franko compiler
+    # so it selects the jemalloc runtime header.
+    default_opt = IS_WINDOWS and not (args.optimize or args.Omax)
+    optimized = args.optimize or args.Omax or default_opt
+    effective_O = args.optimize or default_opt
     include, jemalloc_lib = (jemalloc_paths() if optimized else (None, None))
 
     target = host_target()
@@ -117,8 +126,12 @@ def main(argv: list[str] | None = None) -> int:
         print("Build mode: max-speed (-O3, jemalloc, no bounds/unsafe_cast checks)")
         print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
         print(f"jemalloc static library: {relative(jemalloc_lib)}")
-    elif args.optimize:
-        print("Build mode: optimized (-O3, jemalloc)")
+    elif effective_O:
+        if default_opt:
+            print("Build mode: optimized (-O3, jemalloc; Windows default, "
+                  "AddressSanitizer unsupported)")
+        else:
+            print("Build mode: optimized (-O3, jemalloc)")
         print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
         print(f"jemalloc static library: {relative(jemalloc_lib)}")
     else:
@@ -135,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if args.Omax:
         franko_cmd.append("-Omax")
-    elif args.optimize:
+    elif effective_O:
         franko_cmd.append("-O")
     run(franko_cmd)
     print()

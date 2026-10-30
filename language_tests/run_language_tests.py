@@ -47,9 +47,10 @@ a passing case and kept for inspection after a failure.
 
 Every build-backed case runs twice: once in ASan/system-allocator mode
 (Franko without -O, C++ -O1 + AddressSanitizer) and once in optimized
-mode (Franko -O, C++ -O3 + jemalloc). The optimized build keeps the
-historical artifact names; the ASan build uses .asan-suffixed ones so
-the modes never share failure evidence.
+mode (Franko -O, C++ -O3 + jemalloc). On Windows AddressSanitizer is
+unsupported, so cases run only once, in optimized mode. The optimized
+build keeps the historical artifact names; the ASan build uses
+.asan-suffixed ones so the modes never share failure evidence.
 """
 
 import sys

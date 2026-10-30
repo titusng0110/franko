@@ -223,7 +223,7 @@ def cxx_compile_flags(
 # Dual-mode (ASan / optimized) builds
 # ------------------------------------------------------------
 
-BUILD_MODES = ("asan", "opt")
+BUILD_MODES = ("opt",) if IS_WINDOWS else ("asan", "opt")
 """Build modes used by compile.py and the test runners.
 
 "asan" is the default debug mode: the Franko compiler runs without -O
@@ -231,6 +231,10 @@ BUILD_MODES = ("asan", "opt")
 -O1 + AddressSanitizer with no jemalloc. "opt" is the optimized mode:
 the compiler runs with -O (jemalloc header) and the C++ step uses -O3
 with the bundled jemalloc.
+
+Windows does not support AddressSanitizer, so only "opt" runs there:
+compile.py's default build is "opt" on Windows, and the test runners
+iterate just ("opt",) and never exercise the "asan" mode.
 """
 
 
