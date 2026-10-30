@@ -5,6 +5,14 @@ Replaces compile_linux-x86_64.sh and compile_windows-x64.ps1; the same
 command works on Linux, macOS and Windows:
 
     uv run python compile.py programs/bfs.fr
+    uv run python compile.py -O programs/bfs.fr
+
+Without -O the default is an unoptimised debug build with
+AddressSanitizer (-O0 -fsanitize=address -static-libasan) using the
+system allocator (malloc/free via FrankoRuntimeWithAsan.hpp); with -O
+it is an optimized build (-O3) using the bundled jemalloc. The -O flag
+is passed through to the Franko compiler, which selects the matching
+runtime header.
 
 It runs the Franko compiler (Franko -> C++14), then links the generated
 C++ against the bundled jemalloc for the host platform. Output is written
@@ -49,6 +57,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Compile a Franko (.fr) program into a native executable.",
     )
     parser.add_argument("source", help="path to the .fr source file")
+    parser.add_argument(
+        "-O", "--optimize",
+        action="store_true",
+        help="optimized build with -O3 (default without -O: "
+             "-O0 with AddressSanitizer)",
+    )
     return parser.parse_args(argv)
 
 
@@ -69,7 +83,10 @@ def main(argv: list[str] | None = None) -> int:
     cxx = find_cxx()
     ensure_toolchain()
 
-    include, jemalloc_lib = jemalloc_paths()
+    # The optimized build links the bundled jemalloc for the host; the
+    # default ASan build uses the system allocator instead and needs no
+    # jemalloc bundle at all.
+    include, jemalloc_lib = (jemalloc_paths() if args.optimize else (None, None))
 
     target = host_target()
 
@@ -83,17 +100,25 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Source: {relative(source)}")
     print(f"Generated C++: {relative(cpp_out)}")
     print(f"Binary output: {relative(bin_out)}")
-    print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
-    print(f"jemalloc static library: {relative(jemalloc_lib)}")
+    if args.optimize:
+        print("Build mode: optimized (-O3, jemalloc)")
+        print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
+        print(f"jemalloc static library: {relative(jemalloc_lib)}")
+    else:
+        print("Build mode: debug + AddressSanitizer "
+              "(-O0 -fsanitize=address -static-libasan, system allocator)")
     print()
 
     # ------------------------------------------------------------
     # Franko -> C++14
     # ------------------------------------------------------------
-    run([
+    franko_cmd = [
         java, "-cp", franko_classpath(), "Main",
         source, "-o", cpp_out, "-p", IMPORT_DIR, "--target", target,
-    ])
+    ]
+    if args.optimize:
+        franko_cmd.append("-O")
+    run(franko_cmd)
     print()
 
     # ------------------------------------------------------------
@@ -105,15 +130,19 @@ def main(argv: list[str] | None = None) -> int:
     # is renamed to libjemalloc.a, because GCC's -l search convention may
     # not pick up jemalloc.lib).
     #
-    compile_flags = cxx_compile_flags("basic")
+    compile_flags = cxx_compile_flags(
+        "basic",
+        optimize="3" if args.optimize else "0",
+        sanitize=not args.optimize,
+    )
     command = [
         cxx,
         *compile_flags,
         f"-I{INCLUDE_DIR}",
-        f"-I{include}",
+        *([f"-I{include}"] if args.optimize else []),
         cpp_out,
-        jemalloc_lib,
-        *link_flags(),
+        *([jemalloc_lib] if args.optimize else []),
+        *link_flags(sanitize=not args.optimize),
         "-o",
         bin_out,
     ]
@@ -122,7 +151,10 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"Successfully compiled to binary output: {relative(bin_out)}")
     print()
-    print("✅ Compilation finished with statically linked jemalloc.")
+    if args.optimize:
+        print("✅ Compilation finished with statically linked jemalloc.")
+    else:
+        print("✅ Compilation finished with system allocator + AddressSanitizer.")
     return 0
 
 

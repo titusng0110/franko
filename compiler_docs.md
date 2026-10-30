@@ -66,7 +66,8 @@ checked Semantic AST
 generated C++ body
    │  template splice   (ProgramTemplate.cpp or ProgramTemplateWithRawCArgs.cpp,
    │                     selected by sema.entryKind(); the body replaces
-   │                     __FRANKO_PROGRAM__)
+   │                     __FRANKO_PROGRAM__ and the runtime #include replaces
+   │                     __FRANKO_RUNTIME_HEADER__)
    ▼
 output .cpp  (then compiled with the host C++ compiler)
 ```
@@ -855,8 +856,8 @@ runs/JVMs/platforms. Called only from `Symbol` (`FunctionSymbol.mangledName`,
 entry-point sanity check.
 
 #### `ProgramTemplate.cpp` / `ProgramTemplateWithRawCArgs.cpp`
-The fixed program skeleton codegen deliberately does not emit: the
-`#include "FrankoRuntime.hpp"`, the `__FRANKO_PROGRAM__` insertion point, and
+The fixed program skeleton codegen deliberately does not emit: the runtime
+`#include` (a `__FRANKO_RUNTIME_HEADER__` placeholder), the `__FRANKO_PROGRAM__` insertion point, and
 the real C `main` wrapper that calls the mangled Franko `main`. The no-args
 template calls `FUNC_main_HASH_d8625720()` directly; the raw-C-args template
 marshals `argc`/`argv` byte-for-byte (no null terminators) into
@@ -864,7 +865,12 @@ marshals `argc`/`argv` byte-for-byte (no null terminators) into
 `FUNC_main_HASH_db73581e(&frankoArgs)`. `Main` sanity-checks that the chosen
 template contains the expected entry call — a cheap guard against
 template/mangling drift, mirroring `OsFfi.verifyBridge`. An explicit
-`-t <template>` skips the check.
+`-t <template>` skips the check. `Main` selects the runtime header from
+the `-O` flag (`FrankoRuntime.hpp`, bundled jemalloc, with `-O`;
+`FrankoRuntimeWithAsan.hpp`, system allocator, without) and splices it
+into `__FRANKO_RUNTIME_HEADER__`; a stock template missing the
+placeholder is rejected, while a custom `-t` template without it keeps
+its pinned `#include` untouched.
 
 #### `SemanticASTPrinter` / `ASTPrinter`
 Debug printers (`--verbose` only): `ASTPrinter` for the raw AST at three
@@ -880,7 +886,7 @@ types. Used by `SymbolTable` (semantic phase), `Desugarer`, `Main` (legality
 and pointer-state bags), and every checker.
 
 #### `Main`
-The driver: CLI parsing (`-o`, `-t`, `-p`, `-v`, `--target`), the phase
+The driver: CLI parsing (`-o`, `-t`, `-p`, `-v`, `-O`, `--target`), the phase
 sequence shown in §1, template selection by `sema.entryKind()`, template
 sanity checks, and output writing. Its nested `LexErrorCollector` turns ANTLR
 lexer "token recognition" errors into hard failures (the lexer would otherwise
@@ -974,7 +980,7 @@ type it would have in C++. Consequences:
 
 ### 4.7 Conditional branch pruning (BranchPruner)
 - A condition is pruned only when it is a **tautology or contradiction** under
-  a truth table of at most 10 effect-free `uint8`-typed atoms; `==`/`!=`
+  a truth table of at most 12 effect-free `uint8`-typed atoms; `==`/`!=`
   pairs over identical operands are the same variable and its negation.
 - Pruning **discards** the condition, so conditions containing function or
   array-intrinsic calls are never pruned (effects must survive); derefs and
@@ -1079,7 +1085,7 @@ returning `getview` of a local). A loop condition containing a decay is
 rewritten to the goto form (`L_top` / declarations / `if (!(cond)) goto
 L_brk` / body / update / `goto L_top` / `L_brk`) so the header is rebuilt
 on every iteration. The `borrowed` flag on `Franko_Dynamic_Array` makes
-its destructor skip `destroy_elements`/`je_free` for these headers, so
+its destructor skip `destroy_elements` and the buffer free for these headers, so
 borrowed storage is never freed — including at the end of each loop
 iteration. Lifecycle intrinsics stay blocked on the result (the region
 rule), and `ptr` never decays.
@@ -1111,8 +1117,12 @@ Consequences of strings being views:
 
 ## 4.11 Runtime array and allocation semantics
 
-The generated code allocates through bundled jemalloc (`je_malloc`,
-`je_calloc`, `je_realloc`, `je_free`).
+The generated code allocates through one of two runtime headers selected
+by the compiler `-O` flag: `FrankoRuntime.hpp` (bundled jemalloc:
+`je_malloc`, `je_calloc`, `je_realloc`, `je_free`) with `-O`, and
+`FrankoRuntimeWithAsan.hpp` (system `malloc`/`calloc`/`realloc`/`free`,
+so AddressSanitizer instrumentation applies) by default. Both headers
+implement identical array semantics; only the allocator differs.
 
 Dynamic array element buffers are allocated by the array runtime methods
 and freed by `uninit()` or by the array object's destructor (never for
@@ -1130,11 +1140,15 @@ skip destruction entirely. Element lifetime in the dynamic array runtime:
   keep raw (`init`) or zeroed (`init_zero`) storage with no per-element
   work.
 - `resize(n)` default-constructs the grown tail when growing and destroys
-  the dropped tail when shrinking; trivial element types skip both.
+  the dropped tail when shrinking; trivial element types skip both. The
+  dropped tail is destroyed **before** the buffer is reallocated (its
+  storage must still be alive for the elements' destructors to run), and
+  on a failed shrink the surviving `count` is narrowed so already-destroyed
+  elements are never destroyed again.
 - `uninit()` and the array destructor destroy all `count` elements before
   freeing the buffer; trivially destructible element types skip
   destruction.
-- `je_realloc` byte-moves the existing elements on `resize`, which is fine
+- `realloc` byte-moves the existing elements on `resize`, which is fine
   for the runtime's trivially-relocatable element types.
 
 Array `memcpy` is designed to support the combinations

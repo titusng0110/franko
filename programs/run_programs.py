@@ -23,6 +23,11 @@ deterministically under the smoke test.
 
 Generated artifacts (.cpp, .testbin, .actual) are removed after a passing
 case and kept for inspection after a failure.
+
+Every program builds and runs twice: ASan/system-allocator mode
+(Franko without -O) and optimized mode (Franko -O with jemalloc).
+The optimized build keeps the historical artifact names; the ASan
+build uses .asan-suffixed ones.
 """
 
 import sys
@@ -35,6 +40,7 @@ from franko_tools import (
     IMPORT_DIR,
     INCLUDE_DIR,
     JAVA_HINT,
+    BUILD_MODES,
     Results,
     ToolError,
     compare_output,
@@ -44,8 +50,10 @@ from franko_tools import (
     find_cxx,
     find_tool,
     franko_classpath,
+    java_mode_flags,
     jemalloc_paths,
     link_flags,
+    mode_artifact,
     read_run_args,
     read_stdin_bytes,
     relative,
@@ -70,9 +78,6 @@ def main() -> int:
 
     for src in programs:
         base = src.with_suffix("")
-        out_cpp = Path(f"{base}.cpp")
-        out_bin = Path(f"{base}.testbin{executable_suffix()}")
-        actual = Path(f"{base}.actual")
         expected = Path(f"{base}.expected")
 
         print()
@@ -82,42 +87,52 @@ def main() -> int:
         run_args = read_run_args(Path(f"{base}.args"))
         stdin_bytes = read_stdin_bytes(Path(f"{base}.stdin"))
 
-        if run(
-            [java, "-cp", franko_classpath(), "Main", src, "-o", out_cpp,
-             "-p", IMPORT_DIR],
-            check=False,
-        ) != 0:
-            results.fail_case(f"{relative(src)} (Franko compile failed)")
-            continue
+        for mode in BUILD_MODES:
+            out_cpp = mode_artifact(Path(f"{base}.cpp"), mode)
+            out_bin = mode_artifact(Path(f"{base}.testbin{executable_suffix()}"), mode)
+            actual = mode_artifact(Path(f"{base}.actual"), mode)
+            label = f"{relative(src)} [{mode}]"
+            optimize = mode == "opt"
 
-        if run(
-            [cxx, *cxx_compile_flags("basic"), f"-I{INCLUDE_DIR}", f"-I{include}",
-             out_cpp, jemalloc_lib, *link_flags(), "-o", out_bin],
-            check=False,
-        ) != 0:
-            results.fail_case(f"{relative(src)} (C++ compile failed)")
-            continue
+            if run(
+                [java, "-cp", franko_classpath(), "Main", src, "-o", out_cpp,
+                 "-p", IMPORT_DIR, *java_mode_flags(mode)],
+                check=False,
+            ) != 0:
+                results.fail_case(f"{label} (Franko compile failed)")
+                continue
 
-        if out_bin.stat().st_size == 0:
-            results.fail_case(f"{relative(src)} (linked binary is empty, 0 bytes)")
-            continue
+            if run(
+                [cxx, *cxx_compile_flags("basic", optimize="3" if optimize else "0",
+                                          sanitize=not optimize),
+                 f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
+                 out_cpp, *([jemalloc_lib] if optimize else []),
+                 *link_flags(sanitize=not optimize), "-o", out_bin],
+                check=False,
+            ) != 0:
+                results.fail_case(f"{label} (C++ compile failed)")
+                continue
 
-        exit_code = run_test_binary(out_bin, run_args, stdin_bytes, actual)
-        if exit_code != 0:
-            print(f"---- runtime output (exit code {exit_code}): ----")
-            dump_file(actual)
-            results.fail_case(f"{relative(src)} (binary exited non-zero)")
-            continue
+            if out_bin.stat().st_size == 0:
+                results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
+                continue
 
-        print(f"Comparing output against {relative(expected)}:")
-        if not compare_output(actual, expected):
-            results.fail_case(f"{relative(src)} (output mismatch)")
-            continue
+            exit_code = run_test_binary(out_bin, run_args, stdin_bytes, actual)
+            if exit_code != 0:
+                print(f"---- runtime output (exit code {exit_code}): ----")
+                dump_file(actual)
+                results.fail_case(f"{label} (binary exited non-zero)")
+                continue
 
-        remove_artifacts(out_cpp, out_bin, actual)
-        results.pass_case(
-            f"{relative(src)} ran successfully, output matches {relative(expected)}"
-        )
+            print(f"Comparing output against {relative(expected)}:")
+            if not compare_output(actual, expected):
+                results.fail_case(f"{label} (output mismatch)")
+                continue
+
+            remove_artifacts(out_cpp, out_bin, actual)
+            results.pass_case(
+                f"{label} ran successfully, output matches {relative(expected)}"
+            )
 
     return results.finish("✅ All programs passed.")
 

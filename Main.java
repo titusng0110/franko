@@ -18,6 +18,7 @@ public class Main {
         Path importSearchDir = Path.of("import");
         boolean verbose = false;
         String targetSpec = null;
+        boolean optimize = false;
 
         if (args.length > 0) {
             sourceFile = args[0];
@@ -49,6 +50,10 @@ public class Main {
 
                 case "-v":
                     verbose = true;
+                    break;
+
+                case "-O":
+                    optimize = true;
                     break;
 
                 case "--target":
@@ -242,6 +247,16 @@ public class Main {
             throw new RuntimeException("Template does not contain __FRANKO_PROGRAM__ placeholder.");
         }
 
+        // Without -O the program uses the system allocator (malloc/free)
+        // so AddressSanitizer instrumentation applies; with -O it uses
+        // the bundled jemalloc header. Custom -t templates that pin their
+        // own runtime #include keep working: the splice only fires when
+        // the placeholder is present, but stock templates must carry it.
+        String runtimeHeader = optimize ? "FrankoRuntime.hpp" : "FrankoRuntimeWithAsan.hpp";
+        if (!explicitTemplate && !template.contains("__FRANKO_RUNTIME_HEADER__")) {
+            throw new RuntimeException("Template does not contain __FRANKO_RUNTIME_HEADER__ placeholder.");
+        }
+
         if (!explicitTemplate) {
             String expectedEntryCall = switch (sema.entryKind()) {
                 case ARGS -> "FUNC_main_HASH_747cdf98";
@@ -262,7 +277,7 @@ public class Main {
         String finalCpp = template.replace(
             "__FRANKO_PROGRAM__",
             indentBlock(generatedBody, 0).trim()
-        );
+        ).replace("__FRANKO_RUNTIME_HEADER__", runtimeHeader);
 
         Path outPath = Path.of(outputFile);
         Path parent = outPath.getParent();
