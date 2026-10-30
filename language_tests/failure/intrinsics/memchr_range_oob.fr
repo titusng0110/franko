@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/memchr_range_oob
+// Constant ranged memchr bounds are checked against static sizes.
+func main() -> int32 {
+    [byte, 4] a;
+    a.memchr(1, 2, 3);
+    return 0;
+}

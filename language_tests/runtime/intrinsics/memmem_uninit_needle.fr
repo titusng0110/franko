@@ -1,0 +1,11 @@
+import "franko/io"
+
+// Runtime fixture: intrinsics/memmem_uninit_needle
+// The memmem needle must be initialized too.
+func main() -> int32 {
+    [byte, 4] hay;
+    hay.memset(0);
+    [byte] needle;
+    print(hay.memmem(getptr(needle)));
+    return 0;
+}

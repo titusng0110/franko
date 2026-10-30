@@ -174,7 +174,7 @@ def main() -> int:
                 continue
 
             failed = native_compile(
-                out_cpp, out_bin, mode=mode, warnings="full",
+                out_cpp, out_bin, mode=mode, warnings=True,
                 log=log, echo=False,
             )
             if failed != 0:
@@ -230,7 +230,7 @@ def main() -> int:
                 continue
 
             failed = native_compile(
-                out_cpp, out_bin, mode=mode, warnings="none",
+                out_cpp, out_bin, mode=mode, warnings=False,
                 log=log, echo=False,
             )
             if failed != 0:

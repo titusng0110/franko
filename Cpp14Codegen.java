@@ -46,9 +46,6 @@ public class Cpp14Codegen {
 
     private String currentEmitNamespace = null;
 
-    private static final SemanticType UINT8_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8);
-
     private static final SemanticType UINT32_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
 
@@ -1473,67 +1470,19 @@ public class Cpp14Codegen {
             int index
     ) {
         SemanticExprNode arg = node.args.get(index);
+        SemanticIntrinsicArgKind argKind = node.kind.argKind(index);
 
-        return switch (node.kind) {
-            case INIT, INIT_ZERO, RESIZE ->
-                    emitExprAsType(arg, UINT32_TYPE);
+        if (argKind.isPointer()) {
+            return emitExpr(arg);
+        }
 
-            case UNINIT ->
-                    throw new IllegalStateException(
-                            "Internal compiler error: uninit() should not have arguments"
-                    );
-
-            case MEMSET -> {
-                if (index == 0) {
-                    yield emitExprAsType(arg, UINT8_TYPE);
-                }
-
-                yield emitExprAsType(arg, UINT32_TYPE);
-            }
-
-            case MEMCPY -> {
-                if (index == 0) {
-
-                    yield emitExpr(arg);
-                }
-
-                yield emitExprAsType(arg, UINT32_TYPE);
-            }
-
-            case MEMMOVE ->
-                    emitExprAsType(arg, UINT32_TYPE);
-
-            case LENGTH ->
-                    throw new IllegalStateException(
-                            "Internal compiler error: length() should not have arguments"
-                    );
-        };
+        return emitExprAsType(arg, argKind.primitiveType());
     }
 
     private void validateArrayIntrinsicArityForCodegen(
             SemanticArrayIntrinsicCallNode node
     ) {
-        boolean ok = switch (node.kind) {
-            case INIT, INIT_ZERO, RESIZE ->
-                    node.args.size() == 1;
-
-            case UNINIT ->
-                    node.args.isEmpty();
-
-            case MEMSET ->
-                    node.args.size() == 1 || node.args.size() == 3;
-
-            case MEMCPY ->
-                    node.args.size() == 1 || node.args.size() == 4;
-
-            case MEMMOVE ->
-                    node.args.size() == 3;
-
-            case LENGTH ->
-                    node.args.isEmpty();
-        };
-
-        if (!ok) {
+        if (!node.kind.acceptsArity(node.args.size())) {
             throw new IllegalStateException(
                     "Internal compiler error: invalid arity for array intrinsic '"
                             + node.kind.runtimeName

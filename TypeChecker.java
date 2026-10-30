@@ -616,11 +616,11 @@ public class TypeChecker {
         return !isSigned(kind);
     }
 
-    public boolean isMemsetable(SemanticType t) {
-        return isMemsetable(t, new HashSet<>());
+    public boolean isTrivial(SemanticType t) {
+        return isTrivial(t, new HashSet<>());
     }
 
-    private boolean isMemsetable(SemanticType t, Set<SemanticType> visited) {
+    private boolean isTrivial(SemanticType t, Set<SemanticType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
@@ -630,7 +630,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isMemsetable(s.elementType, visited);
+            return isTrivial(s.elementType, visited);
         }
 
         if (t instanceof SemanticStructType struct) {
@@ -639,28 +639,28 @@ public class TypeChecker {
                 return false;
             }
 
-            boolean memsetable = true;
+            boolean trivial = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
-                if (!isMemsetable(field.type, visited)) {
-                    memsetable = false;
+                if (!isTrivial(field.type, visited)) {
+                    trivial = false;
                     break;
                 }
             }
 
             visited.remove(t);
 
-            return memsetable;
+            return trivial;
         }
 
         return false;
     }
 
-    public boolean isMemcpyable(SemanticType t) {
-        return isMemcpyable(t, new HashSet<>());
+    public boolean isCopiable(SemanticType t) {
+        return isCopiable(t, new HashSet<>());
     }
 
-    private boolean isMemcpyable(SemanticType t, Set<SemanticType> visited) {
+    private boolean isCopiable(SemanticType t, Set<SemanticType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
@@ -671,7 +671,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isMemcpyable(s.elementType, visited);
+            return isCopiable(s.elementType, visited);
         }
 
         if (t instanceof SemanticStructType struct) {
@@ -680,21 +680,26 @@ public class TypeChecker {
                 return false;
             }
 
-            boolean memcpyable = true;
+            boolean copiable = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
-                if (!isMemcpyable(field.type, visited)) {
-                    memcpyable = false;
+                if (!isCopiable(field.type, visited)) {
+                    copiable = false;
                     break;
                 }
             }
 
             visited.remove(t);
 
-            return memcpyable;
+            return copiable;
         }
 
         return false;
+    }
+
+    public boolean isByteType(SemanticType t) {
+        return t instanceof SemanticPrimitiveType pt
+                && pt.kind == SemanticPrimitiveKind.UINT8;
     }
 
     public BigInteger parseIntegerLiteral(String val) {

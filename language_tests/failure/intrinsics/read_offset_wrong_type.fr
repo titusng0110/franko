@@ -1,0 +1,10 @@
+import "franko/io"
+
+// Failure fixture: intrinsics/read_offset_wrong_type
+// A nonconstant accessor offset must be exactly uint32.
+func main() -> int32 {
+    [byte, 8] a;
+    int32 off = 0;
+    print(a.read_uint32_LE(off));
+    return 0;
+}

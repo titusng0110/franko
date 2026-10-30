@@ -523,3 +523,42 @@ func main(view<[[byte]]> args) -> int32 {
 ```
 
 Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Compiler Internals](../compiler_docs.md)).
+
+## 32.23 Byte-Array Search, Endian, and Bit Intrinsics
+
+```franko
+import "franko/io"
+
+func main() -> int32 {
+    [byte, 8] packet;
+    packet.memset(0);
+
+    // Big-endian header: 0xCAFEBABE, then a little-endian length.
+    packet.write_uint32_BE(0, 0xCAFEBABE);
+    packet.write_uint16_LE(4, 300);
+    print(packet.read_uint32_BE(0));   // 3405691582
+    print(packet.read_uint16_LE(4));   // 300
+
+    // Search the payload with memchr / memmem.
+    packet[6] = 65;
+    packet[7] = 66;
+    print(packet.memchr(65));          // 6
+    print(packet.memmem("AB"));        // 6
+    print(packet.memchr(67));          // 4294967295 (not found)
+
+    // Compare whole byte arrays.
+    [byte, 8] copy;
+    copy.memset(0);
+    copy.memcpy(getptr(packet));
+    print(copy.memcmp(getptr(packet)) == 0);   // 1
+
+    // Bit flags across byte boundaries.
+    [byte, 2] flags;
+    flags.memset(0);
+    flags.write_bit(15, 1);
+    print(flags.read_bit(15));         // 1
+    print(flags.count_set_bits());     // 1
+
+    return 0;
+}
+```

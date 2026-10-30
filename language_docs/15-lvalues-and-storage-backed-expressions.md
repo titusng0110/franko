@@ -25,5 +25,5 @@ This distinction matters for:
 - assignment targets;
 - compound assignment targets and `x++` / `x--` targets;
 - `getptr(...)` operands;
-- array intrinsic receivers;
-- `memcpy` sources.
+- array intrinsic receivers (mutating intrinsics);
+- `memcpy`, `memcmp`, and `memmem` sources.

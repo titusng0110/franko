@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/memcmp_arity
+// memcmp takes either 1 or 4 arguments.
+func main() -> int32 {
+    [int32, 3] a;
+    [int32, 3] b;
+    a.memcmp(getptr(b), 0);
+    return 0;
+}

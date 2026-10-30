@@ -270,10 +270,27 @@ public final class PointerPermissionChecker {
             case INIT, INIT_ZERO, RESIZE, UNINIT ->
                     markPath(node.receiver, PtrPermission.OWNER);
 
-            case MEMSET, MEMCPY, MEMMOVE ->
+            case MEMSET, MEMCPY, MEMMOVE,
+                 WRITE_UINT16_LE, WRITE_UINT16_BE,
+                 WRITE_UINT32_LE, WRITE_UINT32_BE,
+                 WRITE_UINT64_LE, WRITE_UINT64_BE,
+                 WRITE_INT16_LE, WRITE_INT16_BE,
+                 WRITE_INT32_LE, WRITE_INT32_BE,
+                 WRITE_INT64_LE, WRITE_INT64_BE,
+                 WRITE_BIT, FLIP_BIT,
+                 BITWISE_NOT_MASK, BITWISE_XOR_MASK,
+                 BITWISE_AND_MASK, BITWISE_OR_MASK,
+                 SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT ->
                     markPath(node.receiver, PtrPermission.MUTABLE);
 
-            case LENGTH ->
+            case LENGTH, MEMCMP, MEMCHR, MEMMEM,
+                 READ_UINT16_LE, READ_UINT16_BE,
+                 READ_UINT32_LE, READ_UINT32_BE,
+                 READ_UINT64_LE, READ_UINT64_BE,
+                 READ_INT16_LE, READ_INT16_BE,
+                 READ_INT32_LE, READ_INT32_BE,
+                 READ_INT64_LE, READ_INT64_BE,
+                 READ_BIT, COUNT_SET_BITS ->
                     markPath(node.receiver, PtrPermission.READ_ONLY);
         }
 

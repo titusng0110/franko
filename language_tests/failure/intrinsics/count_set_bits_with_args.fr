@@ -1,0 +1,9 @@
+import "franko/io"
+
+// Failure fixture: intrinsics/count_set_bits_with_args
+// count_set_bits takes no arguments.
+func main() -> int32 {
+    [byte, 4] a;
+    print(a.count_set_bits(1));
+    return 0;
+}

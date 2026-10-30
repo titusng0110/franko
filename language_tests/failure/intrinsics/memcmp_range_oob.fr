@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/memcmp_range_oob
+// Constant ranged memcmp bounds are checked against static sizes.
+func main() -> int32 {
+    [int32, 3] a;
+    [int32, 3] b;
+    a.memcmp(getptr(b), 1, 0, 3);
+    return 0;
+}

@@ -219,7 +219,7 @@ def main() -> int:
                 continue
 
             failed = native_compile(
-                paths["cpp"], paths["bin"], mode=mode, warnings="full",
+                paths["cpp"], paths["bin"], mode=mode, warnings=True,
                 log=paths["log"], echo=False,
             )
             if failed != 0:
@@ -276,7 +276,7 @@ def main() -> int:
                 continue
 
             failed = native_compile(
-                paths["cpp"], paths["bin"], mode=mode, warnings="none",
+                paths["cpp"], paths["bin"], mode=mode, warnings=False,
                 log=paths["log"], echo=False,
             )
             if failed != 0:

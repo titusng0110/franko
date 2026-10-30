@@ -1,0 +1,9 @@
+// Runtime fixture: intrinsics/write_bit_oob
+// A bit index must be below 8 * array length.
+func main() -> int32 {
+    [byte] buf;
+    buf.init_zero(1);
+    buf.write_bit(8, 1);
+    buf.uninit();
+    return 0;
+}

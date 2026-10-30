@@ -265,8 +265,8 @@ public class Main {
         // Custom -t templates that pin their own runtime #include keep
         // working: the splice only fires when the placeholder is present,
         // but stock templates must carry it.
-        String runtimeHeader = maxOptimize ? "FrankoRuntimeMax.hpp"
-                : optimize ? "FrankoRuntime.hpp"
+        String runtimeHeader = maxOptimize ? "FrankoRuntimeOptimizedMax.hpp"
+                : optimize ? "FrankoRuntimeOptimized.hpp"
                 : "FrankoRuntimeWithAsan.hpp";
         if (!explicitTemplate && !template.contains("__FRANKO_RUNTIME_HEADER__")) {
             throw new RuntimeException("Template does not contain __FRANKO_RUNTIME_HEADER__ placeholder.");

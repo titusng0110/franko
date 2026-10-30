@@ -1,0 +1,9 @@
+import "franko/io"
+
+// Failure fixture: intrinsics/read_offset_negative
+// Constant accessor offsets are nonnegative uint32 values.
+func main() -> int32 {
+    [byte, 8] a;
+    print(a.read_uint16_LE(-1));
+    return 0;
+}

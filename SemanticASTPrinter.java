@@ -481,18 +481,15 @@ public class SemanticASTPrinter {
             printExpr(node.args.get(i), indent + 2);
         }
 
-        if (node.kind == SemanticArrayIntrinsicKind.MEMSET) {
-            line(indent + 1, "isFullArrayMemset: "
-                    + node.isFullArrayMemset());
-            line(indent + 1, "isRangedMemset: "
-                    + node.isRangedMemset());
-        }
-
-        if (node.kind == SemanticArrayIntrinsicKind.MEMCPY) {
-            line(indent + 1, "isFullArrayMemcpy: "
-                    + node.isFullArrayMemcpy());
-            line(indent + 1, "isRangedMemcpy: "
-                    + node.isRangedMemcpy());
+        if (node.kind == SemanticArrayIntrinsicKind.MEMSET
+                || node.kind == SemanticArrayIntrinsicKind.MEMCPY
+                || node.kind == SemanticArrayIntrinsicKind.MEMCMP
+                || node.kind == SemanticArrayIntrinsicKind.MEMCHR
+                || node.kind == SemanticArrayIntrinsicKind.MEMMEM) {
+            line(indent + 1, "isFullArrayForm: "
+                    + node.isFullArrayForm());
+            line(indent + 1, "isRangedArrayForm: "
+                    + node.isRangedArrayForm());
         }
     }
 

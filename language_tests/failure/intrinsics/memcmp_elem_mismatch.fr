@@ -1,0 +1,8 @@
+// Failure fixture: intrinsics/memcmp_elem_mismatch
+// memcmp requires identical source and target element types.
+func main() -> int32 {
+    [int32, 3] a;
+    [byte, 3] b;
+    a.memcmp(getptr(b));
+    return 0;
+}

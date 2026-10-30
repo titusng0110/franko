@@ -117,6 +117,33 @@ def host_target() -> str:
     return f"{host_os()}-{host_arch()}"
 
 
+_TARGET_OSES = {"linux": "linux", "windows": "windows", "macos": "macos", "darwin": "macos"}
+_TARGET_ARCHES = {
+    "x86_64": "x86_64", "x64": "x86_64", "amd64": "x86_64",
+    "arm64": "arm64", "aarch64": "arm64",
+}
+
+
+def normalize_target(spec: str) -> str:
+    """Canonicalize a ``<os>-<arch>`` target spec.
+
+    Mirrors ``TargetInfo.parse`` on the Java side: os in {linux, windows,
+    macos} (alias: darwin), arch in {x86_64, arm64} (aliases: x64, amd64,
+    aarch64), case-insensitive. Returns the canonical ``<os>-<arch>`` and
+    raises ToolError for anything else.
+    """
+    parts = spec.lower().split("-")
+
+    if len(parts) != 2 or parts[0] not in _TARGET_OSES or parts[1] not in _TARGET_ARCHES:
+        raise ToolError(
+            f"invalid target {spec!r}: expected <os>-<arch> with "
+            "os in {linux, windows, macos} and arch in {x86_64, arm64} "
+            "(aliases: darwin, x64, amd64, aarch64), or 'native'"
+        )
+
+    return f"{_TARGET_OSES[parts[0]]}-{_TARGET_ARCHES[parts[1]]}"
+
+
 def executable_suffix() -> str:
     return ".exe" if IS_WINDOWS else ""
 
@@ -191,29 +218,36 @@ def ensure_jemalloc_bundle() -> None:
 
 
 def cxx_compile_flags(
-    warnings: str = "basic", optimize: str = "3", sanitize: bool = False
+    warnings: bool = True,
+    optimize: str = "3",
+    sanitize: bool = False,
+    target: str | None = None,
 ) -> list[str]:
     """Common C++ compile flags for Franko output and test programs.
 
-    WARNINGS is one of:
-      "full"  -Wall -Wextra -Wpedantic -Wshadow (test suite builds),
-      "basic" -Wall -Wextra -Wpedantic          (compile.py, matching the
-                                                 old compile_* scripts),
-      "none"  no warning flags                  (test runtime builds).
+    WARNINGS toggles the warning set -Wall -Wextra -Wpedantic -Wshadow;
+    pass False for warning-free builds (test runtime-abort cases).
 
     OPTIMIZE is the -O level ("3" for optimized builds, ASAN_OPTIMIZE
     for sanitizer builds). SANITIZE adds AddressSanitizer
     (-fsanitize=address plus debug info) for debug builds; the
     matching link flags come from link_flags(sanitize=True), since the
     suites and compile.py build and link in a single driver invocation.
+
+    TARGET is the compile.py ``--target`` value: "native" adds
+    ``-march=native``, optimizing for the host CPU (wider SIMD; the
+    binary then requires a matching CPU). An explicit ``<os>-<arch>``
+    is validated but does not change the C++ flags — it selects the
+    Franko target, and a host-different target never reaches the C++
+    step. None keeps the portable baseline ISA.
     """
     flags = [f"-O{optimize}", "-std=c++14"]
-    if warnings == "full":
+    if target == "native":
+        flags += ["-march=native"]
+    elif target is not None:
+        normalize_target(target)
+    if warnings:
         flags += ["-Wall", "-Wextra", "-Wpedantic", "-Wshadow"]
-    elif warnings == "basic":
-        flags += ["-Wall", "-Wextra", "-Wpedantic"]
-    elif warnings != "none":
-        raise ValueError(f"unknown warning level: {warnings!r}")
     if sanitize:
         flags += ["-fsanitize=address", "-g", "-fno-omit-frame-pointer"]
     return flags

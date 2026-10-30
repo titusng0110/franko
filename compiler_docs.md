@@ -13,9 +13,11 @@ about the compiler design should reside here.
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain.
-- **Runtime**: `include/FrankoRuntime.hpp` (arrays, `franko_unsafe_cast`,
-  the `borrowed` marker that keeps compiler-synthesized view-decay headers
-  from freeing their storage),
+- **Runtime**: `include/FrankoRuntimeOptimized.hpp` (arrays,
+  `franko_unsafe_cast`, the `borrowed` marker that keeps
+  compiler-synthesized view-decay headers from freeing their storage),
+  with two sibling tiers: `FrankoRuntimeOptimizedMax.hpp` (checks
+  stripped) and `FrankoRuntimeWithAsan.hpp` (system allocator), plus
   optional jemalloc (`third_party/`).
 
 ---
@@ -396,9 +398,15 @@ desugared-for update epilogue, `SemanticBreakNode` with levels,
 `SemanticContinueNode`, `SemanticReturnNode` carrying the
 owning `FunctionSymbol`), the array-intrinsic vocabulary
 (`SemanticArrayIntrinsicKind`: INIT, INIT_ZERO, RESIZE, UNINIT, MEMSET, MEMCPY,
-MEMMOVE, LENGTH — with `returnType()`/`returnsVoid()`;
-`SemanticArrayIntrinsicCallNode` with separate receiver + args and full/ranged
-memset/memcpy predicates), and expressions (all carrying `type`,
+MEMMOVE, LENGTH, MEMCMP, MEMCHR, MEMMEM, the twenty-four
+`READ_*`/`WRITE_*_{LE,BE}` endian accessors, READ_BIT, WRITE_BIT, FLIP_BIT,
+BITWISE_NOT_MASK, BITWISE_XOR_MASK, BITWISE_AND_MASK, BITWISE_OR_MASK,
+SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT, COUNT_SET_BITS — each carrying a
+signature descriptor: runtime member name, return kind, dynamic-only flag,
+element rule (none/trivial/copiable/byte), receiver permission, allowed
+arities, and per-argument kinds; `SemanticArrayIntrinsicCallNode` with
+separate receiver + args and full/ranged form predicates), and expressions
+(all carrying `type`,
 `constantValue: BigInteger`, `isConstant()`; `isLValue()` abstract).
 `SemanticGetPtrNode` covers all three creation intrinsics; the permission
 created is `type`'s (`SemanticPtrType.permission`), which is exactly the
@@ -531,16 +539,19 @@ Frontend lowering of array-intrinsic call syntax to
 `SemanticArrayIntrinsicCallNode`s during semantic analysis: named member
 intrinsics (`xs.init(n)`, `xs.init_zero()`, `xs.resize(n)`, `xs.uninit()`,
 `xs.memset(v)`/`xs.memset(s,n,v)`, `xs.memcpy(src)`/`xs.memcpy(src,sr,dst,n)`,
-`xs.memmove(src,n)`, `xs.length()`) plus the dynamic-array init shorthand
+`xs.memmove(src,n)`, `xs.length()`, `xs.memcmp(src)`/`xs.memcmp(src,sr,dst,n)`,
+the byte-array search/endian/bit intrinsics, and the dynamic-array init shorthand
 `xs(size)` → `xs.init(size)`. Type-directed dispatch: a struct-typed receiver
 is a method call, never an intrinsic, even when a method name coincides with an
 intrinsic name; `shouldSuppressCallDiagnostic` avoids misleading "no matching
 overload" errors when fallthrough would be noise. The shorthand disambiguator
 "peeks" at member-call receivers before full callee analysis to avoid spurious
-errors alongside real method resolution. Mutually coupled with
-`ExpressionAnalyzer` (analyzes intrinsic arguments through it). Passes the
-receiver's element type as the expected type of `memcpy` sources so an
-array literal argument infers its element type from the target.
+errors alongside real method resolution. The per-kind signature descriptor
+drives arity checks, receiver lvalue requirements (mutating kinds only), and
+argument lowering; pointer arguments (`memcpy`/`memcmp` sources, `memmem`
+needles) receive an expected `view<[elem]>` context so array/string literals
+infer their element type. Mutually coupled with `ExpressionAnalyzer` (analyzes
+intrinsic arguments through it).
 
 #### `ArrayLiteralLowerer`
 Lowers `ArrayLiteralNode` expressions during semantic analysis into
@@ -626,8 +637,15 @@ pointer conversion — permission downgrade or array-view decay —, no
 void/array arguments), array intrinsic
 argument rules **and receiver permission rules** (lifecycle intrinsics
 `init`/`init_zero`/`resize`/`uninit` need an OWNER region;
-`memset`/`memcpy`/`memmove` targets need mutation rights; `length()` and
-reads are always fine), constant static-array index bounds, cast rules
+`memset`/`memcpy`/`memmove`, `write_*`, `write_bit`, `flip_bit`,
+`bitwise_*_mask`, and `shift_bits_*` targets need mutation rights;
+`length`, `memcmp`, `memchr`, `memmem`, `read_*`, `read_bit`, and
+`count_set_bits` are always fine); per-family argument rules (element-type equality
+and `isCopiable` for `memcpy`/`memcmp`, identical/`isTrivial` for `memset`,
+byte-only receivers for the search/endian/bit families, pointer-to-array
+sources with element-type checks, scalar arguments checked as exact types or
+fitting constants), constant static-array index/range/byte-offset/bit-index
+bounds, cast rules
 (`cast` = value-preserving integer widening, pointer permission downgrade
 over an identical referenced type, or the static-to-dynamic array view
 decay — whose to-`ptr` form gets a dedicated "cannot decay ownership"
@@ -653,9 +671,11 @@ constant-fit machinery (`requireConstantFitsType`, static
 (`isPermissionDowngrade`, `isStaticArrayViewDecay`, `isPointerConversion` —
 delegating wrappers over
 `PointerPermissions`), literal parsing (`parseIntegerLiteral`:
-0b/0x/decimal), and memset/memcpy element rules (`isMemsetable`,
-`isMemcpyable` — recursive with path-scoped cycle detection so diamond-shaped
-field graphs stay fine while by-value cycles terminate). `ensureAssignable`
+0b/0x/decimal), element classification (`isTrivial` — memset-filled
+byte-wise; `isCopiable` — memcpy/memcmp-copied byte-wise; `isByteType` — the
+byte/bit intrinsic element type) — recursive with path-scoped cycle detection
+so diamond-shaped field graphs stay fine while by-value cycles terminate.
+`ensureAssignable`
 accepts the pointer conversions alongside exact matches and
 also special-cases array targets fed a pointer-to-array source: the error
 suggests `memcpy`, and names string literals or array literals explicitly
@@ -694,9 +714,12 @@ used:
   region, or any use where a `ptr<T>` is expected (argument, return value,
   assignment into a `ptr`-typed slot, method `self`).
 - *Mutation (mview)*: assignment through the variable's region,
-  `memset`/`memcpy`/`memmove`, or use where an `mview<T>` is expected.
-- *Read (view)*: reads through the region, `length()`, or use where a
-  `view<T>` is expected.
+  `memset`/`memcpy`/`memmove`, the byte/bit mutators (`write_*`,
+  `write_bit`, `flip_bit`, `bitwise_*_mask`, `shift_bits_*`), or use where an
+  `mview<T>` is expected.
+- *Read (view)*: reads through the region, `length`, `memcmp`, `memchr`,
+  `memmem`, the `read_*` accessors, `read_bit`, `count_set_bits`, or use
+  where a `view<T>` is expected.
 
 Attribution follows the pointer-boundary rule (§4.9): an operation through
 `$(v)` credits `v` at the level its region is used, but once the access path
@@ -831,7 +854,10 @@ Expression lowering is structural (`ptr<T>`/`mview<T>`→`T*`,
 `$(p)`→`(*p)`, arrays → `Franko_Dynamic_Array<T>` /
 `Franko_Static_Array<T,N>`, pre-folded constants emitted directly, contextual
 `static_cast` via `emitExprAsType` to preserve Franko's constant typing and
-already-chosen overloads, `franko_unsafe_cast` for `unsafe_cast`). A
+already-chosen overloads, `franko_unsafe_cast` for `unsafe_cast`). Array
+intrinsics emit `receiver.<runtimeName>(args)`; scalar arguments are cast to
+the argument descriptor's primitive type, pointer arguments pass through.
+A
 static-to-dynamic array view decay (implicit at the `emitExprAsType`
 positions, explicit in `emitCast`, and at global static initializers)
 buffers a hidden borrowed-header declaration via statement lookback and
@@ -866,9 +892,10 @@ marshals `argc`/`argv` byte-for-byte (no null terminators) into
 template contains the expected entry call — a cheap guard against
 template/mangling drift, mirroring `OsFfi.verifyBridge`. An explicit
 `-t <template>` skips the check. `Main` selects the runtime header from
-the optimization flags (`FrankoRuntime.hpp`, bundled jemalloc, with `-O`;
-`FrankoRuntimeMax.hpp`, jemalloc with bounds and unsafe_cast checks
-stripped, with `-Omax`; `FrankoRuntimeWithAsan.hpp`, system allocator,
+the optimization flags (`FrankoRuntimeOptimized.hpp`, bundled jemalloc,
+with `-O`; `FrankoRuntimeOptimizedMax.hpp`, jemalloc with bounds and
+unsafe_cast checks stripped, with `-Omax`; `FrankoRuntimeWithAsan.hpp`,
+system allocator,
 without either) and splices it
 into `__FRANKO_RUNTIME_HEADER__`; a stock template missing the
 placeholder is rejected, while a custom `-t` template without it keeps
@@ -1024,11 +1051,14 @@ leaf). Index and member accesses stay inside the region created
 above them; each dereference **resets** the region from the pointer's own
 type. A bare variable's own storage is always owner-protected. Consequences:
 
-* writes (assignment, compound assignment) and `memset`/`memcpy`/`memmove`
-  targets need a region allowing MUTABLE;
+* writes (assignment, compound assignment), `memset`/`memcpy`/`memmove`
+  targets, and the byte/bit mutators (`write_*`, `write_bit`, `flip_bit`,
+  `bitwise_*_mask`, `shift_bits_*`) need a region allowing MUTABLE;
 * `init`/`init_zero`/`resize`/`uninit` (and the `xs(size)` shorthand) need an
   OWNER region;
-* reads, `length()`, and memcpy *sources* are always fine;
+* reads, `length`, `memcmp`, `memchr`, `memmem`, the `read_*` accessors,
+  `read_bit`, `count_set_bits`, and memcpy/memcmp/memmem *sources* are always
+  fine;
 * `getptr(l)` requires an OWNER region, `getmview(l)` a MUTABLE-or-stronger
   one, `getview(l)` anything — this is what makes `view` airtight (no
   laundering through `getptr($(v))`) while `$($(v)[0]).init()` still works
@@ -1120,9 +1150,10 @@ Consequences of strings being views:
 ## 4.11 Runtime array and allocation semantics
 
 The generated code allocates through one of three runtime headers
-selected by the compiler's optimization flags: `FrankoRuntime.hpp`
+selected by the compiler's optimization flags: `FrankoRuntimeOptimized.hpp`
 (bundled jemalloc: `je_malloc`, `je_calloc`, `je_realloc`, `je_free`)
-with `-O`; `FrankoRuntimeMax.hpp` (same jemalloc allocator, with bounds
+with `-O`; `FrankoRuntimeOptimizedMax.hpp` (same jemalloc allocator,
+with bounds
 checking and unsafe_cast range checking stripped for speed) with
 `-Omax`; and `FrankoRuntimeWithAsan.hpp` (system
 `malloc`/`calloc`/`realloc`/`free`, so AddressSanitizer instrumentation
@@ -1160,12 +1191,25 @@ skip destruction entirely. Element lifetime in the dynamic array runtime:
 Array `memcpy` is designed to support the combinations
 `Static<T,N>.memcpy(Static<T,M>)`, `Static<T,N>.memcpy(Dynamic<T>)`,
 `Dynamic<T>.memcpy(Dynamic<T>)`, `Dynamic<T>.memcpy(Static<T,M>)`.
+`memcmp` supports the same four shape combinations in both the whole-array
+and ranged forms; the whole-array form compares the shared prefix with
+`std::memcmp` and orders by length on a tie, returning `int32`.
 Static array sizes must be greater than zero because generated C++ uses
 fixed-size arrays, and zero-length C++ arrays are not standard. Static and
 dynamic arrays runtime-check indexes and intrinsics and raise
 `std::runtime_error` (via `franko_panic`) on violations such as
 out-of-bounds access, use of an uninitialized dynamic array, double
 initialization, or zero-size allocation.
+
+The byte-array intrinsics (`memchr`/`memmem`, the endian accessors, the bit
+intrinsics) share one kernel layer (`franko_byte_arrays`) of free templates
+over `(pointer, length)` pairs; each `Franko_Static_Array` /
+`Franko_Dynamic_Array` member is a thin delegate that supplies its class tag
+and length. `memchr`/`memmem` return `MEM_NOT_FOUND` (`0xFFFFFFFF`) on no
+match; the endian accessors are unaligned byte loads/stores built on
+`std::memcpy`; bit index `i` means byte `i / 8`, bit `i % 8` counted from
+the LSB. Every kernel is SFINAE-restricted to `uint8` elements at the C++
+layer as a backstop behind the compiler's byte-only rule.
 
 The dynamic array length is stored in a `count` field with a `length()`
 accessor returning `uint32` (a field and method may not share a name in
@@ -1362,7 +1406,7 @@ uv run python library_tests/run_library_tests.py
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
 | Track new dataflow facts | `PointerNullStateChecker` (or a new standalone checker invoked from `Main`) |
 | Emit new C++ constructs | `Cpp14Codegen` (+ `SemanticASTNode`/`SemanticType` as needed) |
-| Add a runtime intrinsic | runtime header + `ArrayLowerer`/`SemanticArrayIntrinsicKind` + `ExpressionChecker` validation + `Cpp14Codegen` emission |
+| Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ExpressionChecker` validation + `Cpp14Codegen` emission |
 | Add an os FFI call | `import/franko/os.fr` + `os.ffi.cpp` block + `OsFfi` signatures |
 | Add/adjust a pointer permission rule | the region rule lives in `PointerPermissions`; enforce it in the relevant checker (`ExpressionChecker`/`StatementChecker`) and teach use-site attribution to `PointerPermissionChecker` (§4.9) |
 | Change how string literals are represented | `Desugarer` (hoisting, §4.10) + `StringLiteralDecoder` + `GlobalVariableSymbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
