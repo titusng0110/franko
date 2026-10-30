@@ -27,11 +27,17 @@ next to the source file:
     programs/bfs.out     (Linux/macOS)
     programs/bfs.exe     (Windows)
 
+The two build stages are also importable so the test runners share them
+instead of reimplementing them: franko_compile() (Franko -> C++14) and
+native_compile() (C++14 -> executable), both parameterized by build
+mode ("asan" / "opt" / "omax").
+
 The Java toolchain is built automatically when it is missing.
 """
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -51,11 +57,76 @@ from franko_tools import (
     find_tool,
     franko_classpath,
     host_target,
+    java_mode_flags,
     jemalloc_paths,
     link_flags,
     relative,
     run,
 )
+
+
+def franko_compile(
+    src: Path | str,
+    out_cpp: Path | str,
+    *,
+    mode: str = "asan",
+    extra_flags: Sequence[str] = (),
+    log: Path | None = None,
+    echo: bool = False,
+    check: bool = False,
+) -> int:
+    """Run the Franko compiler (Franko -> C++14) for one build MODE.
+
+    MODE is "asan" (no Franko flag, system-allocator runtime header),
+    "opt" (-O, jemalloc header) or "omax" (-Omax, unchecked header).
+    The compiler always runs with `-p IMPORT_DIR --target <host>`,
+    which is what the CLI and every runner already resolve to (the
+    Java defaults are a relative "import" dir under the repo-root cwd
+    and host detection, respectively).
+
+    Returns the compiler exit code so test runners can attribute a
+    per-case failure; with CHECK a non-zero exit raises ToolError.
+    """
+    java = find_tool("java", JAVA_HINT)
+    return run(
+        [java, "-cp", franko_classpath(), "Main",
+         src, "-o", out_cpp, "-p", IMPORT_DIR, "--target", host_target(),
+         *extra_flags, *java_mode_flags(mode)],
+        log_file=log, echo=echo, check=check,
+    )
+
+
+def native_compile(
+    out_cpp: Path | str,
+    out_bin: Path | str,
+    *,
+    mode: str = "asan",
+    warnings: str = "basic",
+    log: Path | None = None,
+    echo: bool = False,
+    check: bool = False,
+) -> int:
+    """Compile generated C++14 to a native executable for one build MODE.
+
+    "opt"/"omax" build -O3 against the bundled jemalloc; "asan" builds
+    -O1 + AddressSanitizer against the system allocator. WARNINGS is
+    the cxx_compile_flags warning level ("full" for the test suites,
+    "basic" for compile.py and the program smoke test, "none" for
+    runtime-abort cases).
+
+    Returns the driver exit code (CHECK raises instead).
+    """
+    cxx = find_cxx()
+    optimized = mode in ("opt", "omax")
+    include, jemalloc_lib = (jemalloc_paths() if optimized else (None, None))
+    return run(
+        [cxx, *cxx_compile_flags(warnings, optimize="3" if optimized else ASAN_OPTIMIZE,
+                                  sanitize=not optimized),
+         f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimized else []),
+         out_cpp, *([jemalloc_lib] if optimized else []),
+         *link_flags(sanitize=not optimized), "-o", out_bin],
+        log_file=log, echo=echo, check=check,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -94,20 +165,23 @@ def main(argv: list[str] | None = None) -> int:
         raise ToolError(f"source file not found: {args.source}")
 
     # Tool checks happen before any build step so a missing JDK or compiler
-    # reports the real problem instead of a half-built output.
-    java = find_tool("java", JAVA_HINT)
-    cxx = find_cxx()
+    # reports the real problem instead of a half-built output (the build
+    # stages below re-resolve the same tools).
+    find_tool("java", JAVA_HINT)
+    find_cxx()
     ensure_toolchain()
 
-    # The optimized builds (-O / -Omax, plus the Windows default which is
-    # already -O because AddressSanitizer is unsupported there) link the
-    # bundled jemalloc for the host; the default ASan build on Linux/macOS
-    # uses the system allocator instead and needs no jemalloc bundle at all.
-    # On Windows without -O/-Omax we still pass -O to the Franko compiler
-    # so it selects the jemalloc runtime header.
-    default_opt = IS_WINDOWS and not (args.optimize or args.Omax)
-    optimized = args.optimize or args.Omax or default_opt
-    effective_O = args.optimize or default_opt
+    # Windows cannot use AddressSanitizer, so the default build there is
+    # already -O (and still passes -O to the Franko compiler so it
+    # selects the jemalloc runtime header).
+    defaulted_opt = IS_WINDOWS and not (args.optimize or args.Omax)
+    if args.Omax:
+        mode = "omax"
+    elif args.optimize or defaulted_opt:
+        mode = "opt"
+    else:
+        mode = "asan"
+    optimized = mode in ("opt", "omax")
     include, jemalloc_lib = (jemalloc_paths() if optimized else (None, None))
 
     target = host_target()
@@ -122,12 +196,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Source: {relative(source)}")
     print(f"Generated C++: {relative(cpp_out)}")
     print(f"Binary output: {relative(bin_out)}")
-    if args.Omax:
+    if mode == "omax":
         print("Build mode: max-speed (-O3, jemalloc, no bounds/unsafe_cast checks)")
         print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
         print(f"jemalloc static library: {relative(jemalloc_lib)}")
-    elif effective_O:
-        if default_opt:
+    elif mode == "opt":
+        if defaulted_opt:
             print("Build mode: optimized (-O3, jemalloc; Windows default, "
                   "AddressSanitizer unsupported)")
         else:
@@ -140,43 +214,13 @@ def main(argv: list[str] | None = None) -> int:
     print()
 
     # ------------------------------------------------------------
-    # Franko -> C++14
+    # Franko -> C++14 -> native executable, shared with the test runners.
     # ------------------------------------------------------------
-    franko_cmd = [
-        java, "-cp", franko_classpath(), "Main",
-        source, "-o", cpp_out, "-p", IMPORT_DIR, "--target", target,
-    ]
-    if args.Omax:
-        franko_cmd.append("-Omax")
-    elif effective_O:
-        franko_cmd.append("-O")
-    run(franko_cmd)
+    franko_compile(source, cpp_out, mode=mode, echo=True, check=True)
     print()
 
-    # ------------------------------------------------------------
-    # C++14 -> native executable
-    # ------------------------------------------------------------
-    #
-    # -I<include> lets FrankoRuntime.hpp include <jemalloc/jemalloc.h>;
-    # the archive is passed by full path (do not switch to -L/-l unless it
-    # is renamed to libjemalloc.a, because GCC's -l search convention may
-    # not pick up jemalloc.lib).
-    #
-    compile_flags = cxx_compile_flags(
-        "basic",
-        optimize="3" if optimized else ASAN_OPTIMIZE,
-        sanitize=not optimized,
-    )
-    command = [
-        cxx,
-        *compile_flags,
-        f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimized else []),
-        cpp_out, *([jemalloc_lib] if optimized else []),
-        *link_flags(sanitize=not optimized),
-        "-o",
-        bin_out,
-    ]
-    run(command)
+    native_compile(cpp_out, bin_out, mode=mode, warnings="basic",
+                   echo=True, check=True)
 
     print()
     print(f"Successfully compiled to binary output: {relative(bin_out)}")
