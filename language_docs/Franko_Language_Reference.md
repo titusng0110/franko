@@ -116,6 +116,30 @@ Franko currently does **not** implement:
 
 Franko currently targets C++14.
 
+## Compiling programs
+
+Build a program with the bundled compile script:
+
+```bash
+uv run python compile.py programs/bfs.fr
+```
+
+This is the default debug mode: the generated code is compiled with
+`-O0` plus AddressSanitizer (including leak checking) and uses the
+system allocator. For an optimized binary, pass `-O`:
+
+```bash
+uv run python compile.py -O programs/bfs.fr
+```
+
+`-O` compiles with `-O3`, no sanitizer, and the bundled jemalloc
+allocator instead of the system one. Both modes implement the same
+language with identical compiler diagnostics and program output; only
+the allocator, the optimization level, and the runtime checking differ.
+Debug mode reports memory errors and leaks (for example a missing
+`arr.uninit()`) at run time, so develop and test without `-O` and use
+`-O` for the final fast binary.
+
 ---
 
 # 2. Source Files

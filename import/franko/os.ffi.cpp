@@ -28,8 +28,9 @@
 //     names. The stub bodies in ../os.fr are never emitted when the bridge
 //     is active; the bridge definitions are the only definitions.
 //
-//   - The bridge is spliced after the program template's
-//     `#include "FrankoRuntime.hpp"`, so Franko_Dynamic_Array, franko_panic,
+//   - The bridge is spliced after the program template's runtime
+//     `#include` (selected via the `__FRANKO_RUNTIME_HEADER__`
+//     placeholder), so Franko_Dynamic_Array, franko_panic,
 //     and the fixed-width integer types are available. Keep every block
 //     warning-clean under -Wall -Wextra -Wpedantic -Wshadow.
 //

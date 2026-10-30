@@ -190,7 +190,9 @@ def ensure_jemalloc_bundle() -> None:
     print("jemalloc bundle ready.")
 
 
-def cxx_compile_flags(warnings: str = "basic") -> list[str]:
+def cxx_compile_flags(
+    warnings: str = "basic", optimize: str = "3", sanitize: bool = False
+) -> list[str]:
     """Common C++ compile flags for Franko output and test programs.
 
     WARNINGS is one of:
@@ -198,18 +200,63 @@ def cxx_compile_flags(warnings: str = "basic") -> list[str]:
       "basic" -Wall -Wextra -Wpedantic          (compile.py, matching the
                                                  old compile_* scripts),
       "none"  no warning flags                  (test runtime builds).
+
+    OPTIMIZE is the -O level ("3" or "0"). SANITIZE adds AddressSanitizer
+    (-fsanitize=address plus debug info) for unoptimised debug builds; the
+    matching link flags come from link_flags(sanitize=True), since the
+    suites and compile.py build and link in a single driver invocation.
     """
-    flags = ["-O3", "-std=c++14"]
+    flags = [f"-O{optimize}", "-std=c++14"]
     if warnings == "full":
         flags += ["-Wall", "-Wextra", "-Wpedantic", "-Wshadow"]
     elif warnings == "basic":
         flags += ["-Wall", "-Wextra", "-Wpedantic"]
     elif warnings != "none":
         raise ValueError(f"unknown warning level: {warnings!r}")
+    if sanitize:
+        flags += ["-fsanitize=address", "-g", "-fno-omit-frame-pointer"]
     return flags
 
 
-def link_flags() -> list[str]:
+# ------------------------------------------------------------
+# Dual-mode (ASan / optimized) builds
+# ------------------------------------------------------------
+
+BUILD_MODES = ("asan", "opt")
+"""Build modes used by compile.py and the test runners.
+
+"asan" is the default debug mode: the Franko compiler runs without -O
+(selecting the system-allocator runtime header) and the C++ step uses
+-O0 + AddressSanitizer with no jemalloc. "opt" is the optimized mode:
+the compiler runs with -O (jemalloc header) and the C++ step uses -O3
+with the bundled jemalloc.
+"""
+
+
+def java_mode_flags(mode: str) -> list[str]:
+    """Extra Franko-compiler flags for MODE: ["-O"] for "opt", [] for "asan"."""
+    if mode == "opt":
+        return ["-O"]
+    if mode == "asan":
+        return []
+    raise ValueError(f"unknown build mode: {mode!r}")
+
+
+def mode_artifact(path: Path, mode: str) -> Path:
+    """Map a status-quo artifact PATH to its per-mode path.
+
+    "opt" keeps the path unchanged; "asan" inserts ".asan" before the
+    final suffix (main.cpp -> main.asan.cpp), so the two modes never
+    share - and can never clobber - build artifacts or failure evidence.
+    """
+    if mode == "opt":
+        return path
+    if mode == "asan":
+        return path.with_name(f"{path.stem}.asan{path.suffix}")
+    raise ValueError(f"unknown build mode: {mode!r}")
+
+
+def link_flags(sanitize: bool = False) -> list[str]:
     """Link flags for a native binary, per host OS.
 
     Linux needs pthread/dl (jemalloc is linked statically and references
@@ -218,9 +265,19 @@ def link_flags() -> list[str]:
     lives in libSystem), MinGW needs neither. The static libstdc++/libgcc
     pair (Linux/Windows only) keeps binaries independent of the system's
     GCC runtimes; Apple's clang has no libstdc++ to link.
+
+    SANITIZE adds -fsanitize=address (required at link time as well as
+    compile time) with -static-libasan on GCC hosts so the binary does not
+    depend on a shared libasan. It also drops -s: stripping a sanitizer
+    build would discard the symbols its reports need. No -static-libasan
+    on macOS (Apple's clang has no such option).
     """
     flags: list[str] = []
     system = host_os()
+    if sanitize:
+        flags.append("-fsanitize=address")
+        if system != "macos":
+            flags.append("-static-libasan")
     if system in ("linux", "macos"):
         flags.append("-pthread")
     if system == "linux":
@@ -228,7 +285,9 @@ def link_flags() -> list[str]:
     if system != "macos":
         flags += ["-static-libstdc++", "-static-libgcc"]
         # Apple's clang treats -s as obsolete; GNU ld accepts it.
-        flags.append("-s")
+        # Never strip sanitizer builds (see docstring).
+        if not sanitize:
+            flags.append("-s")
     return flags
 
 

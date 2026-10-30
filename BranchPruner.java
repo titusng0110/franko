@@ -5,7 +5,7 @@ import java.util.Objects;
 
 final class BranchPruner {
 
-    private static final int MAX_ATOMS = 10;
+    private static final int MAX_ATOMS = 12;
 
     private static final SemanticIntLiteralNode TRUE_LITERAL =
             new SemanticIntLiteralNode(

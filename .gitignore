@@ -29,3 +29,11 @@ library_tests/**/*.cpp
 library_tests/**/*.bin
 library_tests/**/*.actual
 library_tests/**/*.compile.log
+
+# Dual-mode ASan build artifacts (the .asan-suffixed parallels of the
+# blocks above; kept after a failing case for inspection).
+**/*.asan.cpp
+**/*.asan.bin
+**/*.asan.testbin
+**/*.asan.actual
+**/*.asan.log

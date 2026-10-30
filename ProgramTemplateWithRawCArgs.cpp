@@ -1,4 +1,4 @@
-#include "FrankoRuntime.hpp"
+#include "__FRANKO_RUNTIME_HEADER__"
 
 __FRANKO_PROGRAM__
 

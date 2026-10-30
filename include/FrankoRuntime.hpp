@@ -310,18 +310,29 @@ struct Franko_Dynamic_Array {
 
         const uint32_t oldCount = count;
 
+        if (n < oldCount) {
+            // Destroy the dropped tail while its storage is still alive:
+            // realloc may release the tail first, so destroying afterwards
+            // would run destructors on freed memory.
+            destroy_elements(data + n, oldCount - n);
+        }
+
         T* newData = static_cast<T*>(je_realloc(data, sizeof(T) * static_cast<size_t>(n)));
 
-        if (!newData)
+        if (!newData) {
+            // The buffer is unchanged on realloc failure, but a shrinking
+            // resize already destroyed its dropped tail: narrow count so
+            // the destroyed elements are never destroyed again.
+            count = (n < oldCount) ? n : oldCount;
             return -1;
+        }
 
         // je_realloc byte-moves existing elements, which is fine for the
-        // runtime's trivially-relocatable element types. Only the changed
-        // tail needs lifetime handling.
+        // runtime's trivially-relocatable element types. Only the grown
+        // tail needs lifetime handling (the dropped tail was destroyed
+        // above, before the realloc).
         if (n > oldCount)
             construct_elements(newData + oldCount, n - oldCount);
-        else if (n < oldCount)
-            destroy_elements(newData + n, oldCount - n);
 
         data = newData;
         count = n;
