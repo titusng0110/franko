@@ -8,7 +8,7 @@ command works on Linux, macOS and Windows:
     uv run python compile.py -O programs/bfs.fr
 
 Without -O the default is an unoptimised debug build with
-AddressSanitizer (-O0 -fsanitize=address) using the
+AddressSanitizer (-O1 -fsanitize=address) using the
 system allocator (malloc/free via FrankoRuntimeWithAsan.hpp); with -O
 it is an optimized build (-O3) using the bundled jemalloc; with -Omax
 it is the same optimized build but against FrankoRuntimeMax.hpp,
@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from franko_tools import (
+    ASAN_OPTIMIZE,
     IMPORT_DIR,
     INCLUDE_DIR,
     JAVA_HINT,
@@ -65,7 +66,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "-O", "--optimize",
         action="store_true",
         help="optimized build with -O3 (default without -O: "
-             "-O0 with AddressSanitizer)",
+             "-O1 with AddressSanitizer)",
     )
     mode.add_argument(
         "-Omax",
@@ -122,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"jemalloc static library: {relative(jemalloc_lib)}")
     else:
         print("Build mode: debug + AddressSanitizer "
-              "(-O0 -fsanitize=address, system allocator)")
+              "(-O1 -fsanitize=address, system allocator)")
     print()
 
     # ------------------------------------------------------------
@@ -150,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     #
     compile_flags = cxx_compile_flags(
         "basic",
-        optimize="3" if optimized else "0",
+        optimize="3" if optimized else ASAN_OPTIMIZE,
         sanitize=not optimized,
     )
     command = [

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Benchmark Franko build modes vs C++ std::set on the AVL workload.
+"""Benchmark Franko build modes vs C++ std::set on a red-black workload.
 
-Franko (benchmark/AVL_franko.fr), 3 modes built with compile.py:
-    default  (-O0 + ASan + system allocator)
+Franko (benchmark/redblack_franko.fr), 3 modes built with compile.py:
+    default  (-O1 + ASan + system allocator)
     -O       (-O3 + jemalloc, checked runtime)
     -Omax    (-O3 + jemalloc, unchecked runtime)
 
-C++ (benchmark/AVL_cpp.cpp), 2 modes built with g++ (static
-libstdc++/libgcc, like the Franko builds):
-    cpp-O0   (g++ -O0 -std=c++14)
-    cpp-O3   (g++ -O3 -std=c++14)
+C++ (benchmark/redblack_cpp.cpp), 3 modes built with g++ (static
+libstdc++/libgcc, like the Franko builds; ASan links dynamic, since
+-static-libasan does not exist on every toolchain):
+    cpp-O1-asan (g++ -O1 -fsanitize=address -g -fno-omit-frame-pointer)
+    cpp-O1      (g++ -O1)
+    cpp-O3      (g++ -O3)
 
 Each test runs REPS times, timed with time.perf_counter(); the headline
 number is the average. stdout must agree within each group (franko modes
@@ -29,13 +31,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "benchmark"
 
-FRANKO_SRC = BENCH / "AVL_franko.fr"
-FRANKO_BIN = BENCH / ("AVL_franko.exe" if sys.platform == "win32"
-                      else "AVL_franko.out")
-CPP_SRC = BENCH / "AVL_cpp.cpp"
+FRANKO_SRC = BENCH / "redblack_franko.fr"
+FRANKO_BIN = BENCH / ("redblack_franko.exe" if sys.platform == "win32"
+                      else "redblack_franko.out")
+CPP_SRC = BENCH / "redblack_cpp.cpp"
 
 FRANKO_MODES = ("-Omax", "-O", "default")  # fastest first
-CPP_MODES = (("cpp-O0", "-O0"), ("cpp-O3", "-O3"))
+
+# (label, g++ flags): the plain -O1 build plus an ASan-instrumented -O1
+# twin, so the Franko default (-O1 + ASan) has a direct apples-to-apples
+# counterpart. The -O3 reference stays as the speed ceiling.
+CPP_MODES = (
+    ("cpp-O1-asan", ["-O1", "-fsanitize=address", "-g",
+                     "-fno-omit-frame-pointer"]),
+    ("cpp-O1", ["-O1"]),
+    ("cpp-O3", ["-O3"]),
+)
 
 # Same static libstdc++/libgcc the Franko builds use (see
 # franko_tools.link_flags): the C++ reference must not get its std libs
@@ -57,9 +68,9 @@ def build_franko(mode: str) -> Path:
     return FRANKO_BIN
 
 
-def build_cpp(label: str, opt: str) -> Path:
-    binary = BENCH / f"AVL_cpp_{label.removeprefix('cpp-')}.out"
-    cmd = ["g++", opt, "-std=c++14", *STATIC_STDLIBS, str(CPP_SRC),
+def build_cpp(label: str, flags: list[str]) -> Path:
+    binary = BENCH / f"redblack_cpp_{label.removeprefix('cpp-')}.out"
+    cmd = ["g++", *flags, "-std=c++14", *STATIC_STDLIBS, str(CPP_SRC),
            "-o", str(binary)]
     print(f"--- building {label}: {' '.join(cmd)} ---", flush=True)
     subprocess.run(cmd, cwd=ROOT, check=True,
@@ -100,8 +111,8 @@ def main() -> int:
         results[mode], outputs[mode] = bench(mode, FRANKO_BIN, reps)
 
     cpp_outputs: dict[str, str] = {}
-    for label, opt in CPP_MODES:
-        binary = build_cpp(label, opt)
+    for label, flags in CPP_MODES:
+        binary = build_cpp(label, flags)
         sizes[label] = binary.stat().st_size
         results[label], cpp_outputs[label] = bench(label, binary, reps)
     outputs.update(cpp_outputs)
@@ -117,7 +128,7 @@ def main() -> int:
     if not (franko_ok and cpp_ok):
         return 1
 
-    order = ["default", "-O", "-Omax", "cpp-O0", "cpp-O3"]
+    order = ["default", "-O", "-Omax", "cpp-O1-asan", "cpp-O1", "cpp-O3"]
     print()
     print("| test | " + " | ".join(f"run{i + 1} (s)"
                                    for i in range(reps)) + " | avg (s) | bin (KB) |")
@@ -131,7 +142,10 @@ def main() -> int:
     print(f"-O vs default: {avg['default'] / avg['-O']:.2f}x faster")
     print(f"-Omax vs -O: {avg['-O'] / avg['-Omax']:.2f}x faster")
     print(f"-Omax vs default: {avg['default'] / avg['-Omax']:.2f}x faster")
-    print(f"cpp-O3 vs cpp-O0: {avg['cpp-O0'] / avg['cpp-O3']:.2f}x faster")
+    print(f"cpp-O3 vs cpp-O1: {avg['cpp-O1'] / avg['cpp-O3']:.2f}x faster")
+    print(f"cpp-O1 vs cpp-O1-asan: {avg['cpp-O1-asan'] / avg['cpp-O1']:.2f}x faster")
+    print(f"franko default vs cpp-O1-asan: {avg['cpp-O1-asan'] / avg['default']:.2f}x "
+          f"({'faster' if avg['cpp-O1-asan'] > avg['default'] else 'slower'})")
     print(f"cpp-O3 vs franko -Omax: {avg['-Omax'] / avg['cpp-O3']:.2f}x "
           f"({'faster' if avg['-Omax'] > avg['cpp-O3'] else 'slower'})")
     return 0

@@ -40,6 +40,7 @@ from franko_tools import (
     IMPORT_DIR,
     INCLUDE_DIR,
     JAVA_HINT,
+    ASAN_OPTIMIZE,
     BUILD_MODES,
     Results,
     ToolError,
@@ -103,7 +104,7 @@ def main() -> int:
                 continue
 
             if run(
-                [cxx, *cxx_compile_flags("basic", optimize="3" if optimize else "0",
+                [cxx, *cxx_compile_flags("basic", optimize="3" if optimize else ASAN_OPTIMIZE,
                                           sanitize=not optimize),
                  f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
                  out_cpp, *([jemalloc_lib] if optimize else []),
