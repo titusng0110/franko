@@ -1,0 +1,41 @@
+// franko/limit — integer type limits.
+//
+// One global per bound per primitive integer type, named after the
+// C conventions (INT32_MAX, UINT8_MIN, ...), wrapped in `namespace std`
+// like the other std modules. The language has no `const` yet, so
+// these are ordinary globals: each is declared with a constant
+// initializer (folded at compile time) and should be treated as
+// read-only. Because they are variables rather than literals, they
+// cannot appear in constant-expression slots (static array sizes,
+// struct field defaults, `break N` levels) and they do not get the
+// fluid-constant fit rules — their declared type is exact.
+//
+//   import "franko/limit"
+//
+//   if (n == std::INT32_MAX) { ... }
+
+namespace std {
+    int8 INT8_MIN = -128
+    int8 INT8_MAX = 127
+
+    int16 INT16_MIN = -32768
+    int16 INT16_MAX = 32767
+
+    int32 INT32_MIN = -2147483648
+    int32 INT32_MAX = 2147483647
+
+    int64 INT64_MIN = -9223372036854775808
+    int64 INT64_MAX = 9223372036854775807
+
+    uint8 UINT8_MIN = 0
+    uint8 UINT8_MAX = 255
+
+    uint16 UINT16_MIN = 0
+    uint16 UINT16_MAX = 65535
+
+    uint32 UINT32_MIN = 0
+    uint32 UINT32_MAX = 4294967295
+
+    uint64 UINT64_MIN = 0
+    uint64 UINT64_MAX = 18446744073709551615
+}

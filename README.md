@@ -119,5 +119,5 @@ Compile and run any of them the same way as above.
   the phase pipeline, code generation to C++14, the runtime headers, and
   the build/test tooling.
 
-For library modules (`franko/io`, `franko/os`, `franko/pool`), see
-[`library_docs/`](library_docs/).
+For library modules (`franko/io`, `franko/limit`, `franko/os`,
+`franko/pool`), see [`library_docs/`](library_docs/).
