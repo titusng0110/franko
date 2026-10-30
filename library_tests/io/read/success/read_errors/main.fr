@@ -1,0 +1,28 @@
+// ============================================================
+// LIBRARY TEST (io/read): read error returns
+// ============================================================
+// read_bytes and read_line return -1 without touching stdin when
+// their arguments cannot work, and 0 when the (empty) input is
+// exhausted. `two` is a 2-byte buffer:
+//   read_bytes(null, 1)           -> -1  (null buffer)
+//   read_bytes(getmview(two), 3)  -> -1  (count exceeds buffer)
+//   read_bytes(getmview(two), 2)  -> 0   (end of input)
+//   read_line(null, 2)            -> -1  (null buffer)
+//   read_line(getmview(two), 0)   -> -1  (max is zero)
+//   read_line(getmview(two), 3)   -> -1  (max exceeds buffer)
+//   read_line(getmview(two), 2)   -> 0   (end of input)
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    [byte, 2] two;
+    print(read_bytes(null, 1));
+    print(read_bytes(getmview(two), 3));
+    print(read_bytes(getmview(two), 2));
+    print(read_line(null, 2));
+    print(read_line(getmview(two), 0));
+    print(read_line(getmview(two), 3));
+    print(read_line(getmview(two), 2));
+    return 0;
+}

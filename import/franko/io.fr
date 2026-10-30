@@ -1,6 +1,6 @@
 import "./os"
 
-// franko/io — user-level output.
+// franko/io — user-level output and input.
 //
 // `print` is an ordinary overloaded function (not a statement).
 // Single-argument `print(x)` writes `x` followed by `\n` in a single
@@ -17,6 +17,9 @@ import "./os"
 // repeated `% 10` / `/ 10` (negatives stay negative throughout so
 // `INT64_MIN` needs no overflow-prone negation) and emitted with the
 // suffix in as few writes as possible.
+//
+// Input (`read_bytes`, `read_line`) reads stdin into a caller-provided
+// buffer and reports how much arrived; see their comments below.
 
 func print() -> void {
     [byte, 1] nl
@@ -418,6 +421,31 @@ func print(view<[uint8]> utf8str) -> void {
         [byte, 1] nl
         nl[0] = 10
         os::posix::write(os::posix::STDOUT_FILENO, getptr(nl), 1)
+    }
+}
+
+func print(view<[uint8]> utf8str, view<[uint8]> end) -> void {
+    if (utf8str != null) {
+        uint32 n = $(utf8str).length()
+        if (n != 0) {
+            if (os::IS_WINDOWS) {
+                uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+                os::win32::WriteFile(h, utf8str, n, null)
+            } else if (os::IS_LINUX || os::IS_MACOS) {
+                os::posix::write(os::posix::STDOUT_FILENO, utf8str, cast<uint64>(n))
+            }
+        }
+    }
+    if (end != null) {
+        uint32 m = $(end).length()
+        if (m != 0) {
+            if (os::IS_WINDOWS) {
+                uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+                os::win32::WriteFile(h, end, m, null)
+            } else if (os::IS_LINUX || os::IS_MACOS) {
+                os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
+            }
+        }
     }
 }
 
@@ -913,4 +941,80 @@ func print(int64 num, view<[uint8]> end) -> void {
             }
         }
     }
+}
+
+// franko/io — input.
+//
+// Input fills a caller-provided buffer (arrays cannot be returned
+// directly) and reports how much arrived. Both functions go through
+// the same OS bridge `print` writes with: os::posix::read on
+// linux/macos, os::win32::ReadFile on windows, so input shares a
+// channel with raw fd reads.
+
+// Read up to `count` bytes from stdin into `buf`; return the number of
+// bytes read, 0 at end of input, or -1 on error (a null `buf`, or
+// `count` larger than the buffer). A short result is normal: the
+// return value may be smaller than `count` even before end of input.
+func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
+    if (buf == null) {
+        return -1
+    }
+    if ($(buf).length() < count) {
+        return -1
+    }
+    if (os::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
+        uint32 n = 0
+        int32 ok = os::win32::ReadFile(h, buf, count, getmview(n))
+        if (ok == 0) {
+            return -1
+        }
+        return cast<int64>(n)
+    } else if (os::IS_LINUX || os::IS_MACOS) {
+        return os::posix::read(os::posix::STDIN_FILENO, buf, cast<uint64>(count))
+    }
+    return -1
+}
+
+// Read one line from stdin into `buf`, at most `max` bytes. Reading
+// stops at a `\n` (consumed and not stored; a preceding `\r` is
+// dropped too, so `\r\n` counts as one terminator), at `max` bytes, or
+// at end of input. Returns the number of bytes stored, or -1 on error
+// (a null `buf`, `max` zero, or `max` larger than the buffer).
+// A line longer than `max` is split: the remainder, including its line
+// ending, stays in stdin for the next call. A zero return means an
+// empty line or end of input with nothing pending.
+func read_line(mview<[byte]> buf, uint32 max) -> int64 {
+    if (buf == null) {
+        return -1
+    }
+    if (max == 0) {
+        return -1
+    }
+    if ($(buf).length() < max) {
+        return -1
+    }
+    [byte, 1] one
+    uint32 n = 0
+    while (n < max) {
+        int64 r = read_bytes(getmview(one), 1)
+        if (r < 0) {
+            return -1
+        }
+        if (r == 0) {
+            break
+        }
+        byte b = one[0]
+        if (b == 10) {
+            if (n != 0) {
+                if ($(buf)[n - 1] == 13) {
+                    n = n - 1
+                }
+            }
+            break
+        }
+        $(buf)[n] = b
+        n = n + 1
+    }
+    return cast<int64>(n)
 }

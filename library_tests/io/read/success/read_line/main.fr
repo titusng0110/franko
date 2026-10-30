@@ -1,0 +1,30 @@
+// ============================================================
+// LIBRARY TEST (io/read): read_line
+// ============================================================
+// stdin is "ab\ncd\n\nef" (9 bytes, no final newline). read_line
+// stores the line without its terminator and returns the stored
+// byte count:
+//   read_line -> 2  ("ab"; the \n is consumed, not stored)
+//   read_line -> 2  ("cd")
+//   read_line -> 0  (empty line)
+//   read_line -> 2  ("ef"; end of input without a terminator)
+//   read_line -> 0  (end of input)
+// A zero return therefore means an empty line or end of input.
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    [byte] buf;
+    buf.init(8);
+    print(read_line(getmview(buf), 8));
+    print(buf[0], " "); print(buf[1]);
+    print(read_line(getmview(buf), 8));
+    print(buf[0], " "); print(buf[1]);
+    print(read_line(getmview(buf), 8));
+    print(read_line(getmview(buf), 8));
+    print(buf[0], " "); print(buf[1]);
+    print(read_line(getmview(buf), 8));
+    buf.uninit();
+    return 0;
+}

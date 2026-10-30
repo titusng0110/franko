@@ -1,0 +1,29 @@
+// ============================================================
+// LIBRARY TEST (io/read): read_line with a too-long line
+// ============================================================
+// stdin is "abcdef\nxy\n". A line longer than `max` is split: the
+// remainder, including its line ending, stays in stdin for the
+// next call:
+//   read_line(max 3) -> 3  ("abc")
+//   read_line(max 3) -> 3  ("def"; still the same line)
+//   read_line(max 3) -> 0  (the leftover \n: an empty line)
+//   read_line(max 3) -> 2  ("xy")
+//   read_line(max 3) -> 0  (end of input)
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    [byte] buf;
+    buf.init(3);
+    print(read_line(getmview(buf), 3));
+    print(buf[0], " "); print(buf[1], " "); print(buf[2]);
+    print(read_line(getmview(buf), 3));
+    print(buf[0], " "); print(buf[1], " "); print(buf[2]);
+    print(read_line(getmview(buf), 3));
+    print(read_line(getmview(buf), 3));
+    print(buf[0], " "); print(buf[1]);
+    print(read_line(getmview(buf), 3));
+    buf.uninit();
+    return 0;
+}
