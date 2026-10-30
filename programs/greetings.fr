@@ -1,78 +1,44 @@
-// OS FFI showcase: asks for a name on stdout, reads it from stdin,
+// Console greeting: asks for a name on stdout, reads it from stdin,
 // and writes back "Hello, [NAME]~".
 //
-// import "franko/os" plus the os::IS_* compile-time constants select
-// the API per target, so this program compiles for every target: on
-// Windows only the win32 calls are emitted (and bridged), on
-// linux/macos only the posix ones. Deliberately print-free: it uses raw
-// fd writes directly instead of going through `franko/io`.
-//
-// Input line endings depend on how stdin is wired, so the scan
-// tolerates both "\r\n" (interactive Windows console) and "\n"
-// (pipes). Run with:
+// Everything goes through `franko/io`: `print(text, end)` writes text
+// with `end` as the suffix (a null `end` means no suffix, so no
+// newline), and `read_line` fills a caller-owned buffer with the name
+// and reports its length. Input line endings depend on how stdin is
+// wired, so read_line tolerates both "\r\n" (interactive Windows
+// console) and "\n" (pipes). Run with:
 //
 //   ./programs/greetings.out < programs/greetings.stdin
 
-import "franko/os"
+import "franko/io"
 
 func main() -> int {
-    // A string literal is a view<[byte, N]> over a hoisted
-    // global; the write API needs dynamic arrays, so size them from
-    // the literal's length() and memcpy the bytes over.
-    view<[byte, 18]> promptT = "What's your name? ";
-    [byte] prompt;
-    prompt.init($(promptT).length());
-    prompt.memcpy(promptT);
+    // Prompt without a trailing newline.
+    print("What's your name? ", null)
 
+    // The name without its line ending, at most 32 bytes.
     [byte] name;
     name.init(32);
-    name.memset(0);
-
-    if (os::IS_WINDOWS) {
-        uint64 hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(hOut, getptr(prompt), cast<uint32>($(promptT).length()), null);
-        uint64 hIn = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
-        os::win32::ReadFile(hIn, getptr(name), 32, null);
-    } else if (os::IS_LINUX || os::IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, getptr(prompt), cast<uint64>($(promptT).length()));
-        os::posix::read(os::posix::STDIN_FILENO, getptr(name), 32);
-    }
-
-    prompt.uninit();
-
-    // Name length: bytes up to the first line ending (10 or 13) or
-    // NUL padding (0).
+    int64 got = read_line(getmview(name), 32);
     uint len = 0;
-    uint i = 0;
-    while (i < 32) {
-        byte b = name[i];
-        if ((b == 10) || (b == 13) || (b == 0)) {
-            break;
-        }
-        len++;
-        i++;
+    if (got > 0) {
+        len = unsafe_cast<uint>(got);
     }
 
-    // "Hello, " template plus up to 32 name bytes plus "~" (126).
-    view<[byte, 7]> helloT = "Hello, ";
+    // "Hello, " + name + "~" in one exact-sized buffer. A string
+    // literal is a valid memcpy source, and $(...) over it gives its
+    // length; the result is printed verbatim (a null `end` means no
+    // suffix and no newline).
+    uint greetingLen = $("Hello, ").length();
+    uint total = greetingLen + len + 1;
     [byte] out;
-    out.init($(helloT).length() + 32 + 1);
-    out.memset(0);
-    out.memcpy(helloT);
-    uint greetingLen = $(helloT).length();
-    uint j = 0;
-    while (j < len) {
+    out.init(total);
+    out.memcpy("Hello, ");
+    for (uint j = 0; j < len; j++) {
         out[greetingLen + j] = name[j];
-        j++;
     }
-    out[greetingLen + len] = 126;
-
-    if (os::IS_WINDOWS) {
-        uint64 hOut = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(hOut, getptr(out), cast<uint32>(greetingLen + len + 1), null);
-    } else if (os::IS_LINUX || os::IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(greetingLen + len + 1));
-    }
+    out[total - 1] = 126;
+    print(getview(out), null);
 
     out.uninit();
     name.uninit();

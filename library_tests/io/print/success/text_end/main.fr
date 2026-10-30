@@ -1,0 +1,19 @@
+// ============================================================
+// LIBRARY TEST (io/print): print(text, end)
+// ============================================================
+// The two-argument text form writes `text` followed by `end`
+// verbatim: a null `end` means no suffix and no newline, which is
+// how a program writes a prompt or a partial line. A null `text`
+// prints nothing but still writes `end`.
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    print("Hello, ", null)
+    print("world")
+    print("a", "b")
+    print(null, "c")
+    print("done")
+    return 0;
+}

@@ -8,7 +8,7 @@ requires-python = ">=3.13"
 # dependency of the language doc tools (language_docs/renumber_sections.py)
 # and is declared here so `uv run` keeps it installed.
 dependencies = [
-    "regex",
+    "regex", "ruff",
 ]
 
 [tool.uv]

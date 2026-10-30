@@ -1,0 +1,29 @@
+// ============================================================
+// LIBRARY TEST (io/read): read_bytes
+// ============================================================
+// stdin is "ABCDEFGHIJ\n" (11 bytes). read_bytes fills the
+// caller-provided buffer and reports how much arrived:
+//   read_bytes(buf, 4)  -> 4    (the count caps a single call)
+//   read_bytes(buf, 4)  -> 4
+//   read_bytes(buf, 8)  -> 3    (a short read is normal)
+//   read_bytes(buf, 4)  -> 0    (end of input)
+// Bytes are printed numerically so the golden is exact. The
+// buffer is not cleared between reads, so stale bytes past the
+// returned count are expected and never printed here.
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    [byte] buf;
+    buf.init(8);
+    print(read_bytes(getmview(buf), 4));
+    print(buf[0], " "); print(buf[1], " "); print(buf[2], " "); print(buf[3]);
+    print(read_bytes(getmview(buf), 4));
+    print(buf[0], " "); print(buf[1], " "); print(buf[2], " "); print(buf[3]);
+    print(read_bytes(getmview(buf), 8));
+    print(buf[0], " "); print(buf[1], " "); print(buf[2]);
+    print(read_bytes(getmview(buf), 4));
+    buf.uninit();
+    return 0;
+}
