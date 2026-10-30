@@ -866,8 +866,10 @@ marshals `argc`/`argv` byte-for-byte (no null terminators) into
 template contains the expected entry call — a cheap guard against
 template/mangling drift, mirroring `OsFfi.verifyBridge`. An explicit
 `-t <template>` skips the check. `Main` selects the runtime header from
-the `-O` flag (`FrankoRuntime.hpp`, bundled jemalloc, with `-O`;
-`FrankoRuntimeWithAsan.hpp`, system allocator, without) and splices it
+the optimization flags (`FrankoRuntime.hpp`, bundled jemalloc, with `-O`;
+`FrankoRuntimeMax.hpp`, jemalloc with bounds and unsafe_cast checks
+stripped, with `-Omax`; `FrankoRuntimeWithAsan.hpp`, system allocator,
+without either) and splices it
 into `__FRANKO_RUNTIME_HEADER__`; a stock template missing the
 placeholder is rejected, while a custom `-t` template without it keeps
 its pinned `#include` untouched.
@@ -1117,12 +1119,16 @@ Consequences of strings being views:
 
 ## 4.11 Runtime array and allocation semantics
 
-The generated code allocates through one of two runtime headers selected
-by the compiler `-O` flag: `FrankoRuntime.hpp` (bundled jemalloc:
-`je_malloc`, `je_calloc`, `je_realloc`, `je_free`) with `-O`, and
-`FrankoRuntimeWithAsan.hpp` (system `malloc`/`calloc`/`realloc`/`free`,
-so AddressSanitizer instrumentation applies) by default. Both headers
-implement identical array semantics; only the allocator differs.
+The generated code allocates through one of three runtime headers
+selected by the compiler's optimization flags: `FrankoRuntime.hpp`
+(bundled jemalloc: `je_malloc`, `je_calloc`, `je_realloc`, `je_free`)
+with `-O`; `FrankoRuntimeMax.hpp` (same jemalloc allocator, with bounds
+checking and unsafe_cast range checking stripped for speed) with
+`-Omax`; and `FrankoRuntimeWithAsan.hpp` (system
+`malloc`/`calloc`/`realloc`/`free`, so AddressSanitizer instrumentation
+applies) by default. All three headers implement identical array
+semantics apart from the stripped checks; only the allocator and the
+runtime checks differ.
 
 Dynamic array element buffers are allocated by the array runtime methods
 and freed by `uninit()` or by the array object's destructor (never for

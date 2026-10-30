@@ -64,7 +64,7 @@ Windows):
 .\programs\bfs.exe          # Windows
 ```
 
-There are two build modes:
+There are two build modes plus an unchecked max-speed mode:
 
 * **default** — `-O0` with AddressSanitizer (including leak checking)
   and the system allocator. Use this while developing and testing: it
@@ -72,12 +72,17 @@ There are two build modes:
   at run time.
 * **`-O`** — optimized (`-O3`) with the bundled jemalloc allocator and
   no sanitizer. Use this for the final fast binary.
+* **`-Omax`** — like `-O`, but against an unchecked runtime: all array
+  bounds checks and `unsafe_cast` range checks are stripped. Out-of-range
+  access is then undefined behavior. For developers who have already
+  validated their program and want maximum speed.
 
 ```bash
 uv run python compile.py -O programs/bfs.fr
+uv run python compile.py -Omax programs/bfs.fr
 ```
 
-Both modes implement the same language with identical compiler
+All modes implement the same language with identical compiler
 diagnostics and program output; only the allocator, the optimization
 level, and the runtime checking differ.
 

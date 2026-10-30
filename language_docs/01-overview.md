@@ -77,9 +77,23 @@ uv run python compile.py -O programs/bfs.fr
 ```
 
 `-O` compiles with `-O3`, no sanitizer, and the bundled jemalloc
-allocator instead of the system one. Both modes implement the same
-language with identical compiler diagnostics and program output; only
-the allocator, the optimization level, and the runtime checking differ.
-Debug mode reports memory errors and leaks (for example a missing
-`arr.uninit()`) at run time, so develop and test without `-O` and use
-`-O` for the final fast binary.
+allocator instead of the system one. A third mode, `-Omax`, is the same
+optimized build but swaps in an unchecked runtime: all array bounds
+checks and `unsafe_cast` range checks are stripped.
+
+```bash
+uv run python compile.py -Omax programs/bfs.fr
+```
+
+All modes implement the same language with identical compiler
+diagnostics and program output; only the allocator, the optimization
+level, and the runtime checking differ. Debug mode reports memory
+errors and leaks (for example a missing `arr.uninit()`) at run time, so
+develop and test without `-O` and use `-O` for the final fast binary.
+
+`-Omax` is for developers who have already validated their program and
+want maximum speed. Out-of-range array access and out-of-range
+`unsafe_cast` values are **undefined behavior** in this mode — they
+silently read or write whatever memory is there and silently wrap or
+truncate cast results, instead of aborting like the checked modes. Prefer
+`-O` unless profiling shows the checks themselves are the bottleneck.

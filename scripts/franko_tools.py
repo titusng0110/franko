@@ -267,17 +267,16 @@ def link_flags(sanitize: bool = False) -> list[str]:
     GCC runtimes; Apple's clang has no libstdc++ to link.
 
     SANITIZE adds -fsanitize=address (required at link time as well as
-    compile time) with -static-libasan on GCC hosts so the binary does not
-    depend on a shared libasan. It also drops -s: stripping a sanitizer
-    build would discard the symbols its reports need. No -static-libasan
-    on macOS (Apple's clang has no such option).
+    compile time). It also drops -s: stripping a sanitizer build would
+    discard the symbols its reports need. AddressSanitizer is always
+    linked dynamically (no -static-libasan): the flag does not exist on
+    every supported toolchain (e.g. Windows MinGW-w64), and the shared
+    runtime is found automatically on all three platforms.
     """
     flags: list[str] = []
     system = host_os()
     if sanitize:
         flags.append("-fsanitize=address")
-        if system != "macos":
-            flags.append("-static-libasan")
     if system in ("linux", "macos"):
         flags.append("-pthread")
     if system == "linux":
