@@ -26,6 +26,8 @@ case and kept for inspection after a failure.
 
 Every program builds and runs twice: ASan/system-allocator mode
 (Franko without -O) and optimized mode (Franko -O with jemalloc).
+On Windows AddressSanitizer is unsupported, so programs build and run
+only once, in optimized mode.
 The optimized build keeps the historical artifact names; the ASan
 build uses .asan-suffixed ones.
 """
