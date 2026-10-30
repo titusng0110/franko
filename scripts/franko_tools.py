@@ -223,19 +223,29 @@ def cxx_compile_flags(
 # Dual-mode (ASan / optimized) builds
 # ------------------------------------------------------------
 
-BUILD_MODES = ("opt",) if IS_WINDOWS else ("asan", "opt")
-"""Build modes used by compile.py and the test runners.
+BUILD_MODES = ("asan", "opt")
+"""Build modes exercised by the test runners.
 
-"asan" is the default debug mode: the Franko compiler runs without -O
+"asan" is the debug mode: the Franko compiler runs without -O
 (selecting the system-allocator runtime header) and the C++ step uses
 -O1 + AddressSanitizer with no jemalloc. "opt" is the optimized mode:
 the compiler runs with -O (jemalloc header) and the C++ step uses -O3
 with the bundled jemalloc.
 
-Windows does not support AddressSanitizer, so only "opt" runs there:
-compile.py's default build is "opt" on Windows, and the test runners
-iterate just ("opt",) and never exercise the "asan" mode.
+This is the full matrix; runners iterate active_build_modes(), which
+drops "asan" on Windows where AddressSanitizer is unsupported.
 """
+
+
+def active_build_modes() -> tuple[str, ...]:
+    """Modes the test runners actually iterate.
+
+    The full BUILD_MODES matrix on Linux/macOS; just ("opt",) on
+    Windows, where AddressSanitizer is unsupported (compile.py's
+    default build is "opt" there for the same reason). One platform
+    branch, shared by every runner.
+    """
+    return ("opt",) if IS_WINDOWS else BUILD_MODES
 
 
 ASAN_OPTIMIZE = "1"
@@ -248,9 +258,16 @@ with sanitize=True) keep the reports readable.
 
 
 def java_mode_flags(mode: str) -> list[str]:
-    """Extra Franko-compiler flags for MODE: ["-O"] for "opt", [] for "asan"."""
+    """Extra Franko-compiler flags for MODE.
+
+    [] for "asan", ["-O"] for "opt", ["-Omax"] for "omax" (compile.py's
+    max-speed build; the test matrix in BUILD_MODES exercises just
+    "asan" and "opt").
+    """
     if mode == "opt":
         return ["-O"]
+    if mode == "omax":
+        return ["-Omax"]
     if mode == "asan":
         return []
     raise ValueError(f"unknown build mode: {mode!r}")

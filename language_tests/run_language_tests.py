@@ -45,12 +45,15 @@ by exit status only.
 Generated artifacts (.cpp, .bin, .actual, compiler logs) are removed after
 a passing case and kept for inspection after a failure.
 
-Every build-backed case runs twice: once in ASan/system-allocator mode
-(Franko without -O, C++ -O1 + AddressSanitizer) and once in optimized
-mode (Franko -O, C++ -O3 + jemalloc). On Windows AddressSanitizer is
-unsupported, so cases run only once, in optimized mode. The optimized
-build keeps the historical artifact names; the ASan build uses
-.asan-suffixed ones so the modes never share failure evidence.
+Every build-backed case runs in each active build mode (see
+franko_tools.active_build_modes): ASan/system-allocator mode (Franko
+without -O, C++ -O1 + AddressSanitizer) and optimized mode (Franko -O,
+C++ -O3 + jemalloc) on Linux/macOS; optimized mode only on Windows,
+where AddressSanitizer is unsupported. Both stages build through
+compile.franko_compile / compile.native_compile, shared with
+compile.py and the other suites. The optimized build keeps the
+historical artifact names; the ASan build uses .asan-suffixed ones so
+the modes never share failure evidence.
 """
 
 import sys
@@ -58,26 +61,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
 
+from compile import franko_compile, native_compile
 from franko_tools import (
-    INCLUDE_DIR,
-    JAVA_HINT,
-    ASAN_OPTIMIZE,
-    BUILD_MODES,
     Results,
     ToolError,
+    active_build_modes,
     check_no_substrings,
     check_substrings,
     compare_output,
-    cxx_compile_flags,
     dump_file,
     executable_suffix,
-    find_cxx,
-    find_tool,
-    franko_classpath,
-    java_mode_flags,
-    jemalloc_paths,
-    link_flags,
     mode_artifact,
     read_flags,
     read_run_args,
@@ -85,16 +80,13 @@ from franko_tools import (
     relative,
     remove_artifacts,
     require_toolchain,
-    run,
     run_test_binary,
 )
 
 
 def main() -> int:
     require_toolchain()
-    java = find_tool("java", JAVA_HINT)
-    cxx = find_cxx()
-    include, jemalloc_lib = jemalloc_paths()
+    modes = active_build_modes()
 
     results = Results()
 
@@ -109,15 +101,14 @@ def main() -> int:
         print(f"=== {relative(src)} ===")
 
         extra_flags = read_flags(Path(f"{base}.flags"))
-        for mode in BUILD_MODES:
+        for mode in modes:
             out_cpp = mode_artifact(Path(f"{base}.cpp"), mode)
             log = mode_artifact(Path(f"{base}.compile.log"), mode)
             label = f"{relative(src)} [{mode}]"
 
-            accepted = run(
-                [java, "-cp", franko_classpath(), "Main", src, "-o", out_cpp,
-                 *extra_flags, *java_mode_flags(mode)],
-                log_file=log, echo=False, check=False,
+            accepted = franko_compile(
+                src, out_cpp, mode=mode, extra_flags=extra_flags,
+                log=log, echo=False,
             )
 
             if accepted == 0:
@@ -153,18 +144,16 @@ def main() -> int:
         extra_flags = read_flags(Path(f"{base}.flags"))
         run_args = read_run_args(Path(f"{base}.args"))
 
-        for mode in BUILD_MODES:
+        for mode in modes:
             out_cpp = mode_artifact(Path(f"{base}.cpp"), mode)
             out_bin = mode_artifact(Path(f"{base}.bin{executable_suffix()}"), mode)
             actual = mode_artifact(Path(f"{base}.actual"), mode)
             log = mode_artifact(Path(f"{base}.compile.log"), mode)
             label = f"{relative(src)} [{mode}]"
-            optimize = mode == "opt"
 
-            failed = run(
-                [java, "-cp", franko_classpath(), "Main", src, "-o", out_cpp,
-                 *extra_flags, *java_mode_flags(mode)],
-                log_file=log, echo=False, check=False,
+            failed = franko_compile(
+                src, out_cpp, mode=mode, extra_flags=extra_flags,
+                log=log, echo=False,
             )
             if failed != 0:
                 print("---- compiler output: ----")
@@ -184,13 +173,9 @@ def main() -> int:
                 results.fail_case(f"{label} (emitted forbidden warnings)")
                 continue
 
-            failed = run(
-                [cxx, *cxx_compile_flags("full", optimize="3" if optimize else ASAN_OPTIMIZE,
-                                          sanitize=not optimize),
-                 f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
-                 out_cpp, *([jemalloc_lib] if optimize else []),
-                 *link_flags(sanitize=not optimize), "-o", out_bin],
-                log_file=log, echo=False, check=False,
+            failed = native_compile(
+                out_cpp, out_bin, mode=mode, warnings="full",
+                log=log, echo=False,
             )
             if failed != 0:
                 print("---- g++ output: ----")
@@ -227,18 +212,16 @@ def main() -> int:
 
         extra_flags = read_flags(Path(f"{base}.flags"))
 
-        for mode in BUILD_MODES:
+        for mode in modes:
             out_cpp = mode_artifact(Path(f"{base}.cpp"), mode)
             out_bin = mode_artifact(Path(f"{base}.bin{executable_suffix()}"), mode)
             actual = mode_artifact(Path(f"{base}.actual"), mode)
             log = mode_artifact(Path(f"{base}.compile.log"), mode)
             label = f"{relative(src)} [{mode}]"
-            optimize = mode == "opt"
 
-            failed = run(
-                [java, "-cp", franko_classpath(), "Main", src, "-o", out_cpp,
-                 *extra_flags, *java_mode_flags(mode)],
-                log_file=log, echo=False, check=False,
+            failed = franko_compile(
+                src, out_cpp, mode=mode, extra_flags=extra_flags,
+                log=log, echo=False,
             )
             if failed != 0:
                 print("---- compiler output: ----")
@@ -246,13 +229,9 @@ def main() -> int:
                 results.fail_case(f"{label} (Franko compile failed; runtime cases must compile)")
                 continue
 
-            failed = run(
-                [cxx, *cxx_compile_flags("none", optimize="3" if optimize else ASAN_OPTIMIZE,
-                                          sanitize=not optimize),
-                 f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
-                 out_cpp, *([jemalloc_lib] if optimize else []),
-                 *link_flags(sanitize=not optimize), "-o", out_bin],
-                log_file=log, echo=False, check=False,
+            failed = native_compile(
+                out_cpp, out_bin, mode=mode, warnings="none",
+                log=log, echo=False,
             )
             if failed != 0:
                 print("---- g++ output: ----")

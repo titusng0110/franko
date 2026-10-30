@@ -24,10 +24,12 @@ deterministically under the smoke test.
 Generated artifacts (.cpp, .testbin, .actual) are removed after a passing
 case and kept for inspection after a failure.
 
-Every program builds and runs twice: ASan/system-allocator mode
-(Franko without -O) and optimized mode (Franko -O with jemalloc).
-On Windows AddressSanitizer is unsupported, so programs build and run
-only once, in optimized mode.
+Every program builds and runs in each active build mode (see
+franko_tools.active_build_modes): ASan/system-allocator mode (Franko
+without -O) and optimized mode (Franko -O with jemalloc) on
+Linux/macOS; optimized mode only on Windows, where AddressSanitizer is
+unsupported. Both stages build through compile.franko_compile /
+compile.native_compile, shared with compile.py and the other suites.
 The optimized build keeps the historical artifact names; the ASan
 build uses .asan-suffixed ones.
 """
@@ -37,41 +39,29 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
 
+from compile import franko_compile, native_compile
 from franko_tools import (
-    IMPORT_DIR,
-    INCLUDE_DIR,
-    JAVA_HINT,
-    ASAN_OPTIMIZE,
-    BUILD_MODES,
     Results,
     ToolError,
+    active_build_modes,
     compare_output,
-    cxx_compile_flags,
     dump_file,
     executable_suffix,
-    find_cxx,
-    find_tool,
-    franko_classpath,
-    java_mode_flags,
-    jemalloc_paths,
-    link_flags,
     mode_artifact,
     read_run_args,
     read_stdin_bytes,
     relative,
     remove_artifacts,
     require_toolchain,
-    run,
     run_test_binary,
 )
 
 
 def main() -> int:
     require_toolchain()
-    java = find_tool("java", JAVA_HINT)
-    cxx = find_cxx()
-    include, jemalloc_lib = jemalloc_paths()
+    modes = active_build_modes()
 
     programs = sorted(ROOT.glob("programs/*.fr"))
     if not programs:
@@ -90,29 +80,18 @@ def main() -> int:
         run_args = read_run_args(Path(f"{base}.args"))
         stdin_bytes = read_stdin_bytes(Path(f"{base}.stdin"))
 
-        for mode in BUILD_MODES:
+        for mode in modes:
             out_cpp = mode_artifact(Path(f"{base}.cpp"), mode)
             out_bin = mode_artifact(Path(f"{base}.testbin{executable_suffix()}"), mode)
             actual = mode_artifact(Path(f"{base}.actual"), mode)
             label = f"{relative(src)} [{mode}]"
-            optimize = mode == "opt"
 
-            if run(
-                [java, "-cp", franko_classpath(), "Main", src, "-o", out_cpp,
-                 "-p", IMPORT_DIR, *java_mode_flags(mode)],
-                check=False,
-            ) != 0:
+            if franko_compile(src, out_cpp, mode=mode, echo=True) != 0:
                 results.fail_case(f"{label} (Franko compile failed)")
                 continue
 
-            if run(
-                [cxx, *cxx_compile_flags("basic", optimize="3" if optimize else ASAN_OPTIMIZE,
-                                          sanitize=not optimize),
-                 f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimize else []),
-                 out_cpp, *([jemalloc_lib] if optimize else []),
-                 *link_flags(sanitize=not optimize), "-o", out_bin],
-                check=False,
-            ) != 0:
+            if native_compile(out_cpp, out_bin, mode=mode, warnings="basic",
+                               echo=True) != 0:
                 results.fail_case(f"{label} (C++ compile failed)")
                 continue
 
