@@ -1,6 +1,6 @@
 // The decay only erases the outermost dimension; the element type must
-// match exactly (the borrowed descriptor points at the same storage, so
-// element layouts have to be identical).
+// match exactly, because both view types otherwise index the same
+// storage with different element layouts.
 func main() -> int32 {
     [int32, 3] xs;
     view<[int32, 3]> v = getview(xs);

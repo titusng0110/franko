@@ -123,7 +123,7 @@ The value must satisfy the rules of the corresponding binary operator (`+ - * / 
 arr[f()] += 1;   // f() runs once
 ```
 
-The backend emits the C++ compound assignment directly, so array indices, field chains, and dereferences in the target are never evaluated twice.
+The target expression is evaluated once; array indices, field chains, and dereferences in the target are never evaluated twice.
 
 Invalid:
 

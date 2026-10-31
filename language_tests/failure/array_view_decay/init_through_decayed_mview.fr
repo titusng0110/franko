@@ -1,6 +1,6 @@
-// Lifecycle intrinsics never survive the decay: the borrowed dynamic-
-// array descriptor must not be init()ed (it would allocate over storage
-// the static array owns).
+// Lifecycle intrinsics never survive the decay: the decayed type is
+// view<[T]> and lifecycle permissions are not part of the conversion,
+// so init() cannot allocate over storage the static array owns.
 func main() -> int32 {
     [[int32], 2] g;
     g[0].init(2);

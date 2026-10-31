@@ -4,9 +4,10 @@ import "franko/io"
 // LANGUAGE TEST: Literal Decay to Dynamic Views
 // ============================================================
 // Covers: a literal (or string literal) consumed at view<[T]>
-// in an assignment, call argument, or return is hoisted as a global
-// dynamic-array header over the literal's constant storage — never
-// a stack temporary. Returning one (including recursively) is safe.
+// in an assignment, call argument, or return is a fat pointer over
+// the literal's constant static storage — never a stack temporary or
+// a separate descriptor global. Returning one (including
+// recursively) is safe.
 // ============================================================
 
 func take(view<[int32]> v) -> int32 {

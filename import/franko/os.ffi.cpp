@@ -30,7 +30,7 @@
 //
 //   - The bridge is spliced after the program template's runtime
 //     `#include` (selected via the `__FRANKO_RUNTIME_HEADER__`
-//     placeholder), so Franko_Dynamic_Array, franko_panic,
+//     placeholder), so Franko_Fat_Pointer, franko_panic,
 //     and the fixed-width integer types are available. Keep every block
 //     warning-clean under -Wall -Wextra -Wpedantic -Wshadow.
 //
@@ -71,18 +71,31 @@
 // @@franko-ffi:posix.read
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint64_t VAR_count)
+int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
 {
-    if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
+    uint8_t* buffer;
+    uint32_t length;
+
+    if (VAR_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+            return -1;
+        }
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
+    } else if (VAR_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(VAR_buf.data);
+        length = VAR_buf.count;
+    } else {
         return -1;
     }
-    if (VAR_count > static_cast<uint64_t>(VAR_buf->length())) {
+
+    if (VAR_count > static_cast<uint64_t>(length)) {
         franko_panic("os::posix::read: count exceeds buffer length");
     }
 #ifdef _WIN32
 #error "os::posix::read is only available when compiling for a non-Windows target (linux, macos)"
 #else
-    return static_cast<int64_t>(::read(VAR_fd, VAR_buf->data, static_cast<size_t>(VAR_count)));
+    return static_cast<int64_t>(::read(VAR_fd, buffer, static_cast<size_t>(VAR_count)));
 #endif
 }
 }
@@ -92,18 +105,31 @@ int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t>* V
 // @@franko-ffi:posix.write
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Dynamic_Array<uint8_t> const* VAR_buf, uint64_t VAR_count)
+int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
 {
-    if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
+    uint8_t* buffer;
+    uint32_t length;
+
+    if (VAR_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+            return -1;
+        }
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
+    } else if (VAR_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(VAR_buf.data);
+        length = VAR_buf.count;
+    } else {
         return -1;
     }
-    if (VAR_count > static_cast<uint64_t>(VAR_buf->length())) {
+
+    if (VAR_count > static_cast<uint64_t>(length)) {
         franko_panic("os::posix::write: count exceeds buffer length");
     }
 #ifdef _WIN32
 #error "os::posix::write is only available when compiling for a non-Windows target (linux, macos)"
 #else
-    return static_cast<int64_t>(::write(VAR_fd, VAR_buf->data, static_cast<size_t>(VAR_count)));
+    return static_cast<int64_t>(::write(VAR_fd, buffer, static_cast<size_t>(VAR_count)));
 #endif
 }
 }
@@ -129,17 +155,30 @@ uint64_t FUNC_GetStdHandle_HASH_31d0af80(uint32_t VAR_nStdHandle)
 // @@franko-ffi:win32.ReadFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Dynamic_Array<uint8_t>* VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
+int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
 {
 #ifdef _WIN32
-    if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
+    uint8_t* buffer;
+    uint32_t length;
+
+    if (VAR_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+            return 0;
+        }
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
+    } else if (VAR_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(VAR_buf.data);
+        length = VAR_buf.count;
+    } else {
         return 0;
     }
-    if (static_cast<uint64_t>(VAR_count) > static_cast<uint64_t>(VAR_buf->length())) {
+
+    if (static_cast<uint64_t>(VAR_count) > static_cast<uint64_t>(length)) {
         franko_panic("os::win32::ReadFile: count exceeds buffer length");
     }
     DWORD n = 0;
-    BOOL ok = ::ReadFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), VAR_buf->data, static_cast<DWORD>(VAR_count), &n, nullptr);
+    BOOL ok = ::ReadFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), buffer, static_cast<DWORD>(VAR_count), &n, nullptr);
     if (VAR_bytesRead != nullptr) {
         *VAR_bytesRead = static_cast<uint32_t>(n);
     }
@@ -155,17 +194,30 @@ int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Dynamic_Array<uin
 // @@franko-ffi:win32.WriteFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_WriteFile_HASH_ab68bdd0(uint64_t VAR_hFile, Franko_Dynamic_Array<uint8_t> const* VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
+int32_t FUNC_WriteFile_HASH_ab68bdd0(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
 {
 #ifdef _WIN32
-    if (VAR_buf == nullptr || VAR_buf->data == nullptr) {
+    uint8_t* buffer;
+    uint32_t length;
+
+    if (VAR_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+            return 0;
+        }
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
+    } else if (VAR_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(VAR_buf.data);
+        length = VAR_buf.count;
+    } else {
         return 0;
     }
-    if (static_cast<uint64_t>(VAR_count) > static_cast<uint64_t>(VAR_buf->length())) {
+
+    if (static_cast<uint64_t>(VAR_count) > static_cast<uint64_t>(length)) {
         franko_panic("os::win32::WriteFile: count exceeds buffer length");
     }
     DWORD n = 0;
-    BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), VAR_buf->data, static_cast<DWORD>(VAR_count), &n, nullptr);
+    BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), buffer, static_cast<DWORD>(VAR_count), &n, nullptr);
     if (VAR_bytesWritten != nullptr) {
         *VAR_bytesWritten = static_cast<uint32_t>(n);
     }

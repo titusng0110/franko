@@ -167,28 +167,12 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 ## 26.8 Methods and Pointer Checking
 
-`self` is an `ptr<X>` parameter:
+`self` is a pointer parameter with the declared permission:
 
-- `self` enters pointing: the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
-- Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)). The checker is intra-procedural.
+- The receiver is a storage-backed lvalue, and `self` is non-null at method entry, so dereferencing it without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)).
 
-## 26.9 Backend Notes
-
-Methods emit as free C++ functions with a mangled name:
-
-| Franko construct | Generated C++ name |
-|---|---|
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
-| method `self` parameter | `VAR_self` (`STRUCT_X*`) |
-
-The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Compiler Internals](../compiler_docs.md).
-
-- The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
-- `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
-- Struct definitions emit no members for methods; prototypes emit in the function prototype phase (free functions first, then methods of the same namespace) and definitions emit in the function definition phase.
-- A method named `main` mangles to `METH_main_OFSTRUCT_X_HASH_<8hex>` and cannot collide with the entry-point `main`.
-
-## 26.10 Restrictions Summary
+## 26.9 Restrictions Summary
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
 - Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.

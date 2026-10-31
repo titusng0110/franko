@@ -161,11 +161,6 @@ final class InactiveDeclarationPruner {
                     collectExprVariables(global.staticInitializer, refs);
                 }
 
-                if (global.symbol instanceof GlobalVariableSymbol header
-                        && header.literalHeaderData != null) {
-                    refs.add(header.literalHeaderData);
-                }
-
                 for (VariableSymbol ref : refs) {
                     if (keptVariables.add(ref)) {
                         changed = true;

@@ -1,0 +1,64 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Returning Decayed Array Views
+// ============================================================
+// Covers: static-to-dynamic view decay is representation-preserving,
+// so a decayed view<[T,N]>/mview<[T,N]> value can be returned as
+// view<[T]>/mview<[T]> without a hidden stack descriptor:
+//   - returning a decayed view parameter;
+//   - returning a view of a global static array;
+//   - returning a copied decayed view;
+//   - returning a decayed view through cast<T>(...).
+// Element access and length through the returned fat pointer keep the
+// original mode 2 / count N, so indexing the static storage works.
+// ============================================================
+
+[int32, 4] G
+
+func return_parameter(view<[int32, 4]> v) -> view<[int32]> {
+    return v
+}
+
+func return_global() -> view<[int32]> {
+    view<[int32, 4]> v = getview(G)
+    return v
+}
+
+func return_copied(view<[int32, 4]> v) -> view<[int32]> {
+    view<[int32]> d = v
+    view<[int32]> e = d
+    return e
+}
+
+func return_cast(view<[int32, 4]> v) -> view<[int32]> {
+    return cast<view<[int32]>>(v)
+}
+
+func main() -> int32 {
+    [int32, 4] xs
+    xs[0] = 10
+    xs[1] = 20
+    xs[2] = 30
+    xs[3] = 40
+
+    view<[int32]> a = return_parameter(getview(xs))
+    print($(a).length())
+    print($(a)[2])
+
+    G[0] = 1
+    G[1] = 2
+    G[2] = 3
+    G[3] = 4
+    view<[int32]> b = return_global()
+    print($(b).length())
+    print($(b)[3])
+
+    view<[int32]> c = return_copied(getview(xs))
+    print($(c)[1])
+
+    view<[int32]> d = return_cast(getview(xs))
+    print($(d)[0])
+
+    return 0
+}

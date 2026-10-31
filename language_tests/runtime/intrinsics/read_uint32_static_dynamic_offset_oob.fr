@@ -1,0 +1,12 @@
+// Runtime fixture: intrinsics/read_uint32_static_dynamic_offset_oob
+// A nonconstant endian offset into a raw static byte array is still
+// range-checked by the fat-pointer intrinsic receiver in ASan and -O
+// builds.
+import "franko/io"
+
+func main() -> int32 {
+    [byte, 4] buf
+    uint32 off = 2
+    print(buf.read_uint32_LE(off))
+    return 0
+}

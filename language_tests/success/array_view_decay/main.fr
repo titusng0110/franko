@@ -7,11 +7,13 @@ import "franko/io"
 // mview<[T,N]> / view<[T,N]> -> mview<[T]> /
 // view<[T]>, including permission downgrades combined in
 // the same step (ptr<[T,N]> -> mview<[T]> ->
-// view<[T]>). The compiler secretly constructs a
-// Franko_Dynamic_Array descriptor (Franko_Borrowed_Dynamic_Array)
-// over the static storage; .init/.uninit/.resize stay blocked on
-// the result (see failure/array_view_decay). T may itself be a
-// static or dynamic array; only the outermost dimension decays.
+// view<[T]>). Decay is representation-preserving: both sides are a
+// Franko_Fat_Pointer<T>, and the value keeps mode 2 (static array)
+// with its original count N, so no descriptor is built and the same
+// storage is indexed through checked bounds. .init/.uninit/.resize
+// stay blocked on the result (see failure/array_view_decay). T may
+// itself be a static or dynamic array; only the outermost dimension
+// decays.
 // ============================================================
 
 func take_view(view<[int32]> v) -> uint32 {
@@ -99,7 +101,7 @@ func main() -> int32 {
     print(f(getmview(xs)));
     print(take_view(getmview(xs)));
 
-    // decay inside a while condition: descriptor rebuilt per iteration
+    // decay inside a while condition: no temporary descriptor is built
     uint32 i = 0;
     while (take_view(getview(xs)) == 4 && i < 2) {
         i += 1;

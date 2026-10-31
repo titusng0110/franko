@@ -1,20 +1,12 @@
 # Franko Language Reference
 
-This document describes the Franko language as implemented by the current compiler pipeline:
+This document describes the Franko language: its types, declarations,
+statements, expressions, pointer rules, arrays, structs, methods, and
+standard modules. It is written for Franko programmers.
 
-```text
-Franko source
-  -> lexer + parser
-  -> parser AST
-  -> Desugarer
-  -> SemanticAnalyzer
-  -> LegalityChecker (declarations, expressions, statements, functions, types)
-  -> PointerNullStateChecker
-  -> DanglingPointerChecker
-  -> C++14 code generation
-```
-
-It documents both intended language behavior and important current implementation restrictions.
+Compiler architecture, code generation, runtime representation, and
+checker internals are documented separately in
+[Compiler Internals](../compiler_docs.md).
 
 ---
 
@@ -121,8 +113,6 @@ Franko currently does **not** implement:
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`).
 
-Franko currently targets C++14.
-
 ## Compiling programs
 
 Build a program with the bundled compile script:
@@ -131,26 +121,26 @@ Build a program with the bundled compile script:
 uv run python compile.py programs/bfs.fr
 ```
 
-This is the default debug mode: the generated code is compiled with
-`-O1` plus AddressSanitizer (including leak checking) and uses the
-system allocator. For an optimized binary, pass `-O`:
+This is the default debug mode: it builds an unoptimized binary with
+AddressSanitizer (including leak checking) and full runtime checks. For
+an optimized binary, pass `-O`:
 
 ```bash
 uv run python compile.py -O programs/bfs.fr
 ```
 
-`-O` compiles with `-O3`, no sanitizer, and the bundled jemalloc
-allocator instead of the system one. A third mode, `-Omax`, is the same
-optimized build but swaps in an unchecked runtime: all array bounds
-checks and `unsafe_cast` range checks are stripped.
+`-O` builds an optimized binary without sanitizer instrumentation, with
+the full runtime checks. A third mode, `-Omax`, is the same optimized
+build but with array bounds checks and `unsafe_cast` range checks
+stripped.
 
 ```bash
 uv run python compile.py -Omax programs/bfs.fr
 ```
 
 All modes implement the same language with identical compiler
-diagnostics and program output; only the allocator, the optimization
-level, and the runtime checking differ. Debug mode reports memory
+diagnostics and program output; only the optimization level and the
+runtime checking differ. Debug mode reports memory
 errors and leaks (for example a missing `arr.uninit()`) at run time, so
 develop and test without `-O` and use `-O` for the final fast binary.
 
@@ -268,11 +258,10 @@ Because every symbol lives in one global namespace, duplicate declarations acros
 ### Built-in Modules
 
 Importing certain modules through their canonical specifier (currently
-only `import "franko/os"`) additionally activates compiler FFI
-behavior: declared functions are given C++ definitions from a bridge
-file instead of their Franko bodies. See [Foreign Function
-Interface](31-foreign-function-interface.md) for the activation rule,
-the bridge layout, and the verification checks.
+only `import "franko/os"`) additionally activates built-in FFI
+behavior. See [Foreign Function
+Interface](31-foreign-function-interface.md) for the activation rule and
+the module contract.
 
 ---
 
@@ -732,7 +721,7 @@ Boolean-like results from comparison and logical operators use `uint8`, with:
 
 # 8. Integer Literals
 
-Integer literals are represented internally as arbitrary-precision `BigInteger` values before contextual type checking.
+Integer literals are evaluated with arbitrary precision before contextual type checking; no intermediate literal arithmetic overflows.
 
 Supported literal forms:
 
@@ -766,9 +755,9 @@ There is no unary `+` operator and no `+123` literal form:
 +123    // invalid: parsed as an unmatched '+' token
 ```
 
-There is no documented octal literal syntax. Decimal literals with leading zeros (for example `075`) are currently passed to the C++14 backend verbatim, where they may be interpreted as octal by the C++ compiler; avoid leading zeros in decimal literals.
-
-The backend emits very large decimal literals with a trailing `ULL` suffix so they remain well-formed C++14 (see [Compiler Internals](../compiler_docs.md)).
+There is no octal literal syntax. Write decimal literals without
+leading zeros: `075` is not an octal escape hatch and its meaning is not
+portable.
 
 ---
 
@@ -816,7 +805,7 @@ Examples:
 
 `[int32, 0x10]` reaches semantic analysis as `[int32, 16]`; `int8 g = 1 + 2` reaches it as `int8 g = 3`.
 
-**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32` range for array sizes, fit for global and field initializers, primitive-only field defaults.
+**Validation** checks the computed value in context, using the declared types: positivity and `uint32` range for array sizes, fit for global and field initializers, primitive-only field defaults.
 
 Evaluation failures are reported before semantic analysis:
 
@@ -825,7 +814,7 @@ Evaluation failures are reported before semantic analysis:
 [int, 10 % 0] bytes;   // invalid: Division by zero in constant expression
 ```
 
-Modulus folding uses truncated division, so the remainder keeps the sign of the dividend, matching the generated C++ (see [Operators](17-operators.md)).
+Modulus folding uses truncated division, so the remainder keeps the sign of the dividend (see [Operators](17-operators.md)).
 
 Evaluation is conservative.
 
@@ -847,7 +836,7 @@ int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 
 `?` array size inference uses the same evaluator quietly: it only needs the value when one exists, and reports its own inference diagnostics otherwise (see [Desugaring](05-desugaring.md)).
 
-A static array `length()` call is emitted as a compile-time constant, not as a runtime read (see [Array Intrinsics](21-array-intrinsics.md)).
+A static array `length()` call is a compile-time constant, not a runtime read (see [Array Intrinsics](21-array-intrinsics.md)).
 
 ---
 
@@ -976,14 +965,14 @@ are the only ways to initialize a global at its declaration.
 
 A **local** declaration without an initializer default-initializes the variable:
 
-- primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
+- primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
 - **pointer variables are the exception: an `ptr<T>` declaration is guaranteed null-initialized** (see [Pointers](24-pointers.md)).
 
 There is no implicit zero-initialization for locals other than pointers. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated: primitives and static array elements start at zero before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
 
 ## 11.6 Struct Fields
 
@@ -1056,7 +1045,9 @@ Return type is not part of the function signature.
 
 Declaring two functions with the same identifier and the same ordered parameter types is an error, even if their return types differ.
 
-Emitted C++ names carry the return type even though overload resolution does not: each function emits as `FUNC_f_HASH_<8hex>`, where the suffix is the FNV-1a 32-bit hash of the canonical signature key `fn(P1,P2,...)->R` (declared parameter types in order, then the return type, each spelled exactly as written: `int32`, `uint64`, `void`, `[T]`, `[T,N]`, `ptr<T>`, `mview<T>`, `view<T>`, qualified struct names). The backend therefore never relies on g++ overload resolution. The entry-point `main` emits its mangled name like every other function: the generated C++ entry point is a small wrapper in the program template that calls it (`ProgramTemplate.cpp` calls the no-args `main`, `ProgramTemplateWithRawCArgs.cpp` converts `argc`/`argv` and calls the args-form `main`).
+Return type is not part of overload identity, but two declarations with
+the same identifier and parameter types are still an error when their
+return types differ. Functions may be called recursively.
 
 ## 12.6 Function Call Resolution
 
@@ -1109,7 +1100,9 @@ A `void` function may use bare `return` and must not use `return expr`.
 
 A non-`void` function must return an expression compatible with the declared return type.
 
-A non-`void` function must contain at least one `return` statement somewhere in its body (a bare `return;` still counts for this presence check, but is separately rejected for lacking an expression). The checker's missing-return detection is presence-based: a `return` nested inside an `if` or `while` body counts as appearing in the function, and full path-sensitive "all paths return" analysis is not performed.
+A non-`void` function must contain at least one `return` statement somewhere in its body (a bare `return;` still counts for this presence check, but is separately rejected for lacking an expression). Missing-return detection is presence-based: a `return` nested inside an
+`if` or `while` body counts as appearing in the function, and full
+path-sensitive "all paths return" analysis is not performed.
 
 ## 12.10 Function Return Types
 
@@ -1301,7 +1294,7 @@ The value must satisfy the rules of the corresponding binary operator (`+ - * / 
 arr[f()] += 1;   // f() runs once
 ```
 
-The backend emits the C++ compound assignment directly, so array indices, field chains, and dereferences in the target are never evaluated twice.
+The target expression is evaluated once; array indices, field chains, and dereferences in the target are never evaluated twice.
 
 Invalid:
 
@@ -1530,6 +1523,10 @@ mview<[int32]> d = cast<mview<[int32]>>(m);
 Decaying to `ptr<[T]>` is invalid: the result would claim ownership
 of storage the static array owns.
 
+The decay does not copy elements or allocate storage: the converted
+view refers to the same array and keeps the static array's length. No
+new array object is created.
+
 Raw integers can never be converted to pointers.
 
 ## 16.6 What Casts Do Not Cover
@@ -1594,7 +1591,7 @@ Supported unary operators:
 - logical NOT: `!x`
 - unary minus: `-x`
 
-Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and the generated C++ casts.
+Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and explicit conversions.
 
 Unsupported unary operators:
 
@@ -2077,7 +2074,7 @@ elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 ## 20.6 Array Lifetime Limitations
 
-The checker validates intrinsic legality, but it does not fully prove:
+The compiler validates intrinsic legality, but it does not fully prove:
 
 - dynamic array initialized before indexing;
 - dynamic array not used after `uninit`;
@@ -2259,7 +2256,7 @@ Current trivial types:
 
 ## 21.7 `memcpy`
 
-Copies array contents byte-wise according to the generated C++ array model.
+Copies array contents byte-wise.
 
 Forms:
 
@@ -2737,15 +2734,12 @@ view<[int32]> d = [1, 2, 3, 4];  // decay in a declaration
 ```
 
 When the decay applies directly to a literal in one of these positions,
-the converted view is itself a hoisted constant global (a
-dynamic-array header over the literal's constant storage), not a
-statement-scoped temporary. Returning or keeping such a view is therefore
-always safe — including from recursive functions — unlike a decay of an
-ordinary local, which must not outlive its scope (see
-[Pointers](24-pointers.md) 24.4.1).
-
-Permissions never upgrade: a literal (read-only) cannot initialize an
-`mview` or `ptr` variable.
+the converted view refers to the literal's constant storage and keeps
+its length. No copy or new array object is created. Returning or
+keeping such a view is therefore always safe — including from recursive
+functions — because the literal's storage has static lifetime.
+Permission rules are unchanged: a literal (read-only) cannot initialize
+an `mview` or `ptr` variable.
 
 ## 22.7 `?` Size Inference
 
@@ -2776,6 +2770,9 @@ func main() -> int32 {
     return 0;
 }
 ```
+
+`G` refers to the literal's constant `[int32, 4]` storage; the literal is
+not copied.
 
 Array-typed globals are not assignable from literals (22.5); use
 element assignments in an initializer function.
@@ -2917,14 +2914,16 @@ An empty string literal `""` is not supported: a string literal is a
 Franko has a capability-based pointer system with three pointer types,
 representing strict levels of permission:
 
-| Type | Meaning | C++ Emission | Allowed Operations |
-|---|---|---|---|
-| `ptr<T>` | Owner | `T*` | Read, Write, Allocate, Free |
-| `mview<T>` | Writer | `T*` | Read, Write |
-| `view<T>` | Reader | `const T*` | Read Only |
+| Type | Meaning | Allowed Operations |
+|---|---|---|
+| `ptr<T>` | Owner | Read, Write, Allocate, Free |
+| `mview<T>` | Writer | Read, Write |
+| `view<T>` | Reader | Read Only |
 
-(`ptr` = pointer, `mview` = mutable view, `view` = view.) All three are
-thin pointers; the permissions are enforced entirely at compile time.
+(`ptr` = pointer, `mview` = mutable view, `view` = view.) The three
+types differ only in the permissions they grant; no pointer owns its
+pointee automatically, and no pointer is tied to the lifetime of the
+storage it refers to.
 
 A pointer value refers to a storage location containing a value of type `T`.
 
@@ -3025,7 +3024,7 @@ A pointer to a **static** array implicitly converts to a pointer to a
 - `T` may itself be a static or dynamic array, but only the **outermost**
   dimension decays: `view<[[int32, 2], 3]>` converts to
   `view<[[int32, 2]]>`, never to `view<[[int32]]>`
-  (element layouts must stay identical behind the one thin pointer);
+  (the element layout viewed through the two types must stay identical);
 - the reverse direction is invalid, and ownership never decays:
   `ptr<[T, N]>` cannot convert to `ptr<[T]>`.
 
@@ -3047,57 +3046,19 @@ or freed through it. The conversion is allowed in the same positions as
 permission downgrades: assignment, return values, and function arguments.
 Comparing pointers still requires identical pointer types.
 
-A decayed view is backed by a hidden `Franko_Dynamic_Array` descriptor
-(count, data pointer, and a borrowed flag) that the compiler creates in
-the **current function's stack frame**. The descriptor survives for the
-whole statement and for everything the callees do with it, but it dies
-when that function returns. A non-literal converted view must therefore
-not be returned from the function that performs the decay: the caller
-would receive a view pointing at a dead stack descriptor.
-`DanglingPointerChecker` rejects that case:
+Decay does not copy elements or allocate storage, and it creates no
+hidden array object: the converted view continues to refer to the same
+array. In particular:
 
-```franko
-func bad(view<[int32, 4]> m) -> view<[int32]> {
-    return m;                    // error: decayed view escapes 'bad'
-}
-```
+- returning a decayed parameter or global view is safe;
+- a returned decayed view still refers to the original static storage;
+- returning a decayed view of **local** array storage remains an
+  ordinary frame-storage escape and is still rejected, exactly like
+  returning any other pointer to a local.
 
-There are two correct ways to structure such a function:
-
-- If the function only consumes the array through a dynamic view, take
-  `view<[T]>` as the parameter and let the **caller** perform the decay.
-  The descriptor then lives in the caller's frame and survives the call:
-
-  ```franko
-  func consume(view<[int32]> v) -> uint32 {
-      return $(v).length();
-  }
-
-  [int32, 4] xs;
-  print(consume(getview(xs)));   // decay happens in the caller
-  ```
-
-- If the function must return a view of the static array, keep the static
-  return type and let the caller decay the result:
-
-  ```franko
-  func pass(view<[int32, 4]> m) -> view<[int32, 4]> {
-      return m;
-  }
-
-  [int32, 4] xs;
-  view<[int32]> v = pass(getview(xs));   // decay happens in the caller
-  ```
-
-Literals are the exception: when the decay applies directly to an array or
-string literal in an assignment, return, argument, or global initializer,
-the converted view points at a hoisted constant global descriptor, so
-returning or keeping it is always safe (see
-[Array Literals](22-array-literals.md)). An existing global dynamic view
-is likewise safe to return: its descriptor has static lifetime. The
-restriction applies to decays of non-literal **local** static views,
-including a decay that happens at the `return` itself or inside an
-explicit `cast`.
+Literal views refer to constant storage with static lifetime (see
+[Array Literals](22-array-literals.md)), so returning or keeping one is
+safe.
 
 ## 24.5 Pointer Comparison
 
@@ -3306,7 +3267,7 @@ Guarding with `p != null` removes the warning, because the compiler refines the 
 
 To encourage safe, data-oriented design, the compiler tracks the
 highest permission each `ptr`/`mview` local variable and parameter
-actually exercises and emits a non-fatal **warning** recommending a
+actually exercises and produces a non-fatal **warning** recommending a
 downgrade when elevated permissions go unused (global variables are not
 linted: their uses span functions, so no per-use summary would be
 meaningful):
@@ -3341,19 +3302,17 @@ Pointer lifetime is not fully tracked, but the compiler does detect one
 important class of dangling pointers: a pointer/view returned from a
 function while it refers to that function's own stack storage.
 
-`DanglingPointerChecker` rejects a `return` of:
-
-- a pointer to a local variable, a parameter, or any field/element of
-  one, including through pointer copies, `$(...)` aliases, and branch
-  merges;
-- a non-literal static-array view decayed to a dynamic-array view, because
-  the hidden descriptor lives in the returning function's frame.
+The compiler rejects a `return` of a pointer to a local variable, a
+parameter, or any field/element of one, including through pointer copies,
+`$(...)` aliases, and branch merges.
 
 A return that only *may* refer to local storage after a branch merge is a
 warning; a definite escape is an error. Safe returns include pointer
 parameters, pointers obtained from global storage or from
-`getptr($(pointerParameter))`, literal-backed views, and existing global
-dynamic views.
+`getptr($(pointerParameter))`, literal-backed views, existing global
+views, and decayed views of parameters or global storage. A decayed view
+of local array storage is rejected as an ordinary frame-storage escape:
+the view refers to the local array itself.
 
 What remains untracked:
 
@@ -3521,7 +3480,7 @@ xs[i].field           // element of a static or dynamic array
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](11-declarations.md)).
 - **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar desugars into a declaration plus a whole-value assignment.
-- **Global declarations.** Global structs are statically allocated. Fields with defaults receive their defaults; fields without defaults are zero-initialized in the generated C++ (static storage). This is an implementation characteristic of the current backend; do not rely on it in portable code — give every field an explicit default or assign before use.
+- **Global declarations.** Global structs are statically allocated. Fields with defaults receive their defaults; a field without a default should be treated as indeterminate until assigned. Give every field an explicit default or assign it before use.
 
 ## 25.9 Struct Globals
 
@@ -3540,17 +3499,7 @@ int32 scale = 2;
 - Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch.
 - Struct globals are declared before `main` runs; executable statements remain invalid at global scope (see [Program Structure](03-program-structure.md)).
 
-## 25.10 Backend Notes
-
-The C++14 backend:
-
-- emits each struct as a C++ `struct STRUCT_X { ... };` definition, preceded by a forward-declaration block (`struct STRUCT_X;`) so pointers may reference structs declared later in source order;
-- orders struct definitions topologically over by-value field dependencies, so a struct used by value inside another is defined first (`ptr` and dynamic-array fields impose no ordering constraint);
-- emits field defaults as C++ non-static data member initializers (NSDMI), e.g. `int32 num = 0;`;
-- emits member access as `target.field`.
-- emits methods as mangled free functions (`METH_f_OFSTRUCT_X_HASH_<8hex>`); see [Methods](26-methods.md).
-
-## 25.11 Restrictions Summary
+## 25.10 Restrictions Summary
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](26-methods.md)).
@@ -3733,28 +3682,12 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 ## 26.8 Methods and Pointer Checking
 
-`self` is an `ptr<X>` parameter:
+`self` is a pointer parameter with the declared permission:
 
-- `self` enters pointing: the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue, so dereferencing `self` without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
-- Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)). The checker is intra-procedural.
+- The receiver is a storage-backed lvalue, and `self` is non-null at method entry, so dereferencing it without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](27-memory-safety-checking.md)).
 
-## 26.9 Backend Notes
-
-Methods emit as free C++ functions with a mangled name:
-
-| Franko construct | Generated C++ name |
-|---|---|
-| method `f` of struct `X` | `METH_f_OFSTRUCT_X_HASH_<8hex>` |
-| method `self` parameter | `VAR_self` (`STRUCT_X*`) |
-
-The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key (declared parameter types in order, including `self` as `ptr<X>`, then the return type); see [Compiler Internals](../compiler_docs.md).
-
-- The mangled name is namespace-qualified like `FUNC_` names: a method of `util::Counter` emits as e.g. `NS_util::METH_bump_OFSTRUCT_Counter_HASH_<8hex>` and is called as `NS_util::METH_bump_OFSTRUCT_X_HASH_<8hex>((&VAR_c))` from outside the namespace.
-- `s.method(args)` emits as `METH_method_OFSTRUCT_X_HASH_<8hex>((&recv), args...)`, with each user argument cast to its parameter type to pin Franko overload resolution, exactly like free-function calls.
-- Struct definitions emit no members for methods; prototypes emit in the function prototype phase (free functions first, then methods of the same namespace) and definitions emit in the function definition phase.
-- A method named `main` mangles to `METH_main_OFSTRUCT_X_HASH_<8hex>` and cannot collide with the entry-point `main`.
-
-## 26.10 Restrictions Summary
+## 26.9 Restrictions Summary
 
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
 - Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.
@@ -3768,28 +3701,27 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 
 # 27. Memory Safety Checking
 
-After legality checking, the compiler runs two dedicated pointer passes:
-the **pointer null-state pass** (`PointerNullStateChecker`) and the
-**dangling-pointer pass** (`DanglingPointerChecker`). Both cover all three
-pointer types (`ptr`, `mview`, and `view`).
+Franko checks two independent properties of pointers: **null state**
+and **dangling storage**. Both checks cover all three pointer types
+(`ptr`, `mview`, and `view`).
 
-The null-state pass tracks one fact per pointer variable: whether it is
+The null-state check tracks one fact per pointer variable: whether it is
 definitely null, definitely pointing, or possibly null on the current
-execution path. The dangling-pointer pass tracks where a returned
+execution path. The dangling-storage check tracks where a returned
 pointer's storage lives (see
 [Dangling-Pointer Checking](#279-dangling-pointer-checking)).
 
-The null-state pass checks:
+The null-state check covers:
 
 - dereferencing a null pointer (an error);
 - dereferencing a possibly-null pointer (a warning);
 - that `null` is only used for pointer types (see [Types](06-types.md)).
 
-The pass is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers, and no facts cross function boundaries (interprocedural nullability is deliberately not attempted).
+The null-state check is **intra-procedural**: each function body is analyzed separately with a fresh state. Called functions are not analyzed for their effects on the caller's pointers, and no facts cross function boundaries (interprocedural nullability is deliberately not attempted).
 
 ## 27.1 Pointer States
 
-For each pointer variable the checker tracks one of:
+For each pointer variable the compiler tracks one of:
 
 | State | Meaning |
 |---|---|
@@ -3804,7 +3736,7 @@ For each pointer variable the checker tracks one of:
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the checker cannot see. Exceptions: a method's `self` parameter enters pointing, since the call synthesizes `getptr`/`getmview`/`getview(receiver)` over a storage-backed lvalue; and the global args-form `main`'s `view<[[byte]]>` parameter enters pointing, since the template wrapper always passes a live pointer.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the compiler cannot see. Exceptions: a method's `self` parameter enters pointing, because the receiver is a storage-backed lvalue; and the global args-form `main`'s `view<[[byte]]>` parameter enters pointing, since the template wrapper always passes a live pointer.
 
 ## 27.3 Dereference Checking
 
@@ -3819,7 +3751,7 @@ A variable warns at most once per check, so a path-sensitive traversal that revi
 
 A branch that **definitely returns** does not contribute its state to the code following the `if`, because that path never continues there.
 
-Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond that depth the checker falls back to a conservative path-insensitive merge.
+Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond that depth the compiler falls back to a conservative path-insensitive merge.
 
 ## 27.5 Loop Handling
 
@@ -3830,11 +3762,11 @@ Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond tha
 
 Loop termination is not proven; the post-loop state is conservative.
 
-`for` loops are desugared to blocks and `while` loops before this pass runs, so they receive the same treatment. See [Desugaring](05-desugaring.md).
+`for` loops are desugared to blocks and `while` loops before this check runs, so they receive the same treatment. See [Desugaring](05-desugaring.md).
 
 ## 27.6 Guard Refinement
 
-Inside `if (p == null)` / `if (p != null)` (either operand order), the checker refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
+Inside `if (p == null)` / `if (p != null)` (either operand order), the compiler refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
 
 ```franko
 ptr<int32> p;
@@ -3844,7 +3776,7 @@ if (p != null) {
 $(p);          // error: p is provably null after the guard fails
 ```
 
-When a guard's assertion contradicts a definite current state, that path is statically infeasible; the checker suppresses dereference diagnostics inside it and does not let its state flow onward.
+When a guard's assertion contradicts a definite current state, that path is statically infeasible; the compiler suppresses dereference diagnostics inside it and does not let its state flow onward.
 
 ```franko
 ptr<int32> p;
@@ -3861,7 +3793,7 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 
 ## 27.7 Limitations
 
-Current limitations of the pointer null-state checker:
+Current limitations of the pointer null-state check:
 
 - values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
 - only plain pointer **variables** are tracked. A pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
@@ -3871,44 +3803,32 @@ Current limitations of the pointer null-state checker:
 
 ## 27.8 Capability Linting
 
-A third, independent pass (`PointerPermissionChecker`) warns when a
-`ptr`/`mview` local variable or parameter requests permissions it never
-exercises, so developers default to the tightest pointer that fits. See
-the "Capability Linter" section of [Pointers](24-pointers.md).
+A third, independent check warns when a `ptr`/`mview` local variable or
+parameter requests permissions it never exercises, so developers default
+to the tightest pointer that fits. See the "Capability Linter" section of
+[Pointers](24-pointers.md).
 
 ## 27.9 Dangling-Pointer Checking
 
-`DanglingPointerChecker` runs after branch/declaration pruning and after
-the null-state pass. It is **return-only** and **intra-procedural**: each
+The compiler checks `return` values for pointers that outlive the storage
+they refer to. The check is **return-only and intra-procedural**: each
 function or method body is analyzed separately, and only `return`
-expressions are classified. Dead functions and pruned branches therefore
-cannot produce diagnostics.
+expressions are classified. Dead functions and pruned branches cannot
+produce diagnostics.
 
-### 27.9.1 Tracked Origins
+### 27.9.1 What Is Tracked
 
-For every pointer-typed variable (local, parameter, or global), the pass
-tracks an immutable set of possible storage origins:
-
-| Origin | Meaning |
-|---|---|
-| frame | the pointer may refer to a local variable's or parameter's current-frame slot |
-| global | the pointer may refer to a global variable's storage |
-| decay | the pointer points at a hidden static-to-dynamic descriptor in the current frame |
-| unknown | caller-owned or untracked: parameters, call results, `null`, pointer-typed field/element reads |
-
-Origins flow through assignments and pointer copies, through `$(...)`
-aliases when the dereferenced pointer targets a tracked pointer variable,
-and through `getptr`/`getmview`/`getview` of lvalues:
+Taking a pointer to a local or parameter and returning it is rejected:
 
 ```franko
 int32 x
-ptr<int32> p = getptr(x)       // p -> frame(x)
-ptr<int32> q = p                // q -> frame(x)
+ptr<int32> p = getptr(x)
+ptr<int32> q = p
 return q                        // error: x dies with the frame
 ```
 
-Taking the address of a pointer parameter or dereferencing a pointer
-parameter is caller-owned and safe to return:
+Taking a pointer to a pointer parameter, or dereferencing one, is
+caller-owned and safe to return:
 
 ```franko
 func ok(ptr<int32> p) -> ptr<int32> {
@@ -3916,18 +3836,17 @@ func ok(ptr<int32> p) -> ptr<int32> {
 }
 ```
 
-At function entry every tracked variable starts as `unknown`, so pointer
-parameters and globals are never assumed to point into the current frame.
+The analysis follows assignments, pointer copies, `$(...)` aliases, and
+`getptr`/`getmview`/`getview` of lvalues. Pointer parameters and globals
+are never assumed to point into the current frame.
 
 ### 27.9.2 The Return Rule
 
-At a pointer-typed `return`, the pass classifies the value's origins:
+At a pointer-typed `return`:
 
-- any decay origin → **error** (the descriptor is always stack-local);
-- frame origins with no `unknown` and no `global` alternative →
-  **error** (definitely dangling);
-- frame origins mixed with caller-owned/global alternatives → **warning**
-  (possibly dangling after a branch merge).
+- a value that definitely refers to the current frame → **error**;
+- a value that may refer to the current frame after a branch merge, or
+  may refer elsewhere → **warning**.
 
 The diagnostic names the local variable or parameter:
 
@@ -3939,42 +3858,23 @@ Returning a pointer that may refer to local variable 'x' from function 'maybe' (
 
 ### 27.9.3 Decayed Views
 
-A static-to-dynamic array view decay synthesizes a hidden
-`Franko_Dynamic_Array` descriptor in the current stack frame. Returning a
-non-literal decayed view is always an error, even when the array data is
-global or the decay comes from a branch merge:
+Static-to-dynamic array view decay does not create a new storage object:
+the converted view refers to the same array. Therefore:
 
-```franko
-func bad(view<[int32, 4]> m) -> view<[int32]> {
-    return m;                    // error: descriptor dies with 'bad'
-}
-```
+- returning a decayed parameter or global view is **safe** and is not
+  diagnosed;
+- a returned decayed view still refers to the original static storage;
+- returning a decayed view of **local** array storage is still a normal
+  frame-storage escape and is rejected by the same return rule as any
+  other pointer to a local.
 
-The direct form (the decay happens at the `return` or in a top-level
-`cast`) gets a detailed message explaining the descriptor lifetime and
-two fixes:
-
-- take `view<[T]>` as the parameter and let the caller decay at the call
-  site, then consume the view without returning it;
-- return `view<[T,N]>` and let the caller perform the decay on the result.
-
-A decay already carried by a variable or copy gets a shorter message:
-
-```franko
-func bad(view<[int32, 4]> m) -> view<[int32]> {
-    view<[int32]> d = m;
-    return d;                    // error: 'd' holds a decayed view
-}
-```
-
-Literal-backed views are safe: an array or string literal that decays
-immediately points at a hoisted constant global descriptor, not at a
-stack temporary. Existing global dynamic views are safe for the same
-reason. Global initializers are never analyzed as function bodies.
+Literal views refer to constant storage with static lifetime, so
+returning or keeping one is safe. Global initializers are never analyzed
+as function bodies.
 
 ### 27.9.4 Limitations
 
-The pass intentionally does not detect:
+The check intentionally does not detect:
 
 - pointers escaping through function calls, out-parameters, or stores into
   globals;
@@ -4198,15 +4098,17 @@ Array literal elements must be compile-time constant expressions
 
 ## 30.9 No Full Dynamic Array Lifetime Checking
 
-The checker validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
+The compiler validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
 
 ## 30.10 Pointer Lifetime Is Not Fully Tracked
 
 The compiler does not fully track dangling pointers or ownership. One
 class is now detected: returning a pointer to the current function's own
-frame storage, including a non-literal static-to-dynamic decayed view.
-Escapes through calls, globals, out-parameters, and returned aggregates
-remain untracked. See
+frame storage. Escapes through calls, globals, out-parameters, and
+returned aggregates remain untracked. Decayed static-array views refer
+to their original array, so they are safe to return when that storage
+is a parameter or global; a decayed view of local array storage is still
+caught as a normal frame-storage escape. See
 [Dangling-Pointer Checking](27-memory-safety-checking.md#279-dangling-pointer-checking).
 
 ## 30.11 Output Is a Library Function
@@ -4248,7 +4150,7 @@ s.memcpy("hello");
 
 ## 30.14 No `switch` or `do`/`do-while`
 
-Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto` (the generated C++ uses `goto` internally to lower `break` and `continue`; see [Statements](19-statements.md)).
+Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto`; see [Statements](19-statements.md).
 
 ## 30.15 Global Scope Is Declaration-Only
 
@@ -4269,125 +4171,53 @@ The following forms do not exist in the grammar:
 # 31. Foreign Function Interface
 
 Franko has no general native-call syntax. Operating-system access goes
-through FFI intrinsics: functions that are *declared* in Franko and
-*defined* in C++ by a bridge file the compiler splices into the
-generated program. The currently available FFI module is `franko/os`;
-its API is documented separately in `library_docs/os.md`. This chapter
-describes the mechanics: how the compiler detects the module, where
-the C++ lives, and which mistakes fail loudly instead of miscompiling.
-
-## 31.1 Activation
-
-FFI behavior switches on only when the program imports the module
-through its canonical specifier:
+through the built-in `franko/os` module. Import it with the canonical
+specifier:
 
 ```franko
 import "franko/os"
 ```
 
-`import "franko/os.fr"` normalizes to the same path text and activates
-the bridge identically. Any other path that happens to reach the same
-file (for example a `./` or `../` relative import) keeps it an
-ordinary Franko file: the stub bodies compile as written and no bridge
-is loaded. See [Source Files](02-source-files.md) for the general
-import path rules.
+Its functions and constants are then ordinary Franko declarations; the
+API is documented in `library_docs/os.md`. The rest of this chapter
+describes the language-visible behavior of the module.
 
-## 31.2 Declaration File
+## 31.1 Activation
 
-`import/franko/os.fr` declares the module API with stub bodies only.
-Every compiler phase between import resolution and code generation
-runs unchanged: the declarations parse, desugar, type-check, and pass
-legality and memory safety checking exactly like user-written Franko,
-and calls resolve through the ordinary overload rules. The stubs
-return failure values (`-1` for posix calls, `0` for win32 calls), so
-if the bridge ever fails to attach, the program reports failure
-instead of silently succeeding.
+FFI behavior switches on only when the program imports the module
+through its canonical specifier. `import "franko/os.fr"` normalizes to
+the same path text and activates it identically. Any other path that
+happens to reach the same file (for example a `./` or `../` relative
+import) keeps it an ordinary Franko file, and its stub bodies compile as
+written. See [Source Files](02-source-files.md) for the general import
+path rules.
 
-## 31.3 Bridge File
+## 31.2 Type Checking
 
-The real definitions live in `import/franko/os.ffi.cpp`, next to the
-module. A `.cpp` file can sit there safely because imports only allow
-`.fr` files: the bridge can never be picked up as a module itself.
+Module functions are checked exactly like user-written Franko, and calls
+resolve through the ordinary overload rules.
 
-The file is split into marker-delimited splice units:
+A known intrinsic with any other signature is a compile error, and any
+other function declared in `os::posix` or `os::win32` is an
+unsupported-function error while the module is active. A call that is
+only valid on a different target is also rejected at compile time, so
+the dead branch of a target check never has to compile on the wrong
+platform.
 
-```text
-// @@franko-ffi:common               platform includes (windows.h / unistd.h)
-// @@franko-ffi:posix.read            os::posix::read definition
-// @@franko-ffi:posix.write           os::posix::write definition
-// @@franko-ffi:win32.GetStdHandle    os::win32::GetStdHandle definition
-// @@franko-ffi:win32.ReadFile        os::win32::ReadFile definition
-// @@franko-ffi:win32.WriteFile       os::win32::WriteFile definition
-```
+## 31.3 Runtime Contract
 
-Each unit ends with `// @@franko-ffi:end`. Every intrinsic block
-defines its function under the exact mangled C++ name the backend
-emits for the Franko declaration (see [Compiler Internals](../compiler_docs.md)
-for the mangling rule): the
-same trick the program templates use to call the mangled `main`.
+The module checks `count` against the buffer's array length before every
+transfer: a count beyond the end aborts, consistent with Franko's other
+bounds checks, so the FFI cannot corrupt memory. A null or uninitialized
+buffer returns the failure value (`-1` for posix calls, `0` for win32
+calls) instead of crashing.
 
-```text
-FUNC_read_HASH_247cb6de            os::posix::read
-FUNC_write_HASH_3a46712f           os::posix::write
-FUNC_GetStdHandle_HASH_31d0af80    os::win32::GetStdHandle
-FUNC_ReadFile_HASH_955d9645        os::win32::ReadFile
-FUNC_WriteFile_HASH_ab68bdd0       os::win32::WriteFile
-```
+## 31.4 Namespace Ownership
 
-(The hashes move whenever the `os.fr` signatures change: they are the
-FNV-1a hash of the canonical signature key, which includes the
-parameter pointer permissions — `read` fills an `mview<[byte]>`
-while `write` only reads a `view<[byte]>`.)
-
-Signatures must match the prototypes codegen emits for the `os.fr`
-declarations, including the `NS_os::NS_posix` / `NS_os::NS_win32`
-namespace nesting. The bridge is spliced after the program template's
-`#include "FrankoRuntime.hpp"`, so `Franko_Dynamic_Array`,
-`franko_panic`, and the fixed-width integer types are available.
-
-## 31.4 Splicing
-
-Codegen emits prototypes for every intrinsic (they act as forward
-declarations) but never emits the stub bodies; the bridge provides the
-only definitions. After emission, the compiler prepends the `common`
-block plus one block per intrinsic the program actually calls.
-Merely importing `franko/os` without calling anything adds zero C++
-to the output, and an unused intrinsic leaves only its harmless
-prototype behind.
-
-## 31.5 Verification
-
-Three mistakes fail at Franko-compile time instead of C++ link time:
-
-- a missing bridge file (`os.ffi.cpp` next to the resolved `os.fr`)
-  is an import-time error naming the expected path;
-- every intrinsic declared in the program must have its mangled
-  definition present in `ffi.cpp`, checked the same way the driver
-  checks the program template's entry-point call. If `os.fr`
-  signatures change without updating the bridge, compilation stops
-  here, naming the drifted symbol;
-- a known intrinsic name with anything but the exact intrinsic
-  signature is an `os.fr`/`ffi.cpp` drift error, and any other
-  function declared in `os::posix` or `os::win32` is an unsupported-
-  function error. Stubs in those namespaces must never compile
-  silently.
-
-## 31.6 Runtime Contract
-
-The bridge checks `count` against the buffer's array length before
-every transfer: `count` beyond the end aborts via `franko_panic`,
-consistent with Franko's other bounds checks, so the FFI cannot
-corrupt memory. A null or uninitialized buffer returns the stub
-failure value instead of crashing. The win32 blocks compile to a
-`#error` off Windows, so a win32 call built for the wrong target
-fails with a clear message at the C++ stage.
-
-## 31.7 Namespace Ownership
-
-The ownership rule in 32.5 applies only while the module is active.
-Without `import "franko/os"`, `os::posix` and `os::win32` are
-ordinary namespaces anyone may extend; the compiler owns them only
-for programs that import the module through its canonical specifier.
+`os::posix` and `os::win32` are owned by the module only while it is
+active. Without `import "franko/os"`, they are ordinary namespaces
+anyone may extend; the compiler owns them only for programs that import
+the module through its canonical specifier.
 
 ---
 

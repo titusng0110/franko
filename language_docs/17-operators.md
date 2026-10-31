@@ -32,7 +32,7 @@ Supported unary operators:
 - logical NOT: `!x`
 - unary minus: `-x`
 
-Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and the generated C++ casts.
+Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and explicit conversions.
 
 Unsupported unary operators:
 

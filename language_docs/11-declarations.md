@@ -123,14 +123,14 @@ are the only ways to initialize a global at its declaration.
 
 A **local** declaration without an initializer default-initializes the variable:
 
-- primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior in the generated C++;
+- primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
 - **pointer variables are the exception: an `ptr<T>` declaration is guaranteed null-initialized** (see [Pointers](24-pointers.md)).
 
 There is no implicit zero-initialization for locals other than pointers. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: in the generated C++ they live in static storage, so primitives and static array elements are zero-initialized before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated: primitives and static array elements start at zero before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
 
 ## 11.6 Struct Fields
 

@@ -103,8 +103,7 @@ Because every symbol lives in one global namespace, duplicate declarations acros
 ### Built-in Modules
 
 Importing certain modules through their canonical specifier (currently
-only `import "franko/os"`) additionally activates compiler FFI
-behavior: declared functions are given C++ definitions from a bridge
-file instead of their Franko bodies. See [Foreign Function
-Interface](31-foreign-function-interface.md) for the activation rule,
-the bridge layout, and the verification checks.
+only `import "franko/os"`) additionally activates built-in FFI
+behavior. See [Foreign Function
+Interface](31-foreign-function-interface.md) for the activation rule and
+the module contract.

@@ -10,10 +10,6 @@ public final class ArrayLiteralLowerer {
                 SemanticStaticArrayType arrayType,
                 List<BigInteger> values
         );
-
-        SemanticVarExprNode hoistLiteralViewHeader(
-                GlobalVariableSymbol dataSymbol
-        );
     }
 
     private static final SemanticType FALLBACK_TYPE =
@@ -252,51 +248,6 @@ public final class ArrayLiteralLowerer {
         return new SemanticGetPtrNode(
                 new SemanticViewType(arrayType),
                 global
-        );
-    }
-
-    public SemanticExprNode resolveImmediateDecay(
-            SemanticExprNode expr,
-            SemanticType expectedType
-    ) {
-        if (!(expr instanceof SemanticGetPtrNode get)) {
-            return expr;
-        }
-
-        if (!(get.target instanceof SemanticVarExprNode var)) {
-            return expr;
-        }
-
-        if (!(var.symbol instanceof GlobalVariableSymbol data)) {
-            return expr;
-        }
-
-        if (data.literalBytes == null && data.literalValues == null) {
-            return expr;
-        }
-
-        if (data.literalHeaderData != null) {
-            return expr;
-        }
-
-        if (!PointerPermissions.isStaticArrayViewDecay(
-                get.type,
-                expectedType)) {
-            return expr;
-        }
-
-        if (hoister == null) {
-            ctx.error("Internal compiler error: no array literal hoister "
-                    + "wired into the array literal lowerer");
-            return expr;
-        }
-
-        SemanticVarExprNode header =
-                hoister.hoistLiteralViewHeader(data);
-
-        return new SemanticGetPtrNode(
-                new SemanticViewType((SemanticDynamicArrayType) header.type),
-                header
         );
     }
 
