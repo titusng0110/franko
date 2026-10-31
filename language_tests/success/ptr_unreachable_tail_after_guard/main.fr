@@ -1,0 +1,27 @@
+import "franko/io"
+
+func null_tail() -> int32 {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    if (p != null) {
+        return 0
+    }
+    ptr<int32> q
+    print($(q))
+    return 0
+}
+
+func dangling_tail() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    if (p != null) {
+        return null
+    }
+    return p
+}
+
+func main() -> int32 {
+    int32 a = null_tail()
+    ptr<int32> p = dangling_tail()
+    return 0
+}

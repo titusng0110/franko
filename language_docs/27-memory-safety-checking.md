@@ -50,7 +50,7 @@ A variable warns at most once per check, so a path-sensitive traversal that revi
 
 A branch that **definitely returns** does not contribute its state to the code following the `if`, because that path never continues there.
 
-Branch-sensitive analysis is limited to a maximum nesting depth (10). Beyond that depth the compiler falls back to a conservative path-insensitive merge.
+Branch-sensitive analysis is limited to a maximum nesting depth (12). Beyond that depth the compiler falls back to a conservative path-insensitive merge.
 
 ## 27.5 Loop Handling
 
@@ -139,7 +139,31 @@ The analysis follows assignments, pointer copies, `$(...)` aliases, and
 `getptr`/`getmview`/`getview` of lvalues. Pointer parameters and globals
 are never assumed to point into the current frame.
 
-### 27.9.2 The Return Rule
+### 27.9.2 Path and Loop Handling
+
+The dangling-storage check uses the same bounded path-sensitive traversal
+as the null-state check: `if`/`else` is followed branch by branch up to
+12 nested branches, then merged conservatively, and `while` loops merge
+the zero-trip, back-edge, and `break` states. `for` loops receive the same
+treatment after desugaring.
+
+Null guards refine what is known about the storage too:
+
+- in an `if (p == null)` path, `p` is null, so any recorded local or
+  global storage origin for `p` is discarded;
+- `if (p != null)` over a pointer that is definitely null is infeasible;
+- `if (p == null)` over a pointer that is definitely non-null is
+  infeasible; every `getptr`/`getmview`/`getview` result is definitely
+  non-null, even when the storage it points at is caller-owned;
+- a return inside an infeasible path is not diagnosed, because that path
+  never executes.
+
+On the condition-false exit of `while (p != null)`, `p` is null, so
+returning `p` is safe on that path even though the loop body saw a
+non-null pointer. Paths that leave the loop through `break` are merged
+separately and may still return a non-null `p`.
+
+### 27.9.3 The Return Rule
 
 At a pointer-typed `return`:
 
@@ -155,7 +179,7 @@ Returning a pointer to parameter 'x' from function 'bad' (dangling after return)
 Returning a pointer that may refer to local variable 'x' from function 'maybe' (possibly dangling after return)
 ```
 
-### 27.9.3 Decayed Views
+### 27.9.4 Decayed Views
 
 Static-to-dynamic array view decay does not create a new storage object:
 the converted view refers to the same array. Therefore:
@@ -171,7 +195,7 @@ Literal views refer to constant storage with static lifetime, so
 returning or keeping one is safe. Global initializers are never analyzed
 as function bodies.
 
-### 27.9.4 Limitations
+### 27.9.5 Limitations
 
 The check intentionally does not detect:
 

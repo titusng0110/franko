@@ -7,7 +7,7 @@ import java.util.Objects;
 import java.util.Set;
 
 public final class PointerNullStateChecker {
-    private static final int MAX_BRANCH_DEPTH = 10;
+    private static final int MAX_BRANCH_DEPTH = 12;
 
     private enum PointerState {
         POINTING,
@@ -54,6 +54,7 @@ public final class PointerNullStateChecker {
 
         branchDepth = 0;
         snapshotCount = 0;
+        suppressNullDerefChecks = false;
 
         Arrays.fill(pointerState, PointerState.MAYBE_NULL);
 
@@ -447,6 +448,7 @@ public final class PointerNullStateChecker {
         int beforeFunction = snapshot();
 
         Arrays.fill(pointerState, PointerState.MAYBE_NULL);
+        suppressNullDerefChecks = false;
 
         if (node.symbol instanceof MethodSymbol method
                 && !method.parameters.isEmpty()) {
@@ -597,16 +599,16 @@ public final class PointerNullStateChecker {
             refinePointerStatesFromGuard(node.condition, true);
         }
 
-        suppressNullDerefChecks = !thenFeasible;
+        boolean previousSuppression = suppressNullDerefChecks;
+        suppressNullDerefChecks = previousSuppression || !thenFeasible;
         boolean thenReturns = checkStmt(node.thenBranch);
-        suppressNullDerefChecks = false;
+        suppressNullDerefChecks = previousSuppression;
 
         int thenState = thenFeasible ? snapshot() : -1;
 
         restore(before);
 
-        boolean elseFeasible = node.elseBranch == null
-                || guardPathFeasible(node.condition, false);
+        boolean elseFeasible = guardPathFeasible(node.condition, false);
 
         boolean elseReturns = false;
         int elseState = -1;
@@ -617,9 +619,9 @@ public final class PointerNullStateChecker {
                 refinePointerStatesFromGuard(node.condition, false);
             }
 
-            suppressNullDerefChecks = !elseFeasible;
+            suppressNullDerefChecks = previousSuppression || !elseFeasible;
             elseReturns = checkStmt(node.elseBranch);
-            suppressNullDerefChecks = false;
+            suppressNullDerefChecks = previousSuppression;
 
             elseState = elseFeasible ? snapshot() : -1;
         } else if (elseFeasible) {
@@ -637,14 +639,17 @@ public final class PointerNullStateChecker {
                 thenState,
                 thenReturns || !thenFeasible,
                 elseState,
-                elseReturns,
+                elseReturns || !elseFeasible,
                 node.elseBranch != null,
                 fallthroughState
         );
 
-        return node.elseBranch != null
-                && (thenReturns || !thenFeasible)
-                && (elseReturns || !elseFeasible);
+        boolean thenLeaves = thenReturns || !thenFeasible;
+        boolean elseLeaves = node.elseBranch != null
+                ? elseReturns || !elseFeasible
+                : !elseFeasible;
+
+        return thenLeaves && elseLeaves;
     }
 
     private boolean checkIfPathInsensitive(SemanticIfNode node) {
@@ -780,9 +785,10 @@ public final class PointerNullStateChecker {
             afterBody = snapshot();
         } else {
 
+            boolean previousSuppression = suppressNullDerefChecks;
             suppressNullDerefChecks = true;
             checkStmt(node.body);
-            suppressNullDerefChecks = false;
+            suppressNullDerefChecks = previousSuppression;
         }
 
         List<Integer> backEdgeStates = new ArrayList<>();
@@ -829,13 +835,14 @@ public final class PointerNullStateChecker {
             }
         } else {
 
+            boolean previousSuppression = suppressNullDerefChecks;
             suppressNullDerefChecks = true;
 
             for (SemanticStmtNode updateStmt : node.update) {
                 checkStmt(updateStmt);
             }
 
-            suppressNullDerefChecks = false;
+            suppressNullDerefChecks = previousSuppression;
         }
 
         loopStack.remove(loopStack.size() - 1);

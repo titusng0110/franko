@@ -8,33 +8,48 @@ import java.util.Objects;
 import java.util.Set;
 
 public final class DanglingPointerChecker {
+    private static final int MAX_BRANCH_DEPTH = 12;
+
     private static final class OriginSet {
         static final OriginSet EMPTY =
-                new OriginSet(Set.of(), Set.of(), false);
+                new OriginSet(Set.of(), Set.of(), false, false);
 
         static final OriginSet UNKNOWN =
-                new OriginSet(Set.of(), Set.of(), true);
+                new OriginSet(Set.of(), Set.of(), true, false);
 
         final Set<VariableSymbol> frameCells;
         final Set<VariableSymbol> globalCells;
         final boolean unknown;
+        final boolean nonNull;
 
         private OriginSet(
                 Set<VariableSymbol> frameCells,
                 Set<VariableSymbol> globalCells,
-                boolean unknown
+                boolean unknown,
+                boolean nonNull
         ) {
             this.frameCells = frameCells;
             this.globalCells = globalCells;
             this.unknown = unknown;
+            this.nonNull = nonNull;
         }
 
         static OriginSet frame(VariableSymbol symbol) {
-            return EMPTY.withFrameCell(symbol);
+            return new OriginSet(
+                    Set.of(symbol),
+                    Set.of(),
+                    false,
+                    true
+            );
         }
 
         static OriginSet global(VariableSymbol symbol) {
-            return EMPTY.withGlobalCell(symbol);
+            return new OriginSet(
+                    Set.of(),
+                    Set.of(symbol),
+                    false,
+                    true
+            );
         }
 
         boolean mayDangle() {
@@ -44,62 +59,45 @@ public final class DanglingPointerChecker {
         boolean definiteDangle() {
             return !frameCells.isEmpty()
                     && !unknown
-                    && globalCells.isEmpty();
+                    && globalCells.isEmpty()
+                    && nonNull;
         }
 
         boolean possibleDangle() {
             return mayDangle() && !definiteDangle();
         }
 
-        OriginSet withFrameCell(VariableSymbol symbol) {
-            if (frameCells.contains(symbol)) {
-                return this;
-            }
-
-            Set<VariableSymbol> next = new LinkedHashSet<>(frameCells);
-            next.add(symbol);
-
-            return new OriginSet(
-                    Set.copyOf(next),
-                    globalCells,
-                    unknown
-            );
+        boolean definitelyPoints() {
+            return nonNull;
         }
 
-        OriginSet withGlobalCell(VariableSymbol symbol) {
-            if (globalCells.contains(symbol)) {
-                return this;
-            }
-
-            Set<VariableSymbol> next = new LinkedHashSet<>(globalCells);
-            next.add(symbol);
-
-            return new OriginSet(
-                    frameCells,
-                    Set.copyOf(next),
-                    unknown
-            );
+        boolean definitelyNull() {
+            return !nonNull
+                    && !unknown
+                    && frameCells.isEmpty()
+                    && globalCells.isEmpty();
         }
 
-        OriginSet withUnknown() {
-            if (unknown) {
+        OriginSet withNonNull() {
+            if (nonNull) {
                 return this;
             }
 
             return new OriginSet(
                     frameCells,
                     globalCells,
+                    unknown,
                     true
             );
         }
 
         OriginSet union(OriginSet other) {
-            if (other == null || other == EMPTY) {
-                return this;
+            if (other == null) {
+                other = UNKNOWN;
             }
 
-            if (this == EMPTY) {
-                return other;
+            if (this == other) {
+                return this;
             }
 
             Set<VariableSymbol> frame = new LinkedHashSet<>(frameCells);
@@ -111,7 +109,8 @@ public final class DanglingPointerChecker {
             return new OriginSet(
                     Set.copyOf(frame),
                     Set.copyOf(global),
-                    unknown || other.unknown
+                    unknown || other.unknown,
+                    nonNull && other.nonNull
             );
         }
     }
@@ -120,6 +119,8 @@ public final class DanglingPointerChecker {
         final List<Integer> breakStates = new ArrayList<>();
         final List<Integer> continueStates = new ArrayList<>();
     }
+
+    private record NullGuard(SemanticExprNode variable, boolean isEquality) {}
 
     private final DiagnosticBag diagnostics;
 
@@ -130,9 +131,12 @@ public final class DanglingPointerChecker {
     private int pointerCount = 0;
 
     private OriginSet[] pointerState = new OriginSet[0];
+
     private OriginSet[][] pointerSnapshots = new OriginSet[0][];
 
     private int snapshotCount = 0;
+
+    private int branchDepth = 0;
 
     private final List<LoopFrame> loopStack = new ArrayList<>();
 
@@ -141,6 +145,8 @@ public final class DanglingPointerChecker {
 
     private final Set<SemanticReturnNode> reportedReturnSites =
             Collections.newSetFromMap(new IdentityHashMap<>());
+
+    private boolean suppressEscapeChecks = false;
 
     public DanglingPointerChecker(DiagnosticBag diagnostics) {
         this.diagnostics = Objects.requireNonNull(diagnostics);
@@ -151,10 +157,12 @@ public final class DanglingPointerChecker {
 
         prepareAnalysis(node);
 
+        branchDepth = 0;
         snapshotCount = 0;
         loopStack.clear();
         addressTakenPointers.clear();
         reportedReturnSites.clear();
+        suppressEscapeChecks = false;
 
         Arrays.fill(pointerState, OriginSet.UNKNOWN);
 
@@ -179,7 +187,12 @@ public final class DanglingPointerChecker {
         pointerState = new OriginSet[pointerCount];
         Arrays.fill(pointerState, OriginSet.UNKNOWN);
 
-        pointerSnapshots = new OriginSet[16][pointerCount];
+        int estimatedSnapshots = Math.max(
+                2 * MAX_BRANCH_DEPTH,
+                estimateSnapshotDemand(root, 0) + MAX_BRANCH_DEPTH
+        );
+
+        pointerSnapshots = new OriginSet[estimatedSnapshots][pointerCount];
 
         for (int i = 0; i < pointerSnapshots.length; i++) {
             Arrays.fill(pointerSnapshots[i], OriginSet.UNKNOWN);
@@ -364,6 +377,14 @@ public final class DanglingPointerChecker {
         pointerCount++;
     }
 
+    private int pointerIndexOf(SemanticExprNode expr) {
+        if (!(expr instanceof SemanticVarExprNode n)) {
+            return -1;
+        }
+
+        return pointerIndexOfSymbol(n.symbol);
+    }
+
     private int pointerIndexOfSymbol(VariableSymbol symbol) {
         if (symbol == null
                 || !(symbol.type instanceof SemanticPtrType)) {
@@ -373,6 +394,88 @@ public final class DanglingPointerChecker {
         Integer index = pointerIndexBySymbol.get(symbol);
 
         return index == null ? -1 : index;
+    }
+
+    private int estimateSnapshotDemand(
+            SemanticASTNode node,
+            int depth
+    ) {
+        if (node == null) {
+            return 0;
+        }
+
+        if (node instanceof SemanticProgramNode n) {
+            int total = 0;
+
+            for (SemanticASTNode item : n.topLevelItems) {
+                total += estimateSnapshotDemand(item, depth);
+            }
+
+            return total;
+        }
+
+        if (node instanceof SemanticNamespaceNode n) {
+            int total = 0;
+
+            for (SemanticASTNode item : n.items) {
+                total += estimateSnapshotDemand(item, depth);
+            }
+
+            return total;
+        }
+
+        if (node instanceof SemanticFunctionDeclNode n) {
+            return 1 + estimateSnapshotDemand(n.body, depth);
+        }
+
+        if (node instanceof SemanticStructDeclNode n) {
+            int total = 0;
+
+            for (SemanticFunctionDeclNode method : n.methods) {
+                total += 1 + estimateSnapshotDemand(method.body, depth);
+            }
+
+            return total;
+        }
+
+        if (node instanceof SemanticBlockNode n) {
+            int total = 0;
+
+            for (SemanticStmtNode stmt : n.statements) {
+                total += estimateSnapshotDemand(stmt, depth);
+            }
+
+            return total;
+        }
+
+        if (node instanceof SemanticIfNode n) {
+            int local = n.elseBranch == null ? 2 : 3;
+
+            int nextDepth = depth < MAX_BRANCH_DEPTH
+                    ? depth + 1
+                    : depth;
+
+            return local
+                    + estimateSnapshotDemand(n.thenBranch, nextDepth)
+                    + estimateSnapshotDemand(n.elseBranch, nextDepth);
+        }
+
+        if (node instanceof SemanticWhileNode n) {
+            int total = 2 + estimateSnapshotDemand(n.body, depth);
+
+            for (SemanticStmtNode updateStmt : n.update) {
+                total += estimateSnapshotDemand(updateStmt, depth);
+            }
+
+            return total;
+        }
+
+        if (node instanceof SemanticBreakNode
+                || node instanceof SemanticContinueNode) {
+            return 1;
+        }
+
+        return 0;
     }
 
     private boolean checkNode(SemanticASTNode node) {
@@ -420,16 +523,20 @@ public final class DanglingPointerChecker {
     }
 
     private void checkFunction(SemanticFunctionDeclNode node) {
+        int beforeFunction = snapshot();
+
         Arrays.fill(pointerState, OriginSet.UNKNOWN);
 
-        snapshotCount = 0;
         loopStack.clear();
         addressTakenPointers.clear();
         reportedReturnSites.clear();
+        suppressEscapeChecks = false;
 
         if (node.body != null) {
             checkBlock(node.body);
         }
+
+        restore(beforeFunction);
     }
 
     private boolean checkStmt(SemanticStmtNode node) {
@@ -518,7 +625,7 @@ public final class DanglingPointerChecker {
         int index = pointerIndexOfSymbol(node.symbol);
 
         if (index >= 0) {
-            pointerState[index] = OriginSet.UNKNOWN;
+            pointerState[index] = OriginSet.EMPTY;
         }
 
         checkExpr(node.staticInitializer);
@@ -541,35 +648,179 @@ public final class DanglingPointerChecker {
     private boolean checkIf(SemanticIfNode node) {
         checkExpr(node.condition);
 
+        if (branchDepth >= MAX_BRANCH_DEPTH) {
+            return checkIfPathInsensitive(node);
+        }
+
         int before = snapshot();
 
-        boolean thenTerminates = checkStmt(node.thenBranch);
-        int thenState = snapshot();
+        branchDepth++;
+
+        boolean thenFeasible = guardPathFeasible(node.condition, true);
 
         restore(before);
 
-        boolean elseTerminates = false;
+        if (thenFeasible) {
+            refineOriginsFromGuard(node.condition, true);
+        }
+
+        boolean previousSuppression = suppressEscapeChecks;
+        suppressEscapeChecks = previousSuppression || !thenFeasible;
+        boolean thenReturns = checkStmt(node.thenBranch);
+        suppressEscapeChecks = previousSuppression;
+
+        int thenState = thenFeasible ? snapshot() : -1;
+
+        restore(before);
+
+        boolean elseFeasible = guardPathFeasible(node.condition, false);
+
+        boolean elseReturns = false;
         int elseState = -1;
+        int fallthroughState = -1;
 
         if (node.elseBranch != null) {
-            elseTerminates = checkStmt(node.elseBranch);
-            elseState = snapshot();
+            if (elseFeasible) {
+                refineOriginsFromGuard(node.condition, false);
+            }
 
-            restore(before);
+            suppressEscapeChecks = previousSuppression || !elseFeasible;
+            elseReturns = checkStmt(node.elseBranch);
+            suppressEscapeChecks = previousSuppression;
+
+            elseState = elseFeasible ? snapshot() : -1;
+        } else if (elseFeasible) {
+            refineOriginsFromGuard(node.condition, false);
+            fallthroughState = snapshot();
         }
+
+        restore(before);
+
+        branchDepth--;
 
         mergeAfterIf(
                 before,
                 thenState,
-                thenTerminates,
+                thenReturns || !thenFeasible,
                 elseState,
-                elseTerminates,
-                node.elseBranch != null
+                elseReturns || !elseFeasible,
+                node.elseBranch != null,
+                fallthroughState
         );
 
-        return node.elseBranch != null
-                && thenTerminates
-                && elseTerminates;
+        boolean thenLeaves = thenReturns || !thenFeasible;
+        boolean elseLeaves = node.elseBranch != null
+                ? elseReturns || !elseFeasible
+                : !elseFeasible;
+
+        return thenLeaves && elseLeaves;
+    }
+
+    private boolean checkIfPathInsensitive(SemanticIfNode node) {
+        int before = snapshot();
+
+        boolean thenReturns = checkStmt(node.thenBranch);
+        int thenState = snapshot();
+
+        restore(before);
+
+        boolean elseReturns = false;
+        int elseState = -1;
+
+        if (node.elseBranch != null) {
+            elseReturns = checkStmt(node.elseBranch);
+            elseState = snapshot();
+        }
+
+        restore(before);
+
+        mergeAfterIf(
+                before,
+                thenState,
+                thenReturns,
+                elseState,
+                elseReturns,
+                node.elseBranch != null,
+                before
+        );
+
+        return node.elseBranch != null && thenReturns && elseReturns;
+    }
+
+    private NullGuard nullGuard(SemanticExprNode condition) {
+        if (!(condition instanceof SemanticBinOpNode bin)) {
+            return null;
+        }
+
+        if (!bin.op.equals("==") && !bin.op.equals("!=")) {
+            return null;
+        }
+
+        if (bin.left instanceof SemanticNullLiteralNode) {
+            return new NullGuard(bin.right, bin.op.equals("=="));
+        }
+
+        if (bin.right instanceof SemanticNullLiteralNode) {
+            return new NullGuard(bin.left, bin.op.equals("=="));
+        }
+
+        return null;
+    }
+
+    private boolean guardPathFeasible(
+            SemanticExprNode condition,
+            boolean guardHolds
+    ) {
+        NullGuard guard = nullGuard(condition);
+
+        if (guard == null) {
+            return true;
+        }
+
+        int index = pointerIndexOf(guard.variable());
+
+        if (index < 0) {
+            return true;
+        }
+
+        boolean assertedNull = guard.isEquality() == guardHolds;
+
+        OriginSet current = pointerState[index];
+
+        if (assertedNull) {
+            return current == null || !current.definitelyPoints();
+        }
+
+        return current == null || !current.definitelyNull();
+    }
+
+    private void refineOriginsFromGuard(
+            SemanticExprNode condition,
+            boolean guardHolds
+    ) {
+        NullGuard guard = nullGuard(condition);
+
+        if (guard == null) {
+            return;
+        }
+
+        int index = pointerIndexOf(guard.variable());
+
+        if (index < 0) {
+            return;
+        }
+
+        boolean assertedNull = guard.isEquality() == guardHolds;
+
+        if (!assertedNull) {
+            return;
+        }
+
+        OriginSet current = pointerState[index];
+
+        if (current != null && !current.definitelyPoints()) {
+            pointerState[index] = OriginSet.EMPTY;
+        }
     }
 
     private boolean checkWhile(SemanticWhileNode node) {
@@ -577,64 +828,95 @@ public final class DanglingPointerChecker {
 
         int before = snapshot();
 
+        boolean bodyFeasible = guardPathFeasible(node.condition, true);
+
         LoopFrame frame = new LoopFrame();
         loopStack.add(frame);
 
-        boolean bodyTerminates = checkStmt(node.body);
-        int afterBody = snapshot();
+        boolean bodyTerminates = false;
+        int afterBody = -1;
+
+        if (bodyFeasible) {
+            refineOriginsFromGuard(node.condition, true);
+
+            bodyTerminates = checkStmt(node.body);
+            afterBody = snapshot();
+        } else {
+            boolean previousSuppression = suppressEscapeChecks;
+            suppressEscapeChecks = true;
+            checkStmt(node.body);
+            suppressEscapeChecks = previousSuppression;
+        }
 
         List<Integer> backEdgeStates = new ArrayList<>();
 
-        if (!node.update.isEmpty()) {
-            if (!bodyTerminates) {
-                boolean iterationFallsThrough = true;
-
-                for (SemanticStmtNode updateStmt : node.update) {
-                    if (checkStmt(updateStmt)) {
-                        iterationFallsThrough = false;
-                        break;
-                    }
-                }
+        if (bodyFeasible) {
+            if (!node.update.isEmpty()) {
+                boolean iterationFallsThrough = !bodyTerminates;
 
                 if (iterationFallsThrough) {
-                    backEdgeStates.add(snapshot());
-                }
-            }
+                    for (SemanticStmtNode updateStmt : node.update) {
+                        if (checkStmt(updateStmt)) {
+                            iterationFallsThrough = false;
+                            break;
+                        }
+                    }
 
-            for (int continueState : frame.continueStates) {
-                restore(continueState);
-
-                boolean continueFallsThrough = true;
-
-                for (SemanticStmtNode updateStmt : node.update) {
-                    if (checkStmt(updateStmt)) {
-                        continueFallsThrough = false;
-                        break;
+                    if (iterationFallsThrough) {
+                        backEdgeStates.add(snapshot());
                     }
                 }
 
-                if (continueFallsThrough) {
-                    backEdgeStates.add(snapshot());
+                for (int continueState : frame.continueStates) {
+                    restore(continueState);
+
+                    boolean continueFallsThrough = true;
+
+                    for (SemanticStmtNode updateStmt : node.update) {
+                        if (checkStmt(updateStmt)) {
+                            continueFallsThrough = false;
+                            break;
+                        }
+                    }
+
+                    if (continueFallsThrough) {
+                        backEdgeStates.add(snapshot());
+                    }
                 }
+            } else {
+                if (!bodyTerminates) {
+                    backEdgeStates.add(afterBody);
+                }
+
+                backEdgeStates.addAll(frame.continueStates);
             }
         } else {
-            if (!bodyTerminates) {
-                backEdgeStates.add(afterBody);
+            boolean previousSuppression = suppressEscapeChecks;
+            suppressEscapeChecks = true;
+
+            for (SemanticStmtNode updateStmt : node.update) {
+                checkStmt(updateStmt);
             }
 
-            backEdgeStates.addAll(frame.continueStates);
+            suppressEscapeChecks = previousSuppression;
         }
 
         loopStack.remove(loopStack.size() - 1);
 
         restore(before);
 
-        if (!backEdgeStates.isEmpty()) {
+        if (bodyFeasible && !backEdgeStates.isEmpty()) {
             mergeLoopStates(before, backEdgeStates);
         }
 
-        for (int breakState : frame.breakStates) {
-            mergeStateIntoCurrent(breakState);
+        if (!bodyFeasible || !bodyTerminates || !backEdgeStates.isEmpty()) {
+            refineOriginsFromGuard(node.condition, false);
+        }
+
+        if (bodyFeasible) {
+            for (int breakState : frame.breakStates) {
+                mergeStateIntoCurrent(breakState);
+            }
         }
 
         return false;
@@ -662,11 +944,42 @@ public final class DanglingPointerChecker {
         }
     }
 
+    private void mergeLoopStates(int before, List<Integer> iterationStates) {
+        for (int i = 0; i < pointerCount; i++) {
+            OriginSet merged =
+                    originSetFromSnapshot(before, i, before);
+
+            for (int slot : iterationStates) {
+                merged = mergeOriginSets(
+                        merged,
+                        originSetFromSnapshot(slot, i, before)
+                );
+            }
+
+            pointerState[i] = merged == null
+                    ? OriginSet.UNKNOWN
+                    : merged;
+        }
+    }
+
+    private void mergeStateIntoCurrent(int slot) {
+        for (int i = 0; i < pointerCount; i++) {
+            pointerState[i] = mergeOriginSets(
+                    pointerState[i],
+                    originSetFromSnapshot(slot, i, slot)
+            );
+        }
+    }
+
     private boolean checkReturn(SemanticReturnNode node) {
         checkExpr(node.value);
 
         if (node.value == null
                 || !(node.value.type instanceof SemanticPtrType)) {
+            return true;
+        }
+
+        if (suppressEscapeChecks) {
             return true;
         }
 
@@ -735,11 +1048,11 @@ public final class DanglingPointerChecker {
         }
 
         if (expr instanceof SemanticNullLiteralNode) {
-            return OriginSet.UNKNOWN;
+            return OriginSet.EMPTY;
         }
 
         if (expr instanceof SemanticGetPtrNode n) {
-            return storageOrigins(n.target);
+            return storageOrigins(n.target).withNonNull();
         }
 
         if (expr instanceof SemanticVarExprNode n) {
@@ -778,19 +1091,29 @@ public final class DanglingPointerChecker {
             return OriginSet.UNKNOWN;
         }
 
-        OriginSet result = cells.unknown
-                ? OriginSet.UNKNOWN
-                : OriginSet.EMPTY;
+        OriginSet result = cells.unknown ? OriginSet.UNKNOWN : null;
 
         for (VariableSymbol cell : cells.frameCells) {
-            result = result.union(readPointerCell(cell));
+            result = unionOrigins(result, readPointerCell(cell));
         }
 
         for (VariableSymbol cell : cells.globalCells) {
-            result = result.union(readPointerCell(cell));
+            result = unionOrigins(result, readPointerCell(cell));
         }
 
-        return result;
+        return result == null ? OriginSet.EMPTY : result;
+    }
+
+    private OriginSet unionOrigins(OriginSet left, OriginSet right) {
+        if (left == null) {
+            return right;
+        }
+
+        if (right == null) {
+            return left;
+        }
+
+        return left.union(right);
     }
 
     private OriginSet readPointerCell(VariableSymbol cell) {
@@ -1033,7 +1356,8 @@ public final class DanglingPointerChecker {
             boolean thenTerminates,
             int elseState,
             boolean elseTerminates,
-            boolean hasElse
+            boolean hasElse,
+            int fallthroughState
     ) {
         for (int i = 0; i < pointerCount; i++) {
             boolean hasContinuingPath = false;
@@ -1055,11 +1379,11 @@ public final class DanglingPointerChecker {
                             originSetFromSnapshot(elseState, i, before)
                     );
                 }
-            } else {
+            } else if (fallthroughState >= 0) {
                 hasContinuingPath = true;
                 merged = mergeOriginSets(
                         merged,
-                        originSetFromSnapshot(before, i, before)
+                        originSetFromSnapshot(fallthroughState, i, before)
                 );
             }
 
@@ -1068,33 +1392,6 @@ public final class DanglingPointerChecker {
             } else {
                 pointerState[i] = originSetFromSnapshot(before, i, before);
             }
-        }
-    }
-
-    private void mergeLoopStates(
-            int before,
-            List<Integer> iterationStates
-    ) {
-        for (int i = 0; i < pointerCount; i++) {
-            OriginSet merged = originSetFromSnapshot(before, i, before);
-
-            for (int slot : iterationStates) {
-                merged = mergeOriginSets(
-                        merged,
-                        originSetFromSnapshot(slot, i, before)
-                );
-            }
-
-            pointerState[i] = merged == null ? OriginSet.UNKNOWN : merged;
-        }
-    }
-
-    private void mergeStateIntoCurrent(int slot) {
-        for (int i = 0; i < pointerCount; i++) {
-            pointerState[i] = mergeOriginSets(
-                    pointerState[i],
-                    originSetFromSnapshot(slot, i, slot)
-            );
         }
     }
 

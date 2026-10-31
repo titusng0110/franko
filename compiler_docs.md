@@ -709,7 +709,7 @@ initialized to `MAYBE_NULL` at function entry (except method `self` and
 certifications); `p = null` → NULL; `p = q` copies state; anything else →
 MAYBE_NULL. Guard refinement: `p == null` / `p != null` conditions refine
 states on each path; exploration is path-sensitive up to
-`MAX_BRANCH_DEPTH = 10`, with an insensitive fallback beyond the cap.
+`MAX_BRANCH_DEPTH = 12`, with an insensitive fallback beyond the cap.
 Loops track break/continue jump states via snapshot slots (`LoopFrame`,
 preallocated `PointerState[][]` store), merge back-edge states, and compute
 zero-trip exit states. Reports deref of definitely-NULL as error and
@@ -735,11 +735,22 @@ variable (locals, parameters, and globals alike), indexed by
   (a local or parameter);
 - `GLOBAL(s)` — the pointer may refer to global `s`'s storage;
 - `UNKNOWN` — caller-owned/untracked (pointer parameters, call results,
-  `null`, pointer-typed field/element reads).
+  pointer-typed field/element reads); it may also be null;
+- `EMPTY` — definitely null: no frame/global origin and no `UNKNOWN`;
+- **definitely non-null** — set for every `getptr`/`getmview`/`getview`
+  result, even when its storage origin is `UNKNOWN` (for example
+  `getptr($(p))` over a pointer parameter).
 
-Merging is set union; `UNKNOWN` is an absorbing boolean that still merges
-with concrete origins. Snapshots store immutable `OriginSet` references,
-so branch/loop snapshots are cheap and never alias mutable state.
+Merging is set union. Nullness is a separate definite-non-null flag: a
+merged value is definitely non-null only when every continuing path is,
+so a null-or-frame value is a *possible* escape (warning) rather than a
+definite one (error).
+Snapshots store immutable `OriginSet` references, so branch/loop
+snapshots are cheap and never alias mutable state. The checker
+preallocates the contiguous `OriginSet[][]` snapshot store from an AST
+demand estimate, like `PointerNullStateChecker`, and grows it only if the
+estimate is low.
+
 `storageOrigins(expr)` maps an lvalue to the region it occupies
 (variable → `FRAME`/`GLOBAL`; `$(p)` → `valueOrigins(p)`; member/index
 access → its base's storage; cast → its operand). `valueOrigins(expr)`
@@ -750,12 +761,13 @@ cells in `valueOrigins(p)` (with `UNKNOWN` if any cell is untracked);
 `cast<T>(e)` → `valueOrigins(e)`; call results and pointer-typed
 field/element reads → `UNKNOWN`.
 
-Transfer rules mirror `PointerNullStateChecker` structurally, without its
-null-specific guard refinement or branch-depth cap:
+Transfer rules mirror `PointerNullStateChecker` structurally, including
+its bounded path-sensitive branch handling, guard feasibility/refinement,
+and loop exit refinement:
 
-- pointer declarations start `UNKNOWN` (pointers are null-initialized and
-  null does not dangle); at function entry every tracked symbol is
-  `UNKNOWN`, including parameters and globals;
+- pointer declarations start `EMPTY` (they are null-initialized and null
+  does not dangle); at function entry every tracked symbol is `UNKNOWN`,
+  including parameters and globals;
 - a direct pointer-variable assignment is a strong update with the RHS
   origins; a store through `$(d)` strong-updates the single tracked
   pointer cell `valueOrigins(d)` resolves to; any other pointer-typed
@@ -770,14 +782,23 @@ null-specific guard refinement or branch-depth cap:
   pointer-typed arguments, and pointer locals whose address was taken by
   `getptr`/`getmview` become `UNKNOWN`;
 - `if`/`else` analyzes both branches from the pre-branch snapshot and
-  merges only continuing paths; `while` analyzes the body once, replays
-  the update epilogue for normal and `continue` edges, merges zero-trip
-  and back-edge states, then merges `break` snapshots;
+  merges only continuing paths. Exploration is path-sensitive to
+  `MAX_BRANCH_DEPTH = 12` nested branches, then falls back to a
+  path-insensitive merge;
+- a null guard refines the origin state: the `p == null` path sets `p`
+  to `EMPTY`; `p != null` over an `EMPTY` pointer and `p == null` over a
+  definitely-pointing pointer are infeasible. Returns inside an
+  infeasible path are not diagnosed;
+- `while` analyzes the body once, replays the update epilogue for normal
+  and `continue` edges, merges zero-trip and back-edge states, then
+  merges `break` snapshots. The condition-false exit of
+  `while (p != null)` refines `p` to `EMPTY` before `break` states are
+  merged;
 - block-local pointer states are reset to `UNKNOWN` when the block ends.
 
 At a return of pointer type, the checker classifies the value's origins:
 `mayDangle = FRAME non-empty`;
-`definiteDangle = FRAME non-empty and no UNKNOWN and no GLOBAL`;
+`definiteDangle = FRAME non-empty, no UNKNOWN, no GLOBAL, and definitely non-null`;
 `possibleDangle = mayDangle and not definiteDangle`. Definite frame
 escapes are errors; possible escapes after a branch merge are warnings.
 There is no separate decay classification: a decayed view is just a fat
@@ -1135,7 +1156,7 @@ type it would have in C++. Consequences:
   or a pointer copy.
 - Deref of definitely-NULL = error; maybe-null deref = warning.
 - Guards (`p == null`/`p != null`) refine per-path; branch exploration is
-  path-sensitive to depth 10, then falls back to insensitive checking.
+  path-sensitive to depth 12, then falls back to insensitive checking.
 - Loops snapshot/merge states so breaks, continues, and zero-trip exits all
   get correct entry states.
 
@@ -1525,9 +1546,16 @@ origin set:
 - `FRAME(s)` — may refer to local/parameter `s`'s current-frame slot;
 - `GLOBAL(s)` — may refer to global `s`'s storage;
 - `UNKNOWN` — caller-owned/untracked: pointer parameters, call results,
-  `null`, pointer-typed field/element reads.
+  pointer-typed field/element reads; it may also be null;
+- `EMPTY` — definitely null: no frame/global origin and no `UNKNOWN`;
+- **definitely non-null** — set for every
+  `getptr`/`getmview`/`getview` result, even when its storage origin is
+  `UNKNOWN` (for example `getptr($(p))` over a pointer parameter).
 
-Merging is union (with `UNKNOWN` an absorbing flag). At function entry
+Merging is union. Nullness is a separate definite-non-null flag: a
+merged value is definitely non-null only when every continuing path is,
+so null-or-frame is a possible escape (warning), not a definite one
+(error). At function entry
 every tracked symbol — parameters, globals, and locals — starts
 `UNKNOWN`. `storageOrigins` follows lvalue paths: a variable is
 `FRAME`/`GLOBAL`, `$(p)` is `valueOrigins(p)`, member/index access
@@ -1537,27 +1565,36 @@ storage; pointer variables use their current state; a pointer-typed
 `$(p)` reads the states of the tracked pointer cells `p` may point at
 (any untracked cell contributes `UNKNOWN`); a cast inherits its
 operand's origins; calls and pointer-typed field/element reads are
-`UNKNOWN`.
+`UNKNOWN`; `null` is `EMPTY`.
 
-**Transfers.** Pointer declarations are `UNKNOWN` (null does not
-dangle). Direct pointer-variable assignment is a strong update;
-`$(d) = value` strong-updates the single tracked pointer cell
-`valueOrigins(d)` resolves to, and any other pointer-typed store path
-invalidates every tracked state. Static-to-dynamic decay is
-representation-preserving and adds no origin; a decayed parameter/global
-view therefore keeps the value's caller-owned/global state, while a
-decayed view of a local array keeps that local's `FRAME` origin.
-Calls emit no escape diagnostic but forget state: global pointer states,
-tracked cells reachable from pointer-typed arguments, and address-taken
-pointer locals (from `getptr`/`getmview`) become `UNKNOWN`. `if`/`else`
-analyzes both branches from the pre-branch snapshot and merges only
-continuing paths; `while` analyzes the body once, replays the update
-epilogue for normal and `continue` edges, merges zero-trip and back-edge
-states, then merges `break` snapshots. Block-local pointer states reset
-at block end.
+**Transfers.** Pointer declarations start `EMPTY` (they are
+null-initialized and null does not dangle). Direct pointer-variable
+assignment is a strong update; `$(d) = value` strong-updates the single
+tracked pointer cell `valueOrigins(d)` resolves to, and any other
+pointer-typed store path invalidates every tracked state.
+Static-to-dynamic decay is representation-preserving and adds no origin;
+a decayed parameter/global view therefore keeps the value's
+caller-owned/global state, while a decayed view of a local array keeps
+that local's `FRAME` origin. Calls emit no escape diagnostic but forget
+state: global pointer states, tracked cells reachable from pointer-typed
+arguments, and address-taken pointer locals (from `getptr`/`getmview`)
+become `UNKNOWN`.
+
+`if`/`else` analyzes both branches from the pre-branch snapshot and
+merges only continuing paths. Like the null-state check, exploration is
+path-sensitive to `MAX_BRANCH_DEPTH = 12` nested branches and then falls
+back to a path-insensitive merge. A null guard refines the origin state:
+the `p == null` path sets `p` to `EMPTY`; `p != null` over an `EMPTY`
+pointer and `p == null` over a definitely-pointing pointer are
+infeasible, and returns inside those dead paths are not diagnosed.
+`while` analyzes the body once, replays the update epilogue for normal
+and `continue` edges, merges zero-trip and back-edge states, then merges
+`break` snapshots; the condition-false exit of `while (p != null)`
+refines `p` to `EMPTY`, while `break` paths are merged separately.
+Block-local pointer states reset at block end.
 
 **Return classification.** `mayDangle = FRAME non-empty`;
-`definiteDangle = FRAME non-empty and no UNKNOWN and no GLOBAL`;
+`definiteDangle = FRAME non-empty, no UNKNOWN, no GLOBAL, and definitely non-null`;
 `possibleDangle = mayDangle and not definiteDangle`. Definite frame
 escapes are errors; possible escapes after a branch merge are warnings.
 There is no decay-specific diagnostic; a returned decayed view is simply

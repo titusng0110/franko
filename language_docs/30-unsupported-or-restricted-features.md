@@ -14,7 +14,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - arrays cannot be returned by value;
 - arrays cannot be passed as parameters by value; use ptr<[...]> parameters (see [Functions](12-functions.md));
 - `void` calls cannot be used in value-producing contexts;
-- full path-sensitive return analysis is not currently performed.
+- full path-sensitive "all paths return" analysis is not currently performed.
 
 ## 30.2 No General Member Calls
 
