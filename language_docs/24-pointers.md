@@ -131,16 +131,59 @@ result: `.init`, `.init_zero`, `.resize`, and `.uninit` are forbidden on
 decays), so the storage behind the converted view is never reallocated
 or freed through it. The conversion is allowed in the same positions as
 permission downgrades: assignment, return values, and function arguments.
-Comparing pointers still requires identical pointer types. Like every
-pointer in Franko, a converted view must not outlive the scope it was
-created in — a view that escapes past it (returned, or stored into
-longer-lived storage) is the usual untracked dangling-pointer case of
-[Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations),
-exactly as if it had been created there with `getview`. Literals are the
-exception: when the decay applies directly to an array or string literal
-in one of those positions, the converted view is itself a hoisted constant
-global, so returning or keeping it is always safe (see
-[Array Literals](22-array-literals.md)).
+Comparing pointers still requires identical pointer types.
+
+A decayed view is backed by a hidden `Franko_Dynamic_Array` descriptor
+(count, data pointer, and a borrowed flag) that the compiler creates in
+the **current function's stack frame**. The descriptor survives for the
+whole statement and for everything the callees do with it, but it dies
+when that function returns. A non-literal converted view must therefore
+not be returned from the function that performs the decay: the caller
+would receive a view pointing at a dead stack descriptor.
+`DanglingPointerChecker` rejects that case:
+
+```franko
+func bad(view<[int32, 4]> m) -> view<[int32]> {
+    return m;                    // error: decayed view escapes 'bad'
+}
+```
+
+There are two correct ways to structure such a function:
+
+- If the function only consumes the array through a dynamic view, take
+  `view<[T]>` as the parameter and let the **caller** perform the decay.
+  The descriptor then lives in the caller's frame and survives the call:
+
+  ```franko
+  func consume(view<[int32]> v) -> uint32 {
+      return $(v).length();
+  }
+
+  [int32, 4] xs;
+  print(consume(getview(xs)));   // decay happens in the caller
+  ```
+
+- If the function must return a view of the static array, keep the static
+  return type and let the caller decay the result:
+
+  ```franko
+  func pass(view<[int32, 4]> m) -> view<[int32, 4]> {
+      return m;
+  }
+
+  [int32, 4] xs;
+  view<[int32]> v = pass(getview(xs));   // decay happens in the caller
+  ```
+
+Literals are the exception: when the decay applies directly to an array or
+string literal in an assignment, return, argument, or global initializer,
+the converted view points at a hoisted constant global descriptor, so
+returning or keeping it is always safe (see
+[Array Literals](22-array-literals.md)). An existing global dynamic view
+is likewise safe to return: its descriptor has static lifetime. The
+restriction applies to decays of non-literal **local** static views,
+including a decay that happens at the `return` itself or inside an
+explicit `cast`.
 
 ## 24.5 Pointer Comparison
 
@@ -321,8 +364,11 @@ Assignment from another pointer variable copies that variable's exact state, so 
 Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
 The analysis is **intra-procedural**: no nullness facts cross function
-boundaries (a returned pointer is always maybe-null at the call site),
-and dangling pointers are not checked.
+boundaries (a returned pointer is always maybe-null at the call site).
+Dangling pointers are checked separately, and only for values escaping a
+function through `return` (see
+[Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations) and
+[Memory Safety Checking](27-memory-safety-checking.md)).
 
 ### 24.9.3 Dereferencing and Warnings
 
@@ -377,6 +423,32 @@ memory corruption.
 
 ## 24.11 Pointer Lifetime Limitations
 
-Pointer lifetime is not fully tracked.
+Pointer lifetime is not fully tracked, but the compiler does detect one
+important class of dangling pointers: a pointer/view returned from a
+function while it refers to that function's own stack storage.
 
-The compiler does not fully track dangling pointers or aliasing through pointers. A pointer may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.
+`DanglingPointerChecker` rejects a `return` of:
+
+- a pointer to a local variable, a parameter, or any field/element of
+  one, including through pointer copies, `$(...)` aliases, and branch
+  merges;
+- a non-literal static-array view decayed to a dynamic-array view, because
+  the hidden descriptor lives in the returning function's frame.
+
+A return that only *may* refer to local storage after a branch merge is a
+warning; a definite escape is an error. Safe returns include pointer
+parameters, pointers obtained from global storage or from
+`getptr($(pointerParameter))`, literal-backed views, and existing global
+dynamic views.
+
+What remains untracked:
+
+- pointers escaping through function calls (out-parameters, globals, or
+  return values of other functions);
+- pointers hidden inside returned structs or arrays;
+- use of a pointer after the block that owns its pointee ends, but before
+  the function returns;
+- dynamic-array buffer lifetime across `resize`/`uninit`;
+- aliasing and interprocedural ownership in general.
+
+A runtime check for the remaining cases is planned as a later change.

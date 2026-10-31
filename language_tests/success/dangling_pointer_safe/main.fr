@@ -1,0 +1,61 @@
+import "franko/io"
+
+[int32, 4] G
+view<[int32]> G_VIEW = [1, 2, 3, 4]
+view<[int32, 4]> G_STATIC_VIEW = [5, 6, 7, 8]
+
+func return_param(ptr<int32> p) -> ptr<int32> {
+    return p
+}
+
+func return_global() -> ptr<int32> {
+    return getptr(G[0])
+}
+
+func return_caller_pointee(ptr<int32> p) -> ptr<int32> {
+    return getptr($(p))
+}
+
+func return_static_literal() -> view<[int32, 4]> {
+    return [1, 2, 3, 4]
+}
+
+func return_dynamic_literal() -> view<[int32]> {
+    return [1, 2, 3, 4]
+}
+
+func return_global_dynamic_view() -> view<[int32]> {
+    return G_VIEW
+}
+
+func return_global_static_view() -> view<[int32, 4]> {
+    return G_STATIC_VIEW
+}
+
+func reassign_to_global() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    p = getptr(G[0])
+    return p
+}
+
+func local_deref_only() -> int32 {
+    int32 x = 7
+    ptr<int32> p = getptr(x)
+    return $(p)
+}
+
+func main() -> int32 {
+    int32 x = 3
+    ptr<int32> p = return_param(getptr(x))
+    print($(p))
+    print($(return_global()))
+    print($(return_caller_pointee(getptr(x))))
+    print($(return_static_literal())[0])
+    print($(return_dynamic_literal()).length())
+    print($(return_global_dynamic_view()).length())
+    print($(return_global_static_view())[1])
+    print($(reassign_to_global()))
+    print(local_deref_only())
+    return 0
+}

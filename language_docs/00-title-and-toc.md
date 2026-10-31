@@ -10,6 +10,7 @@ Franko source
   -> SemanticAnalyzer
   -> LegalityChecker (declarations, expressions, statements, functions, types)
   -> PointerNullStateChecker
+  -> DanglingPointerChecker
   -> C++14 code generation
 ```
 

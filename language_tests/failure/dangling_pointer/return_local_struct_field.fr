@@ -1,0 +1,13 @@
+struct Box {
+    int32 x = 0
+}
+
+func bad() -> ptr<int32> {
+    Box b
+    return getptr(b.x)
+}
+
+func main() -> int32 {
+    ptr<int32> p = bad()
+    return 0
+}

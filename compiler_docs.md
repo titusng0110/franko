@@ -57,6 +57,8 @@ Semantic AST (SemanticProgramNode)
    │                     and variables never used in surviving code are
    │                     removed from the Semantic AST)
    │  PointerNullStateChecker (intra-procedural pointer null dataflow)
+   │  DanglingPointerChecker (return-escape provenance: pointers to frame
+   │                          storage and decayed static-array views)
    │  PointerPermissionChecker (capability linter: unused-permission
    │                            warnings for ptr/mview variables)
    ▼
@@ -74,9 +76,9 @@ generated C++ body
 output .cpp  (then compiled with the host C++ compiler)
 ```
 
-Non-fatal warnings (semantic warnings, pointer maybe-null warnings) are printed
-between phases; errors abort with a `RuntimeException` carrying the formatted
-`DiagnosticBag` contents.
+Non-fatal warnings (semantic warnings, pointer maybe-null warnings,
+dangling-pointer warnings) are printed between phases; errors abort with a
+`RuntimeException` carrying the formatted `DiagnosticBag` contents.
 
 ---
 
@@ -122,6 +124,7 @@ flowchart TD
     Main --> BranchPruner
     Main --> InactiveDeclarationPruner
     Main --> PointerNullStateChecker
+    Main --> DanglingPointerChecker
     Main --> PointerPermissionChecker
     PointerPermissionChecker -. reads Semantic AST only .-> SemanticASTNode
     Main --> Cpp14Codegen
@@ -145,7 +148,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `PointerPermissionChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
+| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `PointerPermissionChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
 | `ImportResolver` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ASTNode` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
 | `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ArrayLiteralLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
@@ -161,6 +164,7 @@ flowchart TD
 | `DeclarationChecker` | `TypeChecker` (incl. static `fitsBigIntegerToPrimitive`) |
 | `ExpressionChecker` | `TypeChecker` |
 | `PointerNullStateChecker` | `DiagnosticBag` only (deliberately standalone) |
+| `DanglingPointerChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
 | `PointerPermissionChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
 | `Cpp14Codegen` | `OsFfi`, `TargetInfo`, `Symbol`/`Mangler` (mangled names), `SymbolTable.splitNamespacePath` (static) |
 | `SymbolTable` | `DiagnosticBag`, `Symbol`, `SemanticType` |
@@ -178,8 +182,9 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
   `ConstExpressionEvaluator`.
 - `SemanticASTNode.java` — lowered typed AST, produced by
   `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`, consumed by every
-  checker, `PointerNullStateChecker`, `PointerPermissionChecker`,
-  `Cpp14Codegen`, `OsFfi`, `SemanticASTPrinter`.
+  checker, `PointerNullStateChecker`, `DanglingPointerChecker`,
+  `PointerPermissionChecker`, `Cpp14Codegen`, `OsFfi`,
+  `SemanticASTPrinter`.
 - `SemanticType.java` — structural type system (overload resolution, mangling
   keys). Also hosts `PtrPermission` (OWNER/MUTABLE/READ_ONLY), the permission
   lattice shared with the raw AST (`ASTNode.PtrTypeNode.kind`,
@@ -704,6 +709,86 @@ preallocated `PointerState[][]` store), merge back-edge states, and compute
 zero-trip exit states. Reports deref of definitely-NULL as error and
 maybe-null as warning (each pointer warns at most once per check site).
 
+#### `DanglingPointerChecker`
+Return-escape provenance analysis, run after both pruners and after
+`PointerNullStateChecker` (so dead functions/branches and dead returns
+cannot produce diagnostics), deliberately independent of the checker
+cluster (only `DiagnosticBag`, `PointerPermissions`, and the semantic AST).
+It is **return-only and intra-procedural**: each function/method body is
+analyzed separately with a fresh state, and only `return` expressions are
+classified. Passing a pointer to a callee, storing one into a global or
+out-parameter, pointers hidden inside returned structs/arrays, use after
+an inner block, dynamic-array buffer lifetime, and nullness are out of
+scope (nullness stays `PointerNullStateChecker`'s job).
+
+The abstract domain is one immutable origin set per pointer-typed
+variable (locals, parameters, and globals alike), indexed by
+`IdentityHashMap<VariableSymbol, Integer>`:
+
+- `FRAME(s)` — the pointer may refer to symbol `s`'s current-frame slot
+  (a local or parameter);
+- `GLOBAL(s)` — the pointer may refer to global `s`'s storage;
+- `DECAY(sourceType, label)` — the pointer points at a
+  compiler-synthesized static-to-dynamic descriptor in the current frame;
+- `UNKNOWN` — caller-owned/untracked (pointer parameters, call results,
+  `null`, pointer-typed field/element reads).
+
+Merging is set union; `UNKNOWN` is an absorbing boolean that still merges
+with concrete origins. Snapshots store immutable `OriginSet` references,
+so branch/loop snapshots are cheap and never alias mutable state.
+`storageOrigins(expr)` maps an lvalue to the region it occupies
+(variable → `FRAME`/`GLOBAL`; `$(p)` → `valueOrigins(p)`; member/index
+access → its base's storage; cast → its operand). `valueOrigins(expr)`
+maps a pointer value to what it points at: `getptr`/`getmview`/`getview`
+→ `storageOrigins` of the target; a pointer variable → its current state;
+`$(p)` whose result is a pointer → the states of the tracked pointer
+cells in `valueOrigins(p)` (with `UNKNOWN` if any cell is untracked or a
+decay descriptor); `cast<T>(e)` → `valueOrigins(e)` plus a `DECAY` when
+the cast itself is a static-to-dynamic view decay; call results and
+pointer-typed field/element reads → `UNKNOWN`.
+
+Transfer rules mirror `PointerNullStateChecker` structurally, without its
+null-specific guard refinement or branch-depth cap:
+
+- pointer declarations start `UNKNOWN` (pointers are null-initialized and
+  null does not dangle); at function entry every tracked symbol is
+  `UNKNOWN`, including parameters and globals;
+- a direct pointer-variable assignment is a strong update with the RHS
+  origins; a store through `$(d)` strong-updates the single tracked
+  pointer cell `valueOrigins(d)` resolves to; any other pointer-typed
+  store path invalidates all tracked states to `UNKNOWN`;
+- assignments, casts, and returns that are the outermost static-to-dynamic
+  decay add a `DecaySource`, which is what catches
+  `view<[T]> d = staticView; return d;` even though `d`'s type is already
+  dynamic; literal immediate decays are not stack decays (the literal's
+  hoisted global header is the value) and global initializer decays are
+  never analyzed;
+- function calls emit no escape diagnostic, but conservatively forget
+  state: all global pointer states, tracked pointer cells reachable from
+  pointer-typed arguments, and pointer locals whose address was taken by
+  `getptr`/`getmview` become `UNKNOWN`;
+- `if`/`else` analyzes both branches from the pre-branch snapshot and
+  merges only continuing paths; `while` analyzes the body once, replays
+  the update epilogue for normal and `continue` edges, merges zero-trip
+  and back-edge states, then merges `break` snapshots;
+- block-local pointer states are reset to `UNKNOWN` when the block ends.
+
+At a return of pointer type, the checker classifies the value's origins:
+`mayDangle = FRAME non-empty or DECAY non-empty`;
+`definiteDangle = DECAY non-empty or (FRAME non-empty and no UNKNOWN and
+no GLOBAL)`; `possibleDangle = mayDangle and not definiteDangle`.
+A direct decay (the return conversion itself, or a top-level `cast` in
+the return expression) produces the detailed descriptor-lifetime error
+that names the return type, the source value/type, the hidden
+`Franko_Dynamic_Array` local, and both fixes (take `view<[T]>` as the
+parameter, or return `view<[T,N]>` and decay at the caller); it adds a
+global-data clause when the backing storage is global and a local-data
+clause when it is a frame cell. A decay carried by a variable/copy
+produces the short indirect message (with possible source types when
+several sources merged). Decay diagnostics suppress the generic
+local-escape message for that return site. Definite frame escapes are
+errors; possible escapes after a branch merge are warnings.
+
 #### `PointerPermissionChecker`
 The capability linter: run after branch/declaration pruning (so only
 surviving code counts) and before codegen, warnings-only. Per function it
@@ -986,8 +1071,8 @@ type it would have in C++. Consequences:
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
 - Strictly intra-procedural: one analysis per function, state reset at every
   function entry, no facts cross function boundaries (interprocedural
-  nullability is deliberately not attempted). Dangling pointers are not
-  checked.
+  nullability is deliberately not attempted). Dangling pointers are handled
+  separately by the return-only `DanglingPointerChecker` (§4.14).
 - `getptr(x)`/`getmview(x)`/`getview(x)` are the only certifications of
   POINTING; every other value source is MAYBE_NULL unless it is `null` (NULL)
   or a pointer copy.
@@ -1110,10 +1195,14 @@ declarations are emitted as C++ statements immediately before the
 statement — `Franko_Dynamic_Array<T> _TMP_VIEW_k = {N,
 const_cast<T*>(src->data), true};` with the conversion becoming
 `(&_TMP_VIEW_k)`. The header lives in the enclosing scope, so it stays
-valid for the whole statement and everything the callees do with it; a
-converted view must not outlive that scope — past it, it is the ordinary
-untracked dangling-pointer case (returning one is the same class as
-returning `getview` of a local). A loop condition containing a decay is
+valid for the whole statement and everything the callees do with it.
+Returning a non-literal decayed view is rejected by
+`DanglingPointerChecker` (§4.14): the descriptor would be a hidden local
+of the returning function and the caller would receive a view of dead
+stack storage. Literal immediate decays are safe because the literal's
+hoisted dynamic-array header is a constant global, and a returned global
+dynamic view is safe because its descriptor has static lifetime. A loop
+condition containing a decay is
 rewritten to the goto form (`L_top` / declarations / `if (!(cond)) goto
 L_brk` / body / update / `goto L_top` / `L_brk`) so the header is rebuilt
 on every iteration. The `borrowed` flag on `Franko_Dynamic_Array` makes
@@ -1366,6 +1455,76 @@ if several overloads remain it is an ambiguity error.
 array literal (`view<[int32, 4]> G = [1,2,3,4];`); array-typed
 globals may not (memcpy suggestion, §4.10 parity).
 
+## 4.14 Dangling-pointer model (DanglingPointerChecker)
+
+A standalone return-only pass that rejects pointer/view values escaping a
+function while referring to storage owned by that function's frame. It
+runs after `BranchPruner`, `InactiveDeclarationPruner`, and
+`PointerNullStateChecker`, so only surviving code and live functions are
+analyzed.
+
+**Origin lattice.** Each tracked pointer variable holds an immutable
+origin set:
+
+- `FRAME(s)` — may refer to local/parameter `s`'s current-frame slot;
+- `GLOBAL(s)` — may refer to global `s`'s storage;
+- `DECAY(sourceType, label)` — points at a compiler-synthesized
+  static-to-dynamic descriptor in the current frame;
+- `UNKNOWN` — caller-owned/untracked: pointer parameters, call results,
+  `null`, pointer-typed field/element reads.
+
+Merging is union (with `UNKNOWN` an absorbing flag). At function entry
+every tracked symbol — parameters, globals, and locals — starts
+`UNKNOWN`. `storageOrigins` follows lvalue paths: a variable is
+`FRAME`/`GLOBAL`, `$(p)` is `valueOrigins(p)`, member/index access
+inherits its base's storage, and a cast inherits its operand's.
+`valueOrigins` maps pointer values: creation intrinsics use the target's
+storage; pointer variables use their current state; a pointer-typed
+`$(p)` reads the states of the tracked pointer cells `p` may point at
+(any untracked cell or decay descriptor contributes `UNKNOWN`); a cast
+adds a `DECAY` when the cast is itself the static-to-dynamic decay; calls
+and pointer-typed field/element reads are `UNKNOWN`.
+
+**Transfers.** Pointer declarations are `UNKNOWN` (null does not
+dangle). Direct pointer-variable assignment is a strong update;
+`$(d) = value` strong-updates the single tracked pointer cell
+`valueOrigins(d)` resolves to, and any other pointer-typed store path
+invalidates every tracked state. Assignments, casts, and returns that
+perform the outermost static-to-dynamic decay add a `DecaySource`.
+Calls emit no escape diagnostic but forget state: global pointer states,
+tracked cells reachable from pointer-typed arguments, and address-taken
+pointer locals (from `getptr`/`getmview`) become `UNKNOWN`. `if`/`else`
+analyzes both branches from the pre-branch snapshot and merges only
+continuing paths; `while` analyzes the body once, replays the update
+epilogue for normal and `continue` edges, merges zero-trip and back-edge
+states, then merges `break` snapshots. Block-local pointer states reset
+at block end.
+
+**Return classification.** `mayDangle = FRAME non-empty or DECAY
+non-empty`; `definiteDangle = DECAY non-empty or (FRAME non-empty and no
+UNKNOWN and no GLOBAL)`; `possibleDangle = mayDangle and not
+definiteDangle`. A direct decay (the return conversion itself, or a
+top-level `cast` in the return expression) gets the detailed
+descriptor-lifetime error with both suggested fixes; a decay carried by a
+variable/copy gets the short indirect message. Decay diagnostics suppress
+the generic local-escape message for the same return site. Definite frame
+escapes are errors; possible escapes after a branch merge are warnings.
+
+**Safe returns.** Pointer parameters and `getptr($(p))` over a pointer
+parameter are caller-owned (`UNKNOWN`); `getptr(G)` is global; literal
+array/string values (including immediate literal decay) point at hoisted
+constant globals; an existing global dynamic view is `UNKNOWN`; and a
+local pointer reassigned to a global address before the return carries
+only `GLOBAL`. Global initializer decays are never analyzed: global
+declarations are not function bodies and their descriptors have static
+lifetime.
+
+**v1 limitations.** No interprocedural escape facts, no global/
+out-parameter store escapes, no pointers hidden inside returned
+aggregates, no use-after-block detection, no dynamic-array buffer
+lifetime across `resize`/`uninit`, and loops are analyzed once rather
+than to a fixed point.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -1404,7 +1563,8 @@ uv run python library_tests/run_library_tests.py
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
-| Track new dataflow facts | `PointerNullStateChecker` (or a new standalone checker invoked from `Main`) |
+| Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker` (or a new standalone checker invoked from `Main`) |
+| Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker` |
 | Emit new C++ constructs | `Cpp14Codegen` (+ `SemanticASTNode`/`SemanticType` as needed) |
 | Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ExpressionChecker` validation + `Cpp14Codegen` emission |
 | Add an os FFI call | `import/franko/os.fr` + `os.ffi.cpp` block + `OsFfi` signatures |

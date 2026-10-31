@@ -192,6 +192,21 @@ public class Main {
             }
         }
 
+        System.out.println("==== Dangling Pointer Checking ====");
+        DiagnosticBag danglingDiagnostics =
+                new DiagnosticBag("Dangling pointer checking failed:");
+        DanglingPointerChecker danglingChecker =
+                new DanglingPointerChecker(danglingDiagnostics);
+        danglingChecker.check(semaAST);
+
+        if (danglingDiagnostics.hasWarnings()) {
+            System.out.println("==== Dangling Pointer Warnings ====");
+
+            for (String warning : danglingDiagnostics.getWarnings()) {
+                System.out.println("  - " + warning);
+            }
+        }
+
         System.out.println("==== Pointer Permission Linting ====");
         DiagnosticBag permissionDiagnostics =
                 new DiagnosticBag("Pointer permission linting failed:");

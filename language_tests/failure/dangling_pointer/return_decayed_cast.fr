@@ -1,0 +1,9 @@
+func bad(view<[int32, 4]> m) -> view<[int32]> {
+    return cast<view<[int32]>>(m)
+}
+
+func main() -> int32 {
+    [int32, 4] xs
+    bad(getview(xs))
+    return 0
+}
