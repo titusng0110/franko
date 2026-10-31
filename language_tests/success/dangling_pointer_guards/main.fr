@@ -1,0 +1,92 @@
+[int32, 4] G
+
+func null_branch_is_safe(uint32 pick) -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p
+    if (pick != 0) {
+        p = getptr(x)
+    } else {
+        p = null
+    }
+    if (p == null) {
+        return p
+    }
+    p = getptr(G[0])
+    return p
+}
+
+func infeasible_branch_is_ignored() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    if (p == null) {
+        return p
+    }
+    p = null
+    return p
+}
+
+func null_guard_is_infeasible() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p
+    ptr<int32> q = p
+    if (q != null) {
+        if (x != 0) {
+            x = 1
+        }
+        return getptr(x)
+    }
+    return q
+}
+
+func loop_exit_is_null() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    while (p != null) {
+        p = null
+    }
+    return p
+}
+
+func null_loop_is_infeasible() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p
+    while (p != null) {
+        if (x != 0) {
+            x = 1
+        }
+        return getptr(x)
+    }
+    return p
+}
+
+func caller_owned_getptr_is_nonnull(ptr<int32> q) -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr($(q))
+    if (p == null) {
+        return getptr(x)
+    }
+    return null
+}
+
+func infeasible_else_drops_frame() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    if (p != null) {
+        p = null
+    } else {
+        x = 1
+    }
+    return p
+}
+
+func main() -> int32 {
+    int32 z = 0
+    ptr<int32> a = null_branch_is_safe(0)
+    ptr<int32> b = infeasible_branch_is_ignored()
+    ptr<int32> c = loop_exit_is_null()
+    ptr<int32> d = null_guard_is_infeasible()
+    ptr<int32> e = null_loop_is_infeasible()
+    ptr<int32> f = caller_owned_getptr_is_nonnull(getptr(z))
+    ptr<int32> g = infeasible_else_drops_frame()
+    return 0
+}
