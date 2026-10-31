@@ -1,0 +1,17 @@
+[int32, 4] G
+
+func maybe(uint32 pick) -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p
+    if (pick != 0) {
+        p = getptr(x)
+    } else {
+        p = getptr(G[0])
+    }
+    return p
+}
+
+func main() -> int32 {
+    ptr<int32> p = maybe(0)
+    return 0
+}

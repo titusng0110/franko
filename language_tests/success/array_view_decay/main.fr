@@ -22,10 +22,6 @@ func take_mview(mview<[int32]> m) -> uint32 {
     return $(m).length();
 }
 
-func ret_decay(mview<[int32, 4]> m) -> view<[int32]> {
-    return m;
-}
-
 func f(view<[int32, 4]> x) -> int32 {
     return $(x)[0] - 9;
 }
@@ -67,10 +63,10 @@ func main() -> int32 {
     print(take_view(m));
     print(take_view(v));
 
-    // return conversion: a converted view must not outlive its scope (the
-    // same untracked dangling class as returning getview of a local), so
-    // the call result is intentionally not consumed here
-    ret_decay(getmview(xs));
+    // return conversion of a non-literal decayed view is rejected by
+    // DanglingPointerChecker (see failure/dangling_pointer/
+    // return_decayed_parameter.fr); this fixture only covers the
+    // argument and assignment conversions that remain safe here.
 
     // explicit casts, including combos
     view<[int32]> c = cast<view<[int32]>>(getview(xs));

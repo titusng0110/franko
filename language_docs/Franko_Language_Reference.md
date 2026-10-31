@@ -10,6 +10,7 @@ Franko source
   -> SemanticAnalyzer
   -> LegalityChecker (declarations, expressions, statements, functions, types)
   -> PointerNullStateChecker
+  -> DanglingPointerChecker
   -> C++14 code generation
 ```
 
@@ -3044,16 +3045,59 @@ result: `.init`, `.init_zero`, `.resize`, and `.uninit` are forbidden on
 decays), so the storage behind the converted view is never reallocated
 or freed through it. The conversion is allowed in the same positions as
 permission downgrades: assignment, return values, and function arguments.
-Comparing pointers still requires identical pointer types. Like every
-pointer in Franko, a converted view must not outlive the scope it was
-created in — a view that escapes past it (returned, or stored into
-longer-lived storage) is the usual untracked dangling-pointer case of
-[Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations),
-exactly as if it had been created there with `getview`. Literals are the
-exception: when the decay applies directly to an array or string literal
-in one of those positions, the converted view is itself a hoisted constant
-global, so returning or keeping it is always safe (see
-[Array Literals](22-array-literals.md)).
+Comparing pointers still requires identical pointer types.
+
+A decayed view is backed by a hidden `Franko_Dynamic_Array` descriptor
+(count, data pointer, and a borrowed flag) that the compiler creates in
+the **current function's stack frame**. The descriptor survives for the
+whole statement and for everything the callees do with it, but it dies
+when that function returns. A non-literal converted view must therefore
+not be returned from the function that performs the decay: the caller
+would receive a view pointing at a dead stack descriptor.
+`DanglingPointerChecker` rejects that case:
+
+```franko
+func bad(view<[int32, 4]> m) -> view<[int32]> {
+    return m;                    // error: decayed view escapes 'bad'
+}
+```
+
+There are two correct ways to structure such a function:
+
+- If the function only consumes the array through a dynamic view, take
+  `view<[T]>` as the parameter and let the **caller** perform the decay.
+  The descriptor then lives in the caller's frame and survives the call:
+
+  ```franko
+  func consume(view<[int32]> v) -> uint32 {
+      return $(v).length();
+  }
+
+  [int32, 4] xs;
+  print(consume(getview(xs)));   // decay happens in the caller
+  ```
+
+- If the function must return a view of the static array, keep the static
+  return type and let the caller decay the result:
+
+  ```franko
+  func pass(view<[int32, 4]> m) -> view<[int32, 4]> {
+      return m;
+  }
+
+  [int32, 4] xs;
+  view<[int32]> v = pass(getview(xs));   // decay happens in the caller
+  ```
+
+Literals are the exception: when the decay applies directly to an array or
+string literal in an assignment, return, argument, or global initializer,
+the converted view points at a hoisted constant global descriptor, so
+returning or keeping it is always safe (see
+[Array Literals](22-array-literals.md)). An existing global dynamic view
+is likewise safe to return: its descriptor has static lifetime. The
+restriction applies to decays of non-literal **local** static views,
+including a decay that happens at the `return` itself or inside an
+explicit `cast`.
 
 ## 24.5 Pointer Comparison
 
@@ -3234,8 +3278,11 @@ Assignment from another pointer variable copies that variable's exact state, so 
 Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
 The analysis is **intra-procedural**: no nullness facts cross function
-boundaries (a returned pointer is always maybe-null at the call site),
-and dangling pointers are not checked.
+boundaries (a returned pointer is always maybe-null at the call site).
+Dangling pointers are checked separately, and only for values escaping a
+function through `return` (see
+[Pointer Lifetime Limitations](#2411-pointer-lifetime-limitations) and
+[Memory Safety Checking](27-memory-safety-checking.md)).
 
 ### 24.9.3 Dereferencing and Warnings
 
@@ -3290,9 +3337,35 @@ memory corruption.
 
 ## 24.11 Pointer Lifetime Limitations
 
-Pointer lifetime is not fully tracked.
+Pointer lifetime is not fully tracked, but the compiler does detect one
+important class of dangling pointers: a pointer/view returned from a
+function while it refers to that function's own stack storage.
 
-The compiler does not fully track dangling pointers or aliasing through pointers. A pointer may outlive its pointee, and the compiler does not detect that case at compile time; a runtime check for this is planned as a later change.
+`DanglingPointerChecker` rejects a `return` of:
+
+- a pointer to a local variable, a parameter, or any field/element of
+  one, including through pointer copies, `$(...)` aliases, and branch
+  merges;
+- a non-literal static-array view decayed to a dynamic-array view, because
+  the hidden descriptor lives in the returning function's frame.
+
+A return that only *may* refer to local storage after a branch merge is a
+warning; a definite escape is an error. Safe returns include pointer
+parameters, pointers obtained from global storage or from
+`getptr($(pointerParameter))`, literal-backed views, and existing global
+dynamic views.
+
+What remains untracked:
+
+- pointers escaping through function calls (out-parameters, globals, or
+  return values of other functions);
+- pointers hidden inside returned structs or arrays;
+- use of a pointer after the block that owns its pointee ends, but before
+  the function returns;
+- dynamic-array buffer lifetime across `resize`/`uninit`;
+- aliasing and interprocedural ownership in general.
+
+A runtime check for the remaining cases is planned as a later change.
 
 ---
 
@@ -3695,11 +3768,18 @@ The 8-hex-digit suffix is the FNV-1a 32-bit hash of the canonical signature key 
 
 # 27. Memory Safety Checking
 
-After legality checking, the compiler runs a dedicated **pointer null-state pass** (`PointerNullStateChecker`) over pointer-typed variables (`ptr`, `mview`, and `view` alike).
+After legality checking, the compiler runs two dedicated pointer passes:
+the **pointer null-state pass** (`PointerNullStateChecker`) and the
+**dangling-pointer pass** (`DanglingPointerChecker`). Both cover all three
+pointer types (`ptr`, `mview`, and `view`).
 
-The pass tracks one fact per pointer variable: whether it is definitely null, definitely pointing, or possibly null on the current execution path.
+The null-state pass tracks one fact per pointer variable: whether it is
+definitely null, definitely pointing, or possibly null on the current
+execution path. The dangling-pointer pass tracks where a returned
+pointer's storage lives (see
+[Dangling-Pointer Checking](#279-dangling-pointer-checking)).
 
-It checks:
+The null-state pass checks:
 
 - dereferencing a null pointer (an error);
 - dereferencing a possibly-null pointer (a warning);
@@ -3781,20 +3861,133 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 
 ## 27.7 Limitations
 
-Current limitations of the pointer checker:
+Current limitations of the pointer null-state checker:
 
 - values of unknown provenance (call results, parameters, field and element reads) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain pointer **variables** are tracked. An pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
-- dangling pointers are not detected at compile time; an pointer may outlive its pointee, and the compiler does not detect that case. A runtime check is planned as a later change;
+- only plain pointer **variables** are tracked. A pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
+- dangling pointers are only detected for values escaping a function by `return`; a pointer may still outlive its pointee through calls, globals, aggregates, or block exits (see [Dangling-Pointer Checking](#279-dangling-pointer-checking));
 - checks are intra-procedural; pointer effects of called functions are not analyzed;
 - branch-path sensitivity is capped by the nesting-depth limit described above.
 
 ## 27.8 Capability Linting
 
-A second, independent pass (`PointerPermissionChecker`) warns when a
+A third, independent pass (`PointerPermissionChecker`) warns when a
 `ptr`/`mview` local variable or parameter requests permissions it never
 exercises, so developers default to the tightest pointer that fits. See
 the "Capability Linter" section of [Pointers](24-pointers.md).
+
+## 27.9 Dangling-Pointer Checking
+
+`DanglingPointerChecker` runs after branch/declaration pruning and after
+the null-state pass. It is **return-only** and **intra-procedural**: each
+function or method body is analyzed separately, and only `return`
+expressions are classified. Dead functions and pruned branches therefore
+cannot produce diagnostics.
+
+### 27.9.1 Tracked Origins
+
+For every pointer-typed variable (local, parameter, or global), the pass
+tracks an immutable set of possible storage origins:
+
+| Origin | Meaning |
+|---|---|
+| frame | the pointer may refer to a local variable's or parameter's current-frame slot |
+| global | the pointer may refer to a global variable's storage |
+| decay | the pointer points at a hidden static-to-dynamic descriptor in the current frame |
+| unknown | caller-owned or untracked: parameters, call results, `null`, pointer-typed field/element reads |
+
+Origins flow through assignments and pointer copies, through `$(...)`
+aliases when the dereferenced pointer targets a tracked pointer variable,
+and through `getptr`/`getmview`/`getview` of lvalues:
+
+```franko
+int32 x
+ptr<int32> p = getptr(x)       // p -> frame(x)
+ptr<int32> q = p                // q -> frame(x)
+return q                        // error: x dies with the frame
+```
+
+Taking the address of a pointer parameter or dereferencing a pointer
+parameter is caller-owned and safe to return:
+
+```franko
+func ok(ptr<int32> p) -> ptr<int32> {
+    return getptr($(p));       // points at the caller's storage
+}
+```
+
+At function entry every tracked variable starts as `unknown`, so pointer
+parameters and globals are never assumed to point into the current frame.
+
+### 27.9.2 The Return Rule
+
+At a pointer-typed `return`, the pass classifies the value's origins:
+
+- any decay origin → **error** (the descriptor is always stack-local);
+- frame origins with no `unknown` and no `global` alternative →
+  **error** (definitely dangling);
+- frame origins mixed with caller-owned/global alternatives → **warning**
+  (possibly dangling after a branch merge).
+
+The diagnostic names the local variable or parameter:
+
+```text
+Returning a pointer to local variable 'x' from function 'bad' (dangling after return)
+Returning a pointer to parameter 'x' from function 'bad' (dangling after return)
+Returning a pointer that may refer to local variable 'x' from function 'maybe' (possibly dangling after return)
+```
+
+### 27.9.3 Decayed Views
+
+A static-to-dynamic array view decay synthesizes a hidden
+`Franko_Dynamic_Array` descriptor in the current stack frame. Returning a
+non-literal decayed view is always an error, even when the array data is
+global or the decay comes from a branch merge:
+
+```franko
+func bad(view<[int32, 4]> m) -> view<[int32]> {
+    return m;                    // error: descriptor dies with 'bad'
+}
+```
+
+The direct form (the decay happens at the `return` or in a top-level
+`cast`) gets a detailed message explaining the descriptor lifetime and
+two fixes:
+
+- take `view<[T]>` as the parameter and let the caller decay at the call
+  site, then consume the view without returning it;
+- return `view<[T,N]>` and let the caller perform the decay on the result.
+
+A decay already carried by a variable or copy gets a shorter message:
+
+```franko
+func bad(view<[int32, 4]> m) -> view<[int32]> {
+    view<[int32]> d = m;
+    return d;                    // error: 'd' holds a decayed view
+}
+```
+
+Literal-backed views are safe: an array or string literal that decays
+immediately points at a hoisted constant global descriptor, not at a
+stack temporary. Existing global dynamic views are safe for the same
+reason. Global initializers are never analyzed as function bodies.
+
+### 27.9.4 Limitations
+
+The pass intentionally does not detect:
+
+- pointers escaping through function calls, out-parameters, or stores into
+  globals;
+- pointers hidden inside returned structs or arrays;
+- use after an inner block ends but before the function returns;
+- dynamic-array buffer invalidation after `resize`/`uninit`;
+- interprocedural ownership or lifetime facts;
+- loop fixed points (the body is analyzed once, so loop-carried state is
+  merged conservatively).
+
+Calls do conservatively forget state, so later diagnostics do not assume a
+callee left pointer variables untouched. None of these cases produce a
+false positive, but they can produce false negatives.
 
 ---
 
@@ -4009,7 +4202,12 @@ The checker validates intrinsic legality, but it does not fully prove dynamic ar
 
 ## 30.10 Pointer Lifetime Is Not Fully Tracked
 
-The compiler does not fully track dangling pointers or ownership.
+The compiler does not fully track dangling pointers or ownership. One
+class is now detected: returning a pointer to the current function's own
+frame storage, including a non-literal static-to-dynamic decayed view.
+Escapes through calls, globals, out-parameters, and returned aggregates
+remain untracked. See
+[Dangling-Pointer Checking](27-memory-safety-checking.md#279-dangling-pointer-checking).
 
 ## 30.11 Output Is a Library Function
 

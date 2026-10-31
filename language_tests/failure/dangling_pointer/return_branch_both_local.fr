@@ -1,0 +1,16 @@
+func bad(uint32 pick) -> ptr<int32> {
+    int32 x = 0
+    int32 y = 0
+    ptr<int32> p
+    if (pick != 0) {
+        p = getptr(x)
+    } else {
+        p = getptr(y)
+    }
+    return p
+}
+
+func main() -> int32 {
+    ptr<int32> p = bad(0)
+    return 0
+}

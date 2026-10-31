@@ -1,0 +1,3 @@
+Cannot return a decayed array view from function
+variable 'e' holds a value produced by decaying
+return the static view type instead

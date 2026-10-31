@@ -1,0 +1,11 @@
+[int32, 4] G
+
+func bad() -> view<[int32]> {
+    view<[int32, 4]> v = getview(G)
+    return v
+}
+
+func main() -> int32 {
+    bad()
+    return 0
+}

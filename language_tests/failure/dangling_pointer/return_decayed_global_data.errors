@@ -1,0 +1,3 @@
+Cannot return a decayed array view from function
+The array data itself is global ('G')
+does not keep the descriptor alive

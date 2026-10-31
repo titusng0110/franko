@@ -1,0 +1,3 @@
+Returning a pointer to local variable 'xs'
+from function 'bad'
+dangling after return

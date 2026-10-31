@@ -1,0 +1,11 @@
+func bad() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    ptr<int32> q = p
+    return q
+}
+
+func main() -> int32 {
+    ptr<int32> p = bad()
+    return 0
+}
