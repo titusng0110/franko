@@ -1,20 +1,12 @@
 # Franko Language Reference
 
-This document describes the Franko language as implemented by the current compiler pipeline:
+This document describes the Franko language: its types, declarations,
+statements, expressions, pointer rules, arrays, structs, methods, and
+standard modules. It is written for Franko programmers.
 
-```text
-Franko source
-  -> lexer + parser
-  -> parser AST
-  -> Desugarer
-  -> SemanticAnalyzer
-  -> LegalityChecker (declarations, expressions, statements, functions, types)
-  -> PointerNullStateChecker
-  -> DanglingPointerChecker
-  -> C++14 code generation
-```
-
-It documents both intended language behavior and important current implementation restrictions.
+Compiler architecture, code generation, runtime representation, and
+checker internals are documented separately in
+[Compiler Internals](../compiler_docs.md).
 
 ---
 

@@ -1,0 +1,9 @@
+// Runtime fixture: arrays/static_index_nonconst_oob
+// A nonconstant index into a raw static array is still bounds-checked
+// (franko_static_array_at) in ASan and -O builds.
+func main() -> int32 {
+    [int32, 3] xs
+    uint32 i = 5
+    xs[i] = 1
+    return 0
+}

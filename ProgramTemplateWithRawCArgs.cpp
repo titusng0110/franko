@@ -21,5 +21,6 @@ int main(int argc, char** argv)
         }
     }
 
-    return FUNC_main_HASH_747cdf98(&frankoArgs);
+    return FUNC_main_HASH_747cdf98(
+            franko_make_dynamic_fat_pointer(&frankoArgs));
 }

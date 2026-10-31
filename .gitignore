@@ -48,3 +48,9 @@ benchmark/**/*.compile.log
 **/*.asan.testbin
 **/*.asan.actual
 **/*.asan.compile.log
+
+# -Omax smoke artifacts (language_tests/run_omax_smoke.py).
+language_tests/**/*.omax.cpp
+language_tests/**/*.omax.bin
+language_tests/**/*.omax.actual
+language_tests/**/*.omax.compile.log

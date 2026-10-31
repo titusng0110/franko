@@ -1,5 +1,5 @@
 // uninit() through a decayed view is blocked twice over: the view region
-// is read-only, and the borrowed descriptor must never be freed anyway.
+// is read-only, and the decayed type never gains lifecycle permission.
 func main() -> int32 {
     [[int32], 2] g;
     g[0].init(2);

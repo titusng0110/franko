@@ -8,52 +8,24 @@ import java.util.Objects;
 import java.util.Set;
 
 public final class DanglingPointerChecker {
-    private static final class DecaySource {
-        final SemanticType sourceType;
-        final String label;
-
-        DecaySource(SemanticType sourceType, String label) {
-            this.sourceType = Objects.requireNonNull(sourceType);
-            this.label = Objects.requireNonNull(label);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (!(obj instanceof DecaySource other)) {
-                return false;
-            }
-
-            return sourceType.equals(other.sourceType)
-                    && label.equals(other.label);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(sourceType, label);
-        }
-    }
-
     private static final class OriginSet {
         static final OriginSet EMPTY =
-                new OriginSet(Set.of(), Set.of(), Set.of(), false);
+                new OriginSet(Set.of(), Set.of(), false);
 
         static final OriginSet UNKNOWN =
-                new OriginSet(Set.of(), Set.of(), Set.of(), true);
+                new OriginSet(Set.of(), Set.of(), true);
 
         final Set<VariableSymbol> frameCells;
         final Set<VariableSymbol> globalCells;
-        final Set<DecaySource> decaySources;
         final boolean unknown;
 
         private OriginSet(
                 Set<VariableSymbol> frameCells,
                 Set<VariableSymbol> globalCells,
-                Set<DecaySource> decaySources,
                 boolean unknown
         ) {
             this.frameCells = frameCells;
             this.globalCells = globalCells;
-            this.decaySources = decaySources;
             this.unknown = unknown;
         }
 
@@ -65,19 +37,14 @@ public final class DanglingPointerChecker {
             return EMPTY.withGlobalCell(symbol);
         }
 
-        boolean hasDecay() {
-            return !decaySources.isEmpty();
-        }
-
         boolean mayDangle() {
-            return !frameCells.isEmpty() || !decaySources.isEmpty();
+            return !frameCells.isEmpty();
         }
 
         boolean definiteDangle() {
-            return !decaySources.isEmpty()
-                    || (!frameCells.isEmpty()
-                        && !unknown
-                        && globalCells.isEmpty());
+            return !frameCells.isEmpty()
+                    && !unknown
+                    && globalCells.isEmpty();
         }
 
         boolean possibleDangle() {
@@ -95,7 +62,6 @@ public final class DanglingPointerChecker {
             return new OriginSet(
                     Set.copyOf(next),
                     globalCells,
-                    decaySources,
                     unknown
             );
         }
@@ -111,25 +77,6 @@ public final class DanglingPointerChecker {
             return new OriginSet(
                     frameCells,
                     Set.copyOf(next),
-                    decaySources,
-                    unknown
-            );
-        }
-
-        OriginSet withDecay(SemanticType sourceType, String label) {
-            DecaySource source = new DecaySource(sourceType, label);
-
-            if (decaySources.contains(source)) {
-                return this;
-            }
-
-            Set<DecaySource> next = new LinkedHashSet<>(decaySources);
-            next.add(source);
-
-            return new OriginSet(
-                    frameCells,
-                    globalCells,
-                    Set.copyOf(next),
                     unknown
             );
         }
@@ -142,7 +89,6 @@ public final class DanglingPointerChecker {
             return new OriginSet(
                     frameCells,
                     globalCells,
-                    decaySources,
                     true
             );
         }
@@ -162,13 +108,9 @@ public final class DanglingPointerChecker {
             Set<VariableSymbol> global = new LinkedHashSet<>(globalCells);
             global.addAll(other.globalCells);
 
-            Set<DecaySource> decay = new LinkedHashSet<>(decaySources);
-            decay.addAll(other.decaySources);
-
             return new OriginSet(
                     Set.copyOf(frame),
                     Set.copyOf(global),
-                    Set.copyOf(decay),
                     unknown || other.unknown
             );
         }
@@ -593,15 +535,6 @@ public final class DanglingPointerChecker {
 
         OriginSet value = valueOrigins(node.value);
 
-        if (PointerPermissions.isStaticArrayViewDecay(
-                node.value.type,
-                node.target.type)) {
-            value = value.withDecay(
-                    node.value.type,
-                    describeExpr(node.value)
-            );
-        }
-
         applyPointerStore(node.target, value);
     }
 
@@ -743,38 +676,6 @@ public final class DanglingPointerChecker {
 
         OriginSet origins = valueOrigins(node.value);
 
-        DecaySource directDecay = directDecaySource(node.value);
-
-        boolean implicitReturnDecay =
-                PointerPermissions.isStaticArrayViewDecay(
-                        node.value.type,
-                        node.function.returnType()
-                );
-
-        if (implicitReturnDecay) {
-            origins = origins.withDecay(
-                    node.value.type,
-                    describeExpr(node.value)
-            );
-
-            if (directDecay == null) {
-                directDecay = new DecaySource(
-                        node.value.type,
-                        describeExpr(node.value)
-                );
-            }
-        }
-
-        if (origins.hasDecay()) {
-            if (directDecay != null) {
-                reportDecayEscape(node, directDecay, origins);
-            } else {
-                reportIndirectDecayEscape(node, origins);
-            }
-
-            return true;
-        }
-
         if (origins.definiteDangle()) {
             diagnostics.error(
                     "Returning a pointer to "
@@ -794,128 +695,6 @@ public final class DanglingPointerChecker {
         }
 
         return true;
-    }
-
-    private void reportDecayEscape(
-            SemanticReturnNode node,
-            DecaySource source,
-            OriginSet origins
-    ) {
-        String functionName = functionDisplayName(node.function);
-        String returnType = node.function.returnType().describe();
-        String sourceType = source.sourceType.describe();
-
-        StringBuilder message = new StringBuilder();
-
-        message.append("Cannot return a decayed array view from function '")
-                .append(functionName)
-                .append("': the return type '")
-                .append(returnType)
-                .append("' needs a hidden dynamic-array descriptor, but the value '")
-                .append(source.label)
-                .append("' has type '")
-                .append(sourceType)
-                .append("' and points directly at static array storage. "
-                        + "The compiler creates that descriptor as a hidden local "
-                        + "(Franko_Dynamic_Array) in the stack frame of '")
-                .append(functionName)
-                .append("'; it is destroyed when '")
-                .append(functionName)
-                .append("' returns, so the caller receives a view pointing to "
-                        + "dead stack storage. Did you mean to take '")
-                .append(returnType)
-                .append("' as the parameter instead, so the caller performs the "
-                        + "decay at the call site and the function only consumes "
-                        + "the view? If the function must return a view of the "
-                        + "static array, return '")
-                .append(sourceType)
-                .append("' and let the caller decay the result. A literal-backed "
-                        + "view or an existing global dynamic view is also safe "
-                        + "to return.");
-
-        if (!origins.globalCells.isEmpty()) {
-            message.append(" The array data itself is global (")
-                    .append(quoteList(sortedNames(origins.globalCells)))
-                    .append("), but the returned view points at the stack "
-                            + "descriptor, not at that global data; making the "
-                            + "data global does not keep the descriptor alive.");
-        }
-
-        if (!origins.frameCells.isEmpty()) {
-            message.append(" The descriptor's data also points into ")
-                    .append(formatLocalOrigins(origins.frameCells))
-                    .append(origins.frameCells.size() == 1
-                            ? ", which dies at the same return."
-                            : ", which die at the same return.");
-        }
-
-        diagnostics.error(message.toString());
-    }
-
-    private void reportIndirectDecayEscape(
-            SemanticReturnNode node,
-            OriginSet origins
-    ) {
-        String functionName = functionDisplayName(node.function);
-
-        List<String> sourceTypes = new ArrayList<>();
-
-        for (DecaySource source : origins.decaySources) {
-            String described = source.sourceType.describe();
-
-            if (!sourceTypes.contains(described)) {
-                sourceTypes.add(described);
-            }
-        }
-
-        Collections.sort(sourceTypes);
-
-        String subject = node.value instanceof SemanticVarExprNode
-                ? "variable '" + describeExpr(node.value) + "'"
-                : "value '" + describeExpr(node.value) + "'";
-
-        StringBuilder message = new StringBuilder();
-
-        message.append("Cannot return a decayed array view from function '")
-                .append(functionName)
-                .append("': ")
-                .append(subject);
-
-        if (origins.decaySources.size() == 1) {
-            message.append(" holds a value produced by decaying a static "
-                    + "array view.");
-        } else {
-            message.append(" may hold a value produced by decaying a static "
-                    + "array view (possible source types: ")
-                    .append(quoteList(sourceTypes))
-                    .append(").");
-        }
-
-        message.append(" The decay descriptor is local to '")
-                .append(functionName)
-                .append("' and dies when '")
-                .append(functionName)
-                .append("' returns. To fix this, return the static view type "
-                        + "instead and let the caller perform the decay.");
-
-        diagnostics.error(message.toString());
-    }
-
-    private DecaySource directDecaySource(SemanticExprNode value) {
-        if (!(value instanceof SemanticCastExprNode cast)) {
-            return null;
-        }
-
-        if (PointerPermissions.isStaticArrayViewDecay(
-                cast.expr.type,
-                cast.type)) {
-            return new DecaySource(
-                    cast.expr.type,
-                    describeExpr(cast.expr)
-            );
-        }
-
-        return directDecaySource(cast.expr);
     }
 
     private OriginSet storageOrigins(SemanticExprNode expr) {
@@ -976,18 +755,7 @@ public final class DanglingPointerChecker {
         }
 
         if (expr instanceof SemanticCastExprNode n) {
-            OriginSet origins = valueOrigins(n.expr);
-
-            if (PointerPermissions.isStaticArrayViewDecay(
-                    n.expr.type,
-                    n.type)) {
-                origins = origins.withDecay(
-                        n.expr.type,
-                        describeExpr(n.expr)
-                );
-            }
-
-            return origins;
+            return valueOrigins(n.expr);
         }
 
         if (expr instanceof SemanticFunctionCallNode) {
@@ -1013,10 +781,6 @@ public final class DanglingPointerChecker {
         OriginSet result = cells.unknown
                 ? OriginSet.UNKNOWN
                 : OriginSet.EMPTY;
-
-        if (!cells.decaySources.isEmpty()) {
-            result = result.withUnknown();
-        }
 
         for (VariableSymbol cell : cells.frameCells) {
             result = result.union(readPointerCell(cell));
@@ -1073,9 +837,7 @@ public final class DanglingPointerChecker {
     }
 
     private VariableSymbol exactlyOneTrackedPointerCell(OriginSet cells) {
-        if (cells == null
-                || cells.unknown
-                || !cells.decaySources.isEmpty()) {
+        if (cells == null || cells.unknown) {
             return null;
         }
 
@@ -1426,18 +1188,6 @@ public final class DanglingPointerChecker {
         return String.join(" and ", parts);
     }
 
-    private List<String> sortedNames(Set<VariableSymbol> symbols) {
-        List<String> names = new ArrayList<>();
-
-        for (VariableSymbol symbol : symbols) {
-            names.add(symbol.qualifiedName());
-        }
-
-        Collections.sort(names);
-
-        return names;
-    }
-
     private String quoteList(List<String> values) {
         StringBuilder sb = new StringBuilder();
 
@@ -1450,60 +1200,5 @@ public final class DanglingPointerChecker {
         }
 
         return sb.toString();
-    }
-
-    private String describeExpr(SemanticExprNode expr) {
-        if (expr == null) {
-            return "<expression>";
-        }
-
-        if (expr instanceof SemanticVarExprNode n) {
-            return n.symbol.qualifiedName();
-        }
-
-        if (expr instanceof SemanticGetPtrNode n) {
-            PtrPermission permission =
-                    PointerPermissions.pointerPermission(n.type);
-
-            return PointerPermissions.creationIntrinsic(permission)
-                    + "("
-                    + describeExpr(n.target)
-                    + ")";
-        }
-
-        if (expr instanceof SemanticDerefNode n) {
-            return "$(" + describeExpr(n.expr) + ")";
-        }
-
-        if (expr instanceof SemanticMemberAccessNode n) {
-            return describeExpr(n.target) + "." + n.field.name;
-        }
-
-        if (expr instanceof SemanticArrayAccessNode n) {
-            return describeExpr(n.target) + "[" + describeExpr(n.index) + "]";
-        }
-
-        if (expr instanceof SemanticCastExprNode n) {
-            return (n.checked ? "unsafe_cast" : "cast")
-                    + "<"
-                    + n.type.describe()
-                    + ">("
-                    + describeExpr(n.expr)
-                    + ")";
-        }
-
-        if (expr instanceof SemanticNullLiteralNode) {
-            return "null";
-        }
-
-        if (expr instanceof SemanticIntLiteralNode n) {
-            return n.rawValue;
-        }
-
-        if (expr instanceof SemanticFunctionCallNode n) {
-            return n.function.name + "(...)";
-        }
-
-        return "<expression>";
     }
 }

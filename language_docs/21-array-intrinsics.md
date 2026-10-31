@@ -171,7 +171,7 @@ Current trivial types:
 
 ## 21.7 `memcpy`
 
-Copies array contents byte-wise according to the generated C++ array model.
+Copies array contents byte-wise.
 
 Forms:
 

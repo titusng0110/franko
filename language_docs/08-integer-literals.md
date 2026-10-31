@@ -1,6 +1,6 @@
 # 8. Integer Literals
 
-Integer literals are represented internally as arbitrary-precision `BigInteger` values before contextual type checking.
+Integer literals are evaluated with arbitrary precision before contextual type checking; no intermediate literal arithmetic overflows.
 
 Supported literal forms:
 
@@ -34,6 +34,6 @@ There is no unary `+` operator and no `+123` literal form:
 +123    // invalid: parsed as an unmatched '+' token
 ```
 
-There is no documented octal literal syntax. Decimal literals with leading zeros (for example `075`) are currently passed to the C++14 backend verbatim, where they may be interpreted as octal by the C++ compiler; avoid leading zeros in decimal literals.
-
-The backend emits very large decimal literals with a trailing `ULL` suffix so they remain well-formed C++14 (see [Compiler Internals](../compiler_docs.md)).
+There is no octal literal syntax. Write decimal literals without
+leading zeros: `075` is not an octal escape hatch and its meaning is not
+portable.

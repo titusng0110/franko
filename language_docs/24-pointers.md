@@ -3,14 +3,16 @@
 Franko has a capability-based pointer system with three pointer types,
 representing strict levels of permission:
 
-| Type | Meaning | C++ Emission | Allowed Operations |
-|---|---|---|---|
-| `ptr<T>` | Owner | `T*` | Read, Write, Allocate, Free |
-| `mview<T>` | Writer | `T*` | Read, Write |
-| `view<T>` | Reader | `const T*` | Read Only |
+| Type | Meaning | Allowed Operations |
+|---|---|---|
+| `ptr<T>` | Owner | Read, Write, Allocate, Free |
+| `mview<T>` | Writer | Read, Write |
+| `view<T>` | Reader | Read Only |
 
-(`ptr` = pointer, `mview` = mutable view, `view` = view.) All three are
-thin pointers; the permissions are enforced entirely at compile time.
+(`ptr` = pointer, `mview` = mutable view, `view` = view.) The three
+types differ only in the permissions they grant; no pointer owns its
+pointee automatically, and no pointer is tied to the lifetime of the
+storage it refers to.
 
 A pointer value refers to a storage location containing a value of type `T`.
 
@@ -111,7 +113,7 @@ A pointer to a **static** array implicitly converts to a pointer to a
 - `T` may itself be a static or dynamic array, but only the **outermost**
   dimension decays: `view<[[int32, 2], 3]>` converts to
   `view<[[int32, 2]]>`, never to `view<[[int32]]>`
-  (element layouts must stay identical behind the one thin pointer);
+  (the element layout viewed through the two types must stay identical);
 - the reverse direction is invalid, and ownership never decays:
   `ptr<[T, N]>` cannot convert to `ptr<[T]>`.
 
@@ -133,57 +135,19 @@ or freed through it. The conversion is allowed in the same positions as
 permission downgrades: assignment, return values, and function arguments.
 Comparing pointers still requires identical pointer types.
 
-A decayed view is backed by a hidden `Franko_Dynamic_Array` descriptor
-(count, data pointer, and a borrowed flag) that the compiler creates in
-the **current function's stack frame**. The descriptor survives for the
-whole statement and for everything the callees do with it, but it dies
-when that function returns. A non-literal converted view must therefore
-not be returned from the function that performs the decay: the caller
-would receive a view pointing at a dead stack descriptor.
-`DanglingPointerChecker` rejects that case:
+Decay does not copy elements or allocate storage, and it creates no
+hidden array object: the converted view continues to refer to the same
+array. In particular:
 
-```franko
-func bad(view<[int32, 4]> m) -> view<[int32]> {
-    return m;                    // error: decayed view escapes 'bad'
-}
-```
+- returning a decayed parameter or global view is safe;
+- a returned decayed view still refers to the original static storage;
+- returning a decayed view of **local** array storage remains an
+  ordinary frame-storage escape and is still rejected, exactly like
+  returning any other pointer to a local.
 
-There are two correct ways to structure such a function:
-
-- If the function only consumes the array through a dynamic view, take
-  `view<[T]>` as the parameter and let the **caller** perform the decay.
-  The descriptor then lives in the caller's frame and survives the call:
-
-  ```franko
-  func consume(view<[int32]> v) -> uint32 {
-      return $(v).length();
-  }
-
-  [int32, 4] xs;
-  print(consume(getview(xs)));   // decay happens in the caller
-  ```
-
-- If the function must return a view of the static array, keep the static
-  return type and let the caller decay the result:
-
-  ```franko
-  func pass(view<[int32, 4]> m) -> view<[int32, 4]> {
-      return m;
-  }
-
-  [int32, 4] xs;
-  view<[int32]> v = pass(getview(xs));   // decay happens in the caller
-  ```
-
-Literals are the exception: when the decay applies directly to an array or
-string literal in an assignment, return, argument, or global initializer,
-the converted view points at a hoisted constant global descriptor, so
-returning or keeping it is always safe (see
-[Array Literals](22-array-literals.md)). An existing global dynamic view
-is likewise safe to return: its descriptor has static lifetime. The
-restriction applies to decays of non-literal **local** static views,
-including a decay that happens at the `return` itself or inside an
-explicit `cast`.
+Literal views refer to constant storage with static lifetime (see
+[Array Literals](22-array-literals.md)), so returning or keeping one is
+safe.
 
 ## 24.5 Pointer Comparison
 
@@ -392,7 +356,7 @@ Guarding with `p != null` removes the warning, because the compiler refines the 
 
 To encourage safe, data-oriented design, the compiler tracks the
 highest permission each `ptr`/`mview` local variable and parameter
-actually exercises and emits a non-fatal **warning** recommending a
+actually exercises and produces a non-fatal **warning** recommending a
 downgrade when elevated permissions go unused (global variables are not
 linted: their uses span functions, so no per-use summary would be
 meaningful):
@@ -427,19 +391,17 @@ Pointer lifetime is not fully tracked, but the compiler does detect one
 important class of dangling pointers: a pointer/view returned from a
 function while it refers to that function's own stack storage.
 
-`DanglingPointerChecker` rejects a `return` of:
-
-- a pointer to a local variable, a parameter, or any field/element of
-  one, including through pointer copies, `$(...)` aliases, and branch
-  merges;
-- a non-literal static-array view decayed to a dynamic-array view, because
-  the hidden descriptor lives in the returning function's frame.
+The compiler rejects a `return` of a pointer to a local variable, a
+parameter, or any field/element of one, including through pointer copies,
+`$(...)` aliases, and branch merges.
 
 A return that only *may* refer to local storage after a branch merge is a
 warning; a definite escape is an error. Safe returns include pointer
 parameters, pointers obtained from global storage or from
-`getptr($(pointerParameter))`, literal-backed views, and existing global
-dynamic views.
+`getptr($(pointerParameter))`, literal-backed views, existing global
+views, and decayed views of parameters or global storage. A decayed view
+of local array storage is rejected as an ordinary frame-storage escape:
+the view refers to the local array itself.
 
 What remains untracked:
 

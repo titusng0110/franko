@@ -146,6 +146,10 @@ mview<[int32]> d = cast<mview<[int32]>>(m);
 Decaying to `ptr<[T]>` is invalid: the result would claim ownership
 of storage the static array owns.
 
+The decay does not copy elements or allocate storage: the converted
+view refers to the same array and keeps the static array's length. No
+new array object is created.
+
 Raw integers can never be converted to pointers.
 
 ## 16.6 What Casts Do Not Cover

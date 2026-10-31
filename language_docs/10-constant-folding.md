@@ -17,7 +17,7 @@ Examples:
 
 `[int32, 0x10]` reaches semantic analysis as `[int32, 16]`; `int8 g = 1 + 2` reaches it as `int8 g = 3`.
 
-**Validation** checks the computed value in context. This stays in semantic analysis and later checkers, because it needs declared types: positivity and `uint32` range for array sizes, fit for global and field initializers, primitive-only field defaults.
+**Validation** checks the computed value in context, using the declared types: positivity and `uint32` range for array sizes, fit for global and field initializers, primitive-only field defaults.
 
 Evaluation failures are reported before semantic analysis:
 
@@ -26,7 +26,7 @@ Evaluation failures are reported before semantic analysis:
 [int, 10 % 0] bytes;   // invalid: Division by zero in constant expression
 ```
 
-Modulus folding uses truncated division, so the remainder keeps the sign of the dividend, matching the generated C++ (see [Operators](17-operators.md)).
+Modulus folding uses truncated division, so the remainder keeps the sign of the dividend (see [Operators](17-operators.md)).
 
 Evaluation is conservative.
 
@@ -48,4 +48,4 @@ int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 
 `?` array size inference uses the same evaluator quietly: it only needs the value when one exists, and reports its own inference diagnostics otherwise (see [Desugaring](05-desugaring.md)).
 
-A static array `length()` call is emitted as a compile-time constant, not as a runtime read (see [Array Intrinsics](21-array-intrinsics.md)).
+A static array `length()` call is a compile-time constant, not a runtime read (see [Array Intrinsics](21-array-intrinsics.md)).

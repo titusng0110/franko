@@ -9,15 +9,14 @@ command works on Linux, macOS and Windows:
 
 Without -O the default is an unoptimised debug build with
 AddressSanitizer (-O1 -fsanitize=address) using the
-system allocator (malloc/free via FrankoRuntimeWithAsan.hpp), except
-on Windows where AddressSanitizer is unsupported and the default is
-already the optimized build below; with -O
-it is an optimized build (-O3) using the bundled jemalloc; with -Omax
-it is the same optimized build but against FrankoRuntimeMax.hpp,
-which strips bounds checking and unsafe_cast range checking for speed
-(out-of-range access is then undefined behavior). The flag is passed
-through to the Franko compiler, which selects the matching runtime
-header.
+system allocator (malloc/free), except on Windows where
+AddressSanitizer is unsupported and the default is already the
+optimized build below; with -O it is an optimized build (-O3) using
+the bundled jemalloc; with -Omax it is the same optimized build but
+with bounds checking and unsafe_cast range checking stripped for speed
+(out-of-range access is then undefined behavior). All modes share
+include/FrankoRuntime.hpp; the C++ step selects the mode with
+-DFRANKO_USE_JEMALLOC and -DFRANKO_BOUNDS_UNCHECKED.
 
 With --target the build target is chosen: --target native builds for
 the host <os>-<arch> and adds -march=native to the C++ step, optimizing
@@ -89,8 +88,9 @@ def franko_compile(
 ) -> int:
     """Run the Franko compiler (Franko -> C++14) for one build MODE.
 
-    MODE is "asan" (no Franko flag, system-allocator runtime header),
-    "opt" (-O, jemalloc header) or "omax" (-Omax, unchecked header).
+    MODE is "asan" (no Franko flag; checked, system allocator),
+    "opt" (-O; checked, jemalloc) or "omax" (-Omax; unchecked,
+    jemalloc). The matching defines are added by native_compile().
     The compiler always runs with `-p IMPORT_DIR --target <target>`,
     where TARGET is a canonical `<os>-<arch>` spec (the os::IS_*
     constants follow it) and defaults to the host. The `-p` default is
@@ -122,20 +122,29 @@ def native_compile(
 ) -> int:
     """Compile generated C++14 to a native executable for one build MODE.
 
-    "opt"/"omax" build -O3 against the bundled jemalloc; "asan" builds
-    -O1 + AddressSanitizer against the system allocator. WARNINGS
-    toggles the -Wall -Wextra -Wpedantic -Wshadow set (off for
-    runtime-abort test builds). TARGET is the compile.py --target value
-    ("native" adds -march=native to the C++ compiler).
+    "opt"/"omax" build -O3 against the bundled jemalloc and define
+    FRANKO_USE_JEMALLOC=1; "omax" also defines
+    FRANKO_BOUNDS_UNCHECKED=1. "asan" builds -O1 + AddressSanitizer
+    against the system allocator and leaves both flags at their
+    checked/system-allocator defaults. WARNINGS toggles the
+    -Wall -Wextra -Wpedantic -Wshadow set (off for runtime-abort test
+    builds). TARGET is the compile.py --target value ("native" adds
+    -march=native to the C++ compiler).
 
     Returns the driver exit code (CHECK raises instead).
     """
     cxx = find_cxx()
     optimized = mode in ("opt", "omax")
     include, jemalloc_lib = (jemalloc_paths() if optimized else (None, None))
+    mode_defines = []
+    if optimized:
+        mode_defines.append("-DFRANKO_USE_JEMALLOC=1")
+    if mode == "omax":
+        mode_defines.append("-DFRANKO_BOUNDS_UNCHECKED=1")
     return run(
-        [cxx, *cxx_compile_flags(warnings, optimize="3" if optimized else ASAN_OPTIMIZE,
-                                  sanitize=not optimized, target=target),
+        [cxx, *mode_defines,
+         *cxx_compile_flags(warnings, optimize="3" if optimized else ASAN_OPTIMIZE,
+                           sanitize=not optimized, target=target),
          f"-I{INCLUDE_DIR}", *([f"-I{include}"] if optimized else []),
          out_cpp, *([jemalloc_lib] if optimized else []),
          *link_flags(sanitize=not optimized), "-o", out_bin],
@@ -160,9 +169,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     mode.add_argument(
         "-Omax",
         action="store_true",
-        help="maximum-speed build like -O but with the checked runtime "
-             "replaced by FrankoRuntimeMax.hpp (no bounds or unsafe_cast "
-             "checking; out-of-range access is undefined behavior)",
+        help="maximum-speed build like -O but with bounds and unsafe_cast "
+             "checking stripped (out-of-range access is undefined behavior)",
     )
     parser.add_argument(
         "--target",
@@ -210,8 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     ensure_toolchain()
 
     # Windows cannot use AddressSanitizer, so the default build there is
-    # already -O (and still passes -O to the Franko compiler so it
-    # selects the jemalloc runtime header).
+    # already -O (and still passes -O to the Franko compiler so codegen
+    # matches the optimized runtime).
     defaulted_opt = IS_WINDOWS and not (args.optimize or args.Omax)
     if args.Omax:
         mode = "omax"

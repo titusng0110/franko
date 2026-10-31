@@ -73,15 +73,17 @@ Array literal elements must be compile-time constant expressions
 
 ## 30.9 No Full Dynamic Array Lifetime Checking
 
-The checker validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
+The compiler validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
 
 ## 30.10 Pointer Lifetime Is Not Fully Tracked
 
 The compiler does not fully track dangling pointers or ownership. One
 class is now detected: returning a pointer to the current function's own
-frame storage, including a non-literal static-to-dynamic decayed view.
-Escapes through calls, globals, out-parameters, and returned aggregates
-remain untracked. See
+frame storage. Escapes through calls, globals, out-parameters, and
+returned aggregates remain untracked. Decayed static-array views refer
+to their original array, so they are safe to return when that storage
+is a parameter or global; a decayed view of local array storage is still
+caught as a normal frame-storage escape. See
 [Dangling-Pointer Checking](27-memory-safety-checking.md#279-dangling-pointer-checking).
 
 ## 30.11 Output Is a Library Function
@@ -123,7 +125,7 @@ s.memcpy("hello");
 
 ## 30.14 No `switch` or `do`/`do-while`
 
-Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto` (the generated C++ uses `goto` internally to lower `break` and `continue`; see [Statements](19-statements.md)).
+Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto`; see [Statements](19-statements.md).
 
 ## 30.15 Global Scope Is Declaration-Only
 

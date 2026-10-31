@@ -1,4 +1,0 @@
-Cannot return a decayed array view from function
-the value 'm' has type 'view<[int32, 4]>'
-take 'view<[int32]>' as the parameter
-dead stack storage

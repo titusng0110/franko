@@ -2,10 +2,14 @@
 """Extended red-black benchmark: portable vs -march=native, and a
 same-data-structure C++ control.
 
-Three groups:
+Four groups:
 
   franko  Franko source (benchmark/redblack_franko.fr), built by
           compile.py in default / -O / -Omax modes.
+  sparse  Franko source with SparseSetAllocator instead of
+          NextAllocator (benchmark/redblack_franko_sparse.fr), same
+          three modes and native variants. Franko-only: there is no
+          C++ control for this allocator.
   cpp     hand-written C++ std::set reference
           (benchmark/redblack_cpp.cpp).
   pool    hand-written C++ port of the Franko array-pool tree
@@ -46,8 +50,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "benchmark"
 
 FRANKO_SRC = BENCH / "redblack_franko.fr"
-FRANKO_BIN = BENCH / ("redblack_franko.exe" if sys.platform == "win32"
-                      else "redblack_franko.out")
+FRANKO_SPARSE_SRC = BENCH / "redblack_franko_sparse.fr"
 CPP_SRC = BENCH / "redblack_cpp.cpp"
 CPP_POOL_SRC = BENCH / "redblack_cpp_pool.cpp"
 
@@ -68,12 +71,24 @@ class Mode:
     opt: str = "3"
 
 
-# Build order matters for the Franko group: compile.py always writes the
-# same benchmark/redblack_franko.cpp and .out paths, so each Franko build
-# must be copied out before the next one starts. The final Franko build is
-# the portable default, which leaves the checked-in generated C++ in the
+# Build order matters for each Franko source: compile.py writes the .cpp
+# and binary next to the source, so the NextAllocator and sparse-set
+# builds have separate artifact paths. The final build is the normal
+# portable default, which leaves benchmark/redblack_franko.cpp in the
 # same form the normal benchmark leaves it.
 MODES = (
+    Mode("sparse-default-native", "sparse", "franko",
+         FRANKO_SPARSE_SRC, native=True),
+    Mode("sparse-O-native", "sparse", "franko",
+         FRANKO_SPARSE_SRC, franko_flag="-O", native=True),
+    Mode("sparse-Omax-native", "sparse", "franko",
+         FRANKO_SPARSE_SRC, franko_flag="-Omax", native=True),
+    Mode("sparse-Omax", "sparse", "franko",
+         FRANKO_SPARSE_SRC, franko_flag="-Omax"),
+    Mode("sparse-O", "sparse", "franko",
+         FRANKO_SPARSE_SRC, franko_flag="-O"),
+    Mode("sparse-default", "sparse", "franko", FRANKO_SPARSE_SRC),
+
     Mode("default-native", "franko", "franko", native=True),
     Mode("-O-native", "franko", "franko", franko_flag="-O", native=True),
     Mode("-Omax-native", "franko", "franko", franko_flag="-Omax", native=True),
@@ -107,6 +122,11 @@ REPORT_ORDER = {
         "-O", "-O-native",
         "-Omax", "-Omax-native",
     ),
+    "sparse": (
+        "sparse-default", "sparse-default-native",
+        "sparse-O", "sparse-O-native",
+        "sparse-Omax", "sparse-Omax-native",
+    ),
     "cpp": (
         "cpp-O1-asan", "cpp-O1-asan-native",
         "cpp-O1", "cpp-O1-native",
@@ -121,6 +141,7 @@ REPORT_ORDER = {
 
 GROUP_TITLE = {
     "franko": "Franko (array pool, generated C++)",
+    "sparse": "Franko (sparse-set pool, generated C++)",
     "cpp": "C++ std::set reference",
     "pool": "C++ array-pool control (same data structure as Franko)",
 }
@@ -129,20 +150,23 @@ GROUP_TITLE = {
 def build_mode(mode: Mode, out_dir: Path) -> Path:
     """Build one MODE, copy the binary to OUT_DIR, return its path."""
     if mode.kind == "franko":
+        source = mode.source if mode.source is not None else FRANKO_SRC
         cmd = [sys.executable, str(ROOT / "compile.py")]
         if mode.franko_flag:
             cmd.append(mode.franko_flag)
         if mode.native:
             cmd += ["--target", "native"]
-        cmd.append(str(FRANKO_SRC))
-        dest = out_dir / f"franko-{mode.label}.out"
+        cmd.append(str(source))
+        binary = source.with_suffix(
+            ".exe" if sys.platform == "win32" else ".out")
+        dest = out_dir / f"{mode.label}.out"
         print(f"--- building [{mode.label}]: {' '.join(cmd)} ---", flush=True)
         proc = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"build failed: {' '.join(cmd)}\n"
                                f"{proc.stdout[-4000:]}")
-        shutil.copy2(FRANKO_BIN, dest)
+        shutil.copy2(binary, dest)
         return dest
 
     assert mode.source is not None
@@ -286,23 +310,29 @@ def main() -> int:
         print()
         print("program outputs (must agree within each group):")
         group_outputs: dict[str, set[str]] = {}
-        for group in ("franko", "cpp", "pool"):
+        for group in ("franko", "sparse", "cpp", "pool"):
             outs = {outputs[label] for label in REPORT_ORDER[group]}
             group_outputs[group] = outs
             for out in sorted(outs):
                 print(f"[{group}] {out!r}")
         franko_ok = len(group_outputs["franko"]) == 1
+        sparse_ok = len(group_outputs["sparse"]) == 1
         cpp_ok = len(group_outputs["cpp"]) == 1
         pool_ok = len(group_outputs["pool"]) == 1
+        sparse_matches_franko = (
+            group_outputs["sparse"] == group_outputs["franko"])
         pool_matches_franko = group_outputs["pool"] == group_outputs["franko"]
         print(f"franko outputs agree: {franko_ok}")
+        print(f"franko sparse outputs agree: {sparse_ok}")
         print(f"cpp std::set outputs agree: {cpp_ok}")
         print(f"cpp array-pool outputs agree: {pool_ok}")
+        print(f"franko sparse output matches franko: {sparse_matches_franko}")
         print(f"cpp array-pool output matches franko: {pool_matches_franko}")
-        if not (franko_ok and cpp_ok and pool_ok and pool_matches_franko):
+        if not (franko_ok and sparse_ok and cpp_ok and pool_ok
+                and sparse_matches_franko and pool_matches_franko):
             return 1
 
-        for group in ("franko", "cpp", "pool"):
+        for group in ("franko", "sparse", "cpp", "pool"):
             print_group_table(group, args.reps, times, sizes)
 
         means = {label: statistics.fmean(times[label]) for label in labels}
@@ -318,6 +348,9 @@ def main() -> int:
             ("default", "default-native"),
             ("-O", "-O-native"),
             ("-Omax", "-Omax-native"),
+            ("sparse-default", "sparse-default-native"),
+            ("sparse-O", "sparse-O-native"),
+            ("sparse-Omax", "sparse-Omax-native"),
             ("cpp-O1-asan", "cpp-O1-asan-native"),
             ("cpp-O1", "cpp-O1-native"),
             ("cpp-O3", "cpp-O3-native"),
@@ -337,6 +370,22 @@ def main() -> int:
             ("-O-native", "-Omax-native", "native"),
             ("default", "-Omax", "portable"),
             ("default-native", "-Omax-native", "native"),
+        ], means)
+
+        print_comparison_table("Franko sparse-set build-mode effects", [
+            ("sparse-default", "sparse-O", "portable"),
+            ("sparse-default-native", "sparse-O-native", "native"),
+            ("sparse-O", "sparse-Omax", "portable"),
+            ("sparse-O-native", "sparse-Omax-native", "native"),
+        ], means)
+
+        print_comparison_table("Franko allocator variants", [
+            ("default", "sparse-default", "portable, ASan"),
+            ("default-native", "sparse-default-native", "native, ASan"),
+            ("-O", "sparse-O", "portable, checked release"),
+            ("-O-native", "sparse-O-native", "native, checked release"),
+            ("-Omax", "sparse-Omax", "portable, unchecked release"),
+            ("-Omax-native", "sparse-Omax-native", "native, unchecked release"),
         ], means)
 
         print_comparison_table("C++ std::set build-mode effects", [

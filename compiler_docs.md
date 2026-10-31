@@ -13,12 +13,14 @@ about the compiler design should reside here.
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain.
-- **Runtime**: `include/FrankoRuntimeOptimized.hpp` (arrays,
-  `franko_unsafe_cast`, the `borrowed` marker that keeps
-  compiler-synthesized view-decay headers from freeing their storage),
-  with two sibling tiers: `FrankoRuntimeOptimizedMax.hpp` (checks
-  stripped) and `FrankoRuntimeWithAsan.hpp` (system allocator), plus
-  optional jemalloc (`third_party/`).
+- **Runtime**: `include/FrankoRuntime.hpp`, one header for all build
+  modes: `Franko_Dynamic_Array<T>` (owning dynamic arrays), raw C++ static
+  arrays, `Franko_Fat_Pointer<T>` (pointers to arrays; scalar and struct
+  pointers are raw `T*`), the byte intrinsics, and `franko_unsafe_cast`. Two C++ defines select the mode:
+  `FRANKO_USE_JEMALLOC=1` links the bundled jemalloc (`third_party/`)
+  instead of the system allocator, and `FRANKO_BOUNDS_UNCHECKED=1`
+  strips bounds/range/bit/offset checks. Defaults (no defines) are the
+  checked system-allocator ASan build.
 
 ---
 
@@ -437,11 +439,14 @@ C++-spelling key embedded in generated names — must stay stable). Structural
 `equals`/`hashCode` everywhere.
 
 The pointer family is one class with a `PtrPermission` level (OWNER
-`ptr<T>` → `T*`, MUTABLE `mview<T>` → `T*`, READ_ONLY `view<T>` → `T const*`),
-exposed as the subclasses `SemanticPtrType`/`SemanticMViewType`/
-`SemanticViewType` so every `instanceof SemanticPtrType` check covers all
-three while type equality keeps them distinct (`getClass()` + referenced
-type). `mangleKey()` spells them `ptr<…>`/`mview<…>`/`view<…>`, so owner
+`ptr<T>`, MUTABLE `mview<T>`, READ_ONLY `view<T>`), exposed as the
+subclasses `SemanticPtrType`/`SemanticMViewType`/`SemanticViewType` so
+every `instanceof SemanticPtrType` check covers all three while type
+equality keeps them distinct (`getClass()` + referenced type). Emission
+depends on the referenced type: a pointer to an array becomes
+`Franko_Fat_Pointer<element(T)>`, while a pointer to a scalar, struct, or
+another pointer is raw `T*`; permission is not part of the C++ type
+(see §4.9). `mangleKey()` spells them `ptr<…>`/`mview<…>`/`view<…>`, so owner
 signatures (and every pinned mangling) are unchanged.
 `PtrPermission.allows(other)` encodes the downgrade lattice: permissions
 only ever downgrade (owner → mutable → read-only), so a stronger level
@@ -459,8 +464,9 @@ The symbol hierarchy and mangling policy:
   not part of overload identity** (so `f(int32)->int32` and
   `f(int32)->uint32` conflict).
 - `MethodSymbol` — adds `owner: StructSymbol`; emitted as
-  `METH_<name>_OFSTRUCT_<Struct>_HASH_<hex>` free functions taking
-  `STRUCT_X* VAR_self` (spelled `T*`/`T const*` per the self permission).
+  `METH_<name>_OFSTRUCT_<Struct>_HASH_<hex>` free functions taking a raw
+  `STRUCT_X*` for `VAR_self` (a struct pointer is scalar, so it uses the
+  raw-pointer representation; the self permission is compile-time only).
   **Method overload identity excludes the `self` parameter's type**: name +
   the remaining parameter types must be unique, so a struct may not carry
   both a `view<X> self` and an `mview<X> self` method with otherwise
@@ -728,8 +734,6 @@ variable (locals, parameters, and globals alike), indexed by
 - `FRAME(s)` — the pointer may refer to symbol `s`'s current-frame slot
   (a local or parameter);
 - `GLOBAL(s)` — the pointer may refer to global `s`'s storage;
-- `DECAY(sourceType, label)` — the pointer points at a
-  compiler-synthesized static-to-dynamic descriptor in the current frame;
 - `UNKNOWN` — caller-owned/untracked (pointer parameters, call results,
   `null`, pointer-typed field/element reads).
 
@@ -742,10 +746,9 @@ access → its base's storage; cast → its operand). `valueOrigins(expr)`
 maps a pointer value to what it points at: `getptr`/`getmview`/`getview`
 → `storageOrigins` of the target; a pointer variable → its current state;
 `$(p)` whose result is a pointer → the states of the tracked pointer
-cells in `valueOrigins(p)` (with `UNKNOWN` if any cell is untracked or a
-decay descriptor); `cast<T>(e)` → `valueOrigins(e)` plus a `DECAY` when
-the cast itself is a static-to-dynamic view decay; call results and
-pointer-typed field/element reads → `UNKNOWN`.
+cells in `valueOrigins(p)` (with `UNKNOWN` if any cell is untracked);
+`cast<T>(e)` → `valueOrigins(e)`; call results and pointer-typed
+field/element reads → `UNKNOWN`.
 
 Transfer rules mirror `PointerNullStateChecker` structurally, without its
 null-specific guard refinement or branch-depth cap:
@@ -757,12 +760,11 @@ null-specific guard refinement or branch-depth cap:
   origins; a store through `$(d)` strong-updates the single tracked
   pointer cell `valueOrigins(d)` resolves to; any other pointer-typed
   store path invalidates all tracked states to `UNKNOWN`;
-- assignments, casts, and returns that are the outermost static-to-dynamic
-  decay add a `DecaySource`, which is what catches
-  `view<[T]> d = staticView; return d;` even though `d`'s type is already
-  dynamic; literal immediate decays are not stack decays (the literal's
-  hoisted global header is the value) and global initializer decays are
-  never analyzed;
+- static-to-dynamic view decay adds no origin: it preserves the fat
+  pointer's mode/count and creates no frame object, so a decayed
+  parameter/global view is safe to return, while a decayed view of local
+  array storage carries that local's `FRAME` origin and is caught by the
+  ordinary rule; global initializer decays are never analyzed;
 - function calls emit no escape diagnostic, but conservatively forget
   state: all global pointer states, tracked pointer cells reachable from
   pointer-typed arguments, and pointer locals whose address was taken by
@@ -774,20 +776,12 @@ null-specific guard refinement or branch-depth cap:
 - block-local pointer states are reset to `UNKNOWN` when the block ends.
 
 At a return of pointer type, the checker classifies the value's origins:
-`mayDangle = FRAME non-empty or DECAY non-empty`;
-`definiteDangle = DECAY non-empty or (FRAME non-empty and no UNKNOWN and
-no GLOBAL)`; `possibleDangle = mayDangle and not definiteDangle`.
-A direct decay (the return conversion itself, or a top-level `cast` in
-the return expression) produces the detailed descriptor-lifetime error
-that names the return type, the source value/type, the hidden
-`Franko_Dynamic_Array` local, and both fixes (take `view<[T]>` as the
-parameter, or return `view<[T,N]>` and decay at the caller); it adds a
-global-data clause when the backing storage is global and a local-data
-clause when it is a frame cell. A decay carried by a variable/copy
-produces the short indirect message (with possible source types when
-several sources merged). Decay diagnostics suppress the generic
-local-escape message for that return site. Definite frame escapes are
-errors; possible escapes after a branch merge are warnings.
+`mayDangle = FRAME non-empty`;
+`definiteDangle = FRAME non-empty and no UNKNOWN and no GLOBAL`;
+`possibleDangle = mayDangle and not definiteDangle`. Definite frame
+escapes are errors; possible escapes after a branch merge are warnings.
+There is no separate decay classification: a decayed view is just a fat
+pointer over its original storage.
 
 #### `PointerPermissionChecker`
 The capability linter: run after branch/declaration pruning (so only
@@ -934,28 +928,62 @@ guaranteed null-initialization rule. Statement lowering: `if` with constant-dead
 branch pruning, `while` with goto-based `L_brk_<id>`/`L_cont_<id>` labels plus
 the desugared for-update epilogue (continue label placed *before* the
 epilogue so `continue` runs the update and `break` skips it).
-Expression lowering is structural (`ptr<T>`/`mview<T>`→`T*`,
-`view<T>`→`T const*`, `getptr`/`getmview`/`getview(x)`→`(&x)`,
-`$(p)`→`(*p)`, arrays → `Franko_Dynamic_Array<T>` /
-`Franko_Static_Array<T,N>`, pre-folded constants emitted directly, contextual
-`static_cast` via `emitExprAsType` to preserve Franko's constant typing and
-already-chosen overloads, `franko_unsafe_cast` for `unsafe_cast`). Array
-intrinsics emit `receiver.<runtimeName>(args)`; scalar arguments are cast to
-the argument descriptor's primitive type, pointer arguments pass through.
-A
-static-to-dynamic array view decay (implicit at the `emitExprAsType`
-positions, explicit in `emitCast`, and at global static initializers)
-buffers a hidden borrowed-header declaration via statement lookback and
-emits the header's address (§4.9). Literal-
-backed string globals emit as `const Franko_Static_Array<uint8_t, N>
-VAR__STR_<hash> = {{…}}` (constant initialization, so static-init order is
-irrelevant), and pointer globals with static address initializers emit the
-address directly. A
+Expression lowering is structural. A pointer to an array emits
+`Franko_Fat_Pointer<element(T)>`, where `element(T)` is the immediate
+element type (`ptr<[U, N]>` and `ptr<[U]>` both emit
+`Franko_Fat_Pointer<U>`). A pointer to a scalar, struct, or another
+pointer emits raw `T*`. The fat pointer records the array mode: 2
+static array with count `N`, or 3 dynamic array with the
+`Franko_Dynamic_Array<T>` descriptor pointer. `getptr`/`getmview`/
+`getview(x)` emit `(&x)` for a scalar/struct lvalue,
+`franko_make_fat_pointer(x, N, 2)` for a static array, and
+`franko_make_dynamic_fat_pointer(&x)` for a dynamic array (a distinct
+name, because a static array of `Franko_Dynamic_Array<T>` is
+pointer-indistinguishable from a `Franko_Dynamic_Array<T>` lvalue). A
+dereference emits `(*p)` for scalar/struct pointers,
+`(*static_cast<Franko_Dynamic_Array<T>*>(p.data))` for dynamic arrays,
+and `franko_static_array_ref<T, N>(static_cast<T*>(p.data))` for static
+arrays. Method `self` is a struct pointer, so it is raw `STRUCT_X*` at
+the call boundary. Static arrays are raw C++ arrays (`int32_t VAR_x[3][2]`, outer
+dimension first); locals, globals, fields, and parameters use a
+declarator emitter, while return types and template arguments use a
+type-id emitter. Pre-folded constants are emitted directly; contextual
+`static_cast` via `emitExprAsType` preserves Franko's constant typing and
+already-chosen overloads; `unsafe_cast` emits `franko_unsafe_cast`.
+
+Array indexing through a raw static array emits
+`franko_static_array_at(array, index)` in ASan and `-O` builds; `-Omax`
+emits bare `array[index]` (the `uncheckedStaticArrayAccess` codegen flag,
+set only from `-Omax`). Indexing through a pointer emits the fat
+pointer's checked `operator[]`, including for a decayed view (`view<[T]>`
+whose runtime mode is still 2). Dynamic arrays always use their own
+checked `operator[]`, in every mode, so null/uninitialized checks
+survive `-Omax`.
+
+Array intrinsics emit `receiver.<runtimeName>(args)`; lifecycle
+intrinsics (`init`, `init_zero`, `resize`, `uninit`) stay direct calls on
+the dynamic array lvalue, while every other intrinsic wraps its receiver
+in a fat pointer: a dereferenced receiver is already a fat pointer and is
+reused as-is (keeping a decayed view's mode 2), a static array lvalue
+becomes `franko_make_fat_pointer(receiver, N, 2)`, and a dynamic array
+lvalue becomes `franko_make_dynamic_fat_pointer(&receiver)`. Scalar
+arguments are cast to the argument descriptor's primitive type, pointer
+arguments pass through.
+
+Static-to-dynamic array view decay is representation-preserving: both
+sides are the same `Franko_Fat_Pointer<U>` and the value keeps mode 2
+with count `N`. `emitExprAsType` and `emitCast` therefore emit the value
+unchanged, with no temporary descriptor and no prelude buffering.
+Literal-backed string and array globals emit as `const uint8_t
+VAR__STR_<hash>[N] = {…}` / `const int32_t VAR__ARR_<hash>[N] = {…}`
+(constant initialization, so static-init order is irrelevant; nested
+literals use one brace level per dimension), and pointer globals with
+static initializers emit the fat pointer over them directly. A
 `checkEmittedNameCollisions` guard catches 32-bit hash collisions between
-distinct signatures. When `franko/os` was imported, `generate()` prepends the
-`OsFfi.buildBridge` splice (common block + one block per used intrinsic) and
-suppresses the os.fr stub bodies; each intrinsic call site is also checked
-with `OsFfi.checkTargetAllowed`.
+distinct signatures. When `franko/os` was imported, `generate()` prepends
+the `OsFfi.buildBridge` splice (common block + one block per used
+intrinsic) and suppresses the os.fr stub bodies; each intrinsic call site
+is also checked with `OsFfi.checkTargetAllowed`.
 
 #### `Mangler`
 Stateless FNV-1a 32-bit hash utility: `hashHex(key)` → 8 lowercase hex digits
@@ -963,28 +991,26 @@ over the UTF-8 bytes of the canonical signature key. Deterministic across
 runs/JVMs/platforms. Called only from `Symbol` (`FunctionSymbol.mangledName`,
 `MethodSymbol.mangledName`), but its outputs are pinned in three places:
 `OsFfi.expectedEmittedName`, both program templates
-(`FUNC_main_HASH_d8625720` / `FUNC_main_HASH_db73581e`), and `Main`'s
+(`FUNC_main_HASH_d7d11c43` / `FUNC_main_HASH_747cdf98`), and `Main`'s
 entry-point sanity check.
 
 #### `ProgramTemplate.cpp` / `ProgramTemplateWithRawCArgs.cpp`
 The fixed program skeleton codegen deliberately does not emit: the runtime
 `#include` (a `__FRANKO_RUNTIME_HEADER__` placeholder), the `__FRANKO_PROGRAM__` insertion point, and
 the real C `main` wrapper that calls the mangled Franko `main`. The no-args
-template calls `FUNC_main_HASH_d8625720()` directly; the raw-C-args template
-marshals `argc`/`argv` byte-for-byte (no null terminators) into
+template calls `FUNC_main_HASH_d7d11c43()` directly; the raw-C-args
+template marshals `argc`/`argv` byte-for-byte (no null terminators) into
 `Franko_Dynamic_Array<Franko_Dynamic_Array<uint8_t>>` and calls
-`FUNC_main_HASH_db73581e(&frankoArgs)`. `Main` sanity-checks that the chosen
-template contains the expected entry call — a cheap guard against
-template/mangling drift, mirroring `OsFfi.verifyBridge`. An explicit
-`-t <template>` skips the check. `Main` selects the runtime header from
-the optimization flags (`FrankoRuntimeOptimized.hpp`, bundled jemalloc,
-with `-O`; `FrankoRuntimeOptimizedMax.hpp`, jemalloc with bounds and
-unsafe_cast checks stripped, with `-Omax`; `FrankoRuntimeWithAsan.hpp`,
-system allocator,
-without either) and splices it
-into `__FRANKO_RUNTIME_HEADER__`; a stock template missing the
-placeholder is rejected, while a custom `-t` template without it keeps
-its pinned `#include` untouched.
+`FUNC_main_HASH_747cdf98(franko_make_dynamic_fat_pointer(&frankoArgs))`.
+`Main` sanity-checks that the chosen template contains the expected entry
+call — a cheap guard against template/mangling drift, mirroring
+`OsFfi.verifyBridge`. An explicit `-t <template>` skips the check. Every
+stock template includes `"FrankoRuntime.hpp"` through
+`__FRANKO_RUNTIME_HEADER__`; the build mode is selected later by the C++
+step's `-DFRANKO_USE_JEMALLOC` / `-DFRANKO_BOUNDS_UNCHECKED` flags
+(`compile.native_compile`), so `Main` no longer chooses a header. A stock
+template missing the placeholder is rejected, while a custom `-t`
+template without it keeps its pinned `#include` untouched.
 
 #### `SemanticASTPrinter` / `ASTPrinter`
 Debug printers (`--verbose` only): `ASTPrinter` for the raw AST at three
@@ -1067,6 +1093,37 @@ type it would have in C++. Consequences:
   stub bodies.
 - Signature drift on a known intrinsic name is a hard compile error; stubs
   must never silently compile.
+- `os.ffi.cpp` is split into `common` plus one block per intrinsic:
+  `posix.read`, `posix.write`, `win32.GetStdHandle`, `win32.ReadFile`,
+  `win32.WriteFile`. Each block is spliced verbatim under the same pinned
+  mangled name codegen emits for the `os.fr` declaration
+  (`FUNC_read_HASH_247cb6de`, `FUNC_write_HASH_3a46712f`,
+  `FUNC_GetStdHandle_HASH_31d0af80`, `FUNC_ReadFile_HASH_955d9645`,
+  `FUNC_WriteFile_HASH_ab68bdd0`); the hashes move with signature changes,
+  including pointer permissions.
+- Codegen emits prototypes for every intrinsic but never the stub bodies;
+  the bridge supplies the definitions. The splice runs after the template’s
+  `#include "FrankoRuntime.hpp"`, so the runtime types are available.
+  Merely importing `franko/os` without calling an intrinsic adds no C++
+  definition (only the harmless prototypes).
+- Buffer parameters are array pointers, so they are
+  `Franko_Fat_Pointer<uint8_t>` by value. The bridge checks the runtime
+  mode (2 static array, 3 dynamic array), treats a null or uninitialized
+  buffer as its failure return value, and reads through
+  `VAR_buf.data` (mode 2) or
+  `static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data`
+  (mode 3). Scalar out-parameters such as `mview<uint32> bytesRead` are
+  raw `uint32_t*` (scalar pointers are raw); the bridge null-checks the
+  pointer and writes through it.
+- Verification is a hard compile error for a known intrinsic with the
+  wrong signature, for an unsupported function in `os::posix` /
+  `os::win32`, and for a missing `os.ffi.cpp` or a missing mangled
+  definition (`OsFfi.verifyBridge`, mirroring the program template’s
+  entry-call check).
+- Runtime contract: `count` is checked against the buffer’s array length
+  before each transfer and aborts through `franko_panic` on overflow; a
+  null or uninitialized buffer returns the stub failure value instead of
+  crashing. win32 blocks compile to `#error` off Windows.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
 - Strictly intra-procedural: one analysis per function, state reset at every
@@ -1123,10 +1180,18 @@ type it would have in C++. Consequences:
 ## 4.9 Pointer permissions (capability model)
 
 Franko has one pointer family with three permission levels (`PtrPermission`,
-strongest first): `ptr<T>` (OWNER, `T*`, read/write/alloc/free),
-`mview<T>` (MUTABLE, `T*`, read/write), `view<T>` (READ_ONLY, `T const*`,
-read only). Permissions are enforced entirely by the checkers; the C++
-`const` on `view` is a backstop.
+strongest first): `ptr<T>` (OWNER), `mview<T>` (MUTABLE), and `view<T>`
+(READ_ONLY). Permissions are enforced entirely by the checkers and are
+not represented in the C++ type. A pointer to an array emits
+`Franko_Fat_Pointer<element(T)>`, whose runtime mode records static
+array (2) or dynamic array (3) and whose count records a static array's
+length. A pointer to a scalar, struct, or another pointer emits raw
+`T*`, which keeps scalar/struct method calls and pointer fields at the
+raw-pointer ABI. This split is deliberate: a scalar pointer has no array
+mode or count to carry, and passing a 16-byte fat pointer by value for
+every method `self`/pointer parameter makes ASan debug builds
+materialize an instrumented stack copy per call. Array pointers are the
+only representation that needs `{data, count, mode}`.
 
 **The region rule.** Every storage-backed lvalue access path touches one
 *storage region*. The region's permission is the permission of the operand
@@ -1178,38 +1243,30 @@ downgrades, then decays — see below):
   with a downgrade) convert to `mview<[T]>`/`view<[T]>`. Only
   the outermost dimension decays (`T` must match exactly, and `T` may
   itself be a static or dynamic array), the direction is unidirectional,
-  and the target is never `ptr` (ownership could free the borrowed
-  storage). Explicit form: `cast<mview<[T]>>(m)`.
+  and the target is never `ptr` (ownership could free storage the
+  static array owns). Explicit form: `cast<mview<[T]>>(m)`.
 
 Everything else is exact. Explicit downgrades may be
 written `cast<view<T>>(p)`; casting upwards or across pointee types is an
 error. Integer `cast` is value-preserving widening only; `unsafe_cast`
 carries the checked conversions (`franko_unsafe_cast`).
 
-**Decay implementation.** A decayed value is a hidden
-`Franko_Dynamic_Array<T>` header (`{count = N, data = the static array's
-storage, borrowed = true}`) synthesized at the conversion site.
-`Cpp14Codegen` uses statement lookback: while a statement's expressions
-are emitted, each decay buffers a header declaration, and the buffered
-declarations are emitted as C++ statements immediately before the
-statement — `Franko_Dynamic_Array<T> _TMP_VIEW_k = {N,
-const_cast<T*>(src->data), true};` with the conversion becoming
-`(&_TMP_VIEW_k)`. The header lives in the enclosing scope, so it stays
-valid for the whole statement and everything the callees do with it.
-Returning a non-literal decayed view is rejected by
-`DanglingPointerChecker` (§4.14): the descriptor would be a hidden local
-of the returning function and the caller would receive a view of dead
-stack storage. Literal immediate decays are safe because the literal's
-hoisted dynamic-array header is a constant global, and a returned global
-dynamic view is safe because its descriptor has static lifetime. A loop
-condition containing a decay is
-rewritten to the goto form (`L_top` / declarations / `if (!(cond)) goto
-L_brk` / body / update / `goto L_top` / `L_brk`) so the header is rebuilt
-on every iteration. The `borrowed` flag on `Franko_Dynamic_Array` makes
-its destructor skip `destroy_elements` and the buffer free for these headers, so
-borrowed storage is never freed — including at the end of each loop
-iteration. Lifecycle intrinsics stay blocked on the result (the region
-rule), and `ptr` never decays.
+**Decay implementation.** Decay is representation-preserving.
+`ptr<[T, N]>`/`mview<[T, N]>`/`view<[T, N]>` and their dynamic
+counterparts all emit `Franko_Fat_Pointer<T>`; a static array pointer
+carries mode 2 with count `N`, and a dynamic array pointer mode 3 with
+the `Franko_Dynamic_Array<T>` descriptor address. Scalar/struct
+pointers are raw `T*` and are never involved in decay. Converting
+`view<[T, N]>` to `view<[T]>` creates no object: the C++ value is copied
+unchanged and remains mode 2/count `N`. `Cpp14Codegen` therefore emits
+nothing for the conversion (no prelude, no `_TMP_VIEW_*`, no temporary
+header), and a decay in a loop condition needs no goto rewrite. The same
+holds for `cast<...>` and for argument/return/assignment conversions.
+Because there is no descriptor, `DanglingPointerChecker` has no decay
+origin (§4.14): returning a decayed parameter or global view is safe,
+while returning a decayed view of local array storage is the ordinary
+frame-storage escape. Lifecycle intrinsics stay blocked on the result
+(the region rule), and `ptr` never decays.
 
 **Method `self`.** `self` may be `ptr<X> self`, `mview<X> self`, or
 `view<X> self`. The hidden self argument at a call site is synthesized as
@@ -1223,8 +1280,10 @@ A string literal is **not** byte-array sugar: it is a value of type
 `view<[byte, N]>` (N = UTF-8 byte length) over a hoisted, literal-backed
 global `[byte, N]` named `VAR__STR_<content-hash>`. Identical literals
 share one global; empty literals are rejected (`N >= 1`). The C++ emission is
-a `const Franko_Static_Array<uint8_t, N> = {{…}}` (constant initialization),
-so declaration order and static-init order never matter.
+a `const uint8_t VAR__STR_<hash>[N] = {…}` (constant initialization),
+so declaration order and static-init order never matter. A string
+literal expression is `franko_make_fat_pointer(VAR__STR_<hash>, N, 2)`;
+decaying it to `view<[byte]>` copies the same mode-2 fat pointer.
 
 Consequences of strings being views:
 * `s = "text"` / `[byte, N] s = "text"` are compile errors suggesting
@@ -1238,21 +1297,23 @@ Consequences of strings being views:
 
 ## 4.11 Runtime array and allocation semantics
 
-The generated code allocates through one of three runtime headers
-selected by the compiler's optimization flags: `FrankoRuntimeOptimized.hpp`
-(bundled jemalloc: `je_malloc`, `je_calloc`, `je_realloc`, `je_free`)
-with `-O`; `FrankoRuntimeOptimizedMax.hpp` (same jemalloc allocator,
-with bounds
-checking and unsafe_cast range checking stripped for speed) with
-`-Omax`; and `FrankoRuntimeWithAsan.hpp` (system
-`malloc`/`calloc`/`realloc`/`free`, so AddressSanitizer instrumentation
-applies) by default. All three headers implement identical array
-semantics apart from the stripped checks; only the allocator and the
-runtime checks differ.
+The generated code includes the single `include/FrankoRuntime.hpp`.
+The C++ build flags select the mode:
+
+| Build | Defines | Allocator | Checks |
+|---|---|---|---|
+| ASan/default | none | system `malloc`/`calloc`/`realloc`/`free` | full |
+| `-O` | `FRANKO_USE_JEMALLOC=1` | bundled jemalloc (`je_*`) | full |
+| `-Omax` | `FRANKO_USE_JEMALLOC=1` `FRANKO_BOUNDS_UNCHECKED=1` | bundled jemalloc | bounds/range/bit/offset/unsafe_cast stripped |
+
+All modes share the same array semantics (`Franko_Dynamic_Array`,
+`Franko_Fat_Pointer`, static-array helpers, byte kernels); only the
+allocator and the checked blocks differ.
 
 Dynamic array element buffers are allocated by the array runtime methods
-and freed by `uninit()` or by the array object's destructor (never for
-`borrowed` headers, §4.9).
+and freed by `uninit()` or by the array object's destructor. Static
+arrays are raw C++ arrays and are never heap-allocated. Decay creates no
+descriptor, so there is no borrowed-header marker.
 
 Element construction follows the C++ type of the elements: buffers for
 trivially default-constructible element types keep raw storage, while any
@@ -1292,9 +1353,12 @@ initialization, or zero-size allocation.
 
 The byte-array intrinsics (`memchr`/`memmem`, the endian accessors, the bit
 intrinsics) share one kernel layer (`franko_byte_arrays`) of free templates
-over `(pointer, length)` pairs; each `Franko_Static_Array` /
-`Franko_Dynamic_Array` member is a thin delegate that supplies its class tag
-and length. `memchr`/`memmem` return `MEM_NOT_FOUND` (`0xFFFFFFFF`) on no
+over `(pointer, length)` pairs; each `Franko_Fat_Pointer` member is a thin
+delegate that supplies its class tag and the data/count for its runtime
+mode (static storage for mode 2, the `Franko_Dynamic_Array` descriptor for
+mode 3). Byte intrinsics exist only on `Franko_Fat_Pointer`, never on
+`Franko_Dynamic_Array` or raw static arrays; codegen wraps those receivers
+in a temporary fat pointer. `memchr`/`memmem` return `MEM_NOT_FOUND` (`0xFFFFFFFF`) on no
 match; the endian accessors are unaligned byte loads/stores built on
 `std::memcpy`; bit index `i` means byte `i / 8`, bit `i % 8` counted from
 the LSB. Every kernel is SFINAE-restricted to `uint8` elements at the C++
@@ -1422,28 +1486,20 @@ elements are rejected: a literal is hoisted to a `const` global, so it is
 always safe to return one or to return one from a recursive function —
 there is no statement-scoped storage and no dangling case. Hoisting is
 per (element type, row-major values) pair, so identical literals share
-one `_ARR_<hash>` global. C++ emission is a
-`const Franko_Static_Array<…> = {…}` with fully explicit nested braces
-(each level emits both the struct and the `data[]` braces; brace elision
-is not well-defined past two levels in C++14 aggregate initialization).
+one `_ARR_<hash>` global. C++ emission is a raw C++ array,
+`const int32_t VAR__ARR_<hash>[N] = {…}` (outer dimension first, one brace
+level per dimension, e.g. `{{1, 2}, {3, 4}}`); no wrapper struct is
+emitted.
 
-**Immediate decay on literals.** When the conversion at an inference
-site is exactly the outermost static→dynamic decay
-(`view<[T,N]>` → `view<[T]>`) and the source is a
-literal-backed global (a string or array literal, i.e. the decay applies
-*immediately* on the literal in an assignment, call argument, return, or
-global initializer), no stack header is synthesized. Instead the literal's
-hoisting also hoists a constant dynamic-array header global
-(`Franko_Dynamic_Array<T> _ARR_<hash>_VIEW = {N, data->data, true}`,
-marked `GlobalVariableSymbol.literalHeaderData`, one header per data
-global) and the expression types as `view<[T]>` pointing at it —
-so the semantics compile the type the literal already "knows" at hoist
-time rather than decaying a stack address. Returning or keeping such a
-view is therefore safe, including from recursive functions; the general
-decay caveat (§4.9, stack header must not outlive its scope) now applies
-only to decays of non-literal sources. `InactiveDeclarationPruner` keeps
-a referenced header's data global transitively; `emitDecayedViewTemp` is
-unchanged and still handles the non-literal case.
+**Immediate decay on literals.** A literal is hoisted as one constant
+global `_ARR_<hash>`; its expression is a fat pointer over that storage
+(mode 2, count `N`). Decaying it at an inference site
+(`view<[T,N]>` → `view<[T]>`) is representation-preserving: the same
+mode-2 value is used, with no `_VIEW` header global and no
+`GlobalVariableSymbol.literalHeaderData`. Returning or keeping such a
+view is safe, including from recursive functions, and
+`InactiveDeclarationPruner` only has to follow the literal data global
+(the expression's `getptr` target).
 
 **Overload resolution.** Call arguments lower in two phases
 (`SymbolTable.CallArg`): a pending literal matches any `view<[...]>`
@@ -1468,8 +1524,6 @@ origin set:
 
 - `FRAME(s)` — may refer to local/parameter `s`'s current-frame slot;
 - `GLOBAL(s)` — may refer to global `s`'s storage;
-- `DECAY(sourceType, label)` — points at a compiler-synthesized
-  static-to-dynamic descriptor in the current frame;
 - `UNKNOWN` — caller-owned/untracked: pointer parameters, call results,
   `null`, pointer-typed field/element reads.
 
@@ -1481,16 +1535,18 @@ inherits its base's storage, and a cast inherits its operand's.
 `valueOrigins` maps pointer values: creation intrinsics use the target's
 storage; pointer variables use their current state; a pointer-typed
 `$(p)` reads the states of the tracked pointer cells `p` may point at
-(any untracked cell or decay descriptor contributes `UNKNOWN`); a cast
-adds a `DECAY` when the cast is itself the static-to-dynamic decay; calls
-and pointer-typed field/element reads are `UNKNOWN`.
+(any untracked cell contributes `UNKNOWN`); a cast inherits its
+operand's origins; calls and pointer-typed field/element reads are
+`UNKNOWN`.
 
 **Transfers.** Pointer declarations are `UNKNOWN` (null does not
 dangle). Direct pointer-variable assignment is a strong update;
 `$(d) = value` strong-updates the single tracked pointer cell
 `valueOrigins(d)` resolves to, and any other pointer-typed store path
-invalidates every tracked state. Assignments, casts, and returns that
-perform the outermost static-to-dynamic decay add a `DecaySource`.
+invalidates every tracked state. Static-to-dynamic decay is
+representation-preserving and adds no origin; a decayed parameter/global
+view therefore keeps the value's caller-owned/global state, while a
+decayed view of a local array keeps that local's `FRAME` origin.
 Calls emit no escape diagnostic but forget state: global pointer states,
 tracked cells reachable from pointer-typed arguments, and address-taken
 pointer locals (from `getptr`/`getmview`) become `UNKNOWN`. `if`/`else`
@@ -1500,24 +1556,21 @@ epilogue for normal and `continue` edges, merges zero-trip and back-edge
 states, then merges `break` snapshots. Block-local pointer states reset
 at block end.
 
-**Return classification.** `mayDangle = FRAME non-empty or DECAY
-non-empty`; `definiteDangle = DECAY non-empty or (FRAME non-empty and no
-UNKNOWN and no GLOBAL)`; `possibleDangle = mayDangle and not
-definiteDangle`. A direct decay (the return conversion itself, or a
-top-level `cast` in the return expression) gets the detailed
-descriptor-lifetime error with both suggested fixes; a decay carried by a
-variable/copy gets the short indirect message. Decay diagnostics suppress
-the generic local-escape message for the same return site. Definite frame
+**Return classification.** `mayDangle = FRAME non-empty`;
+`definiteDangle = FRAME non-empty and no UNKNOWN and no GLOBAL`;
+`possibleDangle = mayDangle and not definiteDangle`. Definite frame
 escapes are errors; possible escapes after a branch merge are warnings.
+There is no decay-specific diagnostic; a returned decayed view is simply
+a pointer over its backing storage.
 
 **Safe returns.** Pointer parameters and `getptr($(p))` over a pointer
 parameter are caller-owned (`UNKNOWN`); `getptr(G)` is global; literal
-array/string values (including immediate literal decay) point at hoisted
-constant globals; an existing global dynamic view is `UNKNOWN`; and a
-local pointer reassigned to a global address before the return carries
-only `GLOBAL`. Global initializer decays are never analyzed: global
-declarations are not function bodies and their descriptors have static
-lifetime.
+array/string values (including decayed literals) point at hoisted
+constant globals; an existing global view is `UNKNOWN`; decayed views of
+parameters or globals are safe; and a local pointer reassigned to a
+global address before the return carries only `GLOBAL`. Global
+initializers are never analyzed because global declarations are not
+function bodies.
 
 **v1 limitations.** No interprocedural escape facts, no global/
 out-parameter store escapes, no pointers hidden inside returned
@@ -1541,6 +1594,7 @@ uv run python compile.py path/to/test.fr          # wraps java -cp build/classes
 # Test suites (same order as CI):
 uv run python programs/run_programs.py
 uv run python language_tests/run_language_tests.py
+uv run python language_tests/run_omax_smoke.py
 uv run python library_tests/run_library_tests.py
 ```
 
@@ -1550,6 +1604,10 @@ uv run python library_tests/run_library_tests.py
 - Failure fixtures: compiler must exit non-zero; optional `.errors` substrings
   must appear.
 - Runtime fixtures: compiler succeeds, binary exits non-zero.
+- `-Omax` is intentionally outside the normal asan/opt matrix (out-of-range
+  access is undefined behavior there); `language_tests/run_omax_smoke.py`
+  compiles and runs representative success fixtures with `-Omax` and pins the
+  bare static-index emission in the generated C++.
 - `build/` and `.antlr/` are generated and gitignored; never edit them.
 
 ## 6. Adding a new phase or check — where things go

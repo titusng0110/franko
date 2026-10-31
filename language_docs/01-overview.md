@@ -64,8 +64,6 @@ Franko currently does **not** implement:
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`).
 
-Franko currently targets C++14.
-
 ## Compiling programs
 
 Build a program with the bundled compile script:
@@ -74,26 +72,26 @@ Build a program with the bundled compile script:
 uv run python compile.py programs/bfs.fr
 ```
 
-This is the default debug mode: the generated code is compiled with
-`-O1` plus AddressSanitizer (including leak checking) and uses the
-system allocator. For an optimized binary, pass `-O`:
+This is the default debug mode: it builds an unoptimized binary with
+AddressSanitizer (including leak checking) and full runtime checks. For
+an optimized binary, pass `-O`:
 
 ```bash
 uv run python compile.py -O programs/bfs.fr
 ```
 
-`-O` compiles with `-O3`, no sanitizer, and the bundled jemalloc
-allocator instead of the system one. A third mode, `-Omax`, is the same
-optimized build but swaps in an unchecked runtime: all array bounds
-checks and `unsafe_cast` range checks are stripped.
+`-O` builds an optimized binary without sanitizer instrumentation, with
+the full runtime checks. A third mode, `-Omax`, is the same optimized
+build but with array bounds checks and `unsafe_cast` range checks
+stripped.
 
 ```bash
 uv run python compile.py -Omax programs/bfs.fr
 ```
 
 All modes implement the same language with identical compiler
-diagnostics and program output; only the allocator, the optimization
-level, and the runtime checking differ. Debug mode reports memory
+diagnostics and program output; only the optimization level and the
+runtime checking differ. Debug mode reports memory
 errors and leaks (for example a missing `arr.uninit()`) at run time, so
 develop and test without `-O` and use `-O` for the final fast binary.
 

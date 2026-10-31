@@ -169,7 +169,7 @@ elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 ## 20.6 Array Lifetime Limitations
 
-The checker validates intrinsic legality, but it does not fully prove:
+The compiler validates intrinsic legality, but it does not fully prove:
 
 - dynamic array initialized before indexing;
 - dynamic array not used after `uninit`;

@@ -27,9 +27,6 @@ public class SemanticAnalyzer {
     private final Map<String, GlobalVariableSymbol> hoistedArrayLiteralGlobals =
             new LinkedHashMap<>();
 
-    private final Map<GlobalVariableSymbol, GlobalVariableSymbol> hoistedLiteralViewHeaders =
-            new IdentityHashMap<>();
-
     private final List<SemanticVarDeclNode> pendingHoistedArrayLiterals =
             new ArrayList<>();
 
@@ -72,12 +69,6 @@ public class SemanticAnalyzer {
                     List<BigInteger> values) {
                 return hoistArrayLiteralGlobal(arrayType, values);
             }
-
-            @Override
-            public SemanticVarExprNode hoistLiteralViewHeader(
-                    GlobalVariableSymbol dataSymbol) {
-                return SemanticAnalyzer.this.hoistLiteralViewHeader(dataSymbol);
-            }
         });
         this.exprAnalyzer.setArrayLiteralLowerer(arrayLiteralLowerer);
     }
@@ -93,7 +84,6 @@ public class SemanticAnalyzer {
     public SemanticASTNode analyze(ASTNode root) {
         symbolTable.clear();
         hoistedArrayLiteralGlobals.clear();
-        hoistedLiteralViewHeaders.clear();
         pendingHoistedArrayLiterals.clear();
         symbolTable.pushScope();
         entryKind = EntryKind.NONE;
@@ -127,7 +117,6 @@ public class SemanticAnalyzer {
     public List<SemanticStmtNode> analyze(List<ASTNode> nodes) {
         symbolTable.clear();
         hoistedArrayLiteralGlobals.clear();
-        hoistedLiteralViewHeaders.clear();
         pendingHoistedArrayLiterals.clear();
         symbolTable.pushScope();
 
@@ -196,54 +185,6 @@ public class SemanticAnalyzer {
 
         sym.literalValues = List.copyOf(values);
         hoistedArrayLiteralGlobals.put(keyText, sym);
-        pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(sym));
-
-        return new SemanticVarExprNode(sym.type, sym);
-    }
-
-    SemanticVarExprNode hoistLiteralViewHeader(GlobalVariableSymbol dataSymbol) {
-        GlobalVariableSymbol existing =
-                hoistedLiteralViewHeaders.get(dataSymbol);
-
-        if (existing != null) {
-            return new SemanticVarExprNode(existing.type, existing);
-        }
-
-        if (!(dataSymbol.type instanceof SemanticStaticArrayType staticArray)) {
-            symbolTable.error("Internal compiler error: literal view header "
-                    + "requires a static array global");
-            return new SemanticVarExprNode(
-                    new SemanticDynamicArrayType(FALLBACK_TYPE),
-                    new GlobalVariableSymbol(
-                            null,
-                            "<literal-header>",
-                            new SemanticDynamicArrayType(FALLBACK_TYPE)));
-        }
-
-        SemanticType headerType =
-                new SemanticDynamicArrayType(staticArray.elementType);
-
-        String baseName = dataSymbol.name + "_VIEW";
-        String name = baseName;
-        int suffix = 0;
-
-        GlobalVariableSymbol sym;
-
-        while (true) {
-            GlobalVariableSymbol candidate =
-                    new GlobalVariableSymbol(null, name, headerType);
-
-            if (symbolTable.declareGlobalNamespaceVariable(candidate)) {
-                sym = candidate;
-                break;
-            }
-
-            suffix++;
-            name = baseName + "_" + suffix;
-        }
-
-        sym.literalHeaderData = dataSymbol;
-        hoistedLiteralViewHeaders.put(dataSymbol, sym);
         pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(sym));
 
         return new SemanticVarExprNode(sym.type, sym);

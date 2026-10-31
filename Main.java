@@ -254,7 +254,7 @@ public class Main {
             OsFfi.verifyBridge(semaAST, osFfiBridgeText);
         }
 
-        Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText, target);
+        Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText, target, maxOptimize);
         String generatedBody = codegen.generate(semaAST);
 
         if (!explicitTemplate) {
@@ -273,16 +273,7 @@ public class Main {
             throw new RuntimeException("Template does not contain __FRANKO_PROGRAM__ placeholder.");
         }
 
-        // Without -O the program uses the system allocator (malloc/free)
-        // so AddressSanitizer instrumentation applies; with -O it uses
-        // the bundled jemalloc header; with -Omax it uses the jemalloc
-        // header variant with bounds and unsafe_cast checking stripped.
-        // Custom -t templates that pin their own runtime #include keep
-        // working: the splice only fires when the placeholder is present,
-        // but stock templates must carry it.
-        String runtimeHeader = maxOptimize ? "FrankoRuntimeOptimizedMax.hpp"
-                : optimize ? "FrankoRuntimeOptimized.hpp"
-                : "FrankoRuntimeWithAsan.hpp";
+        String runtimeHeader = "FrankoRuntime.hpp";
         if (!explicitTemplate && !template.contains("__FRANKO_RUNTIME_HEADER__")) {
             throw new RuntimeException("Template does not contain __FRANKO_RUNTIME_HEADER__ placeholder.");
         }

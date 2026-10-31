@@ -169,15 +169,12 @@ view<[int32]> d = [1, 2, 3, 4];  // decay in a declaration
 ```
 
 When the decay applies directly to a literal in one of these positions,
-the converted view is itself a hoisted constant global (a
-dynamic-array header over the literal's constant storage), not a
-statement-scoped temporary. Returning or keeping such a view is therefore
-always safe — including from recursive functions — unlike a decay of an
-ordinary local, which must not outlive its scope (see
-[Pointers](24-pointers.md) 24.4.1).
-
-Permissions never upgrade: a literal (read-only) cannot initialize an
-`mview` or `ptr` variable.
+the converted view refers to the literal's constant storage and keeps
+its length. No copy or new array object is created. Returning or
+keeping such a view is therefore always safe — including from recursive
+functions — because the literal's storage has static lifetime.
+Permission rules are unchanged: a literal (read-only) cannot initialize
+an `mview` or `ptr` variable.
 
 ## 22.7 `?` Size Inference
 
@@ -208,6 +205,9 @@ func main() -> int32 {
     return 0;
 }
 ```
+
+`G` refers to the literal's constant `[int32, 4]` storage; the literal is
+not copied.
 
 Array-typed globals are not assignable from literals (22.5); use
 element assignments in an initializer function.

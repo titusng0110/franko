@@ -1,0 +1,43 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Byte Intrinsics on Static Array Receivers
+// ============================================================
+// Covers the byte intrinsics whose receiver is a decayed static byte
+// view or an inner row of a nested static byte array. Both cases wrap
+// the underlying storage in a Franko_Fat_Pointer<uint8_t> (mode 2,
+// count N) and share the same checked implementation:
+//   - getview([byte, N]) decayed to view<[byte]>: memchr, endian read;
+//   - grid[i] inner [byte, N] row: memset, write_bit/read_bit,
+//     endian write/read, flip_bit, memchr, count_set_bits.
+// No descriptor is built for the decay, and the inner row is bounds
+// checked by the enclosing static array access.
+// ============================================================
+
+[byte, 4] buf
+
+func main() -> int32 {
+    buf[0] = 65
+    buf[1] = 66
+    buf[2] = 67
+    buf[3] = 68
+
+    view<[byte]> v = getview(buf)
+    print($(v).length())
+    print($(v).memchr(67))
+    print($(v).read_uint16_LE(0))
+    print($(v).memchr(90))
+
+    [[byte, 4], 2] grid
+    grid[0].memset(0)
+    grid[0].write_bit(0, 1)
+    grid[1].write_uint16_BE(0, 0x1234)
+    grid[1].flip_bit(0)
+
+    print(grid[0].memchr(0))
+    print(grid[0].read_bit(0))
+    print(grid[1].read_uint16_BE(0))
+    print(grid[1].count_set_bits())
+
+    return 0
+}

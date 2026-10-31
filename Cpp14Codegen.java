@@ -22,12 +22,11 @@ public class Cpp14Codegen {
     private final List<LoopFrame> loopStack = new ArrayList<>();
     private int nextLoopId = 0;
 
-    private final List<String> pendingPrelude = new ArrayList<>();
-    private int nextDecayTempId = 0;
-
     private final String osFfiBridgeText;
 
     private final TargetInfo target;
+
+    private final boolean uncheckedStaticArrayAccess;
 
     private final Set<OsFfi.Kind> usedOsFfiKinds = new LinkedHashSet<>();
 
@@ -40,8 +39,17 @@ public class Cpp14Codegen {
     }
 
     public Cpp14Codegen(String osFfiBridgeText, TargetInfo target) {
+        this(osFfiBridgeText, target, false);
+    }
+
+    public Cpp14Codegen(
+            String osFfiBridgeText,
+            TargetInfo target,
+            boolean uncheckedStaticArrayAccess
+    ) {
         this.osFfiBridgeText = osFfiBridgeText;
         this.target = target;
+        this.uncheckedStaticArrayAccess = uncheckedStaticArrayAccess;
     }
 
     private String currentEmitNamespace = null;
@@ -59,8 +67,6 @@ public class Cpp14Codegen {
         out.setLength(0);
         indentLevel = 0;
         usedOsFfiKinds.clear();
-        pendingPrelude.clear();
-        nextDecayTempId = 0;
 
         emitNode(root);
 
@@ -510,9 +516,7 @@ public class Cpp14Codegen {
 
         StringBuilder sb = new StringBuilder();
 
-        sb.append(emitType(field.type));
-        sb.append(" ");
-        sb.append(field.name);
+        sb.append(emitDecl(field.type, field.name));
 
         if (field.foldedDefault != null) {
             sb.append(" = ");
@@ -657,9 +661,7 @@ public class Cpp14Codegen {
             }
 
             ParameterSymbol param = params.get(i);
-            sb.append(emitType(param.type));
-            sb.append(" ");
-            sb.append(emitSymbolName(param));
+            sb.append(emitDecl(param.type, emitSymbolName(param)));
         }
 
         sb.append(")");
@@ -716,7 +718,6 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticExprStmtNode exprStmt) {
             String expr = emitExpr(exprStmt.expr);
-            flushPrelude();
             emitLine(expr + ";");
             return;
         }
@@ -742,35 +743,29 @@ public class Cpp14Codegen {
     private void emitGlobalForwardDeclaration(SemanticVarDeclNode node) {
         VariableSymbol sym = node.symbol;
 
-        String cppType = emitType(sym.type);
-        String name = emitSymbolName(sym);
         String qualifier = "";
 
         if (sym instanceof GlobalVariableSymbol global
                 && (global.literalBytes != null
-                    || global.literalValues != null
-                    || global.literalHeaderData != null)) {
+                    || global.literalValues != null)) {
             qualifier = "const ";
         }
 
-        emitLine("extern " + qualifier + cppType + " " + name + ";");
+        emitLine("extern " + qualifier
+                + emitDecl(sym.type, emitSymbolName(sym)) + ";");
     }
 
     private void emitVarDecl(SemanticVarDeclNode node) {
         VariableSymbol sym = node.symbol;
 
-        String cppType = emitType(sym.type);
-        String name = emitSymbolName(sym);
+        String declaration = emitDecl(sym.type, emitSymbolName(sym));
 
         if (sym instanceof GlobalVariableSymbol global
                 && (global.literalBytes != null
-                    || global.literalValues != null
-                    || global.literalHeaderData != null)) {
+                    || global.literalValues != null)) {
             String initializer;
 
-            if (global.literalHeaderData != null) {
-                initializer = emitLiteralViewHeaderInitializer(global);
-            } else if (global.literalBytes != null) {
+            if (global.literalBytes != null) {
                 initializer =
                         emitByteArrayInitializer(global.literalBytes);
             } else if (sym.type instanceof SemanticStaticArrayType staticArray) {
@@ -785,9 +780,7 @@ public class Cpp14Codegen {
             }
 
             emitLine("const "
-                    + cppType
-                    + " "
-                    + name
+                    + declaration
                     + " = "
                     + initializer
                     + ";");
@@ -802,20 +795,7 @@ public class Cpp14Codegen {
         }
 
         if (node.staticInitializer != null) {
-            String raw = emitExpr(node.staticInitializer);
-
-            if (PointerPermissions.isStaticArrayViewDecay(
-                    node.staticInitializer.type,
-                    sym.type)) {
-                initializer = " = "
-                        + emitDecayedViewTemp(
-                                raw,
-                                node.staticInitializer.type,
-                                sym.type
-                        );
-            } else {
-                initializer = " = " + raw;
-            }
+            initializer = " = " + emitExpr(node.staticInitializer);
         }
 
         if (initializer.isEmpty()
@@ -823,36 +803,7 @@ public class Cpp14Codegen {
             initializer = " = nullptr";
         }
 
-        flushPrelude();
-        emitLine(cppType + " " + name + initializer + ";");
-    }
-
-    private String emitLiteralViewHeaderInitializer(
-            GlobalVariableSymbol global
-    ) {
-        if (!(global.type instanceof SemanticDynamicArrayType dynamicArray)) {
-            throw new IllegalStateException(
-                    "Internal compiler error: literal view header '"
-                            + global.qualifiedName()
-                            + "' does not have a dynamic array type");
-        }
-
-        GlobalVariableSymbol data = global.literalHeaderData;
-
-        if (!(data.type instanceof SemanticStaticArrayType staticArray)) {
-            throw new IllegalStateException(
-                    "Internal compiler error: literal view header '"
-                            + global.qualifiedName()
-                            + "' is not backed by a static array global");
-        }
-
-        return "{"
-                + staticArray.sizeLiteral
-                + ", const_cast<"
-                + emitType(dynamicArray.elementType)
-                + "*>("
-                + emitSymbolName(data)
-                + ".data), true}";
+        emitLine(declaration + initializer + ";");
     }
 
     private String emitStaticArrayLiteralInitializer(
@@ -878,37 +829,24 @@ public class Cpp14Codegen {
 
         sb.append("{");
 
-        if (type.elementType instanceof SemanticStaticArrayType rowType) {
-            sb.append("{");
+        for (int i = 0; i < size; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
 
-            for (int i = 0; i < size; i++) {
-                if (i > 0) {
-                    sb.append(", ");
-                }
-
+            if (type.elementType instanceof SemanticStaticArrayType rowType) {
                 sb.append(emitStaticArrayLiteralValue(
                         rowType,
                         values,
                         cursor));
+                continue;
             }
 
-            sb.append("}");
-        } else {
-            sb.append("{");
+            BigInteger value = cursor[0] < values.size()
+                    ? values.get(cursor[0]++)
+                    : BigInteger.ZERO;
 
-            for (int i = 0; i < size; i++) {
-                if (i > 0) {
-                    sb.append(", ");
-                }
-
-                BigInteger value = cursor[0] < values.size()
-                        ? values.get(cursor[0]++)
-                        : BigInteger.ZERO;
-
-                sb.append(emitBigIntegerLiteral(value));
-            }
-
-            sb.append("}");
+            sb.append(emitBigIntegerLiteral(value));
         }
 
         sb.append("}");
@@ -946,7 +884,7 @@ public class Cpp14Codegen {
     private String emitByteArrayInitializer(List<BigInteger> bytes) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("{{");
+        sb.append("{");
 
         for (int i = 0; i < bytes.size(); i++) {
             if (i > 0) {
@@ -956,7 +894,7 @@ public class Cpp14Codegen {
             sb.append(bytes.get(i).toString(10));
         }
 
-        sb.append("}}");
+        sb.append("}");
 
         return sb.toString();
     }
@@ -965,7 +903,6 @@ public class Cpp14Codegen {
 
         String target = emitLValue(node.target);
         String value = emitExprAsType(node.value, node.target.type);
-        flushPrelude();
 
         emitLine(
                 target
@@ -980,7 +917,6 @@ public class Cpp14Codegen {
     private void emitIf(SemanticIfNode node) {
 
         String condition = emitExpr(node.condition);
-        flushPrelude();
         emitLine("if (" + condition + ")");
         emitControlledStmt(node.thenBranch);
 
@@ -1001,27 +937,6 @@ public class Cpp14Codegen {
         loopStack.add(frame);
 
         String condition = emitExpr(node.condition);
-
-        if (!pendingPrelude.isEmpty()) {
-            emitLine("L_top_" + frame.id + ": ;");
-            flushPrelude();
-            emitLine("if (!(" + condition + ")) goto L_brk_" + frame.id + ";");
-            emitStmt(node.body);
-
-            if (needsContinueLabel) {
-                emitLine("L_cont_" + frame.id + ": ;");
-            }
-
-            for (SemanticStmtNode updateStmt : node.update) {
-                emitStmt(updateStmt);
-            }
-
-            emitLine("goto L_top_" + frame.id + ";");
-            emitLine("L_brk_" + frame.id + ": ;");
-
-            loopStack.remove(loopStack.size() - 1);
-            return;
-        }
 
         emitLine("while (" + condition + ")");
 
@@ -1213,7 +1128,6 @@ public class Cpp14Codegen {
                 : node.value.type;
 
         String value = emitExprAsType(node.value, targetType);
-        flushPrelude();
 
         emitLine("return " + value + ";");
     }
@@ -1349,14 +1263,19 @@ public class Cpp14Codegen {
     }
 
     private String emitArrayAccess(SemanticArrayAccessNode node) {
-        return "("
-                + emitExpr(node.target)
-                + "["
-                + emitExprAsType(
-                        node.index,
-                        UINT32_TYPE
-                )
-                + "])";
+        String index = emitExprAsType(node.index, UINT32_TYPE);
+
+        if (node.target instanceof SemanticDerefNode deref) {
+            return "(" + emitExpr(deref.expr) + "[" + index + "])";
+        }
+
+        if (node.target.type instanceof SemanticStaticArrayType
+                && !uncheckedStaticArrayAccess) {
+            return "(franko_static_array_at("
+                    + emitExpr(node.target) + ", " + index + "))";
+        }
+
+        return "(" + emitExpr(node.target) + "[" + index + "])";
     }
 
     private String emitFunctionCall(SemanticFunctionCallNode node) {
@@ -1427,7 +1346,7 @@ public class Cpp14Codegen {
 
         StringBuilder sb = new StringBuilder();
 
-        sb.append(emitLValue(node.receiver));
+        sb.append(emitIntrinsicReceiver(node));
         sb.append(".");
         sb.append(node.kind.runtimeName);
         sb.append("(");
@@ -1445,11 +1364,43 @@ public class Cpp14Codegen {
         return sb.toString();
     }
 
+    private String emitIntrinsicReceiver(SemanticArrayIntrinsicCallNode node) {
+        if (node.kind.dynamicOnly) {
+            return emitLValue(node.receiver);
+        }
+
+        if (node.receiver instanceof SemanticDerefNode deref) {
+            return emitExpr(deref.expr);
+        }
+
+        if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
+            return "franko_make_fat_pointer("
+                    + emitLValue(node.receiver)
+                    + ", "
+                    + staticArray.sizeLiteral
+                    + ", 2)";
+        }
+
+        if (node.receiver.type instanceof SemanticDynamicArrayType) {
+            return "franko_make_dynamic_fat_pointer(&"
+                    + emitLValue(node.receiver)
+                    + ")";
+        }
+
+        throw new IllegalStateException(
+                "Internal compiler error: array intrinsic receiver is not an array"
+        );
+    }
+
     private String emitArrayLengthCall(SemanticArrayIntrinsicCallNode node) {
         if (!node.args.isEmpty()) {
             throw new IllegalStateException(
                     "Internal compiler error: invalid arity for array intrinsic 'length'"
             );
+        }
+
+        if (node.receiver instanceof SemanticDerefNode deref) {
+            return emitExpr(deref.expr) + ".length()";
         }
 
         if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
@@ -1493,13 +1444,59 @@ public class Cpp14Codegen {
     }
 
     private String emitGetPtr(SemanticGetPtrNode node) {
+        if (node.target instanceof SemanticDerefNode deref) {
+            return emitExpr(deref.expr);
+        }
+
+        if (node.target.type instanceof SemanticStaticArrayType staticArray) {
+            return "franko_make_fat_pointer("
+                    + emitLValue(node.target)
+                    + ", "
+                    + staticArray.sizeLiteral
+                    + ", 2)";
+        }
+
+        if (node.target.type instanceof SemanticDynamicArrayType) {
+            return "franko_make_dynamic_fat_pointer(&"
+                    + emitLValue(node.target)
+                    + ")";
+        }
 
         return "(&" + emitLValue(node.target) + ")";
     }
 
     private String emitDeref(SemanticDerefNode node) {
+        if (!(node.expr.type instanceof SemanticPtrType pointerType)) {
+            throw new IllegalStateException(
+                    "Internal compiler error: dereference operand is not a pointer type"
+            );
+        }
 
-        return "(*" + emitExpr(node.expr) + ")";
+        String pointer = emitExpr(node.expr);
+
+        if (pointerType.referencedType instanceof SemanticStaticArrayType staticArray) {
+            String elementType = emitType(staticArray.elementType);
+
+            return "franko_static_array_ref<"
+                    + elementType
+                    + ", "
+                    + staticArray.sizeLiteral
+                    + ">(static_cast<"
+                    + elementType
+                    + "*>("
+                    + pointer
+                    + ".data))";
+        }
+
+        if (pointerType.referencedType instanceof SemanticDynamicArrayType dynamicArray) {
+            return "(*static_cast<Franko_Dynamic_Array<"
+                    + emitType(dynamicArray.elementType)
+                    + ">*>("
+                    + pointer
+                    + ".data))";
+        }
+
+        return "(*" + pointer + ")";
     }
 
     private String emitCast(SemanticCastExprNode node) {
@@ -1509,10 +1506,6 @@ public class Cpp14Codegen {
         }
 
         String raw = emitExpr(node.expr);
-
-        if (PointerPermissions.isStaticArrayViewDecay(node.expr.type, node.type)) {
-            return emitDecayedViewTemp(raw, node.expr.type, node.type);
-        }
 
         if (!node.checked) {
 
@@ -1565,19 +1558,25 @@ public class Cpp14Codegen {
         }
 
         if (type instanceof SemanticStaticArrayType staticArray) {
-            return "Franko_Static_Array<"
-                    + emitType(staticArray.elementType)
-                    + ", "
-                    + staticArray.sizeLiteral
-                    + ">";
+            StringBuilder dimensions = new StringBuilder();
+            SemanticType elementType = staticArray;
+
+            while (elementType instanceof SemanticStaticArrayType row) {
+                dimensions.append("[").append(row.sizeLiteral).append("]");
+                elementType = row.elementType;
+            }
+
+            return emitType(elementType) + dimensions;
         }
 
         if (type instanceof SemanticPtrType ptr) {
-            String pointee = emitType(ptr.referencedType);
+            if (isArrayType(ptr.referencedType)) {
+                return "Franko_Fat_Pointer<"
+                        + emitType(pointerElementType(ptr.referencedType))
+                        + ">";
+            }
 
-            return ptr.permission == PtrPermission.READ_ONLY
-                    ? pointee + " const*"
-                    : pointee + "*";
+            return emitType(ptr.referencedType) + "*";
         }
 
         if (type instanceof SemanticStructType struct) {
@@ -1596,6 +1595,39 @@ public class Cpp14Codegen {
                 "Internal compiler error: unsupported semantic type for codegen: "
                         + type.getClass().getSimpleName()
         );
+    }
+
+    private String emitDecl(SemanticType type, String name) {
+        if (type instanceof SemanticStaticArrayType staticArray) {
+            StringBuilder dimensions = new StringBuilder();
+            SemanticType elementType = staticArray;
+
+            while (elementType instanceof SemanticStaticArrayType row) {
+                dimensions.append("[").append(row.sizeLiteral).append("]");
+                elementType = row.elementType;
+            }
+
+            return emitType(elementType) + " " + name + dimensions;
+        }
+
+        return emitType(type) + " " + name;
+    }
+
+    private static boolean isArrayType(SemanticType type) {
+        return type instanceof SemanticStaticArrayType
+                || type instanceof SemanticDynamicArrayType;
+    }
+
+    private static SemanticType pointerElementType(SemanticType referencedType) {
+        if (referencedType instanceof SemanticStaticArrayType staticArray) {
+            return staticArray.elementType;
+        }
+
+        if (referencedType instanceof SemanticDynamicArrayType dynamicArray) {
+            return dynamicArray.elementType;
+        }
+
+        return referencedType;
     }
 
     private String emitPrimitiveType(SemanticPrimitiveKind kind) {
@@ -1716,49 +1748,7 @@ public class Cpp14Codegen {
             return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
         }
 
-        if (PointerPermissions.isStaticArrayViewDecay(expr.type, targetType)) {
-            return emitDecayedViewTemp(raw, expr.type, targetType);
-        }
-
         return raw;
-    }
-
-    private String emitDecayedViewTemp(
-            String raw,
-            SemanticType sourceType,
-            SemanticType targetType
-    ) {
-        SemanticStaticArrayType staticArray = (SemanticStaticArrayType)
-                ((SemanticPtrType) sourceType).referencedType;
-        SemanticDynamicArrayType dynamicArray = (SemanticDynamicArrayType)
-                ((SemanticPtrType) targetType).referencedType;
-
-        String elementType = emitType(dynamicArray.elementType);
-        String name = "_TMP_VIEW_" + (nextDecayTempId++);
-
-        pendingPrelude.add(
-                "Franko_Dynamic_Array<"
-                        + elementType
-                        + "> "
-                        + name
-                        + " = {"
-                        + staticArray.sizeLiteral
-                        + ", const_cast<"
-                        + elementType
-                        + "*>("
-                        + raw
-                        + "->data), true};"
-        );
-
-        return "(&" + name + ")";
-    }
-
-    private void flushPrelude() {
-        for (String line : pendingPrelude) {
-            emitLine(line);
-        }
-
-        pendingPrelude.clear();
     }
 
     private String castToSemanticExprTypeIfNeeded(

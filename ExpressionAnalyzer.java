@@ -58,19 +58,11 @@ public final class ExpressionAnalyzer {
             ASTNode node,
             SemanticType expectedType
     ) {
-        SemanticExprNode expr;
-
         if (node instanceof ArrayLiteralNode lit) {
-            expr = lowerArrayLiteral(lit, expectedType);
-        } else {
-            expr = analyzeExpr(node);
+            return lowerArrayLiteral(lit, expectedType);
         }
 
-        if (arrayLiteralLowerer == null) {
-            return expr;
-        }
-
-        return arrayLiteralLowerer.resolveImmediateDecay(expr, expectedType);
+        return analyzeExpr(node);
     }
 
     private SemanticExprNode lowerArrayLiteral(
@@ -512,17 +504,7 @@ public final class ExpressionAnalyzer {
             SymbolTable.CallArg callArg = callArgs.get(i);
 
             if (!callArg.isLiteral()) {
-                SemanticType context = parameterTypes != null
-                        && i < parameterTypes.size()
-                        ? parameterTypes.get(i)
-                        : null;
-
-                out.add(arrayLiteralLowerer == null
-                        ? callArg.lowered
-                        : arrayLiteralLowerer.resolveImmediateDecay(
-                                callArg.lowered,
-                                context));
-
+                out.add(callArg.lowered);
                 continue;
             }
 
