@@ -273,15 +273,24 @@ state, because those permissions cannot allocate or free storage.
 
 | Operation | Required state | Result |
 |---|---|---|
-| `d.init(n)`, `d.init_zero(n)`, `d(n)` | `UNINITED` | `INITED`; double init is an error |
+| `d.init(n)`, `d.init_zero(n)`, `d(n)` | any | `INITED`; repeated init is not diagnosed |
 | `d.resize(n)` | `INITED` | stays `INITED` |
-| `d.uninit()` | `INITED` | `UNINITED`; double uninit is an error |
+| `d.uninit()` | `INITED` | `UNINITED`; invalid free if never initialized, double free if already uninitialized |
 | `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |
 | `d.memcmp`, `d.memchr`, `d.memmem`, `d.read_*`, `d.read_bit`, `d.count_set_bits` | `INITED` | unchanged |
 | `d.length()` | any state | unchanged; safe after `uninit` |
 
 A use of a definitely `UNINITED` array is an error; a use of a
 `MAYBE_INITED` array is a warning.
+
+`uninit()` on a definitely never-initialized array is an **invalid
+free**. `uninit()` on an array that was already uninitialized is a
+**double free**. Both are errors when definite; possible cases are
+warnings.
+
+Repeated `init`/`init_zero` is deliberately not diagnosed: the first
+call may have returned `-1`, and retrying is valid. The runtime still
+aborts if the array really was initialized already.
 
 ### 27.10.4 Guard Traps
 

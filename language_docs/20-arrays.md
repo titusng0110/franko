@@ -171,9 +171,12 @@ elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 The compiler validates intrinsic legality and also tracks the
 initialization lifecycle of function-local dynamic array variables and
-owner `ptr<[T]>` aliases. Definite double init, use before init, use
-after `uninit`, and double uninit are compile errors; possible cases are
-warnings. Missing an explicit `uninit()` is a warning because the
+owner `ptr<[T]>` aliases. Definite use before init, use after `uninit`,
+invalid free, and double free are compile errors; possible cases are
+warnings.
+Repeated `init` is not diagnosed because an earlier call may have failed
+with `-1` and a retry is valid; the runtime still aborts on a true
+double init. Missing an explicit `uninit()` is a warning because the
 runtime destructor still frees local buffers. See
 [Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 

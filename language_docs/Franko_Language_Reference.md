@@ -2078,9 +2078,12 @@ elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 The compiler validates intrinsic legality and also tracks the
 initialization lifecycle of function-local dynamic array variables and
-owner `ptr<[T]>` aliases. Definite double init, use before init, use
-after `uninit`, and double uninit are compile errors; possible cases are
-warnings. Missing an explicit `uninit()` is a warning because the
+owner `ptr<[T]>` aliases. Definite use before init, use after `uninit`,
+invalid free, and double free are compile errors; possible cases are
+warnings.
+Repeated `init` is not diagnosed because an earlier call may have failed
+with `-1` and a retry is valid; the runtime still aborts on a true
+double init. Missing an explicit `uninit()` is a warning because the
 runtime destructor still frees local buffers. See
 [Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
@@ -2109,8 +2112,10 @@ Void-returning intrinsics are invalid in value contexts.
 
 For function-local dynamic arrays, the compiler also tracks
 `init`/`init_zero`/`resize`/`uninit` lifecycle state and reports
-definite double init, use before init, use after `uninit`, and double
-uninit. See
+definite use before init, use after `uninit`, invalid free, and double
+free.
+Repeated `init` is not diagnosed because an earlier call may have failed
+with `-1` and a retry is valid. See
 [Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
 | Intrinsic | Receiver | Returns | Status |
@@ -3991,15 +3996,24 @@ state, because those permissions cannot allocate or free storage.
 
 | Operation | Required state | Result |
 |---|---|---|
-| `d.init(n)`, `d.init_zero(n)`, `d(n)` | `UNINITED` | `INITED`; double init is an error |
+| `d.init(n)`, `d.init_zero(n)`, `d(n)` | any | `INITED`; repeated init is not diagnosed |
 | `d.resize(n)` | `INITED` | stays `INITED` |
-| `d.uninit()` | `INITED` | `UNINITED`; double uninit is an error |
+| `d.uninit()` | `INITED` | `UNINITED`; invalid free if never initialized, double free if already uninitialized |
 | `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |
 | `d.memcmp`, `d.memchr`, `d.memmem`, `d.read_*`, `d.read_bit`, `d.count_set_bits` | `INITED` | unchanged |
 | `d.length()` | any state | unchanged; safe after `uninit` |
 
 A use of a definitely `UNINITED` array is an error; a use of a
 `MAYBE_INITED` array is a warning.
+
+`uninit()` on a definitely never-initialized array is an **invalid
+free**. `uninit()` on an array that was already uninitialized is a
+**double free**. Both are errors when definite; possible cases are
+warnings.
+
+Repeated `init`/`init_zero` is deliberately not diagnosed: the first
+call may have returned `-1`, and retrying is valid. The runtime still
+aborts if the array really was initialized already.
 
 ### 27.10.4 Guard Traps
 
@@ -4287,9 +4301,12 @@ Array literal elements must be compile-time constant expressions
 ## 30.9 Dynamic Array Lifetime Checking Is Partial
 
 The compiler tracks the init/uninit lifecycle of function-local dynamic
-array variables and owner `ptr<[T]>` aliases. It rejects definite double
-init, use before init, use after `uninit`, and double uninit; possible
-cases and missing explicit `uninit()` calls are warnings. It does not
+array variables and owner `ptr<[T]>` aliases. It rejects definite use
+before init, use after `uninit`, invalid free, and double free;
+possible cases and missing explicit `uninit()` calls are warnings.
+Repeated `init` is not
+diagnosed because an earlier call may have failed with `-1` and a retry
+is valid. It does not
 track dynamic arrays in struct fields or nested elements, `mview`/`view`
 aliases, or interprocedural callee effects, and it does not prove all
 bounds properties. See

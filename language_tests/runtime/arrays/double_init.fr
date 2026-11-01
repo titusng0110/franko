@@ -1,17 +1,13 @@
 import "franko/io"
 
 // Runtime fixture: arrays/double_init
-// The double init happens through a caller-owned pointer, so the
-// intra-procedural checker cannot prove it and the array runtime raises
-// a runtime error (doc 32.3).
-func initTwice(ptr<[int32]> p) -> void {
-    $(p).init(4)
-    $(p).init(4)
-}
-
+// A repeated init is not rejected by the checker because an earlier init
+// may have failed with -1 and a retry is valid. The array runtime still
+// raises a runtime error on a true double init.
 func main() -> int32 {
     [int32] xs
-    initTwice(getptr(xs))
+    xs.init(4)
+    xs.init(4)
     print(xs[0])
     return 0
 }
