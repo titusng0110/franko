@@ -1,0 +1,7 @@
+func main() -> int32 {
+    [int32] d
+    d.init(4)
+    d.uninit()
+    d.memset(0)
+    return 0
+}

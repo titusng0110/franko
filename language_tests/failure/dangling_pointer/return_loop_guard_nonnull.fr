@@ -1,0 +1,13 @@
+func bad() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p
+    while (p == null) {
+        p = getptr(x)
+    }
+    return p
+}
+
+func main() -> int32 {
+    ptr<int32> p = bad()
+    return 0
+}

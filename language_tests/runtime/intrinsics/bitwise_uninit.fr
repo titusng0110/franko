@@ -1,7 +1,12 @@
 // Runtime fixture: intrinsics/bitwise_uninit
-// Byte-mask intrinsics abort on an uninitialized dynamic array.
+// The operation happens through a caller-owned pointer, so the checker
+// cannot prove the array is uninitialized; the runtime aborts.
+func invert(ptr<[byte]> p) -> void {
+    $(p).bitwise_not_mask()
+}
+
 func main() -> int32 {
-    [byte] buf;
-    buf.bitwise_not_mask();
-    return 0;
+    [byte] buf
+    invert(getptr(buf))
+    return 0
 }

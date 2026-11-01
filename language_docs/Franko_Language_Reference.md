@@ -140,9 +140,11 @@ uv run python compile.py -Omax programs/bfs.fr
 
 All modes implement the same language with identical compiler
 diagnostics and program output; only the optimization level and the
-runtime checking differ. Debug mode reports memory
-errors and leaks (for example a missing `arr.uninit()`) at run time, so
-develop and test without `-O` and use `-O` for the final fast binary.
+runtime checking differ. Debug mode reports memory errors at run time.
+Compile-time checks reject definite pointer and dynamic-array lifecycle
+misuse; a missing explicit `arr.uninit()` is a warning rather than a
+leak error because local dynamic arrays are freed by their destructor.
+Develop and test without `-O` and use `-O` for the final fast binary.
 
 `-Omax` is for developers who have already validated their program and
 want maximum speed. Out-of-range array access and out-of-range
@@ -2072,14 +2074,23 @@ a.uninit();
 An array literal is not an array value; arrays receive literal
 elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
-## 20.6 Array Lifetime Limitations
+## 20.6 Array Lifetime Checking
 
-The compiler validates intrinsic legality, but it does not fully prove:
+The compiler validates intrinsic legality and also tracks the
+initialization lifecycle of function-local dynamic array variables and
+owner `ptr<[T]>` aliases. Definite double init, use before init, use
+after `uninit`, and double uninit are compile errors; possible cases are
+warnings. Missing an explicit `uninit()` is a warning because the
+runtime destructor still frees local buffers. See
+[Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
-- dynamic array initialized before indexing;
-- dynamic array not used after `uninit`;
-- dynamic array not initialized twice;
-- all array accesses are within bounds.
+The check does not yet cover:
+
+- dynamic arrays in struct fields or nested dynamic-array elements;
+- `mview<[T]>`/`view<[T]>` aliases;
+- callee effects beyond marking owner-pointer arguments as possibly
+  initialized;
+- runtime bounds violations for nonconstant indexes.
 
 ---
 
@@ -2095,6 +2106,12 @@ status = xs.init(10);
 ```
 
 Void-returning intrinsics are invalid in value contexts.
+
+For function-local dynamic arrays, the compiler also tracks
+`init`/`init_zero`/`resize`/`uninit` lifecycle state and reports
+definite double init, use before init, use after `uninit`, and double
+uninit. See
+[Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
 | Intrinsic | Receiver | Returns | Status |
 |---|---|---|---|
@@ -3703,7 +3720,10 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 Franko checks two independent properties of pointers: **null state**
 and **dangling storage**. Both checks cover all three pointer types
-(`ptr`, `mview`, and `view`).
+(`ptr`, `mview`, and `view`). A third, separate intra-procedural check
+tracks the initialization lifecycle of function-local dynamic arrays
+(see
+[Dynamic-Array Lifecycle Checking](#2710-dynamic-array-lifecycle-checking)).
 
 The null-state check tracks one fact per pointer variable: whether it is
 definitely null, definitely pointing, or possibly null on the current
@@ -3758,7 +3778,11 @@ Branch-sensitive analysis is limited to a maximum nesting depth (12). Beyond tha
 `while` loops are handled with a bounded abstraction:
 
 - the body is checked once;
-- the state after the loop merges the "zero iterations" and "one iteration" states, since a loop may execute zero times.
+- zero-trip and back-edge exit states are included only when the
+  condition-false guard is feasible for that state;
+- `break` and `continue` states are merged separately;
+- if neither a normal exit nor a `break` is feasible, the loop is
+  treated as non-falling-through, so its tail is not analyzed.
 
 Loop termination is not proven; the post-loop state is conservative.
 
@@ -3844,14 +3868,20 @@ are never assumed to point into the current frame.
 
 The dangling-storage check uses the same bounded path-sensitive traversal
 as the null-state check: `if`/`else` is followed branch by branch up to
-12 nested branches, then merged conservatively, and `while` loops merge
-the zero-trip, back-edge, and `break` states. `for` loops receive the same
-treatment after desugaring.
+12 nested branches, then merged conservatively. For `while`, each
+zero-trip and back-edge exit is included only when the condition-false
+guard is feasible for that state; `break` and `continue` states are
+merged separately, and a loop with no feasible exit is treated as
+non-falling-through. `for` loops receive the same treatment after
+desugaring.
 
 Null guards refine what is known about the storage too:
 
 - in an `if (p == null)` path, `p` is null, so any recorded local or
   global storage origin for `p` is discarded;
+- in an `if (p != null)` path, the surviving value is marked definitely
+  non-null, so a later return can be classified as definitely dangling
+  rather than only possibly dangling;
 - `if (p != null)` over a pointer that is definitely null is infeasible;
 - `if (p == null)` over a pointer that is definitely non-null is
   infeasible; every `getptr`/`getmview`/`getview` result is definitely
@@ -3912,6 +3942,140 @@ The check intentionally does not detect:
 Calls do conservatively forget state, so later diagnostics do not assume a
 callee left pointer variables untouched. None of these cases produce a
 false positive, but they can produce false negatives.
+
+## 27.10 Dynamic-Array Lifecycle Checking
+
+The compiler also tracks whether a function-local dynamic array has
+allocated element storage. The check is **intra-procedural**: each
+function or method starts with a fresh lifecycle state.
+
+### 27.10.1 Array States
+
+Each tracked dynamic array is in one of three states:
+
+| State | Meaning |
+|---|---|
+| `UNINITED` | no element storage; never initialized, or already `uninit`ed |
+| `INITED` | element storage is allocated |
+| `MAYBE_INITED` | initialized on some paths, or possibly changed by a call |
+
+A separate history flag distinguishes a never-initialized array from one
+that was already freed. That only changes diagnostic wording; it is not
+a fourth lifecycle state.
+
+### 27.10.2 What Is Tracked
+
+The check covers function-local dynamic array variables and owner
+`ptr<[T]>` values obtained from `getptr(localArray)`, including pointer
+copies, casts, and `getptr($(p))` aliases.
+
+It does not yet track:
+
+- dynamic arrays stored in struct fields;
+- individual elements of nested dynamic arrays;
+- element pointers such as `getptr(d[0])`;
+- `mview<[T]>` and `view<[T]>` aliases;
+- global dynamic array variables.
+
+Global owner pointer variables are not trusted across functions: they
+enter each function unknown, can be certified by a local assignment such
+as `G = getptr(d)`, and are forgotten after any function call. Global
+dynamic array lifecycle is not tracked at all.
+
+Passing an owner `ptr<[T]>` to a function marks the array
+`MAYBE_INITED`, because the callee may call `init`, `resize`, or
+`uninit`. Passing an `mview<[T]>` or `view<[T]>` does not change the
+state, because those permissions cannot allocate or free storage.
+
+### 27.10.3 Operations
+
+| Operation | Required state | Result |
+|---|---|---|
+| `d.init(n)`, `d.init_zero(n)`, `d(n)` | `UNINITED` | `INITED`; double init is an error |
+| `d.resize(n)` | `INITED` | stays `INITED` |
+| `d.uninit()` | `INITED` | `UNINITED`; double uninit is an error |
+| `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |
+| `d.memcmp`, `d.memchr`, `d.memmem`, `d.read_*`, `d.read_bit`, `d.count_set_bits` | `INITED` | unchanged |
+| `d.length()` | any state | unchanged; safe after `uninit` |
+
+A use of a definitely `UNINITED` array is an error; a use of a
+`MAYBE_INITED` array is a warning.
+
+### 27.10.4 Guard Traps
+
+A comparison of `d.length()` against a constant refines the state on
+each path:
+
+| Guard | True path | False path |
+|---|---|---|
+| `d.length() == 0` | `UNINITED` | `INITED` |
+| `d.length() != 0` | `INITED` | `UNINITED` |
+| `d.length() > 0`, `>= 1` | `INITED` | `UNINITED` |
+| `d.length() <= 0`, `< 1` | `UNINITED` | `INITED` |
+
+Nonzero constant comparisons also certify the nonzero side as `INITED`.
+The compiler uses the same infeasible-branch suppression as the
+null-state check:
+
+```franko
+[int32] d;
+d.init(4);
+if (d.length() == 0) {
+    d[0] = 1;       // not diagnosed: this path cannot execute
+}
+```
+
+The inverse form is also rejected when it is definitely wrong:
+
+```franko
+[int32] d;
+if (d.length() > 0) {
+    d[0] = 1;       // not diagnosed: this path cannot execute
+}
+```
+
+### 27.10.5 Branches and Loops
+
+`if`/`else` is path-sensitive to the same 12-level branch depth as the
+other checks. Loops merge zero-trip, back-edge, `break`, and `continue`
+states, and apply the condition-false refinement to each exit path. A
+loop with no feasible normal exit or `break` is treated as
+non-falling-through, so its tail is not analyzed. This means:
+
+```franko
+[int32] d;
+while (d.length() == 0) {
+    d.init(4);
+}
+d[0] = 1;           // valid: the loop exited with d initialized
+```
+
+### 27.10.6 Missing `uninit`
+
+A local dynamic array's runtime destructor already frees its buffer when
+the array goes out of scope. Missing an explicit `uninit()` is therefore
+a **warning**, not a memory leak error:
+
+```text
+Dynamic array 'd' is still initialized at return from function 'f'
+(missing explicit uninit)
+```
+
+The warning is suppressed when the array escaped through a global,
+aggregate store, or owner-pointer call, because the compiler can no
+longer prove the state.
+
+### 27.10.7 Limitations
+
+The check does not detect:
+
+- lifecycle misuse of struct-field or nested-element arrays;
+- uninitialized reads performed through `mview`/`view` aliases;
+- callee effects precisely (owner-pointer calls become `MAYBE_INITED`);
+- allocation failure of `init`/`init_zero` (the successful path is
+  modeled);
+- element-pointer invalidation after `resize` or `uninit`;
+- loop fixed points (each loop body is analyzed once).
 
 ---
 
@@ -4120,9 +4284,16 @@ return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 Array literal elements must be compile-time constant expressions
 (runtime values cannot appear in one).
 
-## 30.9 No Full Dynamic Array Lifetime Checking
+## 30.9 Dynamic Array Lifetime Checking Is Partial
 
-The compiler validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
+The compiler tracks the init/uninit lifecycle of function-local dynamic
+array variables and owner `ptr<[T]>` aliases. It rejects definite double
+init, use before init, use after `uninit`, and double uninit; possible
+cases and missing explicit `uninit()` calls are warnings. It does not
+track dynamic arrays in struct fields or nested elements, `mview`/`view`
+aliases, or interprocedural callee effects, and it does not prove all
+bounds properties. See
+[Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
 ## 30.10 Pointer Lifetime Is Not Fully Tracked
 

@@ -207,6 +207,21 @@ public class Main {
             }
         }
 
+        System.out.println("==== Dynamic Array Memory Checking ====");
+        DiagnosticBag dynamicArrayDiagnostics =
+                new DiagnosticBag("Dynamic array memory checking failed:");
+        DynamicArrayMemoryChecker dynamicArrayChecker =
+                new DynamicArrayMemoryChecker(dynamicArrayDiagnostics);
+        dynamicArrayChecker.check(semaAST);
+
+        if (dynamicArrayDiagnostics.hasWarnings()) {
+            System.out.println("==== Dynamic Array Memory Warnings ====");
+
+            for (String warning : dynamicArrayDiagnostics.getWarnings()) {
+                System.out.println("  - " + warning);
+            }
+        }
+
         System.out.println("==== Pointer Permission Linting ====");
         DiagnosticBag permissionDiagnostics =
                 new DiagnosticBag("Pointer permission linting failed:");

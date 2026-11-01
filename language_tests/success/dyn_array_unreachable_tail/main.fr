@@ -1,0 +1,19 @@
+func loop_tail() -> int32 {
+    [int32] d
+    while (d.length() == 0) {
+        return 0
+    }
+    d[0] = 1
+    return 0
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(1)
+    if (d.length() != 0) {
+        d.uninit()
+        return loop_tail()
+    }
+    d[0] = 1
+    return 0
+}

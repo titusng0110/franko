@@ -1,0 +1,16 @@
+func maybe(int32 c) -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p
+    if (c != 0) {
+        p = getptr(x)
+    }
+    if (p != null) {
+        return p
+    }
+    return null
+}
+
+func main() -> int32 {
+    ptr<int32> p = maybe(1)
+    return 0
+}

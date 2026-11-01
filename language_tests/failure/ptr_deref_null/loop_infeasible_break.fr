@@ -1,0 +1,12 @@
+func main() -> int32 {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    while (p != null) {
+        if (p == null) {
+            break
+        }
+        p = null
+    }
+    $(p) = 1
+    return 0
+}

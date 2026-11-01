@@ -1,0 +1,11 @@
+import "franko/io"
+
+func main() -> int32 {
+    [int32] d
+    ptr<[int32]> p = getptr(d)
+    $(p).init(2)
+    d[0] = 11
+    print(d[0])
+    $(p).uninit()
+    return 0
+}

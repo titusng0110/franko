@@ -1,0 +1,6 @@
+func main() -> int32 {
+    [int32] d
+    d.init(4)
+    d.init_zero(4)
+    return 0
+}

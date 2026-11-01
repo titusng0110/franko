@@ -1,0 +1,67 @@
+import "franko/io"
+
+func guarded_init() -> int32 {
+    [int32] d
+    if (d.length() == 0) {
+        d.init(2)
+        d[0] = 7
+    }
+    int32 r = d[0]
+    d.uninit()
+    return r
+}
+
+func guarded_use() -> int32 {
+    [int32] d
+    d.init(2)
+    d[0] = 9
+    if (d.length() != 0) {
+        int32 r = d[0]
+        d.uninit()
+        return r
+    }
+    return 0
+}
+
+func loop_init() -> int32 {
+    [int32] d
+    while (d.length() == 0) {
+        d.init(1)
+    }
+    d[0] = 5
+    int32 r = d[0]
+    d.uninit()
+    return r
+}
+
+func loop_uninit() -> int32 {
+    [int32] d
+    d.init(1)
+    d[0] = 3
+    int32 r = 0
+    while (d.length() > 0) {
+        r = d[0]
+        d.uninit()
+    }
+    return r
+}
+
+func reinit_after_uninit() -> int32 {
+    [int32] d
+    d.init(1)
+    d.uninit()
+    d.init(1)
+    d[0] = 8
+    int32 r = d[0]
+    d.uninit()
+    return r
+}
+
+func main() -> int32 {
+    print(guarded_init())
+    print(guarded_use())
+    print(loop_init())
+    print(loop_uninit())
+    print(reinit_after_uninit())
+    return 0
+}

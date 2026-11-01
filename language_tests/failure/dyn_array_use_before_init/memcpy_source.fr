@@ -1,0 +1,8 @@
+func main() -> int32 {
+    [int32] src
+    [int32] dst
+    dst.init(4)
+    dst.memcpy(getptr(src))
+    dst.uninit()
+    return 0
+}

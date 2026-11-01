@@ -687,6 +687,12 @@ public final class PointerNullStateChecker {
             SemanticExprNode condition,
             boolean guardHolds
     ) {
+        if (condition.constantValue != null) {
+            boolean truthy = condition.constantValue.signum() != 0;
+
+            return guardHolds == truthy;
+        }
+
         if (!(condition instanceof SemanticBinOpNode bin)) {
             return true;
         }
@@ -774,38 +780,29 @@ public final class PointerNullStateChecker {
         LoopFrame frame = new LoopFrame();
         loopStack.add(frame);
 
-        boolean bodyTerminates = false;
-        int afterBody = -1;
+        List<Integer> exitStates = new ArrayList<>();
 
-        if (bodyFeasible) {
-
-            refinePointerStatesFromGuard(node.condition, true);
-
-            bodyTerminates = checkStmt(node.body);
-            afterBody = snapshot();
-        } else {
-
-            boolean previousSuppression = suppressNullDerefChecks;
-            suppressNullDerefChecks = true;
-            checkStmt(node.body);
-            suppressNullDerefChecks = previousSuppression;
+        if (guardPathFeasible(node.condition, false)) {
+            restore(before);
+            refinePointerStatesFromGuard(node.condition, false);
+            exitStates.add(snapshot());
         }
 
+        boolean bodyTerminates = false;
         List<Integer> backEdgeStates = new ArrayList<>();
 
         if (bodyFeasible) {
+            restore(before);
+            refinePointerStatesFromGuard(node.condition, true);
+
+            bodyTerminates = checkStmt(node.body);
+            int afterBody = bodyTerminates ? -1 : snapshot();
+
             if (!node.update.isEmpty()) {
-                boolean iterationFallsThrough = !bodyTerminates;
+                if (!bodyTerminates) {
+                    restore(afterBody);
 
-                if (iterationFallsThrough) {
-                    for (SemanticStmtNode updateStmt : node.update) {
-                        if (checkStmt(updateStmt)) {
-                            iterationFallsThrough = false;
-                            break;
-                        }
-                    }
-
-                    if (iterationFallsThrough) {
+                    if (checkUpdates(node.update)) {
                         backEdgeStates.add(snapshot());
                     }
                 }
@@ -813,16 +810,7 @@ public final class PointerNullStateChecker {
                 for (int continueState : frame.continueStates) {
                     restore(continueState);
 
-                    boolean continueFallsThrough = true;
-
-                    for (SemanticStmtNode updateStmt : node.update) {
-                        if (checkStmt(updateStmt)) {
-                            continueFallsThrough = false;
-                            break;
-                        }
-                    }
-
-                    if (continueFallsThrough) {
+                    if (checkUpdates(node.update)) {
                         backEdgeStates.add(snapshot());
                     }
                 }
@@ -833,10 +821,20 @@ public final class PointerNullStateChecker {
 
                 backEdgeStates.addAll(frame.continueStates);
             }
-        } else {
 
+            for (int backEdgeState : backEdgeStates) {
+                restore(backEdgeState);
+
+                if (guardPathFeasible(node.condition, false)) {
+                    refinePointerStatesFromGuard(node.condition, false);
+                    exitStates.add(snapshot());
+                }
+            }
+        } else {
             boolean previousSuppression = suppressNullDerefChecks;
             suppressNullDerefChecks = true;
+
+            checkStmt(node.body);
 
             for (SemanticStmtNode updateStmt : node.update) {
                 checkStmt(updateStmt);
@@ -849,13 +847,8 @@ public final class PointerNullStateChecker {
 
         restore(before);
 
-        if (bodyFeasible && !backEdgeStates.isEmpty()) {
-            mergeLoopStates(before, backEdgeStates);
-        }
-
-        if (!bodyFeasible || !bodyTerminates || !backEdgeStates.isEmpty()) {
-
-            refinePointerStatesFromGuard(node.condition, false);
+        if (!exitStates.isEmpty()) {
+            mergeLoopExitStates(exitStates);
         }
 
         if (bodyFeasible) {
@@ -864,12 +857,24 @@ public final class PointerNullStateChecker {
             }
         }
 
-        return false;
+        boolean hasExit = !exitStates.isEmpty()
+                || (bodyFeasible && !frame.breakStates.isEmpty());
+
+        return !hasExit;
+    }
+
+    private boolean checkUpdates(List<SemanticStmtNode> updates) {
+        for (SemanticStmtNode update : updates) {
+            if (checkStmt(update)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void recordJumpState(int levels, boolean isContinue) {
-        if (loopStack.isEmpty()) {
-
+        if (loopStack.isEmpty() || suppressNullDerefChecks) {
             return;
         }
 
@@ -890,18 +895,20 @@ public final class PointerNullStateChecker {
         }
     }
 
-    private void mergeLoopStates(int before, List<Integer> iterationStates) {
-        for (int i = 0; i < pointerCount; i++) {
-            PointerState merged =
-                    mergePointerStateValue(
-                            null,
-                            pointerStateFromSnapshot(before, i, before)
-                    );
+    private void mergeLoopExitStates(List<Integer> exitStates) {
+        if (exitStates.isEmpty()) {
+            return;
+        }
 
-            for (int slot : iterationStates) {
+        int first = exitStates.get(0);
+
+        for (int i = 0; i < pointerCount; i++) {
+            PointerState merged = null;
+
+            for (int slot : exitStates) {
                 merged = mergePointerStateValue(
                         merged,
-                        pointerStateFromSnapshot(slot, i, before)
+                        pointerStateFromSnapshot(slot, i, first)
                 );
             }
 
