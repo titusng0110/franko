@@ -15,26 +15,26 @@ func main() -> int32 {
     int32 div = 15 / 3;
 
     // --- Relational Operators ---
-    uint8 isGreater = 5 > 3;
-    uint8 isLess = 5 < 3;
-    uint8 isEq = 5 == 5;
-    uint8 isNeq = 5 != 5;
-    uint8 isGE = 5 >= 3;
-    uint8 isLE = 3 <= 5;
+    uint8 is_greater = 5 > 3;
+    uint8 is_less = 5 < 3;
+    uint8 is_eq = 5 == 5;
+    uint8 is_neq = 5 != 5;
+    uint8 is_ge = 5 >= 3;
+    uint8 is_le = 3 <= 5;
 
     // --- Logical Operators ---
-    uint8 logicAnd = 1 && 0;
-    uint8 logicOr = 1 || 0;
-    uint8 logicNot = !0;
+    uint8 logic_and = 1 && 0;
+    uint8 logic_or = 1 || 0;
+    uint8 logic_not = !0;
 
     // --- Bitwise Operators ---
-    int32 bitAnd = 12 & 10;
-    int32 bitOr = 12 | 10;
-    int32 bitXor = 12 ^ 10;
+    int32 bit_and = 12 & 10;
+    int32 bit_or = 12 | 10;
+    int32 bit_xor = 12 ^ 10;
 
     // --- Shift Operators ---
-    int32 shiftLeft = 1 << 4;
-    int32 shiftRight = 16 >> 2;
+    int32 shift_left = 1 << 4;
+    int32 shift_right = 16 >> 2;
 
     // --- Unary Operators ---
     int32 neg = -5;
@@ -53,23 +53,23 @@ func main() -> int32 {
     print(mul);
     print(div);
 
-    print(isGreater);
-    print(isLess);
-    print(isEq);
-    print(isNeq);
-    print(isGE);
-    print(isLE);
+    print(is_greater);
+    print(is_less);
+    print(is_eq);
+    print(is_neq);
+    print(is_ge);
+    print(is_le);
 
-    print(logicAnd);
-    print(logicOr);
-    print(logicNot);
+    print(logic_and);
+    print(logic_or);
+    print(logic_not);
 
-    print(bitAnd);
-    print(bitOr);
-    print(bitXor);
+    print(bit_and);
+    print(bit_or);
+    print(bit_xor);
 
-    print(shiftLeft);
-    print(shiftRight);
+    print(shift_left);
+    print(shift_right);
 
     print(neg);
     print(pos);

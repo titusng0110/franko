@@ -4,7 +4,7 @@
 // raises permissions and is rejected.
 [byte, 5] greeting;
 
-ptr<[byte, 5]> G = getview(greeting);
+ptr<[byte, 5]> global_value = getview(greeting);
 
 func main() -> int32 {
     return 0;

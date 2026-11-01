@@ -18,15 +18,15 @@ struct Config {
 
 func main() -> int32 {
     // --- Static Array declaration with array literal initializer ---
-    [int32, 3] staticArr;
-    staticArr.memcpy([1, 2, 3]);
+    [int32, 3] static_arr;
+    static_arr.memcpy([1, 2, 3]);
 
     // --- Dynamic Array declaration ---
-    [int32] dynArr;
+    [int32] dyn_arr;
 
     // --- Array access & assignment ---
-    staticArr[0] = 100;
-    int32 val = staticArr[0];
+    static_arr[0] = 100;
+    int32 val = static_arr[0];
 
     // --- Nested array literal ---
     [[int32, 2], 2] matrix;
@@ -40,11 +40,11 @@ func main() -> int32 {
     cfg.data[1] = 12;
 
     // --- Struct field array access ---
-    int32 cfgVal = cfg.data[0];
+    int32 cfg_val = cfg.data[0];
 
     print(val);
-    print(cfgVal);
+    print(cfg_val);
 
-    print(val + cfgVal);
+    print(val + cfg_val);
     return 0;
 }

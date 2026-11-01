@@ -4,7 +4,7 @@
 // Allocator: std::NextAllocator
 //
 // Covers:
-//   success path: grow(newC) returns 0 for newC > capacity, old
+//   success path: grow(new_c) returns 0 for new_c > capacity, old
 //     slots keep their indices, new slots are allocatable
 //   failure paths: grow before init returns -1, grow to the same
 //     capacity returns -1, grow smaller returns -1, and an

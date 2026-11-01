@@ -40,6 +40,7 @@ The cleaned section ordering is:
 30. Unsupported or Restricted Features
 31. Foreign Function Interface
 32. Examples
+33. Naming Conventions
 
 ## How to rebuild one combined document
 

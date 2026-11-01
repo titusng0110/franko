@@ -18,7 +18,7 @@ func bump(Pair p) -> void {
     p.b = p.b + 200;
 }
 
-func makePair(int32 seed) -> Pair {
+func make_pair(int32 seed) -> Pair {
     Pair q;
     q.a = seed;
     q.b = seed * 2;
@@ -32,7 +32,7 @@ func main() -> int32 {
     bump(p);
     print(p.a, " "); print(p.b);
 
-    Pair r = makePair(5);
+    Pair r = make_pair(5);
     print(r.a, " "); print(r.b);
     return 0;
 }

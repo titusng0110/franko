@@ -13,7 +13,7 @@ func add(int32 a, int32 b) -> int32 {
 }
 
 // --- Function with void return type ---
-func voidFunc() -> void {
+func void_func() -> void {
     print(2);
 }
 
@@ -32,12 +32,12 @@ struct Point {
 }
 
 // Note: Struct parameters are allowed if fields are assignable.
-func getSum(Point p) -> int32 {
+func get_sum(Point p) -> int32 {
     return p.x + p.y;
 }
 
 // --- Function with pointer parameter ---
-func processRef(ptr<int32> p) -> int32 {
+func process_ref(ptr<int32> p) -> int32 {
     return $(p);
 }
 
@@ -47,14 +47,14 @@ func main() -> int32 {
     Point p;
     p.x = 3;
     p.y = 4;
-    result = result + getSum(p);
+    result = result + get_sum(p);
 
     result = result + factorial(3);
 
     int32 val = 100;
-    result = result + processRef(getptr(val));
+    result = result + process_ref(getptr(val));
 
-    voidFunc();
+    void_func();
 
     print(result);
     print(result);

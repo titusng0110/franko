@@ -3,7 +3,7 @@ import "franko/io"
 // Failure fixture: scoping/undeclared_var
 // Referencing an identifier that was never declared is illegal.
 func main() -> int32 {
-    int32 y = noSuchVariable
+    int32 y = no_such_variable
     print(y)
     return 0
 }

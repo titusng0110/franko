@@ -32,8 +32,8 @@ func f(view<[int32]> x) -> int32 {
     return 2;
 }
 
-[int32, 3] G_XS;
-mview<[int32]> G_M = getmview(G_XS);
+[int32, 3] global_xs;
+mview<[int32]> global_m = getmview(global_xs);
 
 func main() -> int32 {
     [int32, 4] xs;
@@ -109,10 +109,10 @@ func main() -> int32 {
     print(i);
 
     // decay in a global initializer
-    G_XS[0] = 7;
-    $(G_M)[0] = 8;
-    print(G_XS[0]);
-    print($(G_M).length());
+    global_xs[0] = 7;
+    $(global_m)[0] = 8;
+    print(global_xs[0]);
+    print($(global_m).length());
 
     return 0;
 }

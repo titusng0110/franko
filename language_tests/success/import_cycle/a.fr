@@ -3,8 +3,8 @@
 
 import "b"
 
-int32 aBase = 30
+int32 a_base = 30
 
-func aValue() -> int32 {
-    return aBase + 1
+func a_value() -> int32 {
+    return a_base + 1
 }

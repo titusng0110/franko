@@ -11,15 +11,15 @@ import "franko/io"
 // failure/pointer_permissions.
 // ============================================================
 
-func takePtr(ptr<[byte, 3]> p) -> void {
+func take_ptr(ptr<[byte, 3]> p) -> void {
     $(p)[0] = 1;
 }
 
-func takeMView(mview<[byte, 3]> m) -> void {
+func take_mview(mview<[byte, 3]> m) -> void {
     $(m)[1] = 2;
 }
 
-func takeView(view<[byte, 3]> v) -> void {
+func take_view(view<[byte, 3]> v) -> void {
     print($(v)[2]);
 }
 
@@ -47,12 +47,12 @@ func main() -> int32 {
     print($(down3)[2]);
 
     // Implicit downgrades when passing arguments.
-    takePtr(p);
-    takeMView(p);
-    takeView(p);
-    takeMView(m);
-    takeView(m);
-    takeView(v);
+    take_ptr(p);
+    take_mview(p);
+    take_view(p);
+    take_mview(m);
+    take_view(m);
+    take_view(v);
     print($(v)[0]);
     print($(v)[1]);
 

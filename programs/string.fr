@@ -18,7 +18,7 @@ struct TextBuf {
         return
     }
 
-    func testAscii(mview<TextBuf> self) -> void {
+    func test_ascii(mview<TextBuf> self) -> void {
         // "Hello,\tWorld!\n\"Franko\"" -> 22 bytes.
         $(self).buf.memset(0)
         $(self).buf.memcpy("Hello,\tWorld!\n\"Franko\"")
@@ -31,7 +31,7 @@ struct TextBuf {
         return
     }
 
-    func testUnicode(mview<TextBuf> self) -> void {
+    func test_unicode(mview<TextBuf> self) -> void {
         // "你好, Franko 😭😍" -> 23 UTF-8 bytes.
         $(self).buf.memset(0)
         $(self).buf.memcpy("你好, Franko 😭😍")
@@ -44,7 +44,7 @@ struct TextBuf {
         return
     }
 
-    func testMultiline(mview<TextBuf> self) -> void {
+    func test_multiline(mview<TextBuf> self) -> void {
         // A literal multiline string -> 20 bytes.
         $(self).buf.memset(0)
         $(self).buf.memcpy("Line 1
@@ -59,7 +59,7 @@ Line 3")
         return
     }
 
-    func testEscapes(mview<TextBuf> self) -> void {
+    func test_escapes(mview<TextBuf> self) -> void {
         // "A\\B\"C\a\b\f\n\r\t\vZ" -> 13 bytes.
         $(self).buf.memset(0)
         $(self).buf.memcpy("A\\B\"C\a\b\f\n\r\t\vZ")
@@ -77,10 +77,10 @@ func main() -> int {
     TextBuf t
     t.init(200)
 
-    t.testAscii()
-    t.testUnicode()
-    t.testMultiline()
-    t.testEscapes()
+    t.test_ascii()
+    t.test_unicode()
+    t.test_multiline()
+    t.test_escapes()
 
     t.uninit()
     return 0

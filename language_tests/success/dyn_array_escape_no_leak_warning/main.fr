@@ -1,9 +1,9 @@
-ptr<[int32]> G
+ptr<[int32]> global_value
 
 func f() -> int32 {
     [int32] d
     d.init(1)
-    G = getptr(d)
+    global_value = getptr(d)
     return 0
 }
 

@@ -14,11 +14,11 @@ struct Point {
 
 int32 offset = 100
 
-func doubleIt(int32 v) -> int32 {
+func double_it(int32 v) -> int32 {
     return v + v
 }
 
-func makePointSum() -> int32 {
+func make_point_sum() -> int32 {
     Point p
-    return p.x + p.y + offset + deepGlobal
+    return p.x + p.y + offset + deep_global
 }

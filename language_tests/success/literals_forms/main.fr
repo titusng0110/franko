@@ -10,18 +10,18 @@ import "franko/io"
 
 func main() -> int32 {
     int32 dec = 123;
-    int32 hexLower = 0xFF;
-    int32 hexUpperPrefix = 0XFF;
-    int32 binLower = 0b1010;
-    int32 binUpper = 0B1010;
-    uint64 maxU64 = 18446744073709551615;
+    int32 hex_lower = 0xFF;
+    int32 hex_upper_prefix = 0XFF;
+    int32 bin_lower = 0b1010;
+    int32 bin_upper = 0B1010;
+    uint64 max_u64 = 18446744073709551615;
 
     print(dec);
-    print(hexLower);
-    print(hexUpperPrefix);
-    print(binLower);
-    print(binUpper);
-    print(maxU64);
+    print(hex_lower);
+    print(hex_upper_prefix);
+    print(bin_lower);
+    print(bin_upper);
+    print(max_u64);
 
     return 0;
 }

@@ -20,10 +20,8 @@ func main() -> int32 {
     buf.memset(0);
     int64 n = os::posix::read(os::posix::STDIN_FILENO, getptr(buf), 8);
     print(n);
-    uint32 i = 0;
-    while (i < 3) {
+    for (uint32 i = 0; i < 3; i = i + 1) {
         print(buf[i]);
-        i = i + 1;
     }
     int64 m = os::posix::write(1, getptr(buf), 3);
     print(m);

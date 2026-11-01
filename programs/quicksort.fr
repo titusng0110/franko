@@ -14,7 +14,7 @@ import "franko/io"
 struct QuickSort {
     [int, 50] data
 
-    func printArray(view<QuickSort> self, uint n) -> void {
+    func print_array(view<QuickSort> self, uint n) -> void {
         for (uint i = 0; i < n; i++) {
             print($(self).data[i])
         }
@@ -22,7 +22,7 @@ struct QuickSort {
         return
     }
 
-    func initData(mview<QuickSort> self) -> void {
+    func init_data(mview<QuickSort> self) -> void {
         [int, 50] source
 
         source.memcpy([
@@ -67,43 +67,43 @@ struct QuickSort {
     }
 
     func quicksort(mview<QuickSort> self, uint n) -> void {
-        [uint, 128] stackLow
-        [uint, 128] stackHigh
+        [uint, 128] stack_low
+        [uint, 128] stack_high
 
         uint top = 0
         uint low = 0
         uint high = 0
         uint pi = 0
 
-        stackLow.memset(0)
-        stackHigh.memset(0)
+        stack_low.memset(0)
+        stack_high.memset(0)
 
         if (n <= 1) {
             return
         }
 
-        stackLow[top] = 0
-        stackHigh[top] = n - 1
+        stack_low[top] = 0
+        stack_high[top] = n - 1
         top++
 
         while (top != 0) {
             top--
 
-            low = stackLow[top]
-            high = stackHigh[top]
+            low = stack_low[top]
+            high = stack_high[top]
 
             if (low < high) {
                 pi = $(self).partition(low, high)
 
                 if (pi > low) {
-                    stackLow[top] = low
-                    stackHigh[top] = pi - 1
+                    stack_low[top] = low
+                    stack_high[top] = pi - 1
                     top++
                 }
 
                 if (pi < high) {
-                    stackLow[top] = pi + 1
-                    stackHigh[top] = high
+                    stack_low[top] = pi + 1
+                    stack_high[top] = high
                     top++
                 }
             }
@@ -112,7 +112,7 @@ struct QuickSort {
         return
     }
 
-    func isSorted(view<QuickSort> self, uint n) -> byte {
+    func is_sorted(view<QuickSort> self, uint n) -> byte {
         byte sorted = 1
 
         for (uint k = 1; k < n; k++) {
@@ -133,17 +133,17 @@ func main() -> int {
     byte sorted = 0
 
     sorter.data.memset(0)
-    sorter.initData()
+    sorter.init_data()
 
     print(2001)
-    sorter.printArray(n)
+    sorter.print_array(n)
 
     sorter.quicksort(n)
 
     print(2002)
-    sorter.printArray(n)
+    sorter.print_array(n)
 
-    sorted = sorter.isSorted(n)
+    sorted = sorter.is_sorted(n)
 
     print(2003)
     print(sorted)

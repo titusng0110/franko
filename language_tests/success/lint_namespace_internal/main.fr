@@ -1,0 +1,54 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Namespace Internal Identifier Linting
+// ============================================================
+// Functions and structs whose names start with '__' are internal
+// to their namespace. References from the same namespace or a
+// nested namespace are allowed; references from outside warn.
+// ============================================================
+
+namespace lib {
+    struct __Hidden {
+        int32 value = 7
+
+        func get(view<__Hidden> self) -> int32 {
+            return $(self).value
+        }
+    }
+
+    func __secret() -> int32 {
+        return 11
+    }
+
+    func __internal_only_helper() -> int32 {
+        return 3
+    }
+
+    func public_api() -> int32 {
+        return __secret() + __internal_only_helper()
+    }
+}
+
+namespace lib::nested {
+    func nested_api() -> int32 {
+        return lib::__internal_only_helper()
+    }
+}
+
+namespace other {
+    func peek() -> int32 {
+        return lib::__secret()
+    }
+}
+
+func main() -> int32 {
+    lib::__Hidden h
+    print(h.get())
+    print(lib::__secret())
+    print(lib::public_api())
+    print(lib::nested::nested_api())
+    print(other::peek())
+
+    return 0
+}

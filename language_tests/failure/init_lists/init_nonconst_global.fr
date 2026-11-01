@@ -4,7 +4,7 @@
 // expression in a literal is rejected in global initializers too.
 [int32] d;
 
-view<[uint32, 1]> G = [d.length()];
+view<[uint32, 1]> global_value = [d.length()];
 
 func main() -> int32 {
     return 0;

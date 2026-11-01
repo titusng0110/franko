@@ -8,14 +8,14 @@ import "franko/io"
 // call site; the callee writes through $(p)[i].
 // ============================================================
 
-func fillDynamic(ptr<[int32]> p) -> void {
+func fill_dynamic(ptr<[int32]> p) -> void {
     $(p)[0] = 11;
     $(p)[1] = 22;
     $(p)[2] = 33;
     $(p)[3] = 44;
 }
 
-func fillStatic(ptr<[int32, 8]> p) -> void {
+func fill_static(ptr<[int32, 8]> p) -> void {
     $(p)[0] = 5;
     $(p)[7] = 9;
 }
@@ -23,11 +23,11 @@ func fillStatic(ptr<[int32, 8]> p) -> void {
 func main() -> int32 {
     [int32] xs;
     xs.init_zero(4);
-    fillDynamic(getptr(xs));
+    fill_dynamic(getptr(xs));
     print(xs[0], " "); print(xs[1], " "); print(xs[2], " "); print(xs[3]);
 
     [int32, 8] grid;
-    fillStatic(getptr(grid));
+    fill_static(getptr(grid));
     print(grid[0], " "); print(grid[7]);
 
     xs.uninit();

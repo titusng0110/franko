@@ -22,8 +22,8 @@ import "franko/io"
 func main() -> int32 {
     // Symbols from lib/util.fr.
     print(offset)
-    print(doubleIt(21))
-    print(makePointSum())
+    print(double_it(21))
+    print(make_point_sum())
 
     Point p
     print(p.x)
@@ -31,13 +31,13 @@ func main() -> int32 {
 
     // Symbols from lib/deep/extra.fr (transitively imported).
     print(helper2())
-    print(deepGlobal)
+    print(deep_global)
 
     // Symbols from extra_calls.fr.
-    print(extraHelper())
-    print(extraGlobal)
+    print(extra_helper())
+    print(extra_global)
 
-    print(deepGlobal + extraGlobal)
+    print(deep_global + extra_global)
 
     return 0
 }

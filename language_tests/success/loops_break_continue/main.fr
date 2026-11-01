@@ -90,7 +90,7 @@ func main() -> int32 {
 
     // continue targets the innermost loop only.
     int32 outer = 0;
-    int32 innerTotal = 0;
+    int32 inner_total = 0;
     while (outer < 3) {
         outer = outer + 1;
         int32 b2 = 0;
@@ -99,10 +99,10 @@ func main() -> int32 {
             if (b2 == 2) {
                 continue;
             }
-            innerTotal = innerTotal + b2;
+            inner_total = inner_total + b2;
         }
     }
-    print(innerTotal);
+    print(inner_total);
 
     // braceless loop bodies.
     i = 0;

@@ -4,7 +4,7 @@ import "franko/io"
 // LANGUAGE TEST: Function Recursion
 // ============================================================
 // Covers: direct recursion (factorial) and mutual recursion
-// (isEven/isOdd) enabled by forward reference registration.
+// (is_even/is_odd) enabled by forward reference registration.
 // ============================================================
 
 func factorial(int32 n) -> int32 {
@@ -14,24 +14,24 @@ func factorial(int32 n) -> int32 {
     return n * factorial(n - 1);
 }
 
-func isEven(int32 n) -> int32 {
+func is_even(int32 n) -> int32 {
     if (n == 0) {
         return 1;
     }
-    return isOdd(n - 1);
+    return is_odd(n - 1);
 }
 
-func isOdd(int32 n) -> int32 {
+func is_odd(int32 n) -> int32 {
     if (n == 0) {
         return 0;
     }
-    return isEven(n - 1);
+    return is_even(n - 1);
 }
 
 func main() -> int32 {
     print(factorial(5));
-    print(isEven(4));
-    print(isEven(7));
-    print(isOdd(7));
+    print(is_even(4));
+    print(is_even(7));
+    print(is_odd(7));
     return 0;
 }

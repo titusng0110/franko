@@ -51,9 +51,8 @@ func main() -> int32 {
 
     int32 i = 0;
     int32 sum = 0;
-    while (i < 4) {
+    for (; i < 4; i += 1) {
         sum += i;
-        i += 1;
     }
     print(sum); // 6
     print(i); // 4

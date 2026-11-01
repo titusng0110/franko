@@ -8,41 +8,41 @@ import "franko/io"
 
 func main() -> int32 {
     // --- Stack variable ---
-    int32 stackVar = 42;
+    int32 stack_var = 42;
 
     // --- Pointers & dereferencing ---
-    ptr<int32> p = getptr(stackVar);
-    int32 derefVal = $(p);
+    ptr<int32> p = getptr(stack_var);
+    int32 deref_val = $(p);
 
     // --- Writes through an pointer ---
-    ptr<int32> stackPtr = getptr(stackVar);
-    $(stackPtr) = 200;
+    ptr<int32> stack_ptr = getptr(stack_var);
+    $(stack_ptr) = 200;
 
     // --- Null pointer ---
-    ptr<int32> nullPtr;
-    if (nullPtr == null) {
+    ptr<int32> null_ptr;
+    if (null_ptr == null) {
         print(1);
     }
-    nullPtr = getptr(stackVar);
-    if (nullPtr != null) {
+    null_ptr = getptr(stack_var);
+    if (null_ptr != null) {
         print(0);
     }
 
     // --- Pointer of array ---
     [int32] arr;
     arr.init(10); // or arr(10)
-    ptr<[int32]> arrPtr = getptr(arr);
-    $(arrPtr)[0] = 1;
-    int32 arrVal = $(arrPtr)[0];
+    ptr<[int32]> arr_ptr = getptr(arr);
+    $(arr_ptr)[0] = 1;
+    int32 arr_val = $(arr_ptr)[0];
 
     // --- Pointer of array with static size ---
-    [int32, 5] staticArr;
-    ptr<[int32, 5]> staticArrPtr = getptr(staticArr);
-    $(staticArrPtr)[0] = 5;
+    [int32, 5] static_arr;
+    ptr<[int32, 5]> static_arr_ptr = getptr(static_arr);
+    $(static_arr_ptr)[0] = 5;
 
-    print(derefVal);
-    print($(stackPtr));
-    print(arrVal);
+    print(deref_val);
+    print($(stack_ptr));
+    print(arr_val);
 
     return 0;
 }

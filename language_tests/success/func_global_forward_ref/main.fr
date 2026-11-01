@@ -10,13 +10,13 @@ import "franko/io"
 // ============================================================
 
 func main() -> int32 {
-    print(laterGlobal)
-    print(laterFunc(2))
+    print(later_global)
+    print(later_func(2))
     return 0
 }
 
-int32 laterGlobal = 41
+int32 later_global = 41
 
-func laterFunc(int32 v) -> int32 {
+func later_func(int32 v) -> int32 {
     return v * 2
 }

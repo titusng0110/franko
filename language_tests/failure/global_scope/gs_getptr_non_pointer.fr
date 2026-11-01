@@ -3,7 +3,7 @@
 // representable address (getptr/getmview/getview over a global).
 [byte, 3] buf;
 
-int32 G = getptr(buf);
+int32 global_value = getptr(buf);
 
 func main() -> int32 {
     return 0;

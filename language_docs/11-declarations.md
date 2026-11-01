@@ -21,7 +21,7 @@ Array and pointer declarations:
 
 ptr<int> p;
 ptr<int32> q;
-ptr<[int]> arrayPtr;
+ptr<[int]> array_ptr;
 ```
 
 Declaration initializers are syntax sugar:

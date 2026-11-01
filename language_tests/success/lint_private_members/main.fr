@@ -1,0 +1,51 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Private Member Identifier Linting
+// ============================================================
+// Fields and methods whose names start with '_' are private to
+// their struct. Access from outside the struct warns; access from
+// the struct's own methods does not.
+// ============================================================
+
+struct Wallet {
+    int32 _balance = 10
+    int32 _internal_only = 1
+    int32 visible = 20
+
+    func _hidden(view<Wallet> self) -> int32 {
+        return $(self)._balance
+    }
+
+    func _internal_only_method(view<Wallet> self) -> int32 {
+        return $(self)._internal_only
+    }
+
+    func inspect(view<Wallet> self) -> int32 {
+        return $(self)._balance + $(self)._hidden() + $(self)._internal_only + $(self)._internal_only_method()
+    }
+}
+
+struct Thief {
+    func steal(view<Thief> self, Wallet w) -> int32 {
+        return w._balance
+    }
+
+    func call_hidden(view<Thief> self, Wallet w) -> int32 {
+        return w._hidden()
+    }
+}
+
+func main() -> int32 {
+    Wallet w
+    print(w._balance)
+    print(w._hidden())
+    print(w.inspect())
+
+    Thief t
+    print(t.steal(w))
+    print(t.call_hidden(w))
+    print(w.visible)
+
+    return 0
+}

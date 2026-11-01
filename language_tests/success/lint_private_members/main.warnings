@@ -1,0 +1,4 @@
+'Wallet._balance' is a private field of struct 'Wallet'
+'Wallet._hidden' is a private method of struct 'Wallet'
+Are you sure you want to access it from function 'main'?
+Are you sure you want to call it from method 'Thief.call_hidden'?

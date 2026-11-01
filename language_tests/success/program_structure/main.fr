@@ -8,7 +8,7 @@ import "franko/io"
 // ============================================================
 
 // A global variable declaration.
-int32 globalCounter = 0;
+int32 global_counter = 0;
 
 // A struct declaration.
 struct Point {
@@ -19,7 +19,7 @@ struct Point {
 // A namespace declaration.
 namespace util {
     int32 offset = 100
-    func doubleIt(int32 v) -> int32 {
+    func double_it(int32 v) -> int32 {
         return v + v + offset
     }
 }

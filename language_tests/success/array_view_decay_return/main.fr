@@ -14,14 +14,14 @@ import "franko/io"
 // original mode 2 / count N, so indexing the static storage works.
 // ============================================================
 
-[int32, 4] G
+[int32, 4] global_value
 
 func return_parameter(view<[int32, 4]> v) -> view<[int32]> {
     return v
 }
 
 func return_global() -> view<[int32]> {
-    view<[int32, 4]> v = getview(G)
+    view<[int32, 4]> v = getview(global_value)
     return v
 }
 
@@ -46,10 +46,10 @@ func main() -> int32 {
     print($(a).length())
     print($(a)[2])
 
-    G[0] = 1
-    G[1] = 2
-    G[2] = 3
-    G[3] = 4
+    global_value[0] = 1
+    global_value[1] = 2
+    global_value[2] = 3
+    global_value[3] = 4
     view<[int32]> b = return_global()
     print($(b).length())
     print($(b)[3])

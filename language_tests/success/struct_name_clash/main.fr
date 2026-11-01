@@ -6,7 +6,8 @@ import "franko/io"
 // Covers: struct names live in their own namespace, so a struct
 // may share its name with a variable and a function. The compiler
 // emits a warning (not part of program output) and the generated
-// code is unambiguous.
+// code is unambiguous. The shared 'Item' spelling is deliberately
+// outside the normal casing conventions to exercise the clash.
 // ============================================================
 
 struct Item {

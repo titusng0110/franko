@@ -18,9 +18,9 @@ import "franko/os"
 import "franko/io"
 
 func main() -> int32 {
-    int32 osSum = os::IS_LINUX + os::IS_WINDOWS + os::IS_MACOS;
-    int32 archSum = os::IS_X86_64 + os::IS_ARM64;
-    print(osSum);
-    print(archSum);
+    int32 os_sum = os::IS_LINUX + os::IS_WINDOWS + os::IS_MACOS;
+    int32 arch_sum = os::IS_X86_64 + os::IS_ARM64;
+    print(os_sum);
+    print(arch_sum);
     return 0;
 }

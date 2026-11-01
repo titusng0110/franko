@@ -9,10 +9,16 @@ Function declarations are not valid inside blocks or inside other function bodie
 ## 12.1 Function Declaration Syntax
 
 ```franko
-func name(parameters) -> returnType {
+func name(parameters) -> return_type {
     statements
 }
 ```
+
+By convention function names use `lower_case_snake_case`. A function whose
+name starts with `__` is internal to its declaring namespace and produces a
+warning when referenced from outside that namespace. Direct FFI mappings keep
+the platform API spelling, such as `os::win32::ReadFile`; see
+[Naming Conventions](33-naming-conventions.md).
 
 ## 12.2 Function Declaration Placement
 

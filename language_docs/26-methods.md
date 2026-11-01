@@ -42,6 +42,7 @@ Rules:
 - A method may declare additional parameters after `self`; they follow ordinary parameter rules.
 - A method body follows ordinary function body rules, including return checking (see [Functions](12-functions.md)).
 - Method names are ordinary identifiers; a method may not share its name with a field of the same struct, and duplicate method signatures are rejected (see [Declaration Type Validity](29-declaration-type-validity.md)).
+- By convention method names use `lower_case_snake_case`. A method whose name starts with `_` is private to its struct and warns when called from outside it; see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](33-naming-conventions.md).
 
 ## 26.2 The `self` Parameter
 
