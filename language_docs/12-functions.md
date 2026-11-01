@@ -33,12 +33,12 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
-- an pointer type `ptr<T>`, where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `ptr<[int32, 8]>`, and `ptr<ptr<int32>>` are all passable; or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass `ptr<X>` and `getptr(s)` instead. See [Structs](25-structs.md).
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](25-structs.md).
 
-Bare array types are not passable. To pass an array to a function, declare an `ptr<[T]>` (or `ptr<[T, N]>`) parameter and pass `getptr(array)` at the call site.
+Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `getptr`/`getmview`/`getview` expression at the call site.
 
-`void` cannot be written as a parameter type at all: the grammar only accepts an ordinary type in parameter positions, and `void` is not an ordinary type.
+`void` cannot be written as a parameter type.
 
 ## 12.4 `void`
 
@@ -122,13 +122,13 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
-- an pointer type, `ptr<T>`; or
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
 - a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)).
 
 Arrays cannot currently be returned directly.
 
 ## 12.11 Forward References and Recursion
 
-Function signatures are registered before function bodies are analyzed, allowing forward references, direct recursion, and mutual recursion.
+Function signatures are known before function bodies are checked, allowing forward references, direct recursion, and mutual recursion.
 
 Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](26-methods.md).

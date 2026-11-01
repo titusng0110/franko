@@ -1,6 +1,8 @@
 # 21. Array Intrinsics
 
-Array operations are written using call syntax but lowered into special semantic nodes. They are **not** general user-defined function calls, and only these named intrinsics are recognized.
+Array operations are written using call syntax, but they are built-in
+intrinsics recognized by the compiler, **not** general user-defined
+function calls. Only the named intrinsics below are recognized.
 
 Intrinsics are **expressions**, not statement-only forms. Status-returning intrinsics may be used in value contexts:
 
@@ -191,7 +193,7 @@ target.memcpy(source, dst_start, src_start, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be an **pointer to an array** (`ptr<[T]>` or `ptr<[T, N]>`), typically produced with `getptr(...)`, or an array literal (its element type is inferred from the target); passing an array value directly is invalid;
+- source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the corresponding `[T, N]` forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array/string literal (its element type is inferred from the target); passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;

@@ -87,8 +87,8 @@ The initializer must be a constant expression built from literals, so it is fold
 
 **Static address initializers.** A pointer-typed global may be
 initialized with `null`, with `getptr`/`getmview`/`getview` over another
-global variable, or with a string literal (which is a view over a
-hoisted global; see [String Literals](23-string-literals.md)):
+global variable, or with a string literal (which is a view over
+immutable constant storage; see [String Literals](23-string-literals.md)):
 
 ```franko
 [byte, 5] greeting
@@ -101,14 +101,14 @@ The initializer must be a statically representable address of the right
 type (a permission downgrade is allowed, an upgrade is not).
 
 An array literal may initialize a pointer-typed global (it is a
-`view<[T, N]>` value over a constant global, like a string
+`view<[T, N]>` value over immutable constant storage, like a string
 literal):
 
 ```franko
 view<[int32, 4]> G = [1, 2, 3, 4]   // valid
 ```
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — desugar into executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — are equivalent to executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
 
 ```franko
 int32 g = h                     // invalid: the initializer must be constant
@@ -126,11 +126,11 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
 - static array elements start with indeterminate values;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **pointer variables are the exception: an `ptr<T>` declaration is guaranteed null-initialized** (see [Pointers](24-pointers.md)).
+- **pointer variables are the exception: a pointer declaration is guaranteed null-initialized** (see [Pointers](24-pointers.md)).
 
-There is no implicit zero-initialization for locals other than pointers. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals other than pointer variables and pointer fields. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: primitives and static array elements start at zero before `main` runs, and dynamic arrays start empty. Global constant initializers (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated: primitives, static array elements, and struct fields without an explicit default start at zero (pointer fields start null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
 
 ## 11.6 Struct Fields
 

@@ -33,12 +33,12 @@ For each pointer variable the compiler tracks one of:
 
 ## 27.2 Assignment Rules
 
-- an ordinary `ptr<T>` declaration is **null-initialized**, so it starts in the null state;
+- an ordinary pointer declaration is **null-initialized**, so it starts in the null state;
 - assigning the `null` literal makes the target null;
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the compiler cannot see. Exceptions: a method's `self` parameter enters pointing, because the receiver is a storage-backed lvalue; and the global args-form `main`'s `view<[[byte]]>` parameter enters pointing, since the template wrapper always passes a live pointer.
+- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the compiler cannot see. Exceptions: a method's `self` parameter enters pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter enters pointing, because it always receives a live view.
 
 ## 27.3 Dereference Checking
 
@@ -53,7 +53,7 @@ A variable warns at most once per check, so a path-sensitive traversal that revi
 
 A branch that **definitely returns** does not contribute its state to the code following the `if`, because that path never continues there.
 
-Branch-sensitive analysis is limited to a maximum nesting depth (12). Beyond that depth the compiler falls back to a conservative path-insensitive merge.
+Branch-sensitive analysis is bounded by a maximum nesting depth. Beyond that depth the compiler falls back to a conservative path-insensitive merge.
 
 ## 27.5 Loop Handling
 
@@ -68,7 +68,7 @@ Branch-sensitive analysis is limited to a maximum nesting depth (12). Beyond tha
 
 Loop termination is not proven; the post-loop state is conservative.
 
-`for` loops are desugared to blocks and `while` loops before this check runs, so they receive the same treatment. See [Desugaring](05-desugaring.md).
+`for` loops receive the same treatment as the equivalent block and `while` loop, so they are handled the same way. See [Desugaring](05-desugaring.md).
 
 ## 27.6 Guard Refinement
 
@@ -109,7 +109,7 @@ Current limitations of the pointer null-state check:
 
 ## 27.8 Capability Linting
 
-A third, independent check warns when a `ptr`/`mview` local variable or
+A separate, independent check warns when a `ptr`/`mview` local variable or
 parameter requests permissions it never exercises, so developers default
 to the tightest pointer that fits. See the "Capability Linter" section of
 [Pointers](24-pointers.md).
@@ -150,12 +150,12 @@ are never assumed to point into the current frame.
 
 The dangling-storage check uses the same bounded path-sensitive traversal
 as the null-state check: `if`/`else` is followed branch by branch up to
-12 nested branches, then merged conservatively. For `while`, each
+the nesting-depth limit, then merged conservatively. For `while`, each
 zero-trip and back-edge exit is included only when the condition-false
 guard is feasible for that state; `break` and `continue` states are
 merged separately, and a loop with no feasible exit is treated as
-non-falling-through. `for` loops receive the same treatment after
-desugaring.
+non-falling-through. `for` loops receive the same treatment as their
+equivalent block and `while` loop.
 
 Null guards refine what is known about the storage too:
 
@@ -327,7 +327,7 @@ if (d.length() > 0) {
 
 ### 27.10.5 Branches and Loops
 
-`if`/`else` is path-sensitive to the same 12-level branch depth as the
+`if`/`else` is path-sensitive to the same bounded branch depth as the
 other checks. Loops merge zero-trip, back-edge, `break`, and `continue`
 states, and apply the condition-false refinement to each exit path. A
 loop with no feasible normal exit or `break` is treated as

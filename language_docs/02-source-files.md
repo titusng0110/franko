@@ -62,16 +62,24 @@ String literal paths support the same escape sequences as string literals. The p
 
 ### Search Directory
 
-The compiler accepts an import search directory with `-p <dir>`. The default is `import` relative to the compiler's working directory; the bundled compile scripts pass the compiler's own `import` directory explicitly.
+The compiler has a single import search directory: by default the
+compiler's own `import/` directory. The bundled `compile.py` always uses
+that directory, which is where the standard modules live.
 
-A **prefix-free** path (one that does not start with `./`, `../`, or `/`) is looked up in two places, in order:
+A **prefix-free** path (one that does not start with `./`, `../`, or `/`)
+is looked up in two places, in order:
 
 1. the search directory: `<search-dir>/<path>.fr`
 2. the directory of the file that contains the import statement
 
-The first location that holds a regular file wins, so a module supplied through `-p` shadows a same-named file next to the importing source file. A missing search directory is not an error; resolution simply falls through to the importing file's directory.
+The first location that holds a regular file wins, so a module supplied
+through the search directory shadows a same-named file next to the
+importing source file. A missing search directory is not an error;
+resolution simply falls through to the importing file's directory.
 
-Paths with an explicit `./`, `../`, or `/` prefix skip the search directory and resolve relative to the importing file (or as an absolute path).
+Paths with an explicit `./`, `../`, or `/` prefix skip the search
+directory and resolve relative to the importing file (or as an absolute
+path).
 
 Examples (search directory `import/`):
 
@@ -105,21 +113,23 @@ or use the `franko/` prefix for user modules. Use a project-relative path or
 your own search-directory path instead, such as `import "./lib/my_module"` or
 `import "myproject/my_module"` (see [Naming Conventions](33-naming-conventions.md)).
 
-### How Imports Compile
+### How Imports Resolve
 
 An import is resolved at compile time:
 
-- the referenced file is parsed like any other source file;
-- all of its top-level items (structs, global variables, functions) are compiled into the same global program as the importing file's items;
-- imports are processed in declaration order, and an import of an already-processed file is skipped silently, so repeated and cyclic imports are safe (each file is compiled exactly once);
+- the referenced file is read like any other source file;
+- all of its top-level items (structs, global variables, functions) become part of the same program as the importing file's items;
+- imports are processed in declaration order, and an import of an already-processed file is skipped silently, so repeated and cyclic imports are safe (each file is processed exactly once);
 - an imported file's own imports are resolved relative to that file's directory (after first consulting the search directory).
 
-Because every symbol lives in one global namespace, duplicate declarations across files are reported like duplicate declarations within one file.
+Namespaces still separate symbols by path; duplicate declarations that end up in the same namespace are reported like duplicates within one file.
 
 ### Built-in Modules
 
-Importing certain modules through their canonical specifier (currently
-only `import "franko/os"`) additionally activates built-in FFI
-behavior. See [Foreign Function
+Importing a module whose resolved target path ends in `franko/os.fr`
+(normally the bundled `import/franko/os.fr`; the usual spelling is
+`import "franko/os"`) additionally activates built-in FFI behavior.
+The standard `franko/io` module also reaches it through its internal
+relative import. See [Foreign Function
 Interface](31-foreign-function-interface.md) for the activation rule and
 the module contract.

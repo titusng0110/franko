@@ -47,7 +47,7 @@ The cleaned section ordering is:
 Run:
 
 ```bash
-python3 build_reference.py
+uv run python language_docs/build_reference.py
 ```
 
 This creates:
@@ -60,19 +60,13 @@ from the split files in `SUMMARY.md` order.
 
 ## Tooling
 
-The doc scripts live in this directory and are meant to run inside a local
-uv-managed virtual environment (git-ignored):
-
-```bash
-uv venv                 # creates .venv/
-uv pip install regex    # used by renumber_sections.py
-```
-
-Alternatively, the repository root declares `regex` in `pyproject.toml`,
-so no local venv is needed — from the repository root:
+The doc scripts live in this directory. Run them from the repository root
+through `uv`; `renumber_sections.py` uses the `regex` package declared in
+the root `pyproject.toml`, and `build_reference.py` is stdlib-only.
 
 ```bash
 uv run python language_docs/renumber_sections.py check
+uv run python language_docs/build_reference.py
 ```
 
 ### Renumbering sections
@@ -84,11 +78,11 @@ chapter means shifting every later number. `renumber_sections.py` propagates
 that shift in one step:
 
 ```bash
-.venv/bin/python renumber_sections.py insert-at 24 -n  # preview (dry run)
-.venv/bin/python renumber_sections.py insert-at 24     # make room at 24
+uv run python language_docs/renumber_sections.py insert-at 24 -n  # preview (dry run)
+uv run python language_docs/renumber_sections.py insert-at 24     # make room at 24
 # ...create/edit the new 24-*.md, then update SUMMARY/TOC/README entries...
-.venv/bin/python renumber_sections.py check            # validate numbering + links
-.venv/bin/python build_reference.py                    # regenerate the combined doc
+uv run python language_docs/renumber_sections.py check            # validate numbering + links
+uv run python language_docs/build_reference.py                    # regenerate the combined doc
 ```
 
 `insert-at N` shifts every section `>= N` up by one (files, headings, links,
@@ -100,7 +94,7 @@ regenerate it with `build_reference.py` afterwards).
 ### Consistency check
 
 ```bash
-.venv/bin/python renumber_sections.py check
+uv run python language_docs/renumber_sections.py check
 ```
 
 validates that: every SUMMARY link target exists, section numbers are

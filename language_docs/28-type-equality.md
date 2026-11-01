@@ -54,8 +54,9 @@ view<[byte, 3]> != view<[byte, 5]>
 The pointer conversions — permission downgrades (`ptr<T>` to
 `mview<T>`/`view<T>`, `mview<T>` to `view<T>`) and the static-to-dynamic
 array pointer view decay (`mview`/`view` of `[T, N]` to `mview`/
-`view` of `[T]`) — are the only implicit conversions the language
-allows; they do not make the types equal (see [Pointers](24-pointers.md)).
+`view` of `[T]`, optionally combined with a downgrade from a `ptr`
+source) — are the only implicit conversions the language allows for
+nonconstant values; they do not make the types equal (see [Pointers](24-pointers.md)).
 
 ## 28.5 Function Signature Equality
 

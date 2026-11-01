@@ -51,7 +51,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointers (`ptr<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -114,14 +114,14 @@ struct Node {
 A type is **assignable** when a value of that type can participate in ordinary assignment with `=`:
 
 - primitive integer types are assignable;
-- pointer types `ptr<T>` are assignable;
+- pointer types (`ptr<T>`, `mview<T>`, `view<T>`) are assignable;
 - a struct is assignable if and only if all of its fields are assignable, recursively.
 
 Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **pointer-only**.
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For an pointer-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through `ptr<X>` and `getptr(s)` instead.
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access).
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](12-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
@@ -136,8 +136,8 @@ Member access uses dot syntax. Access chains compose with every storage form:
 
 ```franko
 s.field               // local struct
-$(p).field        // through an pointer
-$(a.next).field   // another hop through an ptr field: deref the link first
+$(p).field        // through a pointer
+$(a.next).field   // another hop through a ptr field: deref the link first
 xs[i].field           // element of a static or dynamic array
 ```
 
@@ -150,8 +150,8 @@ xs[i].field           // element of a static or dynamic array
 ## 25.8 Initialization Semantics
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](11-declarations.md)).
-- **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar desugars into a declaration plus a whole-value assignment.
-- **Global declarations.** Global structs are statically allocated. Fields with defaults receive their defaults; a field without a default should be treated as indeterminate until assigned. Give every field an explicit default or assign it before use.
+- **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
+- **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
 ## 25.9 Struct Globals
 
@@ -178,6 +178,6 @@ int32 scale = 2;
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is pointer-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use `ptr<X>`.
+- A struct with any non-assignable field is pointer-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access).
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).

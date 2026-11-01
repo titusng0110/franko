@@ -211,7 +211,7 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
 
 ### 3.1 Front end
 
-#### `Franko.g4` (grammar, 1131 lines)
+#### `Franko.g4` (grammar, 1127 lines)
 The single source of truth for Franko syntax: combined ANTLR4 lexer+parser
 grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
@@ -291,13 +291,15 @@ desugared. A giant `instanceof` dispatch over every `ASTNode` class; also
 Resolves `import "…"` immediately after AST construction, before desugaring.
 For each `ImportNode` it lexes/parses/visits the imported file with the same
 front end and splices its top-level items into the root `ProgramNode`, so the
-whole program becomes one flat AST. Path resolution: `.fr` extension is
-mandatory; relative paths resolve against the importing file; unqualified
-paths search the `-p` search dir (default `./import`) before the importing
-file's directory; real-path canonicalization dedups diamonds; files are marked
+whole program becomes one flat AST. Path resolution: `.fr` is appended when
+the file name has no extension, and a present non-`.fr` extension is rejected;
+relative paths resolve against the importing file; unqualified paths search the
+`-p` search dir (default `./import`) before the importing file's directory;
+real-path canonicalization dedups diamonds; files are marked
 processed *before* splicing so import cycles terminate. Records the import
-graph (`importGraph()`), detects the canonical `franko/os` builtin module
-(`importedBuiltinModules()`, `frankoOsModuleFile()`) which activates the FFI
+graph (`importGraph()`), detects a resolved target ending in `franko/os.fr`
+(the bundled builtin module; `importedBuiltinModules()`,
+`frankoOsModuleFile()`) which activates the FFI
 and target-constant machinery in `Main`, and contains a testable
 `translateWindowsAbsolutePath` helper. Also contains a
 `CollectingErrorListener` that prefixes lexer/parser errors of imported files
@@ -312,8 +314,10 @@ C-like), `?` array sizes in `view<[...]>` declarations → concrete
 constants via the rectangle rule (array
 literals only), string literals → hoisted literal-backed globals plus a
 `getview(<global>)` expression of type `view<[byte, N]>` (§4.10), and
-every `constExpr` slot → a canonical decimal `IntNode` via
-`ConstExpressionEvaluator`. Array literals are passed through untouched
+every `constExpr` slot it owns (array sizes, global const initializers,
+field defaults) → a canonical decimal `IntNode` via
+`ConstExpressionEvaluator`; `break N` levels are folded later during
+semantic analysis. Array literals are passed through untouched
 (§4.13). Global initializers pass through the statically
 representable forms (`null`, `getptr`/`getmview`/`getview` over a global,
 an array literal) and reject everything else. Error-recovery style: it accumulates diagnostics in
@@ -344,8 +348,8 @@ Compiler side of the `import "franko/os"` foreign-function bridge. Five known
 intrinsics (posix read/write; win32 GetStdHandle/ReadFile/WriteFile), each
 recognized by namespace+name+exact signature (`kindOf`). Responsibilities:
 - `applyTargetConstants` — rewrites the five `os::IS_*` placeholder globals in
-  the raw AST to the target's 0/1 values before desugaring (only the canonical
-  `franko/os` import activates this).
+  the raw AST to the target's 0/1 values before desugaring (activation is by
+  the resolved `franko/os.fr` module, directly or through `franko/io`).
 - `checkTargetAllowed` — rejects live calls to wrong-target intrinsics (posix
   on Windows, win32 off Windows); must run after constant-dead-branch pruning.
 - `parseBlocks`/`buildBridge` — the bridge file `os.ffi.cpp` is split into
@@ -936,10 +940,10 @@ condition's boolean structure:
 - **Trap policy**: derefs (`$(p)`) and array indexing are allowed as atoms
   even though they can trap; when a condition is pruned, such a trap
   disappears with it (deliberate trade-off).
-- **Enumeration**: at most `MAX_ATOMS = 10` variables (≤ 1024 rows); atoms are
+- **Enumeration**: at most `MAX_ATOMS = 12` variables (≤ 4096 rows); atoms are
   treated as independent propositional variables, which over-approximates
   reality — so "true on all rows" / "false on all rows" soundly implies the
-  condition is a tautology / contradiction. More than 10 atoms → no pruning.
+  condition is a tautology / contradiction. More than 12 atoms → no pruning.
   Zero atoms recovers plain constant folding (a folded `constantValue`
   decides immediately).
 - **Outcomes**: an always-true `if` keeps only its pruned then-branch; an
@@ -1110,12 +1114,12 @@ types. Used by `SymbolTable` (semantic phase), `Desugarer`, `Main` (legality
 and pointer-state bags), and every checker.
 
 #### `Main`
-The driver: CLI parsing (`-o`, `-t`, `-p`, `-v`, `-O`, `--target`), the phase
+The driver: CLI parsing (`-o`, `-t`, `-p`, `-v`, `-O`, `-Omax`, `--target`), the phase
 sequence shown in §1, template selection by `sema.entryKind()`, template
 sanity checks, and output writing. Its nested `LexErrorCollector` turns ANTLR
 lexer "token recognition" errors into hard failures (the lexer would otherwise
-silently skip unrecognizable characters, letting programs like `a % b` or
-`~a` compile into a different program).
+silently skip unrecognizable characters, letting an unsupported character such
+as `~` in `~a` compile into a different program).
 
 ---
 
@@ -1134,9 +1138,10 @@ silently skip unrecognizable characters, letting programs like `a % b` or
 - `view<[T, ?]>` size inference: the literal must be a perfect static
   rectangle (no jagged); inference failure is an error, with size-1
   placeholder recovery.
-- Every `constExpr` slot (array sizes, global const initializers, field
-  defaults, cast constants, break levels) is folded here to a canonical
-  decimal `IntNode` — later phases see only integers.
+- Constant-expression slots owned by the desugarer (array sizes, global const
+  initializers, and field defaults) are folded here to a canonical decimal
+  `IntNode` — later phases see only integers. `break N` levels are folded
+  during semantic analysis by `ConstExpressionEvaluator`.
 - String literals are hoisted to literal-backed globals and replaced with
   `getview(<global>)` everywhere (§4.10); array literals get the same
   treatment during semantic analysis (§4.13). Assigning a literal to an
@@ -1168,9 +1173,11 @@ type it would have in C++. Consequences:
   (`expectedEmittedName`).
 
 ### 4.4 os FFI bridge
-- Activation: only the canonical `import "franko/os"` (recorded by
-  `ImportResolver`) turns on target constants, target gating, and bridge
-  splicing; a user-defined `os` namespace without that import is untouched.
+- Activation: importing a module whose resolved target ends in
+  `franko/os.fr` (normally `import "franko/os"`, directly or through
+  `franko/io`'s relative import) turns on target constants, target gating, and
+  bridge splicing; a user-defined `os` namespace without that module is
+  untouched.
 - `os.ffi.cpp` is a marker-structured file (`// @@franko-ffi:<name>` …
   `// @@franko-ffi:end`, plus `common`); codegen emits the used intrinsic
   bodies verbatim under their pinned mangled names and suppresses the Franko
@@ -1839,6 +1846,10 @@ uv run python language_tests/run_language_tests.py
 uv run python language_tests/run_omax_smoke.py
 uv run python library_tests/run_library_tests.py
 ```
+
+The build mode defaults to the ASan debug build on Linux/macOS; Windows has no
+AddressSanitizer support, so its default is the optimized `-O` build. Windows
+ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 
 - Success fixtures: compiled binary must exit 0 and stdout must exactly match
   `main.expected` (optional `main.warnings` substring checks and

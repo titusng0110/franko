@@ -40,4 +40,4 @@ handle is detectable. The pool tracks indices only; the payload that an
 index selects belongs to the program.
 
 The pool allocator API is documented in
-`library_docs/pool.md`.
+[`franko/pool`](../library_docs/pool.md).

@@ -2,8 +2,8 @@
 
 The `franko/os` module is Franko's low-level operating-system interface.
 It exposes a small set of OS syscalls as ordinary Franko functions with
-FFI bridge definitions (see [Foreign Function Interface](../language_docs/32-foreign-function-interface.md)
-in the language reference for the bridge mechanics).
+FFI bridge definitions (see [Foreign Function Interface](../language_docs/31-foreign-function-interface.md)
+in the language reference for the activation and runtime behavior).
 
 ```franko
 import "franko/os"
@@ -53,7 +53,7 @@ auto-detected from the host when the flag is omitted.
 The compiler does two things with them:
 
 - **It rewrites the initializers** above to the target's `0`/`1`
-  before semantic analysis, so the emitted C++ globals carry the
+  before type checking, so the emitted C++ globals carry the
   target's values.
 - **It folds every reference into an integer literal**, so a use such
   as `os::IS_WINDOWS` behaves exactly like the constant `1` or `0`:

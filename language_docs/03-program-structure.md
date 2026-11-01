@@ -89,7 +89,7 @@ func main(view<[[byte]]> args) -> int32 {
 
 Any other shape (parameters of another type, a different return type) is a compile error.
 
-In the args form, the parameter name is free (`args`, `notargs`, ...). The template wrapper converts the raw `argc`/`argv` into nested dynamic byte arrays: `args[0]` is the program name and each argument is its raw bytes with no NUL terminator (see [Compiler Internals](../compiler_docs.md)).
+In the args form, the parameter name is free (`args`, `notargs`, ...). `args[0]` is the program name, and each argument is its raw bytes with no NUL terminator.
 
 Executable statements are **not** currently allowed in global scope.
 
@@ -106,7 +106,7 @@ Invalid global-scope items include:
 - array initializer assignments.
 - expression statements (bare expressions such as `1 + 2`);
 
-Note that some invalid global-scope forms only become visible after desugaring: declaration initializer sugar is invalid because it desugars into executable statements (an assignment, an expression-statement call, or indexed element assignments).
+Note that some invalid global-scope forms are only invalid in their executable form: declaration initializer sugar is equivalent to an assignment, an expression-statement call, or indexed element assignments, all of which are executable statements.
 
 Execution should be rooted in a user-defined `main` function.
 

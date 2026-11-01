@@ -12,10 +12,10 @@ array of `N` UTF-8 bytes, where `N` is the literal's byte length.
 
 ## 23.1 A String Literal Is a View Value
 
-Each distinct literal is hoisted to its own global `[byte, N]`
-holding the UTF-8 bytes, and the literal expression is `getview(...)`
-over it. Identical literal texts share one global. No null terminator is
-appended: `N` is exactly the number of content bytes.
+Each distinct literal is backed by immutable `[byte, N]` storage
+holding the UTF-8 bytes, and the literal expression is a read-only view
+over it. Identical literal texts share one backing store. No null
+terminator is appended: `N` is exactly the number of content bytes.
 
 Because the literal is a pointer, it must be dereferenced with `$(...)`
 to reach the bytes:

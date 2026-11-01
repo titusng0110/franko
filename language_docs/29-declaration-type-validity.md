@@ -37,7 +37,7 @@ A function return type has separate rules. It may be:
 
 - `void`;
 - a primitive integer type;
-- an pointer type; or
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
 - a struct whose fields are all assignable value types, recursively.
 
 Array return types are invalid.
