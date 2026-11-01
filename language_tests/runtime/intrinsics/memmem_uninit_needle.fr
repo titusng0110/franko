@@ -1,11 +1,19 @@
 import "franko/io"
 
 // Runtime fixture: intrinsics/memmem_uninit_needle
-// The memmem needle must be initialized too.
+// The needle is passed as a caller-owned pointer, so the checker cannot
+// prove it is uninitialized; the runtime aborts.
+func find(
+    ptr<[byte, 4]> hay,
+    ptr<[byte]> needle
+) -> uint32 {
+    return $(hay).memmem(needle)
+}
+
 func main() -> int32 {
-    [byte, 4] hay;
-    hay.memset(0);
-    [byte] needle;
-    print(hay.memmem(getptr(needle)));
-    return 0;
+    [byte, 4] hay
+    hay.memset(0)
+    [byte] needle
+    print(find(getptr(hay), getptr(needle)))
+    return 0
 }

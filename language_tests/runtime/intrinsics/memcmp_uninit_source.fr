@@ -1,11 +1,19 @@
 import "franko/io"
 
 // Runtime fixture: intrinsics/memcmp_uninit_source
-// Comparing against an uninitialized dynamic array aborts.
+// Both arrays are passed as caller-owned pointers, so the checker cannot
+// prove the source is uninitialized; the runtime aborts.
+func compare(
+    ptr<[int32, 4]> a,
+    ptr<[int32]> b
+) -> int32 {
+    return $(a).memcmp(b)
+}
+
 func main() -> int32 {
-    [int32, 4] a;
-    a.memset(0);
-    [int32] b;
-    print(a.memcmp(getptr(b)));
-    return 0;
+    [int32, 4] a
+    a.memset(0)
+    [int32] b
+    print(compare(getptr(a), getptr(b)))
+    return 0
 }

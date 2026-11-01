@@ -61,6 +61,8 @@ Semantic AST (SemanticProgramNode)
    │  PointerNullStateChecker (intra-procedural pointer null dataflow)
    │  DanglingPointerChecker (return-escape provenance: pointers to frame
    │                          storage and decayed static-array views)
+   │  DynamicArrayMemoryChecker (local dynamic-array init/uninit lifecycle,
+   │                             guards, loops, and owner-pointer aliases)
    │  PointerPermissionChecker (capability linter: unused-permission
    │                            warnings for ptr/mview variables)
    ▼
@@ -79,8 +81,9 @@ output .cpp  (then compiled with the host C++ compiler)
 ```
 
 Non-fatal warnings (semantic warnings, pointer maybe-null warnings,
-dangling-pointer warnings) are printed between phases; errors abort with a
-`RuntimeException` carrying the formatted `DiagnosticBag` contents.
+dangling-pointer warnings, dynamic-array lifecycle warnings) are printed
+between phases; errors abort with a `RuntimeException` carrying the
+formatted `DiagnosticBag` contents.
 
 ---
 
@@ -127,6 +130,7 @@ flowchart TD
     Main --> InactiveDeclarationPruner
     Main --> PointerNullStateChecker
     Main --> DanglingPointerChecker
+    Main --> DynamicArrayMemoryChecker
     Main --> PointerPermissionChecker
     PointerPermissionChecker -. reads Semantic AST only .-> SemanticASTNode
     Main --> Cpp14Codegen
@@ -150,7 +154,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `PointerPermissionChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
+| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
 | `ImportResolver` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ASTNode` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
 | `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ArrayLiteralLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
@@ -167,6 +171,7 @@ flowchart TD
 | `ExpressionChecker` | `TypeChecker` |
 | `PointerNullStateChecker` | `DiagnosticBag` only (deliberately standalone) |
 | `DanglingPointerChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
+| `DynamicArrayMemoryChecker` | `DiagnosticBag` only (deliberately standalone) |
 | `PointerPermissionChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
 | `Cpp14Codegen` | `OsFfi`, `TargetInfo`, `Symbol`/`Mangler` (mangled names), `SymbolTable.splitNamespacePath` (static) |
 | `SymbolTable` | `DiagnosticBag`, `Symbol`, `SemanticType` |
@@ -185,8 +190,8 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
 - `SemanticASTNode.java` — lowered typed AST, produced by
   `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`, consumed by every
   checker, `PointerNullStateChecker`, `DanglingPointerChecker`,
-  `PointerPermissionChecker`, `Cpp14Codegen`, `OsFfi`,
-  `SemanticASTPrinter`.
+  `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `Cpp14Codegen`,
+  `OsFfi`, `SemanticASTPrinter`.
 - `SemanticType.java` — structural type system (overload resolution, mangling
   keys). Also hosts `PtrPermission` (OWNER/MUTABLE/READ_ONLY), the permission
   lattice shared with the raw AST (`ASTNode.PtrTypeNode.kind`,
@@ -804,6 +809,16 @@ escapes are errors; possible escapes after a branch merge are warnings.
 There is no separate decay classification: a decayed view is just a fat
 pointer over its original storage.
 
+#### `DynamicArrayMemoryChecker`
+Intra-procedural lifecycle analysis for function-local dynamic arrays,
+run after both pruners and before `PointerPermissionChecker`. Tracks
+`UNINITED`/`INITED`/`MAYBE_INITED`, owner `ptr<[T]>` alias sets,
+`length()` guard refinement, loop exits, and owner-pointer call
+invalidation. Missing explicit `uninit()` is a warning because
+`Franko_Dynamic_Array`'s destructor already frees local buffers. Struct
+fields, nested dynamic-array elements, element pointers, and
+`mview`/`view` aliases are not tracked.
+
 #### `PointerPermissionChecker`
 The capability linter: run after branch/declaration pruning (so only
 surviving code counts) and before codegen, warnings-only. Per function it
@@ -890,8 +905,8 @@ condition's boolean structure:
   parent block — flattening could collide same-named locals (both emitted as
   `VAR_x`) in the generated C++. `checkEmittedNameCollisions` remains as the
   final safety net.
-- **Effect on later phases**: `PointerNullStateChecker` and codegen see the
-  pruned tree, so null-state warnings and code are never produced for dead
+- **Effect on later phases**: all checker passes and codegen see the
+  pruned tree, so diagnostics and code are never produced for dead
   branches, and dead loops vanish from the emitted C++.
 
 ### 3.5 Inactive declaration pruning
@@ -1150,15 +1165,19 @@ type it would have in C++. Consequences:
 - Strictly intra-procedural: one analysis per function, state reset at every
   function entry, no facts cross function boundaries (interprocedural
   nullability is deliberately not attempted). Dangling pointers are handled
-  separately by the return-only `DanglingPointerChecker` (§4.14).
+  separately by the return-only `DanglingPointerChecker` (§4.14), and
+  dynamic-array init/uninit lifecycle by `DynamicArrayMemoryChecker`
+  (§4.15).
 - `getptr(x)`/`getmview(x)`/`getview(x)` are the only certifications of
   POINTING; every other value source is MAYBE_NULL unless it is `null` (NULL)
   or a pointer copy.
 - Deref of definitely-NULL = error; maybe-null deref = warning.
 - Guards (`p == null`/`p != null`) refine per-path; branch exploration is
   path-sensitive to depth 12, then falls back to insensitive checking.
-- Loops snapshot/merge states so breaks, continues, and zero-trip exits all
-  get correct entry states.
+- Loops include zero-trip and back-edge exits only when the
+  condition-false guard is feasible for that state, merge `break` and
+  `continue` snapshots separately, and treat a loop with no feasible exit
+  as non-falling-through.
 
 ### 4.6 Analyzer vs checker split
 - `ExpressionAnalyzer` (SemanticAnalyzer phase) **infers**: it resolves
@@ -1584,14 +1603,16 @@ become `UNKNOWN`.
 merges only continuing paths. Like the null-state check, exploration is
 path-sensitive to `MAX_BRANCH_DEPTH = 12` nested branches and then falls
 back to a path-insensitive merge. A null guard refines the origin state:
-the `p == null` path sets `p` to `EMPTY`; `p != null` over an `EMPTY`
-pointer and `p == null` over a definitely-pointing pointer are
+the `p == null` path sets `p` to `EMPTY`; the `p != null` path marks the
+surviving value definitely non-null (so a guarded return can be a
+definite dangle rather than only a possible one). `p != null` over an
+`EMPTY` pointer and `p == null` over a definitely-pointing pointer are
 infeasible, and returns inside those dead paths are not diagnosed.
-`while` analyzes the body once, replays the update epilogue for normal
-and `continue` edges, merges zero-trip and back-edge states, then merges
-`break` snapshots; the condition-false exit of `while (p != null)`
-refines `p` to `EMPTY`, while `break` paths are merged separately.
-Block-local pointer states reset at block end.
+`while` analyzes the body once and replays the update epilogue for
+normal and `continue` edges. Each zero-trip/back-edge exit is included
+only when the condition-false guard is feasible for that state; `break`
+snapshots are merged separately. A loop with no feasible exit is treated
+as non-falling-through. Block-local pointer states reset at block end.
 
 **Return classification.** `mayDangle = FRAME non-empty`;
 `definiteDangle = FRAME non-empty, no UNKNOWN, no GLOBAL, and definitely non-null`;
@@ -1612,8 +1633,98 @@ function bodies.
 **v1 limitations.** No interprocedural escape facts, no global/
 out-parameter store escapes, no pointers hidden inside returned
 aggregates, no use-after-block detection, no dynamic-array buffer
-lifetime across `resize`/`uninit`, and loops are analyzed once rather
-than to a fixed point.
+pointer invalidation across `resize`/`uninit`, and loops are analyzed
+once rather than to a fixed point.
+
+## 4.15 Dynamic-array lifecycle model (DynamicArrayMemoryChecker)
+
+A standalone intra-procedural pass over function-local dynamic arrays.
+It runs after `BranchPruner`, `InactiveDeclarationPruner`, and
+`DanglingPointerChecker`, so only surviving code is analyzed. Each
+function starts with fresh array and alias state.
+
+**Lifecycle lattice.** One value per tracked local dynamic array:
+
+- `UNINITED` — no element storage;
+- `INITED` — element storage is allocated;
+- `MAYBE_INITED` — initialized on some continuing paths, or possibly
+  changed by an owner-pointer call.
+
+A separate three-valued `FreedState` (`NEVER` / `MAYBE` / `YES`)
+distinguishes use-before-init from use-after-`uninit()`; it does not add
+a fourth lifecycle state. Merges produce `MAYBE_INITED` whenever the
+paths disagree; `FreedState` merges to `MAYBE` on disagreement.
+
+**Tracked entities.** Function-local variables of type `[T]`, including
+the outer value of nested dynamic arrays. Also tracked are owner
+`ptr<[T]>` values whose origins are `getptr(localArray)`, pointer copies,
+casts, and `getptr($(p))`. Global dynamic arrays themselves, dynamic
+array fields, nested elements, element pointers, and
+`mview<[T]>`/`view<[T]>` aliases are untracked. `mview`/`view` call
+arguments never invalidate array state because those permissions cannot
+allocate or free storage.
+
+Origin sets are `ArrayOrigin` values (a set of `VariableSymbol`
+identity plus an `UNKNOWN` flag). Exactly one known origin enables a
+strong update or definite diagnostic; multiple known or unknown origins
+degrade to `MAYBE_INITED` or no diagnostic.
+
+**Transfers.**
+
+- local dynamic array declaration → `UNINITED`, `FreedState.NEVER`;
+- `init(n)`, `init_zero(n)`, and `d(n)` → `INITED`; definite double
+  init is an error, `MAYBE_INITED` is a warning;
+- `resize(n)` requires `INITED` and leaves the array `INITED`;
+- `uninit()` requires `INITED`, then stores `UNINITED` + `FreedState.YES`;
+- element access, `memset`, `memcpy` destination, `memmove`, and every
+  read/search/bit intrinsic except `length()` require `INITED`;
+- `length()` is always safe, including after `uninit()`;
+- `getptr`/`getmview`/`getview` create pointers without changing
+  lifecycle state;
+- pointer assignments copy origin sets; `null` clears them;
+- owner `ptr<[T]>` call arguments mark the target `MAYBE_INITED` and
+  escaped. Arrays whose owner pointer is stored into a global or an
+  owner-pointer-typed field/element are also escaped. Escaped arrays are
+  havocked to `MAYBE_INITED` by later calls or untracked lifecycle
+  operations, and are excluded from leak warnings. Global pointer
+  origins are forgotten after calls, like address-taken locals.
+
+**Length guards.** Direct comparisons of `d.length()` with a constant
+are recognized in either operand order. The zero-asserting paths
+(`== 0`, `<= 0`, `< 1`) refine `d` to `UNINITED`; the nonzero-asserting
+paths (`!= 0`, `> 0`, `>= 1`, `== k` for `k > 0`) refine it to `INITED`.
+Infeasible paths (for example `length() == 0` on an `INITED` array) are
+suppressed and do not contribute state. Nonzero constant comparisons
+certify only the nonzero side.
+
+**Branches and loops.** `if`/`else` uses the same pre-branch snapshot,
+continuing-path merge, no-else fallthrough, infeasible-branch
+suppression, and dead-tail handling as the null/dangling checks.
+Exploration is path-sensitive to `MAX_BRANCH_DEPTH = 12`; beyond that it
+falls back to a path-insensitive merge.
+
+`while` analyzes the body once and replays the update epilogue for
+normal and `continue` edges. Exit states are filtered and refined per
+path before merging: the zero-trip path is included only when the
+condition-false guard is feasible at entry, and each back-edge state is
+included only when the condition-false guard is feasible after that
+iteration. `break` snapshots are merged separately. If neither a normal
+exit nor a `break` is feasible, the loop is treated as
+non-falling-through, so its tail is not analyzed. `for` loops receive
+the same treatment after desugaring.
+
+**Diagnostics and severity.** Definite double init, use before init, use
+after `uninit()`, and double uninit are errors. `MAYBE_INITED`
+equivalents are warnings. Missing explicit `uninit()` at a return or
+scope exit is a warning, not a leak error, because the runtime
+destructor frees local dynamic arrays. Leak warnings are suppressed for
+escaped arrays.
+
+**v1 limitations.** No struct-field or nested-element tracking, no
+`mview`/`view` alias tracking for use checks, no interprocedural callee
+summaries, no allocation-failure status modeling (`init` is assumed to
+succeed), no element-buffer pointer invalidation after `resize`/
+`uninit`, and no loop fixed point.
 
 ## 5. Build & test quick reference
 
@@ -1658,8 +1769,9 @@ uv run python library_tests/run_library_tests.py
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
-| Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker` (or a new standalone checker invoked from `Main`) |
+| Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
 | Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker` |
+| Detect dynamic-array lifecycle misuse | `DynamicArrayMemoryChecker` |
 | Emit new C++ constructs | `Cpp14Codegen` (+ `SemanticASTNode`/`SemanticType` as needed) |
 | Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ExpressionChecker` validation + `Cpp14Codegen` emission |
 | Add an os FFI call | `import/franko/os.fr` + `os.ffi.cpp` block + `OsFfi` signatures |

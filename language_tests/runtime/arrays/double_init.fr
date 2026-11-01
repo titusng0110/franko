@@ -1,12 +1,17 @@
 import "franko/io"
 
 // Runtime fixture: arrays/double_init
-// Initializing a dynamic array twice is not fully proven at compile time
-// (doc 20.7); the array runtime raises a runtime error (doc 32.3).
+// The double init happens through a caller-owned pointer, so the
+// intra-procedural checker cannot prove it and the array runtime raises
+// a runtime error (doc 32.3).
+func initTwice(ptr<[int32]> p) -> void {
+    $(p).init(4)
+    $(p).init(4)
+}
+
 func main() -> int32 {
     [int32] xs
-    xs.init(4)
-    xs.init(4)
+    initTwice(getptr(xs))
     print(xs[0])
     return 0
 }

@@ -167,11 +167,20 @@ a.uninit();
 An array literal is not an array value; arrays receive literal
 elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
-## 20.6 Array Lifetime Limitations
+## 20.6 Array Lifetime Checking
 
-The compiler validates intrinsic legality, but it does not fully prove:
+The compiler validates intrinsic legality and also tracks the
+initialization lifecycle of function-local dynamic array variables and
+owner `ptr<[T]>` aliases. Definite double init, use before init, use
+after `uninit`, and double uninit are compile errors; possible cases are
+warnings. Missing an explicit `uninit()` is a warning because the
+runtime destructor still frees local buffers. See
+[Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
-- dynamic array initialized before indexing;
-- dynamic array not used after `uninit`;
-- dynamic array not initialized twice;
-- all array accesses are within bounds.
+The check does not yet cover:
+
+- dynamic arrays in struct fields or nested dynamic-array elements;
+- `mview<[T]>`/`view<[T]>` aliases;
+- callee effects beyond marking owner-pointer arguments as possibly
+  initialized;
+- runtime bounds violations for nonconstant indexes.

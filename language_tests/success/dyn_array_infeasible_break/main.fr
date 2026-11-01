@@ -1,0 +1,11 @@
+func main() -> int32 {
+    [int32] d
+    d.init(1)
+    while (d.length() > 0) {
+        if (d.length() == 0) {
+            break
+        }
+        d.uninit()
+    }
+    return 0
+}

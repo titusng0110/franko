@@ -1,0 +1,19 @@
+import "franko/io"
+
+func fill(mview<[int32]> v) -> void {
+    $(v)[0] = 1
+}
+
+func peek(view<[int32]> v) -> int32 {
+    return $(v)[0]
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(1)
+    fill(getmview(d))
+    d[0] = 2
+    print(peek(getview(d)))
+    d.uninit()
+    return 0
+}

@@ -1,0 +1,12 @@
+ptr<[int32]> G
+
+func f() -> int32 {
+    [int32] d
+    d.init(1)
+    G = getptr(d)
+    return 0
+}
+
+func main() -> int32 {
+    return f()
+}

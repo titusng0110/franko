@@ -1,0 +1,5 @@
+func main() -> int32 {
+    [int32] d
+    d[0] = 1
+    return 0
+}

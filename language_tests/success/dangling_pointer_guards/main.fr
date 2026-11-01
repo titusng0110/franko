@@ -79,6 +79,34 @@ func infeasible_else_drops_frame() -> ptr<int32> {
     return p
 }
 
+func caller_owned_guard(ptr<int32> q) -> ptr<int32> {
+    if (q != null) {
+        return q
+    }
+    return null
+}
+
+func infeasible_break_is_ignored() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    while (p != null) {
+        if (p == null) {
+            break
+        }
+        p = null
+    }
+    return p
+}
+
+func loop_tail_is_ignored() -> ptr<int32> {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    while (p != null) {
+        return null
+    }
+    return p
+}
+
 func main() -> int32 {
     int32 z = 0
     ptr<int32> a = null_branch_is_safe(0)
@@ -88,5 +116,7 @@ func main() -> int32 {
     ptr<int32> e = null_loop_is_infeasible()
     ptr<int32> f = caller_owned_getptr_is_nonnull(getptr(z))
     ptr<int32> g = infeasible_else_drops_frame()
+    ptr<int32> h = caller_owned_guard(getptr(z))
+    ptr<int32> i = infeasible_break_is_ignored()
     return 0
 }

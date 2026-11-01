@@ -91,9 +91,11 @@ uv run python compile.py -Omax programs/bfs.fr
 
 All modes implement the same language with identical compiler
 diagnostics and program output; only the optimization level and the
-runtime checking differ. Debug mode reports memory
-errors and leaks (for example a missing `arr.uninit()`) at run time, so
-develop and test without `-O` and use `-O` for the final fast binary.
+runtime checking differ. Debug mode reports memory errors at run time.
+Compile-time checks reject definite pointer and dynamic-array lifecycle
+misuse; a missing explicit `arr.uninit()` is a warning rather than a
+leak error because local dynamic arrays are freed by their destructor.
+Develop and test without `-O` and use `-O` for the final fast binary.
 
 `-Omax` is for developers who have already validated their program and
 want maximum speed. Out-of-range array access and out-of-range

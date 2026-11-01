@@ -1,0 +1,7 @@
+func main() -> int32 {
+    [int32] d
+    ptr<[int32]> p = getptr(d)
+    d.init(4)
+    $(p).init(4)
+    return 0
+}

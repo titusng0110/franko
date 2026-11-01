@@ -83,6 +83,15 @@ public final class DanglingPointerChecker {
                 return this;
             }
 
+            if (frameCells.isEmpty() && globalCells.isEmpty()) {
+                return new OriginSet(
+                        Set.of(),
+                        Set.of(),
+                        true,
+                        true
+                );
+            }
+
             return new OriginSet(
                     frameCells,
                     globalCells,
@@ -771,6 +780,12 @@ public final class DanglingPointerChecker {
             SemanticExprNode condition,
             boolean guardHolds
     ) {
+        if (condition.constantValue != null) {
+            boolean truthy = condition.constantValue.signum() != 0;
+
+            return guardHolds == truthy;
+        }
+
         NullGuard guard = nullGuard(condition);
 
         if (guard == null) {
@@ -811,15 +826,18 @@ public final class DanglingPointerChecker {
         }
 
         boolean assertedNull = guard.isEquality() == guardHolds;
+        OriginSet current = pointerState[index];
 
-        if (!assertedNull) {
+        if (assertedNull) {
+            if (current != null && !current.definitelyPoints()) {
+                pointerState[index] = OriginSet.EMPTY;
+            }
+
             return;
         }
 
-        OriginSet current = pointerState[index];
-
-        if (current != null && !current.definitelyPoints()) {
-            pointerState[index] = OriginSet.EMPTY;
+        if (current != null && !current.definitelyNull()) {
+            pointerState[index] = current.withNonNull();
         }
     }
 
@@ -833,36 +851,29 @@ public final class DanglingPointerChecker {
         LoopFrame frame = new LoopFrame();
         loopStack.add(frame);
 
-        boolean bodyTerminates = false;
-        int afterBody = -1;
+        List<Integer> exitStates = new ArrayList<>();
 
-        if (bodyFeasible) {
-            refineOriginsFromGuard(node.condition, true);
-
-            bodyTerminates = checkStmt(node.body);
-            afterBody = snapshot();
-        } else {
-            boolean previousSuppression = suppressEscapeChecks;
-            suppressEscapeChecks = true;
-            checkStmt(node.body);
-            suppressEscapeChecks = previousSuppression;
+        if (guardPathFeasible(node.condition, false)) {
+            restore(before);
+            refineOriginsFromGuard(node.condition, false);
+            exitStates.add(snapshot());
         }
 
+        boolean bodyTerminates = false;
         List<Integer> backEdgeStates = new ArrayList<>();
 
         if (bodyFeasible) {
+            restore(before);
+            refineOriginsFromGuard(node.condition, true);
+
+            bodyTerminates = checkStmt(node.body);
+            int afterBody = bodyTerminates ? -1 : snapshot();
+
             if (!node.update.isEmpty()) {
-                boolean iterationFallsThrough = !bodyTerminates;
+                if (!bodyTerminates) {
+                    restore(afterBody);
 
-                if (iterationFallsThrough) {
-                    for (SemanticStmtNode updateStmt : node.update) {
-                        if (checkStmt(updateStmt)) {
-                            iterationFallsThrough = false;
-                            break;
-                        }
-                    }
-
-                    if (iterationFallsThrough) {
+                    if (checkUpdates(node.update)) {
                         backEdgeStates.add(snapshot());
                     }
                 }
@@ -870,16 +881,7 @@ public final class DanglingPointerChecker {
                 for (int continueState : frame.continueStates) {
                     restore(continueState);
 
-                    boolean continueFallsThrough = true;
-
-                    for (SemanticStmtNode updateStmt : node.update) {
-                        if (checkStmt(updateStmt)) {
-                            continueFallsThrough = false;
-                            break;
-                        }
-                    }
-
-                    if (continueFallsThrough) {
+                    if (checkUpdates(node.update)) {
                         backEdgeStates.add(snapshot());
                     }
                 }
@@ -890,9 +892,20 @@ public final class DanglingPointerChecker {
 
                 backEdgeStates.addAll(frame.continueStates);
             }
+
+            for (int backEdgeState : backEdgeStates) {
+                restore(backEdgeState);
+
+                if (guardPathFeasible(node.condition, false)) {
+                    refineOriginsFromGuard(node.condition, false);
+                    exitStates.add(snapshot());
+                }
+            }
         } else {
             boolean previousSuppression = suppressEscapeChecks;
             suppressEscapeChecks = true;
+
+            checkStmt(node.body);
 
             for (SemanticStmtNode updateStmt : node.update) {
                 checkStmt(updateStmt);
@@ -905,12 +918,8 @@ public final class DanglingPointerChecker {
 
         restore(before);
 
-        if (bodyFeasible && !backEdgeStates.isEmpty()) {
-            mergeLoopStates(before, backEdgeStates);
-        }
-
-        if (!bodyFeasible || !bodyTerminates || !backEdgeStates.isEmpty()) {
-            refineOriginsFromGuard(node.condition, false);
+        if (!exitStates.isEmpty()) {
+            mergeLoopExitStates(exitStates);
         }
 
         if (bodyFeasible) {
@@ -919,11 +928,24 @@ public final class DanglingPointerChecker {
             }
         }
 
-        return false;
+        boolean hasExit = !exitStates.isEmpty()
+                || (bodyFeasible && !frame.breakStates.isEmpty());
+
+        return !hasExit;
+    }
+
+    private boolean checkUpdates(List<SemanticStmtNode> updates) {
+        for (SemanticStmtNode update : updates) {
+            if (checkStmt(update)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void recordJumpState(int levels, boolean isContinue) {
-        if (loopStack.isEmpty()) {
+        if (loopStack.isEmpty() || suppressEscapeChecks) {
             return;
         }
 
@@ -944,15 +966,20 @@ public final class DanglingPointerChecker {
         }
     }
 
-    private void mergeLoopStates(int before, List<Integer> iterationStates) {
-        for (int i = 0; i < pointerCount; i++) {
-            OriginSet merged =
-                    originSetFromSnapshot(before, i, before);
+    private void mergeLoopExitStates(List<Integer> exitStates) {
+        if (exitStates.isEmpty()) {
+            return;
+        }
 
-            for (int slot : iterationStates) {
+        int first = exitStates.get(0);
+
+        for (int i = 0; i < pointerCount; i++) {
+            OriginSet merged = null;
+
+            for (int slot : exitStates) {
                 merged = mergeOriginSets(
                         merged,
-                        originSetFromSnapshot(slot, i, before)
+                        originSetFromSnapshot(slot, i, first)
                 );
             }
 

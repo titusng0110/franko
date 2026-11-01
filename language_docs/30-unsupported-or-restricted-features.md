@@ -71,9 +71,16 @@ return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 Array literal elements must be compile-time constant expressions
 (runtime values cannot appear in one).
 
-## 30.9 No Full Dynamic Array Lifetime Checking
+## 30.9 Dynamic Array Lifetime Checking Is Partial
 
-The compiler validates intrinsic legality, but it does not fully prove dynamic array lifetime and bounds properties.
+The compiler tracks the init/uninit lifecycle of function-local dynamic
+array variables and owner `ptr<[T]>` aliases. It rejects definite double
+init, use before init, use after `uninit`, and double uninit; possible
+cases and missing explicit `uninit()` calls are warnings. It does not
+track dynamic arrays in struct fields or nested elements, `mview`/`view`
+aliases, or interprocedural callee effects, and it does not prove all
+bounds properties. See
+[Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
 ## 30.10 Pointer Lifetime Is Not Fully Tracked
 

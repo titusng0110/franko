@@ -1,0 +1,5 @@
+func main() -> int32 {
+    [int32] d
+    d.uninit()
+    return 0
+}

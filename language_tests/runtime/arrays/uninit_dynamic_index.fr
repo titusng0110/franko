@@ -1,10 +1,14 @@
 import "franko/io"
 
 // Runtime fixture: arrays/uninit_dynamic_index
-// Reading an uninitialized dynamic array aborts at runtime: dynamic
-// array initialization is not statically tracked (docs 20.7, 32.9).
+// The uninitialized read happens through a caller-owned pointer, so the
+// intra-procedural checker cannot prove it and the array runtime aborts.
+func readFirst(ptr<[int32]> p) -> int32 {
+    return $(p)[0]
+}
+
 func main() -> int32 {
     [int32] xs
-    print(xs[0])
+    print(readFirst(getptr(xs)))
     return 0
 }
