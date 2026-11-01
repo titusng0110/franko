@@ -1,6 +1,6 @@
 # 26. Methods
 
-A struct may declare methods: functions bound to the struct whose first parameter is explicitly `self` (`ptr<X> self`, `mview<X> self`, or `view<X> self`). Methods are called with member-call syntax and lower to ordinary function calls with a synthesized `getptr`/`getmview`/`getview(receiver)` first argument matching the declared `self` type (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
+A struct may declare methods: functions bound to the struct whose first parameter is explicitly `self` (`ptr<X> self`, `mview<X> self`, or `view<X> self`). Methods are called with member-call syntax; the receiver is passed through `getptr`/`getmview`/`getview(receiver)` matching the declared `self` type (see [Structs](25-structs.md) for fields and [Functions](12-functions.md) for free functions).
 
 ```franko
 struct X {
@@ -37,7 +37,7 @@ struct X {
 
 Rules:
 
-- Methods are `func` declarations inside a `structDecl` body; separators between members are optional, matching field syntax.
+- Methods are `func` declarations inside a struct body; separators between members are optional, matching field syntax.
 - A method may declare any return type valid for free functions, including `void` (see [Functions](12-functions.md)).
 - A method may declare additional parameters after `self`; they follow ordinary parameter rules.
 - A method body follows ordinary function body rules, including return checking (see [Functions](12-functions.md)).
@@ -77,12 +77,12 @@ Rules:
 
 ## 26.3 Method Calls and Receivers
 
-A method is invoked with member-call syntax. The compiler prepends the
-`self` argument, created with `getptr`, `getmview`, or `getview`
-matching the method's declared `self` type:
+A method is invoked with member-call syntax. The receiver is passed as
+the `self` argument, using `getptr`, `getmview`, or `getview` matching
+the method's declared `self` type:
 
 ```franko
-s.increment()              // -> METH_increment_OFSTRUCT_X_HASH_<8hex>((&s))
+s.increment()              // local struct receiver
 $(p).increment()       // explicit deref for ptr<X> receivers
 xs[i].increment()          // array element receiver
 s.inner.increment()        // field receiver
@@ -105,7 +105,6 @@ Rules:
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
 - Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
-- A method call lowers to `SemanticFunctionCallNode` with a synthesized creation-intrinsic (`getptr`/`getmview`/`getview`) first argument, so argument checking, return checking, and code generation reuse the ordinary function-call paths.
 
 ## 26.4 Fields vs Methods Name Resolution
 

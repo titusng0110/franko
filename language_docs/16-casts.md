@@ -12,7 +12,7 @@ two explicit conversion intrinsics:
 
 ```franko
 uint8 a = 200;
-uint16 b = cast<uint16>(a);        // widening: plain static_cast
+uint16 b = cast<uint16>(a);        // widening: no runtime cost
 
 int32 big = 300;
 uint8 small = unsafe_cast<uint8>(big);   // checked: throws at run time
@@ -57,8 +57,7 @@ print(unsafe_cast<uint8>(wide));
 ## 16.2 Static (Value-Preserving) Casts
 
 When every value of the source type is representable in the target
-type, the cast is statically safe and compiles to a plain
-`static_cast` with zero runtime cost:
+type, the cast is statically safe and has no runtime cost:
 
 - strictly wider, same signedness:
   `uint8 -> uint16 -> uint32 -> uint64` and
@@ -73,9 +72,8 @@ expression already has is allowed and compiles to the value unchanged.
 
 Every conversion that can lose data — narrowing, any signed-to-unsigned
 conversion, `uint64 -> int64`, and same-width signedness changes —
-must be written `unsafe_cast<T>(expr)`. It compiles to a runtime-checked
-`franko_unsafe_cast<T>(expr)` call. The check compares the value
-against the target type's range and throws on overflow, so a bad
+must be written `unsafe_cast<T>(expr)`. It performs a runtime range
+check against the target type's limits and throws on overflow, so a bad
 conversion aborts instead of wrapping or truncating.
 
 ```franko

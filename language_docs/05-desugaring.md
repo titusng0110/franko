@@ -1,10 +1,9 @@
 # 5. Desugaring
 
-Some Franko source forms are accepted as convenient syntax and rewritten before semantic checking.
-
-Desugaring does not change program meaning. It rewrites compact user-facing syntax into simpler core forms used by the semantic analyzer.
-
-After desugaring, normal declaration, assignment, array initialization, and type checking rules apply.
+Some Franko source forms are convenient shorthand for simpler forms. The
+shorthand and its equivalent have the same meaning; the normal
+declaration, assignment, array initialization, and type rules apply to
+the equivalent form.
 
 ## 5.1 Declaration Initializer Sugar
 
@@ -14,14 +13,17 @@ This:
 int x = 10;
 ```
 
-is accepted in statement contexts where declaration followed by assignment is legal, and is desugared to:
+is accepted in statement contexts where a declaration followed by an
+assignment is legal, and is shorthand for:
 
 ```franko
 int x;
 x = 10;
 ```
 
-At global scope, declaration initializer sugar is currently invalid if it desugars into an assignment, because global executable statements are not allowed.
+At global scope, declaration initializer sugar is currently invalid when
+its equivalent form is an assignment, because executable statements are
+not allowed at global scope.
 
 ## 5.2 Dynamic Array Call-Init Declaration Sugar
 
@@ -31,44 +33,38 @@ This:
 [int] arr(20);
 ```
 
-is desugared to:
+is shorthand for:
 
 ```franko
 [int] arr;
 arr(20);
 ```
 
-The call form itself (`arr(20)`) is later recognized as array intrinsic `init` sugar. See [Array Intrinsics](21-array-intrinsics.md).
+The call form itself (`arr(20)`) is array intrinsic `init` shorthand. See
+[Array Intrinsics](21-array-intrinsics.md).
 
 ## 5.3 Array Literal Desugaring
 
-Array literals are not assignment sugar: they are `view<[T, N]>`
-values over hoisted constant global arrays, exactly like string
-literals. An array literal is never rewritten into statements; its
-element type is inferred from the surrounding assignment, return, or
-call-argument context during semantic analysis. See
+Array literals are not assignment sugar: they are `view<[T, N]>` values
+over immutable constant storage, exactly like string literals. An array
+literal is never rewritten into statements; its element type is inferred
+from the surrounding assignment, return, or call-argument context. See
 [Array Literals](22-array-literals.md).
 
 ## 5.4 String Literal Desugaring
 
-Every string literal is hoisted to a literal-backed global `[byte, N]`
-holding its UTF-8 bytes (no null terminator is added) and replaced with a
-`getview(...)` expression over that global, of type `view<[byte, N]>`:
+Every string literal is a read-only `view<[byte, N]>` over immutable
+storage holding its UTF-8 bytes. No null terminator is added, and
+identical literal texts share the same storage:
 
 ```franko
 print($("ABC")[0]);
 ```
 
-first becomes (one global per distinct literal text):
-
-```franko
-[byte, 3] _STR_<hash>;
-print($(getview(_STR_<hash>))[0]);
-```
-
-Identical literals share one global. Because a string literal is a view
-value, it cannot initialize or assign an array: copy the bytes with
-`memcpy` instead. See [String Literals](23-string-literals.md).
+The literal has type `view<[byte, 3]>` and can be indexed after a
+dereference. Because a string literal is a view value, it cannot
+initialize or assign an array: copy the bytes with `memcpy` instead. See
+[String Literals](23-string-literals.md).
 
 ## 5.5 Braceless Control-Flow Bodies
 
@@ -80,7 +76,7 @@ while (i < 10) i = i + 1;
 for (; i < 10; i = i + 1) print(i);
 ```
 
-During desugaring, a braceless body is wrapped in an implicit block:
+A braceless body behaves as if it were wrapped in an implicit block:
 
 ```franko
 if (x) { print(x); }
@@ -88,11 +84,14 @@ while (i < 10) { i = i + 1; }
 for (; i < 10; i = i + 1) { print(i); }
 ```
 
-This makes braceless and braced bodies scope identically: a declaration inside a braceless body is scoped to that implicit block and is not visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
+This makes braceless and braced bodies scope identically: a declaration
+inside a braceless body is scoped to that implicit block and is not
+visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
 
 ## 5.6 For Loop Desugaring
 
-A `for` loop is lowered to declaration/assignment statements and a `while` loop:
+A `for` loop is equivalent to declaration/assignment statements and a
+`while` loop:
 
 ```franko
 for (int32 i = 0; i < n; i = i + 1) {
@@ -100,7 +99,7 @@ for (int32 i = 0; i < n; i = i + 1) {
 }
 ```
 
-becomes:
+is equivalent to:
 
 ```franko
 {
@@ -113,11 +112,18 @@ becomes:
 }
 ```
 
-The whole loop becomes a block, so a loop variable declared in `init` is scoped to the loop and is not visible after it.
+The whole loop behaves as a block, so a loop variable declared in `init`
+is scoped to the loop and is not visible after it.
 
-The `init` and `update` parts are optional header statements (every simple-statement form except `return`). The condition is required. When present, the `update` runs at the end of every iteration, including the last. It is carried as the desugared `while` loop's epilogue rather than being appended to the body block, so `continue` runs it and `break` skips it, matching C's `for` semantics. See [Statements](19-statements.md).
+The `init` and `update` parts are optional header statements (every
+simple-statement form except `return`). The condition is required. When
+present, `update` runs at the end of every iteration, including the
+last: `continue` runs it, and `break` skips it, matching C's `for`
+semantics. See [Statements](19-statements.md).
 
-The `init` and `update` statements go through the ordinary statement desugaring rules, so declaration initializer sugar in the header expands normally. See [Statements](19-statements.md).
+The `init` and `update` statements follow the ordinary statement sugar
+rules, so declaration initializer sugar in the header expands normally.
+See [Statements](19-statements.md).
 
 ## 5.7 Inferred Static Array Sizes (`?`)
 
@@ -128,16 +134,16 @@ declaration with an array-literal initializer:
 view<[int32, ?]> v = [0, 1, 2, 3];
 ```
 
-During desugaring, each `?` is replaced by the element count of the
-corresponding literal level, so the declaration above becomes
-`view<[int32, 4]> v`. Nested literals infer level by level:
+Each `?` is inferred from the element count of the corresponding literal
+level, so the declaration above is `view<[int32, 4]> v`. Nested literals
+infer level by level:
 
 ```franko
 view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
 ```
 
-becomes `view<[[int32, 2], 2]> m`. `?` may appear at any
-level of the nest, including middle levels.
+is `view<[[int32, 2], 2]> m`. `?` may appear at any level of the nest,
+including middle levels.
 
 Inference rules:
 
@@ -158,12 +164,13 @@ Inference rules:
 
 Misplaced `?` (parameters, return types, struct fields, globals,
 pointers, call-style `arr(4)` initialization, non-literal initializers)
-is rejected during desugaring. See [Arrays](20-arrays.md) and
+is rejected. See [Arrays](20-arrays.md) and
 [Array Literals](22-array-literals.md).
 
 ## 5.8 Constant Expression Evaluation
 
-Every other `constExpr` slot is evaluated during desugaring, alongside `?` inference:
+Constant expressions are evaluated at compile time in every
+constant-expression position:
 
 ```franko
 [int32, 0x10] xs;   // size becomes 16
@@ -173,30 +180,38 @@ struct S {                 // field default becomes 8
 }
 ```
 
-Static array sizes, global initializers, and struct field defaults all reach semantic analysis as canonical decimal literals. Semantic analysis then only validates the values (positive sizes, `uint32` range, initializer fit) without folding anything again.
+Static array sizes, global initializers, struct field defaults, and
+`break N` levels are reduced to concrete values. The values are then
+validated in context (positive sizes, `uint32` range, initializer fit)
+without folding anything again.
 
-Evaluation failures are desugaring diagnostics:
+Evaluation failures are compile errors:
 
 ```franko
 [int32, 10 / 0] b;   // invalid: Division by zero in constant expression
 ```
 
-Constant expressions inside ordinary code are not `constExpr` slots and are unaffected: they are still folded later, during semantic analysis. See [Constant Folding](10-constant-folding.md).
+Constant expressions inside ordinary code are also folded at compile
+time. See [Constant Folding](10-constant-folding.md).
 
 ## 5.9 Increment and Decrement Desugaring
 
-Postfix increment and decrement statements are sugar for compound assignment:
+Postfix increment and decrement statements are sugar for compound
+assignment:
 
 ```franko
 x++;
 x--;
 ```
 
-are lowered to:
+are equivalent to:
 
 ```franko
 x += 1;
 x -= 1;
 ```
 
-before semantic analysis, so every rule that applies to `+=` / `-=` (integer storage-backed lvalue target, operand rules, single evaluation of the target) applies identically to `x++` / `x--`. The literal `1` remains a fluid integer constant. See [Assignment](14-assignment.md).
+Every rule that applies to `+=` / `-=` (integer storage-backed lvalue
+target, operand rules, single evaluation of the target) applies
+identically to `x++` / `x--`. The literal `1` remains a fluid integer
+constant. See [Assignment](14-assignment.md).

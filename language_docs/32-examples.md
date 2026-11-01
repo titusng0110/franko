@@ -108,7 +108,7 @@ func main() -> int32 {
 ```
 
 Elements are compile-time constant expressions; runtime values are
-rejected because a literal is hoisted to a constant global array.
+rejected because a literal is backed by immutable constant storage.
 
 ## 32.6 Nested Static Array Literals
 
@@ -374,7 +374,7 @@ func main() -> int32 {
 
 ## 32.17 Structs Passed by Value and by Pointer
 
-Assignable structs may be passed and returned by value; pointer-only structs must go through `ptr<X>`.
+Assignable structs may be passed and returned by value; pointer-only structs are accessed through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access).
 
 ```franko
 struct Point {
@@ -472,7 +472,7 @@ func main() -> int32 {
     print(xs.length());   // 4
 
     [int32, 3] ys;
-    ys = [10, 20, 30];
+    ys.memcpy([10, 20, 30]);
     print(ys.length());   // 3 (compile-time constant)
 
     for (uint32 i = 0; i < ys.length(); i = i + 1) {
@@ -489,15 +489,15 @@ func main() -> int32 {
 
 ```franko
 func main() -> int32 {
-    [int32, ?] a = [0, 1, 2, 3];
-    print(a.length());   // 4
+    view<[int32, ?]> a = [0, 1, 2, 3];
+    print($(a).length());   // 4
 
-    [byte, ?] s = [104, 101, 108, 108, 111];
-    print(s.length());   // 5
+    view<[byte, ?]> s = [104, 101, 108, 108, 111];
+    print($(s).length());   // 5
 
-    [[int32, ?], ?] m = [[1, 2], [3, 4]];
-    print(m.length());      // 2
-    print(m[0].length());   // 2
+    view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
+    print($(m).length());      // 2
+    print($(m)[0].length());   // 2
 
     return 0;
 }
@@ -518,7 +518,7 @@ func main(view<[[byte]]> args) -> int32 {
 }
 ```
 
-Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter needs no null guard: the template wrapper always passes a live pointer (see [Compiler Internals](../compiler_docs.md)).
+Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter always receives a live view, so it needs no null guard.
 
 ## 32.23 Byte-Array Search, Endian, and Bit Intrinsics
 

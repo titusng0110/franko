@@ -23,7 +23,7 @@ Arrays may be nested:
 
 Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
 
-However, Franko supports **array literals** as `view<[T, N]>` values over constant global arrays; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
+However, Franko supports **array literals** as `view<[T, N]>` values over immutable constant storage; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
 
 ## 20.1 Static Arrays
 
@@ -58,15 +58,18 @@ Invalid:
 
 Static arrays do not use `arr(size)` initialization.
 
-The size may be written as `?` to infer it from a declaration initializer (see [Desugaring](05-desugaring.md)):
+The size may be written as `?` in a `view` declaration with an
+array-literal initializer (see [Desugaring](05-desugaring.md)):
 
 ```franko
-[int32, ?] a = [0, 1, 2, 3];   // ? = 4
-[byte, ?] b = [104, 105];        // ? = 2
+view<[int32, ?]> a = [0, 1, 2, 3];   // ? = 4
+view<[byte, ?]> b = [104, 105];      // ? = 2
 ```
 
-(String literals are `view<[byte, N]>` values and do not
-participate in `?` inference; see [String Literals](23-string-literals.md).)
+(`?` requires a `view<[...]>` declaration; a bare static array such as
+`[int32, ?]` is rejected. String literals are `view<[byte, N]>` values
+and do not participate in `?` inference; see
+[String Literals](23-string-literals.md).)
 
 The current element count of any array is available through the `length()` intrinsic (see [Array Intrinsics](21-array-intrinsics.md)).
 

@@ -51,14 +51,14 @@ view<[uint8, 3]> b = [0, 127, 256];   // invalid: 256 does not fit
 ## 22.2 Constant Elements Only
 
 Every element must be a **compile-time constant expression** (integer
-literals and operators over them). A literal is hoisted to a constant
-global array — one per distinct content and element type, shared by all
+literals and operators over them). The literal's constant elements are
+stored once per distinct content and element type and shared by all
 uses, so returning a literal or calling a function that returns one is
 always safe, including recursively:
 
 ```franko
 func first() -> view<[int32, 3]> {
-    return [1, 2, 3];       // backed by one constant global
+    return [1, 2, 3];       // backed by shared constant storage
 }
 
 view<[int32, 3]> a = [1 + 1, 2 * 3, 1 << 3];   // constant expressions
@@ -219,8 +219,8 @@ Array literals in Franko are:
 - ordinary expressions of type `view<[T, N]>`;
 - element type `T` inferred from assignment, return, or call-argument
   contexts (integer primitives only);
-- compile-time constant expressions only, hoisted to shared constant
-  global arrays (recursion-safe, like string literals);
+- compile-time constant expressions only, backed by shared constant
+  storage with static lifetime (recursion-safe, like string literals);
 - exactly as long as written (`N >= 1`);
 - rectangular when nested, with inner dimensions static;
 - decayable to `view<[T]>` (outermost dimension only);

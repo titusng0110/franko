@@ -9,17 +9,19 @@ import "franko/os"
 ```
 
 Its functions and constants are then ordinary Franko declarations; the
-API is documented in `library_docs/os.md`. The rest of this chapter
-describes the language-visible behavior of the module.
+API is documented in [`franko/os`](../library_docs/os.md). The rest of
+this chapter describes the language-visible behavior of the module.
 
 ## 31.1 Activation
 
-FFI behavior switches on only when the program imports the module
-through its canonical specifier. `import "franko/os.fr"` normalizes to
-the same path text and activates it identically. Any other path that
-happens to reach the same file (for example a `./` or `../` relative
-import) keeps it an ordinary Franko file, and its stub bodies compile as
-written. See [Source Files](02-source-files.md) for the general import
+FFI behavior switches on when the resolved import target path ends in
+`franko/os.fr` (normally the bundled module). The supported spelling is
+`import "franko/os"`; `import "franko/os.fr"` resolves to the same
+module and activates it identically. The standard `franko/io` module
+also reaches it through its internal relative import.
+
+A user file that merely defines an `os` namespace does not activate the
+bridge. See [Source Files](02-source-files.md) for the general import
 path rules.
 
 ## 31.2 Type Checking

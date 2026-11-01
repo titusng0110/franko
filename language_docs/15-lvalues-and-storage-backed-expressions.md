@@ -25,5 +25,8 @@ This distinction matters for:
 - assignment targets;
 - compound assignment targets and `x++` / `x--` targets;
 - `getptr(...)` operands;
-- array intrinsic receivers (mutating intrinsics);
-- `memcpy`, `memcmp`, and `memmem` sources.
+- mutating array intrinsic receivers, including a `memcpy` destination.
+
+Read-only sources (`memcpy`/`memcmp`/`memchr`/`memmem` sources) only need
+to be pointer expressions; they do not need to be storage-backed
+lvalues.

@@ -28,13 +28,25 @@ Moving between integer widths is never implicit: use the explicit
 
 ## 14.2 Pointer Assignment
 
-Pointer assignment requires exact pointer type equality.
+Pointer assignment accepts an exactly matching pointer type, or one of
+the implicit pointer conversions:
 
-Raw integers cannot be converted to pointers.
+- a permission downgrade over an identical referenced type
+  (`ptr<T>` to `mview<T>`/`view<T>`, `mview<T>` to `view<T>`);
+- the outermost static-to-dynamic array view decay
+  (`mview<[T, N]>`/`view<[T, N]>` to `mview<[T]>`/`view<[T]>`, optionally
+  combined with a downgrade from `ptr<[T, N]>` to `mview<[T]>`/`view<[T]>`).
+
+Casting upward or across different pointee types is invalid. Raw
+integers cannot be converted to pointers. The `null` literal is valid for
+any pointer target. See [Pointers](24-pointers.md) and
+[Casts](16-casts.md).
 
 ## 14.3 Array Assignment
 
-Arrays cannot be directly assigned as values.
+Arrays cannot be directly assigned as values, and an array literal
+cannot initialize or assign an array: a literal is a read-only
+`view<[T, N]>` value, not an array value.
 
 Invalid:
 
@@ -42,22 +54,22 @@ Invalid:
 [int32] a;
 [int32] b;
 
-a = b;
+a = b;              // arrays cannot be directly assigned
+a = [1, 2, 3];      // an array literal is a view, not an array value
 ```
 
-Array initializer assignment is not value assignment. It is element-assignment sugar:
+Copy elements instead:
 
 ```franko
-a = [1, 2, 3];
+[int32, 3] xs;
+xs.memcpy([1, 2, 3]);        // copies min(3, 3) elements
+
+[int32] ys;
+ys.init(3);
+ys.memcpy(getptr(xs));       // dynamic target is initialized first
 ```
 
-lowers to:
-
-```franko
-a[0] = 1;
-a[1] = 2;
-a[2] = 3;
-```
+See [Array Literals](22-array-literals.md) for literal-source rules.
 
 ## 14.4 Struct Assignment
 
@@ -68,7 +80,7 @@ Valid:
 ```franko
 struct X {
     int32 n
-    ptr<Y> p
+    ptr<X> next
 }
 
 X a;
@@ -88,7 +100,10 @@ W b;
 a = b;    // invalid: struct with non-assignable fields is pointer-only
 ```
 
-Structs with non-assignable fields can still be shared through `ptr<X>`: pass or store `getptr(s)`, and access fields through `$(p).field`.
+Structs with non-assignable fields can still be shared through a pointer
+(for example `ptr<X>` with `getptr(s)`, or `mview`/`view` when only
+read/write access is needed), and fields are accessed through
+`$(p).field`.
 
 ## 14.5 Compound Assignment
 
@@ -108,7 +123,7 @@ $(p) /= 4;
 x %= 7;
 ```
 
-The target follows the same rules as plain assignment: a pointable, non-void storage-backed lvalue.
+The target follows the same rules as plain assignment: a non-void storage-backed lvalue.
 
 The value must satisfy the rules of the corresponding binary operator (`+ - * / %`, see [Operators](17-operators.md)) against the target:
 

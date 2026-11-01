@@ -52,7 +52,9 @@ prevents laundering a `view` into a `ptr`.
 If the operand has type `ptr<T>`, `mview<T>`, or `view<T>`, then
 `$(...)` has type `T`.
 
-`$(...)` is also an lvalue when the pointer carries write permission:
+`$(...)` is an lvalue. Reading through it is allowed with any pointer
+permission; writing through it requires mutation rights (`ptr` or
+`mview`):
 
 ```franko
 $(p)[i] = x;    // array element access (mutating: needs ptr or mview)
@@ -71,9 +73,9 @@ view<ptr<int32>> v;   // read-only view of a ptr<int32> slot
 
 ## 24.4 Assignment and Implicit Downgrades
 
-The implicit conversions in Franko are pointer conversions: the
-permission downgrades below over an identical referenced type, and the
-static-to-dynamic array pointer view decay of
+The implicit conversions for nonconstant values are pointer
+conversions: the permission downgrades below over an identical
+referenced type, and the static-to-dynamic array pointer view decay of
 [§24.4.1](#2441-static-to-dynamic-array-pointer-views):
 
 - `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
@@ -180,7 +182,8 @@ p = getptr(arr);
 $(p)(10);
 ```
 
-Array initializer assignment through a dereferenced array pointer is valid when the dereference produces a storage-backed array lvalue:
+Array literals can be copied through a dereferenced array pointer when
+the dereference produces a storage-backed array lvalue:
 
 ```franko
 [int32, 3] xs;
@@ -188,10 +191,10 @@ ptr<[int32, 3]> p;
 
 p = getptr(xs);
 
-$(p) = [1, 2, 3];
+$(p).memcpy([1, 2, 3]);
 ```
 
-Equivalent to:
+This is equivalent to writing the elements one by one:
 
 ```franko
 $(p)[0] = 1;
@@ -304,7 +307,10 @@ print(p == null);       // true
 ```
 
 This guarantee also applies to pointer-typed struct fields and to
-`mview`/`view` variables.
+`mview`/`view` variables. Pointer elements inside a local static array
+follow the ordinary static-array rule and are indeterminate until
+assigned; a global static array is zero-initialized, so its pointer
+elements are null before `main` runs.
 
 ### 24.9.2 Nullness Certification
 
@@ -413,4 +419,54 @@ What remains untracked:
 - dynamic-array buffer lifetime across `resize`/`uninit`;
 - aliasing and interprocedural ownership in general.
 
-A runtime check for the remaining cases is planned as a later change.
+The remaining cases are not currently checked at compile time.
+
+## 24.12 Prefer Pool Indices to Linked Nodes
+
+For many programs, pool allocation is a safer and faster alternative to
+linked nodes built from pointers. Instead of storing a `ptr<Node> next`
+link, give each live object an index from a pool allocator, store object
+data in parallel payload arrays, and store links as `uint32` indices.
+The pool recycles indices deterministically, and its generational
+variants detect stale handles. The full API is in
+[franko/pool](../library_docs/pool.md).
+
+```franko
+import "franko/io"
+import "franko/pool"
+
+func main() -> int32 {
+    [int32] payload;
+    [uint32] next;
+    payload.init(8);
+    next.init(8);
+
+    std::SparseSetAllocator nodes;
+    nodes.init(8);
+
+    uint32 a = nodes.new_index();
+    uint32 b = nodes.new_index();
+
+    payload[a] = 10;
+    payload[b] = 20;
+    next[a] = b;                // replaces a node's `next` pointer
+    next[b] = 0xFFFFFFFF;       // end of the list
+
+    uint32 i = a;
+    while (i != 0xFFFFFFFF) {
+        print(payload[i]);
+        i = next[i];
+    }
+
+    nodes.free_index(a);
+    nodes.free_index(b);
+    nodes.uninit();
+    next.uninit();
+    payload.uninit();
+    return 0;
+}
+```
+
+A node handle is now the pair of its pool index and (for a generational
+pool) its generation; releasing a slot invalidates stale handles instead
+of leaving a dangling pointer.

@@ -1,8 +1,8 @@
 # 18. Conditions
 
-`if`, `while`, and `for` conditions must be integer expressions.
-
-`for` conditions are checked after desugaring, when the loop has been lowered to a `while` loop. See [Statements](19-statements.md).
+`if`, `while`, and `for` conditions must be integer expressions. A
+`for` condition follows the same rule as a `while` condition (the header
+condition is required). See [Statements](19-statements.md).
 
 Valid:
 

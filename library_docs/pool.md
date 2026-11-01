@@ -198,13 +198,13 @@ Memory cost: one `uint32` per slot, plus one dynamic array.
 
 ## std::SparseSetAllocator
 
-Sparse-set pool. `_dense` holds the live indices in allocation order
-and `_sparse` maps an index to its position in `_dense`; a slot is live
+Sparse-set pool. `_dense` holds the live indices in dense order and
+`_sparse` maps an index to its position in `_dense`; a slot is live
 exactly when `_sparse[idx] < used()` and `_dense[_sparse[idx]] == idx`.
 Allocation and release are O(1), and `write_active_indices` copies only
-the live indices (O(`used()`)) in allocation order — the natural order
-for iterating live objects. Releasing a slot swaps it with the last
-dense entry, so dense order changes as slots are released.
+the live indices (O(`used()`)) in current dense order: it starts in
+allocation order and changes when a released slot is swapped with the
+last dense entry.
 
 ```franko
 std::SparseSetAllocator a;
@@ -260,9 +260,9 @@ Memory cost: three `uint32` per slot, plus three dynamic arrays.
 | Allocator                  | new/free | write_active_indices order | Reuse order  | Detects stale handles | Tables |
 |----------------------------|----------|----------------------------|--------------|-----------------------|--------|
 | `NextAllocator`            | O(1)     | ascending index, O(capacity) | LIFO       | no                    | 1      |
-| `SparseSetAllocator`       | O(1)     | allocation order, O(used)  | swap with last | no                  | 2      |
+| `SparseSetAllocator`       | O(1)     | dense order, O(used)       | swap with last | no                  | 2      |
 | `GenerationalNextAllocator`| O(1)     | ascending index, O(capacity) | LIFO       | yes                   | 2      |
-| `GenerationalSparseSetAllocator` | O(1) | allocation order, O(used)  | swap with last | yes               | 3      |
+| `GenerationalSparseSetAllocator` | O(1) | dense order, O(used)  | swap with last | yes               | 3      |
 
 Pick the plain allocator when indices are used only while known live,
 and the generational one when an index may outlive its allocation —
@@ -279,6 +279,7 @@ matches the handle, so the stale reference is detected instead of
 silently reading the new occupant's data.
 
 ```franko
+import "franko/io"
 import "franko/pool"
 
 func main() -> int32 {

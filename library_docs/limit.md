@@ -46,6 +46,7 @@ namespace std {
 Reference them with `::`, like every other std module:
 
 ```franko
+import "franko/io"
 import "franko/limit"
 
 func main() -> int32 {
