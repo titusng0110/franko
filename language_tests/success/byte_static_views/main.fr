@@ -30,6 +30,7 @@ func main() -> int32 {
 
     [[byte, 4], 2] grid
     grid[0].memset(0)
+    grid[1].memset(0)
     grid[0].write_bit(0, 1)
     grid[1].write_uint16_BE(0, 0x1234)
     grid[1].flip_bit(0)
