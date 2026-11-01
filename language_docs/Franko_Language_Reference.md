@@ -44,6 +44,7 @@ checker internals are documented separately in
 30. [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md)
 31. [Foreign Function Interface](31-foreign-function-interface.md)
 32. [Examples](32-examples.md)
+33. [Naming Conventions](33-naming-conventions.md)
 
 ---
 
@@ -82,9 +83,9 @@ Franko is a small statically typed language with:
   - `arr.resize(size)`;
   - `arr.uninit()`;
   - `arr.memset(value)` and `arr.memset(value, start, count)`;
-  - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
-  - `arr.memmove(dstStart, srcStart, count)`;
-  - `arr.memcmp(source)` and `arr.memcmp(source, dstStart, srcStart, count)`;
+  - `arr.memcpy(source)` and `arr.memcpy(source, dst_start, src_start, count)`;
+  - `arr.memmove(dst_start, src_start, count)`;
+  - `arr.memcmp(source)` and `arr.memcmp(source, dst_start, src_start, count)`;
   - `arr.length()`;
   - byte-array searches: `arr.memchr(...)`, `arr.memmem(...)`;
   - byte-array endian accessors: `arr.read_uint16_LE(offset)` … `arr.write_int64_BE(offset, value)`;
@@ -246,6 +247,22 @@ A quoted path whose last segment is empty (for example `import "abc/"`) is rejec
 
 Import paths are always written in POSIX form with forward slashes, on every platform. On Windows, a `/`-prefixed path is translated when it reaches the filesystem: `import "/abs/foo"` resolves to `X:\abs\foo.fr`, where `X:` is the drive of the current working directory, and `/` separators in the translated path become `\`.
 
+### Standard Library Import Paths
+
+The compiler's bundled standard library lives under its own
+`./import/franko/` directory. The import prefix `franko/` is reserved for
+those standard modules:
+
+```franko
+import "franko/io"
+import "franko/os"
+```
+
+User code must not add files under the compiler's `import/franko/` directory
+or use the `franko/` prefix for user modules. Use a project-relative path or
+your own search-directory path instead, such as `import "./lib/my_module"` or
+`import "myproject/my_module"` (see [Naming Conventions](33-naming-conventions.md)).
+
 ### How Imports Compile
 
 An import is resolved at compile time:
@@ -294,7 +311,7 @@ namespace util {
 
     int32 offset = 100
 
-    func doubleIt(int32 v) -> int32 {
+    func double_it(int32 v) -> int32 {
         return v + v + offset
     }
 }
@@ -321,6 +338,8 @@ namespace a {
 Both forms declare the same namespace, whose full path is `a::b`. A path header (containing `::`) is only valid at the top level: a namespace declared inside a namespace body must use a single name, and its full path is the enclosing path plus that name.
 
 The same namespace may be declared more than once, in the same file or across imported files, in either form; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
+
+By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](33-naming-conventions.md).
 
 ### Qualified References
 
@@ -450,6 +469,30 @@ Namespaces add two lookup rules on top of lexical scope; see [Program Structure]
 Unqualified names used inside a namespace resolve in that namespace first, then fall back to the global namespace. Enclosing namespaces are never searched.
 
 Qualified names (`a::b::x`) resolve strictly inside the named namespace path from the top level, with no fallback. The first segment must name a top-level namespace.
+
+## 4.8 Identifier Visibility
+
+Franko uses leading underscores to mark non-public declarations:
+
+- a struct field or method whose name starts with one or more underscores
+  (`_name`, `__name`, ...) is **private to its struct**;
+- a free function or struct whose name starts with two or more underscores
+  (`__name`, `___name`, ...) is **internal to its namespace**.
+
+Access is allowed inside the declaration's own scope:
+
+- a private field or method may be used by methods declared in the same
+  struct; access from any free function or from a method of another struct
+  warns;
+- a namespace-internal function or struct may be referenced from its declaring
+  namespace or from a namespace nested under it; access from any other
+  namespace warns. Global-namespace internal names are accessible only from
+  global-scope code.
+
+These are compiler warnings, not errors: the program still compiles and runs.
+The complete naming style for structs, functions, methods, variables, fields,
+namespaces, constants, and standard-library imports is in
+[Naming Conventions](33-naming-conventions.md).
 
 ---
 
@@ -865,7 +908,7 @@ Array and pointer declarations:
 
 ptr<int> p;
 ptr<int32> q;
-ptr<[int]> arrayPtr;
+ptr<[int]> array_ptr;
 ```
 
 Declaration initializers are syntax sugar:
@@ -1005,10 +1048,16 @@ Function declarations are not valid inside blocks or inside other function bodie
 ## 12.1 Function Declaration Syntax
 
 ```franko
-func name(parameters) -> returnType {
+func name(parameters) -> return_type {
     statements
 }
 ```
+
+By convention function names use `lower_case_snake_case`. A function whose
+name starts with `__` is internal to its declaring namespace and produces a
+warning when referenced from outside that namespace. Direct FFI mappings keep
+the platform API spelling, such as `os::win32::ReadFile`; see
+[Naming Conventions](33-naming-conventions.md).
 
 ## 12.2 Function Declaration Placement
 
@@ -1763,6 +1812,8 @@ for (init; condition; update) {
 - `init` and `update` are optional header statements: declarations, assignments, compound assignments, increments, and expression statements. `return` is not allowed in either position;
 - the condition is required and must be an integer expression.
 
+Prefer `for` for loops with a clear initialization, condition, and update, such as counted iteration; use `while` when the condition is the only loop control.
+
 Valid:
 
 ```franko
@@ -1917,14 +1968,14 @@ Franko supports two array categories:
 Examples:
 
 ```franko
-[int32] dynamicInts;
-[uint8, 128] staticBytes;
+[int32] dynamic_ints;
+[uint8, 128] static_bytes;
 ```
 
 Arrays may be nested:
 
 ```franko
-[[int32]] nestedDynamic;
+[[int32]] nested_dynamic;
 [[int32, 4], 8] matrix;
 ```
 
@@ -2127,10 +2178,10 @@ with `-1` and a retry is valid. See
 | `target.memset(value)` | array of trivial elements | `void` | — |
 | `target.memset(value, start, count)` | array of trivial elements | `void` | — |
 | `target.memcpy(source)` | array of copiable elements | `void` | — |
-| `target.memcpy(source, dstStart, srcStart, count)` | array of copiable elements | `void` | — |
-| `target.memmove(dstStart, srcStart, count)` | array of copiable elements | `void` | — |
+| `target.memcpy(source, dst_start, src_start, count)` | array of copiable elements | `void` | — |
+| `target.memmove(dst_start, src_start, count)` | array of copiable elements | `void` | — |
 | `target.memcmp(source)` | array of copiable elements | `int32` | negative, zero, or positive |
-| `target.memcmp(source, dstStart, srcStart, count)` | array of copiable elements | `int32` | negative, zero, or positive |
+| `target.memcmp(source, dst_start, src_start, count)` | array of copiable elements | `int32` | negative, zero, or positive |
 | `target.length()` | any array | `uint32` | — |
 | `target.memchr(value)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
 | `target.memchr(value, start, count)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
@@ -2284,7 +2335,7 @@ Forms:
 
 ```franko
 target.memcpy(source)                          // whole array
-target.memcpy(source, dstStart, srcStart, count)  // element ranges
+target.memcpy(source, dst_start, src_start, count)  // element ranges
 ```
 
 Rules:
@@ -2296,7 +2347,7 @@ Rules:
 - static/dynamic shape does not need to match;
 - static lengths do not need to match;
 - target and source element types must be copiable;
-- `dstStart`, `srcStart`, and `count` must be:
+- `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant start/count ranges on both the destination and the source are checked against the static sizes at compile time.
@@ -2311,7 +2362,7 @@ Copies an element range within one array, overlapping ranges included.
 Form:
 
 ```franko
-target.memmove(dstStart, srcStart, count)
+target.memmove(dst_start, src_start, count)
 ```
 
 Rules:
@@ -2319,7 +2370,7 @@ Rules:
 - receiver must be a storage-backed lvalue array (dynamic or static);
 - takes exactly three arguments;
 - receiver element type must be copiable;
-- `dstStart`, `srcStart`, and `count` must be:
+- `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges are checked against the static size at compile time.
@@ -2387,7 +2438,7 @@ Forms:
 
 ```franko
 target.memcmp(source)                             // whole arrays
-target.memcmp(source, dstStart, srcStart, count)  // element ranges
+target.memcmp(source, dst_start, src_start, count)  // element ranges
 ```
 
 Rules:
@@ -2395,7 +2446,7 @@ Rules:
 - receiver may be a dynamic or static array; it does not need to be a storage-backed lvalue;
 - source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the static-array forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array literal whose element type is inferred from the receiver;
 - both receiver and source element types must be copiable;
-- `dstStart`, `srcStart`, and `count` must be:
+- `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges on both sides are checked at compile time.
@@ -3386,6 +3437,7 @@ Rules:
 - Separators between fields are optional, matching block syntax: a trailing separator before `}` is not required, and `;` and newlines may be mixed freely.
 - Duplicate struct names are rejected. Each struct name denotes exactly one declared type.
 - Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes.
+- By convention struct names use `CapitalLetterCamelCase`; a struct whose name starts with `__` is internal to its namespace and warns when named from outside it. See [Naming Conventions](33-naming-conventions.md).
 
 A struct body contains field declarations and method declarations (see [Methods](26-methods.md)). Assignments, statements, nested functions outside methods, and nested struct declarations are invalid inside a struct body.
 
@@ -3407,7 +3459,7 @@ Rules:
 - Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
 - Fields are kept in declaration order; that order is also the generated field order.
-- Field names are ordinary identifiers; keywords cannot be field names.
+- Field names are ordinary identifiers; keywords cannot be field names. By convention they use `lower_case_snake_case`: a field whose name starts with `_` is private to the struct and warns when accessed from outside it. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](33-naming-conventions.md).
 
 ## 25.3 Field Default Values
 
@@ -3579,6 +3631,7 @@ Rules:
 - A method may declare additional parameters after `self`; they follow ordinary parameter rules.
 - A method body follows ordinary function body rules, including return checking (see [Functions](12-functions.md)).
 - Method names are ordinary identifiers; a method may not share its name with a field of the same struct, and duplicate method signatures are rejected (see [Declaration Type Validity](29-declaration-type-validity.md)).
+- By convention method names use `lower_case_snake_case`. A method whose name starts with `_` is private to its struct and warns when called from outside it; see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](33-naming-conventions.md).
 
 ## 26.2 The `self` Parameter
 
@@ -4672,15 +4725,13 @@ func main() -> int32 {
 ```franko
 func main() -> int32 {
     [byte] str;     // dynamic array: str(200) and str.uninit() require one
-    uint i = 0;
 
     str(200);
     str.memset(0);
     str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
-    while (i < 22) {
+    for (uint i = 0; i < 22; i++) {
         print(str[i]);
-        i = i + 1;
     }
 
     str.uninit();
@@ -4947,10 +4998,8 @@ func main(view<[[byte]]> args) -> int32 {
     uint32 n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
-    uint32 i = 1;
-    while (i < n) {
+    for (uint32 i = 1; i < n; i++) {
         print($(args)[i].length());   // byte length of argument i
-        i = i + 1;
     }
 
     return 0;
@@ -4997,3 +5046,238 @@ func main() -> int32 {
     return 0;
 }
 ```
+
+---
+
+# 33. Naming Conventions
+
+Franko does not require particular spellings for user-defined names, but
+consistent names make programs easier to read and make the standard library
+easier to navigate. The conventions in this chapter are the recommended style
+for Franko code.
+
+Only the private-member and namespace-internal access rules in §33.7 produce
+compiler warnings. The other conventions in this chapter are style guidance.
+
+## 33.1 Summary
+
+| Item | Convention | Examples |
+|---|---|---|
+| Struct | `CapitalLetterCamelCase` | `BigInteger`, `Point`, `SparseSetAllocator` |
+| Internal struct | `__` + `CapitalLetterCamelCase` | `__SecretStruct` |
+| Function | `lower_case_snake_case` | `read_line`, `new_index` |
+| Method | `lower_case_snake_case` | `write_active_indices`, `get_capacity` |
+| Private method | `_` + `lower_case_snake_case` | `_secret_function` |
+| Internal function | `__` + `lower_case_snake_case` | `__private_helper` |
+| Variable | `lower_case_snake_case` | `byte_count`, `is_ready` |
+| Field | `lower_case_snake_case` | `capacity`, `next_index` |
+| Private field | `_` + `lower_case_snake_case` | `_secret_field`, `_capacity` |
+| Namespace | short, lowercase, no underscores | `bignum`, `os`, `win32` |
+| Constant | `ALL_CAPS_WITH_UNDERSCORES` | `IS_WINDOWS`, `STDOUT_FILENO` |
+| Private member constant | `_` + `ALL_CAPS_WITH_UNDERSCORES` | `_END`, `_ALLOCATED` |
+| Internal constant | `__` + `ALL_CAPS_WITH_UNDERSCORES` | `__SECRET_CONSTANT` |
+
+## 33.2 Structs
+
+Struct names use `CapitalLetterCamelCase`:
+
+```franko
+struct BigInteger {
+    int32 value
+}
+
+struct SparseSetAllocator {
+    [uint32] _sparse
+    [uint32] _dense
+}
+```
+
+A struct that is internal to its namespace keeps the same base spelling after
+the two-underscore prefix:
+
+```franko
+namespace bignum {
+    struct __SecretStruct {
+        int32 value
+    }
+}
+```
+
+## 33.3 Functions and Methods
+
+Function and method names use `lower_case_snake_case`:
+
+```franko
+func read_line(view<[byte]> buffer) -> uint32 {
+    return 0
+}
+
+struct Counter {
+    int32 count = 0
+
+    func add_value(view<Counter> self, int32 value) -> void {
+        return
+    }
+}
+```
+
+A private method keeps the same base spelling after the single-underscore
+prefix, and an internal function keeps it after the two-underscore prefix:
+
+```franko
+struct Counter {
+    int32 count = 0
+
+    func _secret_function(view<Counter> self) -> int32 {
+        return $(self).count
+    }
+}
+
+func __private_helper() -> int32 {
+    return 2
+}
+```
+
+Direct foreign-function mappings are the exception: the function name
+preserves the platform API spelling, even when that is not snake case. The
+namespace remains lowercase and underscore-free:
+
+```franko
+os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
+os::win32::ReadFile(...)
+os::win32::WriteFile(...)
+```
+
+This exception exists only for direct FFI mappings such as the Win32 file
+API: a mapping like `os::win32::ReadHandle()` keeps the Windows spelling even
+though an ordinary Franko function would be written `read_handle`. Ordinary
+Franko functions and methods still use snake case.
+
+Built-in names are fixed and are not renamed. Array intrinsics (`memcpy`,
+`memset`, `length`, `read_uint16_LE`, ...) and pointer intrinsics (`getptr`,
+`getmview`, `getview`) keep their existing spelling.
+
+## 33.4 Variables and Fields
+
+Variable and field names use `lower_case_snake_case`:
+
+```franko
+int32 byte_count = 0
+uint32 is_ready = 1
+
+struct Buffer {
+    [byte] data
+    uint32 capacity = 0
+}
+```
+
+A private field keeps the same base spelling after the single-underscore
+prefix:
+
+```franko
+struct Buffer {
+    [byte] data
+    uint32 _capacity = 0
+}
+```
+
+## 33.5 Namespaces
+
+Namespace names should be short, lowercase, and free of underscores. When a
+name really needs two words, concatenate them instead of inserting an
+underscore:
+
+```franko
+namespace bignum {
+    struct BigInteger {
+        int32 value
+    }
+}
+
+namespace os::win32 {
+}
+```
+
+Use `bignum::BigInteger` and `os::win32`, not `big_num::BigInteger` or
+`os::win_32`.
+
+## 33.6 Constants
+
+Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`:
+
+```franko
+byte IS_WINDOWS = 0
+int32 STDOUT_FILENO = 1
+```
+
+A constant that belongs to a private member scope uses the single-underscore
+prefix:
+
+```franko
+int32 _END = 0xFFFFFFFF
+int32 _ALLOCATED = 0xFFFFFFFE
+```
+
+An internal constant adds the two-underscore prefix:
+
+```franko
+int32 __SECRET_CONSTANT = 42
+```
+
+## 33.7 Private and Internal Prefixes
+
+Underscore prefixes communicate visibility:
+
+- one leading underscore `_` marks a private struct member: `_secret_field`,
+  `_secret_function`, `_capacity`, `_END`;
+- two leading underscores `__` mark a namespace-internal declaration:
+  `__private_helper`, `__SecretStruct`, `__SECRET_CONSTANT`.
+
+The prefix composes with the base convention for the kind of declaration. For
+example, a private field uses snake case after `_`, while an internal struct
+uses CamelCase after `__`.
+
+The compiler currently warns about the following public accesses:
+
+- accessing a field or method whose name starts with `_` from outside its
+  declaring struct;
+- calling a free function or naming a struct whose name starts with `__` from
+  outside its declaring namespace.
+
+See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) for the
+exact access rules. These warnings do not reject the program. Other naming
+conventions in this chapter are not enforced by the compiler.
+
+## 33.8 Standard Library Imports
+
+The compiler's bundled standard library is stored under `./import/franko/`.
+The import prefix `franko/` is reserved for those standard modules:
+
+```franko
+import "franko/io"
+import "franko/os"
+import "franko/pool"
+```
+
+User modules must not be placed under the compiler's `import/franko/`
+directory and must not use the `franko/` import prefix. Put user modules in
+your own directory or a project-relative path instead:
+
+```franko
+import "./lib/my_module"
+import "myproject/my_module"
+```
+
+See [Source Files](02-source-files.md) for the import search rules.
+
+## 33.9 Compiler-Enforced Rules
+
+The naming conventions are mostly documentation and style. The compiler only
+enforces the access restrictions for the reserved prefixes:
+
+- `_`-prefixed fields and methods are private to their struct;
+- `__`-prefixed free functions and structs are internal to their namespace.
+
+The struct casing, function and variable casing, namespace spelling, constant
+casing, and `franko/` import reservation are conventions that should be
+followed by new code but are not currently diagnosed by the compiler.

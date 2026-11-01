@@ -21,7 +21,7 @@ namespace util {
     }
 }
 
-func readIt(ptr<util::Counter> p) -> int32 {
+func read_it(ptr<util::Counter> p) -> int32 {
     return $(p).value()
 }
 
@@ -30,7 +30,7 @@ func main() -> int32 {
     c.bump()
     c.bump()
     print(c.value())
-    print(readIt(getptr(c)))
+    print(read_it(getptr(c)))
     ptr<util::Counter> q
     q = getptr(c)
     print($(q).value())

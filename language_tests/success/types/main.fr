@@ -27,30 +27,30 @@ func main() -> int32 {
     uint64 u64 = 18446744073709551615;
 
     // --- Type aliases ---
-    int32 aliasInt = 100;
-    uint32 aliasUint = 100;
-    uint8 aliasByte = 100;
+    int32 alias_int = 100;
+    uint32 alias_uint = 100;
+    uint8 alias_byte = 100;
 
     // --- Negative literals (unary negation) ---
-    int32 negVal = -128;
-    int64 negVal64 = -9223372036854775808;
+    int32 neg_val = -128;
+    int64 neg_val64 = -9223372036854775808;
 
     // --- Integer literals (decimal, binary, hex) ---
     int32 dec = 123;
     int32 bin = 0b1010;
     int32 hex = 0xFF;
-    int32 hexUpperPrefix = 0XFF;
+    int32 hex_upper_prefix = 0XFF;
 
     // --- String literals (view<[byte, N]> over a hoisted global) ---
     [byte, 5] str;
     str.memcpy("hello");
 
     // --- Array types ---
-    [int32] dynArray;
-    [int32, 10] staticArray;
-    [[byte, 12], 12] nestedArray;
-    ptr<int32> ptrInt;
-    ptr<Node> ptrStruct;
+    [int32] dyn_array;
+    [int32, 10] static_array;
+    [[byte, 12], 12] nested_array;
+    ptr<int32> ptr_int;
+    ptr<Node> ptr_struct;
 
     print(i8);
     print(i16);
@@ -60,15 +60,15 @@ func main() -> int32 {
     print(u16);
     print(u32);
     print(u64);
-    print(aliasInt);
-    print(aliasUint);
-    print(aliasByte);
-    print(negVal);
-    print(negVal64);
+    print(alias_int);
+    print(alias_uint);
+    print(alias_byte);
+    print(neg_val);
+    print(neg_val64);
     print(dec);
     print(bin);
     print(hex);
-    print(hexUpperPrefix);
+    print(hex_upper_prefix);
 
     return 0;
 }

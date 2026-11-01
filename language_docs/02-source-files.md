@@ -89,6 +89,22 @@ A quoted path whose last segment is empty (for example `import "abc/"`) is rejec
 
 Import paths are always written in POSIX form with forward slashes, on every platform. On Windows, a `/`-prefixed path is translated when it reaches the filesystem: `import "/abs/foo"` resolves to `X:\abs\foo.fr`, where `X:` is the drive of the current working directory, and `/` separators in the translated path become `\`.
 
+### Standard Library Import Paths
+
+The compiler's bundled standard library lives under its own
+`./import/franko/` directory. The import prefix `franko/` is reserved for
+those standard modules:
+
+```franko
+import "franko/io"
+import "franko/os"
+```
+
+User code must not add files under the compiler's `import/franko/` directory
+or use the `franko/` prefix for user modules. Use a project-relative path or
+your own search-directory path instead, such as `import "./lib/my_module"` or
+`import "myproject/my_module"` (see [Naming Conventions](33-naming-conventions.md)).
+
 ### How Imports Compile
 
 An import is resolved at compile time:

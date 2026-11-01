@@ -63,20 +63,20 @@ namespace std {
         // Returns 0 on success, -1 on allocation failure.
         func push(ptr<Vector> self, int32 value) -> int32 {
             if ($(self).len >= $(self).cap) {
-                uint32 newCap = 4
+                uint32 new_cap = 4
                 if ($(self).cap != 0) {
-                    newCap = $(self).cap * 2
+                    new_cap = $(self).cap * 2
                 }
                 int32 st = 0
                 if ($(self).cap == 0) {
-                    st = $(self).data.init(newCap)
+                    st = $(self).data.init(new_cap)
                 } else {
-                    st = $(self).data.resize(newCap)
+                    st = $(self).data.resize(new_cap)
                 }
                 if (st != 0) {
                     return -1
                 }
-                $(self).cap = newCap
+                $(self).cap = new_cap
             }
             $(self).data[$(self).len] = value
             $(self).len++

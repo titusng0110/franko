@@ -1,7 +1,7 @@
 // Shared file imported by both left.fr and right.fr.
 
-int32 sharedValue = 7
+int32 shared_value = 7
 
-func sharedDouble(int32 v) -> int32 {
+func shared_double(int32 v) -> int32 {
     return v + v
 }

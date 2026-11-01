@@ -13,8 +13,8 @@ import "a"
 import "franko/io"
 
 func main() -> int32 {
-    print(aValue())
-    print(bValue())
+    print(a_value())
+    print(b_value())
 
     return 0
 }

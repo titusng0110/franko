@@ -1,4 +1,4 @@
-[int32, 4] G
+[int32, 4] global_value
 
 func maybe(uint32 pick) -> ptr<int32> {
     int32 x = 0
@@ -6,7 +6,7 @@ func maybe(uint32 pick) -> ptr<int32> {
     if (pick != 0) {
         p = getptr(x)
     } else {
-        p = getptr(G[0])
+        p = getptr(global_value[0])
     }
     return p
 }

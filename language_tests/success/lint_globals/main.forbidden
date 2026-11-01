@@ -1,4 +1,4 @@
-# The global G is never attributed by the capability linter: no
+# The global global_value is never attributed by the capability linter: no
 # per-function downgrade warning may mention it.
-G' is only ever read
-G' never exercises
+global_value' is only ever read
+global_value' never exercises

@@ -10,14 +10,14 @@ Franko supports two array categories:
 Examples:
 
 ```franko
-[int32] dynamicInts;
-[uint8, 128] staticBytes;
+[int32] dynamic_ints;
+[uint8, 128] static_bytes;
 ```
 
 Arrays may be nested:
 
 ```franko
-[[int32]] nestedDynamic;
+[[int32]] nested_dynamic;
 [[int32, 4], 8] matrix;
 ```
 

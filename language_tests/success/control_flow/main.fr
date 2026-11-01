@@ -51,7 +51,7 @@ func main() -> int32 {
 }
 
 // --- Void return function ---
-func voidCheck() -> void {
+func void_check() -> void {
     print(99);
     return;
 }

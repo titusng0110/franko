@@ -50,6 +50,8 @@ for (init; condition; update) {
 - `init` and `update` are optional header statements: declarations, assignments, compound assignments, increments, and expression statements. `return` is not allowed in either position;
 - the condition is required and must be an integer expression.
 
+Prefer `for` for loops with a clear initialization, condition, and update, such as counted iteration; use `while` when the condition is the only loop control.
+
 Valid:
 
 ```franko

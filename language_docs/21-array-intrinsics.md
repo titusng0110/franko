@@ -28,10 +28,10 @@ with `-1` and a retry is valid. See
 | `target.memset(value)` | array of trivial elements | `void` | — |
 | `target.memset(value, start, count)` | array of trivial elements | `void` | — |
 | `target.memcpy(source)` | array of copiable elements | `void` | — |
-| `target.memcpy(source, dstStart, srcStart, count)` | array of copiable elements | `void` | — |
-| `target.memmove(dstStart, srcStart, count)` | array of copiable elements | `void` | — |
+| `target.memcpy(source, dst_start, src_start, count)` | array of copiable elements | `void` | — |
+| `target.memmove(dst_start, src_start, count)` | array of copiable elements | `void` | — |
 | `target.memcmp(source)` | array of copiable elements | `int32` | negative, zero, or positive |
-| `target.memcmp(source, dstStart, srcStart, count)` | array of copiable elements | `int32` | negative, zero, or positive |
+| `target.memcmp(source, dst_start, src_start, count)` | array of copiable elements | `int32` | negative, zero, or positive |
 | `target.length()` | any array | `uint32` | — |
 | `target.memchr(value)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
 | `target.memchr(value, start, count)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
@@ -185,7 +185,7 @@ Forms:
 
 ```franko
 target.memcpy(source)                          // whole array
-target.memcpy(source, dstStart, srcStart, count)  // element ranges
+target.memcpy(source, dst_start, src_start, count)  // element ranges
 ```
 
 Rules:
@@ -197,7 +197,7 @@ Rules:
 - static/dynamic shape does not need to match;
 - static lengths do not need to match;
 - target and source element types must be copiable;
-- `dstStart`, `srcStart`, and `count` must be:
+- `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant start/count ranges on both the destination and the source are checked against the static sizes at compile time.
@@ -212,7 +212,7 @@ Copies an element range within one array, overlapping ranges included.
 Form:
 
 ```franko
-target.memmove(dstStart, srcStart, count)
+target.memmove(dst_start, src_start, count)
 ```
 
 Rules:
@@ -220,7 +220,7 @@ Rules:
 - receiver must be a storage-backed lvalue array (dynamic or static);
 - takes exactly three arguments;
 - receiver element type must be copiable;
-- `dstStart`, `srcStart`, and `count` must be:
+- `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges are checked against the static size at compile time.
@@ -288,7 +288,7 @@ Forms:
 
 ```franko
 target.memcmp(source)                             // whole arrays
-target.memcmp(source, dstStart, srcStart, count)  // element ranges
+target.memcmp(source, dst_start, src_start, count)  // element ranges
 ```
 
 Rules:
@@ -296,7 +296,7 @@ Rules:
 - receiver may be a dynamic or static array; it does not need to be a storage-backed lvalue;
 - source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the static-array forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array literal whose element type is inferred from the receiver;
 - both receiver and source element types must be copiable;
-- `dstStart`, `srcStart`, and `count` must be:
+- `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges on both sides are checked at compile time.

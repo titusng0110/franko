@@ -8,24 +8,24 @@ import "franko/io"
 // (init / memset / uninit), uint arithmetic, and strided for loops.
 
 struct Sieve {
-    [byte] isPrime
+    [byte] is_prime
     uint n = 0
 
     func init(ptr<Sieve> self, uint limit) -> int {
-        int initStatus = 0
+        int init_status = 0
 
-        initStatus = $(self).isPrime(limit + 1)
+        init_status = $(self).is_prime(limit + 1)
 
-        if (initStatus != 0) {
+        if (init_status != 0) {
             return -1
         }
 
-        $(self).isPrime.memset(1)
+        $(self).is_prime.memset(1)
 
-        $(self).isPrime[0] = 0
+        $(self).is_prime[0] = 0
 
         if (limit >= 1) {
-            $(self).isPrime[1] = 0
+            $(self).is_prime[1] = 0
         }
 
         $(self).n = limit
@@ -36,23 +36,23 @@ struct Sieve {
         uint p = 0
 
         for (p = 2; p * p <= $(self).n; p++) {
-            if ($(self).isPrime[p] == 0) {
+            if ($(self).is_prime[p] == 0) {
                 continue
             }
 
             for (uint j = p * p; j <= $(self).n; j += p) {
-                $(self).isPrime[j] = 0
+                $(self).is_prime[j] = 0
             }
         }
 
         return
     }
 
-    func printResults(view<Sieve> self) -> void {
+    func print_results(view<Sieve> self) -> void {
         print(1001)
 
         for (uint i = 2; i <= $(self).n; i++) {
-            if ($(self).isPrime[i] == 0) {
+            if ($(self).is_prime[i] == 0) {
                 continue
             }
 
@@ -64,7 +64,7 @@ struct Sieve {
     }
 
     func uninit(ptr<Sieve> self) -> void {
-        $(self).isPrime.uninit()
+        $(self).is_prime.uninit()
         return
     }
 }
@@ -77,7 +77,7 @@ func main() -> int {
     }
 
     s.run()
-    s.printResults()
+    s.print_results()
     s.uninit()
 
     return 0

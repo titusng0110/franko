@@ -34,8 +34,9 @@ Design rules:
 - A pool owns dynamic arrays, so it is pointer-only: it cannot be
   passed or returned by value, and no assignment copies its storage.
 - Lifecycle: a declaration produces the empty pool (`capacity() == 0`,
-  `used() == 0`), `init(C)` prepares it, `grow(newC)` enlarges it,
-  `uninit()` frees it. A pool may be `init`-ed again after `uninit()`.
+  `used() == 0`), `init(slot_count)` prepares it, `grow(new_capacity)`
+  enlarges it, `uninit()` frees it. A pool may be `init`-ed again after
+  `uninit()`.
 
 ## Sentinels
 
@@ -61,12 +62,13 @@ documented once. The signatures below are spelled with
 ### init
 
 ```franko
-func init(ptr<NextAllocator> self, uint32 C) -> int32
+func init(ptr<NextAllocator> self, uint32 slot_count) -> int32
 ```
 
-Prepares `C` slots (`C > 0`), all free, and returns `0`. Returns `-1`
-when the pool is already initialized, when `C == 0`, or when the slot
-tables cannot be allocated. Calling `init` on a live pool does not
+Prepares `slot_count` slots (`slot_count > 0`), all free, and returns
+`0`. Returns `-1` when the pool is already initialized, when
+`slot_count == 0`, or when the slot tables cannot be allocated. Calling
+`init` on a live pool does not
 reset it: the pool keeps its current state and the call fails.
 
 ### uninit
@@ -83,14 +85,15 @@ per-slot action — release the payloads yourself before `uninit`.
 ### grow
 
 ```franko
-func grow(ptr<NextAllocator> self, uint32 newC) -> int32
+func grow(ptr<NextAllocator> self, uint32 new_capacity) -> int32
 ```
 
-Enlarges the pool to `newC` slots (`newC > capacity()`). Existing
-slots keep their indices, their live/free state, and their contents.
-Returns `0` on success, `-1` when the pool is not initialized, when
-`newC` is not greater than the current capacity, or when the tables
-cannot be resized. A failed grow leaves the pool at its old capacity.
+Enlarges the pool to `new_capacity` slots
+(`new_capacity > capacity()`). Existing slots keep their indices, their
+live/free state, and their contents. Returns `0` on success, `-1` when
+the pool is not initialized, when `new_capacity` is not greater than the
+current capacity, or when the tables cannot be resized. A failed grow
+leaves the pool at its old capacity.
 
 ### new_index
 
@@ -152,8 +155,9 @@ every successful `new_index` and falls on every successful
 func capacity(view<NextAllocator> self) -> uint32
 ```
 
-Returns the number of slots the pool currently holds: `C` after
-`init(C)`, `newC` after `grow(newC)`, `0` after `uninit`.
+Returns the number of slots the pool currently holds: `slot_count` after
+`init(slot_count)`, `new_capacity` after `grow(new_capacity)`, and `0`
+after `uninit`.
 
 ## Generational handles
 

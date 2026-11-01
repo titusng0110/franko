@@ -25,7 +25,7 @@ namespace util {
 
     int32 offset = 100
 
-    func doubleIt(int32 v) -> int32 {
+    func double_it(int32 v) -> int32 {
         return v + v + offset
     }
 }
@@ -52,6 +52,8 @@ namespace a {
 Both forms declare the same namespace, whose full path is `a::b`. A path header (containing `::`) is only valid at the top level: a namespace declared inside a namespace body must use a single name, and its full path is the enclosing path plus that name.
 
 The same namespace may be declared more than once, in the same file or across imported files, in either form; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
+
+By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](33-naming-conventions.md).
 
 ### Qualified References
 

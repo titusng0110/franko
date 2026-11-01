@@ -6,7 +6,7 @@
 // are looked up there first and fall back to this file's directory.
 //
 //   - "shared"      exists in ./search AND next to this file; the
-//                   search-directory copy must win (sharedValue = 10).
+//                   search-directory copy must win (shared_value = 10).
 //   - "my-lib/mod a" has a hyphen and a space in its path and only
 //                   exists in ./search.
 //   - "local"       only exists next to this file, exercising the
@@ -22,8 +22,8 @@ import "local"
 import "../../../import/franko/io"
 
 func main() -> int32 {
-    print(sharedValue)
-    print(spaceValue)
-    print(localValue)
+    print(shared_value)
+    print(space_value)
+    print(local_value)
     return 0
 }

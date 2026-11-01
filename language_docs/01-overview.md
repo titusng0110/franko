@@ -33,9 +33,9 @@ Franko is a small statically typed language with:
   - `arr.resize(size)`;
   - `arr.uninit()`;
   - `arr.memset(value)` and `arr.memset(value, start, count)`;
-  - `arr.memcpy(source)` and `arr.memcpy(source, dstStart, srcStart, count)`;
-  - `arr.memmove(dstStart, srcStart, count)`;
-  - `arr.memcmp(source)` and `arr.memcmp(source, dstStart, srcStart, count)`;
+  - `arr.memcpy(source)` and `arr.memcpy(source, dst_start, src_start, count)`;
+  - `arr.memmove(dst_start, src_start, count)`;
+  - `arr.memcmp(source)` and `arr.memcmp(source, dst_start, src_start, count)`;
   - `arr.length()`;
   - byte-array searches: `arr.memchr(...)`, `arr.memmem(...)`;
   - byte-array endian accessors: `arr.read_uint16_LE(offset)` … `arr.write_int64_BE(offset, value)`;

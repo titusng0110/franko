@@ -54,3 +54,27 @@ Namespaces add two lookup rules on top of lexical scope; see [Program Structure]
 Unqualified names used inside a namespace resolve in that namespace first, then fall back to the global namespace. Enclosing namespaces are never searched.
 
 Qualified names (`a::b::x`) resolve strictly inside the named namespace path from the top level, with no fallback. The first segment must name a top-level namespace.
+
+## 4.8 Identifier Visibility
+
+Franko uses leading underscores to mark non-public declarations:
+
+- a struct field or method whose name starts with one or more underscores
+  (`_name`, `__name`, ...) is **private to its struct**;
+- a free function or struct whose name starts with two or more underscores
+  (`__name`, `___name`, ...) is **internal to its namespace**.
+
+Access is allowed inside the declaration's own scope:
+
+- a private field or method may be used by methods declared in the same
+  struct; access from any free function or from a method of another struct
+  warns;
+- a namespace-internal function or struct may be referenced from its declaring
+  namespace or from a namespace nested under it; access from any other
+  namespace warns. Global-namespace internal names are accessible only from
+  global-scope code.
+
+These are compiler warnings, not errors: the program still compiles and runs.
+The complete naming style for structs, functions, methods, variables, fields,
+namespaces, constants, and standard-library imports is in
+[Naming Conventions](33-naming-conventions.md).

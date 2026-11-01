@@ -15,12 +15,12 @@ struct Pair {
 }
 
 // By-value parameter of an assignable struct type.
-func sumOf(Pair p) -> int32 {
+func sum_of(Pair p) -> int32 {
     return p.first + p.second;
 }
 
 // By-value return of an assignable struct type.
-func makePair(int32 a, int32 b) -> Pair {
+func make_pair(int32 a, int32 b) -> Pair {
     Pair p;
     p.first = a;
     p.second = b;
@@ -42,10 +42,10 @@ func main() -> int32 {
     print(a.first, " "); print(a.second);
 
     // Argument copied at the call.
-    print(sumOf(a));
+    print(sum_of(a));
 
     // By-value return bound through declaration initializer sugar.
-    Pair c = makePair(7, 8);
+    Pair c = make_pair(7, 8);
     print(c.first, " "); print(c.second);
 
     return 0;

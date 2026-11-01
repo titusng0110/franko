@@ -29,13 +29,13 @@ func main() -> int {
     // literal is a valid memcpy source, and $(...) over it gives its
     // length; the result is printed verbatim (a null `end` means no
     // suffix and no newline).
-    uint greetingLen = $("Hello, ").length();
-    uint total = greetingLen + len + 1;
+    uint greeting_len = $("Hello, ").length();
+    uint total = greeting_len + len + 1;
     [byte] out;
     out.init(total);
     out.memcpy("Hello, ");
     for (uint j = 0; j < len; j++) {
-        out[greetingLen + j] = name[j];
+        out[greeting_len + j] = name[j];
     }
     out[total - 1] = 126;
     print(getview(out), null);

@@ -16,9 +16,9 @@
 // operations take ptr<X> self, mutating ones mview<X> self, read-only
 // ones view<X> self):
 //
-//   init(C)                 -> int32   set up C slots
+//   init(slot_count)                 -> int32   set up slot_count slots
 //   uninit()                -> int32   tear the pool down
-//   grow(newC)              -> int32   enlarge to newC slots
+//   grow(new_capacity)              -> int32   enlarge to new_capacity slots
 //   new_index()             -> uint32  take one slot
 //   free_index(idx)         -> int32   give one slot back
 //   exist(idx)              -> uint8   is slot idx live?
@@ -41,7 +41,7 @@
 //   - declare a local `std::NextAllocator a`; the declaration state
 //     is the empty pool (capacity 0, used 0), exactly the state the
 //     Python-style constructor produces;
-//   - call a.init(C) once before use (C > 0);
+//   - call a.init(slot_count) once before use (slot_count > 0);
 //   - call a.uninit() when done (frees the slot storage);
 //   - a pool may be re-initialized after uninit.
 //
@@ -56,7 +56,7 @@
 // Adapted from Python pseudo-code, with these Franko adjustments:
 //
 //   - uint32 parameters cannot hold negative values, so the
-//     `C <= 0` guards become `C == 0` and the `idx < 0` guards drop
+//     `slot_count <= 0` guards become `slot_count == 0` and the `idx < 0` guards drop
 //     out entirely;
 //   - slot storage is a dynamic array, whose init/resize can fail, so
 //     init/grow report allocation failure with -1 (impossible in the
@@ -80,23 +80,23 @@ namespace std {
         uint32 _head = 0xFFFFFFFF
         [uint32] _next
 
-        // Prepare C slots (C > 0), all free and chained in ascending
+        // Prepare slot_count slots (slot_count > 0), all free and chained in ascending
         // order starting at slot 0. Returns 0 on success, -1 when the
-        // pool is already initialized, when C is 0, or when the slot
+        // pool is already initialized, when slot_count is 0, or when the slot
         // array cannot be allocated.
-        func init(ptr<NextAllocator> self, uint32 C) -> int32 {
-            if ($(self)._capacity != 0 || C == 0) {
+        func init(ptr<NextAllocator> self, uint32 slot_count) -> int32 {
+            if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
-            int32 st = $(self)._next.init(C)
+            int32 st = $(self)._next.init(slot_count)
             if (st != 0) {
                 return -1
             }
-            for (uint32 i = 0; i < C; i++) {
+            for (uint32 i = 0; i < slot_count; i++) {
                 $(self)._next[i] = i + 1
             }
-            $(self)._next[C - 1] = 0xFFFFFFFF
-            $(self)._capacity = C
+            $(self)._next[slot_count - 1] = 0xFFFFFFFF
+            $(self)._capacity = slot_count
             $(self)._used = 0
             $(self)._head = 0
             return 0
@@ -115,27 +115,27 @@ namespace std {
             return 0
         }
 
-        // Enlarge the pool to newC slots (newC > capacity). The new
+        // Enlarge the pool to new_capacity slots (new_capacity > capacity). The new
         // slots are chained onto the front of the free list; live
         // slots keep their indices and their contents. Returns 0 on
-        // success, -1 when the pool is not initialized, when newC is
+        // success, -1 when the pool is not initialized, when new_capacity is
         // not greater than the current capacity, or when the slot
         // array cannot be resized.
-        func grow(ptr<NextAllocator> self, uint32 newC) -> int32 {
-            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
+        func grow(ptr<NextAllocator> self, uint32 new_capacity) -> int32 {
+            if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
-            uint32 oldC = $(self)._capacity
-            int32 st = $(self)._next.resize(newC)
+            uint32 old_capacity = $(self)._capacity
+            int32 st = $(self)._next.resize(new_capacity)
             if (st != 0) {
                 return -1
             }
-            for (uint32 i = oldC; i < newC; i++) {
+            for (uint32 i = old_capacity; i < new_capacity; i++) {
                 $(self)._next[i] = i + 1
             }
-            $(self)._next[newC - 1] = $(self)._head
-            $(self)._head = oldC
-            $(self)._capacity = newC
+            $(self)._next[new_capacity - 1] = $(self)._head
+            $(self)._head = old_capacity
+            $(self)._capacity = new_capacity
             return 0
         }
 
@@ -223,27 +223,27 @@ namespace std {
         [uint32] _sparse
         [uint32] _dense
 
-        // Prepare C slots (C > 0), all free. Returns 0 on success, -1
-        // when the pool is already initialized, when C is 0, or when
+        // Prepare slot_count slots (slot_count > 0), all free. Returns 0 on success, -1
+        // when the pool is already initialized, when slot_count is 0, or when
         // the tables cannot be allocated.
-        func init(ptr<SparseSetAllocator> self, uint32 C) -> int32 {
-            if ($(self)._capacity != 0 || C == 0) {
+        func init(ptr<SparseSetAllocator> self, uint32 slot_count) -> int32 {
+            if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
-            int32 st = $(self)._sparse.init(C)
+            int32 st = $(self)._sparse.init(slot_count)
             if (st != 0) {
                 return -1
             }
-            st = $(self)._dense.init(C)
+            st = $(self)._dense.init(slot_count)
             if (st != 0) {
                 $(self)._sparse.uninit()
                 return -1
             }
-            for (uint32 i = 0; i < C; i++) {
+            for (uint32 i = 0; i < slot_count; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
             }
-            $(self)._capacity = C
+            $(self)._capacity = slot_count
             $(self)._used = 0
             return 0
         }
@@ -261,30 +261,30 @@ namespace std {
             return 0
         }
 
-        // Enlarge the pool to newC slots (newC > capacity). Live slots
+        // Enlarge the pool to new_capacity slots (new_capacity > capacity). Live slots
         // keep their indices and their dense positions. Returns 0 on
-        // success, -1 when the pool is not initialized, when newC is
+        // success, -1 when the pool is not initialized, when new_capacity is
         // not greater than the current capacity, or when the tables
         // cannot be resized.
-        func grow(ptr<SparseSetAllocator> self, uint32 newC) -> int32 {
-            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
+        func grow(ptr<SparseSetAllocator> self, uint32 new_capacity) -> int32 {
+            if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
-            uint32 oldC = $(self)._capacity
-            int32 st = $(self)._sparse.resize(newC)
+            uint32 old_capacity = $(self)._capacity
+            int32 st = $(self)._sparse.resize(new_capacity)
             if (st != 0) {
                 return -1
             }
-            st = $(self)._dense.resize(newC)
+            st = $(self)._dense.resize(new_capacity)
             if (st != 0) {
-                $(self)._sparse.resize(oldC)
+                $(self)._sparse.resize(old_capacity)
                 return -1
             }
-            for (uint32 i = oldC; i < newC; i++) {
+            for (uint32 i = old_capacity; i < new_capacity; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
             }
-            $(self)._capacity = newC
+            $(self)._capacity = new_capacity
             return 0
         }
 
@@ -308,14 +308,14 @@ namespace std {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
-            uint32 delPos = $(self)._sparse[idx]
-            uint32 lastPos = $(self)._used - 1
-            uint32 lastIdx = $(self)._dense[lastPos]
+            uint32 del_pos = $(self)._sparse[idx]
+            uint32 last_pos = $(self)._used - 1
+            uint32 last_idx = $(self)._dense[last_pos]
 
-            $(self)._dense[delPos] = lastIdx
-            $(self)._dense[lastPos] = idx
-            $(self)._sparse[lastIdx] = delPos
-            $(self)._sparse[idx] = lastPos
+            $(self)._dense[del_pos] = last_idx
+            $(self)._dense[last_pos] = idx
+            $(self)._sparse[last_idx] = del_pos
+            $(self)._sparse[idx] = last_pos
 
             $(self)._used--
             return 0
@@ -375,28 +375,28 @@ namespace std {
         [uint32] _next
         [uint32] _generations
 
-        // Prepare C slots (C > 0), all free, chained in ascending
+        // Prepare slot_count slots (slot_count > 0), all free, chained in ascending
         // order starting at slot 0, all generations zero. Returns 0 on
-        // success, -1 when the pool is already initialized, when C is
+        // success, -1 when the pool is already initialized, when slot_count is
         // 0, or when the storage cannot be allocated.
-        func init(ptr<GenerationalNextAllocator> self, uint32 C) -> int32 {
-            if ($(self)._capacity != 0 || C == 0) {
+        func init(ptr<GenerationalNextAllocator> self, uint32 slot_count) -> int32 {
+            if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
-            int32 st = $(self)._next.init(C)
+            int32 st = $(self)._next.init(slot_count)
             if (st != 0) {
                 return -1
             }
-            st = $(self)._generations.init_zero(C)
+            st = $(self)._generations.init_zero(slot_count)
             if (st != 0) {
                 $(self)._next.uninit()
                 return -1
             }
-            for (uint32 i = 0; i < C; i++) {
+            for (uint32 i = 0; i < slot_count; i++) {
                 $(self)._next[i] = i + 1
             }
-            $(self)._next[C - 1] = 0xFFFFFFFF
-            $(self)._capacity = C
+            $(self)._next[slot_count - 1] = 0xFFFFFFFF
+            $(self)._capacity = slot_count
             $(self)._used = 0
             $(self)._head = 0
             return 0
@@ -416,32 +416,32 @@ namespace std {
             return 0
         }
 
-        // Enlarge the pool to newC slots (newC > capacity). The new
+        // Enlarge the pool to new_capacity slots (new_capacity > capacity). The new
         // slots join the free list with generation 0. Returns 0 on
-        // success, -1 when the pool is not initialized, when newC is
+        // success, -1 when the pool is not initialized, when new_capacity is
         // not greater than the current capacity, or when the storage
         // cannot be resized.
-        func grow(ptr<GenerationalNextAllocator> self, uint32 newC) -> int32 {
-            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
+        func grow(ptr<GenerationalNextAllocator> self, uint32 new_capacity) -> int32 {
+            if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
-            uint32 oldC = $(self)._capacity
-            int32 st = $(self)._next.resize(newC)
+            uint32 old_capacity = $(self)._capacity
+            int32 st = $(self)._next.resize(new_capacity)
             if (st != 0) {
                 return -1
             }
-            st = $(self)._generations.resize(newC)
+            st = $(self)._generations.resize(new_capacity)
             if (st != 0) {
-                $(self)._next.resize(oldC)
+                $(self)._next.resize(old_capacity)
                 return -1
             }
-            for (uint32 i = oldC; i < newC; i++) {
+            for (uint32 i = old_capacity; i < new_capacity; i++) {
                 $(self)._next[i] = i + 1
                 $(self)._generations[i] = 0
             }
-            $(self)._next[newC - 1] = $(self)._head
-            $(self)._head = oldC
-            $(self)._capacity = newC
+            $(self)._next[new_capacity - 1] = $(self)._head
+            $(self)._head = old_capacity
+            $(self)._capacity = new_capacity
             return 0
         }
 
@@ -543,34 +543,34 @@ namespace std {
         [uint32] _dense
         [uint32] _generations
 
-        // Prepare C slots (C > 0), all free, all generations zero.
+        // Prepare slot_count slots (slot_count > 0), all free, all generations zero.
         // Returns 0 on success, -1 when the pool is already
-        // initialized, when C is 0, or when the tables cannot be
+        // initialized, when slot_count is 0, or when the tables cannot be
         // allocated.
-        func init(ptr<GenerationalSparseSetAllocator> self, uint32 C) -> int32 {
-            if ($(self)._capacity != 0 || C == 0) {
+        func init(ptr<GenerationalSparseSetAllocator> self, uint32 slot_count) -> int32 {
+            if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
-            int32 st = $(self)._sparse.init(C)
+            int32 st = $(self)._sparse.init(slot_count)
             if (st != 0) {
                 return -1
             }
-            st = $(self)._dense.init(C)
+            st = $(self)._dense.init(slot_count)
             if (st != 0) {
                 $(self)._sparse.uninit()
                 return -1
             }
-            st = $(self)._generations.init_zero(C)
+            st = $(self)._generations.init_zero(slot_count)
             if (st != 0) {
                 $(self)._sparse.uninit()
                 $(self)._dense.uninit()
                 return -1
             }
-            for (uint32 i = 0; i < C; i++) {
+            for (uint32 i = 0; i < slot_count; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
             }
-            $(self)._capacity = C
+            $(self)._capacity = slot_count
             $(self)._used = 0
             return 0
         }
@@ -589,37 +589,37 @@ namespace std {
             return 0
         }
 
-        // Enlarge the pool to newC slots (newC > capacity). The new
+        // Enlarge the pool to new_capacity slots (new_capacity > capacity). The new
         // slots are free with generation 0. Returns 0 on success, -1
-        // when the pool is not initialized, when newC is not greater
+        // when the pool is not initialized, when new_capacity is not greater
         // than the current capacity, or when the tables cannot be
         // resized.
-        func grow(ptr<GenerationalSparseSetAllocator> self, uint32 newC) -> int32 {
-            if ($(self)._capacity == 0 || newC <= $(self)._capacity) {
+        func grow(ptr<GenerationalSparseSetAllocator> self, uint32 new_capacity) -> int32 {
+            if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
-            uint32 oldC = $(self)._capacity
-            int32 st = $(self)._sparse.resize(newC)
+            uint32 old_capacity = $(self)._capacity
+            int32 st = $(self)._sparse.resize(new_capacity)
             if (st != 0) {
                 return -1
             }
-            st = $(self)._dense.resize(newC)
+            st = $(self)._dense.resize(new_capacity)
             if (st != 0) {
-                $(self)._sparse.resize(oldC)
+                $(self)._sparse.resize(old_capacity)
                 return -1
             }
-            st = $(self)._generations.resize(newC)
+            st = $(self)._generations.resize(new_capacity)
             if (st != 0) {
-                $(self)._sparse.resize(oldC)
-                $(self)._dense.resize(oldC)
+                $(self)._sparse.resize(old_capacity)
+                $(self)._dense.resize(old_capacity)
                 return -1
             }
-            for (uint32 i = oldC; i < newC; i++) {
+            for (uint32 i = old_capacity; i < new_capacity; i++) {
                 $(self)._sparse[i] = i
                 $(self)._dense[i] = i
                 $(self)._generations[i] = 0
             }
-            $(self)._capacity = newC
+            $(self)._capacity = new_capacity
             return 0
         }
 
@@ -646,14 +646,14 @@ namespace std {
             }
             $(self)._generations[idx]++
 
-            uint32 delPos = $(self)._sparse[idx]
-            uint32 lastPos = $(self)._used - 1
-            uint32 lastIdx = $(self)._dense[lastPos]
+            uint32 del_pos = $(self)._sparse[idx]
+            uint32 last_pos = $(self)._used - 1
+            uint32 last_idx = $(self)._dense[last_pos]
 
-            $(self)._dense[delPos] = lastIdx
-            $(self)._dense[lastPos] = idx
-            $(self)._sparse[lastIdx] = delPos
-            $(self)._sparse[idx] = lastPos
+            $(self)._dense[del_pos] = last_idx
+            $(self)._dense[last_pos] = idx
+            $(self)._sparse[last_idx] = del_pos
+            $(self)._sparse[idx] = last_pos
 
             $(self)._used--
             return 0

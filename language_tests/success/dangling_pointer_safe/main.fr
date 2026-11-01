@@ -1,6 +1,6 @@
 import "franko/io"
 
-[int32, 4] G
+[int32, 4] global_value
 view<[int32]> G_VIEW = [1, 2, 3, 4]
 view<[int32, 4]> G_STATIC_VIEW = [5, 6, 7, 8]
 
@@ -9,7 +9,7 @@ func return_param(ptr<int32> p) -> ptr<int32> {
 }
 
 func return_global() -> ptr<int32> {
-    return getptr(G[0])
+    return getptr(global_value[0])
 }
 
 func return_caller_pointee(ptr<int32> p) -> ptr<int32> {
@@ -35,7 +35,7 @@ func return_global_static_view() -> view<[int32, 4]> {
 func reassign_to_global() -> ptr<int32> {
     int32 x = 0
     ptr<int32> p = getptr(x)
-    p = getptr(G[0])
+    p = getptr(global_value[0])
     return p
 }
 

@@ -6,7 +6,7 @@
 
 func main() -> int32 {
     uint64 big = 5;
-    int64 signedTarget;
-    signedTarget = big;
+    int64 signed_target;
+    signed_target = big;
     return 0;
 }

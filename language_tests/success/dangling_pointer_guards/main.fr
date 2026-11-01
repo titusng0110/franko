@@ -1,4 +1,4 @@
-[int32, 4] G
+[int32, 4] global_value
 
 func null_branch_is_safe(uint32 pick) -> ptr<int32> {
     int32 x = 0
@@ -11,7 +11,7 @@ func null_branch_is_safe(uint32 pick) -> ptr<int32> {
     if (p == null) {
         return p
     }
-    p = getptr(G[0])
+    p = getptr(global_value[0])
     return p
 }
 

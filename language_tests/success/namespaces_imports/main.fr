@@ -17,13 +17,13 @@ namespace math {
         int32 y
     }
 
-    func scaleUp(int32 v) -> int32 {
+    func scale_up(int32 v) -> int32 {
         return v * scale
     }
 }
 
 // --- Global functions and variables ---
-int32 globalOffset = 100;
+int32 global_offset = 100;
 
 func main() -> int32 {
     // --- Print statements (dedicated statement, not a function) ---
@@ -33,7 +33,7 @@ func main() -> int32 {
 
     // --- Namespace member access ---
     print(math::scale);
-    print(math::scaleUp(5));
+    print(math::scale_up(5));
 
     // --- Qualified struct references ---
     math::Vec2 p;
@@ -48,7 +48,7 @@ func main() -> int32 {
     print(origin.x + origin.y);
 
     // --- Global variables ---
-    print(globalOffset);
+    print(global_offset);
 
     return 0;
 }

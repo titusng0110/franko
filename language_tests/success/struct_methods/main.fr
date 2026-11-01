@@ -38,7 +38,7 @@ struct Counter {
     func get(ptr<Counter> self) -> int32 {
         return $(self).n
     }
-    func doubleBump(ptr<Counter> self) -> void {
+    func double_bump(ptr<Counter> self) -> void {
         $(self).bump()
         $(self).bump()
         return
@@ -48,7 +48,7 @@ struct Counter {
         $(self).n = 7
         return n
     }
-    func bumpInner(ptr<Counter> self) -> void {
+    func bump_inner(ptr<Counter> self) -> void {
         $(self).inner.bump()
         return
     }
@@ -78,11 +78,11 @@ func main() -> int32 {
     print(c.get())
     c.add(1, 2)
     print(c.get())
-    c.doubleBump()
+    c.double_bump()
     print(c.get())
     print(c.shadow())
     print(c.get())
-    c.bumpInner()
+    c.bump_inner()
     print(c.inner.get())
     [Counter, 2] arr
     arr[0].bump()

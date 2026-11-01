@@ -237,15 +237,13 @@ func main() -> int32 {
 ```franko
 func main() -> int32 {
     [byte] str;     // dynamic array: str(200) and str.uninit() require one
-    uint i = 0;
 
     str(200);
     str.memset(0);
     str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
-    while (i < 22) {
+    for (uint i = 0; i < 22; i++) {
         print(str[i]);
-        i = i + 1;
     }
 
     str.uninit();
@@ -512,10 +510,8 @@ func main(view<[[byte]]> args) -> int32 {
     uint32 n = $(args).length();
     print(n - 1);   // user argument count (args[0] is the program name)
 
-    uint32 i = 1;
-    while (i < n) {
+    for (uint32 i = 1; i < n; i++) {
         print($(args)[i].length());   // byte length of argument i
-        i = i + 1;
     }
 
     return 0;

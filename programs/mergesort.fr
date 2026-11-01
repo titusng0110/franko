@@ -17,7 +17,7 @@ struct MergeSorter {
     [int, 50] a
     [int, 50] b
 
-    func printArray(view<MergeSorter> self, uint n) -> void {
+    func print_array(view<MergeSorter> self, uint n) -> void {
         for (uint i = 0; i < n; i++) {
             print($(self).a[i])
         }
@@ -25,7 +25,7 @@ struct MergeSorter {
         return
     }
 
-    func initData(mview<MergeSorter> self) -> void {
+    func init_data(mview<MergeSorter> self) -> void {
         $(self).a.memcpy([
             42, 7, 19, 3, 100, 55, 1, 88, 12, 33,
             21, 5, 77, 60, 2, 50, 91, 14, 39, 73,
@@ -60,15 +60,13 @@ struct MergeSorter {
             k++
         }
 
-        while (i <= mid) {
+        for (; i <= mid; i++) {
             $(self).b[k] = $(self).a[i]
-            i++
             k++
         }
 
-        while (j <= high) {
+        for (; j <= high; j++) {
             $(self).b[k] = $(self).a[j]
-            j++
             k++
         }
 
@@ -77,21 +75,21 @@ struct MergeSorter {
         return
     }
 
-    func mergeSort(mview<MergeSorter> self, uint low, uint high) -> void {
+    func merge_sort(mview<MergeSorter> self, uint low, uint high) -> void {
         uint mid = 0
 
         if (low < high) {
             mid = low + ((high - low) / 2)
 
-            $(self).mergeSort(low, mid)
-            $(self).mergeSort(mid + 1, high)
+            $(self).merge_sort(low, mid)
+            $(self).merge_sort(mid + 1, high)
             $(self).merge(low, mid, high)
         }
 
         return
     }
 
-    func isSorted(view<MergeSorter> self, uint n) -> byte {
+    func is_sorted(view<MergeSorter> self, uint n) -> byte {
         byte sorted = 1
 
         for (uint k = 1; k < n; k++) {
@@ -110,17 +108,17 @@ func main() -> int {
     uint n = 50
     byte sorted = 0
 
-    sorter.initData()
+    sorter.init_data()
 
     print(3001)
-    sorter.printArray(n)
+    sorter.print_array(n)
 
-    sorter.mergeSort(0, n - 1)
+    sorter.merge_sort(0, n - 1)
 
     print(3002)
-    sorter.printArray(n)
+    sorter.print_array(n)
 
-    sorted = sorter.isSorted(n)
+    sorted = sorter.is_sorted(n)
 
     print(3003)
     print(sorted)

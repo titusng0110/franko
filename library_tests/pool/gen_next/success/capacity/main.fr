@@ -4,7 +4,7 @@
 // Allocator: std::GenerationalNextAllocator
 //
 // Covers:
-//   success path: capacity() follows init(C) and grow(newC)
+//   success path: capacity() follows init(C) and grow(new_c)
 //   failure paths: grow to the same size and grow smaller both
 //     return -1 without changing capacity, and capacity() is 0
 //     before init and after uninit

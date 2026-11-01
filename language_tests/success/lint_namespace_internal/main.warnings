@@ -1,0 +1,4 @@
+'lib::__Hidden' is an internal struct of namespace 'lib'
+'lib::__secret' is an internal function of namespace 'lib'
+Are you sure you want to reference it from function 'main'?
+Are you sure you want to call it from function 'other::peek'?

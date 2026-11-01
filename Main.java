@@ -237,6 +237,21 @@ public class Main {
             }
         }
 
+        System.out.println("==== Private Identifier Linting ====");
+        DiagnosticBag privateIdentifierDiagnostics =
+                new DiagnosticBag("Private identifier linting failed:");
+        PrivateIdentifierLinter privateIdentifierLinter =
+                new PrivateIdentifierLinter(privateIdentifierDiagnostics);
+        privateIdentifierLinter.check(semaAST);
+
+        if (privateIdentifierDiagnostics.hasWarnings()) {
+            System.out.println("==== Private Identifier Warnings ====");
+
+            for (String warning : privateIdentifierDiagnostics.getWarnings()) {
+                System.out.println("  - " + warning);
+            }
+        }
+
         System.out.println("All checks passed.");
 
         String osFfiBridgeText = null;

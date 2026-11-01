@@ -22,7 +22,7 @@ std::NextAllocator slots
 uint NIL = 0xFFFFFFFF
 uint root = 0xFFFFFFFF
 
-func rotateLeft(uint x) -> void {
+func rotate_left(uint x) -> void {
     if (x == NIL) {
         return
     }
@@ -49,7 +49,7 @@ func rotateLeft(uint x) -> void {
     return
 }
 
-func rotateRight(uint x) -> void {
+func rotate_right(uint x) -> void {
     if (x == NIL) {
         return
     }
@@ -76,7 +76,7 @@ func rotateRight(uint x) -> void {
     return
 }
 
-func insertFixup(uint z) -> void {
+func insert_fixup(uint z) -> void {
     while ((nodes[z].parent != NIL) && (nodes[nodes[z].parent].red != 0)) {
         uint aunt = NIL
 
@@ -97,19 +97,19 @@ func insertFixup(uint z) -> void {
             if (nodes[z].parent == nodes[nodes[nodes[z].parent].parent].left) {
                 if (z == nodes[nodes[z].parent].right) {
                     z = nodes[z].parent
-                    rotateLeft(z)
+                    rotate_left(z)
                 }
                 nodes[nodes[z].parent].red = 0
                 nodes[nodes[nodes[z].parent].parent].red = 1
-                rotateRight(nodes[nodes[z].parent].parent)
+                rotate_right(nodes[nodes[z].parent].parent)
             } else {
                 if (z == nodes[nodes[z].parent].left) {
                     z = nodes[z].parent
-                    rotateRight(z)
+                    rotate_right(z)
                 }
                 nodes[nodes[z].parent].red = 0
                 nodes[nodes[nodes[z].parent].parent].red = 1
-                rotateLeft(nodes[nodes[z].parent].parent)
+                rotate_left(nodes[nodes[z].parent].parent)
             }
         }
     }
@@ -154,7 +154,7 @@ func insert(int key) -> void {
         }
     }
 
-    insertFixup(z)
+    insert_fixup(z)
     return
 }
 
@@ -172,7 +172,7 @@ func find(uint n, int key) -> byte {
     return 0
 }
 
-func minKey(uint n) -> int {
+func min_key(uint n) -> int {
     while (n != NIL) {
         if (nodes[n].left == NIL) {
             return nodes[n].key
@@ -200,12 +200,12 @@ func walk(uint n) -> void {
 }
 
 // Black nodes on every root-to-NIL path, or -1 when the tree is broken.
-func blackHeight(uint n) -> int {
+func black_height(uint n) -> int {
     if (n == NIL) {
         return 1
     }
-    int lh = blackHeight(nodes[n].left)
-    int rh = blackHeight(nodes[n].right)
+    int lh = black_height(nodes[n].left)
+    int rh = black_height(nodes[n].right)
     if ((lh != rh) || (lh < 0)) {
         return -1
     }
@@ -215,30 +215,30 @@ func blackHeight(uint n) -> int {
     return lh
 }
 
-func noRedRed(uint n) -> byte {
+func no_red_red(uint n) -> byte {
     if (n == NIL) {
         return 1
     }
     if (nodes[n].red != 0) {
-        byte childRed = 0
+        byte child_red = 0
         if (nodes[n].left != NIL) {
             if (nodes[nodes[n].left].red != 0) {
-                childRed = 1
+                child_red = 1
             }
         }
         if (nodes[n].right != NIL) {
             if (nodes[nodes[n].right].red != 0) {
-                childRed = 1
+                child_red = 1
             }
         }
-        if (childRed != 0) {
+        if (child_red != 0) {
             return 0
         }
     }
-    if (noRedRed(nodes[n].left) == 0) {
+    if (no_red_red(nodes[n].left) == 0) {
         return 0
     }
-    return noRedRed(nodes[n].right)
+    return no_red_red(nodes[n].right)
 }
 
 func main() -> int {
@@ -278,9 +278,9 @@ func main() -> int {
     print(4304)
 
     print(count(root))
-    print(minKey(root))
-    print(blackHeight(root))
-    print(noRedRed(root))
+    print(min_key(root))
+    print(black_height(root))
+    print(no_red_red(root))
 
     print(4305)
 

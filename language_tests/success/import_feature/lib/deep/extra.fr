@@ -11,4 +11,4 @@ func helper2() -> int32 {
     return 77
 }
 
-int32 deepGlobal = 700
+int32 deep_global = 700

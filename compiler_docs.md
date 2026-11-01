@@ -9,7 +9,7 @@ about the compiler design should reside here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: ~28 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: ~36 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain.
@@ -65,6 +65,8 @@ Semantic AST (SemanticProgramNode)
    │                             guards, loops, and owner-pointer aliases)
    │  PointerPermissionChecker (capability linter: unused-permission
    │                            warnings for ptr/mview variables)
+   │  PrivateIdentifierLinter (naming visibility linter: private fields and
+   │                           methods, namespace-internal functions and structs)
    ▼
 checked Semantic AST
    │  OsFfi.verifyBridge (if franko/os imported: every used intrinsic must have
@@ -81,9 +83,10 @@ output .cpp  (then compiled with the host C++ compiler)
 ```
 
 Non-fatal warnings (semantic warnings, pointer maybe-null warnings,
-dangling-pointer warnings, dynamic-array lifecycle warnings) are printed
-between phases; errors abort with a `RuntimeException` carrying the
-formatted `DiagnosticBag` contents.
+dangling-pointer warnings, dynamic-array lifecycle warnings, pointer
+permission warnings, and identifier visibility warnings) are printed between
+phases; errors abort with a `RuntimeException` carrying the formatted
+`DiagnosticBag` contents.
 
 ---
 
@@ -133,6 +136,8 @@ flowchart TD
     Main --> DynamicArrayMemoryChecker
     Main --> PointerPermissionChecker
     PointerPermissionChecker -. reads Semantic AST only .-> SemanticASTNode
+    Main --> PrivateIdentifierLinter
+    PrivateIdentifierLinter -. reads Semantic AST only .-> SemanticASTNode
     Main --> Cpp14Codegen
     Cpp14Codegen --> Mangler
     Cpp14Codegen --> OsFfi
@@ -154,7 +159,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
+| `Main` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ImportResolver`, `OsFfi`, `Desugarer`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `Cpp14Codegen`, `TargetInfo`, `ASTPrinter`, `SemanticASTPrinter` |
 | `ImportResolver` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ASTNode` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
 | `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ArrayLiteralLowerer`, `ConstExpressionEvaluator`, `OsFfi`, `TargetInfo` |
@@ -173,6 +178,7 @@ flowchart TD
 | `DanglingPointerChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
 | `DynamicArrayMemoryChecker` | `DiagnosticBag` only (deliberately standalone) |
 | `PointerPermissionChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
+| `PrivateIdentifierLinter` | `DiagnosticBag` only (deliberately standalone) |
 | `Cpp14Codegen` | `OsFfi`, `TargetInfo`, `Symbol`/`Mangler` (mangled names), `SymbolTable.splitNamespacePath` (static) |
 | `SymbolTable` | `DiagnosticBag`, `Symbol`, `SemanticType` |
 | `Symbol` | `SemanticType`, `Mangler` (static `hashHex`) |
@@ -190,8 +196,8 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
 - `SemanticASTNode.java` — lowered typed AST, produced by
   `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`, consumed by every
   checker, `PointerNullStateChecker`, `DanglingPointerChecker`,
-  `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `Cpp14Codegen`,
-  `OsFfi`, `SemanticASTPrinter`.
+  `DynamicArrayMemoryChecker`, `PointerPermissionChecker`,
+  `PrivateIdentifierLinter`, `Cpp14Codegen`, `OsFfi`, `SemanticASTPrinter`.
 - `SemanticType.java` — structural type system (overload resolution, mangling
   keys). Also hosts `PtrPermission` (OWNER/MUTABLE/READ_ONLY), the permission
   lattice shared with the raw AST (`ASTNode.PtrTypeNode.kind`,
@@ -859,6 +865,48 @@ Implementation notes:
   variable is left to `InactiveDeclarationPruner`.
 - Warnings never fail the build (`check` reports into its own bag; `Main`
   prints them without an error check).
+
+#### `PrivateIdentifierLinter`
+The naming-visibility linter: run after both pruners and after
+`PointerPermissionChecker`, warnings-only. It reads the checked Semantic AST
+and never mutates it or affects codegen. The full user-facing naming style is
+documented in `language_docs/33-naming-conventions.md`; this pass enforces
+only the access rules attached to the reserved prefixes.
+
+State per position:
+- `currentStruct` is the enclosing `SemanticStructDeclNode` while a method
+  body is checked, and `null` in free functions;
+- `currentNamespace` comes from the enclosing `FunctionSymbol`/`MethodSymbol`
+  (`MethodSymbol.namespace` is its owner's namespace), or from a global
+  variable's `VariableSymbol.namespace`. Local `VariableSymbol`s have no
+  namespace of their own, so local declaration types use the enclosing
+  function's namespace.
+
+Rules:
+- a field access whose name starts with `_` warns unless the target struct is
+  `currentStruct`; the field's owner is recovered from
+  `((SemanticStructType) node.target.type).structSymbol`;
+- a method call whose name starts with `_` warns unless
+  `MethodSymbol.owner == currentStruct`;
+- a free-function call whose name starts with `__` warns unless
+  `currentNamespace` is the declaring namespace or a namespace nested under
+  it; a global-namespace internal function is accessible only from
+  global-scope code;
+- a struct referenced from a declared/function/field/cast-target type whose
+  name starts with `__` is warned about under the same namespace rule;
+- expression-inferred types are not rescanned, so a value obtained from an
+  existing variable or function result does not produce an extra warning for
+  the struct name;
+- `__` methods are covered by the private-method rule only; `_` free
+  functions and structs have no namespace-internal rule.
+
+Warning text names the declared kind (field, method, function, or struct),
+the owning struct/namespace, and the current access context (`function '...'`,
+`method '...'`, `struct '...'`, or `global scope`) so the reader can locate
+the public use. Warnings are emitted per syntactic access site, do not fail
+the build, and no check is performed for `SemanticType`s that only appear as
+inferred expression types. `Main` prints the linter's own warning section
+without an error check.
 
 ### 3.4 Branch pruning
 
@@ -1732,6 +1780,46 @@ successful, so repeated init is left to the runtime), no
 element-buffer pointer invalidation after `resize`/`uninit`, and no loop
 fixed point.
 
+## 4.16 Identifier visibility (PrivateIdentifierLinter)
+
+The naming-visibility policy is a warnings-only, post-pruning linter. It is
+deliberately standalone because it needs only the resolved Semantic AST:
+field/method owners come from `FieldSymbol` lookup via the member-access
+target type and `MethodSymbol.owner`; function/struct namespaces come from
+their symbols. No new symbol or AST data is required.
+
+**Rules.**
+- Struct fields and methods starting with `_` are private to their struct.
+  Access from the declaring struct's own method body is allowed; access from
+  a free function or another struct's method warns.
+- Free functions and structs starting with `__` are internal to their
+  declaring namespace. Access is allowed from that namespace and from
+  namespaces nested beneath it; access from another namespace warns.
+  Global-namespace internal declarations are accessible only from global
+  scope.
+- `__` fields and methods are already covered by the `_` private rule and do
+  not receive a second namespace warning. A `_` free function or struct has no
+  namespace-internal rule.
+- The namespace rule is checked on function calls and on struct names that
+  occur syntactically in declarations, function signatures, field types, and
+  cast targets. It is not applied to inferred expression types, so using a
+  value whose type happens to be an internal struct does not warn again.
+- Type walking recurses through dynamic arrays, static arrays, and pointers.
+  Local declaration types use the enclosing function's namespace because
+  local `VariableSymbol`s carry no namespace.
+- One warning is emitted per syntactic access site; private-member warnings
+  are not deduplicated globally. This is a lint pass, so warnings never fail
+  compilation and generated C++ is unchanged.
+- Running after `BranchPruner` and `InactiveDeclarationPruner` means dead
+  branches/functions produce no warnings. `Main` prints the linter's warnings
+  under its own header after the pointer-permission section.
+
+The complete user-facing naming style (struct casing, snake_case functions,
+variables and fields, namespace spelling, constant casing, reserved
+`franko/` imports, and the FFI naming exception) lives only in
+`language_docs/33-naming-conventions.md`; only the prefix access rules above
+are compiler warnings.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -1778,6 +1866,7 @@ uv run python library_tests/run_library_tests.py
 | Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
 | Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker` |
 | Detect dynamic-array lifecycle misuse | `DynamicArrayMemoryChecker` |
+| Detect private-member / namespace-internal access | `PrivateIdentifierLinter` (§3.3, §4.16), invoked by `Main` after pruning |
 | Emit new C++ constructs | `Cpp14Codegen` (+ `SemanticASTNode`/`SemanticType` as needed) |
 | Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ExpressionChecker` validation + `Cpp14Codegen` emission |
 | Add an os FFI call | `import/franko/os.fr` + `os.ffi.cpp` block + `OsFfi` signatures |

@@ -3,11 +3,11 @@ import "franko/io"
 // Failure fixture: conditions/print_void_expr
 // `void` has no matching print overload: a void call result cannot be
 // passed to any `print(...)` overload, so overload resolution fails.
-func voidF() -> void {
+func void_f() -> void {
     return
 }
 
 func main() -> int32 {
-    print(voidF());
+    print(void_f());
     return 0
 }
