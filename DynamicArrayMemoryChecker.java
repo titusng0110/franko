@@ -1423,7 +1423,7 @@ public final class DynamicArrayMemoryChecker {
         switch (node.kind) {
             case INIT:
             case INIT_ZERO:
-                applyInit(node.receiver, node);
+                applyInit(node.receiver);
                 return;
 
             case RESIZE:
@@ -1450,10 +1450,7 @@ public final class DynamicArrayMemoryChecker {
         }
     }
 
-    private void applyInit(
-            SemanticExprNode receiver,
-            SemanticASTNode site
-    ) {
+    private void applyInit(SemanticExprNode receiver) {
         ArrayOrigin origins = storageOrigins(receiver);
 
         if (origins.unknown || origins.arrays.size() != 1) {
@@ -1464,16 +1461,7 @@ public final class DynamicArrayMemoryChecker {
                     continue;
                 }
 
-                if (arrayState[index] == ArrayState.INITED) {
-                    reportWarningOnce(
-                            site,
-                            "Possible double init of dynamic array '"
-                                    + symbol.qualifiedName()
-                                    + "'"
-                    );
-                    arrayState[index] = ArrayState.INITED;
-                    freedState[index] = FreedState.NEVER;
-                } else {
+                if (arrayState[index] != ArrayState.INITED) {
                     arrayState[index] = ArrayState.MAYBE_INITED;
                     freedState[index] = FreedState.MAYBE;
                 }
@@ -1492,22 +1480,6 @@ public final class DynamicArrayMemoryChecker {
         if (index < 0) {
             havocEscapedArrays();
             return;
-        }
-
-        if (arrayState[index] == ArrayState.INITED) {
-            reportErrorOnce(
-                    site,
-                    "Double init of dynamic array '"
-                            + symbol.qualifiedName()
-                            + "'"
-            );
-        } else if (arrayState[index] == ArrayState.MAYBE_INITED) {
-            reportWarningOnce(
-                    site,
-                    "Possible double init of dynamic array '"
-                            + symbol.qualifiedName()
-                            + "'"
-            );
         }
 
         arrayState[index] = ArrayState.INITED;
@@ -1592,7 +1564,7 @@ public final class DynamicArrayMemoryChecker {
         if (arrayState[index] == ArrayState.MAYBE_INITED) {
             reportWarningOnce(
                     site,
-                    "Possible double uninit of dynamic array '"
+                    "Possible invalid free or double free of dynamic array '"
                             + symbol.qualifiedName()
                             + "'"
             );
@@ -1605,21 +1577,21 @@ public final class DynamicArrayMemoryChecker {
         if (freedState[index] == FreedState.YES) {
             reportErrorOnce(
                     site,
-                    "Double uninit of dynamic array '"
+                    "Double free of dynamic array '"
                             + symbol.qualifiedName()
-                            + "'"
+                            + "' (uninit called twice)"
             );
         } else if (freedState[index] == FreedState.NEVER) {
             reportErrorOnce(
                     site,
-                    "Uninit of uninitialized dynamic array '"
+                    "Invalid free of dynamic array '"
                             + symbol.qualifiedName()
-                            + "'"
+                            + "' (uninit before init)"
             );
         } else {
             reportWarningOnce(
                     site,
-                    "Possible double uninit of dynamic array '"
+                    "Possible invalid free or double free of dynamic array '"
                             + symbol.qualifiedName()
                             + "'"
             );

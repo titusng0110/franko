@@ -74,9 +74,12 @@ Array literal elements must be compile-time constant expressions
 ## 30.9 Dynamic Array Lifetime Checking Is Partial
 
 The compiler tracks the init/uninit lifecycle of function-local dynamic
-array variables and owner `ptr<[T]>` aliases. It rejects definite double
-init, use before init, use after `uninit`, and double uninit; possible
-cases and missing explicit `uninit()` calls are warnings. It does not
+array variables and owner `ptr<[T]>` aliases. It rejects definite use
+before init, use after `uninit`, invalid free, and double free;
+possible cases and missing explicit `uninit()` calls are warnings.
+Repeated `init` is not
+diagnosed because an earlier call may have failed with `-1` and a retry
+is valid. It does not
 track dynamic arrays in struct fields or nested elements, `mview`/`view`
 aliases, or interprocedural callee effects, and it does not prove all
 bounds properties. See

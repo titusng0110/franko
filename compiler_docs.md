@@ -1672,10 +1672,13 @@ degrade to `MAYBE_INITED` or no diagnostic.
 **Transfers.**
 
 - local dynamic array declaration → `UNINITED`, `FreedState.NEVER`;
-- `init(n)`, `init_zero(n)`, and `d(n)` → `INITED`; definite double
-  init is an error, `MAYBE_INITED` is a warning;
+- `init(n)`, `init_zero(n)`, and `d(n)` → `INITED`; repeated init is
+  not diagnosed because an earlier init may have failed with `-1` and a
+  retry is valid;
 - `resize(n)` requires `INITED` and leaves the array `INITED`;
-- `uninit()` requires `INITED`, then stores `UNINITED` + `FreedState.YES`;
+- `uninit()` requires `INITED`, then stores `UNINITED` +
+  `FreedState.YES`; calling it before init is an invalid free, and
+  calling it when already uninitialized is a double free;
 - element access, `memset`, `memcpy` destination, `memmove`, and every
   read/search/bit intrinsic except `length()` require `INITED`;
 - `length()` is always safe, including after `uninit()`;
@@ -1713,18 +1716,21 @@ exit nor a `break` is feasible, the loop is treated as
 non-falling-through, so its tail is not analyzed. `for` loops receive
 the same treatment after desugaring.
 
-**Diagnostics and severity.** Definite double init, use before init, use
-after `uninit()`, and double uninit are errors. `MAYBE_INITED`
-equivalents are warnings. Missing explicit `uninit()` at a return or
-scope exit is a warning, not a leak error, because the runtime
+**Diagnostics and severity.** Definite use before init, use after
+`uninit()`, invalid free, and double free are errors. `MAYBE_INITED`
+equivalents are warnings. Repeated `init` is deliberately not diagnosed because
+`init`/`init_zero` can fail with `-1` and a retry is valid; the runtime
+still aborts on a true double init. Missing explicit `uninit()` at a
+return or scope exit is a warning, not a leak error, because the runtime
 destructor frees local dynamic arrays. Leak warnings are suppressed for
 escaped arrays.
 
 **v1 limitations.** No struct-field or nested-element tracking, no
 `mview`/`view` alias tracking for use checks, no interprocedural callee
-summaries, no allocation-failure status modeling (`init` is assumed to
-succeed), no element-buffer pointer invalidation after `resize`/
-`uninit`, and no loop fixed point.
+summaries, no allocation-failure status modeling (`init` is treated as
+successful, so repeated init is left to the runtime), no
+element-buffer pointer invalidation after `resize`/`uninit`, and no loop
+fixed point.
 
 ## 5. Build & test quick reference
 

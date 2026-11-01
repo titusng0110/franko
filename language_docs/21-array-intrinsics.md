@@ -13,8 +13,10 @@ Void-returning intrinsics are invalid in value contexts.
 
 For function-local dynamic arrays, the compiler also tracks
 `init`/`init_zero`/`resize`/`uninit` lifecycle state and reports
-definite double init, use before init, use after `uninit`, and double
-uninit. See
+definite use before init, use after `uninit`, invalid free, and double
+free.
+Repeated `init` is not diagnosed because an earlier call may have failed
+with `-1` and a retry is valid. See
 [Dynamic-Array Lifecycle Checking](27-memory-safety-checking.md#2710-dynamic-array-lifecycle-checking).
 
 | Intrinsic | Receiver | Returns | Status |

@@ -1,0 +1,12 @@
+func main() -> int32 {
+    [int32] d
+    int32 status = d.init(1)
+    if (status == -1) {
+        status = d.init(1)
+    }
+    if (d.length() != 0) {
+        d[0] = 1
+    }
+    d.uninit()
+    return 0
+}

@@ -1,1 +1,1 @@
-Double uninit of dynamic array 'd'
+Double free of dynamic array 'd'
