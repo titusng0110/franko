@@ -53,6 +53,7 @@ public final class ConstExpressionEvaluator {
         return switch (op) {
             case "-" -> val.negate();
             case "!" -> val.signum() == 0 ? BigInteger.ONE : BigInteger.ZERO;
+            case "~" -> val.not();
             default -> null;
         };
     }

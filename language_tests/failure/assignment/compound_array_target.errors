@@ -1,2 +1,5 @@
 Left operand of '+=' must be an integer, got [int32, 3]
 Left operand of '*=' must be an integer, got [int32, 3]
+Left operand of '|=' must be an integer, got [int32, 3]
+Left operand of '&=' must be an integer, got [int32, 3]
+Left operand of '^=' must be an integer, got [int32, 3]

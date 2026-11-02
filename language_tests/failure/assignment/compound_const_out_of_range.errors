@@ -1,2 +1,5 @@
 Right constant for operator '+=': constant value 256 does not fit in uint8
 Right constant for operator '*=': constant value 3000000000 does not fit in int32
+Right constant for operator '|=': constant value 256 does not fit in uint8
+Right constant for operator '&=': constant value 256 does not fit in uint8
+Right constant for operator '^=': constant value 256 does not fit in uint8

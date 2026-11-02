@@ -131,6 +131,14 @@ public class ExpressionChecker {
 
             }
 
+            case "~" -> {
+                types.ensureIntegral(
+                        node.expr.type,
+                        "Unary '~' requires an integer operand"
+                );
+
+            }
+
             default -> diagnostics.error("Unknown unary operator '" + node.op + "'");
         }
     }

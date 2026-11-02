@@ -764,6 +764,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
+    public ASTNode visitBitwiseNot(FrankoParser.BitwiseNotContext ctx) {
+        return new UnaryOpNode("~", visit(ctx.unaryExpr()));
+    }
+
+    @Override
     public ASTNode visitPostfixExprOnly(FrankoParser.PostfixExprOnlyContext ctx) {
         return visit(ctx.postfixExpr());
     }
@@ -831,6 +836,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.BANG() != null) {
             return new UnaryOpNode("!", visit(ctx.constUnaryExpr()));
+        }
+
+        if (ctx.TILDE() != null) {
+            return new UnaryOpNode("~", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.constPrimary() != null) {

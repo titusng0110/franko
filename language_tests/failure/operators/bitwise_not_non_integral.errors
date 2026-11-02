@@ -1,0 +1,2 @@
+Unary '~' requires an integer operand, got ptr<int32>
+Unary '~' requires an integer operand, got [int32, 2]

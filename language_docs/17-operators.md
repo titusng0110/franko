@@ -11,7 +11,7 @@ Arrays are not arithmetic values.
 From highest precedence to lowest:
 
 1. postfix expressions, function calls, array access `a[i]`, `$(a)`
-2. unary `-x`, `!x`
+2. unary `-x`, `!x`, `~x`
 3. multiplicative `*`, `/`, `%`
 4. additive `+`, `-`
 5. shift `<<`, `>>`
@@ -30,14 +30,16 @@ Binary operators are intended to associate left-to-right.
 Supported unary operators:
 
 - logical NOT: `!x`
+- bitwise NOT: `~x`
 - unary minus: `-x`
 
-Unary minus is also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and explicit conversions.
+Unary minus and bitwise NOT are also valid on unsigned integer operands. The result keeps the operand's type; narrowing to a target width happens through the ordinary contextual constant checks and explicit conversions.
+
+For a nonconstant operand, bitwise NOT complements the value in that fixed width. A folded constant follows the arbitrary-precision rules in [Constant Folding](10-constant-folding.md): `~0` folds to `-1`, not to an all-bits-set value of the eventual target type.
 
 Unsupported unary operators:
 
 ```franko
-~x
 +x
 ```
 
@@ -64,9 +66,11 @@ Each arithmetic operator has a compound assignment form (`+=`, `-=`, `*=`, `/=`,
 
 ## 17.4 Bitwise Operators
 
-Bitwise operators: `&`, `|`, `^`.
+Bitwise operators: binary `&`, `|`, `^` and unary `~`.
 
-Operands must be integers.
+Operands must be integers. Unary `~` preserves its operand's type.
+
+Each binary bitwise operator has a compound assignment form (`&=`, `|=`, `^=`) with exactly the same operand rules; see [Assignment](14-assignment.md).
 
 ## 17.5 Shift Operators
 
@@ -98,6 +102,6 @@ Pointers are not integers and cannot participate in arithmetic, bitwise, or shif
 
 ## 17.9 Result Types
 
-Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants).
+Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants). Unary `~` preserves its operand's type.
 
 Comparisons and logical operators always produce `uint8` regardless of operand types.

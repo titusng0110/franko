@@ -4,7 +4,7 @@ Assignment syntax:
 
 ```franko
 target = value;
-target op= value;   // compound: += -= *= /= %=
+target op= value;   // compound: += -= *= /= %= &= |= ^=
 ```
 
 The left-hand side must be a storage-backed lvalue.
@@ -107,10 +107,10 @@ read/write access is needed), and fields are accessed through
 
 ## 14.5 Compound Assignment
 
-Five compound assignment operators exist:
+Eight compound assignment operators exist:
 
 ```franko
-+= -= *= /= %=
++= -= *= /= %= &= |= ^=
 ```
 
 Valid:
@@ -121,11 +121,14 @@ arr[i] -= 2;
 obj.n *= 3;
 $(p) /= 4;
 x %= 7;
+flags &= 0xFF;
+mask |= 1 << 3;
+bits ^= 0x0F;
 ```
 
 The target follows the same rules as plain assignment: a non-void storage-backed lvalue.
 
-The value must satisfy the rules of the corresponding binary operator (`+ - * / %`, see [Operators](17-operators.md)) against the target:
+The value must satisfy the rules of the corresponding binary operator (`+ - * / % & | ^`, see [Operators](17-operators.md)) against the target:
 
 - both operands are integers (arrays, pointers, and void are invalid);
 - with two nonconstant operands, both sides must have exactly the same integer type;

@@ -460,7 +460,7 @@ returnStmt
 //
 // Compound assignment operators:
 //
-//   += -= *= /= %=
+//   += -= *= /= %= &= |= ^=
 //
 // The target is an ordinary lvalue and the right-hand side is an ordinary
 // expr (array initializer lists are NOT accepted on this side).
@@ -487,6 +487,9 @@ compoundAssignOp
     | STAR_ASSIGN
     | SLASH_ASSIGN
     | PERCENT_ASSIGN
+    | AMP_ASSIGN
+    | PIPE_ASSIGN
+    | CARET_ASSIGN
     ;
 
 // ---------- INCREMENT / DECREMENT ----------
@@ -552,7 +555,7 @@ exprStmt
 //   << >>
 //   + -
 //   * / %
-//   unary (- !)
+//   unary (- ! ~)
 //   postfix [] () .
 //
 // Array literal element type inference needs an assignment, return,
@@ -607,6 +610,7 @@ multiplicativeExpr
 unaryExpr
     : MINUS unaryExpr   # UnaryMinus
     | BANG unaryExpr    # LogicalNot
+    | TILDE unaryExpr   # BitwiseNot
     | postfixExpr       # PostfixExprOnly
     ;
 
@@ -733,6 +737,7 @@ memberName
 //   - integer literals
 //   - unary -
 //   - logical !
+//   - bitwise ~
 //   - supported binary integer operators
 //   - parentheses
 //
@@ -810,6 +815,7 @@ constMultiplicativeExpr
 constUnaryExpr
     : MINUS constUnaryExpr
     | BANG constUnaryExpr
+    | TILDE constUnaryExpr
     | constPrimary
     ;
 
@@ -1042,6 +1048,9 @@ MINUS_ASSIGN   : '-=' ;
 STAR_ASSIGN    : '*=' ;
 SLASH_ASSIGN   : '/=' ;
 PERCENT_ASSIGN : '%=' ;
+AMP_ASSIGN     : '&=' ;
+PIPE_ASSIGN    : '|=' ;
+CARET_ASSIGN   : '^=' ;
 PLUSPLUS       : '++' ;
 MINUSMINUS     : '--' ;
 
@@ -1052,6 +1061,7 @@ STAR    : '*' ;
 SLASH   : '/' ;
 PERCENT : '%' ;
 BANG    : '!' ;
+TILDE   : '~' ;
 AMP     : '&' ;
 PIPE    : '|' ;
 CARET   : '^' ;

@@ -211,13 +211,15 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
 
 ### 3.1 Front end
 
-#### `Franko.g4` (grammar, 1127 lines)
+#### `Franko.g4` (grammar, 1137 lines)
 The single source of truth for Franko syntax: combined ANTLR4 lexer+parser
 grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
 `program`/`topLevelItem`, namespace/import/struct/function declarations, a
 labeled-alternative `statement` rule, a full precedence-climbing expression
-layer, a mirrored `constExpr` sub-grammar, and the `type` rule with
+layer (including unary `-`, `!`, `~` and the compound assignments `+=`, `-=`,
+`*=`, `/=`, `%=`, `&=`, `|=`, `^=`), a mirrored `constExpr` sub-grammar, and
+the `type` rule with
 `[T]` / `[T, size]` / `ptr<T>` / `mview<T>` / `view<T>` and the `?`
 inferred-size alternative. Pointer permissions are created by the intrinsic
 forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
@@ -364,7 +366,7 @@ recognized by namespace+name+exact signature (`kindOf`). Responsibilities:
 
 #### `ConstExpressionEvaluator`
 Compile-time integer constant folding for the `constExpr` subset
-(integers, unary `-`/`!`, binary integer operators) over `BigInteger`.
+(integers, unary `-`/`!`/`~`, binary integer operators) over `BigInteger`.
 Instance methods report diagnostics through `SymbolTable` (`parseIntegerLiteralSafe`,
 `foldUnary`, `foldBinary`); static pure methods return `null` on failure
 (`tryFold`, `tryFoldUnary`, `tryFoldBinary`, `parseIntegerLiteralPure`) or
@@ -549,7 +551,8 @@ corresponding pointer permission; qualified `ns::name` references resolve
 strictly against declared namespaces, and `os::IS_*` constants fold into
 integer literals; `inferBinaryResultType` implements the fluid-constant rule
 (when one operand is a folded constant, the result takes the other side's
-type); same-type casts are returned unchanged (no cast node emitted);
+type), while unary `~` is type-preserving like unary `-`; same-type casts are
+returned unchanged (no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
 resolver) and `unsafe_cast<T>()` always lowers as a checked cast; the
 legality checkers decide whether a `cast` is a permitted widening,
@@ -644,8 +647,9 @@ storage — stronger than `SemanticExprNode.isLValue()`), non-void LHS, exact/
 fitting RHS per `TypeChecker.ensureAssignable` (pointer conversions
 allowed); assignment through an lvalue path requires **mutation rights** over
 the target's storage region (§4.9 blocks writes through `view`); compound-assign
-rules with
-constant-zero-divisor rejection; `if`/`while` conditions must be non-void
+rules for all arithmetic and bitwise forms (`+=`, `-=`, `*=`, `/=`, `%=`,
+`&=`, `|=`, `^=`) with constant-zero-divisor rejection for `/=` and `%=`;
+`if`/`while` conditions must be non-void
 integral expressions; and the void-value-context
 rule: a void call may not appear where a value is required (`x = logDone();`,
 `if (logDone()) {}`). Break/continue are no-ops here (already validated by
@@ -655,8 +659,9 @@ because `FunctionChecker` should have intercepted it.
 #### `ExpressionChecker`
 Expression *legality* on the already-inferred tree (it never infers types):
 operator category rules (arithmetic/bitwise need same integral types or one
-fitting constant; comparisons/logical allow mixed integrals with constant fit;
-shifts need a non-negative constant or unsigned right operand), pointer/null
+fitting constant; unary `~` needs an integral operand and preserves its type;
+comparisons/logical allow mixed integrals with constant fit; shifts need a
+non-negative constant or unsigned right operand), pointer/null
 comparisons (only `==`/`!=`, matching pointer types), function-call argument
 revalidation (constants must fit, non-constants match exactly or are a
 pointer conversion — permission downgrade or array-view decay —, no
@@ -1016,7 +1021,10 @@ guaranteed null-initialization rule. Statement lowering: `if` with constant-dead
 branch pruning, `while` with goto-based `L_brk_<id>`/`L_cont_<id>` labels plus
 the desugared for-update epilogue (continue label placed *before* the
 epilogue so `continue` runs the update and `break` skips it).
-Expression lowering is structural. A pointer to an array emits
+Expression lowering is structural. Unary operators emit as `(op expr)` with a
+cast to the semantic result type, and compound assignments emit their operator
+text directly, so `~`, `&=`, `|=`, and `^=` need no special backend path. A
+pointer to an array emits
 `Franko_Fat_Pointer<element(T)>`, where `element(T)` is the immediate
 element type (`ptr<[U, N]>` and `ptr<[U]>` both emit
 `Franko_Fat_Pointer<U>`). A pointer to a scalar, struct, or another
@@ -1119,7 +1127,7 @@ sequence shown in §1, template selection by `sema.entryKind()`, template
 sanity checks, and output writing. Its nested `LexErrorCollector` turns ANTLR
 lexer "token recognition" errors into hard failures (the lexer would otherwise
 silently skip unrecognizable characters, letting an unsupported character such
-as `~` in `~a` compile into a different program).
+as `@` in `@a` compile into a different program).
 
 ---
 
@@ -1151,8 +1159,8 @@ as `~` in `~a` compile into a different program).
 Integer literals and folded constant expressions are **fluid**: a constant is
 checked by its `BigInteger` value against the target type's range, not by the
 type it would have in C++. Consequences:
-- One operand of an arithmetic/comparison/compound-assign expression may be a
-  fitting constant; then the result takes the other operand's type
+- One operand of an arithmetic/bitwise/comparison/compound-assign expression
+  may be a fitting constant; then the result takes the other operand's type
   (`inferBinaryResultType`).
 - Overflow of a constant in the target range is an error; runtime values are
   exact-type-checked.

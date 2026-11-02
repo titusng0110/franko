@@ -7,6 +7,8 @@ import "franko/io"
 // unary operators, shift, and operator precedence.
 // ============================================================
 
+int32 g_bit_not = ~5;
+
 func main() -> int32 {
     // --- Arithmetic Operators ---
     int32 add = 5 + 3;
@@ -31,6 +33,12 @@ func main() -> int32 {
     int32 bit_and = 12 & 10;
     int32 bit_or = 12 | 10;
     int32 bit_xor = 12 ^ 10;
+    int32 bit_not_zero = ~0;
+    int32 bit_not_five = ~5;
+    int32 double_not = ~~5;
+    int32 bit_not_precedence = ~0 * 2;
+    uint8 byte_complement = 1;
+    byte_complement = ~byte_complement;
 
     // --- Shift Operators ---
     int32 shift_left = 1 << 4;
@@ -67,6 +75,12 @@ func main() -> int32 {
     print(bit_and);
     print(bit_or);
     print(bit_xor);
+    print(bit_not_zero);
+    print(bit_not_five);
+    print(g_bit_not);
+    print(double_not);
+    print(bit_not_precedence);
+    print(byte_complement);
 
     print(shift_left);
     print(shift_right);

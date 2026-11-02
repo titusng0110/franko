@@ -8,6 +8,9 @@ func main() -> int32 {
     ptr<int32> p = getptr(v);
 
     p += 1;
+    p |= 1;
+    p &= 1;
+    p ^= 1;
 
     print(v);
 
