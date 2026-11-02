@@ -1,25 +1,25 @@
-import org.antlr.v4.runtime.*;
-import org.antlr.v4.runtime.tree.*;
-
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class Main {
-    public static void main(String[] args) throws Exception {
 
+    private static final class Abort extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        Abort(String message) {
+            super(message);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
         String sourceFile = "test.fr";
-        String templateFile = null;
-        boolean explicitTemplate = false;
         String outputFile = "test.cpp";
         Path importSearchDir = Path.of("import");
-        boolean verbose = false;
         String targetSpec = null;
         boolean optimize = false;
         boolean maxOptimize = false;
+        boolean emitJson = false;
 
         if (args.length > 0) {
             sourceFile = args[0];
@@ -34,14 +34,6 @@ public class Main {
                     outputFile = args[++i];
                     break;
 
-                case "-t":
-                    if (i + 1 >= args.length) {
-                        throw new IllegalArgumentException("Missing value after -t");
-                    }
-                    templateFile = args[++i];
-                    explicitTemplate = true;
-                    break;
-
                 case "-p":
                     if (i + 1 >= args.length) {
                         throw new IllegalArgumentException("Missing value after -p");
@@ -49,8 +41,8 @@ public class Main {
                     importSearchDir = Path.of(args[++i]);
                     break;
 
-                case "-v":
-                    verbose = true;
+                case "--emit-json":
+                    emitJson = true;
                     break;
 
                 case "-O":
@@ -79,223 +71,249 @@ public class Main {
             }
         }
 
-        CharStream input = CharStreams.fromFileName(sourceFile, StandardCharsets.UTF_8);
-        FrankoLexer lexer = new FrankoLexer(input);
+        Path outPath = Path.of(outputFile);
+        JsonArtifacts artifacts = new JsonArtifacts(outPath, emitJson);
+        DiagnosticLog log = new DiagnosticLog();
+        artifacts.deleteStaleArtifacts();
 
-        LexErrorCollector lexErrors = new LexErrorCollector();
-        lexer.removeErrorListeners();
-        lexer.addErrorListener(lexErrors);
-
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        FrankoParser parser = new FrankoParser(tokens);
-
-        ParseTree tree = parser.program();
-
-        if (!lexErrors.errors.isEmpty()) {
-            throw new RuntimeException(String.join("\n", lexErrors.errors));
-        }
-
-        if (parser.getNumberOfSyntaxErrors() > 0) {
-            throw new RuntimeException(
-                "Parse failed: " + parser.getNumberOfSyntaxErrors() + " syntax error(s)."
+        try {
+            runPipeline(
+                    Path.of(sourceFile),
+                    outPath,
+                    importSearchDir,
+                    targetSpec,
+                    maxOptimize,
+                    artifacts,
+                    log
             );
+        } catch (Abort abort) {
+            throw abort;
+        } catch (RuntimeException e) {
+            log.add("internal", Diagnostic.error(
+                    e.getMessage() == null ? e.getClass().getName() : e.getMessage()
+            ));
+            artifacts.writeDiagnostics(log);
+            throw e;
         }
+    }
 
-        FrankoASTVisitor visitor = new FrankoASTVisitor();
-        ASTNode rawAst = visitor.visit(tree);
-        if (verbose) {
-            System.out.println("==== Raw AST ====");
-            ASTPrinter.print(rawAst, 0);
-        }
-
-        ImportResolver importResolver = new ImportResolver(importSearchDir);
-        ASTNode ast = importResolver.resolve(rawAst, Path.of(sourceFile));
-
+    private static void runPipeline(
+            Path sourceFile,
+            Path outPath,
+            Path importSearchDir,
+            String targetSpec,
+            boolean maxOptimize,
+            JsonArtifacts artifacts,
+            DiagnosticLog log
+    ) throws Exception {
         TargetInfo target = targetSpec == null
                 ? TargetInfo.detectHost()
                 : TargetInfo.parse(targetSpec);
 
-        boolean osModuleImported =
-                importResolver.importedBuiltinModules().contains("franko/os");
+        ModuleRegistry modules = new ModuleRegistry();
+        Frontend frontend = new Frontend(artifacts, modules);
+        frontend.setTarget(target);
 
-        if (verbose) {
-            System.out.println("Target: " + target.canonical());
+        Result<AstDocument> rawResult = frontend.parseFile(sourceFile);
+        log.add("parse", rawResult.diagnostics);
+
+        if (rawResult.value == null) {
+            abort(log, artifacts, "Parse failed:", rawResult.diagnostics);
         }
 
-        if (osModuleImported) {
-            OsFfi.applyTargetConstants(ast, target);
+        AstDocument raw = rawResult.value;
+        artifacts.writeAst(AstPhase.RAW, raw);
+
+        if (rawResult.hasErrors()) {
+            abort(log, artifacts, "Module binding failed:", rawResult.diagnostics);
         }
 
-        if (verbose) {
-            System.out.println("==== Imports ====");
+        Result<AstDocument> desugaredResult = frontend.desugar(raw);
+        log.add("desugar", desugaredResult.diagnostics);
 
-            for (Map.Entry<String, List<String>> entry : importResolver.importGraph().entrySet()) {
-                System.out.println("  " + entry.getKey());
-
-                for (String imported : entry.getValue()) {
-                    System.out.println("    -> " + imported);
-                }
-            }
-
-            System.out.println("==== Import-resolved AST ====");
-            ASTPrinter.print(ast, 0);
+        if (desugaredResult.value == null) {
+            abort(log, artifacts, "Desugaring failed:", desugaredResult.diagnostics);
         }
 
-        Desugarer desugarer = new Desugarer();
-        ast = desugarer.desugar(ast);
-        if (desugarer.hasErrors()) {
-            throw new RuntimeException(desugarer.formatErrors());
+        AstDocument desugared = desugaredResult.value;
+        artifacts.writeAst(AstPhase.DESUGARED, desugared);
+
+        if (desugaredResult.hasErrors()) {
+            abort(log, artifacts, "Desugaring failed:", desugaredResult.diagnostics);
         }
-        if (verbose) {
-            System.out.println("==== Desugared AST ====");
-            ASTPrinter.print(ast, 0);
+
+        ImportResolver importResolver = new ImportResolver(importSearchDir, frontend);
+        ImportResult importResult = importResolver.resolve(desugared, sourceFile);
+        log.add("imports", importResult.diagnostics);
+        artifacts.writeAst(AstPhase.IMPORT_RESOLVED, importResult.document);
+
+        if (importResult.hasErrors()) {
+            abort(log, artifacts, "Import resolution failed:", importResult.diagnostics);
         }
 
         SemanticAnalyzer sema = new SemanticAnalyzer();
+        SastResult semaResult = sema.analyze(importResult.document);
+        log.add("semantic", semaResult.diagnostics);
+        artifacts.writeSast(SastPhase.SEMANTIC, semaResult.document);
+        printWarnings("==== Warnings ====", semaResult.diagnostics);
 
-        if (osModuleImported) {
-            sema.setTarget(target);
-        }
-
-        SemanticASTNode semaAST = sema.analyze(ast);
-        if (verbose) {
-            System.out.println("==== Semantic AST ====");
-            SemanticASTPrinter.print(semaAST, 0);
-        }
-
-        if (sema.hasWarnings()) {
-            System.out.println("==== Warnings ====");
-
-            for (String warning : sema.warnings()) {
-                System.out.println("  - " + warning);
-            }
+        if (semaResult.hasErrors()) {
+            abort(log, artifacts, "Semantic analysis failed:", semaResult.diagnostics);
         }
 
         System.out.println("==== Legality Checking ====");
-        DiagnosticBag legalityDiagnostics = new DiagnosticBag("Legality checking failed:");
-        LegalityChecker legalityChecker = new LegalityChecker(legalityDiagnostics);
-        legalityChecker.check(semaAST);
+        PassResult legalityResult = new LegalityChecker().check(semaResult.document);
+        log.add("legality", legalityResult.diagnostics);
+        artifacts.writeSast(SastPhase.LEGALITY, legalityResult.document);
 
-        semaAST = new BranchPruner().prune(semaAST);
-        semaAST = new InactiveDeclarationPruner().prune(semaAST);
+        if (legalityResult.hasErrors()) {
+            abort(log, artifacts, "Legality checking failed:", legalityResult.diagnostics);
+        }
+
+        SastDocument branchPruned = new BranchPruner().prune(legalityResult.document);
+        artifacts.writeSast(SastPhase.BRANCH_PRUNED, branchPruned);
+
+        SastDocument inactivePruned =
+                new InactiveDeclarationPruner().prune(branchPruned);
+        artifacts.writeSast(SastPhase.INACTIVE_PRUNED, inactivePruned);
 
         System.out.println("==== Pointer Null-State Checking ====");
-        DiagnosticBag pointerStateDiagnostics = new DiagnosticBag("Pointer null-state checking failed:");
-        PointerNullStateChecker pointerStateChecker = new PointerNullStateChecker(pointerStateDiagnostics);
-        pointerStateChecker.check(semaAST);
+        PointerNullStateChecker pointerStateChecker =
+                new PointerNullStateChecker(new DiagnosticBag());
+        PassResult pointerStateResult = pointerStateChecker.check(inactivePruned);
+        log.add("null-state", pointerStateResult.diagnostics);
+        artifacts.writeSast(SastPhase.NULL_STATE, pointerStateResult.document);
+        printWarnings(
+                "==== Pointer Null-State Warnings ====",
+                pointerStateResult.diagnostics
+        );
 
-        if (pointerStateDiagnostics.hasWarnings()) {
-            System.out.println("==== Pointer Null-State Warnings ====");
-
-            for (String warning : pointerStateDiagnostics.getWarnings()) {
-                System.out.println("  - " + warning);
-            }
+        if (pointerStateResult.hasErrors()) {
+            abort(
+                    log,
+                    artifacts,
+                    "Pointer null-state checking failed:",
+                    pointerStateResult.diagnostics
+            );
         }
 
         System.out.println("==== Dangling Pointer Checking ====");
-        DiagnosticBag danglingDiagnostics =
-                new DiagnosticBag("Dangling pointer checking failed:");
         DanglingPointerChecker danglingChecker =
-                new DanglingPointerChecker(danglingDiagnostics);
-        danglingChecker.check(semaAST);
+                new DanglingPointerChecker(new DiagnosticBag());
+        PassResult danglingResult = danglingChecker.check(pointerStateResult.document);
+        log.add("dangling", danglingResult.diagnostics);
+        artifacts.writeSast(SastPhase.DANGLING, danglingResult.document);
+        printWarnings(
+                "==== Dangling Pointer Warnings ====",
+                danglingResult.diagnostics
+        );
 
-        if (danglingDiagnostics.hasWarnings()) {
-            System.out.println("==== Dangling Pointer Warnings ====");
-
-            for (String warning : danglingDiagnostics.getWarnings()) {
-                System.out.println("  - " + warning);
-            }
+        if (danglingResult.hasErrors()) {
+            abort(
+                    log,
+                    artifacts,
+                    "Dangling pointer checking failed:",
+                    danglingResult.diagnostics
+            );
         }
 
         System.out.println("==== Dynamic Array Memory Checking ====");
-        DiagnosticBag dynamicArrayDiagnostics =
-                new DiagnosticBag("Dynamic array memory checking failed:");
         DynamicArrayMemoryChecker dynamicArrayChecker =
-                new DynamicArrayMemoryChecker(dynamicArrayDiagnostics);
-        dynamicArrayChecker.check(semaAST);
+                new DynamicArrayMemoryChecker(new DiagnosticBag());
+        PassResult dynamicArrayResult = dynamicArrayChecker.check(danglingResult.document);
+        log.add("dyn-array", dynamicArrayResult.diagnostics);
+        artifacts.writeSast(SastPhase.DYN_ARRAY, dynamicArrayResult.document);
+        printWarnings(
+                "==== Dynamic Array Memory Warnings ====",
+                dynamicArrayResult.diagnostics
+        );
 
-        if (dynamicArrayDiagnostics.hasWarnings()) {
-            System.out.println("==== Dynamic Array Memory Warnings ====");
-
-            for (String warning : dynamicArrayDiagnostics.getWarnings()) {
-                System.out.println("  - " + warning);
-            }
+        if (dynamicArrayResult.hasErrors()) {
+            abort(
+                    log,
+                    artifacts,
+                    "Dynamic array memory checking failed:",
+                    dynamicArrayResult.diagnostics
+            );
         }
 
         System.out.println("==== Pointer Permission Linting ====");
-        DiagnosticBag permissionDiagnostics =
-                new DiagnosticBag("Pointer permission linting failed:");
         PointerPermissionChecker permissionChecker =
-                new PointerPermissionChecker(permissionDiagnostics);
-        permissionChecker.check(semaAST);
+                new PointerPermissionChecker(new DiagnosticBag());
+        PassResult permissionResult = permissionChecker.check(
+                dynamicArrayResult.document
+        );
+        log.add("permissions", permissionResult.diagnostics);
+        artifacts.writeSast(SastPhase.PERMISSIONS, permissionResult.document);
+        printWarnings(
+                "==== Pointer Permission Warnings ====",
+                permissionResult.diagnostics
+        );
 
-        if (permissionDiagnostics.hasWarnings()) {
-            System.out.println("==== Pointer Permission Warnings ====");
-
-            for (String warning : permissionDiagnostics.getWarnings()) {
-                System.out.println("  - " + warning);
-            }
+        if (permissionResult.hasErrors()) {
+            abort(
+                    log,
+                    artifacts,
+                    "Pointer permission linting failed:",
+                    permissionResult.diagnostics
+            );
         }
 
         System.out.println("==== Private Identifier Linting ====");
-        DiagnosticBag privateIdentifierDiagnostics =
-                new DiagnosticBag("Private identifier linting failed:");
         PrivateIdentifierLinter privateIdentifierLinter =
-                new PrivateIdentifierLinter(privateIdentifierDiagnostics);
-        privateIdentifierLinter.check(semaAST);
+                new PrivateIdentifierLinter(new DiagnosticBag());
+        PassResult privateIdentifierResult = privateIdentifierLinter.check(
+                permissionResult.document
+        );
+        log.add("private-id", privateIdentifierResult.diagnostics);
+        artifacts.writeSast(SastPhase.PRIVATE_ID, privateIdentifierResult.document);
+        printWarnings(
+                "==== Private Identifier Warnings ====",
+                privateIdentifierResult.diagnostics
+        );
 
-        if (privateIdentifierDiagnostics.hasWarnings()) {
-            System.out.println("==== Private Identifier Warnings ====");
-
-            for (String warning : privateIdentifierDiagnostics.getWarnings()) {
-                System.out.println("  - " + warning);
-            }
+        if (privateIdentifierResult.hasErrors()) {
+            abort(
+                    log,
+                    artifacts,
+                    "Private identifier linting failed:",
+                    privateIdentifierResult.diagnostics
+            );
         }
+
+        FfiHandler ffiHandler = new FfiHandler(modules, target);
+        SastDocument checkedDocument = privateIdentifierResult.document;
+
+        if (ffiHandler.hasFfiEntities()) {
+            PassResult ffiResult = ffiHandler.verify(privateIdentifierResult.document);
+            log.add("ffi-verified", ffiResult.diagnostics);
+            artifacts.writeSast(SastPhase.FFI_VERIFIED, ffiResult.document);
+
+            if (ffiResult.hasErrors()) {
+                abort(log, artifacts, "FFI verification failed:", ffiResult.diagnostics);
+            }
+
+            checkedDocument = ffiResult.document;
+        }
+
+        checkedDocument = checkedDocument.withPhase(SastPhase.CHECKED);
+        artifacts.writeSast(SastPhase.CHECKED, checkedDocument);
 
         System.out.println("All checks passed.");
 
-        String osFfiBridgeText = null;
+        FfiCodegen ffiCodegen = ffiHandler.hasFfiEntities()
+                ? ffiHandler.codegen()
+                : null;
+        Cpp14Codegen codegen = new Cpp14Codegen(ffiCodegen, target, maxOptimize);
+        String generatedBody = codegen.generate(checkedDocument);
 
-        if (osModuleImported) {
-            Path osModuleFile = importResolver.frankoOsModuleFile();
-
-            if (osModuleFile == null) {
-                throw new RuntimeException(
-                    "Internal compiler error: 'franko/os' was imported but its module file was not recorded"
-                );
-            }
-
-            Path ffiBridgeFile = osModuleFile
-                    .toAbsolutePath()
-                    .getParent()
-                    .resolve("os.ffi.cpp")
-                    .normalize();
-
-            if (!Files.isRegularFile(ffiBridgeFile)) {
-                throw new RuntimeException(
-                    "FFI error: 'franko/os' was imported but the FFI bridge file is missing: '"
-                            + ffiBridgeFile
-                            + "' (expected next to the resolved os.fr module)"
-                );
-            }
-
-            osFfiBridgeText = Files.readString(ffiBridgeFile, StandardCharsets.UTF_8);
-
-            OsFfi.verifyBridge(semaAST, osFfiBridgeText);
-        }
-
-        Cpp14Codegen codegen = new Cpp14Codegen(osFfiBridgeText, target, maxOptimize);
-        String generatedBody = codegen.generate(semaAST);
-
-        if (!explicitTemplate) {
-            templateFile = switch (sema.entryKind()) {
-                case ARGS -> "ProgramTemplateWithRawCArgs.cpp";
-                case NO_ARGS -> "ProgramTemplate.cpp";
-                case NONE -> throw new RuntimeException(
-                    "Internal compiler error: no entry-point function 'main' after successful analysis"
-                );
-            };
-        }
+        String templateFile = switch (checkedDocument.entryKind) {
+            case ARGS -> "ProgramTemplateWithRawCArgs.cpp";
+            case NO_ARGS -> "ProgramTemplate.cpp";
+            case NONE -> throw new RuntimeException(
+                "Internal compiler error: no entry-point function 'main' after successful analysis"
+            );
+        };
 
         String template = Files.readString(Path.of(templateFile), StandardCharsets.UTF_8);
 
@@ -304,25 +322,23 @@ public class Main {
         }
 
         String runtimeHeader = "FrankoRuntime.hpp";
-        if (!explicitTemplate && !template.contains("__FRANKO_RUNTIME_HEADER__")) {
+        if (!template.contains("__FRANKO_RUNTIME_HEADER__")) {
             throw new RuntimeException("Template does not contain __FRANKO_RUNTIME_HEADER__ placeholder.");
         }
 
-        if (!explicitTemplate) {
-            String expectedEntryCall = switch (sema.entryKind()) {
-                case ARGS -> "FUNC_main_HASH_747cdf98";
-                case NO_ARGS -> "FUNC_main_HASH_d7d11c43";
-                case NONE -> throw new RuntimeException(
-                    "Internal compiler error: no entry-point function 'main' after successful analysis"
-                );
-            };
+        String expectedEntryCall = switch (checkedDocument.entryKind) {
+            case ARGS -> "FUNC_main_HASH_747cdf98";
+            case NO_ARGS -> "FUNC_main_HASH_d7d11c43";
+            case NONE -> throw new RuntimeException(
+                "Internal compiler error: no entry-point function 'main' after successful analysis"
+            );
+        };
 
-            if (!template.contains(expectedEntryCall)) {
-                throw new RuntimeException(
-                    "Template '" + templateFile + "' does not call the expected entry point '"
-                        + expectedEntryCall + "'."
-                );
-            }
+        if (!template.contains(expectedEntryCall)) {
+            throw new RuntimeException(
+                "Template '" + templateFile + "' does not call the expected entry point '"
+                    + expectedEntryCall + "'."
+            );
         }
 
         String finalCpp = template.replace(
@@ -330,15 +346,64 @@ public class Main {
             indentBlock(generatedBody, 0).trim()
         ).replace("__FRANKO_RUNTIME_HEADER__", runtimeHeader);
 
-        Path outPath = Path.of(outputFile);
         Path parent = outPath.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
 
         Files.writeString(outPath, finalCpp, StandardCharsets.UTF_8);
+        artifacts.writeDiagnostics(log);
 
-        System.out.println("Successfully compiled to C++14: " + outputFile);
+        System.out.println("Successfully compiled to C++14: " + outPath);
+    }
+
+    private static void abort(
+            DiagnosticLog log,
+            JsonArtifacts artifacts,
+            String header,
+            List<Diagnostic> diagnostics
+    ) {
+        artifacts.writeDiagnostics(log);
+
+        StringBuilder sb = new StringBuilder(header);
+
+        if (!header.endsWith("\n")) {
+            sb.append('\n');
+        }
+
+        int index = 0;
+
+        for (Diagnostic diagnostic : diagnostics) {
+            if (!diagnostic.isError()) {
+                continue;
+            }
+
+            index++;
+            sb.append("  ")
+                    .append(index)
+                    .append(". ")
+                    .append(diagnostic.format())
+                    .append('\n');
+        }
+
+        throw new Abort(sb.toString());
+    }
+
+    private static void printWarnings(String heading, List<Diagnostic> diagnostics) {
+        boolean printed = false;
+
+        for (Diagnostic diagnostic : diagnostics) {
+            if (diagnostic.isError()) {
+                continue;
+            }
+
+            if (!printed) {
+                System.out.println(heading);
+                printed = true;
+            }
+
+            System.out.println("  - " + diagnostic.format());
+        }
     }
 
     private static String indentBlock(String text, int levels) {
@@ -354,31 +419,5 @@ public class Main {
         }
 
         return sb.toString();
-    }
-
-    private static final class LexErrorCollector extends BaseErrorListener {
-        final List<String> errors = new ArrayList<>();
-
-        @Override
-        public void syntaxError(
-                Recognizer<?, ?> recognizer,
-                Object offendingSymbol,
-                int line,
-                int charPositionInLine,
-                String msg,
-                RecognitionException e
-        ) {
-
-            String text = msg;
-            String marker = "token recognition error at: '";
-            int start = msg.indexOf(marker);
-
-            if (start >= 0 && msg.endsWith("'") && msg.length() > start + marker.length()) {
-                text = msg.substring(start + marker.length(), msg.length() - 1);
-            }
-
-            errors.add("Lex error: \"" + text + "\" is not a recognizable token. (line "
-                    + line + ", column " + (charPositionInLine + 1) + ")");
-        }
     }
 }

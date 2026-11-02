@@ -55,15 +55,26 @@ public class LegalityChecker {
         diagnostics.clear();
 
         checkNode(node);
+    }
 
-        if (diagnostics.hasErrors()) {
-            throw new SemanticAnalyzer.SemanticException(
-                    diagnostics.formatErrors()
-            );
-        }
+    public PassResult check(SastDocument document) {
+        check(document.root);
+        return new PassResult(
+                document.withPhase(SastPhase.LEGALITY),
+                diagnostics.diagnostics()
+        );
     }
 
     private void checkNode(SemanticASTNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkNodeInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkNodeInner(SemanticASTNode node) {
         if (node == null) {
             return;
         }

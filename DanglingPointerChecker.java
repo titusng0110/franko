@@ -176,12 +176,14 @@ public final class DanglingPointerChecker {
         Arrays.fill(pointerState, OriginSet.UNKNOWN);
 
         checkNode(node);
+    }
 
-        if (diagnostics.hasErrors()) {
-            throw new SemanticAnalyzer.SemanticException(
-                    diagnostics.formatErrors()
-            );
-        }
+    public PassResult check(SastDocument document) {
+        check(document.root);
+        return new PassResult(
+                document.withPhase(SastPhase.DANGLING),
+                diagnostics.diagnostics()
+        );
     }
 
     private void prepareAnalysis(SemanticASTNode root) {
@@ -488,6 +490,15 @@ public final class DanglingPointerChecker {
     }
 
     private boolean checkNode(SemanticASTNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            return checkNodeInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private boolean checkNodeInner(SemanticASTNode node) {
         if (node == null) {
             return false;
         }
@@ -532,6 +543,15 @@ public final class DanglingPointerChecker {
     }
 
     private void checkFunction(SemanticFunctionDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkFunctionInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkFunctionInner(SemanticFunctionDeclNode node) {
         int beforeFunction = snapshot();
 
         Arrays.fill(pointerState, OriginSet.UNKNOWN);
@@ -627,6 +647,15 @@ public final class DanglingPointerChecker {
     }
 
     private void checkVarDecl(SemanticVarDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkVarDeclInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkVarDeclInner(SemanticVarDeclNode node) {
         if (node == null || node.symbol == null) {
             return;
         }
@@ -641,6 +670,15 @@ public final class DanglingPointerChecker {
     }
 
     private void checkAssign(SemanticAssignNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkAssignInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkAssignInner(SemanticAssignNode node) {
         checkExpr(node.target);
         checkExpr(node.value);
 
@@ -1207,6 +1245,15 @@ public final class DanglingPointerChecker {
     }
 
     private void checkExpr(SemanticExprNode expr) {
+        diagnostics.push(expr == null ? SourceSpan.NONE : expr.span);
+        try {
+            checkExprInner(expr);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkExprInner(SemanticExprNode expr) {
         if (expr == null) {
             return;
         }

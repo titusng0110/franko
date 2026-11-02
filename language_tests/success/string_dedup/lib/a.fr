@@ -1,0 +1,3 @@
+func a_text() -> view<[byte, 4]> {
+    return "same";
+}

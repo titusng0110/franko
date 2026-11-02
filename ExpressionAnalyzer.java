@@ -74,6 +74,7 @@ public final class ExpressionAnalyzer {
                     + "wired into ExpressionAnalyzer");
 
             return new SemanticIntLiteralNode(
+                    lit.span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
                     "0"
@@ -84,17 +85,26 @@ public final class ExpressionAnalyzer {
     }
 
     public SemanticExprNode analyzeExpr(ASTNode node) {
+        ctx.diagnostics().push(node.span);
+        try {
+            return analyzeExprInner(node);
+        } finally {
+            ctx.diagnostics().pop();
+        }
+    }
+
+    private SemanticExprNode analyzeExprInner(ASTNode node) {
         if (node instanceof ArrayLiteralNode lit) {
             return lowerArrayLiteral(lit, null);
         }
 
         if (node instanceof IntNode n) {
             BigInteger val = constEval.parseIntegerLiteralSafe(n.value);
-            return new SemanticIntLiteralNode(FALLBACK_TYPE, val, n.value);
+            return new SemanticIntLiteralNode(n.span, FALLBACK_TYPE, val, n.value);
         }
 
         if (node instanceof NullNode) {
-            return new SemanticNullLiteralNode(NULL_TYPE);
+            return new SemanticNullLiteralNode(node.span, NULL_TYPE);
         }
 
         if (node instanceof VarNode n) {
@@ -112,7 +122,7 @@ public final class ExpressionAnalyzer {
                 sym = new VariableSymbol(null, n.name, FALLBACK_TYPE);
             }
 
-            return new SemanticVarExprNode(sym.type, sym);
+            return new SemanticVarExprNode(node.span, sym.type, sym);
         }
 
         if (node instanceof QualifiedNameNode n) {
@@ -130,6 +140,7 @@ public final class ExpressionAnalyzer {
             );
 
             return new SemanticUnaryOpNode(
+                    node.span,
                     type,
                     folded,
                     n.op,
@@ -154,6 +165,7 @@ public final class ExpressionAnalyzer {
             );
 
             return new SemanticBinOpNode(
+                    node.span,
                     type,
                     folded,
                     n.op,
@@ -169,6 +181,7 @@ public final class ExpressionAnalyzer {
             SemanticType elemType = extractElementType(target.type);
 
             return new SemanticArrayAccessNode(
+                    node.span,
                     elemType,
                     target,
                     index
@@ -189,6 +202,7 @@ public final class ExpressionAnalyzer {
                         + target.type.describe());
 
                 return new SemanticIntLiteralNode(
+                        node.span,
                         FALLBACK_TYPE,
                         BigInteger.ZERO,
                         "0"
@@ -207,6 +221,7 @@ public final class ExpressionAnalyzer {
                         + "'");
 
                 return new SemanticIntLiteralNode(
+                        node.span,
                         FALLBACK_TYPE,
                         BigInteger.ZERO,
                         "0"
@@ -214,6 +229,7 @@ public final class ExpressionAnalyzer {
             }
 
             return new SemanticMemberAccessNode(
+                    node.span,
                     field.type,
                     target,
                     field
@@ -233,6 +249,7 @@ public final class ExpressionAnalyzer {
             );
 
             return new SemanticGetPtrNode(
+                    node.span,
                     pointerTypeFor(n.kind, target.type),
                     target
             );
@@ -251,7 +268,7 @@ public final class ExpressionAnalyzer {
                 ctx.error("Cannot dereference non-pointer type");
             }
 
-            return new SemanticDerefNode(refType, expr);
+            return new SemanticDerefNode(node.span, refType, expr);
         }
 
         if (node instanceof CastNode n) {
@@ -264,6 +281,7 @@ public final class ExpressionAnalyzer {
                 ctx.error("Operand of '" + syntax + "' cannot have void type");
 
                 return new SemanticCastExprNode(
+                        node.span,
                         targetType,
                         null,
                         expr,
@@ -278,6 +296,7 @@ public final class ExpressionAnalyzer {
                         + "expression, got " + expr.type.describe());
 
                 return new SemanticCastExprNode(
+                        node.span,
                         targetType,
                         null,
                         expr,
@@ -292,6 +311,7 @@ public final class ExpressionAnalyzer {
                 }
 
                 return new SemanticCastExprNode(
+                        node.span,
                         targetType,
                         expr.constantValue,
                         expr,
@@ -300,6 +320,7 @@ public final class ExpressionAnalyzer {
             }
 
             return new SemanticCastExprNode(
+                    node.span,
                     targetType,
                     null,
                     expr,
@@ -312,6 +333,7 @@ public final class ExpressionAnalyzer {
                     + "string literal is a view<[byte, N]> value");
 
             return new SemanticIntLiteralNode(
+                    node.span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
                     "0"
@@ -322,6 +344,7 @@ public final class ExpressionAnalyzer {
                 + node.getClass().getSimpleName());
 
         return new SemanticIntLiteralNode(
+                node.span,
                 FALLBACK_TYPE,
                 BigInteger.ZERO,
                 "0"
@@ -446,6 +469,7 @@ public final class ExpressionAnalyzer {
             ctx.error("Unknown namespace '" + namespacePath + "'");
 
             return new SemanticIntLiteralNode(
+                    q.span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
                     "0"
@@ -471,13 +495,14 @@ public final class ExpressionAnalyzer {
         if (sym instanceof GlobalVariableSymbol global
                 && global.compileTimeConstantValue != null) {
             return new SemanticIntLiteralNode(
+                    q.span,
                     sym.type,
                     global.compileTimeConstantValue,
                     global.compileTimeConstantValue.toString(10)
             );
         }
 
-        return new SemanticVarExprNode(sym.type, sym);
+        return new SemanticVarExprNode(q.span, sym.type, sym);
     }
 
     private List<SymbolTable.CallArg> lowerCallArgs(List<ASTNode> rawArgs) {
@@ -540,6 +565,7 @@ public final class ExpressionAnalyzer {
 
             if (arrayLowerer.shouldSuppressCallDiagnostic(call)) {
                 return new SemanticIntLiteralNode(
+                        call.span,
                         FALLBACK_TYPE,
                         BigInteger.ZERO,
                         "0"
@@ -584,6 +610,7 @@ public final class ExpressionAnalyzer {
                 );
 
                 return new SemanticFunctionCallNode(
+                        call.span,
                         FALLBACK_TYPE,
                         fallbackFn,
                         args
@@ -591,6 +618,7 @@ public final class ExpressionAnalyzer {
             }
 
             return new SemanticFunctionCallNode(
+                    call.span,
                     fn.returnType(),
                     fn,
                     args
@@ -615,6 +643,7 @@ public final class ExpressionAnalyzer {
                         + "'");
 
                 return new SemanticIntLiteralNode(
+                        call.span,
                         FALLBACK_TYPE,
                         BigInteger.ZERO,
                         "0"
@@ -657,6 +686,7 @@ public final class ExpressionAnalyzer {
                 );
 
                 return new SemanticFunctionCallNode(
+                        call.span,
                         FALLBACK_TYPE,
                         fallbackFn,
                         args
@@ -664,6 +694,7 @@ public final class ExpressionAnalyzer {
             }
 
             return new SemanticFunctionCallNode(
+                    call.span,
                     fn.returnType(),
                     fn,
                     args
@@ -677,6 +708,7 @@ public final class ExpressionAnalyzer {
         ctx.error("Unsupported call expression");
 
         return new SemanticIntLiteralNode(
+                call.span,
                 FALLBACK_TYPE,
                 BigInteger.ZERO,
                 "0"
@@ -707,6 +739,7 @@ public final class ExpressionAnalyzer {
             }
 
             return new SemanticIntLiteralNode(
+                    call.span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
                     "0"
@@ -720,6 +753,7 @@ public final class ExpressionAnalyzer {
                     + "a variable, field, array element, or $(...) expression");
 
             return new SemanticIntLiteralNode(
+                    call.span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
                     "0"
@@ -769,7 +803,7 @@ public final class ExpressionAnalyzer {
             selfType = declaredSelf;
         }
 
-        SemanticGetPtrNode selfArg = new SemanticGetPtrNode(selfType, target);
+        SemanticGetPtrNode selfArg = new SemanticGetPtrNode(target.span, selfType, target);
 
         List<SemanticExprNode> fullArgs = new ArrayList<>();
         fullArgs.add(selfArg);
@@ -785,6 +819,7 @@ public final class ExpressionAnalyzer {
             );
 
             return new SemanticFunctionCallNode(
+                    call.span,
                     FALLBACK_TYPE,
                     fallbackFn,
                     fullArgs
@@ -792,6 +827,7 @@ public final class ExpressionAnalyzer {
         }
 
         return new SemanticFunctionCallNode(
+                call.span,
                 method.returnType(),
                 method,
                 fullArgs

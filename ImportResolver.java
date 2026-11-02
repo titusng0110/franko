@@ -1,7 +1,4 @@
-import org.antlr.v4.runtime.*;
-import org.antlr.v4.runtime.tree.*;
-
-import java.nio.charset.StandardCharsets;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -25,62 +22,89 @@ public class ImportResolver {
 
     private final Path importSearchDir;
 
-    private final Set<String> importedBuiltinModules = new LinkedHashSet<>();
+    private final Frontend frontend;
 
-    private Path frankoOsModuleFile = null;
+    private final List<Diagnostic> diagnostics = new ArrayList<>();
 
-    public ImportResolver(Path importSearchDir) {
+    private final Map<String, GlobalVarDeclNode> hoistedStringGlobals =
+            new LinkedHashMap<>();
+
+    public ImportResolver(Path importSearchDir, Frontend frontend) {
         this.importSearchDir = importSearchDir;
+        this.frontend = frontend;
     }
 
-    public ASTNode resolve(ASTNode root, Path sourceFile) {
-        if (!(root instanceof ProgramNode program)) {
-            return root;
-        }
-
+    public ImportResult resolve(AstDocument root, Path sourceFile) {
         Path rootPath = sourceFile.toAbsolutePath().normalize();
         String rootKey = canonicalKey(rootPath);
 
         processedFiles.add(rootKey);
         importGraph.computeIfAbsent(rootKey, key -> new ArrayList<>());
 
-        List<ASTNode> items = new ArrayList<>();
-        spliceItems(program.topLevelItems, rootPath, items);
+        SourceTable sources = new SourceTable();
+        sources.addAll(root.sources);
 
-        return new ProgramNode(items);
+        List<ASTNode> items = new ArrayList<>();
+        spliceItems(root.root.topLevelItems, rootPath, items, sources);
+
+        AstDocument merged = new AstDocument(
+                AstPhase.IMPORT_RESOLVED,
+                sources,
+                new ProgramNode(root.root.span, items)
+        );
+
+        return new ImportResult(
+                merged,
+                new LinkedHashMap<>(importGraph),
+                List.copyOf(diagnostics)
+        );
     }
 
     public Map<String, List<String>> importGraph() {
         return importGraph;
     }
 
-    public Set<String> importedBuiltinModules() {
-        return new LinkedHashSet<>(importedBuiltinModules);
-    }
-
-    public Path frankoOsModuleFile() {
-        return frankoOsModuleFile;
-    }
-
     private void spliceItems(
             List<ASTNode> items,
             Path importingFile,
-            List<ASTNode> out
+            List<ASTNode> out,
+            SourceTable sources
     ) {
         for (ASTNode item : items) {
             if (item instanceof ImportNode importNode) {
-                processImport(importNode, importingFile, out);
+                processImport(importNode, importingFile, out, sources);
                 continue;
             }
 
-            out.add(item);
+            addItem(item, out);
         }
+    }
+
+    private void addItem(ASTNode item, List<ASTNode> out) {
+        if (item instanceof GlobalVarDeclNode global
+                && global.literalBytes != null
+                && global.name.startsWith("_STR_")) {
+            String key = global.name
+                    + "|"
+                    + typeKey(global.type)
+                    + "|"
+                    + literalBytesKey(global.literalBytes);
+
+            if (hoistedStringGlobals.containsKey(key)) {
+                return;
+            }
+
+            hoistedStringGlobals.put(key, global);
+        }
+
+        out.add(item);
     }
 
     private void processImport(
             ImportNode importNode,
             Path importingFile,
-            List<ASTNode> out
+            List<ASTNode> out,
+            SourceTable sources
     ) {
         String pathText = computePathText(importNode, importingFile);
 
@@ -96,81 +120,26 @@ public class ImportResolver {
         }
 
         if (!Files.isRegularFile(target)) {
-            throw new RuntimeException(
+            diagnostics.add(Diagnostic.error(
+                    importNode.span,
                     "Import error: cannot read imported file"
                             + candidateDescription(pathText, target, importingFile)
-            );
+            ));
+            return;
         }
 
-        if (pathText.equals("franko/os.fr") || isFrankoOsModuleTarget(target)) {
-            importedBuiltinModules.add("franko/os");
+        processedFiles.add(targetKey);
+        importGraph.computeIfAbsent(targetKey, key -> new ArrayList<>());
 
-            if (frankoOsModuleFile == null) {
-                frankoOsModuleFile = target;
-            }
+        Result<AstDocument> result = frontend.loadDesugared(target);
+        diagnostics.addAll(result.diagnostics);
+
+        if (result.value == null) {
+            return;
         }
 
-        collectFile(target, out);
-    }
-
-    private static boolean isFrankoOsModuleTarget(Path target) {
-        String normalized = target.toAbsolutePath().normalize().toString().replace('\\', '/');
-
-        return normalized.endsWith("franko/os.fr");
-    }
-
-    private void collectFile(Path file, List<ASTNode> out) {
-        String key = canonicalKey(file);
-
-        processedFiles.add(key);
-        importGraph.computeIfAbsent(key, k -> new ArrayList<>());
-
-        CharStream input;
-        try {
-            input = CharStreams.fromPath(file, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "Import error: cannot read file '" + file + "': " + e.getMessage(),
-                    e
-            );
-        }
-
-        FrankoLexer lexer = new FrankoLexer(input);
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        FrankoParser parser = new FrankoParser(tokens);
-
-        CollectingErrorListener errorListener = new CollectingErrorListener(file.toString());
-
-        lexer.removeErrorListeners();
-        lexer.addErrorListener(errorListener);
-
-        parser.removeErrorListeners();
-        parser.addErrorListener(errorListener);
-
-        ParseTree tree = parser.program();
-
-        if (!errorListener.errors.isEmpty()
-                || parser.getNumberOfSyntaxErrors() > 0) {
-            throw new RuntimeException(
-                    "Parse failed in imported file '"
-                            + file
-                            + "':\n"
-                            + String.join("\n", errorListener.errors)
-            );
-        }
-
-        FrankoASTVisitor visitor = new FrankoASTVisitor();
-        ASTNode imported = visitor.visit(tree);
-
-        if (!(imported instanceof ProgramNode program)) {
-            throw new RuntimeException(
-                    "Internal import error: file '"
-                            + file
-                            + "' did not parse into a program"
-            );
-        }
-
-        spliceItems(program.topLevelItems, file, out);
+        sources.addAll(result.value.sources);
+        spliceItems(result.value.root.topLevelItems, target, out, sources);
     }
 
     private String computePathText(ImportNode importNode, Path importingFile) {
@@ -180,13 +149,15 @@ public class ImportResolver {
         String fileName = pathText.substring(pathText.lastIndexOf('/') + 1);
 
         if (fileName.isEmpty()) {
-            throw new RuntimeException(
+            diagnostics.add(Diagnostic.error(
+                    importNode.span,
                     "Import error: import path '"
                             + raw
                             + "' in '"
                             + importingFile
                             + "' has no file name"
-            );
+            ));
+            return pathText;
         }
 
         int dot = fileName.lastIndexOf('.');
@@ -195,13 +166,15 @@ public class ImportResolver {
             String extension = fileName.substring(dot + 1);
 
             if (!extension.equals("fr")) {
-                throw new RuntimeException(
+                diagnostics.add(Diagnostic.error(
+                        importNode.span,
                         "Import error: import path '"
                                 + raw
                                 + "' in '"
                                 + importingFile
                                 + "' must reference a .fr file"
-                );
+                ));
+                return pathText;
             }
 
             return pathText;
@@ -295,24 +268,48 @@ public class ImportResolver {
         }
     }
 
-    private static final class CollectingErrorListener extends BaseErrorListener {
-        private final String fileName;
-        final List<String> errors = new ArrayList<>();
-
-        CollectingErrorListener(String fileName) {
-            this.fileName = fileName;
+    private static String typeKey(TypeNode type) {
+        if (type == null) {
+            return "<null>";
         }
 
-        @Override
-        public void syntaxError(
-                Recognizer<?, ?> recognizer,
-                Object offendingSymbol,
-                int line,
-                int charPositionInLine,
-                String msg,
-                RecognitionException e
-        ) {
-            errors.add(fileName + ":" + line + ":" + charPositionInLine + ": " + msg);
+        if (type instanceof PrimitiveTypeNode primitive) {
+            return primitive.kind.name();
         }
+
+        if (type instanceof VoidTypeNode) {
+            return "void";
+        }
+
+        if (type instanceof DynamicArrayTypeNode dynamic) {
+            return "[" + typeKey(dynamic.elementType) + "]";
+        }
+
+        if (type instanceof StaticArrayTypeNode staticArray) {
+            String size = staticArray.sizeExpr instanceof IntNode intNode
+                    ? intNode.value
+                    : "?";
+            return "[" + typeKey(staticArray.elementType) + ";" + size + "]";
+        }
+
+        if (type instanceof PtrTypeNode ptr) {
+            return ptr.kind.name() + "<" + typeKey(ptr.referencedType) + ">";
+        }
+
+        if (type instanceof StructTypeNode struct) {
+            return String.join("::", struct.namespaceSegments) + "::" + struct.name;
+        }
+
+        return type.getClass().getSimpleName();
+    }
+
+    private static String literalBytesKey(List<BigInteger> values) {
+        StringBuilder sb = new StringBuilder();
+
+        for (BigInteger value : values) {
+            sb.append(value.toString(10)).append(',');
+        }
+
+        return sb.toString();
     }
 }

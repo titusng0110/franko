@@ -1,0 +1,11 @@
+namespace mathx {
+    int32 MAGIC = 0
+
+    func add(int32 a, int32 b) -> int32 {
+        return -1
+    }
+
+    func scale(int32 value, int32 factor) -> int32 {
+        return -1
+    }
+}

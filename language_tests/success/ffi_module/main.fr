@@ -1,0 +1,10 @@
+import "lib/mathx"
+import "franko/io"
+
+func main() -> int32 {
+    print(mathx::MAGIC)
+    print(mathx::add(20, 22))
+    print(mathx::scale(6, 7))
+
+    return 0
+}

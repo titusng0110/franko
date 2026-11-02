@@ -4,6 +4,7 @@ import java.util.*;
 public class SemanticAnalyzer {
 
     public static final class SemanticException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         public SemanticException(String message) {
             super(message);
         }
@@ -29,12 +30,6 @@ public class SemanticAnalyzer {
 
     private final List<SemanticVarDeclNode> pendingHoistedArrayLiterals =
             new ArrayList<>();
-
-    private TargetInfo target = null;
-
-    public void setTarget(TargetInfo target) {
-        this.target = target;
-    }
 
     private EntryKind entryKind = EntryKind.NONE;
     private int globalMainCount = 0;
@@ -66,8 +61,9 @@ public class SemanticAnalyzer {
             @Override
             public SemanticVarExprNode hoistArrayLiteral(
                     SemanticStaticArrayType arrayType,
-                    List<BigInteger> values) {
-                return hoistArrayLiteralGlobal(arrayType, values);
+                    List<BigInteger> values,
+                    SourceSpan span) {
+                return hoistArrayLiteralGlobal(arrayType, values, span);
             }
         });
         this.exprAnalyzer.setArrayLiteralLowerer(arrayLiteralLowerer);
@@ -107,11 +103,44 @@ public class SemanticAnalyzer {
 
         symbolTable.popScope();
 
-        if (symbolTable.hasErrors()) {
-            throw new SemanticException(symbolTable.formatErrors());
+        return result;
+    }
+
+    public SastResult analyze(AstDocument ast) {
+        if (ast == null) {
+            throw new IllegalArgumentException("Cannot analyze a null AST document");
         }
 
-        return result;
+        SemanticASTNode root = analyze(ast.root);
+        SemanticProgramNode program;
+
+        if (root instanceof SemanticProgramNode semanticProgram) {
+            program = semanticProgram;
+        } else if (root == null) {
+            program = new SemanticProgramNode(
+                    ast.root == null ? SourceSpan.NONE : ast.root.span,
+                    List.of()
+            );
+        } else {
+            program = new SemanticProgramNode(root.span, List.of(root));
+        }
+
+        SymbolRegistry registry = new SymbolRegistry();
+        SemanticASTSerializer.registerFromNode(program, registry);
+        registry.registerAll(symbolTable.allSymbols());
+        SastDocument document = new SastDocument(
+                SastPhase.SEMANTIC,
+                entryKind,
+                ast.sources,
+                registry,
+                program
+        );
+
+        return new SastResult(document, symbolTable.diagnostics().diagnostics());
+    }
+
+    public String analyze(String astJson) {
+        return analyze(AstDocument.fromJson(astJson)).document.toJson();
     }
 
     public List<SemanticStmtNode> analyze(List<ASTNode> nodes) {
@@ -128,25 +157,24 @@ public class SemanticAnalyzer {
 
         symbolTable.popScope();
 
-        if (symbolTable.hasErrors()) {
-            throw new SemanticException(symbolTable.formatErrors());
-        }
-
         return out;
     }
 
     private static final class NamespaceProgramItems {
         final NamespaceSymbol space;
+        final SourceSpan span;
         final List<ASTNode> items = new ArrayList<>();
 
-        NamespaceProgramItems(NamespaceSymbol space) {
+        NamespaceProgramItems(NamespaceSymbol space, SourceSpan span) {
             this.space = space;
+            this.span = span;
         }
     }
 
     SemanticVarExprNode hoistArrayLiteralGlobal(
             SemanticStaticArrayType arrayType,
-            List<BigInteger> values
+            List<BigInteger> values,
+            SourceSpan span
     ) {
         StringBuilder key = new StringBuilder(arrayType.mangleKey());
         key.append('|');
@@ -161,7 +189,7 @@ public class SemanticAnalyzer {
                 hoistedArrayLiteralGlobals.get(keyText);
 
         if (existing != null) {
-            return new SemanticVarExprNode(existing.type, existing);
+            return new SemanticVarExprNode(span, existing.type, existing);
         }
 
         String baseName = "_ARR_" + Mangler.hashHex(keyText);
@@ -185,14 +213,16 @@ public class SemanticAnalyzer {
 
         sym.literalValues = List.copyOf(values);
         hoistedArrayLiteralGlobals.put(keyText, sym);
-        pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(sym));
+        pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(span, sym));
 
-        return new SemanticVarExprNode(sym.type, sym);
+        return new SemanticVarExprNode(span, sym.type, sym);
     }
 
     private SemanticProgramNode analyzeProgram(ProgramNode program) {
 
         for (ASTNode item : program.topLevelItems) {
+            symbolTable.diagnostics().push(item.span);
+            try {
             if (item instanceof StructDeclNode
                     || item instanceof GlobalVarDeclNode
                     || item instanceof FunctionDeclNode
@@ -203,12 +233,15 @@ public class SemanticAnalyzer {
             symbolTable.error("Invalid top-level item '"
                     + item.getClass().getSimpleName()
                     + "': only struct declarations, global variable declarations, function declarations, and namespace declarations are allowed at global scope");
+            } finally {
+                symbolTable.diagnostics().pop();
+            }
         }
 
         List<NamespaceProgramItems> spaces = new ArrayList<>();
         Map<String, NamespaceProgramItems> spacesByName = new LinkedHashMap<>();
 
-        NamespaceProgramItems globalSpace = new NamespaceProgramItems(null);
+        NamespaceProgramItems globalSpace = new NamespaceProgramItems(null, program.span);
         spaces.add(globalSpace);
 
         for (ASTNode item : program.topLevelItems) {
@@ -325,22 +358,6 @@ public class SemanticAnalyzer {
                         type
                 );
 
-                if (target != null
-                        && OsFfi.isTargetConstantName(
-                                currentNamespaceName(), n.name)) {
-                    if (!new SemanticPrimitiveType(
-                            SemanticPrimitiveKind.UINT8).equals(type)) {
-                        symbolTable.error("FFI error: 'os::"
-                                + n.name
-                                + "' must be declared as 'byte' in"
-                                + " import/franko/os.fr: os.fr drifted out"
-                                + " of sync with the compiler");
-                    } else {
-                        sym.compileTimeConstantValue =
-                                target.constantFor(n.name);
-                    }
-                }
-
                 if (n.literalBytes != null) {
                     sym.literalBytes = n.literalBytes;
                 }
@@ -362,6 +379,14 @@ public class SemanticAnalyzer {
                             n.constInitializer,
                             "global variable initializer"
                     ));
+                }
+
+                if (n.compileTimeConstant) {
+                    BigInteger value = globalInitializers.get(n);
+
+                    if (value != null) {
+                        sym.compileTimeConstantValue = value;
+                    }
                 }
             }
         }
@@ -399,6 +424,7 @@ public class SemanticAnalyzer {
                         loweredByNode.put(
                                 item,
                                 new SemanticStructDeclNode(
+                                        item.span,
                                         structSymbol,
                                         loweredMethods
                                 )
@@ -431,6 +457,7 @@ public class SemanticAnalyzer {
                         }
 
                         loweredByNode.put(item, new SemanticVarDeclNode(
+                                item.span,
                                 sym,
                                 globalInitializers.get(n),
                                 loweredStaticInit
@@ -483,6 +510,7 @@ public class SemanticAnalyzer {
 
             if (emittedNamespaces.add(space.space.name)) {
                 semanticItems.add(new SemanticNamespaceNode(
+                        space.span,
                         space.space.name,
                         loweredItemsOf(space, loweredByNode)
                 ));
@@ -501,7 +529,7 @@ public class SemanticAnalyzer {
             );
         }
 
-        return new SemanticProgramNode(semanticItems);
+        return new SemanticProgramNode(program.span, semanticItems);
     }
 
     private void collectNamespaceDecl(
@@ -533,7 +561,7 @@ public class SemanticAnalyzer {
                 fullPath,
                 ignored -> {
                     NamespaceProgramItems created =
-                            new NamespaceProgramItems(space);
+                            new NamespaceProgramItems(space, node.span);
                     spaces.add(created);
                     return created;
                 }
@@ -561,6 +589,7 @@ public class SemanticAnalyzer {
 
         if (space != null && emittedNamespaces.add(path)) {
             semanticItems.add(new SemanticNamespaceNode(
+                    space.span,
                     path,
                     loweredItemsOf(space, loweredByNode)
             ));
@@ -579,6 +608,7 @@ public class SemanticAnalyzer {
 
             if (emittedNamespaces.add(nested.space.name)) {
                 semanticItems.add(new SemanticNamespaceNode(
+                        nested.span,
                         nested.space.name,
                         loweredItemsOf(nested, loweredByNode)
                 ));
@@ -781,6 +811,8 @@ public class SemanticAnalyzer {
     }
 
     private SemanticFunctionDeclNode analyzeFunctionDecl(FunctionDeclNode fn) {
+        symbolTable.diagnostics().push(fn.span);
+        try {
         FunctionSymbol symbol = symbolTable.findRegisteredFunction(fn);
 
         if (symbol == null) {
@@ -833,16 +865,25 @@ public class SemanticAnalyzer {
         currentFunction = previousFunction;
 
         return new SemanticFunctionDeclNode(
+                fn.span,
                 symbol,
                 parameterVariables,
-                new SemanticBlockNode(bodyStatements)
+                new SemanticBlockNode(
+                        fn.body == null ? fn.span : fn.body.span,
+                        bodyStatements
+                )
         );
+        } finally {
+            symbolTable.diagnostics().pop();
+        }
     }
 
     private SemanticFunctionDeclNode analyzeMethodDecl(
             StructSymbol owner,
             FunctionDeclNode methodNode
     ) {
+        symbolTable.diagnostics().push(methodNode.span);
+        try {
         MethodSymbol symbol = symbolTable.findRegisteredMethod(owner, methodNode);
 
         if (symbol == null) {
@@ -899,10 +940,19 @@ public class SemanticAnalyzer {
         currentFunction = previousFunction;
 
         return new SemanticFunctionDeclNode(
+                methodNode.span,
                 symbol,
                 parameterVariables,
-                new SemanticBlockNode(bodyStatements)
+                new SemanticBlockNode(
+                        methodNode.body == null
+                                ? methodNode.span
+                                : methodNode.body.span,
+                        bodyStatements
+                )
         );
+        } finally {
+            symbolTable.diagnostics().pop();
+        }
     }
 
     private void appendAnalyzedStmt(
@@ -930,6 +980,9 @@ public class SemanticAnalyzer {
             return null;
         }
 
+        symbolTable.diagnostics().push(node.span);
+        try {
+
         if (node instanceof BlockNode n) {
             symbolTable.pushScope();
 
@@ -941,7 +994,7 @@ public class SemanticAnalyzer {
 
             symbolTable.popScope();
 
-            return new SemanticBlockNode(stmts);
+            return new SemanticBlockNode(n.span, stmts);
         }
 
         if (node instanceof VarDeclInitNode n) {
@@ -950,7 +1003,7 @@ public class SemanticAnalyzer {
             List<SemanticStmtNode> stmts = analyzeVarDeclInitStmtList(n);
             symbolTable.popScope();
 
-            return new SemanticBlockNode(stmts);
+            return new SemanticBlockNode(n.span, stmts);
         }
 
         if (node instanceof VarDeclNode n) {
@@ -959,7 +1012,7 @@ public class SemanticAnalyzer {
                     symbolTable.findRegisteredVarDeclSymbol(n);
 
             if (registered != null) {
-                return new SemanticVarDeclNode(registered);
+                return new SemanticVarDeclNode(n.span, registered);
             }
 
             VariableSymbol sym = new VariableSymbol(
@@ -970,7 +1023,7 @@ public class SemanticAnalyzer {
 
             symbolTable.declare(sym);
 
-            return new SemanticVarDeclNode(sym);
+            return new SemanticVarDeclNode(n.span, sym);
         }
 
         if (node instanceof AssignNode n) {
@@ -985,7 +1038,7 @@ public class SemanticAnalyzer {
                             n.value,
                             target.type);
 
-            return new SemanticAssignNode(n.op, target, value);
+            return new SemanticAssignNode(n.span, n.op, target, value);
         }
 
         if (node instanceof IfNode n) {
@@ -1001,6 +1054,7 @@ public class SemanticAnalyzer {
                             : null;
 
             return new SemanticIfNode(
+                    n.span,
                     condition,
                     thenBranch,
                     elseBranch
@@ -1024,7 +1078,7 @@ public class SemanticAnalyzer {
 
             loopDepth--;
 
-            return new SemanticWhileNode(condition, body, update);
+            return new SemanticWhileNode(n.span, condition, body, update);
         }
 
         if (node instanceof BreakNode n) {
@@ -1046,7 +1100,7 @@ public class SemanticAnalyzer {
                 return null;
             }
 
-            return new SemanticContinueNode();
+            return new SemanticContinueNode(node.span);
         }
 
         if (node instanceof ReturnNode n) {
@@ -1055,6 +1109,7 @@ public class SemanticAnalyzer {
 
         if (node instanceof ExprStmtNode n) {
             return new SemanticExprStmtNode(
+                    n.span,
                     exprAnalyzer.analyzeExpr(n.expr)
             );
         }
@@ -1070,12 +1125,16 @@ public class SemanticAnalyzer {
                 + node.getClass().getSimpleName());
 
         return null;
+        } finally {
+            symbolTable.diagnostics().pop();
+        }
     }
 
     private List<SemanticStmtNode> analyzeVarDeclInitStmtList(
             VarDeclInitNode n
     ) {
-
+        symbolTable.diagnostics().push(n.span);
+        try {
         SemanticType type = analyzeNormalType(n.type);
 
         VariableSymbol sym = new VariableSymbol(
@@ -1087,19 +1146,22 @@ public class SemanticAnalyzer {
         symbolTable.declare(sym);
 
         List<SemanticStmtNode> stmts = new ArrayList<>();
-        stmts.add(new SemanticVarDeclNode(sym));
+        stmts.add(new SemanticVarDeclNode(n.span, sym));
 
         if (n.init != null) {
             SemanticExprNode target =
-                    new SemanticVarExprNode(sym.type, sym);
+                    new SemanticVarExprNode(n.span, sym.type, sym);
 
             SemanticExprNode value =
                     exprAnalyzer.analyzeExprWithExpectedType(n.init, type);
 
-            stmts.add(new SemanticAssignNode(target, value));
+            stmts.add(new SemanticAssignNode(n.span, target, value));
         }
 
         return stmts;
+        } finally {
+            symbolTable.diagnostics().pop();
+        }
     }
 
     private SemanticReturnNode analyzeReturnStmt(ReturnNode n) {
@@ -1124,12 +1186,14 @@ public class SemanticAnalyzer {
             );
 
             return new SemanticReturnNode(
+                    n.span,
                     fallbackFn,
                     value
             );
         }
 
         return new SemanticReturnNode(
+                n.span,
                 currentFunction,
                 value
         );
@@ -1142,7 +1206,7 @@ public class SemanticAnalyzer {
         }
 
         if (n.level == null) {
-            return new SemanticBreakNode(1);
+            return new SemanticBreakNode(n.span, 1);
         }
 
         BigInteger level = null;
@@ -1178,10 +1242,19 @@ public class SemanticAnalyzer {
             return null;
         }
 
-        return new SemanticBreakNode(level.intValue());
+        return new SemanticBreakNode(n.span, level.intValue());
     }
 
     private SemanticType analyzeNormalType(TypeNode node) {
+        symbolTable.diagnostics().push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            return analyzeNormalTypeInner(node);
+        } finally {
+            symbolTable.diagnostics().pop();
+        }
+    }
+
+    private SemanticType analyzeNormalTypeInner(TypeNode node) {
         if (node == null) {
             symbolTable.error("Missing type");
             return FALLBACK_TYPE;

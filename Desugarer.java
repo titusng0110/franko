@@ -30,6 +30,7 @@ public class Desugarer {
     }
 
     private static final class InferenceFailure extends RuntimeException {
+        private static final long serialVersionUID = 1L;
         InferenceFailure(String message) {
             super(message);
         }
@@ -45,7 +46,7 @@ public class Desugarer {
 
             items.addAll(0, hoistedStringGlobals.values());
 
-            return new ProgramNode(items);
+            return new ProgramNode(root.span, items);
         }
 
         return desugarStmt(root);
@@ -75,9 +76,11 @@ public class Desugarer {
 
         if (decl == null) {
             decl = new GlobalVarDeclNode(
+                literal.span,
                 new StaticArrayTypeNode(
-                    new PrimitiveTypeNode(PrimitiveKind.UINT8),
-                    new IntNode(Integer.toString(bytes.size()))
+                    literal.span,
+                    new PrimitiveTypeNode(literal.span, PrimitiveKind.UINT8),
+                    new IntNode(literal.span, Integer.toString(bytes.size()))
                 ),
                 "_STR_" + Mangler.hashHex(key),
                 null
@@ -88,8 +91,9 @@ public class Desugarer {
         }
 
         return new GetPtrNode(
+            literal.span,
             PtrPermission.READ_ONLY,
-            new VarNode(decl.name)
+            new VarNode(literal.span, decl.name)
         );
     }
 
@@ -106,12 +110,12 @@ public class Desugarer {
     private void appendDesugaredTopLevelItem(ASTNode item, List<ASTNode> out) {
         if (item == null) return;
 
+        diagnostics.push(item.span);
+        try {
+
         if (item instanceof ImportNode) {
-            throw new RuntimeException(
-                "Internal desugarer error: unresolved ImportNode '"
-                    + ((ImportNode) item).rawPathText
-                    + "' reached desugaring"
-            );
+            out.add(item);
+            return;
         }
 
         if (item instanceof FunctionDeclNode) {
@@ -135,10 +139,13 @@ public class Desugarer {
         }
 
         appendDesugaredStmt(item, out);
+        } finally {
+            diagnostics.pop();
+        }
     }
 
     private NamespaceNode desugarNamespaceDecl(NamespaceNode n) {
-        return new NamespaceNode(n.name, desugarTopLevelItemList(n.items));
+        return new NamespaceNode(n.span, n.name, desugarTopLevelItemList(n.items));
     }
 
     private StructDeclNode desugarStructDecl(StructDeclNode n) {
@@ -146,6 +153,7 @@ public class Desugarer {
 
         for (StructFieldDeclNode field : n.fields) {
             fields.add(new StructFieldDeclNode(
+                field.span,
                 desugarType(field.type),
                 field.name,
                 evalConstExpr(field.constInitializer, "struct field initializer")
@@ -158,7 +166,7 @@ public class Desugarer {
             methods.add(desugarFunctionDecl(method));
         }
 
-        return new StructDeclNode(n.name, fields, methods);
+        return new StructDeclNode(n.span, n.name, fields, methods);
     }
 
     private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {
@@ -167,9 +175,9 @@ public class Desugarer {
                 + n.name
                 + "'; '?' is only allowed in a local declaration with an array-literal initializer");
 
-            return new GlobalVarDeclNode(
+            return globalVarDecl(
+                n,
                 desugarType(replaceInferredSizesWithFallback(n.type)),
-                n.name,
                 evalConstExpr(n.constInitializer, "global variable initializer")
             );
         }
@@ -186,10 +194,10 @@ public class Desugarer {
                     + "': a string literal is a view<[byte, N]> value "
                     + "and cannot initialize a non-pointer global");
 
-                return new GlobalVarDeclNode(type, n.name, null);
+                return globalVarDecl(n, type, null);
             }
 
-            return new GlobalVarDeclNode(type, n.name, hoisted);
+            return globalVarDecl(n, type, hoisted);
         }
 
         if (init instanceof ArrayLiteralNode) {
@@ -199,14 +207,10 @@ public class Desugarer {
                     + "': only pointer-typed globals may be initialized with "
                     + "an array literal");
 
-                return new GlobalVarDeclNode(type, n.name, null);
+                return globalVarDecl(n, type, null);
             }
 
-            return new GlobalVarDeclNode(
-                type,
-                n.name,
-                desugarExpr(init)
-            );
+            return globalVarDecl(n, type, desugarExpr(init));
         }
 
         if (init instanceof GetPtrNode) {
@@ -216,14 +220,10 @@ public class Desugarer {
                     + "': only pointer-typed globals may be initialized with "
                     + "getptr/getmview/getview");
 
-                return new GlobalVarDeclNode(type, n.name, null);
+                return globalVarDecl(n, type, null);
             }
 
-            return new GlobalVarDeclNode(
-                type,
-                n.name,
-                desugarExpr(init)
-            );
+            return globalVarDecl(n, type, desugarExpr(init));
         }
 
         if (init instanceof NullNode) {
@@ -232,17 +232,32 @@ public class Desugarer {
                     + n.name
                     + "': null is only valid for pointer types");
 
-                return new GlobalVarDeclNode(type, n.name, null);
+                return globalVarDecl(n, type, null);
             }
 
-            return new GlobalVarDeclNode(type, n.name, null);
+            return globalVarDecl(n, type, null);
         }
 
-        return new GlobalVarDeclNode(
+        return globalVarDecl(
+            n,
             type,
-            n.name,
             evalConstExpr(init, "global variable initializer")
         );
+    }
+
+    private GlobalVarDeclNode globalVarDecl(
+        GlobalVarDeclNode source,
+        TypeNode type,
+        ASTNode init
+    ) {
+        GlobalVarDeclNode node = new GlobalVarDeclNode(
+            source.span,
+            type,
+            source.name,
+            init
+        );
+        node.compileTimeConstant = source.compileTimeConstant;
+        return node;
     }
 
     private FunctionDeclNode desugarFunctionDecl(FunctionDeclNode fn) {
@@ -254,10 +269,11 @@ public class Desugarer {
 
         BlockNode body = null;
         if (fn.body != null) {
-            body = new BlockNode(desugarStmtList(fn.body.statements));
+            body = new BlockNode(fn.body.span, desugarStmtList(fn.body.statements));
         }
 
         return new FunctionDeclNode(
+            fn.span,
             fn.name,
             parameters,
             desugarType(fn.returnType),
@@ -267,6 +283,7 @@ public class Desugarer {
 
     private ParameterNode desugarParameter(ParameterNode param) {
         return new ParameterNode(
+            param.span,
             desugarType(param.type),
             param.name
         );
@@ -284,6 +301,9 @@ public class Desugarer {
 
     private void appendDesugaredStmt(ASTNode stmt, List<ASTNode> out) {
         if (stmt == null) return;
+
+        diagnostics.push(stmt.span);
+        try {
 
         if (stmt instanceof VarDeclInitNode) {
             appendDesugaredVarDeclInit((VarDeclInitNode) stmt, out);
@@ -307,7 +327,7 @@ public class Desugarer {
 
         if (stmt instanceof BlockNode) {
             BlockNode b = (BlockNode) stmt;
-            out.add(new BlockNode(desugarStmtList(b.statements)));
+            out.add(new BlockNode(b.span, desugarStmtList(b.statements)));
             return;
         }
 
@@ -315,6 +335,7 @@ public class Desugarer {
             IfNode n = (IfNode) stmt;
 
             out.add(new IfNode(
+                n.span,
                 desugarExpr(n.condition),
                 desugarControlledStmt(n.thenBranch),
                 n.elseBranch != null
@@ -335,6 +356,7 @@ public class Desugarer {
             }
 
             out.add(new WhileNode(
+                n.span,
                 desugarExpr(n.condition),
                 desugarControlledStmt(n.body),
                 loweredUpdate
@@ -351,7 +373,7 @@ public class Desugarer {
         if (stmt instanceof BreakNode) {
             BreakNode n = (BreakNode) stmt;
 
-            out.add(new BreakNode(
+            out.add(new BreakNode(n.span,
                 n.level != null ? desugarExpr(n.level) : null
             ));
             return;
@@ -360,13 +382,16 @@ public class Desugarer {
         if (stmt instanceof ContinueNode) {
             ContinueNode n = (ContinueNode) stmt;
 
-            out.add(new ContinueNode(
+            out.add(new ContinueNode(n.span,
                 n.level != null ? desugarExpr(n.level) : null
             ));
             return;
         }
 
         out.add(desugarStmt(stmt));
+        } finally {
+            diagnostics.pop();
+        }
     }
 
     private void appendDesugaredVarDeclInit(
@@ -384,6 +409,7 @@ public class Desugarer {
         }
 
         out.add(new VarDeclNode(
+            n.span,
             loweredType,
             n.name
         ));
@@ -392,9 +418,11 @@ public class Desugarer {
             return;
         }
 
-        ASTNode target = new VarNode(n.name);
+        ASTNode target = new VarNode(n.span, n.name);
 
         out.add(new AssignNode(
+            n.span,
+            "=",
             target,
             desugarExpr(rawInit)
         ));
@@ -410,6 +438,7 @@ public class Desugarer {
                 + "' requires an array-literal initializer, not a size argument");
 
             out.add(new VarDeclNode(
+                n.span,
                 desugarType(replaceInferredSizesWithFallback(n.type)),
                 n.name
             ));
@@ -418,6 +447,7 @@ public class Desugarer {
         }
 
         out.add(new VarDeclNode(
+            n.span,
             desugarType(n.type),
             n.name
         ));
@@ -427,8 +457,10 @@ public class Desugarer {
             args.add(desugarExpr(n.size));
 
             out.add(new ExprStmtNode(
+                n.span,
                 new CallNode(
-                    new VarNode(n.name),
+                    n.span,
+                    new VarNode(n.span, n.name),
                     args
                 )
             ));
@@ -524,6 +556,7 @@ public class Desugarer {
 
         try {
             return new PtrTypeNode(
+                declared.span,
                 PtrPermission.READ_ONLY,
                 desugarType(inferLevel(nest, literal, varName))
             );
@@ -560,7 +593,7 @@ public class Desugarer {
                     + "' cannot be inferred from an empty initializer list");
             }
 
-            sizeNode = new IntNode(Integer.toString(count));
+            sizeNode = new IntNode(s.sizeExpr.span, Integer.toString(count));
         } else {
             BigInteger declared = ConstExpressionEvaluator.tryFold(s.sizeExpr);
 
@@ -603,7 +636,7 @@ public class Desugarer {
             }
         }
 
-        return new StaticArrayTypeNode(inferredElem, sizeNode);
+        return new StaticArrayTypeNode(type.span, inferredElem, sizeNode);
     }
 
     private void checkLevel(TypeNode concrete, ArrayLiteralNode literal, String varName) {
@@ -667,10 +700,11 @@ public class Desugarer {
     private TypeNode replaceInferredSizesWithFallback(TypeNode type) {
         if (type instanceof StaticArrayTypeNode s) {
             ASTNode size = s.sizeExpr instanceof InferredSizeNode
-                    ? new IntNode("1")
+                    ? new IntNode(s.sizeExpr.span, "1")
                     : s.sizeExpr;
 
             return new StaticArrayTypeNode(
+                s.span,
                 replaceInferredSizesWithFallback(s.elementType),
                 size
             );
@@ -678,12 +712,14 @@ public class Desugarer {
 
         if (type instanceof DynamicArrayTypeNode d) {
             return new DynamicArrayTypeNode(
+                d.span,
                 replaceInferredSizesWithFallback(d.elementType)
             );
         }
 
         if (type instanceof PtrTypeNode a) {
             return new PtrTypeNode(
+                a.span,
                 a.kind,
                 replaceInferredSizesWithFallback(a.referencedType)
             );
@@ -699,6 +735,7 @@ public class Desugarer {
         ASTNode target = desugarLValue(n.target);
 
         out.add(new AssignNode(
+            n.span,
             n.op,
             target,
             desugarExpr(n.value)
@@ -707,9 +744,10 @@ public class Desugarer {
 
     private ASTNode lowerIncDec(IncDecNode n) {
         return new AssignNode(
+            n.span,
             "++".equals(n.op) ? "+=" : "-=",
             desugarLValue(n.target),
-            new IntNode("1")
+            new IntNode(n.span, "1")
         );
     }
 
@@ -719,19 +757,20 @@ public class Desugarer {
         if (stmt instanceof VarDeclInitNode) {
             List<ASTNode> lowered = new ArrayList<>();
             appendDesugaredVarDeclInit((VarDeclInitNode) stmt, lowered);
-            return new BlockNode(lowered);
+            return new BlockNode(stmt.span, lowered);
         }
 
         if (stmt instanceof VarDeclArrayInitNode) {
             List<ASTNode> lowered = new ArrayList<>();
             appendDesugaredVarDeclArrayInit((VarDeclArrayInitNode) stmt, lowered);
-            return new BlockNode(lowered);
+            return new BlockNode(stmt.span, lowered);
         }
 
         if (stmt instanceof AssignNode) {
             AssignNode n = (AssignNode) stmt;
 
             return new AssignNode(
+                n.span,
                 n.op,
                 desugarLValue(n.target),
                 desugarExpr(n.value)
@@ -744,7 +783,7 @@ public class Desugarer {
 
         if (stmt instanceof ProgramNode) {
             ProgramNode p = (ProgramNode) stmt;
-            return new ProgramNode(desugarTopLevelItemList(p.topLevelItems));
+            return new ProgramNode(p.span, desugarTopLevelItemList(p.topLevelItems));
         }
 
         if (stmt instanceof FunctionDeclNode) {
@@ -753,13 +792,14 @@ public class Desugarer {
 
         if (stmt instanceof BlockNode) {
             BlockNode b = (BlockNode) stmt;
-            return new BlockNode(desugarStmtList(b.statements));
+            return new BlockNode(b.span, desugarStmtList(b.statements));
         }
 
         if (stmt instanceof IfNode) {
             IfNode n = (IfNode) stmt;
 
             return new IfNode(
+                n.span,
                 desugarExpr(n.condition),
                 desugarControlledStmt(n.thenBranch),
                 n.elseBranch != null
@@ -778,6 +818,7 @@ public class Desugarer {
             }
 
             return new WhileNode(
+                n.span,
                 desugarExpr(n.condition),
                 desugarControlledStmt(n.body),
                 loweredUpdate
@@ -791,7 +832,7 @@ public class Desugarer {
         if (stmt instanceof BreakNode) {
             BreakNode n = (BreakNode) stmt;
 
-            return new BreakNode(
+            return new BreakNode(n.span,
                 n.level != null ? desugarExpr(n.level) : null
             );
         }
@@ -799,20 +840,20 @@ public class Desugarer {
         if (stmt instanceof ContinueNode) {
             ContinueNode n = (ContinueNode) stmt;
 
-            return new ContinueNode(
+            return new ContinueNode(n.span,
                 n.level != null ? desugarExpr(n.level) : null
             );
         }
 
         if (stmt instanceof ExprStmtNode) {
             ExprStmtNode n = (ExprStmtNode) stmt;
-            return new ExprStmtNode(desugarExpr(n.expr));
+            return new ExprStmtNode(n.span, desugarExpr(n.expr));
         }
 
         if (stmt instanceof ReturnNode) {
             ReturnNode n = (ReturnNode) stmt;
 
-            return new ReturnNode(
+            return new ReturnNode(n.span,
                 n.value != null ? desugarExpr(n.value) : null
             );
         }
@@ -821,6 +862,7 @@ public class Desugarer {
             VarDeclNode n = (VarDeclNode) stmt;
 
             return new VarDeclNode(
+                n.span,
                 desugarType(n.type),
                 n.name
             );
@@ -841,7 +883,7 @@ public class Desugarer {
         List<ASTNode> wrapped = new ArrayList<>();
         wrapped.add(lowered);
 
-        return new BlockNode(wrapped);
+        return new BlockNode(stmt.span, wrapped);
     }
 
     private ASTNode desugarForStmt(ForNode n) {
@@ -867,17 +909,20 @@ public class Desugarer {
             appendDesugaredStmt(n.update, loweredUpdate);
         }
 
-        outer.add(new WhileNode(
+        outer.add(new WhileNode(n.span,
             desugarExpr(n.condition),
             bodyBlock,
             loweredUpdate
         ));
 
-        return new BlockNode(outer);
+        return new BlockNode(n.span, outer);
     }
 
     private ASTNode desugarExpr(ASTNode expr) {
         if (expr == null) return null;
+
+        diagnostics.push(expr.span);
+        try {
 
         if (expr instanceof IntNode) {
             return expr;
@@ -902,7 +947,7 @@ public class Desugarer {
         if (expr instanceof UnaryOpNode) {
             UnaryOpNode n = (UnaryOpNode) expr;
 
-            return new UnaryOpNode(
+            return new UnaryOpNode(expr.span,
                 n.op,
                 desugarExpr(n.expr)
             );
@@ -911,7 +956,7 @@ public class Desugarer {
         if (expr instanceof BinOpNode) {
             BinOpNode n = (BinOpNode) expr;
 
-            return new BinOpNode(
+            return new BinOpNode(expr.span,
                 n.op,
                 desugarExpr(n.left),
                 desugarExpr(n.right)
@@ -921,7 +966,7 @@ public class Desugarer {
         if (expr instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) expr;
 
-            return new ArrayAccessNode(
+            return new ArrayAccessNode(expr.span,
                 desugarExpr(n.target),
                 desugarExpr(n.index)
             );
@@ -930,7 +975,7 @@ public class Desugarer {
         if (expr instanceof MemberAccessNode) {
             MemberAccessNode n = (MemberAccessNode) expr;
 
-            return new MemberAccessNode(
+            return new MemberAccessNode(expr.span,
                 desugarExpr(n.target),
                 n.memberName
             );
@@ -945,7 +990,7 @@ public class Desugarer {
                 args.add(desugarExpr(arg));
             }
 
-            return new CallNode(
+            return new CallNode(expr.span,
                 desugarExpr(n.callee),
                 args
             );
@@ -954,7 +999,7 @@ public class Desugarer {
         if (expr instanceof GetPtrNode) {
             GetPtrNode n = (GetPtrNode) expr;
 
-            return new GetPtrNode(
+            return new GetPtrNode(expr.span,
                 n.kind,
                 desugarLValue(n.target)
             );
@@ -963,7 +1008,7 @@ public class Desugarer {
         if (expr instanceof DerefNode) {
             DerefNode n = (DerefNode) expr;
 
-            return new DerefNode(
+            return new DerefNode(expr.span,
                 desugarExpr(n.expr)
             );
         }
@@ -971,7 +1016,7 @@ public class Desugarer {
         if (expr instanceof CastNode) {
             CastNode n = (CastNode) expr;
 
-            return new CastNode(
+            return new CastNode(expr.span,
                 desugarType(n.target),
                 desugarExpr(n.expr),
                 n.unsafe
@@ -985,19 +1030,25 @@ public class Desugarer {
                 elements.add(desugarExpr(element));
             }
 
-            return new ArrayLiteralNode(elements);
+            return new ArrayLiteralNode(expr.span, elements);
         }
 
         throw new RuntimeException(
             "Unsupported expression in desugarer: " + expr.getClass().getSimpleName()
         );
+        } finally {
+            diagnostics.pop();
+        }
     }
 
     private ASTNode evalConstExpr(ASTNode expr, String role) {
         if (expr == null) return null;
 
+        diagnostics.push(expr.span);
+        try {
         try {
             return new IntNode(
+                expr.span,
                 ConstExpressionEvaluator.evaluatePure(expr).toString(10)
             );
         } catch (ConstExpressionEvaluator.UnevaluableConstant e) {
@@ -1007,7 +1058,10 @@ public class Desugarer {
                 diagnostics.error("Invalid constant expression for " + role);
             }
 
-            return new IntNode("1");
+            return new IntNode(expr.span, "1");
+        }
+        } finally {
+            diagnostics.pop();
         }
     }
 
@@ -1025,7 +1079,7 @@ public class Desugarer {
         if (node instanceof DerefNode) {
             DerefNode n = (DerefNode) node;
 
-            return new DerefNode(
+            return new DerefNode(node.span,
                 desugarExpr(n.expr)
             );
         }
@@ -1033,7 +1087,7 @@ public class Desugarer {
         if (node instanceof ArrayAccessNode) {
             ArrayAccessNode n = (ArrayAccessNode) node;
 
-            return new ArrayAccessNode(
+            return new ArrayAccessNode(node.span,
                 desugarLValue(n.target),
                 desugarExpr(n.index)
             );
@@ -1042,7 +1096,7 @@ public class Desugarer {
         if (node instanceof MemberAccessNode) {
             MemberAccessNode n = (MemberAccessNode) node;
 
-            return new MemberAccessNode(
+            return new MemberAccessNode(node.span,
                 desugarLValue(n.target),
                 n.memberName
             );
@@ -1055,6 +1109,9 @@ public class Desugarer {
 
     private TypeNode desugarType(TypeNode type) {
         if (type == null) return null;
+
+        diagnostics.push(type.span);
+        try {
 
         if (type instanceof PrimitiveTypeNode) {
             return type;
@@ -1072,6 +1129,7 @@ public class Desugarer {
             DynamicArrayTypeNode n = (DynamicArrayTypeNode) type;
 
             return new DynamicArrayTypeNode(
+                n.span,
                 desugarType(n.elementType)
             );
         }
@@ -1083,12 +1141,14 @@ public class Desugarer {
                 diagnostics.error("'?' array size is only allowed in a declaration with an array-literal initializer");
 
                 return new StaticArrayTypeNode(
+                    n.span,
                     desugarType(n.elementType),
-                    new IntNode("1")
+                    new IntNode(n.sizeExpr.span, "1")
                 );
             }
 
             return new StaticArrayTypeNode(
+                n.span,
                 desugarType(n.elementType),
                 evalConstExpr(n.sizeExpr, "static array size")
             );
@@ -1098,6 +1158,7 @@ public class Desugarer {
             PtrTypeNode n = (PtrTypeNode) type;
 
             return new PtrTypeNode(
+                n.span,
                 n.kind,
                 desugarType(n.referencedType)
             );
@@ -1106,5 +1167,8 @@ public class Desugarer {
         throw new RuntimeException(
             "Unsupported type in desugarer: " + type.getClass().getSimpleName()
         );
+        } finally {
+            diagnostics.pop();
+        }
     }
 }

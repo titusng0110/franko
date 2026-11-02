@@ -24,6 +24,15 @@ public class FunctionChecker {
     }
 
     public void checkFunction(SemanticFunctionDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkFunctionInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkFunctionInner(SemanticFunctionDeclNode node) {
         if (node == null) {
             diagnostics.error("Function declaration node cannot be null");
             return;
@@ -75,7 +84,7 @@ public class FunctionChecker {
                         + "'");
             }
 
-            declarations.checkVarDecl(new SemanticVarDeclNode(param));
+            declarations.checkVarDecl(new SemanticVarDeclNode(node.span, param));
 
             if (!types.isAssignableValueType(param.type)) {
                 diagnostics.error("Parameter '"

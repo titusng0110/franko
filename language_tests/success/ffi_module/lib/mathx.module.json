@@ -1,0 +1,30 @@
+{
+  "format": "franko-module",
+  "version": 1,
+  "id": "test/mathx",
+  "source": "mathx.fr",
+  "bridge": "mathx.ffi.cpp",
+  "variables": [
+    {
+      "namespace": "mathx",
+      "name": "MAGIC",
+      "compileTimeConstant": true,
+      "target": {
+        "default": 77
+      }
+    }
+  ],
+  "structs": [],
+  "functions": [
+    {
+      "namespace": "mathx",
+      "name": "add",
+      "bridge": true
+    },
+    {
+      "namespace": "mathx",
+      "name": "scale",
+      "bridge": true
+    }
+  ]
+}

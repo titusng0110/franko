@@ -1,10 +1,12 @@
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 public final class DiagnosticBag {
 
-    private final List<String> errors = new ArrayList<>();
-    private final List<String> warnings = new ArrayList<>();
+    private final List<Diagnostic> diagnostics = new ArrayList<>();
+    private final Deque<SourceSpan> spanStack = new ArrayDeque<>();
 
     private String header;
 
@@ -13,15 +15,11 @@ public final class DiagnosticBag {
     }
 
     public DiagnosticBag(String header) {
-        this.header = header == null || header.isBlank()
-                ? "Diagnostics failed:"
-                : header;
+        this.header = normalizeHeader(header);
     }
 
     public void setHeader(String header) {
-        this.header = header == null || header.isBlank()
-                ? "Diagnostics failed:"
-                : header;
+        this.header = normalizeHeader(header);
     }
 
     public String getHeader() {
@@ -29,32 +27,80 @@ public final class DiagnosticBag {
     }
 
     public void clear() {
-        errors.clear();
-        warnings.clear();
+        diagnostics.clear();
+        spanStack.clear();
+    }
+
+    public SourceSpan push(SourceSpan span) {
+        SourceSpan normalized = span == null ? SourceSpan.NONE : span;
+        spanStack.push(normalized);
+        return normalized;
+    }
+
+    public SourceSpan pop() {
+        return spanStack.pop();
+    }
+
+    public Scope at(SourceSpan span) {
+        spanStack.push(span == null ? SourceSpan.NONE : span);
+        return new Scope();
+    }
+
+    public SourceSpan currentSpan() {
+        SourceSpan span = spanStack.peek();
+        return span == null ? SourceSpan.NONE : span;
     }
 
     public void error(String msg) {
-        errors.add(msg == null ? "<null diagnostic>" : msg);
+        diagnostics.add(Diagnostic.error(currentSpan(), msg));
+    }
+
+    public void errorAt(SourceSpan span, String msg) {
+        diagnostics.add(Diagnostic.error(span, msg));
     }
 
     public void warning(String msg) {
-        warnings.add(msg == null ? "<null warning>" : msg);
+        diagnostics.add(Diagnostic.warning(currentSpan(), msg));
+    }
+
+    public void warningAt(SourceSpan span, String msg) {
+        diagnostics.add(Diagnostic.warning(span, msg));
+    }
+
+    public List<Diagnostic> diagnostics() {
+        return List.copyOf(diagnostics);
     }
 
     public List<String> getWarnings() {
-        return List.copyOf(warnings);
+        List<String> out = new ArrayList<>();
+
+        for (Diagnostic diagnostic : diagnostics) {
+            if (!diagnostic.isError()) {
+                out.add(diagnostic.format());
+            }
+        }
+
+        return List.copyOf(out);
     }
 
     public boolean hasWarnings() {
-        return !warnings.isEmpty();
+        return diagnostics.stream().anyMatch(d -> !d.isError());
     }
 
     public List<String> getErrors() {
-        return List.copyOf(errors);
+        List<String> out = new ArrayList<>();
+
+        for (Diagnostic diagnostic : diagnostics) {
+            if (diagnostic.isError()) {
+                out.add(diagnostic.format());
+            }
+        }
+
+        return List.copyOf(out);
     }
 
     public boolean hasErrors() {
-        return !errors.isEmpty();
+        return diagnostics.stream().anyMatch(Diagnostic::isError);
     }
 
     public String formatErrors() {
@@ -66,11 +112,18 @@ public final class DiagnosticBag {
             sb.append('\n');
         }
 
-        for (int i = 0; i < errors.size(); i++) {
+        int index = 0;
+
+        for (Diagnostic diagnostic : diagnostics) {
+            if (!diagnostic.isError()) {
+                continue;
+            }
+
+            index++;
             sb.append("  ")
-                    .append(i + 1)
+                    .append(index)
                     .append(". ")
-                    .append(errors.get(i))
+                    .append(diagnostic.format())
                     .append('\n');
         }
 
@@ -86,5 +139,27 @@ public final class DiagnosticBag {
         } finally {
             this.header = oldHeader;
         }
+    }
+
+    public final class Scope implements AutoCloseable {
+
+        private boolean closed;
+
+        private Scope() {
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                spanStack.pop();
+                closed = true;
+            }
+        }
+    }
+
+    private static String normalizeHeader(String header) {
+        return header == null || header.isBlank()
+                ? "Diagnostics failed:"
+                : header;
     }
 }
