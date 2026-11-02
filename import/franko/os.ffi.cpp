@@ -7,20 +7,24 @@
 // spliced verbatim into the generated C++ program by Cpp14Codegen when the
 // program imports "franko/os" and calls one of the os intrinsics.
 //
+// The module sidecar `os.module.json` lists the bridged variables, structs,
+// and functions. A bridge block is named after the Franko declaration:
+//
+//   - `// @@common` is always spliced first when any bridged entity is used.
+//   - `// @@os::posix::read` is the block for `os::posix::read`.
+//   - `// @@end` closes the current block.
+//
+// Every other block is spliced only when that declaration is actually used,
+// so merely importing "franko/os" adds zero C++ to the output.
+//
 // Contract:
 //
-//   - Each `// @@franko-ffi:<block>` ... `// @@franko-ffi:end` section is one
-//     splice unit. The `common` block is always spliced first when any
-//     intrinsic is used; every other block is spliced only when that
-//     intrinsic is actually called, so merely importing "franko/os" adds
-//     zero C++ to the output.
-//
-//   - Every intrinsic block defines its function under the exact mangled C++
+//   - Every function block defines its function under the exact mangled C++
 //     name the backend emits for the Franko declaration in ../os.fr
 //     (FUNC_<name>_HASH_<8hex>, the FNV-1a hash of the canonical signature
 //     key). This is the same trick ProgramTemplateWithRawCArgs.cpp uses to
-//     call FUNC_main_HASH_747cdf98. Main sanity-checks that each used
-//     mangled name is present here and fails the compile loudly on drift.
+//     call FUNC_main_HASH_747cdf98. The compiler checks that each used
+//     mangled name is present here and fails loudly on drift.
 //
 //   - Signatures must match the prototypes Cpp14Codegen emits for the
 //     declarations in ../os.fr, including the NS_os::NS_posix /
@@ -54,7 +58,8 @@
 //     a #error, so a win32 call compiled for the wrong target fails with a
 //     clear message at the C++ stage instead of a link error.
 
-// @@franko-ffi:common
+// @@common
+#include "FrankoRuntime.hpp"
 #ifdef _WIN32
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -66,9 +71,9 @@
 #else
 #  include <unistd.h>
 #endif
-// @@franko-ffi:end
+// @@end
 
-// @@franko-ffi:posix.read
+// @@os::posix::read
 namespace NS_os {
 namespace NS_posix {
 int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
@@ -100,9 +105,9 @@ int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_
 }
 }
 }
-// @@franko-ffi:end
+// @@end
 
-// @@franko-ffi:posix.write
+// @@os::posix::write
 namespace NS_os {
 namespace NS_posix {
 int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
@@ -134,9 +139,9 @@ int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR
 }
 }
 }
-// @@franko-ffi:end
+// @@end
 
-// @@franko-ffi:win32.GetStdHandle
+// @@os::win32::GetStdHandle
 namespace NS_os {
 namespace NS_win32 {
 uint64_t FUNC_GetStdHandle_HASH_31d0af80(uint32_t VAR_nStdHandle)
@@ -150,9 +155,9 @@ uint64_t FUNC_GetStdHandle_HASH_31d0af80(uint32_t VAR_nStdHandle)
 }
 }
 }
-// @@franko-ffi:end
+// @@end
 
-// @@franko-ffi:win32.ReadFile
+// @@os::win32::ReadFile
 namespace NS_os {
 namespace NS_win32 {
 int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
@@ -189,9 +194,9 @@ int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8
 }
 }
 }
-// @@franko-ffi:end
+// @@end
 
-// @@franko-ffi:win32.WriteFile
+// @@os::win32::WriteFile
 namespace NS_os {
 namespace NS_win32 {
 int32_t FUNC_WriteFile_HASH_ab68bdd0(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
@@ -228,4 +233,4 @@ int32_t FUNC_WriteFile_HASH_ab68bdd0(uint64_t VAR_hFile, Franko_Fat_Pointer<uint
 }
 }
 }
-// @@franko-ffi:end
+// @@end

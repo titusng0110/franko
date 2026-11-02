@@ -1,5 +1,3 @@
-import java.math.BigInteger;
-
 final class TargetInfo {
 
     static final String OS_LINUX = "linux";
@@ -39,19 +37,6 @@ final class TargetInfo {
 
     boolean isArm64() {
         return ARCH_ARM64.equals(arch);
-    }
-
-    BigInteger constantFor(String name) {
-        return switch (name) {
-            case "IS_LINUX" -> isLinux() ? BigInteger.ONE : BigInteger.ZERO;
-            case "IS_WINDOWS" -> isWindows() ? BigInteger.ONE : BigInteger.ZERO;
-            case "IS_MACOS" -> isMacos() ? BigInteger.ONE : BigInteger.ZERO;
-            case "IS_X86_64" -> isX86_64() ? BigInteger.ONE : BigInteger.ZERO;
-            case "IS_ARM64" -> isArm64() ? BigInteger.ONE : BigInteger.ZERO;
-            default -> throw new IllegalArgumentException(
-                    "Unknown target constant '" + name + "'"
-            );
-        };
     }
 
     static TargetInfo parse(String spec) {

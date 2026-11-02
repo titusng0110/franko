@@ -49,8 +49,29 @@ benchmark/**/*.compile.log
 **/*.asan.actual
 **/*.asan.compile.log
 
+# JSON compiler artifacts (--emit-json; opt-in and never checked in).
+*.raw.ast.json
+*.desugared.ast.json
+*.imports.ast.json
+*.semantic.sast.json
+*.legality.sast.json
+*.branch-pruned.sast.json
+*.inactive-pruned.sast.json
+*.null-state.sast.json
+*.dangling.sast.json
+*.dyn-array.sast.json
+*.permissions.sast.json
+*.private-id.sast.json
+*.ffi-verified.sast.json
+*.checked.sast.json
+*.diagnostic.json
+*.ast/
+
 # -Omax smoke artifacts (language_tests/run_omax_smoke.py).
 language_tests/**/*.omax.cpp
 language_tests/**/*.omax.bin
 language_tests/**/*.omax.actual
 language_tests/**/*.omax.compile.log
+
+# Hand-written FFI bridge sources are fixtures, not generated C++.
+!**/*.ffi.cpp

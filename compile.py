@@ -18,6 +18,9 @@ with bounds checking and unsafe_cast range checking stripped for speed
 include/FrankoRuntime.hpp; the C++ step selects the mode with
 -DFRANKO_USE_JEMALLOC and -DFRANKO_BOUNDS_UNCHECKED.
 
+With --emit-json the Franko stage also writes per-pass AST/SAST snapshots
+and a diagnostic JSON file next to the generated .cpp.
+
 With --target the build target is chosen: --target native builds for
 the host <os>-<arch> and adds -march=native to the C++ step, optimizing
 for the host CPU (e.g. wider SIMD in the runtime intrinsics); the
@@ -82,6 +85,7 @@ def franko_compile(
     mode: str = "asan",
     target: str | None = None,
     extra_flags: Sequence[str] = (),
+    emit_json: bool = False,
     log: Path | None = None,
     echo: bool = False,
     check: bool = False,
@@ -104,6 +108,7 @@ def franko_compile(
     return run(
         [java, "-cp", franko_classpath(), "Main",
          src, "-o", out_cpp, "-p", IMPORT_DIR, "--target", target or host_target(),
+         *(["--emit-json"] if emit_json else []),
          *extra_flags, *java_mode_flags(mode)],
         log_file=log, echo=echo, check=check,
     )
@@ -181,6 +186,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
              "aliases darwin, x64, amd64, aarch64). Defaults to the host "
              "<os>-<arch>. A target different from the host runs the Franko "
              "transpilation only and skips the C++ compiler",
+    )
+    parser.add_argument(
+        "--emit-json",
+        action="store_true",
+        help="write per-pass AST/SAST and diagnostic JSON artifacts next to "
+             "the generated .cpp",
     )
     return parser.parse_args(argv)
 
@@ -264,7 +275,15 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------
     # Franko -> C++14 -> native executable, shared with the test runners.
     # ------------------------------------------------------------
-    franko_compile(source, cpp_out, mode=mode, target=franko_target, echo=True, check=True)
+    franko_compile(
+        source,
+        cpp_out,
+        mode=mode,
+        target=franko_target,
+        emit_json=args.emit_json,
+        echo=True,
+        check=True,
+    )
 
     if cross_target:
         print()

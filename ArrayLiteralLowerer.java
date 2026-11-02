@@ -8,7 +8,8 @@ public final class ArrayLiteralLowerer {
     public interface Hoister {
         SemanticVarExprNode hoistArrayLiteral(
                 SemanticStaticArrayType arrayType,
-                List<BigInteger> values
+                List<BigInteger> values,
+                SourceSpan span
         );
     }
 
@@ -55,7 +56,7 @@ public final class ArrayLiteralLowerer {
             return hoistFallback(lit);
         }
 
-        return hoist(lowered.arrayType, lowered.values);
+        return hoist(lowered.arrayType, lowered.values, lit.span);
     }
 
     private static SemanticType literalShape(SemanticType expectedType) {
@@ -230,12 +231,14 @@ public final class ArrayLiteralLowerer {
 
     private SemanticExprNode hoist(
             SemanticStaticArrayType arrayType,
-            List<BigInteger> values
+            List<BigInteger> values,
+            SourceSpan span
     ) {
         if (hoister == null) {
             ctx.error("Internal compiler error: no array literal hoister "
                     + "wired into the array literal lowerer");
             return new SemanticIntLiteralNode(
+                    span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
                     "0"
@@ -243,9 +246,10 @@ public final class ArrayLiteralLowerer {
         }
 
         SemanticVarExprNode global =
-                hoister.hoistArrayLiteral(arrayType, values);
+                hoister.hoistArrayLiteral(arrayType, values, span);
 
         return new SemanticGetPtrNode(
+                span,
                 new SemanticViewType(arrayType),
                 global
         );
@@ -256,7 +260,7 @@ public final class ArrayLiteralLowerer {
         List<BigInteger> values = new ArrayList<>();
         appendZeroValues(values, shape);
 
-        return hoist(shape, values);
+        return hoist(shape, values, lit.span);
     }
 
     private static SemanticStaticArrayType fallbackShapeType(

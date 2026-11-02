@@ -61,12 +61,14 @@ public final class PointerNullStateChecker {
         warnedMaybeNullVars.clear();
 
         checkNode(node);
+    }
 
-        if (diagnostics.hasErrors()) {
-            throw new SemanticAnalyzer.SemanticException(
-                    diagnostics.formatErrors()
-            );
-        }
+    public PassResult check(SastDocument document) {
+        check(document.root);
+        return new PassResult(
+                document.withPhase(SastPhase.NULL_STATE),
+                diagnostics.diagnostics()
+        );
     }
 
     private void prepareAnalysis(SemanticASTNode root) {
@@ -401,6 +403,15 @@ public final class PointerNullStateChecker {
     }
 
     private boolean checkNode(SemanticASTNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            return checkNodeInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private boolean checkNodeInner(SemanticASTNode node) {
         if (node == null) {
             return false;
         }
@@ -445,6 +456,15 @@ public final class PointerNullStateChecker {
     }
 
     private void checkFunction(SemanticFunctionDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkFunctionInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkFunctionInner(SemanticFunctionDeclNode node) {
         int beforeFunction = snapshot();
 
         Arrays.fill(pointerState, PointerState.MAYBE_NULL);
@@ -569,6 +589,15 @@ public final class PointerNullStateChecker {
     }
 
     private void checkVarDecl(SemanticVarDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkVarDeclInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkVarDeclInner(SemanticVarDeclNode node) {
         if (node == null || node.symbol == null) {
             return;
         }
@@ -928,6 +957,15 @@ public final class PointerNullStateChecker {
     }
 
     private void checkExpr(SemanticExprNode expr) {
+        diagnostics.push(expr == null ? SourceSpan.NONE : expr.span);
+        try {
+            checkExprInner(expr);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkExprInner(SemanticExprNode expr) {
         if (expr == null) {
             return;
         }

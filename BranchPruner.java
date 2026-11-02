@@ -7,13 +7,6 @@ final class BranchPruner {
 
     private static final int MAX_ATOMS = 12;
 
-    private static final SemanticIntLiteralNode TRUE_LITERAL =
-            new SemanticIntLiteralNode(
-                    new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8),
-                    BigInteger.ONE,
-                    "1"
-            );
-
     private enum Determination {
         TRUE,
         FALSE,
@@ -37,6 +30,16 @@ final class BranchPruner {
         return pruneItem(root);
     }
 
+    SastDocument prune(SastDocument document) {
+        return new SastDocument(
+                SastPhase.BRANCH_PRUNED,
+                document.entryKind,
+                document.sources,
+                document.symbols,
+                (SemanticProgramNode) pruneItem(document.root)
+        );
+    }
+
     private SemanticASTNode pruneItem(SemanticASTNode node) {
 
         if (node instanceof SemanticProgramNode program) {
@@ -44,7 +47,7 @@ final class BranchPruner {
 
             return items == program.topLevelItems
                     ? program
-                    : new SemanticProgramNode(items);
+                    : new SemanticProgramNode(program.span, items);
         }
 
         if (node instanceof SemanticNamespaceNode namespace) {
@@ -52,7 +55,11 @@ final class BranchPruner {
 
             return items == namespace.items
                     ? namespace
-                    : new SemanticNamespaceNode(namespace.name, items);
+                    : new SemanticNamespaceNode(
+                            namespace.span,
+                            namespace.name,
+                            items
+                    );
         }
 
         if (node instanceof SemanticFunctionDeclNode fn) {
@@ -60,7 +67,12 @@ final class BranchPruner {
 
             return body == fn.body
                     ? fn
-                    : new SemanticFunctionDeclNode(fn.symbol, fn.parameterVariables, body);
+                    : new SemanticFunctionDeclNode(
+                            fn.span,
+                            fn.symbol,
+                            fn.parameterVariables,
+                            body
+                    );
         }
 
         if (node instanceof SemanticStructDeclNode struct) {
@@ -82,7 +94,11 @@ final class BranchPruner {
 
             return methods == null
                     ? struct
-                    : new SemanticStructDeclNode(struct.symbol, methods);
+                    : new SemanticStructDeclNode(
+                            struct.span,
+                            struct.symbol,
+                            methods
+                    );
         }
 
         return node;
@@ -140,7 +156,7 @@ final class BranchPruner {
             }
         }
 
-        return out == null ? block : new SemanticBlockNode(out);
+        return out == null ? block : new SemanticBlockNode(block.span, out);
     }
 
     private List<SemanticStmtNode> pruneStmtList(List<SemanticStmtNode> stmts) {
@@ -184,8 +200,9 @@ final class BranchPruner {
                 }
 
                 return new SemanticIfNode(
+                        node.span,
                         node.condition,
-                        thenBranch == null ? emptyBlock() : thenBranch,
+                        thenBranch == null ? emptyBlock(node.span) : thenBranch,
                         elseBranch
                 );
             }
@@ -203,24 +220,31 @@ final class BranchPruner {
         SemanticStmtNode body = pruneStmt(node.body);
 
         if (body == null) {
-            body = emptyBlock();
+            body = emptyBlock(node.span);
         }
 
         List<SemanticStmtNode> update = pruneStmtList(node.update);
 
         if (determination == Determination.TRUE) {
-            return new SemanticWhileNode(TRUE_LITERAL, body, update);
+            SemanticIntLiteralNode trueLiteral = new SemanticIntLiteralNode(
+                    node.condition.span,
+                    new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8),
+                    BigInteger.ONE,
+                    "1"
+            );
+
+            return new SemanticWhileNode(node.span, trueLiteral, body, update);
         }
 
         if (body == node.body && update == node.update) {
             return node;
         }
 
-        return new SemanticWhileNode(node.condition, body, update);
+        return new SemanticWhileNode(node.span, node.condition, body, update);
     }
 
-    private static SemanticBlockNode emptyBlock() {
-        return new SemanticBlockNode(List.of());
+    private static SemanticBlockNode emptyBlock(SourceSpan span) {
+        return new SemanticBlockNode(span, List.of());
     }
 
     private static Determination determine(SemanticExprNode condition) {

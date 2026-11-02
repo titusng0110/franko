@@ -2,9 +2,69 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
+
+    private final String sourcePath;
+
+    public FrankoASTVisitor(String sourcePath) {
+        this.sourcePath = sourcePath == null ? "" : sourcePath;
+    }
+
+    private SourceSpan span(ParserRuleContext ctx) {
+        if (ctx == null) {
+            return SourceSpan.NONE;
+        }
+
+        Token start = ctx.getStart();
+        Token stop = ctx.getStop();
+
+        if (start == null || stop == null) {
+            return SourceSpan.NONE;
+        }
+
+        return new SourceSpan(
+                sourcePath,
+                start.getLine(),
+                start.getCharPositionInLine() + 1,
+                stop.getLine(),
+                stop.getCharPositionInLine() + stop.getText().length() + 1
+        );
+    }
+
+    private SourceSpan span(Token token) {
+        if (token == null) {
+            return SourceSpan.NONE;
+        }
+
+        return new SourceSpan(
+                sourcePath,
+                token.getLine(),
+                token.getCharPositionInLine() + 1,
+                token.getLine(),
+                token.getCharPositionInLine() + token.getText().length() + 1
+        );
+    }
+
+    private static SourceSpan merge(SourceSpan left, SourceSpan right) {
+        if (left == null || !left.isPresent()) {
+            return right == null ? SourceSpan.NONE : right;
+        }
+
+        if (right == null || !right.isPresent()) {
+            return left;
+        }
+
+        return new SourceSpan(
+                left.source(),
+                left.startLine(),
+                left.startColumn(),
+                right.endLine(),
+                right.endColumn()
+        );
+    }
 
     private ASTNode foldSimpleBinaryRule(ParserRuleContext ctx) {
         ASTNode current = visit(ctx.getChild(0));
@@ -12,7 +72,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         for (int i = 1; i < ctx.getChildCount(); i += 2) {
             String op = ctx.getChild(i).getText();
             ASTNode rhs = visit(ctx.getChild(i + 1));
-            current = new BinOpNode(op, current, rhs);
+            current = new BinOpNode(span(ctx), op, current, rhs);
         }
 
         return current;
@@ -41,7 +101,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
 
             ASTNode rhs = visit(ctx.additiveExpr(exprIndex));
-            current = new BinOpNode(op, current, rhs);
+            current = new BinOpNode(span(ctx), op, current, rhs);
 
             exprIndex++;
             childIndex += 3;
@@ -73,7 +133,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
 
             ASTNode rhs = visit(ctx.constAdditiveExpr(exprIndex));
-            current = new BinOpNode(op, current, rhs);
+            current = new BinOpNode(span(ctx), op, current, rhs);
 
             exprIndex++;
             childIndex += 3;
@@ -91,7 +151,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         for (FrankoParser.PostfixSuffixContext suffix : suffixes) {
             if (suffix.indexSuffix() != null) {
                 ASTNode index = visit(suffix.indexSuffix().expr());
-                current = new ArrayAccessNode(current, index);
+                current = new ArrayAccessNode(
+                        merge(current.span, span(suffix)),
+                        current,
+                        index
+                );
             } else if (suffix.callSuffix() != null) {
                 List<ASTNode> args = new ArrayList<>();
 
@@ -101,10 +165,14 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                     }
                 }
 
-                current = new CallNode(current, args);
+                current = new CallNode(merge(current.span, span(suffix)), current, args);
             } else if (suffix.memberSuffix() != null) {
                 String memberName = suffix.memberSuffix().memberName().getText();
-                current = new MemberAccessNode(current, memberName);
+                current = new MemberAccessNode(
+                        merge(current.span, span(suffix)),
+                        current,
+                        memberName
+                );
             } else {
                 throw new RuntimeException(
                     "Internal AST visitor error: unknown postfix suffix: " + suffix.getText()
@@ -124,10 +192,18 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         for (FrankoParser.LvalueSuffixContext suffix : suffixes) {
             if (suffix.indexSuffix() != null) {
                 ASTNode index = visit(suffix.indexSuffix().expr());
-                current = new ArrayAccessNode(current, index);
+                current = new ArrayAccessNode(
+                        merge(current.span, span(suffix)),
+                        current,
+                        index
+                );
             } else if (suffix.memberSuffix() != null) {
                 String memberName = suffix.memberSuffix().memberName().getText();
-                current = new MemberAccessNode(current, memberName);
+                current = new MemberAccessNode(
+                        merge(current.span, span(suffix)),
+                        current,
+                        memberName
+                );
             } else {
                 throw new RuntimeException(
                     "Internal AST visitor error: unknown lvalue suffix: " + suffix.getText()
@@ -149,7 +225,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new ProgramNode(topLevelItems);
+        return new ProgramNode(span(ctx), topLevelItems);
     }
 
     @Override
@@ -197,7 +273,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new NamespaceNode(name, items);
+        return new NamespaceNode(span(ctx), name, items);
     }
 
     @Override
@@ -240,7 +316,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         String name = segments.get(segments.size() - 1);
 
-        return new StructTypeNode(namespaceSegments, name);
+        return new StructTypeNode(span(ctx), namespaceSegments, name);
     }
 
     @Override
@@ -250,7 +326,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         String rawContent = rawText.substring(1, rawText.length() - 1);
         String decoded = StringLiteralDecoder.decodeRawContent(rawContent);
 
-        return new ImportNode(decoded);
+        return new ImportNode(span(ctx), decoded);
     }
 
     @Override
@@ -270,7 +346,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new StructDeclNode(name, fields, methods);
+        return new StructDeclNode(span(ctx), name, fields, methods);
     }
 
     @Override
@@ -284,7 +360,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             constInitializer = visit(ctx.constDeclSuffix().constDeclInitializer());
         }
 
-        return new StructFieldDeclNode(type, name, constInitializer);
+        return new StructFieldDeclNode(span(ctx), type, name, constInitializer);
     }
 
     @Override
@@ -299,7 +375,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                     visit(ctx.globalVarInitializer().globalVarInitValue());
         }
 
-        return new GlobalVarDeclNode(type, name, constInitializer);
+        return new GlobalVarDeclNode(span(ctx), type, name, constInitializer);
     }
 
     @Override
@@ -348,7 +424,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         TypeNode returnType = (TypeNode) visit(ctx.returnType());
         BlockNode body = (BlockNode) visit(ctx.block());
 
-        return new FunctionDeclNode(name, parameters, returnType, body);
+        return new FunctionDeclNode(span(ctx), name, parameters, returnType, body);
     }
 
     @Override
@@ -362,7 +438,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             name = ctx.IDENTIFIER().getText();
         }
 
-        return new ParameterNode(type, name);
+        return new ParameterNode(span(ctx), type, name);
     }
 
     @Override
@@ -372,7 +448,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         if (ctx.VOID() != null) {
-            return new VoidTypeNode();
+            return new VoidTypeNode(span(ctx));
         }
 
         throw new RuntimeException("Unknown returnType: " + ctx.getText());
@@ -431,7 +507,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new BlockNode(statements);
+        return new BlockNode(span(ctx), statements);
     }
 
     @Override
@@ -444,7 +520,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             elseBranch = visit(ctx.statement(1));
         }
 
-        return new IfNode(condition, thenBranch, elseBranch);
+        return new IfNode(span(ctx), condition, thenBranch, elseBranch);
     }
 
     @Override
@@ -452,7 +528,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode condition = visit(ctx.expr());
         ASTNode body = visit(ctx.statement());
 
-        return new WhileNode(condition, body);
+        return new WhileNode(span(ctx), condition, body, List.of());
     }
 
     @Override
@@ -478,7 +554,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         ASTNode body = visit(ctx.statement());
 
-        return new ForNode(init, condition, update, body);
+        return new ForNode(span(ctx), init, condition, update, body);
     }
 
     @Override
@@ -489,7 +565,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             value = visit(ctx.expr());
         }
 
-        return new ReturnNode(value);
+        return new ReturnNode(span(ctx), value);
     }
 
     @Override
@@ -500,7 +576,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             level = visit(ctx.constExpr());
         }
 
-        return new BreakNode(level);
+        return new BreakNode(span(ctx), level);
     }
 
     @Override
@@ -511,7 +587,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             level = visit(ctx.constExpr());
         }
 
-        return new ContinueNode(level);
+        return new ContinueNode(span(ctx), level);
     }
 
     @Override
@@ -519,7 +595,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode target = visit(ctx.lvalue());
         ASTNode value = visit(ctx.expr());
 
-        return new AssignNode(target, value);
+        return new AssignNode(span(ctx), "=", target, value);
     }
 
     @Override
@@ -530,6 +606,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         ASTNode value = visit(ctx.expr());
 
         return new AssignNode(
+            span(ctx),
             ctx.compoundAssignOp().getText(),
             target,
             value
@@ -540,58 +617,58 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitIncDecStmt(FrankoParser.IncDecStmtContext ctx) {
         ASTNode target = visit(ctx.lvalue());
 
-        return new IncDecNode(ctx.PLUSPLUS() != null ? "++" : "--", target);
+        return new IncDecNode(span(ctx), ctx.PLUSPLUS() != null ? "++" : "--", target);
     }
 
     @Override
     public ASTNode visitExprStmt(FrankoParser.ExprStmtContext ctx) {
-        return new ExprStmtNode(visit(ctx.expr()));
+        return new ExprStmtNode(span(ctx), visit(ctx.expr()));
     }
 
     @Override
     public ASTNode visitInt8Type(FrankoParser.Int8TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.INT8);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT8);
     }
 
     @Override
     public ASTNode visitInt16Type(FrankoParser.Int16TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.INT16);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT16);
     }
 
     @Override
     public ASTNode visitInt32Type(FrankoParser.Int32TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.INT32);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT32);
     }
 
     @Override
     public ASTNode visitInt64Type(FrankoParser.Int64TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.INT64);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT64);
     }
 
     @Override
     public ASTNode visitUint8Type(FrankoParser.Uint8TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.UINT8);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT8);
     }
 
     @Override
     public ASTNode visitUint16Type(FrankoParser.Uint16TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.UINT16);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT16);
     }
 
     @Override
     public ASTNode visitUint32Type(FrankoParser.Uint32TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.UINT32);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT32);
     }
 
     @Override
     public ASTNode visitUint64Type(FrankoParser.Uint64TypeContext ctx) {
-        return new PrimitiveTypeNode(PrimitiveKind.UINT64);
+        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT64);
     }
 
     @Override
     public ASTNode visitDynamicArrayType(FrankoParser.DynamicArrayTypeContext ctx) {
         TypeNode elementType = (TypeNode) visit(ctx.type());
-        return new DynamicArrayTypeNode(elementType);
+        return new DynamicArrayTypeNode(span(ctx), elementType);
     }
 
     @Override
@@ -601,7 +678,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitInferredArraySize(FrankoParser.InferredArraySizeContext ctx) {
-        return new InferredSizeNode();
+        return new InferredSizeNode(span(ctx));
     }
 
     @Override
@@ -609,30 +686,30 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         TypeNode elementType = (TypeNode) visit(ctx.type());
         ASTNode sizeExpr = visit(ctx.arraySize());
 
-        return new StaticArrayTypeNode(elementType, sizeExpr);
+        return new StaticArrayTypeNode(span(ctx), elementType, sizeExpr);
     }
 
     @Override
     public ASTNode visitPtrType(FrankoParser.PtrTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(PtrPermission.OWNER, referencedType);
+        return new PtrTypeNode(span(ctx), PtrPermission.OWNER, referencedType);
     }
 
     @Override
     public ASTNode visitMViewType(FrankoParser.MViewTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(PtrPermission.MUTABLE, referencedType);
+        return new PtrTypeNode(span(ctx), PtrPermission.MUTABLE, referencedType);
     }
 
     @Override
     public ASTNode visitViewType(FrankoParser.ViewTypeContext ctx) {
         TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(PtrPermission.READ_ONLY, referencedType);
+        return new PtrTypeNode(span(ctx), PtrPermission.READ_ONLY, referencedType);
     }
 
     @Override
     public ASTNode visitStructType(FrankoParser.StructTypeContext ctx) {
-        return new StructTypeNode(List.of(), ctx.IDENTIFIER().getText());
+        return new StructTypeNode(span(ctx), List.of(), ctx.IDENTIFIER().getText());
     }
 
     @Override
@@ -641,7 +718,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         String name = ctx.IDENTIFIER().getText();
 
         if (ctx.declSuffix() == null) {
-            return new VarDeclNode(type, name);
+            return new VarDeclNode(span(ctx), type, name);
         }
 
         if (ctx.declSuffix() instanceof FrankoParser.DeclAssignInitContext) {
@@ -650,7 +727,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
             ASTNode init = visit(initCtx.expr());
 
-            return new VarDeclInitNode(type, name, init);
+            return new VarDeclInitNode(span(ctx), type, name, init);
         }
 
         if (ctx.declSuffix() instanceof FrankoParser.DeclArrayInitContext) {
@@ -659,7 +736,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
             ASTNode size = visit(initCtx.expr());
 
-            return new VarDeclArrayInitNode(type, name, size);
+            return new VarDeclArrayInitNode(span(ctx), type, name, size);
         }
 
         throw new RuntimeException("Unknown declSuffix: " + ctx.declSuffix().getText());
@@ -674,15 +751,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitLvalueAtom(FrankoParser.LvalueAtomContext ctx) {
         if (ctx.IDENTIFIER() != null) {
-            return new VarNode(ctx.IDENTIFIER().getText());
+            return new VarNode(
+                    span(ctx.IDENTIFIER().getSymbol()),
+                    ctx.IDENTIFIER().getText()
+            );
         }
 
         if (ctx.SELF() != null) {
-            return new VarNode("self");
+            return new VarNode(span(ctx.SELF().getSymbol()), "self");
         }
 
         if (ctx.qualifiedName() != null) {
             return new QualifiedNameNode(
+                    span(ctx),
                     qualifiedNameSegments(ctx.qualifiedName())
             );
         }
@@ -755,17 +836,17 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitUnaryMinus(FrankoParser.UnaryMinusContext ctx) {
-        return new UnaryOpNode("-", visit(ctx.unaryExpr()));
+        return new UnaryOpNode(span(ctx), "-", visit(ctx.unaryExpr()));
     }
 
     @Override
     public ASTNode visitLogicalNot(FrankoParser.LogicalNotContext ctx) {
-        return new UnaryOpNode("!", visit(ctx.unaryExpr()));
+        return new UnaryOpNode(span(ctx), "!", visit(ctx.unaryExpr()));
     }
 
     @Override
     public ASTNode visitBitwiseNot(FrankoParser.BitwiseNotContext ctx) {
-        return new UnaryOpNode("~", visit(ctx.unaryExpr()));
+        return new UnaryOpNode(span(ctx), "~", visit(ctx.unaryExpr()));
     }
 
     @Override
@@ -831,15 +912,15 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitConstUnaryExpr(FrankoParser.ConstUnaryExprContext ctx) {
         if (ctx.MINUS() != null) {
-            return new UnaryOpNode("-", visit(ctx.constUnaryExpr()));
+            return new UnaryOpNode(span(ctx), "-", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.BANG() != null) {
-            return new UnaryOpNode("!", visit(ctx.constUnaryExpr()));
+            return new UnaryOpNode(span(ctx), "!", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.TILDE() != null) {
-            return new UnaryOpNode("~", visit(ctx.constUnaryExpr()));
+            return new UnaryOpNode(span(ctx), "~", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.constPrimary() != null) {
@@ -873,7 +954,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new ArrayLiteralNode(elements);
+        return new ArrayLiteralNode(span(ctx), elements);
     }
 
     @Override
@@ -914,15 +995,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         if (ctx.IDENTIFIER() != null) {
-            return new VarNode(ctx.IDENTIFIER().getText());
+            return new VarNode(
+                    span(ctx.IDENTIFIER().getSymbol()),
+                    ctx.IDENTIFIER().getText()
+            );
         }
 
         if (ctx.SELF() != null) {
-            return new VarNode("self");
+            return new VarNode(span(ctx.SELF().getSymbol()), "self");
         }
 
         if (ctx.qualifiedName() != null) {
             return new QualifiedNameNode(
+                    span(ctx),
                     qualifiedNameSegments(ctx.qualifiedName())
             );
         }
@@ -960,46 +1045,47 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitNullLiteral(FrankoParser.NullLiteralContext ctx) {
-        return new NullNode();
+        return new NullNode(span(ctx));
     }
 
     @Override
     public ASTNode visitGetPtrExpr(FrankoParser.GetPtrExprContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(PtrPermission.OWNER, target);
+        return new GetPtrNode(span(ctx), PtrPermission.OWNER, target);
     }
 
     @Override
     public ASTNode visitGetViewExpr(FrankoParser.GetViewExprContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(PtrPermission.READ_ONLY, target);
+        return new GetPtrNode(span(ctx), PtrPermission.READ_ONLY, target);
     }
 
     @Override
     public ASTNode visitGetMViewExpr(FrankoParser.GetMViewExprContext ctx) {
         ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(PtrPermission.MUTABLE, target);
+        return new GetPtrNode(span(ctx), PtrPermission.MUTABLE, target);
     }
 
     @Override
     public ASTNode visitDerefExpr(FrankoParser.DerefExprContext ctx) {
         ASTNode expr = visit(ctx.expr());
-        return new DerefNode(expr);
+        return new DerefNode(span(ctx), expr);
     }
 
     @Override
     public ASTNode visitCastExpr(FrankoParser.CastExprContext ctx) {
         TypeNode target = (TypeNode) visit(ctx.type());
-        return new CastNode(target, visit(ctx.expr()));
+        return new CastNode(span(ctx), target, visit(ctx.expr()), false);
     }
 
     @Override
     public ASTNode visitUnsafeCastExpr(FrankoParser.UnsafeCastExprContext ctx) {
         TypeNode target = new PrimitiveTypeNode(
+                span(ctx.primitiveType()),
                 primitiveKindOf(ctx.primitiveType())
         );
 
-        return new CastNode(target, visit(ctx.expr()), true);
+        return new CastNode(span(ctx), target, visit(ctx.expr()), true);
     }
 
     private static PrimitiveKind primitiveKindOf(
@@ -1030,11 +1116,14 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitIntegerLiteral(FrankoParser.IntegerLiteralContext ctx) {
-        return new IntNode(ctx.getText());
+        return new IntNode(span(ctx.getStart()), ctx.getText());
     }
 
     @Override
     public ASTNode visitStringLiteral(FrankoParser.StringLiteralContext ctx) {
-        return new StringLiteralNode(ctx.STRING_LITERAL().getText());
+        return new StringLiteralNode(
+                span(ctx.STRING_LITERAL().getSymbol()),
+                ctx.STRING_LITERAL().getText()
+        );
     }
 }

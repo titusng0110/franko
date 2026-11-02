@@ -22,7 +22,24 @@ public final class PointerPermissionChecker {
         checkNode(node);
     }
 
+    public PassResult check(SastDocument document) {
+        check(document.root);
+        return new PassResult(
+                document.withPhase(SastPhase.PERMISSIONS),
+                diagnostics.diagnostics()
+        );
+    }
+
     private void checkNode(SemanticASTNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkNodeInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkNodeInner(SemanticASTNode node) {
         if (node == null) {
             return;
         }
@@ -55,6 +72,15 @@ public final class PointerPermissionChecker {
     }
 
     private void checkFunction(SemanticFunctionDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkFunctionInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkFunctionInner(SemanticFunctionDeclNode node) {
         highWaterMark.clear();
         trackedOrder.clear();
 
@@ -141,6 +167,15 @@ public final class PointerPermissionChecker {
     }
 
     private void checkStmt(SemanticStmtNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkStmtInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkStmtInner(SemanticStmtNode node) {
         if (node == null) {
             return;
         }

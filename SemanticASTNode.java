@@ -2,15 +2,30 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
-abstract class SemanticASTNode {}
+abstract class SemanticASTNode {
+    public final SourceSpan span;
 
-abstract class SemanticStmtNode extends SemanticASTNode {}
+    protected SemanticASTNode(SourceSpan span) {
+        this.span = span == null ? SourceSpan.NONE : span;
+    }
+}
+
+abstract class SemanticStmtNode extends SemanticASTNode {
+    protected SemanticStmtNode(SourceSpan span) {
+        super(span);
+    }
+}
 
 abstract class SemanticExprNode extends SemanticASTNode {
     public final SemanticType type;
     public final BigInteger constantValue;
 
-    protected SemanticExprNode(SemanticType type, BigInteger constantValue) {
+    protected SemanticExprNode(
+            SourceSpan span,
+            SemanticType type,
+            BigInteger constantValue
+    ) {
+        super(span);
         this.type = Objects.requireNonNull(type);
         this.constantValue = constantValue;
     }
@@ -25,7 +40,8 @@ abstract class SemanticExprNode extends SemanticASTNode {
 class SemanticProgramNode extends SemanticASTNode {
     public final List<SemanticASTNode> topLevelItems;
 
-    public SemanticProgramNode(List<SemanticASTNode> topLevelItems) {
+    public SemanticProgramNode(SourceSpan span, List<SemanticASTNode> topLevelItems) {
+        super(span);
         this.topLevelItems = List.copyOf(topLevelItems);
     }
 }
@@ -34,7 +50,12 @@ class SemanticNamespaceNode extends SemanticASTNode {
     public final String name;
     public final List<SemanticASTNode> items;
 
-    public SemanticNamespaceNode(String name, List<SemanticASTNode> items) {
+    public SemanticNamespaceNode(
+            SourceSpan span,
+            String name,
+            List<SemanticASTNode> items
+    ) {
+        super(span);
         this.name = Objects.requireNonNull(name);
         this.items = List.copyOf(items);
     }
@@ -43,7 +64,8 @@ class SemanticNamespaceNode extends SemanticASTNode {
 class SemanticBlockNode extends SemanticStmtNode {
     public final List<SemanticStmtNode> statements;
 
-    public SemanticBlockNode(List<SemanticStmtNode> statements) {
+    public SemanticBlockNode(SourceSpan span, List<SemanticStmtNode> statements) {
+        super(span);
         this.statements = List.copyOf(statements);
     }
 }
@@ -51,7 +73,8 @@ class SemanticBlockNode extends SemanticStmtNode {
 class SemanticExprStmtNode extends SemanticStmtNode {
     public final SemanticExprNode expr;
 
-    public SemanticExprStmtNode(SemanticExprNode expr) {
+    public SemanticExprStmtNode(SourceSpan span, SemanticExprNode expr) {
+        super(span);
         this.expr = Objects.requireNonNull(expr);
     }
 }
@@ -62,10 +85,12 @@ class SemanticFunctionDeclNode extends SemanticASTNode {
     public final SemanticBlockNode body;
 
     public SemanticFunctionDeclNode(
+            SourceSpan span,
             FunctionSymbol symbol,
             List<VariableSymbol> parameterVariables,
             SemanticBlockNode body
     ) {
+        super(span);
         this.symbol = Objects.requireNonNull(symbol);
         this.parameterVariables = List.copyOf(parameterVariables);
         this.body = Objects.requireNonNull(body);
@@ -76,14 +101,16 @@ class SemanticStructDeclNode extends SemanticASTNode {
     public final StructSymbol symbol;
     public final List<SemanticFunctionDeclNode> methods;
 
-    public SemanticStructDeclNode(StructSymbol symbol) {
-        this(symbol, List.of());
+    public SemanticStructDeclNode(SourceSpan span, StructSymbol symbol) {
+        this(span, symbol, List.of());
     }
 
     public SemanticStructDeclNode(
+            SourceSpan span,
             StructSymbol symbol,
             List<SemanticFunctionDeclNode> methods
     ) {
+        super(span);
         this.symbol = Objects.requireNonNull(symbol);
         this.methods = List.copyOf(methods);
     }
@@ -95,22 +122,25 @@ class SemanticVarDeclNode extends SemanticStmtNode {
 
     public final SemanticExprNode staticInitializer;
 
-    public SemanticVarDeclNode(VariableSymbol symbol) {
-        this(symbol, null, null);
+    public SemanticVarDeclNode(SourceSpan span, VariableSymbol symbol) {
+        this(span, symbol, null, null);
     }
 
     public SemanticVarDeclNode(
+            SourceSpan span,
             VariableSymbol symbol,
             BigInteger foldedConstInitializer
     ) {
-        this(symbol, foldedConstInitializer, null);
+        this(span, symbol, foldedConstInitializer, null);
     }
 
     public SemanticVarDeclNode(
+            SourceSpan span,
             VariableSymbol symbol,
             BigInteger foldedConstInitializer,
             SemanticExprNode staticInitializer
     ) {
+        super(span);
         this.symbol = Objects.requireNonNull(symbol);
         this.foldedConstInitializer = foldedConstInitializer;
         this.staticInitializer = staticInitializer;
@@ -123,15 +153,21 @@ class SemanticAssignNode extends SemanticStmtNode {
 
     public final String op;
 
-    public SemanticAssignNode(SemanticExprNode target, SemanticExprNode value) {
-        this("=", target, value);
+    public SemanticAssignNode(
+            SourceSpan span,
+            SemanticExprNode target,
+            SemanticExprNode value
+    ) {
+        this(span, "=", target, value);
     }
 
     public SemanticAssignNode(
+            SourceSpan span,
             String op,
             SemanticExprNode target,
             SemanticExprNode value
     ) {
+        super(span);
         this.op = Objects.requireNonNull(op);
         this.target = Objects.requireNonNull(target);
         this.value = Objects.requireNonNull(value);
@@ -152,10 +188,12 @@ class SemanticIfNode extends SemanticStmtNode {
     public final SemanticStmtNode elseBranch;
 
     public SemanticIfNode(
+            SourceSpan span,
             SemanticExprNode condition,
             SemanticStmtNode thenBranch,
             SemanticStmtNode elseBranch
     ) {
+        super(span);
         this.condition = Objects.requireNonNull(condition);
         this.thenBranch = Objects.requireNonNull(thenBranch);
         this.elseBranch = elseBranch;
@@ -168,17 +206,21 @@ class SemanticWhileNode extends SemanticStmtNode {
 
     public final List<SemanticStmtNode> update;
 
-    public SemanticWhileNode(SemanticExprNode condition, SemanticStmtNode body) {
-        this.condition = Objects.requireNonNull(condition);
-        this.body = Objects.requireNonNull(body);
-        this.update = List.of();
+    public SemanticWhileNode(
+            SourceSpan span,
+            SemanticExprNode condition,
+            SemanticStmtNode body
+    ) {
+        this(span, condition, body, List.of());
     }
 
     public SemanticWhileNode(
+            SourceSpan span,
             SemanticExprNode condition,
             SemanticStmtNode body,
             List<SemanticStmtNode> update
     ) {
+        super(span);
         this.condition = Objects.requireNonNull(condition);
         this.body = Objects.requireNonNull(body);
         this.update = List.copyOf(update);
@@ -188,7 +230,8 @@ class SemanticWhileNode extends SemanticStmtNode {
 class SemanticBreakNode extends SemanticStmtNode {
     public final int levels;
 
-    public SemanticBreakNode(int levels) {
+    public SemanticBreakNode(SourceSpan span, int levels) {
+        super(span);
         if (levels < 1) {
             throw new IllegalArgumentException(
                     "break level must be >= 1, got: " + levels
@@ -200,13 +243,21 @@ class SemanticBreakNode extends SemanticStmtNode {
 }
 
 class SemanticContinueNode extends SemanticStmtNode {
+    public SemanticContinueNode(SourceSpan span) {
+        super(span);
+    }
 }
 
 class SemanticReturnNode extends SemanticStmtNode {
     public final FunctionSymbol function;
     public final SemanticExprNode value;
 
-    public SemanticReturnNode(FunctionSymbol function, SemanticExprNode value) {
+    public SemanticReturnNode(
+            SourceSpan span,
+            FunctionSymbol function,
+            SemanticExprNode value
+    ) {
+        super(span);
         this.function = Objects.requireNonNull(function);
         this.value = value;
     }
@@ -553,11 +604,13 @@ class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
     public final List<SemanticExprNode> args;
 
     public SemanticArrayIntrinsicCallNode(
+            SourceSpan span,
             SemanticArrayIntrinsicKind kind,
             SemanticExprNode receiver,
             List<SemanticExprNode> args
     ) {
         super(
+                span,
                 Objects.requireNonNull(kind).returnType(),
                 null
         );
@@ -597,11 +650,12 @@ class SemanticIntLiteralNode extends SemanticExprNode {
     public final String rawValue;
 
     public SemanticIntLiteralNode(
+            SourceSpan span,
             SemanticType type,
             BigInteger constantValue,
             String rawValue
     ) {
-        super(type, constantValue);
+        super(span, type, constantValue);
         this.rawValue = Objects.requireNonNull(rawValue);
     }
 
@@ -612,8 +666,8 @@ class SemanticIntLiteralNode extends SemanticExprNode {
 }
 
 class SemanticNullLiteralNode extends SemanticExprNode {
-    public SemanticNullLiteralNode(SemanticType type) {
-        super(type, null);
+    public SemanticNullLiteralNode(SourceSpan span, SemanticType type) {
+        super(span, type, null);
     }
 
     @Override
@@ -625,8 +679,12 @@ class SemanticNullLiteralNode extends SemanticExprNode {
 class SemanticVarExprNode extends SemanticExprNode {
     public final VariableSymbol symbol;
 
-    public SemanticVarExprNode(SemanticType type, VariableSymbol symbol) {
-        super(type, null);
+    public SemanticVarExprNode(
+            SourceSpan span,
+            SemanticType type,
+            VariableSymbol symbol
+    ) {
+        super(span, type, null);
         this.symbol = Objects.requireNonNull(symbol);
     }
 
@@ -641,12 +699,13 @@ class SemanticUnaryOpNode extends SemanticExprNode {
     public final SemanticExprNode expr;
 
     public SemanticUnaryOpNode(
+            SourceSpan span,
             SemanticType type,
             BigInteger constantValue,
             String op,
             SemanticExprNode expr
     ) {
-        super(type, constantValue);
+        super(span, type, constantValue);
         this.op = Objects.requireNonNull(op);
         this.expr = Objects.requireNonNull(expr);
     }
@@ -663,13 +722,14 @@ class SemanticBinOpNode extends SemanticExprNode {
     public final SemanticExprNode right;
 
     public SemanticBinOpNode(
+            SourceSpan span,
             SemanticType type,
             BigInteger constantValue,
             String op,
             SemanticExprNode left,
             SemanticExprNode right
     ) {
-        super(type, constantValue);
+        super(span, type, constantValue);
         this.op = Objects.requireNonNull(op);
         this.left = Objects.requireNonNull(left);
         this.right = Objects.requireNonNull(right);
@@ -686,11 +746,12 @@ class SemanticArrayAccessNode extends SemanticExprNode {
     public final SemanticExprNode index;
 
     public SemanticArrayAccessNode(
+            SourceSpan span,
             SemanticType type,
             SemanticExprNode target,
             SemanticExprNode index
     ) {
-        super(type, null);
+        super(span, type, null);
         this.target = Objects.requireNonNull(target);
         this.index = Objects.requireNonNull(index);
     }
@@ -706,11 +767,12 @@ class SemanticMemberAccessNode extends SemanticExprNode {
     public final FieldSymbol field;
 
     public SemanticMemberAccessNode(
+            SourceSpan span,
             SemanticType type,
             SemanticExprNode target,
             FieldSymbol field
     ) {
-        super(type, null);
+        super(span, type, null);
         this.target = Objects.requireNonNull(target);
         this.field = Objects.requireNonNull(field);
     }
@@ -726,11 +788,12 @@ class SemanticFunctionCallNode extends SemanticExprNode {
     public final List<SemanticExprNode> args;
 
     public SemanticFunctionCallNode(
+            SourceSpan span,
             SemanticType type,
             FunctionSymbol function,
             List<SemanticExprNode> args
     ) {
-        super(type, null);
+        super(span, type, null);
         this.function = Objects.requireNonNull(function);
         this.args = List.copyOf(args);
     }
@@ -744,8 +807,12 @@ class SemanticFunctionCallNode extends SemanticExprNode {
 class SemanticGetPtrNode extends SemanticExprNode {
     public final SemanticExprNode target;
 
-    public SemanticGetPtrNode(SemanticType type, SemanticExprNode target) {
-        super(type, null);
+    public SemanticGetPtrNode(
+            SourceSpan span,
+            SemanticType type,
+            SemanticExprNode target
+    ) {
+        super(span, type, null);
         this.target = Objects.requireNonNull(target);
     }
 
@@ -758,8 +825,12 @@ class SemanticGetPtrNode extends SemanticExprNode {
 class SemanticDerefNode extends SemanticExprNode {
     public final SemanticExprNode expr;
 
-    public SemanticDerefNode(SemanticType type, SemanticExprNode expr) {
-        super(type, null);
+    public SemanticDerefNode(
+            SourceSpan span,
+            SemanticType type,
+            SemanticExprNode expr
+    ) {
+        super(span, type, null);
         this.expr = Objects.requireNonNull(expr);
     }
 
@@ -774,12 +845,13 @@ class SemanticCastExprNode extends SemanticExprNode {
     public final boolean checked;
 
     public SemanticCastExprNode(
+            SourceSpan span,
             SemanticType type,
             BigInteger constantValue,
             SemanticExprNode expr,
             boolean checked
     ) {
-        super(type, constantValue);
+        super(span, type, constantValue);
         this.expr = Objects.requireNonNull(expr);
         this.checked = checked;
     }

@@ -19,7 +19,24 @@ public final class PrivateIdentifierLinter {
         checkTopLevel(node);
     }
 
+    public PassResult check(SastDocument document) {
+        check(document.root);
+        return new PassResult(
+                document.withPhase(SastPhase.PRIVATE_ID),
+                diagnostics.diagnostics()
+        );
+    }
+
     private void checkTopLevel(SemanticASTNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkTopLevelInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkTopLevelInner(SemanticASTNode node) {
         if (node == null) {
             return;
         }
@@ -59,6 +76,15 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkStruct(SemanticStructDeclNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkStructInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkStructInner(SemanticStructDeclNode node) {
         StructSymbol previousStruct = currentStruct;
         String previousNamespace = currentNamespace;
 
@@ -78,6 +104,18 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkFunction(
+            SemanticFunctionDeclNode node,
+            StructSymbol owner
+    ) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkFunctionInner(node, owner);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkFunctionInner(
             SemanticFunctionDeclNode node,
             StructSymbol owner
     ) {
@@ -102,6 +140,15 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkStmt(SemanticStmtNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkStmtInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkStmtInner(SemanticStmtNode node) {
         if (node == null) {
             return;
         }
@@ -154,6 +201,15 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkExpr(SemanticExprNode node) {
+        diagnostics.push(node == null ? SourceSpan.NONE : node.span);
+        try {
+            checkExprInner(node);
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private void checkExprInner(SemanticExprNode node) {
         if (node == null) {
             return;
         }

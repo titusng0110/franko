@@ -124,12 +124,11 @@ An import is resolved at compile time:
 
 Namespaces still separate symbols by path; duplicate declarations that end up in the same namespace are reported like duplicates within one file.
 
-### Built-in Modules
+### FFI Modules
 
-Importing a module whose resolved target path ends in `franko/os.fr`
-(normally the bundled `import/franko/os.fr`; the usual spelling is
-`import "franko/os"`) additionally activates built-in FFI behavior.
-The standard `franko/io` module also reaches it through its internal
-relative import. See [Foreign Function
-Interface](31-foreign-function-interface.md) for the activation rule and
-the module contract.
+An imported module may ship a sibling `<module>.module.json` descriptor that
+marks variables, structs, or functions as implemented by a C++ bridge. The
+bundled `franko/os` module is the standard example. See
+[Foreign Function Interface](31-foreign-function-interface.md) for the
+descriptor format, bridge block naming, target gating, and examples. A module
+without a descriptor is just an ordinary Franko module.

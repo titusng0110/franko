@@ -3,7 +3,8 @@
 The `franko/os` module is Franko's low-level operating-system interface.
 It exposes a small set of OS syscalls as ordinary Franko functions with
 FFI bridge definitions (see [Foreign Function Interface](../language_docs/31-foreign-function-interface.md)
-in the language reference for the activation and runtime behavior).
+in the language reference for the module descriptor, bridge rules, and
+runtime behavior).
 
 ```franko
 import "franko/os"
@@ -12,8 +13,9 @@ import "franko/os"
 Module files:
 
 ```text
-import/franko/os.fr      // Franko declarations (stub bodies)
-import/franko/os.ffi.cpp // C++ bridge definitions spliced into the build
+import/franko/os.fr          // Franko declarations (stub bodies)
+import/franko/os.module.json // module descriptor and target bindings
+import/franko/os.ffi.cpp     // C++ bridge definitions spliced into the build
 ```
 
 Design rules:

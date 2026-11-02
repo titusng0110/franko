@@ -89,6 +89,25 @@ uv run python compile.py --target native programs/bfs.fr
 (for example `linux-x86_64`) transpiles without building a native binary
 on a different host.
 
+## JSON pipeline artifacts
+
+`--emit-json` writes a snapshot after every top-level compiler pass next
+to the generated `.cpp`:
+
+```bash
+uv run python compile.py --emit-json programs/bfs.fr
+```
+
+This produces `programs/bfs.raw.ast.json`, `bfs.desugared.ast.json`,
+`bfs.imports.ast.json`, one `.sast.json` per semantic pass, and
+`bfs.diagnostic.json`. Imported files get per-file AST snapshots under
+`programs/bfs.ast/`. Diagnostics print with `file:line:column:` locations.
+Round-trip validation is available without a new dependency:
+
+```bash
+java -cp build/classes CompilerJsonSelfTest programs/bfs.checked.sast.json
+```
+
 ## Example programs
 
 Working programs live in [`programs/`](programs/):

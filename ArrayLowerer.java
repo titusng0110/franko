@@ -16,6 +16,15 @@ public final class ArrayLowerer {
     }
 
     public SemanticArrayIntrinsicCallNode tryLowerIntrinsicCall(ASTNode expr) {
+        ctx.diagnostics().push(expr.span);
+        try {
+            return tryLowerIntrinsicCallInner(expr);
+        } finally {
+            ctx.diagnostics().pop();
+        }
+    }
+
+    private SemanticArrayIntrinsicCallNode tryLowerIntrinsicCallInner(ASTNode expr) {
         if (!(expr instanceof CallNode call)) {
             return null;
         }
@@ -172,6 +181,7 @@ public final class ArrayLowerer {
         }
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 kind,
                 receiver,
                 args
@@ -205,6 +215,7 @@ public final class ArrayLowerer {
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 kind,
                 receiver,
                 List.of(size)
@@ -232,6 +243,7 @@ public final class ArrayLowerer {
         );
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 SemanticArrayIntrinsicKind.UNINIT,
                 receiver,
                 List.of()
@@ -277,6 +289,7 @@ public final class ArrayLowerer {
         }
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 SemanticArrayIntrinsicKind.MEMSET,
                 receiver,
                 args
@@ -328,6 +341,7 @@ public final class ArrayLowerer {
         }
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 SemanticArrayIntrinsicKind.MEMCPY,
                 receiver,
                 args
@@ -382,6 +396,7 @@ public final class ArrayLowerer {
                 exprAnalyzer.analyzeExpr(call.args.get(2));
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 SemanticArrayIntrinsicKind.MEMMOVE,
                 receiver,
                 List.of(
@@ -410,6 +425,7 @@ public final class ArrayLowerer {
         );
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 SemanticArrayIntrinsicKind.LENGTH,
                 receiver,
                 List.of()
@@ -478,6 +494,7 @@ public final class ArrayLowerer {
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
         return new SemanticArrayIntrinsicCallNode(
+                call.span,
                 SemanticArrayIntrinsicKind.INIT,
                 receiver,
                 List.of(size)

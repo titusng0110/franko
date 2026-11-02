@@ -1,0 +1,14 @@
+import "lib/a"
+import "lib/b"
+import "franko/io"
+
+func main() -> int32 {
+    view<[byte, 4]> a = a_text();
+    view<[byte, 4]> b = b_text();
+
+    print($(a)[0]);
+    print($(b)[0]);
+    print(a == b);
+
+    return 0;
+}

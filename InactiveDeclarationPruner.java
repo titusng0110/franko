@@ -25,6 +25,16 @@ final class InactiveDeclarationPruner {
         return Collections.newSetFromMap(new IdentityHashMap<>());
     }
 
+    SastDocument prune(SastDocument document) {
+        return new SastDocument(
+                SastPhase.INACTIVE_PRUNED,
+                document.entryKind,
+                document.sources,
+                document.symbols,
+                (SemanticProgramNode) prune(document.root)
+        );
+    }
+
     SemanticASTNode prune(SemanticASTNode root) {
         indexDeclarations(root);
 
@@ -342,7 +352,7 @@ final class InactiveDeclarationPruner {
 
             return items == program.topLevelItems
                     ? program
-                    : new SemanticProgramNode(items);
+                    : new SemanticProgramNode(program.span, items);
         }
 
         if (node instanceof SemanticNamespaceNode namespace) {
@@ -352,7 +362,9 @@ final class InactiveDeclarationPruner {
                 return namespace;
             }
 
-            return items.isEmpty() ? null : new SemanticNamespaceNode(namespace.name, items);
+            return items.isEmpty()
+                    ? null
+                    : new SemanticNamespaceNode(namespace.span, namespace.name, items);
         }
 
         if (node instanceof SemanticFunctionDeclNode fn) {
@@ -365,7 +377,12 @@ final class InactiveDeclarationPruner {
 
             return body == fn.body
                     ? fn
-                    : new SemanticFunctionDeclNode(fn.symbol, fn.parameterVariables, body);
+                    : new SemanticFunctionDeclNode(
+                            fn.span,
+                            fn.symbol,
+                            fn.parameterVariables,
+                            body
+                    );
         }
 
         if (node instanceof SemanticVarDeclNode varDecl) {
@@ -410,7 +427,11 @@ final class InactiveDeclarationPruner {
 
             return methods == null
                     ? struct
-                    : new SemanticStructDeclNode(struct.symbol, methods);
+                    : new SemanticStructDeclNode(
+                            struct.span,
+                            struct.symbol,
+                            methods
+                    );
         }
 
         return node;
@@ -451,7 +472,7 @@ final class InactiveDeclarationPruner {
             }
         }
 
-        return out == null ? block : new SemanticBlockNode(out);
+        return out == null ? block : new SemanticBlockNode(block.span, out);
     }
 
     private SemanticStmtNode rebuildStmt(SemanticStmtNode stmt) {
@@ -481,8 +502,11 @@ final class InactiveDeclarationPruner {
             }
 
             return new SemanticIfNode(
+                    ifNode.span,
                     ifNode.condition,
-                    thenBranch == null ? new SemanticBlockNode(List.of()) : thenBranch,
+                    thenBranch == null
+                            ? new SemanticBlockNode(ifNode.span, List.of())
+                            : thenBranch,
                     elseBranch
             );
         }
@@ -495,8 +519,11 @@ final class InactiveDeclarationPruner {
             }
 
             return new SemanticWhileNode(
+                    whileNode.span,
                     whileNode.condition,
-                    body == null ? new SemanticBlockNode(List.of()) : body,
+                    body == null
+                            ? new SemanticBlockNode(whileNode.span, List.of())
+                            : body,
                     whileNode.update
             );
         }

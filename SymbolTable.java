@@ -755,6 +755,51 @@ public final class SymbolTable {
         return List.copyOf(out);
     }
 
+    public List<Object> allSymbols() {
+        List<Object> out = new ArrayList<>();
+
+        out.addAll(globalVariables.values());
+        addFunctionSymbols(out, functions.values());
+        addStructSymbols(out, structs.values());
+
+        for (NamespaceSymbol namespace : allNamespaces()) {
+            out.addAll(namespace.globalVariables.values());
+            addFunctionSymbols(out, namespace.functions.values());
+            addStructSymbols(out, namespace.structs.values());
+        }
+
+        return out;
+    }
+
+    private static void addFunctionSymbols(
+            List<Object> out,
+            Collection<List<FunctionSymbol>> groups
+    ) {
+        for (List<FunctionSymbol> overloads : groups) {
+            for (FunctionSymbol function : overloads) {
+                out.add(function);
+                out.addAll(function.parameters);
+            }
+        }
+    }
+
+    private static void addStructSymbols(
+            List<Object> out,
+            Collection<StructSymbol> structs
+    ) {
+        for (StructSymbol struct : structs) {
+            out.add(struct);
+            out.addAll(struct.fields);
+
+            for (List<MethodSymbol> overloads : struct.methods.values()) {
+                for (MethodSymbol method : overloads) {
+                    out.add(method);
+                    out.addAll(method.parameters);
+                }
+            }
+        }
+    }
+
     public Set<String> structNames() {
         return Set.copyOf(structs.keySet());
     }

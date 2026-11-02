@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class Cpp14Codegen {
 
@@ -22,32 +21,24 @@ public class Cpp14Codegen {
     private final List<LoopFrame> loopStack = new ArrayList<>();
     private int nextLoopId = 0;
 
-    private final String osFfiBridgeText;
+    private final FfiCodegen ffiCodegen;
 
     private final TargetInfo target;
 
     private final boolean uncheckedStaticArrayAccess;
 
-    private final Set<OsFfi.Kind> usedOsFfiKinds = new LinkedHashSet<>();
+    private final Map<String, FfiMatch> usedFfiMatches = new LinkedHashMap<>();
 
     public Cpp14Codegen() {
-        this(null);
-    }
-
-    public Cpp14Codegen(String osFfiBridgeText) {
-        this(osFfiBridgeText, null);
-    }
-
-    public Cpp14Codegen(String osFfiBridgeText, TargetInfo target) {
-        this(osFfiBridgeText, target, false);
+        this(null, null, false);
     }
 
     public Cpp14Codegen(
-            String osFfiBridgeText,
+            FfiCodegen ffiCodegen,
             TargetInfo target,
             boolean uncheckedStaticArrayAccess
     ) {
-        this.osFfiBridgeText = osFfiBridgeText;
+        this.ffiCodegen = ffiCodegen;
         this.target = target;
         this.uncheckedStaticArrayAccess = uncheckedStaticArrayAccess;
     }
@@ -56,6 +47,14 @@ public class Cpp14Codegen {
 
     private static final SemanticType UINT32_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
+
+    public String generate(SastDocument document) {
+        return generate(document.root);
+    }
+
+    public String generate(String sastJson) {
+        return generate(SastDocument.fromJson(sastJson));
+    }
 
     public String generate(SemanticASTNode root) {
         if (root == null) {
@@ -66,14 +65,16 @@ public class Cpp14Codegen {
 
         out.setLength(0);
         indentLevel = 0;
-        usedOsFfiKinds.clear();
+        usedFfiMatches.clear();
 
         emitNode(root);
 
         String body = out.toString();
 
-        if (osFfiBridgeText != null && !usedOsFfiKinds.isEmpty()) {
-            return OsFfi.buildBridge(osFfiBridgeText, usedOsFfiKinds) + body;
+        if (ffiCodegen != null && !usedFfiMatches.isEmpty()) {
+            return ffiCodegen.bridgePrelude(
+                    new ArrayList<>(usedFfiMatches.values())
+            ) + body;
         }
 
         return body;
@@ -87,7 +88,10 @@ public class Cpp14Codegen {
 
         if (node instanceof SemanticNamespaceNode namespace) {
 
-            emitProgram(new SemanticProgramNode(List.of(namespace)));
+            emitProgram(new SemanticProgramNode(
+                    namespace.span,
+                    List.of(namespace)
+            ));
             return;
         }
 
@@ -622,7 +626,7 @@ public class Cpp14Codegen {
 
     private void emitFunctionDecl(SemanticFunctionDeclNode node) {
 
-        if (osFfiBridgeText != null && OsFfi.kindOf(node.symbol) != null) {
+        if (ffiCodegen != null && ffiCodegen.isBridgedFunction(node.symbol)) {
             return;
         }
 
@@ -1287,13 +1291,11 @@ public class Cpp14Codegen {
             );
         }
 
-        if (osFfiBridgeText != null) {
-            OsFfi.Kind ffiKind = OsFfi.kindOf(fn);
+        if (ffiCodegen != null) {
+            FfiMatch match = ffiCodegen.matchFunction(fn);
 
-            if (ffiKind != null) {
-
-                OsFfi.checkTargetAllowed(ffiKind, target);
-                usedOsFfiKinds.add(ffiKind);
+            if (match != null) {
+                usedFfiMatches.put(match.key(), match);
             }
         }
 
