@@ -3,3 +3,6 @@ Operands of '-=' must have the same integer type, got int32 and int64
 Operands of '*=' must have the same integer type, got int32 and int64
 Operands of '/=' must have the same integer type, got int32 and int64
 Operands of '%=' must have the same integer type, got int32 and int64
+Operands of '&=' must have the same integer type, got int32 and int64
+Operands of '|=' must have the same integer type, got int32 and int64
+Operands of '^=' must have the same integer type, got int32 and int64

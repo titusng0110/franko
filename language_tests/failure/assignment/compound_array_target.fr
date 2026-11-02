@@ -9,6 +9,9 @@ func main() -> int32 {
 
     xs += 1;
     xs *= 2;
+    xs |= 1;
+    xs &= 1;
+    xs ^= 1;
 
     print(xs[0]);
 

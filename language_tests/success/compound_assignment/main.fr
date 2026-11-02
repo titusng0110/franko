@@ -1,8 +1,8 @@
 import "franko/io"
 
-// Compound assignment: += -= *= /= %=
+// Compound assignment: += -= *= /= %= &= |= ^=
 //
-// Covers all five operators, non-trivial targets (array element, struct
+// Covers all eight operators, non-trivial targets (array element, struct
 // field, dereference, global), fluid constants on the right-hand side,
 // and the single-evaluation guarantee: the target of a compound
 // assignment is evaluated exactly once.
@@ -74,6 +74,35 @@ func main() -> int32 {
     }
     print(step); // 2
     print(end); // 6
+
+    // Bitwise compound assignment: &= |= ^=
+    int32 mask = 0b1100;
+    mask &= 0b1010;
+    mask |= 0b0001;
+    mask ^= 0b1111;
+    print(mask); // 6
+
+    uint8 flags = 0xF0;
+    flags &= 0x0F;
+    flags |= 0x80;
+    flags ^= 0xFF;
+    print(flags); // 127
+
+    xs[0] |= 8;
+    xs[1] &= 7;
+    xs[2] ^= 5;
+    print(xs[0]); // 9
+    print(xs[1]); // 4
+    print(xs[2]); // 6
+
+    c.n ^= 3;
+    print(c.n); // 41
+
+    $(p) |= 8;
+    print(v); // 43
+
+    g |= 16;
+    print(g); // 58
 
     return 0;
 }

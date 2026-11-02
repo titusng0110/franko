@@ -102,14 +102,13 @@ Output is provided by `franko/io`, not by the compiler. The overloaded `print(..
 
 ## 30.12 Unsupported Operators
 
-The following operators do not exist in the language. The lexer rejects the character `~` outright ("is not a recognizable token"), and a unary `+` fails to parse:
+The unary plus operator does not exist in the language:
 
 ```franko
-~x  // no bitwise NOT operator
 +x  // no unary plus operator
 ```
 
-Bitwise and shift compound assignments also do not exist (`&=`, `|=`, `^=`, `<<=`, `>>=`): assignment has only plain `=` plus the five arithmetic compound forms `+=`, `-=`, `*=`, `/=`, `%=` (see [Assignment](14-assignment.md)).
+Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](14-assignment.md)).
 
 ## 30.13 String Literals Cannot Initialize Arrays
 

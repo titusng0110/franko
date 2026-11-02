@@ -15,6 +15,7 @@ Examples:
 7 % 3       // evaluated to 1
 10 == 10    // evaluated to 1
 !0          // evaluated to 1
+~0          // evaluated to -1
 1 << 3      // evaluated to 8
 ```
 

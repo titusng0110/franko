@@ -1,0 +1,9 @@
+func main() -> int32 {
+    ptr<int32> p;
+    [int32, 2] xs;
+
+    ~p;
+    ~xs;
+
+    return 0;
+}

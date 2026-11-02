@@ -4,7 +4,7 @@ Franko supports the following statements inside function bodies and blocks:
 
 - variable declarations;
 - assignments;
-- compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`);
+- compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`);
 - increment and decrement statements (`x++`, `x--`);
 - blocks;
 - `if`;
