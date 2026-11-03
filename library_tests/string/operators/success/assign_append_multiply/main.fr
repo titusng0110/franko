@@ -47,14 +47,12 @@ func main() -> int32 {
 
     a *= 0
     print(a.length())
-    print(a.capacity())
     print(a.to(getptr(out)))
     print(out.length())
 
     std::String c
     c = a
     print(c.length())
-    print(c.capacity())
 
     std::String dup
     dup = "xy"

@@ -10,10 +10,11 @@
 import "franko/io"
 
 func main() -> int32 {
+    view<[uint8]> nil = null
     print("Hello, ", null)
     print("world")
     print("a", "b")
-    print(null, "c")
+    print(nil, "c")
     print("done")
     return 0;
 }

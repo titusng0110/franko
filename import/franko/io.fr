@@ -1,4 +1,5 @@
 import "./os"
+import "./string"
 
 // franko/io — user-level output and input.
 //
@@ -8,7 +9,8 @@ import "./os"
 // verbatim (a null or empty `end` means no suffix, so no newline
 // either). `print()` writes a bare newline. `print(str)` writes the
 // UTF-8 bytes verbatim followed by `\n`; a null or empty view prints
-// nothing.
+// nothing. The `std::String` overloads write only the live bytes, not
+// the backing buffer's unused capacity.
 //
 // Output goes through the OS bridge (posix `write` on linux/macos,
 // `WriteFile` on windows), so it shares a channel with raw fd writes.
@@ -399,6 +401,54 @@ func print(view<[uint8]> utf8str, view<[uint8]> end) -> void {
             }
         }
     }
+}
+
+func print(view<std::String> str) -> void {
+    if (str == null) {
+        return
+    }
+    if ($(str).length() == 0) {
+        return
+    }
+    [byte, 1] nl
+    nl[0] = 10
+    print(str, getview(nl))
+    return
+}
+
+func print(view<std::String> str, view<std::String> end) -> void {
+    [byte] endbuf
+    view<[uint8]> endbytes = null
+    if (end != null) {
+        uint32 m = $(end).length()
+        if (m != 0 && $(end).to(getptr(endbuf)) == 0) {
+            endbytes = getview(endbuf)
+        }
+    }
+    print(str, endbytes)
+    if (endbuf.length() != 0) {
+        endbuf.uninit()
+    }
+    return
+}
+
+func print(view<std::String> str, view<[byte]> end) -> void {
+    if (str != null) {
+        uint32 n = $(str).length()
+        if (n != 0) {
+            [byte] buf
+            if ($(str).to(getptr(buf)) == 0) {
+                print(getview(buf), end)
+            }
+            if (buf.length() != 0) {
+                buf.uninit()
+            }
+            return
+        }
+    }
+    view<[uint8]> empty = null
+    print(empty, end)
+    return
 }
 
 func print(uint8 num, view<[uint8]> end) -> void {

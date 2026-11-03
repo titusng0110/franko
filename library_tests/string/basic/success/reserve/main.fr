@@ -1,9 +1,9 @@
 // ============================================================
-// LIBRARY TEST (string/basic): reserve and buffer growth
+// LIBRARY TEST (string/basic): growth and clearing
 // ============================================================
-// Covers the 128-byte default capacity, the payload + 128 growth
-// rule at the 127/128 boundary, reserve(0), and the fact that the
-// tracked capacity is retained when a string is cleared.
+// Covers from() at the 127/128-byte boundary, append/multiply growth,
+// clearing with *= 0, reuse after clearing, and UTF-8 validity across
+// those transitions. Capacity is internal and is not inspected.
 // ============================================================
 
 import "franko/io"
@@ -12,31 +12,33 @@ import "franko/string"
 func main() -> int32 {
     std::String s
     print(s.length())
-    print(s.capacity())
-    print(s.reserve(0))
-    print(s.length())
-    print(s.capacity())
 
     [byte] p127
     p127.init_zero(127)
     std::String a
     print(a.from(getview(p127)))
     print(a.length())
-    print(a.capacity())
+    print(a.is_utf8_compliant())
 
     [byte] p128
     p128.init_zero(128)
     std::String b
     print(b.from(getview(p128)))
     print(b.length())
-    print(b.capacity())
+    print(b.is_utf8_compliant())
 
     std::String c
-    print(c.from(getview(p128)))
-    print(c.capacity())
-    print(c.reserve(0))
+    print(c.from("ab"))
+    c += "cd"
+    c *= 2
     print(c.length())
-    print(c.capacity())
+    print(c.is_utf8_compliant())
+    c *= 0
+    print(c.length())
+    print(c.is_utf8_compliant())
+    print(c.from(getview(p128)))
+    print(c.length())
+    print(c.is_utf8_compliant())
 
     p127.uninit()
     p128.uninit()

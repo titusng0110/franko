@@ -1,0 +1,55 @@
+// ============================================================
+// LIBRARY TEST (io/print): std::String overloads
+// ============================================================
+// Covers print(view<std::String>), print(view<std::String>,
+// view<std::String>), and print(view<std::String>, view<[byte]>).
+// Only live bytes are written; null and empty strings print nothing
+// unless a non-empty end argument is supplied.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func main() -> int32 {
+    std::String s
+    s.from("hello")
+    print(getview(s))
+    print(getview(s), "!")
+    print()
+
+    std::String end
+    end.from(" world")
+    print(getview(s), getview(end))
+    print()
+
+    std::String empty
+    print(getview(empty))
+    print(getview(empty), "x")
+    print()
+
+    view<[byte]> no_end = null
+    print(getview(s), no_end)
+    print()
+
+    view<std::String> nil = null
+    print(nil)
+    print(nil, "y")
+    print()
+    print(nil, getview(end))
+    print()
+    print(getview(s), nil)
+    print()
+
+    print(getview(empty), getview(end))
+    print()
+
+    std::String unicode
+    unicode.from("你好")
+    print(getview(unicode))
+
+    s.uninit()
+    end.uninit()
+    empty.uninit()
+    unicode.uninit()
+    return 0
+}
