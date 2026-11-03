@@ -1,0 +1,11 @@
+// ============================================================
+// FAILURE FIXTURE: static:: without importing franko/static
+// ============================================================
+
+func main() -> int32 {
+    static_if (static::IS_WINDOWS) {
+        return 1;
+    }
+
+    return 0;
+}

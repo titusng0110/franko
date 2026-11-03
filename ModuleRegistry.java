@@ -124,71 +124,9 @@ final class ModuleRegistry {
                 moduleBridge
         );
 
-        parseVariables(root.optArray("variables"), descriptor, manifest);
-        parseStructs(root.optArray("structs"), descriptor, manifest);
         parseFunctions(root.optArray("functions"), descriptor, manifest);
 
         return descriptor;
-    }
-
-    private static void parseVariables(
-            JsonArray array,
-            ModuleDescriptor descriptor,
-            Path manifest
-    ) {
-        if (array == null) {
-            return;
-        }
-
-        for (JsonValue value : array.values()) {
-            JsonObject obj = requireObject(value, "module variable", manifest);
-            String name = obj.requireString("name");
-            boolean bridge = obj.has("bridge") && obj.requireBool("bridge");
-            boolean compileTimeConstant = obj.has("compileTimeConstant")
-                    && obj.requireBool("compileTimeConstant");
-            TargetBinding target = parseTargetBinding(
-                    obj.optObject("target"),
-                    manifest
-            );
-            Path bridgePath = bridge
-                    ? entityBridgePath(obj, descriptor, manifest)
-                    : null;
-
-            descriptor.variables.add(new ModuleVariable(
-                    obj.optString("namespace"),
-                    name,
-                    bridge,
-                    bridgePath,
-                    compileTimeConstant,
-                    target
-            ));
-        }
-    }
-
-    private static void parseStructs(
-            JsonArray array,
-            ModuleDescriptor descriptor,
-            Path manifest
-    ) {
-        if (array == null) {
-            return;
-        }
-
-        for (JsonValue value : array.values()) {
-            JsonObject obj = requireObject(value, "module struct", manifest);
-            String name = obj.requireString("name");
-            boolean bridge = !obj.has("bridge") || obj.requireBool("bridge");
-            Path bridgePath = bridge
-                    ? entityBridgePath(obj, descriptor, manifest)
-                    : null;
-
-            descriptor.structs.add(new ModuleStruct(
-                    obj.optString("namespace"),
-                    name,
-                    bridge,
-                    bridgePath
-            ));
-        }
     }
 
     private static void parseFunctions(
@@ -203,104 +141,14 @@ final class ModuleRegistry {
         for (JsonValue value : array.values()) {
             JsonObject obj = requireObject(value, "module function", manifest);
             String name = obj.requireString("name");
-            boolean bridge = !obj.has("bridge") || obj.requireBool("bridge");
-            Path bridgePath = bridge
-                    ? entityBridgePath(obj, descriptor, manifest)
-                    : null;
+            Path bridgePath = entityBridgePath(obj, descriptor, manifest);
 
             descriptor.functions.add(new ModuleFunction(
                     obj.optString("namespace"),
                     name,
-                    bridge,
-                    bridgePath,
-                    parseFilter(obj.optObject("targets"), manifest)
+                    bridgePath
             ));
         }
-    }
-
-    private static TargetBinding parseTargetBinding(
-            JsonObject obj,
-            Path manifest
-    ) {
-        if (obj == null) {
-            return null;
-        }
-
-        long defaultValue = obj.has("default")
-                ? obj.requireInt("default")
-                : 0;
-
-        List<TargetOverride> overrides = new ArrayList<>();
-        JsonArray array = obj.optArray("overrides");
-
-        if (array != null) {
-            for (JsonValue value : array.values()) {
-                JsonObject override = requireObject(
-                        value,
-                        "target override",
-                        manifest
-                );
-
-                overrides.add(new TargetOverride(
-                        parseFilter(override.optObject("when"), manifest),
-                        override.requireInt("value")
-                ));
-            }
-        }
-
-        return new TargetBinding(defaultValue, overrides);
-    }
-
-    private static TargetFilter parseFilter(
-            JsonObject obj,
-            Path manifest
-    ) {
-        if (obj == null) {
-            return TargetFilter.any();
-        }
-
-        return new TargetFilter(
-                parseStringList(obj.get("os"), "target os", manifest),
-                parseStringList(obj.get("arch"), "target arch", manifest),
-                parseStringList(obj.get("canonical"), "target canonical", manifest)
-        );
-    }
-
-    private static List<String> parseStringList(
-            JsonValue value,
-            String description,
-            Path manifest
-    ) {
-        List<String> out = new ArrayList<>();
-
-        if (value == null || value instanceof JsonNull) {
-            return out;
-        }
-
-        if (value instanceof JsonString string) {
-            out.add(string.value());
-            return out;
-        }
-
-        if (value instanceof JsonArray array) {
-            for (JsonValue element : array.values()) {
-                if (!(element instanceof JsonString string)) {
-                    throw new IllegalArgumentException(
-                            "Module manifest '" + manifest + "': "
-                                    + description + " entries must be strings"
-                    );
-                }
-
-                out.add(string.value());
-            }
-
-            return out;
-        }
-
-        throw new IllegalArgumentException(
-                "Module manifest '" + manifest + "': "
-                        + description + " must be a string or array"
-        );
     }
 
     private static Path entityBridgePath(
@@ -317,7 +165,7 @@ final class ModuleRegistry {
         if (descriptor.bridgePath == null) {
             throw new IllegalArgumentException(
                     "Module manifest '" + manifest
-                            + "' declares a bridged entity but has no bridge file"
+                            + "' declares a bridged function but has no bridge file"
             );
         }
 

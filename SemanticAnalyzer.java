@@ -26,6 +26,12 @@ public class SemanticAnalyzer {
     private final List<SemanticVarDeclNode> pendingHoistedArrayLiterals =
             new ArrayList<>();
 
+    private final Map<String, GlobalVariableSymbol> hoistedStaticStringGlobals =
+            new LinkedHashMap<>();
+
+    private final List<SemanticVarDeclNode> pendingHoistedStaticStrings =
+            new ArrayList<>();
+
     private EntryKind entryKind = EntryKind.NONE;
     private int globalMainCount = 0;
 
@@ -43,7 +49,8 @@ public class SemanticAnalyzer {
                             SourceSpan span) {
                         return hoistArrayLiteralGlobal(arrayType, values, span);
                     }
-                }
+                },
+                this::hoistStaticStringGlobal
         );
 
         this.exprAnalyzer = lowering.analyzer;
@@ -54,6 +61,8 @@ public class SemanticAnalyzer {
         symbolTable.clear();
         hoistedArrayLiteralGlobals.clear();
         pendingHoistedArrayLiterals.clear();
+        hoistedStaticStringGlobals.clear();
+        pendingHoistedStaticStrings.clear();
         symbolTable.pushScope();
         entryKind = EntryKind.NONE;
         globalMainCount = 0;
@@ -116,6 +125,8 @@ public class SemanticAnalyzer {
         symbolTable.clear();
         hoistedArrayLiteralGlobals.clear();
         pendingHoistedArrayLiterals.clear();
+        hoistedStaticStringGlobals.clear();
+        pendingHoistedStaticStrings.clear();
         symbolTable.pushScope();
 
         List<SemanticStmtNode> out = new ArrayList<>();
@@ -185,6 +196,64 @@ public class SemanticAnalyzer {
         pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(span, sym));
 
         return new SemanticVarExprNode(span, sym.type, sym);
+    }
+
+    GlobalVariableSymbol hoistStaticStringGlobal(
+            List<BigInteger> bytes,
+            SourceSpan span
+    ) {
+        StringBuilder key = new StringBuilder();
+
+        for (BigInteger value : bytes) {
+            key.append(value.toString(10)).append(',');
+        }
+
+        String keyText = key.toString();
+
+        GlobalVariableSymbol existing =
+                hoistedStaticStringGlobals.get(keyText);
+
+        if (existing != null) {
+            return existing;
+        }
+
+        SemanticStaticArrayType arrayType = new SemanticStaticArrayType(
+                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8),
+                Integer.toString(bytes.size())
+        );
+
+        String baseName = "_STR_" + Mangler.hashHex(keyText);
+        String name = baseName;
+        int suffix = 0;
+
+        while (true) {
+            VariableSymbol candidate = symbolTable.resolveGlobalVarIn(null, name);
+
+            if (candidate == null) {
+                GlobalVariableSymbol sym = new GlobalVariableSymbol(
+                        null,
+                        name,
+                        arrayType
+                );
+
+                if (symbolTable.declareGlobalNamespaceVariable(sym)) {
+                    sym.literalBytes = List.copyOf(bytes);
+                    hoistedStaticStringGlobals.put(keyText, sym);
+                    pendingHoistedStaticStrings.add(
+                            new SemanticVarDeclNode(span, sym));
+                    return sym;
+                }
+            } else if (candidate instanceof GlobalVariableSymbol global
+                    && global.literalBytes != null
+                    && global.literalBytes.equals(bytes)
+                    && global.type.equals(arrayType)) {
+                hoistedStaticStringGlobals.put(keyText, global);
+                return global;
+            }
+
+            suffix++;
+            name = baseName + "_" + suffix;
+        }
     }
 
     private SemanticProgramNode analyzeProgram(ProgramNode program) {
@@ -484,6 +553,10 @@ public class SemanticAnalyzer {
                         loweredItemsOf(space, loweredByNode)
                 ));
             }
+        }
+
+        for (int i = pendingHoistedStaticStrings.size() - 1; i >= 0; i--) {
+            semanticItems.add(0, pendingHoistedStaticStrings.get(i));
         }
 
         for (int i = pendingHoistedArrayLiterals.size() - 1; i >= 0; i--) {
@@ -1033,6 +1106,33 @@ public class SemanticAnalyzer {
                             target.type);
 
             return new SemanticAssignNode(n.span, n.op, target, value);
+        }
+
+        if (node instanceof StaticIfNode n) {
+            SemanticExprNode condition =
+                    exprAnalyzer.analyzeExpr(n.condition);
+
+            if (!(condition.type instanceof SemanticPrimitiveType)) {
+                symbolTable.error("static_if condition must be an integer, got "
+                        + condition.type.describe());
+                return null;
+            }
+
+            if (!condition.isConstant()) {
+                symbolTable.error(
+                        "static_if condition must be a compile-time constant");
+                return null;
+            }
+
+            ASTNode selected = condition.constantValue.signum() != 0
+                    ? n.thenBranch
+                    : n.elseBranch;
+
+            if (selected == null) {
+                return null;
+            }
+
+            return analyzeStmt(selected);
         }
 
         if (node instanceof IfNode n) {

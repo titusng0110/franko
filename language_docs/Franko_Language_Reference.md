@@ -45,6 +45,7 @@ checker internals are documented separately in
 31. [Foreign Function Interface](31-foreign-function-interface.md)
 32. [Examples](32-examples.md)
 33. [Naming Conventions](33-naming-conventions.md)
+34. [Compile-Time Reflection](34-compile-time-reflection.md)
 
 ---
 
@@ -226,7 +227,12 @@ those standard modules:
 ```franko
 import "franko/io"
 import "franko/os"
+import "franko/static"
 ```
+
+`franko/static` is a built-in module: there is no `static.fr` file in
+your project. It provides the compile-time reflection namespace described
+in [Compile-Time Reflection](34-compile-time-reflection.md).
 
 User code must not add files under the compiler's `import/franko/` directory
 or use the `franko/` prefix for user modules. Use a project-relative path or
@@ -247,11 +253,11 @@ Namespaces still separate symbols by path; duplicate declarations that end up in
 ### FFI Modules
 
 An imported module may ship a sibling `<module>.module.json` descriptor that
-marks variables, structs, or functions as implemented by a C++ bridge. The
-bundled `franko/os` module is the standard example. See
+marks functions as implemented by a C++ bridge. The bundled `franko/os`
+module is the standard example. See
 [Foreign Function Interface](31-foreign-function-interface.md) for the
-descriptor format, bridge block naming, target gating, and examples. A module
-without a descriptor is just an ordinary Franko module.
+descriptor format, bridge block naming, and examples. A module without a
+descriptor is just an ordinary Franko module.
 
 ---
 
@@ -1138,6 +1144,15 @@ Function signatures are known before function bodies are checked, allowing forwa
 
 Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](26-methods.md).
 
+## 12.12 Compile-Time Intrinsics
+
+The functions in the `static` namespace (`static::is_primitive`,
+`static::what_type`, `static::strcmp`, and the rest) are built-in
+compile-time functions, not callable values. They are resolved at
+compile time; they cannot be stored in a variable, passed as a function
+argument, or referred to without a call. See
+[Compile-Time Reflection](34-compile-time-reflection.md).
+
 ---
 
 # 13. Pool Allocation
@@ -1911,6 +1926,12 @@ if (p == q) {
 }
 ```
 
+## Static Conditions
+
+`static_if` uses a different rule: its condition must be a compile-time
+constant integer, and only the selected branch is used. See
+[Compile-Time Reflection](34-compile-time-reflection.md).
+
 ---
 
 # 19. Statements
@@ -1923,6 +1944,7 @@ Franko supports the following statements inside function bodies and blocks:
 - increment and decrement statements (`x++`, `x--`);
 - blocks;
 - `if`;
+- `static_if` / `static_else`;
 - `while`;
 - `for`;
 - `return`;
@@ -2106,6 +2128,25 @@ arr.memset(0);
 arr.memcpy(getptr(other));
 arr.uninit();
 ```
+
+## 19.9 Static If Statements
+
+`static_if` and `static_else` are compile-time statement forms:
+
+```franko
+static_if (constantExpression) {
+    ...
+} static_else {
+    ...
+}
+```
+
+The condition must be a compile-time constant integer. Only the selected
+branch is used; the other branch is ignored entirely. Braceless bodies
+behave like ordinary `if` bodies.
+A standalone `static_else` is a syntax error, and `static_if` is not a
+top-level item. See
+[Compile-Time Reflection](34-compile-time-reflection.md).
 
 ---
 
@@ -2326,13 +2367,13 @@ with `-1` and a retry is valid. See
 | `target.init_zero(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.resize(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.uninit()` | dynamic array | `void` | — |
-| `target.memset(value)` | array of trivial elements | `void` | — |
-| `target.memset(value, start, count)` | array of trivial elements | `void` | — |
-| `target.memcpy(source)` | array of copiable elements | `void` | — |
-| `target.memcpy(source, dst_start, src_start, count)` | array of copiable elements | `void` | — |
-| `target.memmove(dst_start, src_start, count)` | array of copiable elements | `void` | — |
-| `target.memcmp(source)` | array of copiable elements | `int32` | negative, zero, or positive |
-| `target.memcmp(source, dst_start, src_start, count)` | array of copiable elements | `int32` | negative, zero, or positive |
+| `target.memset(value)` | array of memset-safe elements | `void` | — |
+| `target.memset(value, start, count)` | array of memset-safe elements | `void` | — |
+| `target.memcpy(source)` | array of memcpy-safe elements | `void` | — |
+| `target.memcpy(source, dst_start, src_start, count)` | array of memcpy-safe elements | `void` | — |
+| `target.memmove(dst_start, src_start, count)` | array of memcpy-safe elements | `void` | — |
+| `target.memcmp(source)` | array of memcpy-safe elements | `int32` | negative, zero, or positive |
+| `target.memcmp(source, dst_start, src_start, count)` | array of memcpy-safe elements | `int32` | negative, zero, or positive |
 | `target.length()` | any array | `uint32` | — |
 | `target.memchr(value)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
 | `target.memchr(value, start, count)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
@@ -2456,7 +2497,7 @@ Rules:
 
 - receiver must be a storage-backed lvalue;
 - receiver may be a dynamic or static array;
-- receiver element type must be trivial;
+- receiver element type must be memset-safe;
 - the whole-array form takes exactly one argument; the ranged form takes exactly three;
 - fill value must be:
   - a constant fitting `uint8`; or
@@ -2466,17 +2507,22 @@ Rules:
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant start/count ranges are checked against the static size at compile time.
 
-## 21.6 Trivial Element Types
+## 21.6 Memset-Safe Element Types
 
-Current trivial types:
+Current memset-safe types:
 
-| Element type | Trivial? |
+| Element type | Memset-Safe? |
 |---|---|
 | primitive integers | yes |
-| static arrays of trivial elements | yes |
-| structs whose fields are all trivial, recursively | yes |
+| static arrays of memset-safe elements | yes |
+| structs whose fields are all memset-safe, recursively | yes |
 | dynamic arrays | no |
 | pointers | no |
+
+`static::is_memset_safe(x)` exposes this predicate at compile time (see
+[Compile-Time Reflection](34-compile-time-reflection.md)). It is
+deliberately distinct from `static::is_trivial`: a struct with a field
+default is memset-safe but not `is_trivial`.
 
 ## 21.7 `memcpy`
 
@@ -2497,7 +2543,7 @@ Rules:
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
 - static lengths do not need to match;
-- target and source element types must be copiable;
+- target and source element types must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
@@ -2520,22 +2566,22 @@ Rules:
 
 - receiver must be a storage-backed lvalue array (dynamic or static);
 - takes exactly three arguments;
-- receiver element type must be copiable;
+- receiver element type must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges are checked against the static size at compile time.
 
-## 21.9 Copiable Element Types
+## 21.9 Memcpy-Safe Element Types
 
-Current copiable types:
+Current memcpy-safe types:
 
-| Element type | Copiable? |
+| Element type | Memcpy-Safe? |
 |---|---|
 | primitive integers | yes |
 | pointers | yes |
-| static arrays of copiable elements | yes |
-| structs whose fields are all copiable, recursively | yes |
+| static arrays of memcpy-safe elements | yes |
+| structs whose fields are all memcpy-safe, recursively | yes |
 | dynamic arrays | no |
 
 ## 21.10 `length`
@@ -2583,7 +2629,7 @@ print(m[0].length());   // 2
 ## 21.11 `memcmp`
 
 Compares array contents byte-wise. The receiver and the source must have
-identical element types, and that element type must be copiable.
+identical element types, and that element type must be memcpy-safe.
 
 Forms:
 
@@ -2596,7 +2642,7 @@ Rules:
 
 - receiver may be a dynamic or static array; it does not need to be a storage-backed lvalue;
 - source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the static-array forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array literal whose element type is inferred from the receiver;
-- both receiver and source element types must be copiable;
+- both receiver and source element types must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
@@ -4773,9 +4819,9 @@ and [Operators](17-operators.md#1710-struct-operator-overloading).
 # 31. Foreign Function Interface
 
 Franko has no general native-call syntax. Instead, a Franko module can
-declare that some of its variables, structs, or functions are implemented by
-a C++ bridge. The bundled `franko/os` module uses this mechanism; user modules
-can use exactly the same mechanism.
+declare that some of its functions are implemented by a C++ bridge. The
+bundled `franko/os` module uses this mechanism; user modules can use
+exactly the same mechanism.
 
 An FFI module is three sibling files:
 
@@ -4785,9 +4831,10 @@ lib/mathx.module.json
 lib/mathx.ffi.cpp
 ```
 
-The `.fr` file is ordinary Franko: it declares the module's variables,
-structs, and functions. The `.module.json` file names the declarations that
-cross the FFI boundary. The `.ffi.cpp` file contains the C++ implementations.
+The `.fr` file is ordinary Franko: it declares the module's functions
+(and any ordinary variables or structs the module needs). The
+`.module.json` file names the function declarations that cross the FFI
+boundary. The `.ffi.cpp` file contains the C++ implementations.
 
 Import the module normally:
 
@@ -4799,7 +4846,7 @@ The compiler discovers `mathx.module.json` next to the resolved `mathx.fr`.
 
 ## 31.1 Module Descriptor
 
-The descriptor has three declaration lists:
+The descriptor lists only the functions that are bridged:
 
 ```json
 {
@@ -4808,109 +4855,47 @@ The descriptor has three declaration lists:
   "id": "example/mathx",
   "source": "mathx.fr",
   "bridge": "mathx.ffi.cpp",
-
-  "variables": [
-    {
-      "namespace": "mathx",
-      "name": "MAGIC",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 77
-      }
-    }
-  ],
-
-  "structs": [],
-
   "functions": [
-    {
-      "namespace": "mathx",
-      "name": "add",
-      "bridge": true
-    },
-    {
-      "namespace": "mathx",
-      "name": "scale",
-      "bridge": true,
-      "targets": {
-        "os": ["linux", "macos"]
-      }
-    }
+    {"namespace": "mathx", "name": "add"},
+    {"namespace": "mathx", "name": "scale"}
   ]
 }
 ```
 
 - `bridge` is the default C++ bridge file, relative to the descriptor.
-- `bridged` variables default to `false`; bridged structs and functions
-  default to `true`. Set `bridge: true` or `bridge: false` explicitly when
-  needed.
-- A declaration can override the module bridge file with
+- Every entry in `functions` is bridged. There is no per-function
+  `bridge: false` opt-out.
+- A function can override the module bridge file with
   `"bridgeFile": "other.ffi.cpp"`.
 - Names and namespaces must match the declarations in the `.fr` file. The
-  `.fr` declaration supplies the type/signature; the descriptor does not
+  `.fr` declaration supplies the signature; the descriptor does not
   duplicate it.
+- The descriptor does not declare variables, structs, target filters, or
+  target-dependent constants. Platform selection is ordinary Franko code
+  using `static_if` and the `franko/static` target constants.
 
-The descriptor always accepts `variables`, `structs`, and `functions`, so a
-module can declare future bridge entities without changing its file shape.
-Current releases fully implement function bridging and target-dependent
-variables; struct bridging and non-constant bridged variables are reserved
-for future bridge kinds.
+## 31.2 Target Selection
 
-## 31.2 Target-Dependent Variables
+Target-specific FFI calls are guarded with `static_if`:
 
-A variable listed in `variables` can be a compile-time constant that depends
-on the compilation target:
+```franko
+import "franko/static"
 
-```json
-{
-  "namespace": "os",
-  "name": "IS_LINUX",
-  "compileTimeConstant": true,
-  "target": {
-    "default": 0,
-    "overrides": [
-      {"when": {"os": "linux"}, "value": 1}
-    ]
-  }
+static_if (static::IS_WINDOWS) {
+    os::win32::WriteFile(...)
+} static_else static_if (static::IS_LINUX || static::IS_MACOS) {
+    os::posix::write(...)
 }
 ```
 
-The `default` value applies when no override matches. Overrides are checked in
-order and the first match wins. A `when` object can filter on `os`, `arch`, or
-`canonical`:
+Only the selected branch is compiled. The other platform's functions do
+not need to exist on the current target, so the module does not need
+target filters. See
+[Compile-Time Reflection](34-compile-time-reflection.md).
 
-```json
-{"when": {"arch": "x86_64"}, "value": 1}
-{"when": {"canonical": "windows-arm64"}, "value": 1}
-```
+An unguarded off-target call still fails when building for that target.
 
-The declared Franko variable must have an integer type, and the value must fit
-that type. `compileTimeConstant: true` makes references fold to the value, so
-the variable can be used in ordinary `if` conditions and constant expressions.
-
-Target-dependent variables are fully implemented. Bridged storage variables
-(`bridge: true` on a non-constant variable) are accepted by the descriptor
-schema for future use.
-
-## 31.3 Target-Gated Functions
-
-Functions and structs can restrict the targets on which they are valid:
-
-```json
-{
-  "namespace": "os::posix",
-  "name": "write",
-  "bridge": true,
-  "targets": {"os": ["linux", "macos"]}
-}
-```
-
-A live call to a function whose target filter does not match the compilation
-target is a compile-time error. A call in a branch that is eliminated by
-constant folding is not live and does not trigger the error, which is how
-portable target-selection code is written.
-
-## 31.4 Bridge Blocks
+## 31.3 Bridge Blocks
 
 The bridge file is split into named blocks:
 
@@ -4937,12 +4922,10 @@ int32_t FUNC_add_HASH_1d94001d(int32_t VAR_a, int32_t VAR_b)
 Rules:
 
 - A block opens with `// @@<qualified-name>` and closes with `// @@end`.
-- The block name is the declaration's Franko qualified name:
-  - variable `mathx::MAGIC` → `// @@mathx::MAGIC`
-  - struct `mathx::Point` → `// @@mathx::Point`
+- The block name is the function's Franko qualified name:
   - function `mathx::add` → `// @@mathx::add`
 - `common` is reserved for shared includes, helpers, and declarations. It is
-  emitted once when any bridged declaration from that bridge file is used.
+  emitted once when any bridged function from that bridge file is used.
 - Put `#include "FrankoRuntime.hpp"` in the `common` block. Bridge files are
   spliced into the generated program, which already includes the runtime, but
   the include keeps each bridge valid for standalone C++ linting and gives the
@@ -4954,26 +4937,24 @@ Rules:
   reports a compile-time error if the block is missing or the name does not
   match.
 - Merely importing a module with a bridge adds no C++ unless a bridged
-  declaration is actually used.
+  function is actually used.
 
-## 31.5 The Bundled `franko/os` Module
+## 31.4 The Bundled `franko/os` Module
 
-`franko/os` is the compiler's standard FFI module. It ships
+`franko/os` is Franko's standard FFI module. It ships
 `import/franko/os.module.json` and `import/franko/os.ffi.cpp` alongside
-`import/franko/os.fr`. Its functions and constants are documented in
-[`franko/os`](../library_docs/os.md). Nothing about it is special to the
-compiler: it uses the same descriptor and bridge rules described above.
+`import/franko/os.fr`. Its functions are documented in
+[`franko/os`](../library_docs/os.md). It uses the same descriptor and
+bridge rules described above.
 
-## 31.6 Failure Modes
+## 31.5 Failure Modes
 
 The compiler rejects an FFI module when:
 
 - the descriptor is malformed or has an unsupported version;
-- a listed declaration does not exist in the `.fr` file;
-- a bridged declaration has no bridge file or no matching block;
-- a bridged function block does not contain the expected mangled name;
-- a target-dependent constant is missing, mistyped, or out of range;
-- a live call targets a function unavailable on the selected target.
+- a listed function does not exist in the `.fr` file;
+- a bridged function has no bridge file or no matching block;
+- a bridged function block does not contain the expected mangled name.
 
 ---
 
@@ -5778,3 +5759,412 @@ enforces the access restrictions for the reserved prefixes:
 The struct casing, function and variable casing, namespace spelling, constant
 casing, and `franko/` import reservation are conventions that should be
 followed by new code but are not currently diagnosed by the compiler.
+
+---
+
+# 34. Compile-Time Reflection
+
+Franko provides compile-time reflection: target constants, compile-time
+branch selection, and type introspection. These features let one program
+adapt to its target and inspect declared types without running any code.
+
+## 34.1 Importing the module
+
+```franko
+import "franko/static"
+```
+
+`franko/static` is a built-in module. There is no `static.fr` file to add
+to your project; importing it makes the `static` namespace available.
+Without the import, using `static::` reports:
+
+```text
+Unknown namespace 'static'; import "franko/static" to use compile-time reflection
+```
+
+Repeated imports are harmless.
+
+## 34.2 Target constants
+
+The module provides five constants:
+
+| Constant | Value |
+|---|---|
+| `static::IS_LINUX` | `1` when targeting linux, else `0` |
+| `static::IS_WINDOWS` | `1` when targeting windows, else `0` |
+| `static::IS_MACOS` | `1` when targeting macos, else `0` |
+| `static::IS_X86_64` | `1` when targeting x86_64, else `0` |
+| `static::IS_ARM64` | `1` when targeting arm64, else `0` |
+
+All five have type `byte` (`uint8`). Their values come from the
+`--target <os>-<arch>` option:
+
+| OS values | Architecture values |
+|---|---|
+| `linux`, `windows`, `macos` | `x86_64`, `arm64` |
+
+Aliases accepted by `--target` are `darwin` for `macos`, `x64` or
+`amd64` for `x86_64`, and `aarch64` for `arm64`. The `compile.py` driver
+supplies the option and defaults it to the host target.
+
+Exactly one OS constant and one architecture constant are `1` for a
+given target; the others are `0`. They are constants, not variables:
+
+```franko
+int32 os_count = static::IS_LINUX + static::IS_WINDOWS + static::IS_MACOS;
+int32 arch_count = static::IS_X86_64 + static::IS_ARM64;
+
+print(os_count);    // 1
+print(arch_count);  // 1
+
+static::IS_LINUX = 1;   // error: assignment target must be a storage-backed lvalue
+```
+
+The constants can be used in ordinary expressions and in `static_if`.
+They cannot be used in declaration positions that require a literal,
+such as static array sizes, global primitive initializers, or field
+defaults.
+
+## 34.3 `static_if` / `static_else`
+
+`static_if` selects code at compile time:
+
+```franko
+static_if (constantExpression) {
+    ...
+} static_else {
+    ...
+}
+```
+
+The condition is an ordinary expression, but it must be a compile-time
+constant integer. Any nonzero constant selects the then-branch; zero
+selects the else-branch. If the condition is false and there is no
+`static_else`, the whole statement disappears.
+
+`static_if` and `static_else` are statement forms only. They are valid
+inside function and method bodies, including nested blocks and loop
+bodies. They are not top-level items: imports, globals, structs, and
+functions cannot be conditionally declared. A standalone `static_else`
+is a syntax error.
+
+Braceless bodies behave like ordinary `if` bodies: they are wrapped in
+an implicit block, so declarations inside them do not escape.
+
+```franko
+static_if (static::IS_WINDOWS) print("windows")
+static_else print("other")
+```
+
+The condition can also be a compile-time introspection result:
+
+```franko
+static_if (static::is_primitive(x)) {
+    print("primitive")
+} static_else {
+    print("not primitive")
+}
+```
+
+Chaining is written with `static_else static_if`:
+
+```franko
+import "franko/static"
+
+func main() -> int32 {
+    static_if (static::IS_WINDOWS) {
+        print("windows")
+    } static_else static_if (static::IS_LINUX) {
+        print("linux")
+    } static_else {
+        print("other")
+    }
+    return 0
+}
+```
+
+### The unselected branch
+
+Only the selected branch is compiled and checked. The unselected branch
+is not checked against declared names or types, so it may refer to
+functions, variables, or types that do not exist on the current target.
+Syntax and literal rules still apply to both branches. This is what makes
+target selection work across platforms:
+
+```franko
+static_if (static::IS_WINDOWS) {
+    // Ignored on Linux/macOS: win32 symbols and FFI calls need not
+    // exist on this target.
+    os::win32::WriteFile(...)
+} static_else {
+    os::posix::write(...)
+}
+```
+
+Consequences:
+
+- A selected branch containing `return` counts for the function's
+  return check; a dead branch does not.
+- A selected branch containing `break` or `continue` is checked against
+  the surrounding loop depth; a dead branch is not.
+- `static::panic` in a dead branch is ignored and does not stop
+  compilation.
+- The selected branch keeps ordinary block scoping.
+- A runtime `if` is evaluated when the program runs; `static_if` is
+  chosen before the program runs.
+
+### Condition errors
+
+A non-constant condition is rejected:
+
+```text
+static_if condition must be a compile-time constant
+```
+
+A non-integer condition is rejected:
+
+```text
+static_if condition must be an integer, got <type>
+```
+
+## 34.4 Static introspection functions
+
+The `static` namespace also provides compile-time introspection
+functions. They inspect the declared type of a variable; they do not
+read its value. Their results are available while compiling:
+
+- predicate results are integer constants (`0` or `1`);
+- `strcmp` produces an integer constant;
+- `what_type` produces a read-only byte view;
+- `panic` stops compilation.
+
+They can be used in ordinary expressions and in `static_if`, but not in
+declaration positions that require a literal, such as static array
+sizes, global primitive initializers, or field defaults. They are
+built-in compile-time functions, not first-class functions: they cannot
+be stored in a variable or passed as a callback.
+
+| Function | Argument contract | Result | Semantics |
+|---|---|---|---|
+| `static::is_primitive(x)` | one variable identifier | `uint8` | `1` iff `x` has a primitive integer type |
+| `static::is_memcpy_safe(x)` | one variable identifier | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, or struct with all fields memcpy-safe. Dynamic arrays are not memcpy-safe. |
+| `static::is_trivial(x)` | one variable identifier | `uint8` | `1` iff raw uninitialized storage is safe: primitives and static arrays of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or any non-trivial field are not. |
+| `static::is_memset_safe(x)` | one variable identifier | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, and structs whose field types are all memset-safe. Pointers, dynamic arrays, and `void` are not. Field defaults do not affect this predicate. |
+| `static::is_same_type(x, y)` | two variable identifiers | `uint8` | `1` iff the declared types are exactly equal |
+| `static::what_type(x)` | one variable identifier | `view<[byte, N]>` | canonical type spelling as a read-only string |
+| `static::strcmp(a, b)` | two raw string literals | `int32` | lexicographic byte comparison; negative, zero, or positive |
+| `static::panic(message)` | one raw string literal | `void` | stops compilation with the message |
+| `static::is_matchable(x)` | one variable identifier | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; arrays and `void` are `0` |
+| `static::is_comparable(x)` | one variable identifier | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; pointers, arrays, and `void` are `0` |
+| `static::is_same_type_assignable(x)` | one variable identifier | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; arrays and `void` are `0` |
+| `static::is_passable_by_value(x)` | one variable identifier | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, and structs whose fields are all passable by value. Static arrays, dynamic arrays, and `void` are not. |
+
+### Identifier arguments
+
+The type-introspection functions inspect a declared type; they do not
+evaluate a value. Their argument must be a bare variable identifier:
+
+- accepted: a local variable, a parameter, `self`, or a qualified global
+  variable such as `ns::x`;
+- rejected: string literals, `view<[byte]>` values, arithmetic
+  expressions, field accesses, array elements, function calls, and
+  struct names.
+
+```franko
+int32 x = 1;
+print(static::is_primitive(x));     // 1
+print(static::is_primitive(1));     // error
+print(static::is_primitive(x + 1)); // error
+```
+
+### String-literal arguments
+
+`static::strcmp` and `static::panic` accept only syntactic string
+literals. Runtime `view<[byte]>` values, variables, and
+`static::what_type(...)` calls are rejected. Empty string literals are
+rejected consistently with the rest of the language (`N >= 1`).
+
+```franko
+print(static::strcmp("abc", "abd"));   // -1
+print(static::strcmp("abc", "abc"));   // 0
+print(static::strcmp("abd", "abc"));   // 1
+print(static::strcmp("ab", "abc"));    // -1 (prefix sorts first)
+```
+
+`static::panic` stops compilation with its message:
+
+```franko
+static::panic("unsupported configuration");
+```
+
+In a dead `static_if` branch it is ignored, so it does not stop
+compilation.
+
+### `what_type` spellings
+
+`static::what_type(x)` returns a real `view<[byte, N]>` value backed by
+read-only storage that lives for the whole program. It can be printed,
+assigned, or passed to a function that accepts a byte view. It cannot
+feed `strcmp` or `panic`, which require literal tokens.
+
+Spellings use canonical Franko type names:
+
+| Declared type | `what_type` result |
+|---|---|
+| `int` / `int32` | `int32` |
+| `byte` | `uint8` |
+| `uint` | `uint32` |
+| `[int32, 3]` | `[int32, 3]` |
+| `[int32]` | `[int32]` |
+| `ptr<int32>` | `ptr<int32>` |
+| `view<[byte, 5]>` | `view<[uint8, 5]>` |
+| `a::b::Point` | `a::b::Point` |
+
+`byte` is an alias for `uint8`, so canonical spellings use `uint8`.
+The exact result is a `view<[byte, N]>` whose byte length is the UTF-8
+length of the spelling.
+
+## 34.5 Choosing a predicate
+
+These predicates answer different questions:
+
+| Question | Predicate |
+|---|---|
+| Can I copy this type byte-for-byte with `memcpy`/`memcmp`? | `static::is_memcpy_safe(x)` |
+| Can I byte-fill this type with `memset`? | `static::is_memset_safe(x)` |
+| Is raw uninitialized storage a valid value of this type? | `static::is_trivial(x)` |
+| Can I compare two values for equality? | `static::is_matchable(x)` |
+| Can I order two values with `<`? | `static::is_comparable(x)` |
+| Can I assign one value of this type to another? | `static::is_same_type_assignable(x)` |
+| Can I pass a value of this type to a function by value? | `static::is_passable_by_value(x)` |
+
+`is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
+elements, and structs whose fields are all memcpy-safe. Dynamic arrays are
+not memcpy-safe, because copying a dynamic array would duplicate ownership
+of its elements.
+
+`is_memset_safe` covers primitives, static arrays of memset-safe elements,
+and structs whose field types are all memset-safe. Field defaults do not
+affect it, because `memset` deliberately overwrites the storage.
+
+`is_trivial` is stricter: it asks whether a value can be created from raw
+storage. A struct with a field default is memset-safe but not trivial,
+because raw storage would violate the default.
+
+```franko
+struct WithDefault {
+    int32 x = 5
+}
+
+struct Blob {
+    [byte] data
+}
+
+WithDefault d;
+Blob b;
+
+print(static::is_memset_safe(d));   // 1
+print(static::is_trivial(d));      // 0: field default
+print(static::is_memcpy_safe(b));     // 0: dynamic array field
+print(static::is_trivial(b));      // 0: dynamic array field
+print(static::is_same_type_assignable(b)); // 0: no built-in assignment
+```
+
+A struct that is not assignable by default can opt in with a same-type
+`OPERATOR_MOV`; `is_same_type_assignable` then returns `1`.
+
+`is_passable_by_value` covers primitives, pointers, and structs whose
+fields are all passable by value. This is the same rule as built-in
+whole-value assignment; it does not consider a custom `OPERATOR_MOV`
+(use `is_same_type_assignable` for that). Static arrays and dynamic arrays
+are not passable by value, so a struct containing one is not either:
+
+```franko
+struct WithArray {
+    [int32, 3] values
+}
+
+WithArray w;
+print(static::is_passable_by_value(w)); // 0: static array field
+```
+
+`is_same_type` compares exact declared types. Aliases normalize first, so
+`int` and `int32` are the same type:
+
+```franko
+int a;
+int32 b;
+print(static::is_same_type(a, b)); // 1
+```
+
+`is_matchable` covers equality, and `is_comparable` covers ordering.
+Pointers support equality but not ordering, so a pointer is matchable but
+not comparable. A struct opts in with the corresponding operator method:
+
+```franko
+struct Point {
+    int32 x
+
+    func OPERATOR_EQ(view<Point> self, view<Point> other) -> uint8 {
+        return $(self).x == $(other).x
+    }
+
+    func OPERATOR_LT(view<Point> self, view<Point> other) -> uint8 {
+        return $(self).x < $(other).x
+    }
+}
+
+Point p;
+print(static::is_matchable(p));  // 1
+print(static::is_comparable(p)); // 1
+```
+
+## 34.6 FFI target selection
+
+The intended use of `static_if` is to select platform-specific FFI
+calls. Only the selected branch is compiled, so the other platform's
+functions do not need to exist on this target:
+
+```franko
+import "franko/static"
+import "franko/os"
+import "franko/io"
+
+func main() -> int32 {
+    [byte] msg;
+    msg.init(5);
+    msg.memcpy("hello");
+
+    static_if (static::IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+        os::win32::WriteFile(h, getview(msg), 5, null);
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
+        os::posix::write(os::posix::STDOUT_FILENO, getview(msg), 5);
+    }
+
+    msg.uninit();
+    return 0;
+}
+```
+
+An unguarded off-target FFI call still fails when building for that
+target.
+
+## 34.7 Restrictions and edge cases
+
+- `static_if` is not allowed at global scope.
+- `static_if` cannot appear in a `for` header.
+- The condition must be a compile-time constant integer. A local variable
+  is not a compile-time constant, even when it is initialized with a
+  literal.
+- Target constants and introspection calls cannot be used in declaration
+  positions that require a literal: static array sizes, global primitive
+  initializers, and field defaults.
+- Using `static::` without importing `franko/static` reports the import
+  hint shown in [Importing the module](#341-importing-the-module).
+- `static_if` is statement-only; it never produces a value.
+- `static::` introspection functions are built-in compile-time
+  functions, not callable values.
+- `static::what_type` cannot feed `static::strcmp` or `static::panic`.
+- Empty string literals are rejected in `static::strcmp` and
+  `static::panic`.

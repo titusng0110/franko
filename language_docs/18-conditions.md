@@ -41,3 +41,9 @@ if (p == q) {
     print(1);
 }
 ```
+
+## Static Conditions
+
+`static_if` uses a different rule: its condition must be a compile-time
+constant integer, and only the selected branch is used. See
+[Compile-Time Reflection](34-compile-time-reflection.md).

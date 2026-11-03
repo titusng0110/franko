@@ -64,32 +64,6 @@ final class TargetInfo {
         return new TargetInfo(os, arch);
     }
 
-    static TargetInfo detectHost() {
-        String osName = System.getProperty("os.name", "");
-        String osArch = System.getProperty("os.arch", "");
-
-        String os = normalizeHostOs(osName);
-        String arch = normalizeArch(osArch);
-
-        if (os == null) {
-            throw new IllegalStateException(
-                    "Cannot determine target OS from os.name '" + osName + "'"
-                            + ": pass --target <os>-<arch> explicitly"
-                            + " (os in {linux, windows, macos})"
-            );
-        }
-
-        if (arch == null) {
-            throw new IllegalStateException(
-                    "Cannot determine target architecture from os.arch '"
-                            + osArch + "': pass --target <os>-<arch> explicitly"
-                            + " (arch in {x86_64, arm64})"
-            );
-        }
-
-        return new TargetInfo(os, arch);
-    }
-
     private static String normalizeOs(String raw) {
         if (raw == null) {
             return null;
@@ -101,28 +75,6 @@ final class TargetInfo {
             case "macos", "darwin" -> OS_MACOS;
             default -> null;
         };
-    }
-
-    private static String normalizeHostOs(String osName) {
-        if (osName == null) {
-            return null;
-        }
-
-        String lower = osName.toLowerCase();
-
-        if (lower.startsWith("windows")) {
-            return OS_WINDOWS;
-        }
-
-        if (lower.startsWith("linux")) {
-            return OS_LINUX;
-        }
-
-        if (lower.startsWith("mac")) {
-            return OS_MACOS;
-        }
-
-        return null;
     }
 
     private static String normalizeArch(String raw) {

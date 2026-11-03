@@ -2,18 +2,16 @@
 // LIBRARY TEST (os/target): portable target-selected I/O
 // ============================================================
 // Covers: selecting between os::win32 and os::posix intrinsics with
-// the os::IS_WINDOWS compile-time constant.
+// static_if / static_else and the injected static::IS_* constants.
 //
-// The condition folds at Franko-compile time, so the branch that does
-// not match the target is pruned before code generation: the spliced
-// ffi.cpp bridge never contains the wrong target's blocks (whose
-// bodies are #error on the wrong target), and the program writes
-// "hello" to stdout through whichever API matches the target.
-//
-// Both branches are still fully type-checked and memory-safety
-// checked; pruning only affects what is emitted.
+// The condition is a compile-time constant, so only the branch for the
+// current target is semantically analyzed: the other platform's FFI
+// functions are never verified, bridged, or emitted (their bridge
+// bodies are #error on the wrong target). The program writes "hello"
+// to stdout through whichever API matches the target.
 // ============================================================
 
+import "franko/static"
 import "franko/os"
 
 func main() -> int32 {
@@ -21,10 +19,10 @@ func main() -> int32 {
     msg.init(5);
     msg.memcpy("hello");
 
-    if (os::IS_WINDOWS == 1) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
         os::win32::WriteFile(h, getptr(msg), 5, null);
-    } else {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(msg), 5);
     }
 

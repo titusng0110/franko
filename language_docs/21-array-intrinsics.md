@@ -27,13 +27,13 @@ with `-1` and a retry is valid. See
 | `target.init_zero(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.resize(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.uninit()` | dynamic array | `void` | — |
-| `target.memset(value)` | array of trivial elements | `void` | — |
-| `target.memset(value, start, count)` | array of trivial elements | `void` | — |
-| `target.memcpy(source)` | array of copiable elements | `void` | — |
-| `target.memcpy(source, dst_start, src_start, count)` | array of copiable elements | `void` | — |
-| `target.memmove(dst_start, src_start, count)` | array of copiable elements | `void` | — |
-| `target.memcmp(source)` | array of copiable elements | `int32` | negative, zero, or positive |
-| `target.memcmp(source, dst_start, src_start, count)` | array of copiable elements | `int32` | negative, zero, or positive |
+| `target.memset(value)` | array of memset-safe elements | `void` | — |
+| `target.memset(value, start, count)` | array of memset-safe elements | `void` | — |
+| `target.memcpy(source)` | array of memcpy-safe elements | `void` | — |
+| `target.memcpy(source, dst_start, src_start, count)` | array of memcpy-safe elements | `void` | — |
+| `target.memmove(dst_start, src_start, count)` | array of memcpy-safe elements | `void` | — |
+| `target.memcmp(source)` | array of memcpy-safe elements | `int32` | negative, zero, or positive |
+| `target.memcmp(source, dst_start, src_start, count)` | array of memcpy-safe elements | `int32` | negative, zero, or positive |
 | `target.length()` | any array | `uint32` | — |
 | `target.memchr(value)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
 | `target.memchr(value, start, count)` | `[byte]` / `[byte, N]` | `uint32` | index or `0xFFFFFFFF` |
@@ -157,7 +157,7 @@ Rules:
 
 - receiver must be a storage-backed lvalue;
 - receiver may be a dynamic or static array;
-- receiver element type must be trivial;
+- receiver element type must be memset-safe;
 - the whole-array form takes exactly one argument; the ranged form takes exactly three;
 - fill value must be:
   - a constant fitting `uint8`; or
@@ -167,17 +167,22 @@ Rules:
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant start/count ranges are checked against the static size at compile time.
 
-## 21.6 Trivial Element Types
+## 21.6 Memset-Safe Element Types
 
-Current trivial types:
+Current memset-safe types:
 
-| Element type | Trivial? |
+| Element type | Memset-Safe? |
 |---|---|
 | primitive integers | yes |
-| static arrays of trivial elements | yes |
-| structs whose fields are all trivial, recursively | yes |
+| static arrays of memset-safe elements | yes |
+| structs whose fields are all memset-safe, recursively | yes |
 | dynamic arrays | no |
 | pointers | no |
+
+`static::is_memset_safe(x)` exposes this predicate at compile time (see
+[Compile-Time Reflection](34-compile-time-reflection.md)). It is
+deliberately distinct from `static::is_trivial`: a struct with a field
+default is memset-safe but not `is_trivial`.
 
 ## 21.7 `memcpy`
 
@@ -198,7 +203,7 @@ Rules:
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
 - static lengths do not need to match;
-- target and source element types must be copiable;
+- target and source element types must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
@@ -221,22 +226,22 @@ Rules:
 
 - receiver must be a storage-backed lvalue array (dynamic or static);
 - takes exactly three arguments;
-- receiver element type must be copiable;
+- receiver element type must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;
 - for static arrays, constant ranges are checked against the static size at compile time.
 
-## 21.9 Copiable Element Types
+## 21.9 Memcpy-Safe Element Types
 
-Current copiable types:
+Current memcpy-safe types:
 
-| Element type | Copiable? |
+| Element type | Memcpy-Safe? |
 |---|---|
 | primitive integers | yes |
 | pointers | yes |
-| static arrays of copiable elements | yes |
-| structs whose fields are all copiable, recursively | yes |
+| static arrays of memcpy-safe elements | yes |
+| structs whose fields are all memcpy-safe, recursively | yes |
 | dynamic arrays | no |
 
 ## 21.10 `length`
@@ -284,7 +289,7 @@ print(m[0].length());   // 2
 ## 21.11 `memcmp`
 
 Compares array contents byte-wise. The receiver and the source must have
-identical element types, and that element type must be copiable.
+identical element types, and that element type must be memcpy-safe.
 
 Forms:
 
@@ -297,7 +302,7 @@ Rules:
 
 - receiver may be a dynamic or static array; it does not need to be a storage-backed lvalue;
 - source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the static-array forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array literal whose element type is inferred from the receiver;
-- both receiver and source element types must be copiable;
+- both receiver and source element types must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
   - nonconstant expressions of exactly type `uint32`;

@@ -1,0 +1,41 @@
+// ============================================================
+// LANGUAGE TEST: static::what_type spellings
+// ============================================================
+// Covers: canonical type spellings from SemanticType.describe() for
+// primitive aliases, arrays, pointers, structs, qualified structs, and
+// string views. The result is a real read-only view backed by immutable
+// static storage.
+// ============================================================
+
+import "franko/static"
+import "franko/io"
+
+namespace a {
+    namespace b {
+        struct Point {
+            int32 x
+        }
+    }
+}
+
+func main() -> int32 {
+    int i = 1
+    byte b = 2
+    uint u = 3
+    [int32, 3] sa
+    [int32] da
+    ptr<int32> ip = null
+    view<[byte, 5]> text = "hello"
+    a::b::Point p
+
+    print(static::what_type(i));
+    print(static::what_type(b));
+    print(static::what_type(u));
+    print(static::what_type(sa));
+    print(static::what_type(da));
+    print(static::what_type(ip));
+    print(static::what_type(text));
+    print(static::what_type(p));
+
+    return 0;
+}

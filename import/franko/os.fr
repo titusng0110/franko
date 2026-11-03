@@ -1,24 +1,20 @@
 namespace os {
-    // Compile-time target constants. The compiler rewrites these
-    // initializers to the compilation target's 0/1 values (from
-    // --target, or auto-detected from the host) and folds every
-    // reference into an integer literal, so they can select code by
-    // target:
+    // Target selection lives in the compiler-provided franko/static
+    // module. Import it and guard platform-specific calls with
+    // static_if / static_else; the untaken branch is never analyzed,
+    // so only the selected platform's FFI functions are verified and
+    // bridged:
     //
-    //   if (os::IS_WINDOWS == 1) {
+    //   import "franko/static"
+    //
+    //   static_if (static::IS_WINDOWS) {
     //       os::win32::WriteFile(...)
-    //   } else {
+    //   } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
     //       os::posix::write(...)
     //   }
     //
-    // The dead branch is pruned before emission: a win32 call inside
-    // `if os::IS_WINDOWS == 1` compiles cleanly on Linux, while a live
-    // win32 call on a non-Windows target is a Franko-compile error.
-    byte IS_LINUX = 0
-    byte IS_WINDOWS = 0
-    byte IS_MACOS = 0
-    byte IS_X86_64 = 0
-    byte IS_ARM64 = 0
+    // A live call to a function whose bridge block is #error on the
+    // selected target still fails at the C++ stage as a final defense.
     
     namespace posix {
         int32 STDIN_FILENO = 0

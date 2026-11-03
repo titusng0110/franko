@@ -1,0 +1,2 @@
+static::is_primitive argument must be a variable identifier
+static::strcmp argument must be a raw string literal

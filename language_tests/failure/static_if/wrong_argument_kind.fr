@@ -1,0 +1,17 @@
+// ============================================================
+// FAILURE FIXTURE: static introspection argument kinds
+// ============================================================
+// is_primitive takes a bare variable identifier, not a string literal;
+// strcmp takes two raw string literals, not a runtime view value.
+// ============================================================
+
+import "franko/static"
+
+func main() -> int32 {
+    print(static::is_primitive("x"));
+
+    int32 x = 1;
+    print(static::strcmp(x, "a"));
+
+    return 0;
+}

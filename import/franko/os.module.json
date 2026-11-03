@@ -4,94 +4,11 @@
   "id": "franko/os",
   "source": "os.fr",
   "bridge": "os.ffi.cpp",
-  "variables": [
-    {
-      "namespace": "os",
-      "name": "IS_LINUX",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 0,
-        "overrides": [
-          {"when": {"os": "linux"}, "value": 1}
-        ]
-      }
-    },
-    {
-      "namespace": "os",
-      "name": "IS_WINDOWS",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 0,
-        "overrides": [
-          {"when": {"os": "windows"}, "value": 1}
-        ]
-      }
-    },
-    {
-      "namespace": "os",
-      "name": "IS_MACOS",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 0,
-        "overrides": [
-          {"when": {"os": "macos"}, "value": 1}
-        ]
-      }
-    },
-    {
-      "namespace": "os",
-      "name": "IS_X86_64",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 0,
-        "overrides": [
-          {"when": {"arch": "x86_64"}, "value": 1}
-        ]
-      }
-    },
-    {
-      "namespace": "os",
-      "name": "IS_ARM64",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 0,
-        "overrides": [
-          {"when": {"arch": "arm64"}, "value": 1}
-        ]
-      }
-    }
-  ],
-  "structs": [],
   "functions": [
-    {
-      "namespace": "os::posix",
-      "name": "read",
-      "bridge": true,
-      "targets": {"os": ["linux", "macos"]}
-    },
-    {
-      "namespace": "os::posix",
-      "name": "write",
-      "bridge": true,
-      "targets": {"os": ["linux", "macos"]}
-    },
-    {
-      "namespace": "os::win32",
-      "name": "GetStdHandle",
-      "bridge": true,
-      "targets": {"os": ["windows"]}
-    },
-    {
-      "namespace": "os::win32",
-      "name": "ReadFile",
-      "bridge": true,
-      "targets": {"os": ["windows"]}
-    },
-    {
-      "namespace": "os::win32",
-      "name": "WriteFile",
-      "bridge": true,
-      "targets": {"os": ["windows"]}
-    }
+    {"namespace": "os::posix", "name": "read"},
+    {"namespace": "os::posix", "name": "write"},
+    {"namespace": "os::win32", "name": "GetStdHandle"},
+    {"namespace": "os::win32", "name": "ReadFile"},
+    {"namespace": "os::win32", "name": "WriteFile"}
   ]
 }

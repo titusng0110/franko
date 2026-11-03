@@ -8,6 +8,7 @@ Franko supports the following statements inside function bodies and blocks:
 - increment and decrement statements (`x++`, `x--`);
 - blocks;
 - `if`;
+- `static_if` / `static_else`;
 - `while`;
 - `for`;
 - `return`;
@@ -191,3 +192,22 @@ arr.memset(0);
 arr.memcpy(getptr(other));
 arr.uninit();
 ```
+
+## 19.9 Static If Statements
+
+`static_if` and `static_else` are compile-time statement forms:
+
+```franko
+static_if (constantExpression) {
+    ...
+} static_else {
+    ...
+}
+```
+
+The condition must be a compile-time constant integer. Only the selected
+branch is used; the other branch is ignored entirely. Braceless bodies
+behave like ordinary `if` bodies.
+A standalone `static_else` is a syntax error, and `static_if` is not a
+top-level item. See
+[Compile-Time Reflection](34-compile-time-reflection.md).

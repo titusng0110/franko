@@ -1,0 +1,36 @@
+// ============================================================
+// LANGUAGE TEST: static_if target selection and static::IS_* values
+// ============================================================
+// Covers: import "franko/static", the five injected target constants,
+// and static_if / static_else selection.
+//
+// Each OS/arch group has exactly one constant set to 1 for the
+// compilation target, so the sums are portable across the hosts the
+// suite runs on. The selection fixtures print fixed text from the
+// branch chosen for the current target.
+// ============================================================
+
+import "franko/static"
+import "franko/io"
+
+func main() -> int32 {
+    int32 os_sum = static::IS_LINUX + static::IS_WINDOWS + static::IS_MACOS;
+    int32 arch_sum = static::IS_X86_64 + static::IS_ARM64;
+
+    print(os_sum);
+    print(arch_sum);
+
+    static_if (static::IS_LINUX || static::IS_WINDOWS || static::IS_MACOS) {
+        print("os-selected");
+    } static_else {
+        print("os-missing");
+    }
+
+    static_if (static::IS_X86_64 || static::IS_ARM64) {
+        print("arch-selected");
+    } static_else {
+        print("arch-missing");
+    }
+
+    return 0;
+}

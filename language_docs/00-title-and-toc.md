@@ -45,3 +45,4 @@ checker internals are documented separately in
 31. [Foreign Function Interface](31-foreign-function-interface.md)
 32. [Examples](32-examples.md)
 33. [Naming Conventions](33-naming-conventions.md)
+34. [Compile-Time Reflection](34-compile-time-reflection.md)

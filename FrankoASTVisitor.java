@@ -465,6 +465,33 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
+    public ASTNode visitStaticIfStatement(FrankoParser.StaticIfStatementContext ctx) {
+        return visit(ctx.staticIfStmt());
+    }
+
+    @Override
+    public ASTNode visitStaticIfStmt(FrankoParser.StaticIfStmtContext ctx) {
+        ASTNode condition = visit(ctx.expr());
+        ASTNode thenBranch = visit(ctx.statement());
+        ASTNode elseBranch = null;
+
+        if (ctx.staticElseClause() != null) {
+            elseBranch = visit(ctx.staticElseClause().staticElseBody());
+        }
+
+        return new StaticIfNode(span(ctx), condition, thenBranch, elseBranch);
+    }
+
+    @Override
+    public ASTNode visitStaticElseBody(FrankoParser.StaticElseBodyContext ctx) {
+        if (ctx.staticIfStmt() != null) {
+            return visit(ctx.staticIfStmt());
+        }
+
+        return visit(ctx.statement());
+    }
+
+    @Override
     public ASTNode visitWhileStatement(FrankoParser.WhileStatementContext ctx) {
         return visit(ctx.whileStmt());
     }

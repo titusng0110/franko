@@ -318,6 +318,11 @@ public class Desugarer {
             return;
         }
 
+        if (stmt instanceof StaticIfNode) {
+            out.add(desugarStaticIf((StaticIfNode) stmt));
+            return;
+        }
+
         if (stmt instanceof IfNode) {
             IfNode n = (IfNode) stmt;
 
@@ -750,6 +755,10 @@ public class Desugarer {
             );
         }
 
+        if (stmt instanceof StaticIfNode) {
+            return desugarStaticIf((StaticIfNode) stmt);
+        }
+
         if (stmt instanceof WhileNode) {
             WhileNode n = (WhileNode) stmt;
 
@@ -812,6 +821,17 @@ public class Desugarer {
 
         throw new RuntimeException(
             "Unsupported statement in desugarer: " + stmt.getClass().getSimpleName()
+        );
+    }
+
+    private ASTNode desugarStaticIf(StaticIfNode n) {
+        return new StaticIfNode(
+            n.span,
+            desugarExpr(n.condition),
+            desugarControlledStmt(n.thenBranch),
+            n.elseBranch != null
+                    ? desugarControlledStmt(n.elseBranch)
+                    : null
         );
     }
 
@@ -926,9 +946,18 @@ public class Desugarer {
         if (expr instanceof CallNode) {
             CallNode n = (CallNode) expr;
 
+            boolean preserveStringLiterals =
+                isStaticStringIntrinsicCallee(n.callee);
+
             List<ASTNode> args = new ArrayList<>();
 
             for (ASTNode arg : n.args) {
+                if (preserveStringLiterals
+                        && arg instanceof StringLiteralNode) {
+                    args.add(arg);
+                    continue;
+                }
+
                 args.add(desugarExpr(arg));
             }
 
@@ -981,6 +1010,18 @@ public class Desugarer {
         } finally {
             diagnostics.pop();
         }
+    }
+
+    private static boolean isStaticStringIntrinsicCallee(ASTNode callee) {
+        if (!(callee instanceof QualifiedNameNode q)
+                || q.segments.size() != 2
+                || !"static".equals(q.segments.get(0))) {
+            return false;
+        }
+
+        String name = q.segments.get(1);
+
+        return "strcmp".equals(name) || "panic".equals(name);
     }
 
     private ASTNode evalConstExpr(ASTNode expr, String role) {

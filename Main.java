@@ -14,19 +14,15 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        String sourceFile = "test.fr";
-        String outputFile = "test.cpp";
-        Path importSearchDir = Path.of("import");
+        String sourceFile = null;
+        String outputFile = null;
+        Path importSearchDir = null;
         String targetSpec = null;
         boolean optimize = false;
         boolean maxOptimize = false;
         boolean emitJson = false;
 
-        if (args.length > 0) {
-            sourceFile = args[0];
-        }
-
-        for (int i = 1; i < args.length; i++) {
+        for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-o":
                     if (i + 1 >= args.length) {
@@ -68,8 +64,37 @@ public class Main {
                     break;
 
                 default:
-                    throw new IllegalArgumentException("Unknown argument: " + args[i]);
+                    if (args[i].startsWith("-")) {
+                        throw new IllegalArgumentException("Unknown argument: " + args[i]);
+                    }
+
+                    if (sourceFile != null) {
+                        throw new IllegalArgumentException(
+                                "Multiple source files: '" + sourceFile
+                                        + "' and '" + args[i] + "'");
+                    }
+
+                    sourceFile = args[i];
             }
+        }
+
+        if (sourceFile == null) {
+            throw new IllegalArgumentException("Missing source file argument");
+        }
+
+        if (outputFile == null) {
+            throw new IllegalArgumentException(
+                    "Missing required -o <output.cpp> argument");
+        }
+
+        if (importSearchDir == null) {
+            throw new IllegalArgumentException(
+                    "Missing required -p <import-dir> argument");
+        }
+
+        if (targetSpec == null) {
+            throw new IllegalArgumentException(
+                    "Missing required --target <os>-<arch> argument");
         }
 
         Path outPath = Path.of(outputFile);
@@ -107,13 +132,11 @@ public class Main {
             JsonArtifacts artifacts,
             DiagnosticLog log
     ) throws Exception {
-        TargetInfo target = targetSpec == null
-                ? TargetInfo.detectHost()
-                : TargetInfo.parse(targetSpec);
+        TargetInfo target = TargetInfo.parse(targetSpec);
 
         ModuleRegistry modules = new ModuleRegistry();
         Frontend frontend = new Frontend(artifacts, modules);
-        frontend.setTarget(target);
+        CompileTimeInjector compileTimeInjector = new CompileTimeInjector(target);
 
         Result<AstDocument> rawResult = frontend.parseFile(sourceFile);
         log.add("parse", rawResult.diagnostics);
@@ -143,7 +166,11 @@ public class Main {
             abort(log, artifacts, "Desugaring failed:", desugaredResult.diagnostics);
         }
 
-        ImportResolver importResolver = new ImportResolver(importSearchDir, frontend);
+        ImportResolver importResolver = new ImportResolver(
+                importSearchDir,
+                frontend,
+                compileTimeInjector
+        );
         ImportResult importResult = importResolver.resolve(desugared, sourceFile);
         log.add("imports", importResult.diagnostics);
         artifacts.writeAst(AstPhase.IMPORT_RESOLVED, importResult.document);
@@ -241,7 +268,7 @@ public class Main {
                         .check(permissionResult.document)
         );
 
-        FfiHandler ffiHandler = new FfiHandler(modules, target);
+        FfiHandler ffiHandler = new FfiHandler(modules);
         SastDocument checkedDocument = privateIdentifierResult.document;
 
         if (modules.hasFfiEntities()) {
