@@ -56,7 +56,7 @@ Invalid:
 [int32, 999999999999999999999999999999999] c;
 ```
 
-Static arrays do not use `arr(size)` initialization.
+Static arrays cannot use `init`; fill them with `memset` or `memcpy`.
 
 The size may be written as `?` in a `view` declaration with an
 array-literal initializer (see [Desugaring](05-desugaring.md)):
@@ -81,10 +81,9 @@ A dynamic array has runtime size:
 [int32] xs;
 ```
 
-Dynamic arrays are initialized with the array intrinsic `init` (or one of its aliases):
+Dynamic arrays are initialized with the array intrinsics `init` and `init_zero`:
 
 ```franko
-xs(10);             // shorthand for xs.init(10)
 xs.init(10);        // allocate uninitialized storage
 xs.init_zero(10);   // allocate zeroed storage
 ```
@@ -106,12 +105,6 @@ Dynamic array declaration alone does not allocate element storage.
 The array must be initialized before ordinary indexed use.
 
 An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays), `init` and `init_zero` default-construct every element into the uninitialized state, so inner arrays are immediately ready for `init` without further setup.
-
-The call-initialization form is only valid for dynamic arrays:
-
-```franko
-int32 x(5);   // invalid: x is not a dynamic array
-```
 
 ## 20.3 Array Access
 

@@ -17,7 +17,7 @@ struct Point {
 func main() -> int32 {
     // Dynamic array of structs: starts empty, must be initialized.
     [Point] dyn;
-    dyn(2);
+    dyn.init(2);
     dyn[0].x = 1;
     dyn[0].y = 2;
     dyn[1].x = 3;

@@ -6,7 +6,7 @@ import "franko/io"
 // Covers:
 //   - ptr<ptr<int32>>: getptr of an ptr variable, double
 //     dereference to write and read through both levels
-//   - ptr<[int32]>: $(p)(n) allocation shorthand and
+//   - ptr<[int32]>: $(p).init(n) and
 //     element writes through the dereference
 //   - ptr<[int32, 3]>: initializer-list assignment through
 //     the dereference
@@ -35,8 +35,8 @@ func main() -> int32 {
     ptr<[int32]> ap
     ap = getptr(dyn)
 
-    // Allocation shorthand: $(ap)(4) is $(ap).init(4).
-    $(ap)(4)
+    // Allocate through the pointer.
+    $(ap).init(4)
     $(ap)[0] = 10
     $(ap)[3] = 40
     print($(ap)[0])

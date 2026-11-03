@@ -2,6 +2,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class Main {
 
@@ -151,24 +152,27 @@ public class Main {
             abort(log, artifacts, "Import resolution failed:", importResult.diagnostics);
         }
 
-        SemanticAnalyzer sema = new SemanticAnalyzer();
-        SastResult semaResult = sema.analyze(importResult.document);
-        log.add("semantic", semaResult.diagnostics);
-        artifacts.writeSast(SastPhase.SEMANTIC, semaResult.document);
-        printWarnings("==== Warnings ====", semaResult.diagnostics);
+        PassResult semaResult = runPass(
+                log,
+                artifacts,
+                "semantic",
+                SastPhase.SEMANTIC,
+                null,
+                "==== Warnings ====",
+                "Semantic analysis failed:",
+                () -> new SemanticAnalyzer().analyze(importResult.document)
+        );
 
-        if (semaResult.hasErrors()) {
-            abort(log, artifacts, "Semantic analysis failed:", semaResult.diagnostics);
-        }
-
-        System.out.println("==== Legality Checking ====");
-        PassResult legalityResult = new LegalityChecker().check(semaResult.document);
-        log.add("legality", legalityResult.diagnostics);
-        artifacts.writeSast(SastPhase.LEGALITY, legalityResult.document);
-
-        if (legalityResult.hasErrors()) {
-            abort(log, artifacts, "Legality checking failed:", legalityResult.diagnostics);
-        }
+        PassResult legalityResult = runPass(
+                log,
+                artifacts,
+                "legality",
+                SastPhase.LEGALITY,
+                "==== Legality Checking ====",
+                null,
+                "Legality checking failed:",
+                () -> new LegalityChecker().check(semaResult.document)
+        );
 
         SastDocument branchPruned = new BranchPruner().prune(legalityResult.document);
         artifacts.writeSast(SastPhase.BRANCH_PRUNED, branchPruned);
@@ -177,114 +181,70 @@ public class Main {
                 new InactiveDeclarationPruner().prune(branchPruned);
         artifacts.writeSast(SastPhase.INACTIVE_PRUNED, inactivePruned);
 
-        System.out.println("==== Pointer Null-State Checking ====");
-        PointerNullStateChecker pointerStateChecker =
-                new PointerNullStateChecker(new DiagnosticBag());
-        PassResult pointerStateResult = pointerStateChecker.check(inactivePruned);
-        log.add("null-state", pointerStateResult.diagnostics);
-        artifacts.writeSast(SastPhase.NULL_STATE, pointerStateResult.document);
-        printWarnings(
+        PassResult pointerStateResult = runPass(
+                log,
+                artifacts,
+                "null-state",
+                SastPhase.NULL_STATE,
+                "==== Pointer Null-State Checking ====",
                 "==== Pointer Null-State Warnings ====",
-                pointerStateResult.diagnostics
+                "Pointer null-state checking failed:",
+                () -> new PointerNullStateChecker(new DiagnosticBag())
+                        .check(inactivePruned)
         );
 
-        if (pointerStateResult.hasErrors()) {
-            abort(
-                    log,
-                    artifacts,
-                    "Pointer null-state checking failed:",
-                    pointerStateResult.diagnostics
-            );
-        }
-
-        System.out.println("==== Dangling Pointer Checking ====");
-        DanglingPointerChecker danglingChecker =
-                new DanglingPointerChecker(new DiagnosticBag());
-        PassResult danglingResult = danglingChecker.check(pointerStateResult.document);
-        log.add("dangling", danglingResult.diagnostics);
-        artifacts.writeSast(SastPhase.DANGLING, danglingResult.document);
-        printWarnings(
+        PassResult danglingResult = runPass(
+                log,
+                artifacts,
+                "dangling",
+                SastPhase.DANGLING,
+                "==== Dangling Pointer Checking ====",
                 "==== Dangling Pointer Warnings ====",
-                danglingResult.diagnostics
+                "Dangling pointer checking failed:",
+                () -> new DanglingPointerChecker(new DiagnosticBag())
+                        .check(pointerStateResult.document)
         );
 
-        if (danglingResult.hasErrors()) {
-            abort(
-                    log,
-                    artifacts,
-                    "Dangling pointer checking failed:",
-                    danglingResult.diagnostics
-            );
-        }
-
-        System.out.println("==== Dynamic Array Memory Checking ====");
-        DynamicArrayMemoryChecker dynamicArrayChecker =
-                new DynamicArrayMemoryChecker(new DiagnosticBag());
-        PassResult dynamicArrayResult = dynamicArrayChecker.check(danglingResult.document);
-        log.add("dyn-array", dynamicArrayResult.diagnostics);
-        artifacts.writeSast(SastPhase.DYN_ARRAY, dynamicArrayResult.document);
-        printWarnings(
+        PassResult dynamicArrayResult = runPass(
+                log,
+                artifacts,
+                "dyn-array",
+                SastPhase.DYN_ARRAY,
+                "==== Dynamic Array Memory Checking ====",
                 "==== Dynamic Array Memory Warnings ====",
-                dynamicArrayResult.diagnostics
+                "Dynamic array memory checking failed:",
+                () -> new DynamicArrayMemoryChecker(new DiagnosticBag())
+                        .check(danglingResult.document)
         );
 
-        if (dynamicArrayResult.hasErrors()) {
-            abort(
-                    log,
-                    artifacts,
-                    "Dynamic array memory checking failed:",
-                    dynamicArrayResult.diagnostics
-            );
-        }
-
-        System.out.println("==== Pointer Permission Linting ====");
-        PointerPermissionChecker permissionChecker =
-                new PointerPermissionChecker(new DiagnosticBag());
-        PassResult permissionResult = permissionChecker.check(
-                dynamicArrayResult.document
-        );
-        log.add("permissions", permissionResult.diagnostics);
-        artifacts.writeSast(SastPhase.PERMISSIONS, permissionResult.document);
-        printWarnings(
+        PassResult permissionResult = runPass(
+                log,
+                artifacts,
+                "permissions",
+                SastPhase.PERMISSIONS,
+                "==== Pointer Permission Linting ====",
                 "==== Pointer Permission Warnings ====",
-                permissionResult.diagnostics
+                "Pointer permission linting failed:",
+                () -> new PointerPermissionChecker(new DiagnosticBag())
+                        .check(dynamicArrayResult.document)
         );
 
-        if (permissionResult.hasErrors()) {
-            abort(
-                    log,
-                    artifacts,
-                    "Pointer permission linting failed:",
-                    permissionResult.diagnostics
-            );
-        }
-
-        System.out.println("==== Private Identifier Linting ====");
-        PrivateIdentifierLinter privateIdentifierLinter =
-                new PrivateIdentifierLinter(new DiagnosticBag());
-        PassResult privateIdentifierResult = privateIdentifierLinter.check(
-                permissionResult.document
-        );
-        log.add("private-id", privateIdentifierResult.diagnostics);
-        artifacts.writeSast(SastPhase.PRIVATE_ID, privateIdentifierResult.document);
-        printWarnings(
+        PassResult privateIdentifierResult = runPass(
+                log,
+                artifacts,
+                "private-id",
+                SastPhase.PRIVATE_ID,
+                "==== Private Identifier Linting ====",
                 "==== Private Identifier Warnings ====",
-                privateIdentifierResult.diagnostics
+                "Private identifier linting failed:",
+                () -> new PrivateIdentifierLinter(new DiagnosticBag())
+                        .check(permissionResult.document)
         );
-
-        if (privateIdentifierResult.hasErrors()) {
-            abort(
-                    log,
-                    artifacts,
-                    "Private identifier linting failed:",
-                    privateIdentifierResult.diagnostics
-            );
-        }
 
         FfiHandler ffiHandler = new FfiHandler(modules, target);
         SastDocument checkedDocument = privateIdentifierResult.document;
 
-        if (ffiHandler.hasFfiEntities()) {
+        if (modules.hasFfiEntities()) {
             PassResult ffiResult = ffiHandler.verify(privateIdentifierResult.document);
             log.add("ffi-verified", ffiResult.diagnostics);
             artifacts.writeSast(SastPhase.FFI_VERIFIED, ffiResult.document);
@@ -301,11 +261,11 @@ public class Main {
 
         System.out.println("All checks passed.");
 
-        FfiCodegen ffiCodegen = ffiHandler.hasFfiEntities()
-                ? ffiHandler.codegen()
+        FfiHandler activeFfiHandler = modules.hasFfiEntities()
+                ? ffiHandler
                 : null;
-        Cpp14Codegen codegen = new Cpp14Codegen(ffiCodegen, target, maxOptimize);
-        String generatedBody = codegen.generate(checkedDocument);
+        Cpp14Codegen codegen = new Cpp14Codegen(activeFfiHandler, maxOptimize);
+        String generatedBody = codegen.generate(checkedDocument.root);
 
         String templateFile = switch (checkedDocument.entryKind) {
             case ARGS -> "ProgramTemplateWithRawCArgs.cpp";
@@ -357,6 +317,35 @@ public class Main {
         System.out.println("Successfully compiled to C++14: " + outPath);
     }
 
+    private static PassResult runPass(
+            DiagnosticLog log,
+            JsonArtifacts artifacts,
+            String logName,
+            SastPhase phase,
+            String heading,
+            String warningHeading,
+            String failureHeader,
+            Supplier<PassResult> pass
+    ) {
+        if (heading != null) {
+            System.out.println(heading);
+        }
+
+        PassResult result = pass.get();
+        log.add(logName, result.diagnostics);
+        artifacts.writeSast(phase, result.document);
+
+        if (warningHeading != null) {
+            printWarnings(warningHeading, result.diagnostics);
+        }
+
+        if (result.hasErrors()) {
+            abort(log, artifacts, failureHeader, result.diagnostics);
+        }
+
+        return result;
+    }
+
     private static void abort(
             DiagnosticLog log,
             JsonArtifacts artifacts,
@@ -365,28 +354,7 @@ public class Main {
     ) {
         artifacts.writeDiagnostics(log);
 
-        StringBuilder sb = new StringBuilder(header);
-
-        if (!header.endsWith("\n")) {
-            sb.append('\n');
-        }
-
-        int index = 0;
-
-        for (Diagnostic diagnostic : diagnostics) {
-            if (!diagnostic.isError()) {
-                continue;
-            }
-
-            index++;
-            sb.append("  ")
-                    .append(index)
-                    .append(". ")
-                    .append(diagnostic.format())
-                    .append('\n');
-        }
-
-        throw new Abort(sb.toString());
+        throw new Abort(DiagnosticBag.formatErrors(header, diagnostics));
     }
 
     private static void printWarnings(String heading, List<Diagnostic> diagnostics) {

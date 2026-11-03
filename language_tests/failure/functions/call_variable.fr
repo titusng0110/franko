@@ -1,0 +1,7 @@
+// Failure fixture: functions/call_variable
+// A variable is not callable.
+func main() -> int32 {
+    [int32] arr;
+    arr(20);
+    return 0;
+}

@@ -3,7 +3,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -11,109 +10,8 @@ import java.util.Set;
 public final class DynamicArrayMemoryChecker {
     private static final int MAX_BRANCH_DEPTH = 12;
 
-    private enum ArrayState {
-        UNINITED,
-        INITED,
-        MAYBE_INITED
-    }
-
-    private enum FreedState {
-        NEVER,
-        MAYBE,
-        YES
-    }
-
-    private enum LengthAssertion {
-        NONE,
-        ZERO,
-        NONZERO
-    }
-
-    private static final class ArrayOrigin {
-        static final ArrayOrigin EMPTY =
-                new ArrayOrigin(Set.of(), false);
-
-        static final ArrayOrigin UNKNOWN =
-                new ArrayOrigin(Set.of(), true);
-
-        final Set<VariableSymbol> arrays;
-        final boolean unknown;
-
-        private ArrayOrigin(
-                Set<VariableSymbol> arrays,
-                boolean unknown
-        ) {
-            this.arrays = arrays;
-            this.unknown = unknown;
-        }
-
-        static ArrayOrigin of(VariableSymbol symbol) {
-            return new ArrayOrigin(Set.of(symbol), false);
-        }
-
-        ArrayOrigin union(ArrayOrigin other) {
-            if (other == null) {
-                other = UNKNOWN;
-            }
-
-            if (this == other) {
-                return this;
-            }
-
-            Set<VariableSymbol> merged = new LinkedHashSet<>(arrays);
-            merged.addAll(other.arrays);
-
-            return new ArrayOrigin(
-                    Set.copyOf(merged),
-                    unknown || other.unknown
-            );
-        }
-    }
-
-    private static final class LengthGuard {
-        final SemanticExprNode receiver;
-        final String op;
-        final BigInteger constant;
-
-        LengthGuard(
-                SemanticExprNode receiver,
-                String op,
-                BigInteger constant
-        ) {
-            this.receiver = receiver;
-            this.op = op;
-            this.constant = constant;
-        }
-
-        LengthAssertion assertion(boolean holds) {
-            String effective = holds ? op : negate(op);
-            int sign = constant.signum();
-
-            return switch (effective) {
-                case "==" -> sign == 0
-                        ? LengthAssertion.ZERO
-                        : sign > 0
-                                ? LengthAssertion.NONZERO
-                                : LengthAssertion.NONE;
-                case "!=" -> sign == 0
-                        ? LengthAssertion.NONZERO
-                        : LengthAssertion.NONE;
-                case "<" -> constant.equals(BigInteger.ONE)
-                        ? LengthAssertion.ZERO
-                        : LengthAssertion.NONE;
-                case "<=" -> sign == 0
-                        ? LengthAssertion.ZERO
-                        : LengthAssertion.NONE;
-                case ">" -> sign >= 0
-                        ? LengthAssertion.NONZERO
-                        : LengthAssertion.NONE;
-                case ">=" -> constant.compareTo(BigInteger.ONE) >= 0
-                        ? LengthAssertion.NONZERO
-                        : LengthAssertion.NONE;
-                default -> LengthAssertion.NONE;
-            };
-        }
-    }
+    private final DynamicArrayAnalysisState analysisState =
+            new DynamicArrayAnalysisState();
 
     private static final class LoopFrame {
         final List<Integer> breakStates = new ArrayList<>();
@@ -122,29 +20,6 @@ public final class DynamicArrayMemoryChecker {
 
     private final DiagnosticBag diagnostics;
 
-    private final IdentityHashMap<VariableSymbol, Integer> arrayIndexBySymbol =
-            new IdentityHashMap<>();
-
-    private VariableSymbol[] arraySymbols = new VariableSymbol[0];
-    private int arrayCount = 0;
-
-    private final IdentityHashMap<VariableSymbol, Integer> pointerIndexBySymbol =
-            new IdentityHashMap<>();
-
-    private VariableSymbol[] pointerSymbols = new VariableSymbol[0];
-    private int pointerCount = 0;
-
-    private ArrayState[] arrayState = new ArrayState[0];
-    private FreedState[] freedState = new FreedState[0];
-    private boolean[] escaped = new boolean[0];
-
-    private ArrayOrigin[] pointerState = new ArrayOrigin[0];
-
-    private ArrayState[][] arraySnapshots = new ArrayState[0][];
-    private FreedState[][] freedSnapshots = new FreedState[0][];
-    private ArrayOrigin[][] pointerSnapshots = new ArrayOrigin[0][];
-
-    private int snapshotCount = 0;
     private int branchDepth = 0;
 
     private final List<LoopFrame> loopStack = new ArrayList<>();
@@ -169,10 +44,10 @@ public final class DynamicArrayMemoryChecker {
     public void check(SemanticASTNode node) {
         diagnostics.clear();
 
-        prepareAnalysis(node);
+        analysisState.prepare(node);
 
         branchDepth = 0;
-        snapshotCount = 0;
+        analysisState.snapshotCount = 0;
         loopStack.clear();
         addressTakenPointers.clear();
         reportedErrorSites.clear();
@@ -180,10 +55,10 @@ public final class DynamicArrayMemoryChecker {
         suppressLifecycleChecks = false;
         currentFunction = null;
 
-        Arrays.fill(arrayState, ArrayState.UNINITED);
-        Arrays.fill(freedState, FreedState.NEVER);
-        Arrays.fill(escaped, false);
-        Arrays.fill(pointerState, ArrayOrigin.UNKNOWN);
+        Arrays.fill(analysisState.arrayState, ArrayState.UNINITED);
+        Arrays.fill(analysisState.freedState, FreedState.NEVER);
+        Arrays.fill(analysisState.escaped, false);
+        Arrays.fill(analysisState.pointerState, ArrayOrigin.UNKNOWN);
 
         checkNode(node);
     }
@@ -194,367 +69,6 @@ public final class DynamicArrayMemoryChecker {
                 document.withPhase(SastPhase.DYN_ARRAY),
                 diagnostics.diagnostics()
         );
-    }
-
-    private void prepareAnalysis(SemanticASTNode root) {
-        arrayIndexBySymbol.clear();
-        arraySymbols = new VariableSymbol[16];
-        arrayCount = 0;
-
-        pointerIndexBySymbol.clear();
-        pointerSymbols = new VariableSymbol[16];
-        pointerCount = 0;
-
-        collectSymbols(root);
-
-        arraySymbols = Arrays.copyOf(arraySymbols, arrayCount);
-        pointerSymbols = Arrays.copyOf(pointerSymbols, pointerCount);
-
-        arrayState = new ArrayState[arrayCount];
-        freedState = new FreedState[arrayCount];
-        escaped = new boolean[arrayCount];
-
-        Arrays.fill(arrayState, ArrayState.UNINITED);
-        Arrays.fill(freedState, FreedState.NEVER);
-
-        pointerState = new ArrayOrigin[pointerCount];
-        Arrays.fill(pointerState, ArrayOrigin.UNKNOWN);
-
-        int estimatedSnapshots = Math.max(
-                2 * MAX_BRANCH_DEPTH,
-                estimateSnapshotDemand(root, 0) + MAX_BRANCH_DEPTH
-        );
-
-        arraySnapshots = new ArrayState[estimatedSnapshots][arrayCount];
-        freedSnapshots = new FreedState[estimatedSnapshots][arrayCount];
-        pointerSnapshots = new ArrayOrigin[estimatedSnapshots][pointerCount];
-
-        for (int i = 0; i < estimatedSnapshots; i++) {
-            Arrays.fill(arraySnapshots[i], ArrayState.UNINITED);
-            Arrays.fill(freedSnapshots[i], FreedState.NEVER);
-            Arrays.fill(pointerSnapshots[i], ArrayOrigin.UNKNOWN);
-        }
-    }
-
-    private void collectSymbols(SemanticASTNode node) {
-        if (node == null) {
-            return;
-        }
-
-        if (node instanceof SemanticProgramNode n) {
-            for (SemanticASTNode item : n.topLevelItems) {
-                collectSymbols(item);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticNamespaceNode n) {
-            for (SemanticASTNode item : n.items) {
-                collectSymbols(item);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticFunctionDeclNode n) {
-            for (VariableSymbol parameter : n.parameterVariables) {
-                addPointerSymbolIfNeeded(parameter);
-            }
-
-            collectSymbols(n.body);
-            return;
-        }
-
-        if (node instanceof SemanticStructDeclNode n) {
-            for (SemanticFunctionDeclNode method : n.methods) {
-                collectSymbols(method);
-            }
-
-            return;
-        }
-
-        if (node instanceof SemanticBlockNode n) {
-            for (SemanticStmtNode stmt : n.statements) {
-                collectSymbols(stmt);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticVarDeclNode n) {
-            addArraySymbolIfNeeded(n.symbol);
-            addPointerSymbolIfNeeded(n.symbol);
-            collectSymbolsFromExpr(n.staticInitializer);
-            return;
-        }
-
-        if (node instanceof SemanticAssignNode n) {
-            collectSymbolsFromExpr(n.target);
-            collectSymbolsFromExpr(n.value);
-            return;
-        }
-
-        if (node instanceof SemanticIfNode n) {
-            collectSymbolsFromExpr(n.condition);
-            collectSymbols(n.thenBranch);
-            collectSymbols(n.elseBranch);
-            return;
-        }
-
-        if (node instanceof SemanticWhileNode n) {
-            collectSymbolsFromExpr(n.condition);
-            collectSymbols(n.body);
-
-            for (SemanticStmtNode updateStmt : n.update) {
-                collectSymbols(updateStmt);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticReturnNode n) {
-            collectSymbolsFromExpr(n.value);
-            return;
-        }
-
-        if (node instanceof SemanticExprStmtNode n) {
-            collectSymbolsFromExpr(n.expr);
-            return;
-        }
-
-        if (node instanceof SemanticExprNode expr) {
-            collectSymbolsFromExpr(expr);
-        }
-    }
-
-    private void collectSymbolsFromExpr(SemanticExprNode expr) {
-        if (expr == null) {
-            return;
-        }
-
-        if (expr instanceof SemanticIntLiteralNode
-                || expr instanceof SemanticNullLiteralNode) {
-            return;
-        }
-
-        if (expr instanceof SemanticVarExprNode n) {
-            addArraySymbolIfNeeded(n.symbol);
-            addPointerSymbolIfNeeded(n.symbol);
-            return;
-        }
-
-        if (expr instanceof SemanticUnaryOpNode n) {
-            collectSymbolsFromExpr(n.expr);
-            return;
-        }
-
-        if (expr instanceof SemanticBinOpNode n) {
-            collectSymbolsFromExpr(n.left);
-            collectSymbolsFromExpr(n.right);
-            return;
-        }
-
-        if (expr instanceof SemanticArrayAccessNode n) {
-            collectSymbolsFromExpr(n.target);
-            collectSymbolsFromExpr(n.index);
-            return;
-        }
-
-        if (expr instanceof SemanticMemberAccessNode n) {
-            collectSymbolsFromExpr(n.target);
-            return;
-        }
-
-        if (expr instanceof SemanticFunctionCallNode n) {
-            for (SemanticExprNode arg : n.args) {
-                collectSymbolsFromExpr(arg);
-            }
-            return;
-        }
-
-        if (expr instanceof SemanticArrayIntrinsicCallNode n) {
-            collectSymbolsFromExpr(n.receiver);
-
-            for (SemanticExprNode arg : n.args) {
-                collectSymbolsFromExpr(arg);
-            }
-
-            return;
-        }
-
-        if (expr instanceof SemanticGetPtrNode n) {
-            collectSymbolsFromExpr(n.target);
-            return;
-        }
-
-        if (expr instanceof SemanticDerefNode n) {
-            collectSymbolsFromExpr(n.expr);
-            return;
-        }
-
-        if (expr instanceof SemanticCastExprNode n) {
-            collectSymbolsFromExpr(n.expr);
-        }
-    }
-
-    private void addArraySymbolIfNeeded(VariableSymbol symbol) {
-        if (symbol == null
-                || symbol instanceof GlobalVariableSymbol
-                || !(symbol.type instanceof SemanticDynamicArrayType)) {
-            return;
-        }
-
-        if (arrayIndexBySymbol.containsKey(symbol)) {
-            return;
-        }
-
-        if (arrayCount == arraySymbols.length) {
-            arraySymbols = Arrays.copyOf(
-                    arraySymbols,
-                    Math.max(4, arraySymbols.length * 2)
-            );
-        }
-
-        arrayIndexBySymbol.put(symbol, arrayCount);
-        arraySymbols[arrayCount] = symbol;
-        arrayCount++;
-    }
-
-    private void addPointerSymbolIfNeeded(VariableSymbol symbol) {
-        if (symbol == null
-                || !(symbol.type instanceof SemanticPtrType pointer)
-                || pointer.permission != PtrPermission.OWNER
-                || !(pointer.referencedType instanceof SemanticDynamicArrayType)) {
-            return;
-        }
-
-        if (pointerIndexBySymbol.containsKey(symbol)) {
-            return;
-        }
-
-        if (pointerCount == pointerSymbols.length) {
-            pointerSymbols = Arrays.copyOf(
-                    pointerSymbols,
-                    Math.max(4, pointerSymbols.length * 2)
-            );
-        }
-
-        pointerIndexBySymbol.put(symbol, pointerCount);
-        pointerSymbols[pointerCount] = symbol;
-        pointerCount++;
-    }
-
-    private int arrayIndexOfSymbol(VariableSymbol symbol) {
-        if (symbol == null) {
-            return -1;
-        }
-
-        Integer index = arrayIndexBySymbol.get(symbol);
-
-        return index == null ? -1 : index;
-    }
-
-    private int pointerIndexOfSymbol(VariableSymbol symbol) {
-        if (symbol == null) {
-            return -1;
-        }
-
-        Integer index = pointerIndexBySymbol.get(symbol);
-
-        return index == null ? -1 : index;
-    }
-
-    private int singleArrayIndex(SemanticExprNode expr) {
-        ArrayOrigin origins = storageOrigins(expr);
-
-        if (origins == null
-                || origins.unknown
-                || origins.arrays.size() != 1) {
-            return -1;
-        }
-
-        VariableSymbol symbol = origins.arrays.iterator().next();
-
-        return arrayIndexOfSymbol(symbol);
-    }
-
-    private int estimateSnapshotDemand(
-            SemanticASTNode node,
-            int depth
-    ) {
-        if (node == null) {
-            return 0;
-        }
-
-        if (node instanceof SemanticProgramNode n) {
-            int total = 0;
-
-            for (SemanticASTNode item : n.topLevelItems) {
-                total += estimateSnapshotDemand(item, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticNamespaceNode n) {
-            int total = 0;
-
-            for (SemanticASTNode item : n.items) {
-                total += estimateSnapshotDemand(item, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticFunctionDeclNode n) {
-            return 1 + estimateSnapshotDemand(n.body, depth);
-        }
-
-        if (node instanceof SemanticStructDeclNode n) {
-            int total = 0;
-
-            for (SemanticFunctionDeclNode method : n.methods) {
-                total += 1 + estimateSnapshotDemand(method.body, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticBlockNode n) {
-            int total = 0;
-
-            for (SemanticStmtNode stmt : n.statements) {
-                total += estimateSnapshotDemand(stmt, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticIfNode n) {
-            int local = n.elseBranch == null ? 2 : 3;
-
-            int nextDepth = depth < MAX_BRANCH_DEPTH
-                    ? depth + 1
-                    : depth;
-
-            return local
-                    + estimateSnapshotDemand(n.thenBranch, nextDepth)
-                    + estimateSnapshotDemand(n.elseBranch, nextDepth);
-        }
-
-        if (node instanceof SemanticWhileNode n) {
-            int total = 2 + estimateSnapshotDemand(n.body, depth);
-
-            for (SemanticStmtNode updateStmt : n.update) {
-                total += estimateSnapshotDemand(updateStmt, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticBreakNode
-                || node instanceof SemanticContinueNode) {
-            return 1;
-        }
-
-        return 0;
     }
 
     private boolean checkNode(SemanticASTNode node) {
@@ -629,12 +143,12 @@ public final class DynamicArrayMemoryChecker {
     }
 
     private void checkFunctionInner(SemanticFunctionDeclNode node) {
-        int beforeFunction = snapshot();
+        int beforeFunction = analysisState.snapshot();
 
-        Arrays.fill(arrayState, ArrayState.UNINITED);
-        Arrays.fill(freedState, FreedState.NEVER);
-        Arrays.fill(escaped, false);
-        Arrays.fill(pointerState, ArrayOrigin.UNKNOWN);
+        Arrays.fill(analysisState.arrayState, ArrayState.UNINITED);
+        Arrays.fill(analysisState.freedState, FreedState.NEVER);
+        Arrays.fill(analysisState.escaped, false);
+        Arrays.fill(analysisState.pointerState, ArrayOrigin.UNKNOWN);
 
         loopStack.clear();
         addressTakenPointers.clear();
@@ -648,7 +162,7 @@ public final class DynamicArrayMemoryChecker {
             checkBlock(node.body, true);
         }
 
-        restore(beforeFunction);
+        analysisState.restore(beforeFunction);
         currentFunction = null;
     }
 
@@ -716,13 +230,13 @@ public final class DynamicArrayMemoryChecker {
         for (SemanticStmtNode stmt : node.statements) {
             if (stmt instanceof SemanticVarDeclNode decl
                     && decl.symbol != null) {
-                int arrayIndex = arrayIndexOfSymbol(decl.symbol);
+                int arrayIndex = analysisState.arrayIndexOfSymbol(decl.symbol);
 
                 if (arrayIndex >= 0) {
                     blockArrayIndices[blockArrayCount++] = arrayIndex;
                 }
 
-                int pointerIndex = pointerIndexOfSymbol(decl.symbol);
+                int pointerIndex = analysisState.pointerIndexOfSymbol(decl.symbol);
 
                 if (pointerIndex >= 0) {
                     blockPointerIndices[blockPointerCount++] = pointerIndex;
@@ -737,7 +251,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         String where = functionBody
-                ? "end of function '" + functionDisplayName(currentFunction) + "'"
+                ? "end of function '" + DynamicArrayAnalysisState.functionDisplayName(currentFunction) + "'"
                 : "end of scope";
 
         if (!suppressLifecycleChecks) {
@@ -748,13 +262,13 @@ public final class DynamicArrayMemoryChecker {
 
         for (int i = 0; i < blockArrayCount; i++) {
             int index = blockArrayIndices[i];
-            arrayState[index] = ArrayState.UNINITED;
-            freedState[index] = FreedState.NEVER;
-            escaped[index] = false;
+            analysisState.arrayState[index] = ArrayState.UNINITED;
+            analysisState.freedState[index] = FreedState.NEVER;
+            analysisState.escaped[index] = false;
         }
 
         for (int i = 0; i < blockPointerCount; i++) {
-            pointerState[blockPointerIndices[i]] = ArrayOrigin.UNKNOWN;
+            analysisState.pointerState[blockPointerIndices[i]] = ArrayOrigin.UNKNOWN;
         }
 
         return false;
@@ -774,18 +288,18 @@ public final class DynamicArrayMemoryChecker {
             return;
         }
 
-        int arrayIndex = arrayIndexOfSymbol(node.symbol);
+        int arrayIndex = analysisState.arrayIndexOfSymbol(node.symbol);
 
         if (arrayIndex >= 0) {
-            arrayState[arrayIndex] = ArrayState.UNINITED;
-            freedState[arrayIndex] = FreedState.NEVER;
-            escaped[arrayIndex] = false;
+            analysisState.arrayState[arrayIndex] = ArrayState.UNINITED;
+            analysisState.freedState[arrayIndex] = FreedState.NEVER;
+            analysisState.escaped[arrayIndex] = false;
         }
 
-        int pointerIndex = pointerIndexOfSymbol(node.symbol);
+        int pointerIndex = analysisState.pointerIndexOfSymbol(node.symbol);
 
         if (pointerIndex >= 0) {
-            pointerState[pointerIndex] = ArrayOrigin.EMPTY;
+            analysisState.pointerState[pointerIndex] = ArrayOrigin.EMPTY;
         }
 
         checkExpr(node.staticInitializer);
@@ -819,13 +333,13 @@ public final class DynamicArrayMemoryChecker {
             return checkIfPathInsensitive(node);
         }
 
-        int before = snapshot();
+        int before = analysisState.snapshot();
 
         branchDepth++;
 
         boolean thenFeasible = guardPathFeasible(node.condition, true);
 
-        restore(before);
+        analysisState.restore(before);
 
         if (thenFeasible) {
             refineFromGuard(node.condition, true);
@@ -836,9 +350,9 @@ public final class DynamicArrayMemoryChecker {
         boolean thenReturns = checkStmt(node.thenBranch);
         suppressLifecycleChecks = previousSuppression;
 
-        int thenState = thenFeasible ? snapshot() : -1;
+        int thenState = thenFeasible ? analysisState.snapshot() : -1;
 
-        restore(before);
+        analysisState.restore(before);
 
         boolean elseFeasible = guardPathFeasible(node.condition, false);
 
@@ -855,17 +369,17 @@ public final class DynamicArrayMemoryChecker {
             elseReturns = checkStmt(node.elseBranch);
             suppressLifecycleChecks = previousSuppression;
 
-            elseState = elseFeasible ? snapshot() : -1;
+            elseState = elseFeasible ? analysisState.snapshot() : -1;
         } else if (elseFeasible) {
             refineFromGuard(node.condition, false);
-            fallthroughState = snapshot();
+            fallthroughState = analysisState.snapshot();
         }
 
-        restore(before);
+        analysisState.restore(before);
 
         branchDepth--;
 
-        mergeAfterIf(
+        analysisState.mergeAfterIf(
                 before,
                 thenState,
                 thenReturns || !thenFeasible,
@@ -884,24 +398,24 @@ public final class DynamicArrayMemoryChecker {
     }
 
     private boolean checkIfPathInsensitive(SemanticIfNode node) {
-        int before = snapshot();
+        int before = analysisState.snapshot();
 
         boolean thenReturns = checkStmt(node.thenBranch);
-        int thenState = snapshot();
+        int thenState = analysisState.snapshot();
 
-        restore(before);
+        analysisState.restore(before);
 
         boolean elseReturns = false;
         int elseState = -1;
 
         if (node.elseBranch != null) {
             elseReturns = checkStmt(node.elseBranch);
-            elseState = snapshot();
+            elseState = analysisState.snapshot();
         }
 
-        restore(before);
+        analysisState.restore(before);
 
-        mergeAfterIf(
+        analysisState.mergeAfterIf(
                 before,
                 thenState,
                 thenReturns,
@@ -934,18 +448,18 @@ public final class DynamicArrayMemoryChecker {
 
             return new LengthGuard(
                     inner.receiver,
-                    negate(inner.op),
+                    DynamicArrayAnalysisState.negate(inner.op),
                     inner.constant
             );
         }
 
         if (!(condition instanceof SemanticBinOpNode bin)
-                || !isComparison(bin.op)) {
+                || !DynamicArrayAnalysisState.isComparison(bin.op)) {
             return null;
         }
 
-        boolean leftLength = isLengthCall(bin.left);
-        boolean rightLength = isLengthCall(bin.right);
+        boolean leftLength = DynamicArrayAnalysisState.isLengthCall(bin.left);
+        boolean rightLength = DynamicArrayAnalysisState.isLengthCall(bin.right);
 
         if (leftLength == rightLength) {
             return null;
@@ -958,7 +472,7 @@ public final class DynamicArrayMemoryChecker {
             return null;
         }
 
-        String op = leftLength ? bin.op : reverse(bin.op);
+        String op = leftLength ? bin.op : DynamicArrayAnalysisState.reverse(bin.op);
         SemanticExprNode receiver =
                 ((SemanticArrayIntrinsicCallNode) lengthSide).receiver;
 
@@ -991,8 +505,8 @@ public final class DynamicArrayMemoryChecker {
 
         return switch (assertion) {
             case NONE -> true;
-            case ZERO -> arrayState[index] != ArrayState.INITED;
-            case NONZERO -> arrayState[index] != ArrayState.UNINITED;
+            case ZERO -> analysisState.arrayState[index] != ArrayState.INITED;
+            case NONZERO -> analysisState.arrayState[index] != ArrayState.UNINITED;
         };
     }
 
@@ -1015,20 +529,20 @@ public final class DynamicArrayMemoryChecker {
         LengthAssertion assertion = guard.assertion(guardHolds);
 
         if (assertion == LengthAssertion.ZERO) {
-            if (arrayState[index] != ArrayState.UNINITED) {
-                arrayState[index] = ArrayState.UNINITED;
-                freedState[index] = FreedState.MAYBE;
+            if (analysisState.arrayState[index] != ArrayState.UNINITED) {
+                analysisState.arrayState[index] = ArrayState.UNINITED;
+                analysisState.freedState[index] = FreedState.MAYBE;
             }
         } else if (assertion == LengthAssertion.NONZERO) {
-            arrayState[index] = ArrayState.INITED;
-            freedState[index] = FreedState.NEVER;
+            analysisState.arrayState[index] = ArrayState.INITED;
+            analysisState.freedState[index] = FreedState.NEVER;
         }
     }
 
     private boolean checkWhile(SemanticWhileNode node) {
         checkExpr(node.condition);
 
-        int before = snapshot();
+        int before = analysisState.snapshot();
 
         boolean bodyFeasible = guardPathFeasible(node.condition, true);
 
@@ -1038,35 +552,35 @@ public final class DynamicArrayMemoryChecker {
         List<Integer> exitStates = new ArrayList<>();
 
         if (guardPathFeasible(node.condition, false)) {
-            restore(before);
+            analysisState.restore(before);
             refineFromGuard(node.condition, false);
-            exitStates.add(snapshot());
+            exitStates.add(analysisState.snapshot());
         }
 
         boolean bodyTerminates = false;
         List<Integer> backEdgeStates = new ArrayList<>();
 
         if (bodyFeasible) {
-            restore(before);
+            analysisState.restore(before);
             refineFromGuard(node.condition, true);
 
             bodyTerminates = checkStmt(node.body);
-            int afterBody = bodyTerminates ? -1 : snapshot();
+            int afterBody = bodyTerminates ? -1 : analysisState.snapshot();
 
             if (!node.update.isEmpty()) {
                 if (!bodyTerminates) {
-                    restore(afterBody);
+                    analysisState.restore(afterBody);
 
                     if (checkUpdates(node.update)) {
-                        backEdgeStates.add(snapshot());
+                        backEdgeStates.add(analysisState.snapshot());
                     }
                 }
 
                 for (int continueState : frame.continueStates) {
-                    restore(continueState);
+                    analysisState.restore(continueState);
 
                     if (checkUpdates(node.update)) {
-                        backEdgeStates.add(snapshot());
+                        backEdgeStates.add(analysisState.snapshot());
                     }
                 }
             } else {
@@ -1078,11 +592,11 @@ public final class DynamicArrayMemoryChecker {
             }
 
             for (int backEdgeState : backEdgeStates) {
-                restore(backEdgeState);
+                analysisState.restore(backEdgeState);
 
                 if (guardPathFeasible(node.condition, false)) {
                     refineFromGuard(node.condition, false);
-                    exitStates.add(snapshot());
+                    exitStates.add(analysisState.snapshot());
                 }
             }
         } else {
@@ -1100,7 +614,7 @@ public final class DynamicArrayMemoryChecker {
 
         loopStack.remove(loopStack.size() - 1);
 
-        restore(before);
+        analysisState.restore(before);
 
         if (!exitStates.isEmpty()) {
             mergeLoopExitStates(exitStates);
@@ -1133,7 +647,7 @@ public final class DynamicArrayMemoryChecker {
             return;
         }
 
-        int slot = snapshot();
+        int slot = analysisState.snapshot();
 
         int frameIndex = loopStack.size() - levels;
 
@@ -1157,23 +671,23 @@ public final class DynamicArrayMemoryChecker {
 
         int first = slots.get(0);
 
-        for (int i = 0; i < arrayCount; i++) {
+        for (int i = 0; i < analysisState.arrayCount; i++) {
             ArrayState state =
-                    arrayStateFromSnapshot(first, i, first);
+                    analysisState.arrayStateFromSnapshot(first, i, first);
             FreedState freed =
-                    freedStateFromSnapshot(first, i, first);
+                    analysisState.freedStateFromSnapshot(first, i, first);
 
             for (int j = 1; j < slots.size(); j++) {
                 int slot = slots.get(j);
 
-                state = mergeArrayState(
+                state = analysisState.mergeArrayState(
                         state,
-                        arrayStateFromSnapshot(slot, i, first)
+                        analysisState.arrayStateFromSnapshot(slot, i, first)
                 );
 
-                freed = mergeFreedState(
+                freed = analysisState.mergeFreedState(
                         freed,
-                        freedStateFromSnapshot(slot, i, first)
+                        analysisState.freedStateFromSnapshot(slot, i, first)
                 );
             }
 
@@ -1183,48 +697,48 @@ public final class DynamicArrayMemoryChecker {
                 freed = FreedState.MAYBE;
             }
 
-            arrayState[i] = state;
-            freedState[i] = freed;
+            analysisState.arrayState[i] = state;
+            analysisState.freedState[i] = freed;
         }
 
-        for (int i = 0; i < pointerCount; i++) {
+        for (int i = 0; i < analysisState.pointerCount; i++) {
             ArrayOrigin origin =
-                    pointerOriginFromSnapshot(first, i, first);
+                    analysisState.pointerOriginFromSnapshot(first, i, first);
 
             for (int j = 1; j < slots.size(); j++) {
-                origin = mergeOrigins(
+                origin = analysisState.mergeOrigins(
                         origin,
-                        pointerOriginFromSnapshot(slots.get(j), i, first)
+                        analysisState.pointerOriginFromSnapshot(slots.get(j), i, first)
                 );
             }
 
-            pointerState[i] = origin;
+            analysisState.pointerState[i] = origin;
         }
     }
 
     private void mergeStateIntoCurrent(int slot) {
-        for (int i = 0; i < arrayCount; i++) {
-            arrayState[i] = mergeArrayState(
-                    arrayState[i],
-                    arrayStateFromSnapshot(slot, i, slot)
+        for (int i = 0; i < analysisState.arrayCount; i++) {
+            analysisState.arrayState[i] = analysisState.mergeArrayState(
+                    analysisState.arrayState[i],
+                    analysisState.arrayStateFromSnapshot(slot, i, slot)
             );
 
-            freedState[i] = mergeFreedState(
-                    freedState[i],
-                    freedStateFromSnapshot(slot, i, slot)
+            analysisState.freedState[i] = analysisState.mergeFreedState(
+                    analysisState.freedState[i],
+                    analysisState.freedStateFromSnapshot(slot, i, slot)
             );
 
-            if (arrayState[i] == ArrayState.INITED) {
-                freedState[i] = FreedState.NEVER;
-            } else if (arrayState[i] == ArrayState.MAYBE_INITED) {
-                freedState[i] = FreedState.MAYBE;
+            if (analysisState.arrayState[i] == ArrayState.INITED) {
+                analysisState.freedState[i] = FreedState.NEVER;
+            } else if (analysisState.arrayState[i] == ArrayState.MAYBE_INITED) {
+                analysisState.freedState[i] = FreedState.MAYBE;
             }
         }
 
-        for (int i = 0; i < pointerCount; i++) {
-            pointerState[i] = mergeOrigins(
-                    pointerState[i],
-                    pointerOriginFromSnapshot(slot, i, slot)
+        for (int i = 0; i < analysisState.pointerCount; i++) {
+            analysisState.pointerState[i] = analysisState.mergeOrigins(
+                    analysisState.pointerState[i],
+                    analysisState.pointerOriginFromSnapshot(slot, i, slot)
             );
         }
     }
@@ -1235,7 +749,7 @@ public final class DynamicArrayMemoryChecker {
         if (!suppressLifecycleChecks) {
             reportLiveArrays(
                     "return from function '"
-                            + functionDisplayName(node.function)
+                            + DynamicArrayAnalysisState.functionDisplayName(node.function)
                             + "'"
             );
         }
@@ -1244,7 +758,7 @@ public final class DynamicArrayMemoryChecker {
     }
 
     private void reportLiveArrays(String where) {
-        for (int i = 0; i < arrayCount; i++) {
+        for (int i = 0; i < analysisState.arrayCount; i++) {
             reportLeakIfNeeded(i, where);
         }
     }
@@ -1252,14 +766,14 @@ public final class DynamicArrayMemoryChecker {
     private void reportLeakIfNeeded(int index, String where) {
         if (suppressLifecycleChecks
                 || index < 0
-                || index >= arrayCount
-                || escaped[index]) {
+                || index >= analysisState.arrayCount
+                || analysisState.escaped[index]) {
             return;
         }
 
-        String name = arraySymbols[index].qualifiedName();
+        String name = analysisState.arraySymbols[index].qualifiedName();
 
-        if (arrayState[index] == ArrayState.INITED) {
+        if (analysisState.arrayState[index] == ArrayState.INITED) {
             diagnostics.warning(
                     "Dynamic array '"
                             + name
@@ -1267,7 +781,7 @@ public final class DynamicArrayMemoryChecker {
                             + where
                             + " (missing explicit uninit)"
             );
-        } else if (arrayState[index] == ArrayState.MAYBE_INITED) {
+        } else if (analysisState.arrayState[index] == ArrayState.MAYBE_INITED) {
             diagnostics.warning(
                     "Dynamic array '"
                             + name
@@ -1276,6 +790,20 @@ public final class DynamicArrayMemoryChecker {
                             + " (missing explicit uninit)"
             );
         }
+    }
+
+    private int singleArrayIndex(SemanticExprNode expr) {
+        ArrayOrigin origins = storageOrigins(expr);
+
+        if (origins == null
+                || origins.unknown
+                || origins.arrays.size() != 1) {
+            return -1;
+        }
+
+        VariableSymbol symbol = origins.arrays.iterator().next();
+
+        return analysisState.arrayIndexOfSymbol(symbol);
     }
 
     private ArrayOrigin storageOrigins(SemanticExprNode expr) {
@@ -1288,7 +816,7 @@ public final class DynamicArrayMemoryChecker {
                 return ArrayOrigin.EMPTY;
             }
 
-            int index = arrayIndexOfSymbol(n.symbol);
+            int index = analysisState.arrayIndexOfSymbol(n.symbol);
 
             return index < 0
                     ? ArrayOrigin.EMPTY
@@ -1328,11 +856,11 @@ public final class DynamicArrayMemoryChecker {
         }
 
         if (expr instanceof SemanticVarExprNode n) {
-            int index = pointerIndexOfSymbol(n.symbol);
+            int index = analysisState.pointerIndexOfSymbol(n.symbol);
 
             return index < 0
                     ? ArrayOrigin.UNKNOWN
-                    : pointerState[index];
+                    : analysisState.pointerState[index];
         }
 
         if (expr instanceof SemanticDerefNode) {
@@ -1363,10 +891,10 @@ public final class DynamicArrayMemoryChecker {
             ArrayOrigin value
     ) {
         if (target instanceof SemanticVarExprNode n) {
-            int index = pointerIndexOfSymbol(n.symbol);
+            int index = analysisState.pointerIndexOfSymbol(n.symbol);
 
             if (index >= 0) {
-                pointerState[index] = value;
+                analysisState.pointerState[index] = value;
 
                 if (n.symbol instanceof GlobalVariableSymbol) {
                     markEscaped(value);
@@ -1502,15 +1030,15 @@ public final class DynamicArrayMemoryChecker {
 
         if (origins.unknown || origins.arrays.size() != 1) {
             for (VariableSymbol symbol : origins.arrays) {
-                int index = arrayIndexOfSymbol(symbol);
+                int index = analysisState.arrayIndexOfSymbol(symbol);
 
                 if (index < 0) {
                     continue;
                 }
 
-                if (arrayState[index] != ArrayState.INITED) {
-                    arrayState[index] = ArrayState.MAYBE_INITED;
-                    freedState[index] = FreedState.MAYBE;
+                if (analysisState.arrayState[index] != ArrayState.INITED) {
+                    analysisState.arrayState[index] = ArrayState.MAYBE_INITED;
+                    analysisState.freedState[index] = FreedState.MAYBE;
                 }
             }
 
@@ -1522,15 +1050,15 @@ public final class DynamicArrayMemoryChecker {
         }
 
         VariableSymbol symbol = origins.arrays.iterator().next();
-        int index = arrayIndexOfSymbol(symbol);
+        int index = analysisState.arrayIndexOfSymbol(symbol);
 
         if (index < 0) {
             havocEscapedArrays();
             return;
         }
 
-        arrayState[index] = ArrayState.INITED;
-        freedState[index] = FreedState.NEVER;
+        analysisState.arrayState[index] = ArrayState.INITED;
+        analysisState.freedState[index] = FreedState.NEVER;
     }
 
     private void applyResize(
@@ -1548,26 +1076,26 @@ public final class DynamicArrayMemoryChecker {
         }
 
         VariableSymbol symbol = origins.arrays.iterator().next();
-        int index = arrayIndexOfSymbol(symbol);
+        int index = analysisState.arrayIndexOfSymbol(symbol);
 
         if (index < 0) {
             havocEscapedArrays();
             return;
         }
 
-        if (arrayState[index] == ArrayState.MAYBE_INITED) {
+        if (analysisState.arrayState[index] == ArrayState.MAYBE_INITED) {
             reportWarningOnce(
                     site,
                     "Possible use of uninitialized dynamic array '"
                             + symbol.qualifiedName()
                             + "'"
             );
-        } else if (arrayState[index] == ArrayState.UNINITED) {
+        } else if (analysisState.arrayState[index] == ArrayState.UNINITED) {
             reportUninitializedUse(index, site);
         }
 
-        arrayState[index] = ArrayState.INITED;
-        freedState[index] = FreedState.NEVER;
+        analysisState.arrayState[index] = ArrayState.INITED;
+        analysisState.freedState[index] = FreedState.NEVER;
     }
 
     private void applyUninit(
@@ -1578,12 +1106,12 @@ public final class DynamicArrayMemoryChecker {
 
         if (origins.unknown || origins.arrays.size() != 1) {
             for (VariableSymbol symbol : origins.arrays) {
-                int index = arrayIndexOfSymbol(symbol);
+                int index = analysisState.arrayIndexOfSymbol(symbol);
 
                 if (index >= 0
-                        && arrayState[index] != ArrayState.UNINITED) {
-                    arrayState[index] = ArrayState.MAYBE_INITED;
-                    freedState[index] = FreedState.MAYBE;
+                        && analysisState.arrayState[index] != ArrayState.UNINITED) {
+                    analysisState.arrayState[index] = ArrayState.MAYBE_INITED;
+                    analysisState.freedState[index] = FreedState.MAYBE;
                 }
             }
 
@@ -1595,20 +1123,20 @@ public final class DynamicArrayMemoryChecker {
         }
 
         VariableSymbol symbol = origins.arrays.iterator().next();
-        int index = arrayIndexOfSymbol(symbol);
+        int index = analysisState.arrayIndexOfSymbol(symbol);
 
         if (index < 0) {
             havocEscapedArrays();
             return;
         }
 
-        if (arrayState[index] == ArrayState.INITED) {
-            arrayState[index] = ArrayState.UNINITED;
-            freedState[index] = FreedState.YES;
+        if (analysisState.arrayState[index] == ArrayState.INITED) {
+            analysisState.arrayState[index] = ArrayState.UNINITED;
+            analysisState.freedState[index] = FreedState.YES;
             return;
         }
 
-        if (arrayState[index] == ArrayState.MAYBE_INITED) {
+        if (analysisState.arrayState[index] == ArrayState.MAYBE_INITED) {
             reportWarningOnce(
                     site,
                     "Possible invalid free or double free of dynamic array '"
@@ -1616,19 +1144,19 @@ public final class DynamicArrayMemoryChecker {
                             + "'"
             );
 
-            arrayState[index] = ArrayState.UNINITED;
-            freedState[index] = FreedState.YES;
+            analysisState.arrayState[index] = ArrayState.UNINITED;
+            analysisState.freedState[index] = FreedState.YES;
             return;
         }
 
-        if (freedState[index] == FreedState.YES) {
+        if (analysisState.freedState[index] == FreedState.YES) {
             reportErrorOnce(
                     site,
                     "Double free of dynamic array '"
                             + symbol.qualifiedName()
                             + "' (uninit called twice)"
             );
-        } else if (freedState[index] == FreedState.NEVER) {
+        } else if (analysisState.freedState[index] == FreedState.NEVER) {
             reportErrorOnce(
                     site,
                     "Invalid free of dynamic array '"
@@ -1644,8 +1172,8 @@ public final class DynamicArrayMemoryChecker {
             );
         }
 
-        arrayState[index] = ArrayState.UNINITED;
-        freedState[index] = FreedState.YES;
+        analysisState.arrayState[index] = ArrayState.UNINITED;
+        analysisState.freedState[index] = FreedState.YES;
     }
 
     private void requireInitialized(
@@ -1658,15 +1186,15 @@ public final class DynamicArrayMemoryChecker {
             return;
         }
 
-        if (arrayState[index] == ArrayState.INITED) {
+        if (analysisState.arrayState[index] == ArrayState.INITED) {
             return;
         }
 
-        if (arrayState[index] == ArrayState.MAYBE_INITED) {
+        if (analysisState.arrayState[index] == ArrayState.MAYBE_INITED) {
             reportWarningOnce(
                     site,
                     "Possible use of uninitialized dynamic array '"
-                            + arraySymbols[index].qualifiedName()
+                            + analysisState.arraySymbols[index].qualifiedName()
                             + "'"
             );
             return;
@@ -1686,13 +1214,13 @@ public final class DynamicArrayMemoryChecker {
         }
 
         VariableSymbol symbol = origins.arrays.iterator().next();
-        int index = arrayIndexOfSymbol(symbol);
+        int index = analysisState.arrayIndexOfSymbol(symbol);
 
-        if (index < 0 || arrayState[index] == ArrayState.INITED) {
+        if (index < 0 || analysisState.arrayState[index] == ArrayState.INITED) {
             return;
         }
 
-        if (arrayState[index] == ArrayState.MAYBE_INITED) {
+        if (analysisState.arrayState[index] == ArrayState.MAYBE_INITED) {
             reportWarningOnce(
                     site,
                     "Possible use of uninitialized dynamic array '"
@@ -1709,14 +1237,14 @@ public final class DynamicArrayMemoryChecker {
             int index,
             SemanticASTNode site
     ) {
-        String name = arraySymbols[index].qualifiedName();
+        String name = analysisState.arraySymbols[index].qualifiedName();
 
-        if (freedState[index] == FreedState.YES) {
+        if (analysisState.freedState[index] == FreedState.YES) {
             reportErrorOnce(
                     site,
                     "Use of dynamic array '" + name + "' after uninit"
             );
-        } else if (freedState[index] == FreedState.NEVER) {
+        } else if (analysisState.freedState[index] == FreedState.NEVER) {
             reportErrorOnce(
                     site,
                     "Use of uninitialized dynamic array '"
@@ -1738,14 +1266,14 @@ public final class DynamicArrayMemoryChecker {
             return;
         }
 
-        int index = pointerIndexOfSymbol(var.symbol);
+        int index = analysisState.pointerIndexOfSymbol(var.symbol);
 
         if (index < 0) {
             return;
         }
 
         addressTakenPointers.add(var.symbol);
-        markEscaped(pointerState[index]);
+        markEscaped(analysisState.pointerState[index]);
     }
 
     private void invalidateAfterCall(SemanticFunctionCallNode call) {
@@ -1767,17 +1295,17 @@ public final class DynamicArrayMemoryChecker {
             markEscaped(origins);
         }
 
-        for (int i = 0; i < pointerCount; i++) {
-            if (pointerSymbols[i] instanceof GlobalVariableSymbol) {
-                pointerState[i] = ArrayOrigin.UNKNOWN;
+        for (int i = 0; i < analysisState.pointerCount; i++) {
+            if (analysisState.pointerSymbols[i] instanceof GlobalVariableSymbol) {
+                analysisState.pointerState[i] = ArrayOrigin.UNKNOWN;
             }
         }
 
         for (VariableSymbol symbol : addressTakenPointers) {
-            int index = pointerIndexOfSymbol(symbol);
+            int index = analysisState.pointerIndexOfSymbol(symbol);
 
             if (index >= 0) {
-                pointerState[index] = ArrayOrigin.UNKNOWN;
+                analysisState.pointerState[index] = ArrayOrigin.UNKNOWN;
             }
         }
 
@@ -1796,11 +1324,11 @@ public final class DynamicArrayMemoryChecker {
         }
 
         for (VariableSymbol symbol : origins.arrays) {
-            int index = arrayIndexOfSymbol(symbol);
+            int index = analysisState.arrayIndexOfSymbol(symbol);
 
             if (index >= 0) {
-                arrayState[index] = ArrayState.MAYBE_INITED;
-                freedState[index] = FreedState.MAYBE;
+                analysisState.arrayState[index] = ArrayState.MAYBE_INITED;
+                analysisState.freedState[index] = FreedState.MAYBE;
             }
         }
     }
@@ -1811,19 +1339,19 @@ public final class DynamicArrayMemoryChecker {
         }
 
         for (VariableSymbol symbol : origins.arrays) {
-            int index = arrayIndexOfSymbol(symbol);
+            int index = analysisState.arrayIndexOfSymbol(symbol);
 
             if (index >= 0) {
-                escaped[index] = true;
+                analysisState.escaped[index] = true;
             }
         }
     }
 
     private void havocEscapedArrays() {
-        for (int i = 0; i < arrayCount; i++) {
-            if (escaped[i]) {
-                arrayState[i] = ArrayState.MAYBE_INITED;
-                freedState[i] = FreedState.MAYBE;
+        for (int i = 0; i < analysisState.arrayCount; i++) {
+            if (analysisState.escaped[i]) {
+                analysisState.arrayState[i] = ArrayState.MAYBE_INITED;
+                analysisState.freedState[i] = FreedState.MAYBE;
             }
         }
     }
@@ -1848,386 +1376,4 @@ public final class DynamicArrayMemoryChecker {
         }
     }
 
-    private int snapshot() {
-        ensureSnapshotCapacity();
-
-        int slot = snapshotCount++;
-
-        System.arraycopy(
-                arrayState,
-                0,
-                arraySnapshots[slot],
-                0,
-                arrayCount
-        );
-
-        System.arraycopy(
-                freedState,
-                0,
-                freedSnapshots[slot],
-                0,
-                arrayCount
-        );
-
-        System.arraycopy(
-                pointerState,
-                0,
-                pointerSnapshots[slot],
-                0,
-                pointerCount
-        );
-
-        return slot;
-    }
-
-    private void restore(int snapshotSlot) {
-        if (snapshotSlot < 0) {
-            return;
-        }
-
-        System.arraycopy(
-                arraySnapshots[snapshotSlot],
-                0,
-                arrayState,
-                0,
-                arrayCount
-        );
-
-        System.arraycopy(
-                freedSnapshots[snapshotSlot],
-                0,
-                freedState,
-                0,
-                arrayCount
-        );
-
-        System.arraycopy(
-                pointerSnapshots[snapshotSlot],
-                0,
-                pointerState,
-                0,
-                pointerCount
-        );
-    }
-
-    private void ensureSnapshotCapacity() {
-        if (snapshotCount < arraySnapshots.length) {
-            return;
-        }
-
-        int oldLength = arraySnapshots.length;
-        int newLength = Math.max(16, oldLength * 2);
-
-        arraySnapshots = Arrays.copyOf(arraySnapshots, newLength);
-        freedSnapshots = Arrays.copyOf(freedSnapshots, newLength);
-        pointerSnapshots = Arrays.copyOf(pointerSnapshots, newLength);
-
-        for (int i = oldLength; i < newLength; i++) {
-            arraySnapshots[i] = new ArrayState[arrayCount];
-            freedSnapshots[i] = new FreedState[arrayCount];
-            pointerSnapshots[i] = new ArrayOrigin[pointerCount];
-
-            Arrays.fill(arraySnapshots[i], ArrayState.UNINITED);
-            Arrays.fill(freedSnapshots[i], FreedState.NEVER);
-            Arrays.fill(pointerSnapshots[i], ArrayOrigin.UNKNOWN);
-        }
-    }
-
-    private void mergeAfterIf(
-            int before,
-            int thenState,
-            boolean thenTerminates,
-            int elseState,
-            boolean elseTerminates,
-            boolean hasElse,
-            int fallthroughState
-    ) {
-        for (int i = 0; i < arrayCount; i++) {
-            boolean hasContinuingPath = false;
-            ArrayState mergedState = null;
-            FreedState mergedFreed = null;
-
-            if (!thenTerminates) {
-                hasContinuingPath = true;
-                mergedState = mergeArrayState(
-                        mergedState,
-                        arrayStateFromSnapshot(thenState, i, before)
-                );
-                mergedFreed = mergeFreedState(
-                        mergedFreed,
-                        freedStateFromSnapshot(thenState, i, before)
-                );
-            }
-
-            if (hasElse) {
-                if (!elseTerminates) {
-                    hasContinuingPath = true;
-                    mergedState = mergeArrayState(
-                            mergedState,
-                            arrayStateFromSnapshot(elseState, i, before)
-                    );
-                    mergedFreed = mergeFreedState(
-                            mergedFreed,
-                            freedStateFromSnapshot(elseState, i, before)
-                    );
-                }
-            } else if (fallthroughState >= 0) {
-                hasContinuingPath = true;
-                mergedState = mergeArrayState(
-                        mergedState,
-                        arrayStateFromSnapshot(fallthroughState, i, before)
-                );
-                mergedFreed = mergeFreedState(
-                        mergedFreed,
-                        freedStateFromSnapshot(fallthroughState, i, before)
-                );
-            }
-
-            if (hasContinuingPath && mergedState != null) {
-                arrayState[i] = mergedState;
-                freedState[i] = mergedFreed == null
-                        ? FreedState.MAYBE
-                        : mergedFreed;
-
-                if (arrayState[i] == ArrayState.INITED) {
-                    freedState[i] = FreedState.NEVER;
-                } else if (arrayState[i] == ArrayState.MAYBE_INITED) {
-                    freedState[i] = FreedState.MAYBE;
-                }
-            } else {
-                arrayState[i] = arrayStateFromSnapshot(before, i, before);
-                freedState[i] = freedStateFromSnapshot(before, i, before);
-            }
-        }
-
-        for (int i = 0; i < pointerCount; i++) {
-            boolean hasContinuingPath = false;
-            ArrayOrigin merged = null;
-
-            if (!thenTerminates) {
-                hasContinuingPath = true;
-                merged = mergeOrigins(
-                        merged,
-                        pointerOriginFromSnapshot(thenState, i, before)
-                );
-            }
-
-            if (hasElse) {
-                if (!elseTerminates) {
-                    hasContinuingPath = true;
-                    merged = mergeOrigins(
-                            merged,
-                            pointerOriginFromSnapshot(elseState, i, before)
-                    );
-                }
-            } else if (fallthroughState >= 0) {
-                hasContinuingPath = true;
-                merged = mergeOrigins(
-                        merged,
-                        pointerOriginFromSnapshot(fallthroughState, i, before)
-                );
-            }
-
-            if (hasContinuingPath && merged != null) {
-                pointerState[i] = merged;
-            } else {
-                pointerState[i] =
-                        pointerOriginFromSnapshot(before, i, before);
-            }
-        }
-    }
-
-    private ArrayState arrayStateFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= arrayCount) {
-            return ArrayState.UNINITED;
-        }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && arraySnapshots[snapshotSlot] != null) {
-            ArrayState value = arraySnapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
-            }
-        }
-
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && arraySnapshots[fallbackSlot] != null) {
-            ArrayState fallback = arraySnapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
-        }
-
-        return ArrayState.UNINITED;
-    }
-
-    private FreedState freedStateFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= arrayCount) {
-            return FreedState.NEVER;
-        }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && freedSnapshots[snapshotSlot] != null) {
-            FreedState value = freedSnapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
-            }
-        }
-
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && freedSnapshots[fallbackSlot] != null) {
-            FreedState fallback = freedSnapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
-        }
-
-        return FreedState.NEVER;
-    }
-
-    private ArrayOrigin pointerOriginFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= pointerCount) {
-            return ArrayOrigin.UNKNOWN;
-        }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && pointerSnapshots[snapshotSlot] != null) {
-            ArrayOrigin value = pointerSnapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
-            }
-        }
-
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && pointerSnapshots[fallbackSlot] != null) {
-            ArrayOrigin fallback =
-                    pointerSnapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
-        }
-
-        return ArrayOrigin.UNKNOWN;
-    }
-
-    private ArrayState mergeArrayState(
-            ArrayState left,
-            ArrayState right
-    ) {
-        if (right == null) {
-            right = ArrayState.UNINITED;
-        }
-
-        if (left == null) {
-            return right;
-        }
-
-        if (left == right) {
-            return left;
-        }
-
-        return ArrayState.MAYBE_INITED;
-    }
-
-    private FreedState mergeFreedState(
-            FreedState left,
-            FreedState right
-    ) {
-        if (right == null) {
-            right = FreedState.NEVER;
-        }
-
-        if (left == null) {
-            return right;
-        }
-
-        if (left == right) {
-            return left;
-        }
-
-        return FreedState.MAYBE;
-    }
-
-    private ArrayOrigin mergeOrigins(
-            ArrayOrigin left,
-            ArrayOrigin right
-    ) {
-        if (left == null) {
-            return right == null ? ArrayOrigin.UNKNOWN : right;
-        }
-
-        if (right == null) {
-            return left;
-        }
-
-        return left.union(right);
-    }
-
-    private static boolean isLengthCall(SemanticExprNode expr) {
-        return expr instanceof SemanticArrayIntrinsicCallNode n
-                && n.kind == SemanticArrayIntrinsicKind.LENGTH;
-    }
-
-    private static boolean isComparison(String op) {
-        return op.equals("==")
-                || op.equals("!=")
-                || op.equals("<")
-                || op.equals("<=")
-                || op.equals(">")
-                || op.equals(">=");
-    }
-
-    private static String negate(String op) {
-        return switch (op) {
-            case "==" -> "!=";
-            case "!=" -> "==";
-            case "<" -> ">=";
-            case "<=" -> ">";
-            case ">" -> "<=";
-            case ">=" -> "<";
-            default -> op;
-        };
-    }
-
-    private static String reverse(String op) {
-        return switch (op) {
-            case "<" -> ">";
-            case "<=" -> ">=";
-            case ">" -> "<";
-            case ">=" -> "<=";
-            default -> op;
-        };
-    }
-
-    private String functionDisplayName(FunctionSymbol function) {
-        if (function == null) {
-            return "<unknown>";
-        }
-
-        return function.qualifiedName();
-    }
 }

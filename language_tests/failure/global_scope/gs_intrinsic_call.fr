@@ -1,9 +1,9 @@
 // Failure fixture: global_scope/gs_intrinsic_call
-// Array intrinsic calls (xs(10)) are executable statement forms and are
-// not valid top-level items.
+// Array intrinsic calls (xs.init(10)) are executable statement forms and
+// are not valid top-level items.
 [int32] xs
 
-xs(10);
+xs.init(10);
 
 func main() -> int32 {
     return 0

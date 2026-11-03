@@ -25,25 +25,12 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode tryLowerIntrinsicCallInner(ASTNode expr) {
-        if (!(expr instanceof CallNode call)) {
+        if (!(expr instanceof CallNode call)
+                || !(call.callee instanceof MemberAccessNode mac)) {
             return null;
         }
 
-        if (call.callee instanceof QualifiedNameNode) {
-            return null;
-        }
-
-        if (call.callee instanceof MemberAccessNode mac) {
-            SemanticArrayIntrinsicCallNode intrinsic =
-                    tryLowerMemberIntrinsic(call, mac);
-
-            if (intrinsic != null) {
-                return intrinsic;
-            }
-
-        }
-
-        return tryLowerDynamicArrayInitShorthand(call);
+        return tryLowerMemberIntrinsic(call, mac);
     }
 
     public boolean isArrayIntrinsicMemberName(String name) {
@@ -58,24 +45,15 @@ public final class ArrayLowerer {
     }
 
     public boolean shouldSuppressCallDiagnostic(CallNode call) {
-        if (call.callee instanceof MemberAccessNode mac) {
-            if (!isArrayIntrinsicMemberName(mac.memberName)) {
-                return false;
-            }
-
-            return !isStructReceiver(mac);
+        if (!(call.callee instanceof MemberAccessNode mac)) {
+            return false;
         }
 
-        if (call.args.size() == 1
-                && call.callee instanceof VarNode calleeVar) {
-            VariableSymbol var = ctx.resolve(calleeVar.name);
-
-            return var != null
-                    && !ctx.hasAnyFunctionNamed(calleeVar.name)
-                    && !exprAnalyzer.isDynamicArrayType(var.type);
+        if (!isArrayIntrinsicMemberName(mac.memberName)) {
+            return false;
         }
 
-        return false;
+        return !isStructReceiver(mac);
     }
 
     private SemanticArrayIntrinsicCallNode tryLowerMemberIntrinsic(
@@ -432,72 +410,4 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode tryLowerDynamicArrayInitShorthand(
-            CallNode call
-    ) {
-        if (call.args.size() != 1) {
-            return null;
-        }
-
-        if (call.callee instanceof VarNode calleeVar) {
-            VariableSymbol var = ctx.resolve(calleeVar.name);
-
-            if (var == null && ctx.hasAnyFunctionNamed(calleeVar.name)) {
-                return null;
-            }
-
-            if (var == null) {
-                return null;
-            }
-        }
-
-        if (call.callee instanceof MemberAccessNode mac) {
-            SemanticExprNode targetPeek =
-                    exprAnalyzer.analyzeExpr(mac.target);
-
-            if (targetPeek.type instanceof SemanticStructType structType
-                    && structType.structSymbol != null) {
-                FieldSymbol field =
-                        structType.structSymbol.resolveField(mac.memberName);
-
-                if (field == null) {
-                    return null;
-                }
-
-                if (!exprAnalyzer.isDynamicArrayType(field.type)) {
-                    return null;
-                }
-            }
-        }
-
-        SemanticExprNode receiver =
-                exprAnalyzer.analyzeExpr(call.callee);
-
-        if (!exprAnalyzer.isDynamicArrayType(receiver.type)) {
-
-            if (call.callee instanceof VarNode calleeVar
-                    && ctx.resolve(calleeVar.name) != null
-                    && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
-                ctx.error("'" + calleeVar.name
-                        + "' is not a dynamic array, so it cannot be initialized with an argument list");
-            }
-
-            return null;
-        }
-
-        exprAnalyzer.requireLValue(
-                receiver,
-                "array initialization target"
-        );
-
-        SemanticExprNode size =
-                exprAnalyzer.analyzeExpr(call.args.get(0));
-
-        return new SemanticArrayIntrinsicCallNode(
-                call.span,
-                SemanticArrayIntrinsicKind.INIT,
-                receiver,
-                List.of(size)
-        );
-    }
 }

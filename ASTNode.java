@@ -268,19 +268,6 @@ class VarDeclInitNode extends ASTNode {
     }
 }
 
-class VarDeclArrayInitNode extends ASTNode {
-    TypeNode type;
-    String name;
-    ASTNode size;
-
-    VarDeclArrayInitNode(SourceSpan span, TypeNode type, String name, ASTNode size) {
-        super(span);
-        this.type = type;
-        this.name = name;
-        this.size = size;
-    }
-}
-
 enum PrimitiveKind {
     INT8,
     INT16,

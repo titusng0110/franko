@@ -2,7 +2,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -10,126 +9,10 @@ import java.util.Set;
 public final class DanglingPointerChecker {
     private static final int MAX_BRANCH_DEPTH = 12;
 
-    private static final class OriginSet {
-        static final OriginSet EMPTY =
-                new OriginSet(Set.of(), Set.of(), false, false);
-
-        static final OriginSet UNKNOWN =
-                new OriginSet(Set.of(), Set.of(), true, false);
-
-        final Set<VariableSymbol> frameCells;
-        final Set<VariableSymbol> globalCells;
-        final boolean unknown;
-        final boolean nonNull;
-
-        private OriginSet(
-                Set<VariableSymbol> frameCells,
-                Set<VariableSymbol> globalCells,
-                boolean unknown,
-                boolean nonNull
-        ) {
-            this.frameCells = frameCells;
-            this.globalCells = globalCells;
-            this.unknown = unknown;
-            this.nonNull = nonNull;
-        }
-
-        static OriginSet frame(VariableSymbol symbol) {
-            return new OriginSet(
-                    Set.of(symbol),
-                    Set.of(),
-                    false,
-                    true
-            );
-        }
-
-        static OriginSet global(VariableSymbol symbol) {
-            return new OriginSet(
-                    Set.of(),
-                    Set.of(symbol),
-                    false,
-                    true
-            );
-        }
-
-        boolean mayDangle() {
-            return !frameCells.isEmpty();
-        }
-
-        boolean definiteDangle() {
-            return !frameCells.isEmpty()
-                    && !unknown
-                    && globalCells.isEmpty()
-                    && nonNull;
-        }
-
-        boolean possibleDangle() {
-            return mayDangle() && !definiteDangle();
-        }
-
-        boolean definitelyPoints() {
-            return nonNull;
-        }
-
-        boolean definitelyNull() {
-            return !nonNull
-                    && !unknown
-                    && frameCells.isEmpty()
-                    && globalCells.isEmpty();
-        }
-
-        OriginSet withNonNull() {
-            if (nonNull) {
-                return this;
-            }
-
-            if (frameCells.isEmpty() && globalCells.isEmpty()) {
-                return new OriginSet(
-                        Set.of(),
-                        Set.of(),
-                        true,
-                        true
-                );
-            }
-
-            return new OriginSet(
-                    frameCells,
-                    globalCells,
-                    unknown,
-                    true
-            );
-        }
-
-        OriginSet union(OriginSet other) {
-            if (other == null) {
-                other = UNKNOWN;
-            }
-
-            if (this == other) {
-                return this;
-            }
-
-            Set<VariableSymbol> frame = new LinkedHashSet<>(frameCells);
-            frame.addAll(other.frameCells);
-
-            Set<VariableSymbol> global = new LinkedHashSet<>(globalCells);
-            global.addAll(other.globalCells);
-
-            return new OriginSet(
-                    Set.copyOf(frame),
-                    Set.copyOf(global),
-                    unknown || other.unknown,
-                    nonNull && other.nonNull
-            );
-        }
-    }
-
     private static final class LoopFrame {
         final List<Integer> breakStates = new ArrayList<>();
         final List<Integer> continueStates = new ArrayList<>();
     }
-
-    private record NullGuard(SemanticExprNode variable, boolean isEquality) {}
 
     private final DiagnosticBag diagnostics;
 
@@ -817,26 +700,6 @@ public final class DanglingPointerChecker {
         return node.elseBranch != null && thenReturns && elseReturns;
     }
 
-    private NullGuard nullGuard(SemanticExprNode condition) {
-        if (!(condition instanceof SemanticBinOpNode bin)) {
-            return null;
-        }
-
-        if (!bin.op.equals("==") && !bin.op.equals("!=")) {
-            return null;
-        }
-
-        if (bin.left instanceof SemanticNullLiteralNode) {
-            return new NullGuard(bin.right, bin.op.equals("=="));
-        }
-
-        if (bin.right instanceof SemanticNullLiteralNode) {
-            return new NullGuard(bin.left, bin.op.equals("=="));
-        }
-
-        return null;
-    }
-
     private boolean guardPathFeasible(
             SemanticExprNode condition,
             boolean guardHolds
@@ -847,24 +710,24 @@ public final class DanglingPointerChecker {
             return guardHolds == truthy;
         }
 
-        NullGuard guard = nullGuard(condition);
+        NullGuard guard = DanglingPointerState.nullGuard(condition);
 
         if (guard == null) {
             return true;
         }
 
-        int index = pointerIndexOf(guard.variable());
+        int index = pointerIndexOf(guard.variable);
 
         if (index < 0) {
             return true;
         }
 
-        boolean assertedNull = guard.isEquality() == guardHolds;
+        boolean assertedNull = guard.isEquality == guardHolds;
 
         OriginSet current = pointerState[index];
 
         if (assertedNull) {
-            return current == null || !current.definitelyPoints();
+            return current == null || !current.nonNull;
         }
 
         return current == null || !current.definitelyNull();
@@ -874,23 +737,23 @@ public final class DanglingPointerChecker {
             SemanticExprNode condition,
             boolean guardHolds
     ) {
-        NullGuard guard = nullGuard(condition);
+        NullGuard guard = DanglingPointerState.nullGuard(condition);
 
         if (guard == null) {
             return;
         }
 
-        int index = pointerIndexOf(guard.variable());
+        int index = pointerIndexOf(guard.variable);
 
         if (index < 0) {
             return;
         }
 
-        boolean assertedNull = guard.isEquality() == guardHolds;
+        boolean assertedNull = guard.isEquality == guardHolds;
         OriginSet current = pointerState[index];
 
         if (assertedNull) {
-            if (current != null && !current.definitelyPoints()) {
+            if (current != null && !current.nonNull) {
                 pointerState[index] = OriginSet.EMPTY;
             }
 
@@ -1038,7 +901,7 @@ public final class DanglingPointerChecker {
             OriginSet merged = null;
 
             for (int slot : exitStates) {
-                merged = mergeOriginSets(
+                merged = DanglingPointerState.mergeOriginSets(
                         merged,
                         originSetFromSnapshot(slot, i, first)
                 );
@@ -1052,7 +915,7 @@ public final class DanglingPointerChecker {
 
     private void mergeStateIntoCurrent(int slot) {
         for (int i = 0; i < pointerCount; i++) {
-            pointerState[i] = mergeOriginSets(
+            pointerState[i] = DanglingPointerState.mergeOriginSets(
                     pointerState[i],
                     originSetFromSnapshot(slot, i, slot)
             );
@@ -1080,17 +943,17 @@ public final class DanglingPointerChecker {
         if (origins.definiteDangle()) {
             diagnostics.error(
                     "Returning a pointer to "
-                            + formatLocalOrigins(origins.frameCells)
+                            + DanglingPointerState.formatLocalOrigins(origins.frameCells)
                             + " from function '"
-                            + functionDisplayName(node.function)
+                            + DanglingPointerState.functionDisplayName(node.function)
                             + "' (dangling after return)"
             );
-        } else if (origins.possibleDangle()) {
+        } else if (!origins.frameCells.isEmpty() && !origins.definiteDangle()) {
             diagnostics.warning(
                     "Returning a pointer that may refer to "
-                            + formatLocalOrigins(origins.frameCells)
+                            + DanglingPointerState.formatLocalOrigins(origins.frameCells)
                             + " from function '"
-                            + functionDisplayName(node.function)
+                            + DanglingPointerState.functionDisplayName(node.function)
                             + "' (possibly dangling after return)"
             );
         }
@@ -1462,7 +1325,7 @@ public final class DanglingPointerChecker {
 
             if (!thenTerminates) {
                 hasContinuingPath = true;
-                merged = mergeOriginSets(
+                merged = DanglingPointerState.mergeOriginSets(
                         merged,
                         originSetFromSnapshot(thenState, i, before)
                 );
@@ -1471,14 +1334,14 @@ public final class DanglingPointerChecker {
             if (hasElse) {
                 if (!elseTerminates) {
                     hasContinuingPath = true;
-                    merged = mergeOriginSets(
+                    merged = DanglingPointerState.mergeOriginSets(
                             merged,
                             originSetFromSnapshot(elseState, i, before)
                     );
                 }
             } else if (fallthroughState >= 0) {
                 hasContinuingPath = true;
-                merged = mergeOriginSets(
+                merged = DanglingPointerState.mergeOriginSets(
                         merged,
                         originSetFromSnapshot(fallthroughState, i, before)
                 );
@@ -1522,77 +1385,5 @@ public final class DanglingPointerChecker {
         }
 
         return OriginSet.UNKNOWN;
-    }
-
-    private OriginSet mergeOriginSets(OriginSet left, OriginSet right) {
-        if (left == null) {
-            return right == null ? OriginSet.UNKNOWN : right;
-        }
-
-        if (right == null) {
-            return left;
-        }
-
-        return left.union(right);
-    }
-
-    private String functionDisplayName(FunctionSymbol function) {
-        if (function == null) {
-            return "<unknown>";
-        }
-
-        return function.qualifiedName();
-    }
-
-    private String formatLocalOrigins(Set<VariableSymbol> cells) {
-        List<String> parameters = new ArrayList<>();
-        List<String> locals = new ArrayList<>();
-
-        for (VariableSymbol symbol : cells) {
-            if (symbol instanceof ParameterSymbol) {
-                parameters.add(symbol.name);
-            } else {
-                locals.add(symbol.qualifiedName());
-            }
-        }
-
-        Collections.sort(parameters);
-        Collections.sort(locals);
-
-        List<String> parts = new ArrayList<>();
-
-        if (!parameters.isEmpty()) {
-            parts.add(
-                    (parameters.size() == 1 ? "parameter " : "parameters ")
-                            + quoteList(parameters)
-            );
-        }
-
-        if (!locals.isEmpty()) {
-            parts.add(
-                    (locals.size() == 1 ? "local variable " : "local variables ")
-                            + quoteList(locals)
-            );
-        }
-
-        if (parts.isEmpty()) {
-            return "local storage";
-        }
-
-        return String.join(" and ", parts);
-    }
-
-    private String quoteList(List<String> values) {
-        StringBuilder sb = new StringBuilder();
-
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-
-            sb.append('\'').append(values.get(i)).append('\'');
-        }
-
-        return sb.toString();
     }
 }

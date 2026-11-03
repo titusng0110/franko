@@ -319,7 +319,7 @@ state, because those permissions cannot allocate or free storage.
 
 | Operation | Required state | Result |
 |---|---|---|
-| `d.init(n)`, `d.init_zero(n)`, `d(n)` | any | `INITED`; repeated init is not diagnosed |
+| `d.init(n)`, `d.init_zero(n)` | any | `INITED`; repeated init is not diagnosed |
 | `d.resize(n)` | `INITED` | stays `INITED` |
 | `d.uninit()` | `INITED` | `UNINITED`; invalid free if never initialized, double free if already uninitialized |
 | `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |

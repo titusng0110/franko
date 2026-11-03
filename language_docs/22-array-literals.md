@@ -146,7 +146,7 @@ For dynamic arrays, size the storage first:
 
 ```franko
 [int32] dyn;
-dyn(3);
+dyn.init(3);
 dyn.memcpy([1, 2, 3]);
 ```
 

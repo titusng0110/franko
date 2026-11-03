@@ -101,7 +101,7 @@ public class StatementChecker {
             return;
         }
 
-        if (!ensureValueExpression(
+        if (!types.ensureValueExpression(
                 node.value,
                 "Right-hand side of assignment"
         )) {
@@ -139,7 +139,7 @@ public class StatementChecker {
     private void visitIf(SemanticIfNode node) {
         expressions.checkExpr(node.condition);
 
-        if (ensureValueExpression(
+        if (types.ensureValueExpression(
                 node.condition,
                 "if condition"
         )) {
@@ -159,7 +159,7 @@ public class StatementChecker {
     private void visitWhile(SemanticWhileNode node) {
         expressions.checkExpr(node.condition);
 
-        if (ensureValueExpression(
+        if (types.ensureValueExpression(
                 node.condition,
                 "while condition"
         )) {
@@ -182,23 +182,6 @@ public class StatementChecker {
         }
 
         diagnostics.error("Return statement was checked outside FunctionChecker");
-    }
-
-    private boolean ensureValueExpression(
-            SemanticExprNode expr,
-            String where
-    ) {
-        if (expr == null) {
-            diagnostics.error(where + " cannot be null");
-            return false;
-        }
-
-        if (types.isVoidType(expr.type)) {
-            diagnostics.error(where + " cannot be void");
-            return false;
-        }
-
-        return true;
     }
 
     private boolean isStorageBackedLValue(SemanticExprNode expr) {

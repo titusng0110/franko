@@ -62,8 +62,8 @@ public class DeclarationChecker {
             return;
         }
 
-        if (!types.sameType(type, node.staticInitializer.type)
-                && !types.isPointerConversion(
+        if (!TypeChecker.sameType(type, node.staticInitializer.type)
+                && !PointerPermissions.isPointerConversion(
                         node.staticInitializer.type,
                         type)) {
             diagnostics.error("Variable '"
@@ -340,7 +340,7 @@ public class DeclarationChecker {
                     + literal
                     + ": size does not fit uint32");
             }
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             diagnostics.error(where + " has invalid static array size literal: "
                 + literal);
         }

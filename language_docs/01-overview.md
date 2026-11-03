@@ -27,7 +27,6 @@ Franko is a small statically typed language with:
 - `return`;
 - string literals as read-only `view<[byte, N]>` values;
 - array intrinsics:
-  - `arr(size)` (shorthand for `arr.init(size)`);
   - `arr.init(size)`;
   - `arr.init_zero(size)`;
   - `arr.resize(size)`;

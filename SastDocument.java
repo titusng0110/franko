@@ -1,20 +1,20 @@
 public final class SastDocument {
 
     public final SastPhase phase;
-    public final SemanticAnalyzer.EntryKind entryKind;
+    public final EntryKind entryKind;
     public final SourceTable sources;
     public final SymbolRegistry symbols;
     public final SemanticProgramNode root;
 
     public SastDocument(
             SastPhase phase,
-            SemanticAnalyzer.EntryKind entryKind,
+            EntryKind entryKind,
             SourceTable sources,
             SymbolRegistry symbols,
             SemanticProgramNode root
     ) {
         this.phase = phase;
-        this.entryKind = entryKind == null ? SemanticAnalyzer.EntryKind.NONE : entryKind;
+        this.entryKind = entryKind == null ? EntryKind.NONE : entryKind;
         this.sources = sources == null ? new SourceTable() : sources;
         this.symbols = symbols == null ? new SymbolRegistry() : symbols;
         this.root = root;
@@ -22,14 +22,6 @@ public final class SastDocument {
 
     public SastDocument withPhase(SastPhase newPhase) {
         return new SastDocument(newPhase, entryKind, sources, symbols, root);
-    }
-
-    public String toJson() {
-        return SemanticASTSerializer.toJson(this);
-    }
-
-    public static SastDocument fromJson(String json) {
-        return SemanticASTSerializer.fromJson(json);
     }
 }
 

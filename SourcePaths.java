@@ -1,8 +1,17 @@
+import java.io.IOException;
 import java.nio.file.Path;
 
 public final class SourcePaths {
 
     private SourcePaths() {
+    }
+
+    public static String canonicalKey(Path path) {
+        try {
+            return path.toRealPath().toString();
+        } catch (IOException | SecurityException e) {
+            return path.toAbsolutePath().normalize().toString();
+        }
     }
 
     public static String display(Path path) {

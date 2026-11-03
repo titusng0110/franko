@@ -1,25 +1,20 @@
 import java.math.BigInteger;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class SemanticAnalyzer {
-
-    public static final class SemanticException extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-        public SemanticException(String message) {
-            super(message);
-        }
-    }
-
-    public enum EntryKind {
-        NONE,
-        NO_ARGS,
-        ARGS
-    }
 
     private final SymbolTable symbolTable = new SymbolTable();
 
     private final ConstExpressionEvaluator constEval;
     private final ExpressionAnalyzer exprAnalyzer;
+    private final SemanticTypeResolver typeResolver;
 
     private FunctionSymbol currentFunction = null;
 
@@ -34,47 +29,25 @@ public class SemanticAnalyzer {
     private EntryKind entryKind = EntryKind.NONE;
     private int globalMainCount = 0;
 
-    public EntryKind entryKind() {
-        return entryKind;
-    }
-
-    private static final SemanticType FALLBACK_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
-
-    private static final SemanticType VOID_TYPE =
-            new SemanticVoidType();
-
     public SemanticAnalyzer() {
         this.constEval = new ConstExpressionEvaluator(symbolTable);
-        this.exprAnalyzer = new ExpressionAnalyzer(symbolTable, constEval);
 
-        ArrayLowerer arrayLowerer =
-                new ArrayLowerer(symbolTable, exprAnalyzer);
+        ExpressionLowering lowering = new ExpressionLowering(
+                symbolTable,
+                constEval,
+                new ArrayLiteralLowerer.Hoister() {
+                    @Override
+                    public SemanticVarExprNode hoistArrayLiteral(
+                            SemanticStaticArrayType arrayType,
+                            List<BigInteger> values,
+                            SourceSpan span) {
+                        return hoistArrayLiteralGlobal(arrayType, values, span);
+                    }
+                }
+        );
 
-        this.exprAnalyzer.setArrayLowerer(arrayLowerer);
-        this.exprAnalyzer.setTypeResolver(this::analyzeNormalType);
-
-        ArrayLiteralLowerer arrayLiteralLowerer =
-                new ArrayLiteralLowerer(symbolTable, exprAnalyzer);
-
-        arrayLiteralLowerer.setHoister(new ArrayLiteralLowerer.Hoister() {
-            @Override
-            public SemanticVarExprNode hoistArrayLiteral(
-                    SemanticStaticArrayType arrayType,
-                    List<BigInteger> values,
-                    SourceSpan span) {
-                return hoistArrayLiteralGlobal(arrayType, values, span);
-            }
-        });
-        this.exprAnalyzer.setArrayLiteralLowerer(arrayLiteralLowerer);
-    }
-
-    public List<String> warnings() {
-        return symbolTable.warnings();
-    }
-
-    public boolean hasWarnings() {
-        return symbolTable.hasWarnings();
+        this.exprAnalyzer = lowering.analyzer;
+        this.typeResolver = lowering.typeResolver;
     }
 
     public SemanticASTNode analyze(ASTNode root) {
@@ -106,7 +79,7 @@ public class SemanticAnalyzer {
         return result;
     }
 
-    public SastResult analyze(AstDocument ast) {
+    public PassResult analyze(AstDocument ast) {
         if (ast == null) {
             throw new IllegalArgumentException("Cannot analyze a null AST document");
         }
@@ -136,11 +109,7 @@ public class SemanticAnalyzer {
                 program
         );
 
-        return new SastResult(document, symbolTable.diagnostics().diagnostics());
-    }
-
-    public String analyze(String astJson) {
-        return analyze(AstDocument.fromJson(astJson)).document.toJson();
+        return new PassResult(document, symbolTable.diagnostics().diagnostics());
     }
 
     public List<SemanticStmtNode> analyze(List<ASTNode> nodes) {
@@ -302,7 +271,7 @@ public class SemanticAnalyzer {
                         continue;
                     }
 
-                    SemanticType fieldType = analyzeNormalType(fieldNode.type);
+                    SemanticType fieldType = typeResolver.analyzeNormalType(fieldNode.type);
 
                     BigInteger fieldDefault = null;
 
@@ -350,7 +319,7 @@ public class SemanticAnalyzer {
                     continue;
                 }
 
-                SemanticType type = analyzeNormalType(n.type);
+                SemanticType type = typeResolver.analyzeNormalType(n.type);
 
                 GlobalVariableSymbol sym = new GlobalVariableSymbol(
                         currentNamespaceName(),
@@ -654,7 +623,7 @@ public class SemanticAnalyzer {
 
             params.add(new ParameterSymbol(
                     param.name,
-                    analyzeNormalType(param.type),
+                    typeResolver.analyzeNormalType(param.type),
                     i
             ));
         }
@@ -670,7 +639,7 @@ public class SemanticAnalyzer {
                 currentNamespaceName(),
                 fn.name,
                 params,
-                analyzeReturnType(fn.returnType),
+                typeResolver.analyzeReturnType(fn.returnType),
                 false
         );
 
@@ -729,7 +698,7 @@ public class SemanticAnalyzer {
 
             params.add(new ParameterSymbol(
                     param.name,
-                    analyzeNormalType(param.type),
+                    typeResolver.analyzeNormalType(param.type),
                     i
             ));
         }
@@ -741,7 +710,7 @@ public class SemanticAnalyzer {
                     owner,
                     methodNode.name,
                     params,
-                    analyzeReturnType(methodNode.returnType),
+                    typeResolver.analyzeReturnType(methodNode.returnType),
                     false
             );
 
@@ -774,7 +743,7 @@ public class SemanticAnalyzer {
                         + "> self', 'view<"
                         + owner.qualifiedName()
                         + "> self')");
-            } else if (!isSelfTypeForOwner(first.type, owner)) {
+            } else if (!TypeChecker.isSelfTypeForOwner(first.type, owner)) {
                 symbolTable.error("Method '"
                         + display
                         + "' has a 'self' parameter of type "
@@ -800,27 +769,11 @@ public class SemanticAnalyzer {
                 owner,
                 methodNode.name,
                 params,
-                analyzeReturnType(methodNode.returnType),
+                typeResolver.analyzeReturnType(methodNode.returnType),
                 false
         );
 
         symbolTable.declareMethod(owner, methodNode, symbol);
-    }
-
-    private boolean isSelfTypeForOwner(SemanticType type, StructSymbol owner) {
-        if (!(type instanceof SemanticPtrType ptr)) {
-            return false;
-        }
-
-        if (!(ptr.referencedType instanceof SemanticStructType structType)) {
-            return false;
-        }
-
-        if (structType.structSymbol == null) {
-            return false;
-        }
-
-        return structType.structSymbol.qualifiedName().equals(owner.qualifiedName());
     }
 
     private SemanticFunctionDeclNode analyzeFunctionDecl(FunctionDeclNode fn) {
@@ -837,7 +790,7 @@ public class SemanticAnalyzer {
 
                 fallbackParams.add(new ParameterSymbol(
                         param.name,
-                        analyzeNormalType(param.type),
+                        typeResolver.analyzeNormalType(param.type),
                         i
                 ));
             }
@@ -846,7 +799,7 @@ public class SemanticAnalyzer {
                     currentNamespaceName(),
                     fn.name,
                     fallbackParams,
-                    analyzeReturnType(fn.returnType),
+                    typeResolver.analyzeReturnType(fn.returnType),
                     false
             );
         }
@@ -908,7 +861,7 @@ public class SemanticAnalyzer {
 
                 fallbackParams.add(new ParameterSymbol(
                         param.name,
-                        analyzeNormalType(param.type),
+                        typeResolver.analyzeNormalType(param.type),
                         i
                 ));
             }
@@ -917,7 +870,7 @@ public class SemanticAnalyzer {
                     owner,
                     methodNode.name,
                     fallbackParams,
-                    analyzeReturnType(methodNode.returnType),
+                    typeResolver.analyzeReturnType(methodNode.returnType),
                     false
             );
         }
@@ -1031,7 +984,7 @@ public class SemanticAnalyzer {
             VariableSymbol sym = new VariableSymbol(
                     null,
                     n.name,
-                    analyzeNormalType(n.type)
+                    typeResolver.analyzeNormalType(n.type)
             );
 
             symbolTable.declare(sym);
@@ -1176,7 +1129,7 @@ public class SemanticAnalyzer {
     ) {
         symbolTable.diagnostics().push(n.span);
         try {
-        SemanticType type = analyzeNormalType(n.type);
+        SemanticType type = typeResolver.analyzeNormalType(n.type);
 
         VariableSymbol sym = new VariableSymbol(
                 null,
@@ -1248,7 +1201,7 @@ public class SemanticAnalyzer {
                     null,
                     "<invalid-return-context>",
                     List.of(),
-                    VOID_TYPE,
+                    SemanticTypeResolver.VOID_TYPE,
                     false
             );
 
@@ -1312,131 +1265,4 @@ public class SemanticAnalyzer {
         return new SemanticBreakNode(n.span, level.intValue());
     }
 
-    private SemanticType analyzeNormalType(TypeNode node) {
-        symbolTable.diagnostics().push(node == null ? SourceSpan.NONE : node.span);
-        try {
-            return analyzeNormalTypeInner(node);
-        } finally {
-            symbolTable.diagnostics().pop();
-        }
-    }
-
-    private SemanticType analyzeNormalTypeInner(TypeNode node) {
-        if (node == null) {
-            symbolTable.error("Missing type");
-            return FALLBACK_TYPE;
-        }
-
-        if (node instanceof PrimitiveTypeNode p) {
-            return new SemanticPrimitiveType(
-                    SemanticPrimitiveKind.valueOf(p.kind.name())
-            );
-        }
-
-        if (node instanceof StructTypeNode s) {
-            StructSymbol structSymbol = resolveStructTypeSymbol(s);
-
-            if (structSymbol == null) {
-                return FALLBACK_TYPE;
-            }
-
-            return new SemanticStructType(structSymbol);
-        }
-
-        if (node instanceof DynamicArrayTypeNode d) {
-            return new SemanticDynamicArrayType(
-                    analyzeNormalType(d.elementType)
-            );
-        }
-
-        if (node instanceof StaticArrayTypeNode s) {
-
-            if (s.sizeExpr instanceof InferredSizeNode) {
-                symbolTable.error("'?' array size is only allowed in a declaration with an array-literal initializer");
-                return FALLBACK_TYPE;
-            }
-
-            BigInteger canonicalSize =
-                    exprAnalyzer.preEvaluatedConstValue(
-                            s.sizeExpr,
-                            "static array size"
-                    );
-
-            return new SemanticStaticArrayType(
-                    analyzeNormalType(s.elementType),
-                    canonicalSize.toString(10)
-            );
-        }
-
-        if (node instanceof PtrTypeNode a) {
-            SemanticType referencedType = analyzeNormalType(a.referencedType);
-
-            return switch (a.kind) {
-                case OWNER -> new SemanticPtrType(referencedType);
-                case MUTABLE -> new SemanticMViewType(referencedType);
-                case READ_ONLY -> new SemanticViewType(referencedType);
-            };
-        }
-
-        if (node instanceof VoidTypeNode) {
-            symbolTable.error("void is not a valid ordinary type");
-            return FALLBACK_TYPE;
-        }
-
-        symbolTable.error("Unknown type node: "
-                + node.getClass().getSimpleName());
-
-        return FALLBACK_TYPE;
-    }
-
-    private SemanticType analyzeReturnType(TypeNode node) {
-        if (node instanceof VoidTypeNode) {
-            return VOID_TYPE;
-        }
-
-        if (node == null) {
-            symbolTable.error("Function declaration is missing a return type");
-            return FALLBACK_TYPE;
-        }
-
-        return analyzeNormalType(node);
-    }
-
-    private StructSymbol resolveStructTypeSymbol(StructTypeNode s) {
-        if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
-            StructSymbol structSymbol = symbolTable.resolveStruct(s.name);
-
-            if (structSymbol == null) {
-                symbolTable.error("Unknown struct type '" + s.name + "'");
-            }
-
-            return structSymbol;
-        }
-
-        List<String> namespaceSegments = s.namespaceSegments;
-        String qualified = String.join("::", namespaceSegments)
-                + "::"
-                + s.name;
-
-        NamespaceSymbol namespace =
-                symbolTable.resolveNamespace(namespaceSegments);
-
-        if (namespace == null) {
-            symbolTable.error("Unknown namespace '"
-                    + String.join("::", namespaceSegments)
-                    + "'");
-            return null;
-        }
-
-        StructSymbol structSymbol = symbolTable.resolveStructIn(namespace, s.name);
-
-        if (structSymbol == null) {
-            symbolTable.error("Unknown struct type '"
-                    + qualified
-                    + "'");
-            return null;
-        }
-
-        return structSymbol;
-    }
 }

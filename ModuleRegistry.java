@@ -17,7 +17,7 @@ final class ModuleRegistry {
 
     ModuleDescriptor loadFor(Path sourceFile) {
         Path absolute = sourceFile.toAbsolutePath().normalize();
-        String key = canonicalKey(absolute);
+        String key = SourcePaths.canonicalKey(absolute);
 
         if (checkedSources.contains(key)) {
             return bySource.get(key);
@@ -359,14 +359,6 @@ final class ModuleRegistry {
         }
 
         return object;
-    }
-
-    private static String canonicalKey(Path path) {
-        try {
-            return path.toRealPath().toString();
-        } catch (Exception e) {
-            return path.toAbsolutePath().normalize().toString();
-        }
     }
 
     private static String stripExtension(String name) {

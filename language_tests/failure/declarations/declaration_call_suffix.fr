@@ -1,0 +1,6 @@
+// Failure fixture: declarations/declaration_call_suffix
+// A declaration cannot be followed by an argument list.
+func main() -> int32 {
+    [int32] arr(20);
+    return 0;
+}

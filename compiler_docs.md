@@ -9,7 +9,7 @@ about the compiler design should reside here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: ~36 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: 67 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain.
@@ -73,8 +73,8 @@ parses or serializes JSON.
 
 Raw AST nodes and semantic AST nodes carry a `SourceSpan` (stable display
 path + 1-based line/column range). `DiagnosticBag` stores structured
-`Diagnostic` records and prints `file:line:column: message` when a span is
-available. `Main` is the only abort point: passes return diagnostics, `Main`
+`Diagnostic` records; `Diagnostic.format()` yields `file:line:column: message`
+when a span is available. `Main` is the only abort point: passes return diagnostics, `Main`
 prints warnings, writes `<base>.diagnostic.json`, and aborts on errors.
 
 Non-fatal warnings (semantic warnings, pointer maybe-null warnings,
@@ -100,7 +100,7 @@ flowchart TD
     Frontend --> ModuleRegistry
     Frontend --> TargetConstantPass
     Frontend --> ModuleValidator
-    Frontend --> ASTSerializer
+    Frontend --> JsonArtifacts
     ASTSerializer --> Json
     Main --> ImportResolver
     ImportResolver --> Frontend
@@ -108,13 +108,15 @@ flowchart TD
     Main --> FfiHandler
     FfiHandler --> ModuleRegistry
     FfiHandler --> FfiBridge
-    FfiCodegen --> FfiHandler
-    Main --> FfiCodegen
     SemanticAnalyzer --> SastDocument
-    SastDocument --> SemanticASTSerializer
+    SemanticASTSerializer --> SastDocument
     SemanticASTSerializer --> Json
     SemanticAnalyzer --> SymbolTable
-    SemanticAnalyzer --> ExpressionAnalyzer
+    SemanticAnalyzer --> ExpressionLowering
+    ExpressionLowering --> SemanticTypeResolver
+    ExpressionLowering --> ExpressionAnalyzer
+    ExpressionLowering --> ArrayLowerer
+    ExpressionLowering --> ArrayLiteralLowerer
     ExpressionAnalyzer <--> ArrayLowerer
     ExpressionAnalyzer <--> ArrayLiteralLowerer
     ArrayLiteralLowerer --> SemanticAnalyzer
@@ -136,27 +138,31 @@ flowchart TD
     StatementChecker --> DeclarationChecker
     StatementChecker --> ExpressionChecker
     ExpressionChecker --> TypeChecker
+    ExpressionChecker --> ArrayIntrinsicChecker
+    ArrayIntrinsicChecker --> TypeChecker
     DeclarationChecker --> TypeChecker
     Main --> BranchPruner
     Main --> InactiveDeclarationPruner
     Main --> PointerNullStateChecker
     Main --> DanglingPointerChecker
+    DanglingPointerChecker --> DanglingPointerState
     Main --> DynamicArrayMemoryChecker
+    DynamicArrayMemoryChecker --> DynamicArrayAnalysisState
     Main --> PointerPermissionChecker
     PointerPermissionChecker -. reads Semantic AST only .-> SemanticASTNode
     Main --> PrivateIdentifierLinter
     PrivateIdentifierLinter -. reads Semantic AST only .-> SemanticASTNode
     Main --> Cpp14Codegen
-    Cpp14Codegen --> Mangler
-    Cpp14Codegen --> FfiCodegen
-    FfiCodegen --> FfiHandler
+    Cpp14Codegen --> Cpp14ExpressionEmitter
+    Cpp14Codegen --> FfiHandler
     FfiHandler --> TargetInfo
     FfiHandler --> Symbol
     Symbol --> Mangler
     Desugarer --> ConstExpressionEvaluator
     Desugarer --> StringLiteralDecoder
     FrankoASTVisitor --> StringLiteralDecoder
-    SemanticASTSerializer -. writes .-> JsonArtifacts
+    JsonArtifacts --> ASTSerializer
+    JsonArtifacts --> SemanticASTSerializer
     DiagnosticBag -. used by all checkers .- TypeChecker
 ```
 
@@ -167,13 +173,15 @@ flowchart TD
 | Caller | Calls into |
 |---|---|
 | `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
-| `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ModuleRegistry`, `TargetConstantPass`, `ModuleValidator`, `Desugarer`, `JsonArtifacts`, `ASTSerializer` |
+| `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ModuleRegistry`, `TargetConstantPass`, `ModuleValidator`, `Desugarer`, `JsonArtifacts` |
 | `ImportResolver` | `Frontend`, `AstDocument`, `ASTNode` |
-| `ASTSerializer` | `ASTNode`, `AstDocument`, `SourceTable`, `Json` |
+| `ASTSerializer` | `ASTNode`, `AstDocument`, `SourceTable`, `Json`, `JsonAstSupport` |
+| `JsonArtifacts` | `ASTSerializer`, `SemanticASTSerializer`, `Json`, `JsonAstSupport`, filesystem |
 | `SemanticASTSerializer` | `SemanticASTNode`, `SastDocument`, `SymbolRegistry`, `SourceTable`, `Json` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
-| `SemanticAnalyzer` | `SymbolTable`, `ExpressionAnalyzer`, `ArrayLowerer`, `ArrayLiteralLowerer`, `ConstExpressionEvaluator` |
-| `ExpressionAnalyzer` | `SymbolTable`, `ConstExpressionEvaluator`, `ArrayLowerer` (mutually with), `TypeChecker` (static: `isValuePreservingIntegerWidening`) |
+| `SemanticAnalyzer` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `ConstExpressionEvaluator` |
+| `ExpressionLowering` | `ExpressionAnalyzer`, `SemanticTypeResolver`, `ArrayLowerer`, `ArrayLiteralLowerer` |
+| `ExpressionAnalyzer` | `SymbolTable`, `ConstExpressionEvaluator`, `ArrayLowerer` (mutually with), `ArrayLiteralLowerer` (mutually with), `TypeChecker` (static helpers) |
 | `ArrayLowerer` | `ExpressionAnalyzer`, `SymbolTable` |
 | `ArrayLiteralLowerer` | `ExpressionAnalyzer` (element lowering), `TypeChecker` (static `fitsBigIntegerToPrimitive`), `SemanticAnalyzer` (via `Hoister`) |
 | `ConstExpressionEvaluator` | `SymbolTable` (diagnostics only) |
@@ -183,21 +191,25 @@ flowchart TD
 | `FunctionChecker` | `StatementChecker`, `ExpressionChecker`, `DeclarationChecker`, `TypeChecker` |
 | `StatementChecker` | `DeclarationChecker`, `ExpressionChecker`, `TypeChecker` |
 | `DeclarationChecker` | `TypeChecker` (incl. static `fitsBigIntegerToPrimitive`) |
-| `ExpressionChecker` | `TypeChecker` |
+| `ExpressionChecker` | `TypeChecker`, `ArrayIntrinsicChecker` |
+| `ArrayIntrinsicChecker` | `ExpressionChecker` (nested-expression checks), `TypeChecker` |
 | `PointerNullStateChecker` | `DiagnosticBag` only (deliberately standalone) |
-| `DanglingPointerChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
-| `DynamicArrayMemoryChecker` | `DiagnosticBag` only (deliberately standalone) |
+| `DanglingPointerChecker` | `DiagnosticBag`, `PointerPermissions`, `DanglingPointerState`, `OperatorMethods` (deliberately standalone) |
+| `DanglingPointerState` | Semantic AST value objects only (no diagnostics) |
+| `DynamicArrayMemoryChecker` | `DiagnosticBag`, `DynamicArrayAnalysisState` (deliberately standalone) |
+| `DynamicArrayAnalysisState` | Semantic AST value objects and state/snapshot model only |
 | `PointerPermissionChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
 | `PrivateIdentifierLinter` | `DiagnosticBag` only (deliberately standalone) |
-| `Cpp14Codegen` | `FfiCodegen`, `TargetInfo`, `Symbol`/`Mangler` (mangled names), `SymbolTable.splitNamespacePath` (static) |
+| `Cpp14Codegen` | `Cpp14ExpressionEmitter`, `FfiHandler`, `Symbol` (mangled names), `SymbolTable.splitNamespacePath` (static) |
+| `Cpp14ExpressionEmitter` | `Cpp14Codegen` (type/name/symbol emission callback) |
 | `ModuleRegistry` | `ModuleDescriptor`, `Json`, filesystem |
 | `TargetConstantPass` | `ModuleDescriptor`, `TargetInfo`, `TypeChecker` (static fit check) |
 | `ModuleValidator` | `ModuleDescriptor`, `ASTNode` |
 | `FfiHandler` | `ModuleRegistry`, `FfiBridge`, `TargetInfo`, `SemanticFunctionDeclNode` |
-| `FfiCodegen` | `FfiHandler` |
-| `SymbolTable` | `DiagnosticBag`, `Symbol`, `SemanticType` |
+| `SymbolTable` | `DiagnosticBag`, `Symbol`, `SemanticType`, `OverloadResolution`, `CallArg` |
+| `OverloadResolution` | `CallArg`, `SemanticType`, `Symbol` (function/method/parameter), `PointerPermissions`, `TypeChecker` (static same-type/fits/bit helpers) |
 | `Symbol` | `SemanticType`, `Mangler` (static `hashHex`) |
-| `TypeChecker`, `DiagnosticBag` | leaf utilities (JDK only) |
+| `TypeChecker`, `DiagnosticBag` | leaf utilities over model objects (no checker dependencies) |
 
 Called-by is the inverse of the table above (e.g. `TypeChecker` is called by
 every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
@@ -209,7 +221,7 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
   `Desugarer`/`ImportResolver`/`TargetConstantPass`, read by `ASTSerializer`
   and `ConstExpressionEvaluator`.
 - `SemanticASTNode.java` — lowered typed AST, produced by
-  `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`; every node also
+  `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`/`ArrayLiteralLowerer`; every node also
 carries the originating `SourceSpan`, consumed by every
   checker, `PointerNullStateChecker`, `DanglingPointerChecker`,
   `DynamicArrayMemoryChecker`, `PointerPermissionChecker`,
@@ -247,7 +259,10 @@ or pointer permission downgrade; the target is a full `type`) and
 expressions (an array literal is a `view<[T, N]>` value, §4.13).
 Global initializers accept `constExpr`, a
 string literal, an array literal, a `getptr`/`getmview`/`getview` over a
-global, or `null`.
+global, or `null`. `varDecl` carries a parse-time guard that reports
+`unexpected '(' after variable declaration` when the declarator is followed
+by `(`; without it, the parser would split the suffix into a separate
+parenthesized expression statement.
 Notable lexer details: `int/byte/uint` keyword aliases for the sized integer
 types, and a `groupingDepth` member on the lexer that suppresses NEWLINE
 tokens inside `(` and `[` (braces are deliberately excluded so newlines stay
@@ -273,8 +288,8 @@ All raw AST node classes in one file (package-private, constructors only):
 `BreakNode`/`ContinueNode` with optional const level, `ForNode`,
 `ReturnNode`); declarations (`FunctionDeclNode`, `ParameterNode`,
 `StructDeclNode`, `StructFieldDeclNode`, `GlobalVarDeclNode`, `VarDeclNode`,
-`VarDeclInitNode`, `VarDeclArrayInitNode`, `ImportNode`, `NamespaceNode`,
-`QualifiedNameNode`); types (`PrimitiveKind` enum, `PrimitiveTypeNode`,
+`VarDeclInitNode`, `ImportNode`, `NamespaceNode`, `QualifiedNameNode`);
+types (`PrimitiveKind` enum, `PrimitiveTypeNode`,
 `VoidTypeNode`, `DynamicArrayTypeNode`, `StaticArrayTypeNode`, `PtrTypeNode`
 (carrying a `PtrPermission kind`: `ptr`/`mview`/`view`), `StructTypeNode`);
 expressions (`VarNode`, `IntNode`, `InferredSizeNode`, `ArrayLiteralNode`,
@@ -290,8 +305,8 @@ Array-literal globals hoisted during semantic analysis carry
 nesting is derived from the declared static array shape.
 The field layout is the ABI between all phases.
 Lifecycle rules that used to live as comments here:
-- `ForNode`, `IncDecNode`, `VarDeclInitNode`, `VarDeclArrayInitNode` are
-  **pre-desugaring sugar**: none may reach `SemanticAnalyzer`.
+- `ForNode`, `IncDecNode`, `VarDeclInitNode` are **pre-desugaring sugar**:
+  none may reach `SemanticAnalyzer`.
   `ImportNode` survives desugaring and is consumed by `ImportResolver` when
   it splices imported documents. `ArrayLiteralNode` is deliberately NOT
   sugar: it survives desugaring and is lowered during semantic analysis
@@ -306,7 +321,8 @@ Lifecycle rules that used to live as comments here:
 The raw-AST JSON serializer. Exhaustive
 `instanceof` dispatch over every `ASTNode` / `TypeNode` class; writes
 `franko-ast` documents (`format`, `version`, `phase`, `sources`, `root`) and
-parses them back for `AstDocument.fromJson`. Node kinds are lowercase JSON
+parses them back through `ASTSerializer.fromJson`. Shared envelope/source/
+enum/big-integer JSON helpers live in `JsonAstSupport`. Node kinds are lowercase JSON
 names independent of Java class names; enums are serialized by name; every
 node carries `"node"` and `"span"`, and every type carries `"type"` and
 `"span"`. Unknown node kinds are hard errors.
@@ -318,7 +334,9 @@ preserves input order on deserialization. `SourceSpan` is the
 `(source, startLine, startColumn, endLine, endColumn)` record stored on every
 raw and semantic node; `SourceSpan.NONE` serializes as `null`.
 `SourcePaths.display` normalizes paths for spans and JSON (relative to the
-working directory when possible, `/` separators on every platform).
+working directory when possible, `/` separators on every platform), and
+`SourcePaths.canonicalKey` provides the canonical-path fallback used by
+`ModuleRegistry` and `ImportResolver`.
 
 #### `Frontend`
 Owns the per-file front end: lexer, parser, `FrankoASTVisitor`, and a fresh
@@ -449,7 +467,7 @@ to set `GlobalVariableSymbol.compileTimeConstantValue`; it no longer knows
 anything about `os::IS_*` or `TargetInfo`. Missing/mistyped constants are
 diagnostics with the global declaration span.
 
-#### `FfiHandler` / `FfiBridge` / `FfiCodegen`
+#### `FfiHandler` / `FfiBridge`
 `FfiHandler` provides the generic descriptor-based FFI layer:
 
 - `matchFunction(FunctionSymbol)` matches declarations by qualified name
@@ -466,10 +484,9 @@ diagnostics with the global declaration span.
   `// @@end`, and the reserved `common` block. The block name is the Franko
   qualified name (`os::posix::read`, `os::win32::ReadFile`) — module authors
   never choose arbitrary block names or duplicate mangled names.
-- `FfiCodegen` is the small codegen-facing wrapper (`isBridgedFunction`,
-  `matchFunction`, `bridgePrelude`). `Cpp14Codegen` suppresses stub bodies for
-  bridged functions, records used matches during call emission, and prepends
-  the resulting bridge prelude.
+`Cpp14Codegen` suppresses stub bodies for bridged functions, records used
+matches during call emission, and asks `FfiHandler.buildBridge` for the
+resulting bridge prelude.
 
 Variables and structs are parsed and validated as future bridge entities; the
 current codegen path only needs function bridging. The schema is already
@@ -493,18 +510,16 @@ C++14 truncated remainder semantics. Called by `Desugarer`, `SemanticAnalyzer`
 The lowering hub: converts the desugared raw AST into the typed,
 symbol-resolved Semantic AST. It deliberately does **not** enforce full
 language correctness (that is the legality cluster's job). Entry:
-`analyze(AstDocument)` → `SastResult` (a `SastDocument` plus diagnostics);
-the JSON-in/JSON-out overload `analyze(String)` returns SAST JSON. Ordinary
-user errors are returned as diagnostics rather than thrown;
-`SemanticException` remains only for internal invariant failures. Program
-analysis runs five internal phases:
+`analyze(AstDocument)` → `PassResult` (a `SastDocument` plus diagnostics). Ordinary
+user errors are returned as diagnostics rather than thrown. Program
+analysis runs six internal phases:
 1. register struct names (placeholder symbols),
 2. resolve struct fields, fold field defaults,
-2b. register method signatures,
-3. register global variables (fold const initializers; propagate module
+3. register method signatures,
+4. register global variables (fold const initializers; propagate module
    compile-time-constant flags),
-4. register all function signatures (enables forward references/recursion),
-5. lower items in source order (structs+methods, globals, function bodies).
+5. register all function signatures (enables forward references/recursion),
+6. lower items in source order (structs+methods, globals, function bodies).
 
 Assignment statements to struct-typed targets are first offered to
 `ExpressionAnalyzer.tryLowerOperatorAssignment`, which lowers them to an
@@ -514,12 +529,12 @@ applies; an already-analyzed RHS value is reused by the built-in
 normal context-aware path. The same lowering is reused for local
 declaration initializers.
 
-Also determines `entryKind()` (`NONE`/`NO_ARGS`/`ARGS`) which selects the C++
-program template in `Main`, collects non-fatal `warnings()`, and owns the
-`ExpressionAnalyzer` (constructed with the shared `SymbolTable` +
-`ConstExpressionEvaluator`; the `ArrayLowerer` is wired in via
-`exprAnalyzer.setArrayLowerer(...)` and `analyzeNormalType` is wired in as
-the cast-target type resolver via `exprAnalyzer.setTypeResolver(...)`).
+Also determines the entry kind (`NONE`/`NO_ARGS`/`ARGS`), carried on
+`SastDocument` and used by `Main` to select the C++ program template, and owns
+the `ExpressionLowering` coordinator (constructed with the shared `SymbolTable`
++ `ConstExpressionEvaluator`; it builds the `ExpressionAnalyzer`,
+`ArrayLowerer`, `ArrayLiteralLowerer`, and `SemanticTypeResolver` and wires
+them together).
 Globals additionally accept the statically representable initializers
 (`null`, `getptr`/`getmview`/`getview` over a global, a constant array
 literal) and carry the UTF-8
@@ -532,6 +547,19 @@ the same global) and prepended to the program items.
 The entry-point signature must remain exactly `view<[[byte]]>`
 (read-only) for the raw-args `main`; the template marshals argv behind a
 const pointer, so the program cannot mutate its arguments.
+
+#### `SemanticTypeResolver`
+The type-resolution helper used throughout analysis. It maps raw `TypeNode`s
+to `SemanticType`s, rejects `void` in ordinary positions and `?` outside an
+inferred-size declaration, resolves struct names through `SymbolTable`
+(unqualified lookup with namespace-chain fallback, or strict qualified
+lookup), and folds static array sizes through
+`ExpressionAnalyzer.preEvaluatedConstValue`. Diagnostics are reported
+through the shared `SymbolTable`/`DiagnosticBag`, with the type node's span
+pushed while resolution runs. `SemanticAnalyzer` calls
+`analyzeNormalType`/`analyzeReturnType` directly, and `ExpressionLowering`
+wires `typeResolver::analyzeNormalType` into the analyzer, keeping
+type-resolution rules separate from statement/declaration lowering.
 
 #### `SemanticASTNode`
 The lowered AST data model (pure data classes): program/namespace/block
@@ -593,8 +621,7 @@ another pointer is raw `T*`; permission is not part of the C++ type
 signatures (and every pinned mangling) are unchanged.
 `PtrPermission.allows(other)` encodes the downgrade lattice: permissions
 only ever downgrade (owner → mutable → read-only), so a stronger level
-allows a weaker-or-equal one. `SemanticPtrType.withPermission` re-wraps a
-referenced type at another level (used by permission-changing cast paths).
+allows a weaker-or-equal one.
 
 #### `Symbol`
 The symbol hierarchy and mangling policy:
@@ -660,8 +687,8 @@ with variables/functions is legal — the C++ backend's kind prefixes
 delegation to `DiagnosticBag`. `splitNamespacePath` is a static helper also
 used by `Cpp14Codegen`.
 `resolveOperatorMethodWithLiterals` is a separate, operator-only overload
-path used by assignment lowering. Its `OperatorCallArg` describes the RHS
-as either a lowered value or a raw array literal. Applicability and cost
+path used by assignment lowering. Its operator-form `CallArg` describes the
+RHS as either a lowered value or a raw array literal. Applicability and cost
 add three rules on top of ordinary method resolution: a `view<P>`
 parameter accepts a primitive constant that fits `P`; a nested value type
 `T` and the parameter's referenced type `P` use the ordinary pointer
@@ -670,7 +697,27 @@ parameter inside `view<view<...>>`); and a raw array literal is matched
 against the parameter's inner referenced type
 (`isArrayLiteralShapeApplicable`). Constant-fit cost is the ordinary exact/
 narrowest/signed-first scale; inner decay costs 2 and a plain inner
-conversion costs 1.
+conversion costs 1. The pure applicability, preference, and cost helpers
+referenced above live in `OverloadResolution`; `SymbolTable` keeps
+scope/namespace bookkeeping and registration. `CallArg` is a standalone
+argument descriptor shared by both classes.
+
+#### `OverloadResolution`
+Package-private static helper for overload resolution. `SymbolTable` keeps
+the public registration/lookup API plus scope and namespace bookkeeping;
+`OverloadResolution` owns the pure rules: applicability of a call/literal
+argument to a parameter, exact-permission preference, constant-fit
+preference/costs, pointer-conversion/downgrade costs, array-literal shape
+matching, operator-method applicability/cost, duplicate-signature identity,
+and call-signature formatting. Keeping these rules in one helper leaves
+`SymbolTable` focused on symbol tables and lookup order.
+
+#### `CallArg`
+Standalone overload-resolution argument descriptor. It holds either an
+already-lowered `SemanticExprNode` or a not-yet-lowered `ArrayLiteralNode`,
+plus an operator-form flag used by `SymbolTable.resolveOperatorMethodWithLiterals`.
+Keeping it outside `SymbolTable` lets `OverloadResolution` depend on the
+argument shape without depending on the symbol table.
 
 #### `OperatorMethods`
 Package-private constant tables mapping the six comparison and nine
@@ -694,8 +741,7 @@ corresponding pointer permission; qualified `ns::name` references resolve
 strictly against declared namespaces, and module compile-time constants
 (such as `os::IS_*`) fold into integer literals; `inferBinaryResultType` implements the fluid-constant rule
 (when one operand is a folded constant, the result takes the other side's
-type), while unary `~` is type-preserving like unary `-`; same-type casts are
-returned unchanged (no cast node emitted);
+type), while unary `~` is type-preserving like unary `-`; casts between identical primitive kinds are returned unchanged (no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
 resolver) and `unsafe_cast<T>()` always lowers as a checked cast; the
 legality checkers decide whether a `cast` is a permitted widening,
@@ -703,7 +749,7 @@ permission downgrade, or array-view decay. Array literals are delegated
 to `ArrayLiteralLowerer` with an optional expected type (the inference
 context of §4.13: assignment target type, return type, or call parameter
 type); call arguments are lowered in two phases through
-`SymbolTable.CallArg` so a literal argument participates in overload
+`CallArg` so a literal argument participates in overload
 resolution before its element type is known (§4.13).
 
 Struct comparison operators are intercepted after both operands are
@@ -724,23 +770,23 @@ to the selected `view<...>` parameter type. The hidden `self` argument is
 `getptr(target)` using the method's declared first parameter type.
 
 #### `ArrayLowerer`
-Frontend lowering of array-intrinsic call syntax to
+Frontend lowering of array-intrinsic member-call syntax to
 `SemanticArrayIntrinsicCallNode`s during semantic analysis: named member
 intrinsics (`xs.init(n)`, `xs.init_zero()`, `xs.resize(n)`, `xs.uninit()`,
-`xs.memset(v)`/`xs.memset(s,n,v)`, `xs.memcpy(src)`/`xs.memcpy(src,sr,dst,n)`,
-`xs.memmove(src,n)`, `xs.length()`, `xs.memcmp(src)`/`xs.memcmp(src,sr,dst,n)`,
-the byte-array search/endian/bit intrinsics, and the dynamic-array init shorthand
-`xs(size)` → `xs.init(size)`. Type-directed dispatch: a struct-typed receiver
-is a method call, never an intrinsic, even when a method name coincides with an
-intrinsic name; `shouldSuppressCallDiagnostic` avoids misleading "no matching
-overload" errors when fallthrough would be noise. The shorthand disambiguator
-"peeks" at member-call receivers before full callee analysis to avoid spurious
-errors alongside real method resolution. The per-kind signature descriptor
-drives arity checks, receiver lvalue requirements (mutating kinds only), and
-argument lowering; pointer arguments (`memcpy`/`memcmp` sources, `memmem`
-needles) receive an expected `view<[elem]>` context so array/string literals
-infer their element type. Mutually coupled with `ExpressionAnalyzer` (analyzes
-intrinsic arguments through it).
+`xs.memset(v)`/`xs.memset(s,n,v)`, `xs.memcpy(src)`/`xs.memcpy(src,dst,sr,n)`,
+`xs.memmove(dst,sr,n)`, `xs.length()`, `xs.memcmp(src)`/`xs.memcmp(src,dst,sr,n)`,
+and the byte-array search/endian/bit intrinsics. Type-directed dispatch: a
+struct-typed receiver is a method call, never an intrinsic, even when a method
+name coincides with an intrinsic name; `shouldSuppressCallDiagnostic` avoids
+misleading "no matching overload" errors when intrinsic-named member-call
+fallthrough would be noise. The dispatcher "peeks" at member-call receivers
+before full callee analysis to avoid spurious errors alongside real method
+resolution. The per-kind signature descriptor drives arity checks, receiver
+lvalue requirements (mutating kinds only), and argument lowering; pointer
+arguments (`memcpy`/`memcmp` sources, `memmem` needles) receive an expected
+`view<[elem]>` context so array/string literals infer their element type.
+Mutually coupled with `ExpressionAnalyzer` (analyzes intrinsic arguments
+through it).
 
 #### `ArrayLiteralLowerer`
 Lowers `ArrayLiteralNode` expressions during semantic analysis into
@@ -835,18 +881,10 @@ non-negative constant or unsigned right operand), pointer/null
 comparisons (only `==`/`!=`, matching pointer types), function-call argument
 revalidation (constants must fit, non-constants match exactly or are a
 pointer conversion — permission downgrade or array-view decay —, no
-void/array arguments), array intrinsic
-argument rules **and receiver permission rules** (lifecycle intrinsics
-`init`/`init_zero`/`resize`/`uninit` need an OWNER region;
-`memset`/`memcpy`/`memmove`, `write_*`, `write_bit`, `flip_bit`,
-`bitwise_*_mask`, and `shift_bits_*` targets need mutation rights;
-`length`, `memcmp`, `memchr`, `memmem`, `read_*`, `read_bit`, and
-`count_set_bits` are always fine); per-family argument rules (element-type equality
-and `isCopiable` for `memcpy`/`memcmp`, identical/`isTrivial` for `memset`,
-byte-only receivers for the search/endian/bit families, pointer-to-array
-sources with element-type checks, scalar arguments checked as exact types or
-fitting constants), constant static-array index/range/byte-offset/bit-index
-bounds, cast rules
+void/array arguments), array intrinsic calls are delegated to `ArrayIntrinsicChecker` (receiver
+permission, arity, element/argument rules, static-array bounds, and the
+intrinsic expression type); the rules kept here cover non-intrinsic
+expressions, constant static-array index/range bounds, cast rules
 (`cast` = value-preserving integer widening, pointer permission downgrade
 over an identical referenced type, or the static-to-dynamic array view
 decay — whose to-`ptr` form gets a dedicated "cannot decay ownership"
@@ -860,6 +898,16 @@ lowering, and its type is required to be a read-only view. Carries
 the "fluid integer constants" model: folded constants stay fluid until a
 context constrains them.
 
+#### `ArrayIntrinsicChecker`
+The array-intrinsic legality cluster split out of `ExpressionChecker`. It
+checks receiver permission and lvalue/dynamic-array requirements, per-kind
+arity and element rules (trivial/copiable/byte), argument types and ranges,
+static-array byte/bit/range bounds for the intrinsic families, and the
+intrinsic call's expression type. `ExpressionChecker` delegates every
+`SemanticArrayIntrinsicCallNode` to it; argument and receiver subexpressions
+call back into `ExpressionChecker.checkExpr`, so ordinary expression legality
+and pointer/region rules remain in one place.
+
 #### `TypeChecker`
 The shared leaf utility: type predicates (`isVoidType`, `isIntegral`,
 `isPointerType`, `isDynamicArrayType`, …), classification
@@ -871,9 +919,7 @@ constant-fit machinery (`requireConstantFitsType`, static
 `fitsBigIntegerToPrimitive`, `bitWidth`, `isSigned`,
 `unsignedVariantOf`/`signedVariantOf`, static
 `isValuePreservingIntegerWidening` — which also drives cast selection in
-`ExpressionAnalyzer`), pointer conversions
-(`isPermissionDowngrade`, `isStaticArrayViewDecay`, `isPointerConversion` —
-delegating wrappers over
+`ExpressionAnalyzer`), pointer conversions (delegated directly to
 `PointerPermissions`), literal parsing (`parseIntegerLiteral`:
 0b/0x/decimal), element classification (`isTrivial` — memset-filled
 byte-wise; `isCopiable` — memcpy/memcmp-copied byte-wise; `isByteType` — the
@@ -906,13 +952,15 @@ states on each path; exploration is path-sensitive up to
 Loops track break/continue jump states via snapshot slots (`LoopFrame`,
 preallocated `PointerState[][]` store), merge back-edge states, and compute
 zero-trip exit states. Reports deref of definitely-NULL as error and
-maybe-null as warning (each pointer warns at most once per check site).
+maybe-null as warning (each pointer variable warns at most once across the
+whole document analysis).
 
 #### `DanglingPointerChecker`
 Return-escape and pointer-store provenance analysis, run after both pruners
 and after `PointerNullStateChecker` (so dead functions/branches and dead
 returns cannot produce diagnostics), deliberately independent of the checker
-cluster (only `DiagnosticBag`, `PointerPermissions`, and the semantic AST).
+cluster (only `DiagnosticBag`, `PointerPermissions`, `OperatorMethods`,
+`DanglingPointerState`, and the semantic AST).
 It is **intra-procedural**: each function/method body is analyzed separately
 with a fresh state. It classifies `return` expressions and rejects stores
 whose value contains current-frame origins and whose target storage is
@@ -1011,6 +1059,15 @@ escapes are errors; possible escapes after a branch merge are warnings.
 There is no separate decay classification: a decayed view is just a fat
 pointer over its original storage.
 
+#### `DanglingPointerState`
+Package-private value/helper layer for the dangling-pointer analysis. It
+holds the immutable `OriginSet` (frame/global cells plus `unknown` and
+`nonNull` flags), the `NullGuard` pair, origin-set union/merge, guard
+recognition, and diagnostic formatting for origin sets and function names.
+`DanglingPointerChecker` keeps the traversal, snapshots/live pointer state,
+and store/return rules; the helper only supplies the algebraic and
+formatting pieces shared across those rules.
+
 #### `DynamicArrayMemoryChecker`
 Intra-procedural lifecycle analysis for function-local dynamic arrays,
 run after both pruners and before `PointerPermissionChecker`. Tracks
@@ -1020,6 +1077,16 @@ invalidation. Missing explicit `uninit()` is a warning because
 `Franko_Dynamic_Array`'s destructor already frees local buffers. Struct
 fields, nested dynamic-array elements, element pointers, and
 `mview`/`view` aliases are not tracked.
+
+#### `DynamicArrayAnalysisState`
+Package-private state/snapshot layer for `DynamicArrayMemoryChecker`. It
+collects tracked function-local dynamic arrays and owner
+`ptr<[T]>` aliases, owns the symbol-to-index maps, live
+`UNINITED`/`INITED`/`MAYBE_INITED` and freed/escaped/pointer-origin arrays,
+preallocates the branch snapshot store from an AST demand estimate, and
+implements snapshot/restore and state/origin merge. The checker keeps the
+traversal and lifecycle transfer rules; this helper owns the mutable state
+substrate and its branch-merge mechanics.
 
 #### `PointerPermissionChecker`
 The capability linter: run after branch/declaration pruning (so only
@@ -1059,8 +1126,8 @@ Implementation notes:
   `view` even when declared `ptr`, a `ptr` exercised at most at the
   mutation level is told to become an `mview`, and a never-credited
   variable is left to `InactiveDeclarationPruner`.
-- Warnings never fail the build (`check` reports into its own bag; `Main`
-  prints them without an error check).
+- Warnings never fail the build (the linter only emits warnings, so the
+  common pass error check never triggers).
 
 #### `PrivateIdentifierLinter`
 The naming-visibility linter: run after both pruners and after
@@ -1101,8 +1168,8 @@ the owning struct/namespace, and the current access context (`function '...'`,
 `method '...'`, `struct '...'`, or `global scope`) so the reader can locate
 the public use. Warnings are emitted per syntactic access site, do not fail
 the build, and no check is performed for `SemanticType`s that only appear as
-inferred expression types. `Main` prints the linter's own warning section
-without an error check.
+inferred expression types. `Main` prints the linter's warnings; the linter emits no errors, so the
+common pass error check never triggers.
 
 ### 3.4 Branch pruning
 
@@ -1204,11 +1271,13 @@ namespaces where applicable. The global forward declarations let a
 pointer global's static address initializer reference a global declared
 later in the source (or across namespaces); uninitialized pointer
 variables (globals and locals alike) emit `= nullptr`, implementing the
-guaranteed null-initialization rule. Statement lowering: `if` with constant-dead-
-branch pruning, `while` with goto-based `L_brk_<id>`/`L_cont_<id>` labels plus
+guaranteed null-initialization rule. Statement lowering assumes dead branches
+were already removed by `BranchPruner`; `while` uses goto-based
+`L_brk_<id>`/`L_cont_<id>` labels plus
 the desugared for-update epilogue (continue label placed *before* the
 epilogue so `continue` runs the update and `break` skips it).
-Expression lowering is structural. Unary operators emit as `(op expr)` with a
+Expression lowering is structural, implemented by
+`Cpp14ExpressionEmitter`. Unary operators emit as `(op expr)` with a
 cast to the semantic result type, and compound assignments emit their operator
 text directly, so `~`, `&=`, `|=`, and `^=` need no special backend path. A
 pointer to an array emits
@@ -1237,7 +1306,7 @@ the call boundary. Static arrays are raw C++ arrays (`int32_t VAR_x[3][2]`, oute
 dimension first); locals, globals, fields, and parameters use a
 declarator emitter, while return types and template arguments use a
 type-id emitter. Pre-folded constants are emitted directly; contextual
-`static_cast` via `emitExprAsType` preserves Franko's constant typing and
+`static_cast` via `emitAsType` preserves Franko's constant typing and
 already-chosen overloads; `unsafe_cast` emits `franko_unsafe_cast`.
 
 Array indexing through a raw static array emits
@@ -1261,7 +1330,7 @@ arguments pass through.
 
 Static-to-dynamic array view decay is representation-preserving: both
 sides are the same `Franko_Fat_Pointer<U>` and the value keeps mode 2
-with count `N`. `emitExprAsType` and `emitCast` therefore emit the value
+with count `N`. `emitAsType` and `emitCast` therefore emit the value
 unchanged, with no temporary descriptor and no prelude buffering.
 Literal-backed string and array globals emit as `const uint8_t
 VAR__STR_<hash>[N] = {…}` / `const int32_t VAR__ARR_<hash>[N] = {…}`
@@ -1270,14 +1339,24 @@ literals use one brace level per dimension), and pointer globals with
 static initializers emit the fat pointer over them directly. A
 `checkEmittedNameCollisions` guard catches 32-bit hash collisions between
 distinct signatures. When bridged functions are used, `generate()` prepends
-the `FfiCodegen.bridgePrelude` splice (common block per bridge file plus one
+the `FfiHandler.buildBridge` splice (common block per bridge file plus one
 block per used function) and suppresses the Franko stub bodies.
+
+#### `Cpp14ExpressionEmitter`
+The expression/lvalue emitter split from `Cpp14Codegen`. It owns
+`emitExpr`/`emitLValue` and the concrete forms for literals, unary/binary
+operators, array access, function calls, array intrinsics, `getptr`, deref,
+casts, and member access. `Cpp14Codegen` keeps the statement/declaration
+emitter, namespace/type/name formatting, struct ordering, and program-level
+ordering; its call sites invoke this helper directly. The helper calls back
+into `Cpp14Codegen` for type/name emission and the FFI match set.
 
 #### `Mangler`
 Stateless FNV-1a 32-bit hash utility: `hashHex(key)` → 8 lowercase hex digits
 over the UTF-8 bytes of the canonical signature key. Deterministic across
-runs/JVMs/platforms. Called only from `Symbol` (`FunctionSymbol.mangledName`,
-`MethodSymbol.mangledName`), but its outputs are pinned in the bridge block
+runs/JVMs/platforms. Called from `Symbol` (`FunctionSymbol.mangledName`,
+`MethodSymbol.mangledName`), `Desugarer`/`SemanticAnalyzer` (literal global
+names), and its outputs are pinned in the bridge block
 checks performed by `FfiHandler`, both program templates
 (`FUNC_main_HASH_d7d11c43` / `FUNC_main_HASH_747cdf98`), and `Main`'s
 entry-point sanity check.
@@ -1304,7 +1383,8 @@ missing either placeholder is rejected.
 `franko-sast` documents (`format`, `version`, `phase`, `entryKind`, `sources`,
 `symbols`, `root`) with exhaustive node/type dispatch, and deserializes them
 through a symbol registry. `SastDocument` is the pass-boundary semantic
-document. `SymbolRegistry` assigns deterministic `s0`, `s1`, ... IDs and
+document; its `entryKind` is the top-level `EntryKind` enum shared with
+`SemanticAnalyzer` and `Main`. `SymbolRegistry` assigns deterministic `s0`, `s1`, ... IDs and
 preserves input IDs/order on load. Deserialization is multi-phase: struct
 shells, fields/parameters/globals/variables, functions/methods, struct
 field/method tables, then AST nodes. `StructSymbol.methods` is serialized
@@ -1315,14 +1395,19 @@ methods), intentionally keeping pass reruns information-complete.
 
 ### 3.7 Support
 
+#### `JsonAstSupport`
+Shared JSON envelope/source/enum/big-integer helpers used by
+`ASTSerializer`, `SemanticASTSerializer`, and `JsonArtifacts`: all three
+produce the same `sources` arrays, and the two serializers share the same
+enum/big-integer decoding.
+
 #### `DiagnosticBag`
-Phase-agnostic structured error/warning accumulator with a configurable header,
-a span stack (`at(span)` with `AutoCloseable` scopes), and numbered
-`formatErrors()`. `error(String)` / `warning(String)` inherit the current
-span; `errorAt` / `warningAt` attach one explicitly. `diagnostics()` exposes
-`Diagnostic` records, while `getWarnings()` / `getErrors()` keep returning
-formatted strings for existing callers. Used by `SymbolTable`, `Desugarer`,
-every checker, and `Frontend`'s parse collectors.
+Phase-agnostic structured error/warning accumulator with a span stack.
+`error(String)` / `warning(String)` inherit the current span; pass dispatch
+code pushes the node span and pops it after traversal. `diagnostics()` exposes
+`Diagnostic` records, and the static `formatErrors(header, diagnostics)`
+helper renders numbered errors for `Main` and other pass runners. Used by `SymbolTable`, `Desugarer`, every
+checker, and `Frontend`'s parse collectors.
 
 #### `Diagnostic` / `DiagnosticLog`
 `Diagnostic` is `(Severity, message, SourceSpan)`. `DiagnosticLog` accumulates
@@ -1343,8 +1428,10 @@ stale known artifact paths at the start of a run, and is a no-op unless
 #### `CompilerJsonSelfTest`
 Standalone round-trip checker (not a compiler flag):
 `java -cp build/classes CompilerJsonSelfTest <artifact.json>` reads an
-artifact, deserializes it, re-serializes it, and compares canonical JSON.
-Supports `franko-ast`, `franko-sast`, and `franko-diagnostics` artifacts.
+artifact, deserializes and re-serializes AST/SAST documents, and compares
+canonical JSON; `franko-diagnostics` artifacts are parsed and re-written as
+a JSON DOM. Supports `franko-ast`, `franko-sast`, and `franko-diagnostics`
+artifacts.
 
 #### `Main`
 The driver: CLI parsing (`-o`, `-p`, `-O`, `-Omax`, `--target`,
@@ -1439,7 +1526,6 @@ AST node kinds and additional fields (all also carry `span`):
 | `globalVarDecl` | `type`, `name`, `constInitializer`, `literalBytes`, `compileTimeConstant` |
 | `varDecl` | `type`, `name` |
 | `varDeclInit` | `type`, `name`, `init` |
-| `varDeclArrayInit` | `type`, `name`, `size` |
 | `exprStmt` | `expr` |
 | `assign` | `op`, `target`, `value` |
 | `incDec` | `op`, `target` |
@@ -1536,8 +1622,8 @@ Diagnostic document:
 `span` is `null` when a diagnostic has no source location. On success the file
 contains warnings; on failure it contains errors.
 
-Every AST/SAST node carries `"node"` and `"span"`; expression nodes also carry
-`"type"` and `"constantValue"` (decimal string or `null`). Symbol references
+Every AST/SAST node carries `"node"` and `"span"`; SAST expression nodes also
+carry `"type"` and `"constantValue"` (decimal string or `null`). Symbol references
 are IDs (`s0`, `s1`, ...), never inline objects. `SourceTable` assigns source
 indices by encounter order; `SymbolRegistry` assigns deterministic IDs for a
 fresh SAST and preserves input IDs/order on load. All `BigInteger` values are
@@ -1624,7 +1710,7 @@ type it would have in C++. Consequences:
   verifies the block exists, and checks the block contains the function’s
   computed mangled name. Missing/drifted blocks are diagnostics at the
   declaration span; unused/pruned functions need no block.
-- `FfiCodegen` records used matches; `Cpp14Codegen` suppresses bridged stub
+- `Cpp14Codegen` records used matches; it suppresses bridged stub
   bodies and prepends the used bridge blocks. `common` is emitted once per
   bridge file, before the used blocks, so merely importing a module adds no
   C++ definitions. The bundled bridge files put
@@ -1655,7 +1741,8 @@ type it would have in C++. Consequences:
 
 ### 4.6 Analyzer vs checker split
 - `ExpressionAnalyzer` (SemanticAnalyzer phase) **infers**: it resolves
-  symbols and overloads and decorates types/constants but validates nothing.
+  symbols and overloads and decorates types/constants, but does not perform
+  the full legality rules (it reports only lowering-level errors).
 - `ExpressionChecker`/`StatementChecker`/`DeclarationChecker`/`FunctionChecker`
   (LegalityChecker cluster) **validate** the already-inferred tree; they never
   infer types.
@@ -1676,7 +1763,7 @@ type it would have in C++. Consequences:
   normalized to `1`.
 - Pruned branches are spliced as-is, never flattened into parent blocks
   (keeps `VAR_x` name scopes intact in the emitted C++).
-- Runs after all checking and before pointer null-state analysis, so dead
+- Runs after legality checking and before pointer null-state analysis, so dead
   code receives no null-state diagnostics and never reaches codegen.
 
 ### 4.8 Inactive declaration pruning (InactiveDeclarationPruner)
@@ -1718,8 +1805,7 @@ type. A bare variable's own storage is always owner-protected. Consequences:
 * writes (assignment, compound assignment), `memset`/`memcpy`/`memmove`
   targets, and the byte/bit mutators (`write_*`, `write_bit`, `flip_bit`,
   `bitwise_*_mask`, `shift_bits_*`) need a region allowing MUTABLE;
-* `init`/`init_zero`/`resize`/`uninit` (and the `xs(size)` shorthand) need an
-  OWNER region;
+* `init`/`init_zero`/`resize`/`uninit` need an OWNER region;
 * reads, `length`, `memcmp`, `memchr`, `memmem`, the `read_*` accessors,
   `read_bit`, `count_set_bits`, and memcpy/memcmp/memmem *sources* are always
   fine;
@@ -1742,8 +1828,7 @@ outermost-dimension static-to-dynamic array decay), `isPointerConversion`
 (their union: the full implicit-conversion predicate), and
 `creationIntrinsic` (which of
 `getptr`/`getmview`/`getview` creates a given permission level, used in
-diagnostics); the checkers, `SymbolTable`, `TypeChecker`
-(whose three conversion predicates are delegating wrappers), and
+diagnostics); the checkers, `OverloadResolution`, `TypeChecker`, and
 `PointerPermissionChecker` all share it.
 
 **Conversions.** The **only** implicit conversions in all of Franko are
@@ -1917,10 +2002,10 @@ Generated C++ contains no `std::cout` insertions.
 
 **Mangling key spelling.** The 8-hex-digit suffix is the FNV-1a 32-bit
 hash of the canonical signature key: declared parameter types in order
-(including `self` for methods), then the return type, each exactly as
-written in source (`int32`, `uint64`, `void`, `[T]`,
-`[T,N]` with canonical folded decimal size and no space, `ptr<T>`,
-qualified struct names such as `a::b::X`), joined as
+(including `self` for methods), then the return type, each in canonical
+spelling (`int`/`byte`/`uint` aliases normalize to `int32`/`uint8`/`uint32`;
+`void`, `[T]`, `[T,N]` with canonical folded decimal size and no space,
+`ptr<T>`, qualified struct names such as `a::b::X`), joined as
 `fn(P1,P2,...)->R` (§4.3). When a variable or function shares its name
 with a declared struct, semantic analysis emits a warning (the program
 still compiles):
@@ -2030,7 +2115,7 @@ view is safe, including from recursive functions, and
 (the expression's `getptr` target).
 
 **Overload resolution.** Call arguments lower in two phases
-(`SymbolTable.CallArg`): a pending literal matches any `view<[...]>`
+(`CallArg`): a pending literal matches any `view<[...]>`
 parameter of compatible shape (exact length = exact match, dynamic outer
 = decay), and is re-lowered with the selected parameter type afterwards;
 if several overloads remain it is an ambiguity error.
@@ -2177,7 +2262,7 @@ degrade to `MAYBE_INITED` or no diagnostic.
 **Transfers.**
 
 - local dynamic array declaration → `UNINITED`, `FreedState.NEVER`;
-- `init(n)`, `init_zero(n)`, and `d(n)` → `INITED`; repeated init is
+- `init(n)` and `init_zero(n)` → `INITED`; repeated init is
   not diagnosed because an earlier init may have failed with `-1` and a
   retry is valid;
 - `resize(n)` requires `INITED` and leaves the array `INITED`;
@@ -2310,13 +2395,13 @@ operands (including comparison operands on either side) become a
 `SemanticGetPtrNode` with `temporary = true`, emitted as
 `franko_borrow(expr)`. The C++ temporary lives to the end of the full
 expression. User-written `getview` still requires a storage-backed lvalue,
-so `getview(5)` remains invalid. The RHS is always borrowed as `view<T>`
-where `T` is its static type; there is no direct pass for view values,
-string literals, or array literals, so a view RHS needs
-`view<view<...>>`.
+so `getview(5)` remains invalid. Comparison operands are always borrowed as `view<their static type>`,
+so a comparison view RHS needs `view<view<...>>`; assignment lowering
+handles raw array literals separately through its operator-specific
+descriptor before borrowing.
 
 **Operator overload resolution.** `SymbolTable.resolveOperatorMethodWithLiterals`
-accepts a single `OperatorCallArg` (lowered value or raw array literal) and
+accepts a single operator-form `CallArg` (lowered value or raw array literal) and
 implements operator-only rules: constant fitting through a `view<P>`
 parameter, ordinary pointer conversion between the value type and the
 parameter's inner referenced type (one level), and array-literal shape
@@ -2389,21 +2474,23 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 | Add/rename a semantic node | `SemanticASTNode.java` + `SemanticAnalyzer`/`ExpressionAnalyzer` + `SemanticASTSerializer` |
 | Add/change operator overloading | `OperatorMethods` + `ExpressionAnalyzer` (comparison/assignment lowering) + `SemanticAnalyzer` (assignment hook) + `SymbolTable.resolveOperatorMethodWithLiterals` + `FunctionChecker` (signatures) + `DanglingPointerChecker` (borrowed-`other` seed/store rule) + docs §4.17 |
 | Add or change JSON fields/artifacts | the relevant serializer + `AstDocument`/`SastDocument` + `JsonArtifacts` + §3.8 |
-| Add a diagnostic with a location | `DiagnosticBag.errorAt`/`warningAt`, then push the node span with `at(...)` at the pass dispatch |
+| Add a diagnostic with a location | `DiagnosticBag.error`/`warning` inside the pass dispatch span (push/pop around traversal) |
 | Change source-path formatting | `SourcePaths.display` (spans and JSON) |
 | Remove/rename syntax sugar | `Desugarer` |
 | Simplify or remove dead branches/loops | `BranchPruner` |
 | Remove unused structs/functions/variables | `InactiveDeclarationPruner` |
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
+| Change normal/return type resolution | `SemanticTypeResolver` + `SemanticAnalyzer` + `ExpressionLowering` |
+| Change overload applicability/cost rules | `OverloadResolution` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
 | Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
-| Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker` |
-| Detect dynamic-array lifecycle misuse | `DynamicArrayMemoryChecker` |
+| Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker`; origin algebra/formatting in `DanglingPointerState` |
+| Detect dynamic-array lifecycle misuse | `DynamicArrayMemoryChecker`; symbol/state/snapshot substrate in `DynamicArrayAnalysisState` |
 | Detect private-member / namespace-internal access | `PrivateIdentifierLinter` (§3.3, §4.16), invoked by `Main` after pruning |
-| Emit new C++ constructs | `Cpp14Codegen` (+ `SemanticASTNode`/`SemanticType` as needed) |
-| Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ExpressionChecker` validation + `Cpp14Codegen` emission |
+| Emit new C++ constructs | `Cpp14Codegen` for statements/declarations, `Cpp14ExpressionEmitter` for expressions/lvalues (+ `SemanticASTNode`/`SemanticType` as needed) |
+| Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ArrayIntrinsicChecker` validation + `Cpp14ExpressionEmitter` emission |
 | Add an FFI module or function | `<module>.module.json` (`variables`/`structs`/`functions`) + bridge block named after the Franko qualified name |
 | Add/adjust a pointer permission rule | the region rule lives in `PointerPermissions`; enforce it in the relevant checker (`ExpressionChecker`/`StatementChecker`) and teach use-site attribution to `PointerPermissionChecker` (§4.9) |
 | Change how string literals are represented | `Desugarer` (hoisting, §4.10) + `StringLiteralDecoder` + `GlobalVariableSymbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
-| Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `GlobalVariableSymbol.literalValues` + `SymbolTable.CallArg`/`isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |
+| Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `GlobalVariableSymbol.literalValues` + `CallArg`/`OverloadResolution.isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |

@@ -138,7 +138,7 @@ public class FunctionChecker {
                     + "> self', 'view<"
                     + ownerName
                     + "> self')");
-        } else if (!isSelfTypeForOwner(first.type, method.owner)) {
+        } else if (!TypeChecker.isSelfTypeForOwner(first.type, method.owner)) {
             diagnostics.error("Method '"
                     + display
                     + "' has a 'self' parameter of type "
@@ -160,22 +160,6 @@ public class FunctionChecker {
         }
     }
 
-    private boolean isSelfTypeForOwner(SemanticType type, StructSymbol owner) {
-        if (!(type instanceof SemanticPtrType ptr)) {
-            return false;
-        }
-
-        if (!(ptr.referencedType instanceof SemanticStructType structType)) {
-            return false;
-        }
-
-        if (structType.structSymbol == null) {
-            return false;
-        }
-
-        return structType.structSymbol.qualifiedName().equals(owner.qualifiedName());
-    }
-
     private void validateOperatorMethod(MethodSymbol method) {
         if (OperatorMethods.isComparisonMethodName(method.name)) {
             validateComparisonOperatorMethod(method);
@@ -194,7 +178,7 @@ public class FunctionChecker {
                         method.parameters.get(1).type,
                         method.owner)
                 && !"self".equals(method.parameters.get(1).name)
-                && isUInt8Type(method.returnType());
+                && TypeChecker.isByteType(method.returnType());
 
         if (valid) {
             return;
@@ -254,11 +238,6 @@ public class FunctionChecker {
                 && struct.structSymbol != null
                 && struct.structSymbol.qualifiedName().equals(
                         owner.qualifiedName());
-    }
-
-    private boolean isUInt8Type(SemanticType type) {
-        return type instanceof SemanticPrimitiveType primitive
-                && primitive.kind == SemanticPrimitiveKind.UINT8;
     }
 
     private void validateReturnType(FunctionSymbol fn) {

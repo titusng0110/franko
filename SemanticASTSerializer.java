@@ -31,7 +31,7 @@ public final class SemanticASTSerializer {
             document.put("version", VERSION);
             document.put("phase", doc.phase.jsonName());
             document.put("entryKind", doc.entryKind.name());
-            document.put("sources", sourcesToJson(doc.sources));
+            document.put("sources", JsonAstSupport.sourceArray(doc.sources));
             document.put("symbols", symbols);
             document.put("root", root);
 
@@ -42,16 +42,16 @@ public final class SemanticASTSerializer {
     }
 
     public static SastDocument fromJson(String json) {
-        JsonObject document = requireDocument(json);
-        SastPhase phase = requireEnumName(
+        JsonObject document = JsonAstSupport.requireDocument(json, "SAST", FORMAT, VERSION);
+        SastPhase phase = JsonAstSupport.requireEnumName(
                 document.requireString("phase"),
                 SastPhase.class
         );
-        SemanticAnalyzer.EntryKind entryKind = requireEnumName(
+        EntryKind entryKind = JsonAstSupport.requireEnumName(
                 document.requireString("entryKind"),
-                SemanticAnalyzer.EntryKind.class
+                EntryKind.class
         );
-        SourceTable sources = sourcesFromJson(document.requireArray("sources"));
+        SourceTable sources = JsonAstSupport.sourceTable(document.requireArray("sources"), "SAST");
         JsonArray symbolArray = document.requireArray("symbols");
         SymbolRegistry registry = symbolsFromJson(symbolArray, sources);
         SemanticProgramNode root = requireProgram(nodeFromJson(
@@ -63,62 +63,12 @@ public final class SemanticASTSerializer {
         return new SastDocument(phase, entryKind, sources, registry, root);
     }
 
-    private static JsonObject requireDocument(String json) {
-        JsonValue value = Json.parse(json);
-
-        if (!(value instanceof JsonObject document)) {
-            throw new IllegalArgumentException("SAST document must be a JSON object");
-        }
-
-        String format = document.requireString("format");
-
-        if (!FORMAT.equals(format)) {
-            throw new IllegalArgumentException(
-                    "Unsupported document format '" + format + "', expected '" + FORMAT + "'"
-            );
-        }
-
-        int version = document.requireInt("version");
-
-        if (version != VERSION) {
-            throw new IllegalArgumentException(
-                    "Unsupported SAST document version " + version
-            );
-        }
-
-        return document;
-    }
-
     private static SemanticProgramNode requireProgram(SemanticASTNode node) {
         if (!(node instanceof SemanticProgramNode program)) {
             throw new IllegalArgumentException("SAST document root must be a program node");
         }
 
         return program;
-    }
-
-    private static JsonArray sourcesToJson(SourceTable sources) {
-        JsonArray array = new JsonArray();
-
-        for (String source : sources.names()) {
-            array.add(source);
-        }
-
-        return array;
-    }
-
-    private static SourceTable sourcesFromJson(JsonArray array) {
-        SourceTable table = new SourceTable();
-
-        for (JsonValue value : array.values()) {
-            if (!(value instanceof JsonString string)) {
-                throw new IllegalArgumentException("SAST source entry must be a string");
-            }
-
-            table.intern(string.value());
-        }
-
-        return table;
     }
 
     static void registerFromNode(SemanticASTNode node, SymbolRegistry registry) {
@@ -419,8 +369,8 @@ public final class SemanticASTSerializer {
             obj.put("namespace", global.namespace);
             obj.put("type", typeToJson(global.type, registry));
             obj.put("compileTimeConstantValue", stringOrNull(global.compileTimeConstantValue));
-            obj.put("literalBytes", bigIntegerArray(global.literalBytes));
-            obj.put("literalValues", bigIntegerArray(global.literalValues));
+            obj.put("literalBytes", JsonAstSupport.bigIntegerArray(global.literalBytes));
+            obj.put("literalValues", JsonAstSupport.bigIntegerArray(global.literalValues));
         } else if (symbol instanceof VariableSymbol variable) {
             obj.put("kind", "variable");
             obj.put("name", variable.name);
@@ -452,20 +402,6 @@ public final class SemanticASTSerializer {
         return value == null ? JsonNull.INSTANCE : new JsonString(value.toString());
     }
 
-    private static JsonValue bigIntegerArray(List<BigInteger> values) {
-        if (values == null) {
-            return JsonNull.INSTANCE;
-        }
-
-        JsonArray array = new JsonArray();
-
-        for (BigInteger value : values) {
-            array.add(value.toString(10));
-        }
-
-        return array;
-    }
-
     private static SymbolRegistry symbolsFromJson(JsonArray array, SourceTable sources) {
         SymbolRegistry registry = new SymbolRegistry();
         List<String> inputOrder = new ArrayList<>();
@@ -476,7 +412,7 @@ public final class SemanticASTSerializer {
         Map<String, JsonObject> pendingGlobals = new LinkedHashMap<>();
 
         for (JsonValue value : array.values()) {
-            JsonObject obj = requireObject(value, "symbol");
+            JsonObject obj = JsonAstSupport.requireObject(value, "symbol");
             String id = obj.requireString("id");
             String kind = obj.requireString("kind");
             inputOrder.add(id);
@@ -762,7 +698,7 @@ public final class SemanticASTSerializer {
 
                 for (JsonValue value : obj.requireArray("parameters").values()) {
                     parameters.add(typeFromJson(
-                            requireObject(value, "function parameter type"),
+                            JsonAstSupport.requireObject(value, "function parameter type"),
                             registry
                     ));
                 }
@@ -1234,7 +1170,7 @@ public final class SemanticASTSerializer {
 
         for (JsonValue value : array.values()) {
             nodes.add(nodeFromJson(
-                    requireObject(value, "SAST item"),
+                    JsonAstSupport.requireObject(value, "SAST item"),
                     registry,
                     sources
             ));
@@ -1252,7 +1188,7 @@ public final class SemanticASTSerializer {
 
         for (JsonValue value : array.values()) {
             nodes.add((SemanticStmtNode) nodeFromJson(
-                    requireObject(value, "SAST statement"),
+                    JsonAstSupport.requireObject(value, "SAST statement"),
                     registry,
                     sources
             ));
@@ -1270,7 +1206,7 @@ public final class SemanticASTSerializer {
 
         for (JsonValue value : array.values()) {
             nodes.add((SemanticFunctionDeclNode) nodeFromJson(
-                    requireObject(value, "SAST method"),
+                    JsonAstSupport.requireObject(value, "SAST method"),
                     registry,
                     sources
             ));
@@ -1288,7 +1224,7 @@ public final class SemanticASTSerializer {
 
         for (JsonValue value : array.values()) {
             nodes.add((SemanticExprNode) nodeFromJson(
-                    requireObject(value, "SAST expression"),
+                    JsonAstSupport.requireObject(value, "SAST expression"),
                     registry,
                     sources
             ));
@@ -1332,19 +1268,4 @@ public final class SemanticASTSerializer {
         return array;
     }
 
-    private static JsonObject requireObject(JsonValue value, String description) {
-        if (!(value instanceof JsonObject object)) {
-            throw new IllegalArgumentException("Expected " + description + " to be an object");
-        }
-
-        return object;
-    }
-
-    private static <T extends Enum<T>> T requireEnumName(String name, Class<T> type) {
-        try {
-            return Enum.valueOf(type, name.toUpperCase().replace('-', '_'));
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Unknown enum name '" + name + "'", e);
-        }
-    }
 }

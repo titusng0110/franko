@@ -78,7 +78,7 @@ func main() -> int32 {
 func main() -> int32 {
     [int32] xs;
 
-    xs(3);
+    xs.init(3);
 
     xs.memcpy([10, 20, 30]);
 
@@ -139,9 +139,9 @@ time:
 func main() -> int32 {
     [[int32]] matrix;
 
-    matrix(2);
-    matrix[0](3);
-    matrix[1](3);
+    matrix.init(2);
+    matrix[0].init(3);
+    matrix[1].init(3);
 
     matrix[0].memcpy([1, 2, 3]);
     matrix[1].memcpy([4, 5, 6]);
@@ -236,9 +236,9 @@ func main() -> int32 {
 
 ```franko
 func main() -> int32 {
-    [byte] str;     // dynamic array: str(200) and str.uninit() require one
+    [byte] str;     // dynamic array: str.init(200) and str.uninit() require one
 
-    str(200);
+    str.init(200);
     str.memset(0);
     str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
@@ -421,7 +421,7 @@ struct Buffer {
 func main() -> int32 {
     Buffer b;
 
-    b.data(4);          // allocate the dynamic array field
+    b.data.init(4);     // allocate the dynamic array field
     b.data.memset(0);
     b.size = 4;
 
@@ -436,7 +436,7 @@ func main() -> int32 {
 }
 ```
 
-Dynamic array fields are not part of the struct declaration; allocate them explicitly with `field(n)` as above.
+Dynamic array fields are not allocated as part of the struct declaration; allocate them explicitly with `field.init(n)` as above.
 
 ## 32.19 Struct Globals
 

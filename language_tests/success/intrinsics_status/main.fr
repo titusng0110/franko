@@ -4,8 +4,7 @@ import "franko/io"
 // LANGUAGE TEST: Intrinsic Status Values
 // ============================================================
 // Covers: status-returning intrinsics (init, init_zero,
-// resize, and the target(size) shorthand) used in value
-// contexts; 0 means success.
+// resize) used in value contexts; 0 means success.
 // ============================================================
 
 func main() -> int32 {
@@ -23,7 +22,7 @@ func main() -> int32 {
     print(s2);
 
     [int32] zs;
-    int32 s3 = zs(2);
+    int32 s3 = zs.init(2);
     print(s3);
 
     ys.uninit();

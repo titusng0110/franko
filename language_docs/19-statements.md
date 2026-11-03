@@ -186,7 +186,7 @@ Function calls are commonly used as expression statements.
 Array intrinsic calls are special expression-statement forms:
 
 ```franko
-arr(10);
+arr.init(10);
 arr.memset(0);
 arr.memcpy(getptr(other));
 arr.uninit();

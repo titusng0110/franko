@@ -12,21 +12,13 @@ public class Desugarer {
         new LinkedHashMap<>();
 
     public Desugarer() {
-        this(new DiagnosticBag("Desugaring failed:"));
+        this(new DiagnosticBag());
     }
 
     public Desugarer(DiagnosticBag diagnostics) {
         this.diagnostics = diagnostics == null
-                ? new DiagnosticBag("Desugaring failed:")
+                ? new DiagnosticBag()
                 : diagnostics;
-    }
-
-    public boolean hasErrors() {
-        return diagnostics.hasErrors();
-    }
-
-    public String formatErrors() {
-        return diagnostics.formatErrors();
     }
 
     private static final class InferenceFailure extends RuntimeException {
@@ -310,11 +302,6 @@ public class Desugarer {
             return;
         }
 
-        if (stmt instanceof VarDeclArrayInitNode) {
-            appendDesugaredVarDeclArrayInit((VarDeclArrayInitNode) stmt, out);
-            return;
-        }
-
         if (stmt instanceof AssignNode) {
             appendDesugaredAssign((AssignNode) stmt, out);
             return;
@@ -426,45 +413,6 @@ public class Desugarer {
             target,
             desugarExpr(rawInit)
         ));
-    }
-
-    private void appendDesugaredVarDeclArrayInit(
-        VarDeclArrayInitNode n,
-        List<ASTNode> out
-    ) {
-        if (usesInferredSize(n.type)) {
-            diagnostics.error("'?' array size for '"
-                + n.name
-                + "' requires an array-literal initializer, not a size argument");
-
-            out.add(new VarDeclNode(
-                n.span,
-                desugarType(replaceInferredSizesWithFallback(n.type)),
-                n.name
-            ));
-
-            return;
-        }
-
-        out.add(new VarDeclNode(
-            n.span,
-            desugarType(n.type),
-            n.name
-        ));
-
-        if (n.size != null) {
-            List<ASTNode> args = new ArrayList<>();
-            args.add(desugarExpr(n.size));
-
-            out.add(new ExprStmtNode(
-                n.span,
-                new CallNode(
-                    n.span,
-                    new VarNode(n.span, n.name),
-                    args
-                )
-            ));
-        }
     }
 
     private boolean usesInferredSize(TypeNode type) {
@@ -757,12 +705,6 @@ public class Desugarer {
         if (stmt instanceof VarDeclInitNode) {
             List<ASTNode> lowered = new ArrayList<>();
             appendDesugaredVarDeclInit((VarDeclInitNode) stmt, lowered);
-            return new BlockNode(stmt.span, lowered);
-        }
-
-        if (stmt instanceof VarDeclArrayInitNode) {
-            List<ASTNode> lowered = new ArrayList<>();
-            appendDesugaredVarDeclArrayInit((VarDeclArrayInitNode) stmt, lowered);
             return new BlockNode(stmt.span, lowered);
         }
 

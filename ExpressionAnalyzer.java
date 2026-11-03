@@ -1,5 +1,8 @@
 import java.math.BigInteger;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 public final class ExpressionAnalyzer {
@@ -38,20 +41,16 @@ public final class ExpressionAnalyzer {
         this.constEval = Objects.requireNonNull(constEval);
     }
 
-    public void setArrayLowerer(ArrayLowerer arrayLowerer) {
-        this.arrayLowerer = Objects.requireNonNull(arrayLowerer);
-    }
-
-    public void setTypeResolver(
-            Function<TypeNode, SemanticType> typeResolver
-    ) {
-        this.typeResolver = Objects.requireNonNull(typeResolver);
-    }
-
     private ArrayLiteralLowerer arrayLiteralLowerer = null;
 
-    public void setArrayLiteralLowerer(ArrayLiteralLowerer lowerer) {
-        this.arrayLiteralLowerer = Objects.requireNonNull(lowerer);
+    void wire(
+            ArrayLowerer arrayLowerer,
+            Function<TypeNode, SemanticType> typeResolver,
+            ArrayLiteralLowerer arrayLiteralLowerer
+    ) {
+        this.arrayLowerer = Objects.requireNonNull(arrayLowerer);
+        this.typeResolver = Objects.requireNonNull(typeResolver);
+        this.arrayLiteralLowerer = Objects.requireNonNull(arrayLiteralLowerer);
     }
 
     public SemanticExprNode analyzeExprWithExpectedType(
@@ -490,7 +489,7 @@ public final class ExpressionAnalyzer {
         MethodSymbol method = ctx.resolveMethodWithLiterals(
                 owner,
                 methodName,
-                List.of(SymbolTable.CallArg.lowered(rightView))
+                List.of(CallArg.lowered(rightView))
         );
 
         if (method == null) {
@@ -600,10 +599,10 @@ public final class ExpressionAnalyzer {
         }
 
         SemanticExprNode loweredValue = null;
-        SymbolTable.OperatorCallArg arg;
+        CallArg arg;
 
         if (rawValue instanceof ArrayLiteralNode literal) {
-            arg = SymbolTable.OperatorCallArg.literal(literal);
+            arg = CallArg.operatorLiteral(literal);
         } else {
             loweredValue = analyzeExpr(rawValue);
 
@@ -635,7 +634,7 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            arg = SymbolTable.OperatorCallArg.lowered(loweredValue);
+            arg = CallArg.operatorLowered(loweredValue);
         }
 
         MethodSymbol method = ctx.resolveOperatorMethodWithLiterals(
@@ -778,14 +777,14 @@ public final class ExpressionAnalyzer {
         return new SemanticVarExprNode(q.span, sym.type, sym);
     }
 
-    private List<SymbolTable.CallArg> lowerCallArgs(List<ASTNode> rawArgs) {
-        List<SymbolTable.CallArg> out = new ArrayList<>();
+    private List<CallArg> lowerCallArgs(List<ASTNode> rawArgs) {
+        List<CallArg> out = new ArrayList<>();
 
         for (ASTNode arg : rawArgs) {
             if (arg instanceof ArrayLiteralNode lit) {
-                out.add(SymbolTable.CallArg.literal(lit));
+                out.add(CallArg.literal(lit));
             } else {
-                out.add(SymbolTable.CallArg.lowered(analyzeExpr(arg)));
+                out.add(CallArg.lowered(analyzeExpr(arg)));
             }
         }
 
@@ -793,13 +792,13 @@ public final class ExpressionAnalyzer {
     }
 
     private List<SemanticExprNode> finalizeCallArgs(
-            List<SymbolTable.CallArg> callArgs,
+            List<CallArg> callArgs,
             List<SemanticType> parameterTypes
     ) {
         List<SemanticExprNode> out = new ArrayList<>();
 
         for (int i = 0; i < callArgs.size(); i++) {
-            SymbolTable.CallArg callArg = callArgs.get(i);
+            CallArg callArg = callArgs.get(i);
 
             if (!callArg.isLiteral()) {
                 out.add(callArg.lowered);
@@ -847,7 +846,7 @@ public final class ExpressionAnalyzer {
         }
 
         if (call.callee instanceof VarNode calleeVar) {
-            List<SymbolTable.CallArg> callArgs = lowerCallArgs(call.args);
+            List<CallArg> callArgs = lowerCallArgs(call.args);
 
             FunctionSymbol fn = ctx.resolveFunctionWithLiterals(
                     calleeVar.name,
@@ -867,11 +866,16 @@ public final class ExpressionAnalyzer {
                 );
 
                 if (legacy == null) {
-                    ctx.error("No matching overload for function call '"
-                            + formatCallSignature(
-                                    calleeVar.name,
-                                    callArgTypes(args))
-                            + "'");
+                    if (ctx.resolve(calleeVar.name) != null
+                            && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
+                        ctx.error("'" + calleeVar.name + "' is not a function");
+                    } else {
+                        ctx.error("No matching overload for function call '"
+                                + formatCallSignature(
+                                        calleeVar.name,
+                                        callArgTypes(args))
+                                + "'");
+                    }
                 }
 
                 FunctionSymbol fallbackFn = new FunctionSymbol(
@@ -899,7 +903,7 @@ public final class ExpressionAnalyzer {
         }
 
         if (call.callee instanceof QualifiedNameNode calleeQ) {
-            List<SymbolTable.CallArg> callArgs = lowerCallArgs(call.args);
+            List<CallArg> callArgs = lowerCallArgs(call.args);
 
             List<String> namespaceSegments = calleeQ.segments.subList(
                     0, calleeQ.segments.size() - 1);
@@ -1033,7 +1037,7 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        List<SymbolTable.CallArg> callArgs = lowerCallArgs(call.args);
+        List<CallArg> callArgs = lowerCallArgs(call.args);
 
         MethodSymbol method = ctx.resolveMethodWithLiterals(owner, mac.memberName, callArgs);
 
