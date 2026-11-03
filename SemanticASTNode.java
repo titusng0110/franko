@@ -296,8 +296,8 @@ enum SemanticIntrinsicArgKind {
 
 enum SemanticIntrinsicElementRule {
     NONE,
-    TRIVIAL,
-    COPIABLE,
+    MEMSET_SAFE,
+    MEMCPY_SAFE,
     BYTE
 }
 
@@ -317,20 +317,20 @@ enum SemanticArrayIntrinsicKind {
             new int[]{0}),
 
     MEMSET("memset", null, false,
-            SemanticIntrinsicElementRule.TRIVIAL, PtrPermission.MUTABLE,
+            SemanticIntrinsicElementRule.MEMSET_SAFE, PtrPermission.MUTABLE,
             new int[]{1, 3},
             SemanticIntrinsicArgKind.BYTE,
             SemanticIntrinsicArgKind.UINT32,
             SemanticIntrinsicArgKind.UINT32),
     MEMCPY("memcpy", null, false,
-            SemanticIntrinsicElementRule.COPIABLE, PtrPermission.MUTABLE,
+            SemanticIntrinsicElementRule.MEMCPY_SAFE, PtrPermission.MUTABLE,
             new int[]{1, 4},
             SemanticIntrinsicArgKind.POINTER,
             SemanticIntrinsicArgKind.UINT32,
             SemanticIntrinsicArgKind.UINT32,
             SemanticIntrinsicArgKind.UINT32),
     MEMMOVE("memmove", null, false,
-            SemanticIntrinsicElementRule.COPIABLE, PtrPermission.MUTABLE,
+            SemanticIntrinsicElementRule.MEMCPY_SAFE, PtrPermission.MUTABLE,
             new int[]{3},
             SemanticIntrinsicArgKind.UINT32,
             SemanticIntrinsicArgKind.UINT32,
@@ -341,7 +341,7 @@ enum SemanticArrayIntrinsicKind {
             new int[]{0}),
 
     MEMCMP("memcmp", SemanticPrimitiveKind.INT32, false,
-            SemanticIntrinsicElementRule.COPIABLE, PtrPermission.READ_ONLY,
+            SemanticIntrinsicElementRule.MEMCPY_SAFE, PtrPermission.READ_ONLY,
             new int[]{1, 4},
             SemanticIntrinsicArgKind.POINTER,
             SemanticIntrinsicArgKind.UINT32,

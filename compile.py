@@ -26,10 +26,13 @@ the host <os>-<arch> and adds -march=native to the C++ step, optimizing
 for the host CPU (e.g. wider SIMD in the runtime intrinsics); the
 binary then requires a matching CPU. An explicit <os>-<arch> spec (os
 in {linux, windows, macos}, arch in {x86_64, arm64}) selects that
-Franko target (os::IS_* constants follow it); when it differs from the
-host, only the Franko -> C++ transpilation runs and the C++ compiler is
-not invoked. Without --target the target is the host and the C++ step
-uses the portable baseline ISA.
+Franko target (the injected franko/static IS_* constants follow it);
+when it differs from the host, only the Franko -> C++ transpilation
+runs and the C++ compiler is not invoked. Without --target the target
+is the host and the C++ step uses the portable baseline ISA. The Java
+`Main` driver requires an explicit source path, -o, -p, and --target;
+this script supplies all of them, so its CLI remains the single place
+that owns the defaults.
 
 It runs the Franko compiler (Franko -> C++14), then links the generated
 C++ against the bundled jemalloc for the host platform. Output is written
@@ -96,10 +99,10 @@ def franko_compile(
     "opt" (-O; checked, jemalloc) or "omax" (-Omax; unchecked,
     jemalloc). The matching defines are added by native_compile().
     The compiler always runs with `-p IMPORT_DIR --target <target>`,
-    where TARGET is a canonical `<os>-<arch>` spec (the os::IS_*
-    constants follow it) and defaults to the host. The `-p` default is
-    what the CLI and every runner already resolve to (the Java default
-    is a relative "import" dir under the repo-root cwd).
+    where TARGET is a canonical `<os>-<arch>` spec (the injected
+    franko/static IS_* constants follow it) and defaults to the host.
+    `Main` requires the source path, -o, -p, and --target; this helper
+    supplies all of them so test runners and the CLI own the defaults.
 
     Returns the compiler exit code so test runners can attribute a
     per-case failure; with CHECK a non-zero exit raises ToolError.

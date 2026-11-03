@@ -1,0 +1,30 @@
+// ============================================================
+// LANGUAGE TEST: static_else static_if chains and braceless bodies
+// ============================================================
+// The chain selects exactly one assignment for the current target.
+// Braceless branches are implicitly blocked, so the declaration in the
+// unselected branch never escapes (or is even analyzed).
+// ============================================================
+
+import "franko/static"
+import "franko/io"
+
+func main() -> int32 {
+    int32 selected = 0;
+
+    static_if (static::IS_WINDOWS) selected = 1
+    static_else static_if (static::IS_LINUX) selected = 2
+    static_else static_if (static::IS_MACOS) selected = 3
+    static_else selected = 4
+
+    print(selected >= 1 && selected <= 4);
+
+    static_if (0)
+        int32 hidden = 1
+    static_else
+        print("braceless else");
+
+    static_if (0) int32 also_hidden = 2
+
+    return 0;
+}

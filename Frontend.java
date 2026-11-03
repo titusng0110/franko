@@ -17,7 +17,6 @@ public final class Frontend {
 
     private final JsonArtifacts artifacts;
     private final ModuleRegistry modules;
-    private TargetInfo target;
 
     public Frontend(JsonArtifacts artifacts) {
         this(artifacts, new ModuleRegistry());
@@ -26,10 +25,6 @@ public final class Frontend {
     public Frontend(JsonArtifacts artifacts, ModuleRegistry modules) {
         this.artifacts = artifacts;
         this.modules = modules == null ? new ModuleRegistry() : modules;
-    }
-
-    public void setTarget(TargetInfo target) {
-        this.target = target;
     }
 
     public Result<AstDocument> parseFile(Path file) {
@@ -111,7 +106,6 @@ public final class Frontend {
         }
 
         if (module != null) {
-            diagnostics.addAll(TargetConstantPass.apply(raw, target, module));
             diagnostics.addAll(ModuleValidator.validate(program, module));
         }
 

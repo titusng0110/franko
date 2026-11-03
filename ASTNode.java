@@ -79,6 +79,19 @@ class IfNode extends ASTNode {
     }
 }
 
+class StaticIfNode extends ASTNode {
+    ASTNode condition;
+    ASTNode thenBranch;
+    ASTNode elseBranch;
+
+    StaticIfNode(SourceSpan span, ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
+        super(span);
+        this.condition = condition;
+        this.thenBranch = thenBranch;
+        this.elseBranch = elseBranch;
+    }
+}
+
 class WhileNode extends ASTNode {
     ASTNode condition;
     ASTNode body;

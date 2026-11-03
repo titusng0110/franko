@@ -1,0 +1,19 @@
+// ============================================================
+// LANGUAGE TEST: static::panic in a dead static_if branch
+// ============================================================
+// The unselected branch is never semantically analyzed, so its
+// static::panic call must not abort compilation.
+// ============================================================
+
+import "franko/static"
+import "franko/io"
+
+func main() -> int32 {
+    static_if (0) {
+        static::panic("this message must never appear");
+    } static_else {
+        print("alive");
+    }
+
+    return 0;
+}

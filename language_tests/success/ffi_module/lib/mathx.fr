@@ -1,5 +1,5 @@
 namespace mathx {
-    int32 MAGIC = 0
+    int32 MAGIC = 77
 
     func add(int32 a, int32 b) -> int32 {
         return -1

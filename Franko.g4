@@ -290,6 +290,7 @@ returnType
 statement
     : simpleStmt   # SimpleStatement
     | ifStmt       # IfStatement
+    | staticIfStmt # StaticIfStatement
     | whileStmt    # WhileStatement
     | forStmt      # ForStatement
     | breakStmt    # BreakStatement
@@ -313,6 +314,19 @@ block
 ifStmt
     : IF LPAREN expr RPAREN separators* statement
       (separators* ELSE separators* statement)?
+    ;
+
+staticIfStmt
+    : STATIC_IF LPAREN expr RPAREN separators* statement staticElseClause?
+    ;
+
+staticElseClause
+    : separators* STATIC_ELSE separators* staticElseBody
+    ;
+
+staticElseBody
+    : staticIfStmt
+    | statement
     ;
 
 whileStmt
@@ -996,6 +1010,8 @@ STRUCT : 'struct' ;
 // functions resolved by the normal overload rules.
 IF      : 'if' ;
 ELSE    : 'else' ;
+STATIC_IF   : 'static_if' ;
+STATIC_ELSE : 'static_else' ;
 WHILE   : 'while' ;
 FOR     : 'for' ;
 BREAK    : 'break' ;

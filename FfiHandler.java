@@ -40,12 +40,10 @@ final class FfiMatch {
 final class FfiHandler {
 
     private final ModuleRegistry registry;
-    private final TargetInfo target;
     private final Map<String, FfiBridge> bridges = new LinkedHashMap<>();
 
-    FfiHandler(ModuleRegistry registry, TargetInfo target) {
+    FfiHandler(ModuleRegistry registry) {
         this.registry = registry;
-        this.target = target;
     }
 
     FfiMatch matchFunction(FunctionSymbol function) {
@@ -59,7 +57,7 @@ final class FfiHandler {
         for (ModuleDescriptor module : registry.all()) {
             ModuleFunction descriptor = module.findFunction(namespace, name);
 
-            if (descriptor == null || !descriptor.bridge) {
+            if (descriptor == null) {
                 continue;
             }
 
@@ -87,20 +85,6 @@ final class FfiHandler {
             FfiMatch match = matchFunction(declaration.symbol);
 
             if (match == null) {
-                continue;
-            }
-
-            if (!match.function.targets.matches(target)) {
-                diagnostics.add(Diagnostic.error(
-                        declaration.span,
-                        "FFI error: '"
-                                + match.qualifiedName
-                                + "' is only available when targeting "
-                                + match.function.targets.describe()
-                                + " (target: "
-                                + (target == null ? "unknown" : target.canonical())
-                                + ")"
-                ));
                 continue;
             }
 

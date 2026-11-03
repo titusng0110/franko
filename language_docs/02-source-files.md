@@ -106,7 +106,12 @@ those standard modules:
 ```franko
 import "franko/io"
 import "franko/os"
+import "franko/static"
 ```
+
+`franko/static` is a built-in module: there is no `static.fr` file in
+your project. It provides the compile-time reflection namespace described
+in [Compile-Time Reflection](34-compile-time-reflection.md).
 
 User code must not add files under the compiler's `import/franko/` directory
 or use the `franko/` prefix for user modules. Use a project-relative path or
@@ -127,8 +132,8 @@ Namespaces still separate symbols by path; duplicate declarations that end up in
 ### FFI Modules
 
 An imported module may ship a sibling `<module>.module.json` descriptor that
-marks variables, structs, or functions as implemented by a C++ bridge. The
-bundled `franko/os` module is the standard example. See
+marks functions as implemented by a C++ bridge. The bundled `franko/os`
+module is the standard example. See
 [Foreign Function Interface](31-foreign-function-interface.md) for the
-descriptor format, bridge block naming, target gating, and examples. A module
-without a descriptor is just an ordinary Franko module.
+descriptor format, bridge block naming, and examples. A module without a
+descriptor is just an ordinary Franko module.

@@ -9,7 +9,7 @@ about the compiler design should reside here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: 67 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: 68 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain.
@@ -39,6 +39,7 @@ raw AstDocument                         -> <base>.raw.ast.json
 desugared AstDocument                   -> <base>.desugared.ast.json
    │  ImportResolver      (recursively loads imports through
    │                       Frontend.loadDesugared, splices desugared items,
+   │                       injects franko/static via CompileTimeInjector,
    │                       deduplicates hoisted _STR_ globals)
    ▼
 import-resolved AstDocument             -> <base>.imports.ast.json
@@ -98,12 +99,15 @@ flowchart TD
     FrankoASTVisitor --> ASTNode["ASTNode + SourceSpan (raw AST)"]
     Frontend --> Desugarer
     Frontend --> ModuleRegistry
-    Frontend --> TargetConstantPass
     Frontend --> ModuleValidator
     Frontend --> JsonArtifacts
     ASTSerializer --> Json
     Main --> ImportResolver
+    Main --> CompileTimeInjector
+    CompileTimeInjector --> TargetInfo
+    CompileTimeInjector --> ASTNode
     ImportResolver --> Frontend
+    ImportResolver --> CompileTimeInjector
     Main --> SemanticAnalyzer
     Main --> FfiHandler
     FfiHandler --> ModuleRegistry
@@ -123,6 +127,10 @@ flowchart TD
     ExpressionAnalyzer --> SymbolTable
     ExpressionAnalyzer --> ConstExpressionEvaluator
     ExpressionAnalyzer --> TypeChecker
+    ExpressionAnalyzer --> StaticIntrinsics
+    StaticIntrinsics --> TypeChecker
+    StaticIntrinsics --> SymbolTable
+    StaticIntrinsics --> StringLiteralDecoder
     ArrayLowerer --> SymbolTable
     ConstExpressionEvaluator --> SymbolTable
     SemanticAnalyzer --> SemanticASTNode["SemanticASTNode + SemanticType + Symbol"]
@@ -155,7 +163,6 @@ flowchart TD
     Main --> Cpp14Codegen
     Cpp14Codegen --> Cpp14ExpressionEmitter
     Cpp14Codegen --> FfiHandler
-    FfiHandler --> TargetInfo
     FfiHandler --> Symbol
     Symbol --> Mangler
     Desugarer --> ConstExpressionEvaluator
@@ -172,16 +179,18 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
-| `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ModuleRegistry`, `TargetConstantPass`, `ModuleValidator`, `Desugarer`, `JsonArtifacts` |
-| `ImportResolver` | `Frontend`, `AstDocument`, `ASTNode` |
+| `Main` | `Frontend`, `ImportResolver`, `CompileTimeInjector`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
+| `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ModuleRegistry`, `ModuleValidator`, `Desugarer`, `JsonArtifacts` |
+| `ImportResolver` | `Frontend`, `CompileTimeInjector`, `AstDocument`, `ASTNode` |
+| `CompileTimeInjector` | `TargetInfo`, `ASTNode` (builds the injected `static` namespace) |
 | `ASTSerializer` | `ASTNode`, `AstDocument`, `SourceTable`, `Json`, `JsonAstSupport` |
 | `JsonArtifacts` | `ASTSerializer`, `SemanticASTSerializer`, `Json`, `JsonAstSupport`, filesystem |
 | `SemanticASTSerializer` | `SemanticASTNode`, `SastDocument`, `SymbolRegistry`, `SourceTable`, `Json` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `ASTNode` |
-| `SemanticAnalyzer` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `ConstExpressionEvaluator` |
-| `ExpressionLowering` | `ExpressionAnalyzer`, `SemanticTypeResolver`, `ArrayLowerer`, `ArrayLiteralLowerer` |
-| `ExpressionAnalyzer` | `SymbolTable`, `ConstExpressionEvaluator`, `ArrayLowerer` (mutually with), `ArrayLiteralLowerer` (mutually with), `TypeChecker` (static helpers) |
+| `SemanticAnalyzer` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `ConstExpressionEvaluator`, `Mangler` (static-string global names) |
+| `ExpressionLowering` | `ExpressionAnalyzer`, `SemanticTypeResolver`, `ArrayLowerer`, `ArrayLiteralLowerer`, `StaticIntrinsics` |
+| `ExpressionAnalyzer` | `SymbolTable`, `ConstExpressionEvaluator`, `StaticIntrinsics`, `ArrayLowerer` (mutually with), `ArrayLiteralLowerer` (mutually with), `TypeChecker` (static helpers) |
+| `StaticIntrinsics` | `SymbolTable`, `TypeChecker`, `StringLiteralDecoder`, `SemanticASTNode`/`SemanticType` |
 | `ArrayLowerer` | `ExpressionAnalyzer`, `SymbolTable` |
 | `ArrayLiteralLowerer` | `ExpressionAnalyzer` (element lowering), `TypeChecker` (static `fitsBigIntegerToPrimitive`), `SemanticAnalyzer` (via `Hoister`) |
 | `ConstExpressionEvaluator` | `SymbolTable` (diagnostics only) |
@@ -203,9 +212,8 @@ flowchart TD
 | `Cpp14Codegen` | `Cpp14ExpressionEmitter`, `FfiHandler`, `Symbol` (mangled names), `SymbolTable.splitNamespacePath` (static) |
 | `Cpp14ExpressionEmitter` | `Cpp14Codegen` (type/name/symbol emission callback) |
 | `ModuleRegistry` | `ModuleDescriptor`, `Json`, filesystem |
-| `TargetConstantPass` | `ModuleDescriptor`, `TargetInfo`, `TypeChecker` (static fit check) |
 | `ModuleValidator` | `ModuleDescriptor`, `ASTNode` |
-| `FfiHandler` | `ModuleRegistry`, `FfiBridge`, `TargetInfo`, `SemanticFunctionDeclNode` |
+| `FfiHandler` | `ModuleRegistry`, `FfiBridge`, `SemanticFunctionDeclNode` |
 | `SymbolTable` | `DiagnosticBag`, `Symbol`, `SemanticType`, `OverloadResolution`, `CallArg` |
 | `OverloadResolution` | `CallArg`, `SemanticType`, `Symbol` (function/method/parameter), `PointerPermissions`, `TypeChecker` (static same-type/fits/bit helpers) |
 | `Symbol` | `SemanticType`, `Mangler` (static `hashHex`) |
@@ -218,7 +226,7 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
 
 - `ASTNode.java` — raw AST data model with a `SourceSpan` on every node,
   produced by `FrankoASTVisitor`, rewritten by
-  `Desugarer`/`ImportResolver`/`TargetConstantPass`, read by `ASTSerializer`
+  `Desugarer`/`ImportResolver`/`CompileTimeInjector`, read by `ASTSerializer`
   and `ConstExpressionEvaluator`.
 - `SemanticASTNode.java` — lowered typed AST, produced by
   `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`/`ArrayLiteralLowerer`; every node also
@@ -245,7 +253,8 @@ The single source of truth for Franko syntax: combined ANTLR4 lexer+parser
 grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
 `program`/`topLevelItem`, namespace/import/struct/function declarations, a
-labeled-alternative `statement` rule, a full precedence-climbing expression
+labeled-alternative `statement` rule (including the `static_if` statement
+form), a full precedence-climbing expression
 layer (including unary `-`, `!`, `~` and the compound assignments `+=`, `-=`,
 `*=`, `/=`, `%=`, `&=`, `|=`, `^=`), a mirrored `constExpr` sub-grammar, and
 the `type` rule with
@@ -284,7 +293,8 @@ strings.
 #### `ASTNode.java`
 All raw AST node classes in one file (package-private, constructors only):
 `ProgramNode`, `BlockNode`, `ExprStmtNode`; statements (`AssignNode`,
-`IncDecNode`, `IfNode`, `WhileNode` with its desugared-for update epilogue,
+`IncDecNode`, `IfNode`, `StaticIfNode` (compile-time condition with
+then/else raw statements), `WhileNode` with its desugared-for update epilogue,
 `BreakNode`/`ContinueNode` with optional const level, `ForNode`,
 `ReturnNode`); declarations (`FunctionDeclNode`, `ParameterNode`,
 `StructDeclNode`, `StructFieldDeclNode`, `GlobalVarDeclNode`, `VarDeclNode`,
@@ -316,6 +326,8 @@ Lifecycle rules that used to live as comments here:
   initializers must never be rewritten into assignment statements.
 - `WhileNode.update` exists only so desugared for-loops run their update
   epilogue on `continue` (see §4.1).
+- `StaticIfNode` is consumed by `SemanticAnalyzer`: only the selected branch
+  is lowered, so no semantic `static_if` node exists (§4.18).
 
 #### `ASTSerializer`
 The raw-AST JSON serializer. Exhaustive
@@ -344,7 +356,7 @@ Owns the per-file front end: lexer, parser, `FrankoASTVisitor`, and a fresh
 lexer/parser failures into structured diagnostics (with `SourceSpan`) instead
 of throwing, so `Main` stays the only abort point. After parsing, `Frontend`
 asks `ModuleRegistry` for a sibling `<stem>.module.json` and runs
-`TargetConstantPass` before returning the raw document. `desugar` lowers one
+`ModuleValidator` before returning the raw document. `desugar` lowers one
 raw document and has no module or FFI knowledge. `loadDesugared` parses,
 desugars, and emits per-file `.raw.ast.json` / `.desugared.ast.json`
 artifacts when `--emit-json` is enabled. Imported-file parse errors carry the
@@ -362,8 +374,22 @@ importing file's directory; real-path canonicalization dedups diamonds; files
 are marked processed *before* loading so import cycles terminate. Hoisted
 `_STR_` globals are deduplicated by name + bytes + type while splicing.
 Returns an `ImportResult` with the merged document, import graph, and
-accumulated diagnostics. Import resolution has no special case for
-`franko/os`; FFI modules are ordinary modules with sidecar descriptors.
+accumulated diagnostics. Before filesystem resolution, the reserved
+prefix-free path `franko/static` (or `franko/static.fr`) is handled by
+`CompileTimeInjector`: it records a `<franko/static>` pseudo edge, marks
+that key processed, and splices the injected `static` namespace once per
+compilation. Relative paths such as `./franko/static` remain ordinary file
+imports. There is no special case for `franko/os`; FFI modules are ordinary
+modules with sidecar descriptors.
+
+#### `CompileTimeInjector`
+Compiler-only module provider for `franko/static`. Constructed with the
+required `TargetInfo`; recognizes the reserved path and produces one
+`NamespaceNode("static", ...)` containing five `uint8` `GlobalVarDeclNode`s
+(`IS_LINUX`, `IS_WINDOWS`, `IS_MACOS`, `IS_X86_64`, `IS_ARM64`) with
+`constInitializer = IntNode(0|1)` and `compileTimeConstant = true`. The
+namespace is built once and reused; there is no file access, descriptor, or
+bridge. Spans come from the import node (§4.18).
 
 #### `Desugarer`
 The per-file desugaring pass (run by `Frontend` before import resolution).
@@ -385,7 +411,12 @@ every `constExpr` slot it owns (array sizes, global const initializers,
 field defaults) → a canonical decimal `IntNode` via
 `ConstExpressionEvaluator`; `break N` levels are folded later during
 semantic analysis. Array literals are passed through untouched
-(§4.13). Global initializers pass through the statically
+(§4.13). `StaticIfNode` is preserved: its condition is desugared normally,
+its branches go through `desugarControlledStmt` so braceless bodies become
+blocks, and nested `static_if` nodes survive for semantic selection (§4.18).
+String-literal arguments of `static::strcmp` and `static::panic` are
+deliberately **not** hoisted, so `StaticIntrinsics` can inspect the literal
+text. Global initializers pass through the statically
 representable forms (`null`, `getptr`/`getmview`/`getview` over a global,
 an array literal) and reject everything else. Error-recovery style: it accumulates diagnostics in
 a `DiagnosticBag` (placeholder values on failure); `Frontend`/`Main` check
@@ -397,21 +428,20 @@ Static utility: decodes Franko string-literal escapes
 (`\\ \" \a \b \f \n \r \t \v`; rejects `\u \x \0` and unknown/trailing escapes
 with `RuntimeException`) and converts a `StringLiteralNode` into its UTF-8
 byte payload (`toUtf8Bytes`, unsigned bytes, no null terminator) for the
-hoisted string globals. Called by `Desugarer` (string hoisting) and
-`FrankoASTVisitor` (import paths).
+hoisted string globals. Called by `Desugarer` (string hoisting),
+`StaticIntrinsics` (static string arguments), and `FrankoASTVisitor`
+(import paths).
 
 #### `TargetInfo`
 Immutable compilation target (canonical `<os>-<arch>` pair). Key API:
-`detectHost()` (JVM `os.name`/`os.arch` normalization), `parse(spec)` (accepts
-`x64/amd64/aarch64/darwin` aliases), and predicates (`isWindows`, `isArm64`,
-…). Used by `Main`, `Frontend`/`TargetConstantPass`, and `FfiHandler`.
-Target-dependent values are no longer hardcoded here; they come from module
-descriptors.
+`parse(spec)` (accepts `x64/amd64/aarch64/darwin` aliases) and predicates
+(`isWindows`, `isArm64`, …). Used by `Main` and `CompileTimeInjector` to
+build the injected `franko/static` constants. `Main` requires `--target`;
+there is no host-detection fallback.
 
 #### `ModuleDescriptor` / `ModuleRegistry`
-A module sidecar named `<stem>.module.json` describes the module’s
-`variables`, `structs`, and `functions` that cross an FFI boundary. It is
-plain data, not FFI-specific compiler code:
+A module sidecar named `<stem>.module.json` describes the module’s bridged
+`functions`. It is plain data, not FFI-specific compiler code:
 
 ```json
 {
@@ -420,52 +450,27 @@ plain data, not FFI-specific compiler code:
   "id": "franko/os",
   "source": "os.fr",
   "bridge": "os.ffi.cpp",
-  "variables": [
-    {
-      "namespace": "os",
-      "name": "IS_LINUX",
-      "compileTimeConstant": true,
-      "target": {
-        "default": 0,
-        "overrides": [{"when": {"os": "linux"}, "value": 1}]
-      }
-    }
-  ],
-  "structs": [],
   "functions": [
-    {
-      "namespace": "os::posix",
-      "name": "read",
-      "bridge": true,
-      "targets": {"os": ["linux", "macos"]}
-    }
+    {"namespace": "os::posix", "name": "read"},
+    {"namespace": "os::posix", "name": "write"},
+    {"namespace": "os::win32", "name": "GetStdHandle"},
+    {"namespace": "os::win32", "name": "ReadFile"},
+    {"namespace": "os::win32", "name": "WriteFile"}
   ]
 }
 ```
 
-- `bridge` is the module-level bridge file. A bridged variable/struct/function
-  may override it with `bridgeFile`.
-- `variables` support target bindings (`default` plus first-match
-  `overrides`) and `compileTimeConstant`.
-- `structs` and `functions` are bridged by default; `bridge: false` opts out.
-- `targets` filters functions/structs by `os`, `arch`, and/or `canonical`
-  target values.
+- `bridge` is the module-level bridge file. A function may override it with
+  the optional `bridgeFile` entry.
+- Every entry in `functions` is bridged; there is no per-function opt-out,
+  and the descriptor carries no variables, structs, target filters, or
+  target-dependent constants. Target selection is written in Franko with
+  `static_if` and the injected `franko/static` constants (§4.18).
 - Descriptor paths are resolved relative to the manifest. `ModuleRegistry`
   discovers the sidecar next to every parsed `.fr` file, caches descriptors by
   canonical source path, and exposes `all()` plus `hasFfiEntities()`.
-- `ModuleValidator` checks each listed variable/struct/function exists in the
-  parsed module AST, and rejects duplicate descriptor entries.
-
-#### `TargetConstantPass`
-Runs after parsing and before desugaring, only for files with a module
-descriptor. It walks namespaces/global declarations, matches descriptor
-variables by qualified name, checks the declared type, resolves `default` plus
-overrides for the current target, replaces the initializer with an `IntNode`,
-and sets `GlobalVarDeclNode.compileTimeConstant`. The flag is copied through
-desugaring and serialized in AST JSON. `SemanticAnalyzer` uses it generically
-to set `GlobalVariableSymbol.compileTimeConstantValue`; it no longer knows
-anything about `os::IS_*` or `TargetInfo`. Missing/mistyped constants are
-diagnostics with the global declaration span.
+- `ModuleValidator` checks each listed function exists in the parsed module
+  AST, and rejects duplicate descriptor entries.
 
 #### `FfiHandler` / `FfiBridge`
 `FfiHandler` provides the generic descriptor-based FFI layer:
@@ -474,10 +479,11 @@ diagnostics with the global declaration span.
   against descriptor `functions`; no signatures are duplicated in the
   manifest.
 - `verify(SastDocument)` walks the surviving semantic function declarations,
-  checks target filters, locates each bridge file, parses its blocks, and
-  checks that the block contains the function’s computed emitted name. It
-  returns a `PassResult` with the `ffi-verified` phase and diagnostics with
-  declaration spans.
+  locates each bridge file, parses its blocks, and checks that the block
+  contains the function’s computed emitted name. It returns a `PassResult`
+  with the `ffi-verified` phase and diagnostics with declaration spans.
+  Unselected `static_if` branches never reach this pass, so off-target
+  functions need no bridge block.
 - `buildBridge(used)` groups used matches by bridge file and emits the
   `common` block plus one block per used declaration, in first-use order.
 - `FfiBridge` parses the fixed bridge format: `// @@<qualified-name>`,
@@ -488,9 +494,8 @@ diagnostics with the global declaration span.
 matches during call emission, and asks `FfiHandler.buildBridge` for the
 resulting bridge prelude.
 
-Variables and structs are parsed and validated as future bridge entities; the
-current codegen path only needs function bridging. The schema is already
-extensible for bridged globals and struct blocks.
+Only function bridging exists. Variables and structs are ordinary Franko
+declarations, not descriptor entities.
 
 #### `ConstExpressionEvaluator`
 Compile-time integer constant folding for the `constExpr` subset
@@ -544,6 +549,17 @@ also owns array-literal hoisting (`hoistArrayLiteralGlobal`, wired into
 (element type, values) pair becomes one `_ARR_<hash>` global registered in
 the global-namespace table (no namespace, so calls from any namespace see
 the same global) and prepended to the program items.
+`analyzeStmt` handles `StaticIfNode` before ordinary `IfNode`: it analyzes
+the condition, requires a primitive compile-time constant, and lowers only
+the selected branch (returning that branch's semantic statement directly).
+The dead branch never enters the SAST, so it receives no name resolution,
+type checking, FFI verification, memory-safety diagnostics, or codegen
+(§4.18).
+It also owns semantic static-string hoisting for `static::what_type`
+(`hoistStaticStringGlobal`, wired into `StaticIntrinsics` through its
+`StringHoister`): the UTF-8 spelling bytes become a literal-backed
+`_STR_<hash>` `[byte, N]` global, reused when an identical desugared string
+global already exists, and prepended alongside hoisted array literals.
 The entry-point signature must remain exactly `view<[[byte]]>`
 (read-only) for the raw-args `main`; the template marshals argv behind a
 const pointer, so the program cannot mutate its arguments.
@@ -576,7 +592,7 @@ MEMMOVE, LENGTH, MEMCMP, MEMCHR, MEMMEM, the twenty-four
 BITWISE_NOT_MASK, BITWISE_XOR_MASK, BITWISE_AND_MASK, BITWISE_OR_MASK,
 SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT, COUNT_SET_BITS — each carrying a
 signature descriptor: runtime member name, return kind, dynamic-only flag,
-element rule (none/trivial/copiable/byte), receiver permission, allowed
+element rule (none/memset-safe/memcpy-safe/byte), receiver permission, allowed
 arities, and per-argument kinds; `SemanticArrayIntrinsicCallNode` with
 separate receiver + args and full/ranged form predicates), and expressions
 (all carrying `type`,
@@ -640,8 +656,9 @@ The symbol hierarchy and mangling policy:
   the remaining parameter types must be unique, so a struct may not carry
   both a `view<X> self` and an `mview<X> self` method with otherwise
   identical signatures.
-- `GlobalVariableSymbol` — adds `compileTimeConstantValue` (module
-  target-constant folding), `literalBytes` (the UTF-8 payload of a hoisted string-literal
+- `GlobalVariableSymbol` — adds `compileTimeConstantValue` (compile-time
+  constant folding, including the injected `franko/static` target flags),
+  `literalBytes` (the UTF-8 payload of a hoisted string-literal
   global, §4.10), and `literalValues` (the row-major folded element values
   of a hoisted array-literal global, §4.13).
 - `FieldSymbol`, `StructSymbol` (ordered fields, per-name method overloads,
@@ -738,8 +755,13 @@ type** (pointer receivers need explicit `$(p).method(...)`; the creation
 intrinsic's permission rule is what rejects an under-qualified receiver);
 `getptr`/`getmview`/`getview` lower to `SemanticGetPtrNode` with the
 corresponding pointer permission; qualified `ns::name` references resolve
-strictly against declared namespaces, and module compile-time constants
-(such as `os::IS_*`) fold into integer literals; `inferBinaryResultType` implements the fluid-constant rule
+strictly against declared namespaces, and compile-time constants
+(such as the injected `static::IS_*` flags) fold into integer literals;
+calls whose callee is exactly `static::<name>` are delegated to
+`StaticIntrinsics` before ordinary function resolution (identifier and raw
+string-literal arguments are inspected, not lowered); when the `static`
+namespace is undeclared the diagnostic names the required
+`import "franko/static"`. `inferBinaryResultType` implements the fluid-constant rule
 (when one operand is a folded constant, the result takes the other side's
 type), while unary `~` is type-preserving like unary `-`; casts between identical primitive kinds are returned unchanged (no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
@@ -768,6 +790,34 @@ type before being borrowed. The explicit operator argument is always a
 `SemanticGetPtrNode`, with `temporary` set for rvalues and its node type set
 to the selected `view<...>` parameter type. The hidden `self` argument is
 `getptr(target)` using the method's declared first parameter type.
+
+#### `StaticIntrinsics`
+Compile-time reflection analyzer for the `static::` namespace. Wired into
+`ExpressionAnalyzer` through `ExpressionLowering`. Responsibilities:
+recognize the twelve static functions; validate arity; resolve bare identifier
+arguments (`VarNode` through `SymbolTable.resolve`, `QualifiedNameNode`
+through namespace + global lookup) without evaluating them; decode raw
+string literals through `StringLiteralDecoder`; and return semantic
+expression nodes:
+
+- boolean predicates (`is_primitive`, `is_memcpy_safe`, `is_trivial`,
+  `is_memset_safe`, `is_same_type`, `is_matchable`, `is_comparable`,
+  `is_same_type_assignable`, `is_passable_by_value`) → `uint8`
+  `SemanticIntLiteralNode` 0/1;
+- `strcmp` → `int32` `SemanticIntLiteralNode` (lexicographic UTF-8 byte
+  comparison);
+- `what_type` → a hoisted `_STR_<hash>` `[byte, N]` global wrapped in a
+  read-only `SemanticGetPtrNode` of type `view<[byte, N]>`, using the
+  `StringHoister` callback owned by `SemanticAnalyzer`;
+- `panic` → `ctx.error(message)` plus a fallback node (compilation aborts).
+
+Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
+`isAssignableValueType`, the new `isStaticTrivial`) and
+`StructSymbol.getMethods` for the exact
+`OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signature checks (§4.18).
+`is_passable_by_value` is exactly `TypeChecker.isAssignableValueType`
+(the by-value parameter and built-in whole-value assignment rule); unlike
+`is_same_type_assignable` it does not consider a custom `OPERATOR_MOV`.
 
 #### `ArrayLowerer`
 Frontend lowering of array-intrinsic member-call syntax to
@@ -901,7 +951,7 @@ context constrains them.
 #### `ArrayIntrinsicChecker`
 The array-intrinsic legality cluster split out of `ExpressionChecker`. It
 checks receiver permission and lvalue/dynamic-array requirements, per-kind
-arity and element rules (trivial/copiable/byte), argument types and ranges,
+arity and element rules (memset-safe/memcpy-safe/byte), argument types and ranges,
 static-array byte/bit/range bounds for the intrinsic families, and the
 intrinsic call's expression type. `ExpressionChecker` delegates every
 `SemanticArrayIntrinsicCallNode` to it; argument and receiver subexpressions
@@ -921,10 +971,13 @@ constant-fit machinery (`requireConstantFitsType`, static
 `isValuePreservingIntegerWidening` — which also drives cast selection in
 `ExpressionAnalyzer`), pointer conversions (delegated directly to
 `PointerPermissions`), literal parsing (`parseIntegerLiteral`:
-0b/0x/decimal), element classification (`isTrivial` — memset-filled
-byte-wise; `isCopiable` — memcpy/memcmp-copied byte-wise; `isByteType` — the
-byte/bit intrinsic element type) — recursive with path-scoped cycle detection
-so diamond-shaped field graphs stay fine while by-value cycles terminate.
+0b/0x/decimal), element classification (`isMemsetSafe` — memset-filled
+byte-wise; `isMemcpySafe` — memcpy/memcmp-copied byte-wise; `isStaticTrivial`
+— raw-garbage-safe for `static::is_trivial`, which additionally rejects
+structs with any field default and is separate from `isMemsetSafe`;
+`isByteType` — the byte/bit intrinsic element type) — recursive with
+path-scoped cycle detection so diamond-shaped field graphs stay fine while
+by-value cycles terminate.
 `ensureAssignable`
 accepts the pointer conversions alongside exact matches and
 also special-cases array targets fed a pointer-to-array source: the error
@@ -1437,10 +1490,16 @@ artifacts.
 The driver: CLI parsing (`-o`, `-p`, `-O`, `-Omax`, `--target`,
 `--emit-json`), the phase sequence shown in §1, template selection by the
 checked document's `entryKind`, template sanity checks, and output writing.
-`Main` creates `Frontend` and `JsonArtifacts`, threads `AstDocument` /
-`SastDocument` through every pass, writes each pass snapshot, writes
-`<base>.diagnostic.json` on success and failure, and is the only abort point.
-AST/SAST JSON is never printed to stdout.
+`Main` requires one positional source file and the `-o`, `-p`, and
+`--target` flags; there are no built-in defaults, and target parsing has no
+host-detection fallback. `compile.py` owns the user-facing defaults and
+always passes all four. Duplicate flags keep last-wins semantics so fixture
+`.flags` can override `--target`.
+`Main` creates `Frontend`, `ModuleRegistry`, `CompileTimeInjector`, and
+`JsonArtifacts`, threads `AstDocument` / `SastDocument` through every pass,
+writes each pass snapshot, writes `<base>.diagnostic.json` on success and
+failure, and is the only abort point. AST/SAST JSON is never printed to
+stdout.
 
 ---
 
@@ -1530,6 +1589,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `assign` | `op`, `target`, `value` |
 | `incDec` | `op`, `target` |
 | `if` | `condition`, `thenBranch`, `elseBranch` |
+| `staticIf` | `condition`, `thenBranch`, `elseBranch` |
 | `while` | `condition`, `body`, `update` |
 | `break` | `level` |
 | `continue` | `level` |
@@ -1556,7 +1616,9 @@ AST type kinds (also carry `span`): `primitive` (`kind`), `void`, `dynamicArray`
 `referencedType`), `struct` (`namespace`, `name`). Enums are serialized by name
 (`"INT32"`, `"OWNER"`, `"READ_ONLY"`).
 
-SAST node kinds and additional fields (all also carry `span`):
+SAST node kinds and additional fields (all also carry `span`). There is no
+`staticIf` SAST node: `SemanticAnalyzer` selects the branch and lowers only
+that branch's statements.
 
 | `node` | Fields |
 |---|---|
@@ -1689,37 +1751,31 @@ type it would have in C++. Consequences:
   with a sibling `<stem>.module.json` descriptor; `ModuleRegistry` loads it
   when `Frontend` parses the `.fr` file. Importing `franko/os` and importing a
   user module use exactly the same mechanism.
-- Descriptor entities are `variables`, `structs`, and `functions`. Bridged
-  entities set `bridge: true` (defaults: `true` for structs/functions,
-  `false` for variables) and may override the module bridge file with
-  `bridgeFile`. Functions/structs may carry target filters (`os`, `arch`,
-  `canonical`). Variables may carry a target binding (`default` plus ordered
-  `overrides`) and `compileTimeConstant`.
-- `TargetConstantPass` runs after parsing and before desugaring. It resolves
-  target variables, validates their declared integer type/range, replaces the
-  initializer with an `IntNode`, and sets `GlobalVarDeclNode.compileTimeConstant`.
-  `Desugarer` copies that flag; `SemanticAnalyzer` checks it generically and
-  sets `GlobalVariableSymbol.compileTimeConstantValue`. No `os::IS_*` logic
-  remains in semantic analysis.
+- The descriptor lists only `functions`; every entry is bridged. A function
+  may override the module bridge file with the optional `bridgeFile`. There
+  are no variables, structs, target filters, or target-dependent constants in
+  the schema.
+- Target selection is ordinary Franko code: `static_if (static::IS_WINDOWS)`
+  with the compiler-injected `franko/static` constants (§4.18). Only the
+  selected branch is analyzed, so off-target functions are never verified,
+  bridged, or emitted and need no descriptor filter.
 - Bridge files use a fixed marker format: `// @@<qualified-name>` opens a
   block, `// @@end` closes it, and `common` is reserved. Block names are the
   Franko qualified names (`os::posix::read`, `os::win32::ReadFile`), never
-  arbitrary labels, so each entity has exactly one deterministic block name.
+  arbitrary labels, so each function has exactly one deterministic block name.
 - `FfiHandler.verify` walks the surviving semantic function declarations and,
-  for each descriptor match, checks the target filter, parses the bridge file,
-  verifies the block exists, and checks the block contains the function’s
-  computed mangled name. Missing/drifted blocks are diagnostics at the
-  declaration span; unused/pruned functions need no block.
+  for each descriptor match, parses the bridge file, verifies the block
+  exists, and checks the block contains the function’s computed mangled name.
+  Missing/drifted blocks are diagnostics at the declaration span;
+  unused/pruned functions need no block.
 - `Cpp14Codegen` records used matches; it suppresses bridged stub
   bodies and prepends the used bridge blocks. `common` is emitted once per
   bridge file, before the used blocks, so merely importing a module adds no
   C++ definitions. The bundled bridge files put
   `#include "FrankoRuntime.hpp"` in `common`; `#pragma once` keeps the
   duplicate include harmless while making the bridge standalone-lintable.
-- Variables and structs are part of the descriptor schema and flow through
-  `ModuleRegistry`/`TargetConstantPass`; the current codegen bridge path
-  focuses on functions. The same block-naming rule applies when variable and
-  struct bridging is enabled.
+- Only function bridging exists. Variables and structs are ordinary Franko
+  declarations.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
 - Strictly intra-procedural: one analysis per function, state reset at every
@@ -2425,6 +2481,74 @@ allowed. The residual gaps are forwarding to callees and ordinary
 non-operator `view<T>` parameters, which are not seeded and have no
 interprocedural summary.
 
+## 4.18 Compile-time reflection and `static_if`
+
+**Surface.** `import "franko/static"` is a reserved import path. The
+compiler recognizes `franko/static` / `franko/static.fr` before filesystem
+resolution and injects one `static` namespace (`CompileTimeInjector`). There
+is no `static.fr`, descriptor, or bridge file. The namespace contains five
+`uint8` globals (`IS_LINUX`, `IS_WINDOWS`, `IS_MACOS`, `IS_X86_64`,
+`IS_ARM64`) with `compileTimeConstant = true`; their `0`/`1` values come from
+the required `TargetInfo`. Ordinary global registration and qualified-name
+folding turn every reference into an integer literal, and unused injected
+globals are pruned like any other declaration.
+
+**`static_if` parsing.** `STATIC_IF`/`STATIC_ELSE` are lexer tokens;
+`static` itself remains an `IDENTIFIER` so `static::name` still parses as a
+qualified name. `staticIfStmt` is a statement alternative (never a
+`topLevelItem` or `namespaceItem`), and `staticElseBody` is either a nested
+`staticIfStmt` or an ordinary statement, which supports
+`static_else static_if (...)`. The visitor builds a raw `StaticIfNode`; the
+Desugarer desugars the condition and wraps braceless branches in implicit
+blocks through `desugarControlledStmt`. `ASTSerializer` writes the raw
+`staticIf` node; there is no semantic counterpart.
+
+**Selection.** `SemanticAnalyzer.analyzeStmt` handles `StaticIfNode` before
+ordinary `IfNode`: analyze the condition, require a primitive integer type,
+require `isConstant()`, choose `thenBranch` when `constantValue.signum() != 0`
+and `elseBranch` otherwise, then return `analyzeStmt(selected)` directly. A
+null selected branch returns null (the statement disappears). This means the
+dead branch never enters the SAST, so it gets no name resolution, type
+checking, FFI verification, memory-safety diagnostics, or code generation;
+return-presence and loop-depth checks only see the selected branch. The
+ordinary `BranchPruner` is unchanged and still handles runtime `if`/`while`.
+
+**Static intrinsics.** `StaticIntrinsics` is wired into `ExpressionAnalyzer`
+through `ExpressionLowering`. A call whose callee is exactly `static::<name>`
+is delegated before ordinary function resolution; if the `static` namespace
+is undeclared, the diagnostic explicitly asks for
+`import "franko/static"`. Identifier arguments are resolved symbolically
+(`VarNode` via `SymbolTable.resolve`, `QualifiedNameNode` via namespace +
+global lookup) and never lowered/evaluated. String arguments to `strcmp`
+and `panic` must remain raw `StringLiteralNode`s, so the Desugarer skips
+their hoisting; other arguments are desugared normally. Results are folded
+semantic literals (`uint8`/`int32`), except `what_type`, which hoists the
+UTF-8 spelling as a `_STR_<hash>` literal global and returns a read-only
+`SemanticGetPtrNode` of type `view<[byte, N]>`, and `panic`, which reports
+the message as an error and returns a fallback node.
+
+**Predicates.** `is_primitive` checks `SemanticPrimitiveType`;
+`is_memcpy_safe` reuses `TypeChecker.isMemcpySafe`; `is_memset_safe` reuses
+`TypeChecker.isMemsetSafe`; `is_trivial` uses the new
+`TypeChecker.isStaticTrivial` (primitive or static array of static-trivial;
+struct fields must all have no folded default and be static-trivial;
+pointers, dynamic arrays, and void are false), deliberately separate from
+the `memset`-oriented `isMemsetSafe`; `is_same_type` uses structural
+`SemanticType.equals`; `is_matchable`/`is_comparable`/
+`is_same_type_assignable` inspect struct operator methods for the exact
+`OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signatures, and the latter also
+accepts built-in whole-value assignability; `is_passable_by_value` reuses
+`TypeChecker.isAssignableValueType` (the by-value parameter and built-in
+whole-value assignment rule) and intentionally ignores custom
+`OPERATOR_MOV`. `strcmp` compares decoded
+UTF-8 bytes lexicographically. Empty literals are rejected with the same
+`N >= 1` rule as ordinary strings.
+
+**Limits.** The intrinsics are not first-class values, are rejected in
+`constExpr`-only slots, and `what_type` cannot feed `strcmp`/`panic`
+(which require syntactic literals). `static_if` is not allowed at global
+scope or in a `for` header.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -2439,6 +2563,8 @@ uv run python update_toolchain.py
 uv run python compile.py path/to/test.fr          # wraps java -cp build/classes Main ...
 uv run python compile.py --emit-json path/to/test.fr
 #   writes <base>.*.ast.json / <base>.*.sast.json / <base>.diagnostic.json
+# Main itself requires: <source> -o <out.cpp> -p <import-dir> --target <os>-<arch>
+# compile.py supplies all four (target defaults to the host).
 
 # Validate one emitted artifact by deserializing and re-serializing it:
 java -cp build/classes CompilerJsonSelfTest <artifact.json>
@@ -2471,6 +2597,9 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 | You want to… | Put it in |
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `ASTNode.java` + `ASTSerializer` |
+| Add compile-time branch syntax | `Franko.g4` (`staticIfStmt`) + `StaticIfNode` + `SemanticAnalyzer.analyzeStmt` (selected-branch-only lowering) + §4.18 |
+| Add a compile-time intrinsic | `StaticIntrinsics` + `ExpressionAnalyzer` delegation + `TypeChecker` predicate helpers + §4.18 |
+| Add a compiler-injected module | `CompileTimeInjector` + `ImportResolver` reserved-path handling + §4.18 |
 | Add/rename a semantic node | `SemanticASTNode.java` + `SemanticAnalyzer`/`ExpressionAnalyzer` + `SemanticASTSerializer` |
 | Add/change operator overloading | `OperatorMethods` + `ExpressionAnalyzer` (comparison/assignment lowering) + `SemanticAnalyzer` (assignment hook) + `SymbolTable.resolveOperatorMethodWithLiterals` + `FunctionChecker` (signatures) + `DanglingPointerChecker` (borrowed-`other` seed/store rule) + docs §4.17 |
 | Add or change JSON fields/artifacts | the relevant serializer + `AstDocument`/`SastDocument` + `JsonArtifacts` + §3.8 |
@@ -2490,7 +2619,7 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 | Detect private-member / namespace-internal access | `PrivateIdentifierLinter` (§3.3, §4.16), invoked by `Main` after pruning |
 | Emit new C++ constructs | `Cpp14Codegen` for statements/declarations, `Cpp14ExpressionEmitter` for expressions/lvalues (+ `SemanticASTNode`/`SemanticType` as needed) |
 | Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ArrayIntrinsicChecker` validation + `Cpp14ExpressionEmitter` emission |
-| Add an FFI module or function | `<module>.module.json` (`variables`/`structs`/`functions`) + bridge block named after the Franko qualified name |
+| Add an FFI module or function | `<module>.module.json` (`functions`) + bridge block named after the Franko qualified name; select targets with `static_if` (§4.18) |
 | Add/adjust a pointer permission rule | the region rule lives in `PointerPermissions`; enforce it in the relevant checker (`ExpressionChecker`/`StatementChecker`) and teach use-site attribution to `PointerPermissionChecker` (§4.9) |
 | Change how string literals are represented | `Desugarer` (hoisting, §4.10) + `StringLiteralDecoder` + `GlobalVariableSymbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
 | Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `GlobalVariableSymbol.literalValues` + `CallArg`/`OverloadResolution.isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |

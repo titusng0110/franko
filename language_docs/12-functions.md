@@ -132,3 +132,12 @@ Arrays cannot currently be returned directly.
 Function signatures are known before function bodies are checked, allowing forward references, direct recursion, and mutual recursion.
 
 Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](26-methods.md).
+
+## 12.12 Compile-Time Intrinsics
+
+The functions in the `static` namespace (`static::is_primitive`,
+`static::what_type`, `static::strcmp`, and the rest) are built-in
+compile-time functions, not callable values. They are resolved at
+compile time; they cannot be stored in a variable, passed as a function
+argument, or referred to without a call. See
+[Compile-Time Reflection](34-compile-time-reflection.md).

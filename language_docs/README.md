@@ -41,6 +41,7 @@ The cleaned section ordering is:
 31. Foreign Function Interface
 32. Examples
 33. Naming Conventions
+34. Compile-Time Reflection
 
 ## How to rebuild one combined document
 

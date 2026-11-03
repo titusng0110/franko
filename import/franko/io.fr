@@ -1,4 +1,5 @@
 import "./os"
+import "franko/static"
 import "./string"
 
 // franko/io — user-level output and input.
@@ -26,10 +27,10 @@ import "./string"
 func print() -> void {
     [byte, 1] nl
     nl[0] = 10
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(nl), 1, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(nl), 1)
     }
 }
@@ -54,10 +55,10 @@ func print(uint8 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -82,10 +83,10 @@ func print(uint16 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -110,10 +111,10 @@ func print(uint32 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -137,10 +138,10 @@ func print(uint64 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -163,10 +164,10 @@ func print(int8 num) -> void {
         }
         kout[klen + 1] = 10
         uint32 ktotal = klen + 2
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
         }
         return
@@ -190,10 +191,10 @@ func print(int8 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -216,10 +217,10 @@ func print(int16 num) -> void {
         }
         kout[klen + 1] = 10
         uint32 ktotal = klen + 2
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
         }
         return
@@ -243,10 +244,10 @@ func print(int16 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -269,10 +270,10 @@ func print(int32 num) -> void {
         }
         kout[klen + 1] = 10
         uint32 ktotal = klen + 2
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
         }
         return
@@ -296,10 +297,10 @@ func print(int32 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -321,10 +322,10 @@ func print(int64 num) -> void {
         }
         kout[klen + 1] = 10
         uint32 ktotal = klen + 2
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
         }
         return
@@ -348,10 +349,10 @@ func print(int64 num) -> void {
     }
     out[len] = 10
     uint32 total = len + 1
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), total, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(total))
     }
 }
@@ -364,13 +365,13 @@ func print(view<[uint8]> utf8str) -> void {
     if (n == 0) {
         return
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, utf8str, n, null)
         [byte, 1] nl
         nl[0] = 10
         os::win32::WriteFile(h, getptr(nl), 1, null)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, utf8str, cast<uint64>(n))
         [byte, 1] nl
         nl[0] = 10
@@ -382,10 +383,10 @@ func print(view<[uint8]> utf8str, view<[uint8]> end) -> void {
     if (utf8str != null) {
         uint32 n = $(utf8str).length()
         if (n != 0) {
-            if (os::IS_WINDOWS) {
+            static_if (static::IS_WINDOWS) {
                 uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
                 os::win32::WriteFile(h, utf8str, n, null)
-            } else if (os::IS_LINUX || os::IS_MACOS) {
+            } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
                 os::posix::write(os::posix::STDOUT_FILENO, utf8str, cast<uint64>(n))
             }
         }
@@ -393,10 +394,10 @@ func print(view<[uint8]> utf8str, view<[uint8]> end) -> void {
     if (end != null) {
         uint32 m = $(end).length()
         if (m != 0) {
-            if (os::IS_WINDOWS) {
+            static_if (static::IS_WINDOWS) {
                 uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
                 os::win32::WriteFile(h, end, m, null)
-            } else if (os::IS_LINUX || os::IS_MACOS) {
+            } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
                 os::posix::write(os::posix::STDOUT_FILENO, end, cast<uint64>(m))
             }
         }
@@ -469,7 +470,7 @@ func print(uint8 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -478,7 +479,7 @@ func print(uint8 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -507,7 +508,7 @@ func print(uint16 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -516,7 +517,7 @@ func print(uint16 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -545,7 +546,7 @@ func print(uint32 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -554,7 +555,7 @@ func print(uint32 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -582,7 +583,7 @@ func print(uint64 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -591,7 +592,7 @@ func print(uint64 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -619,7 +620,7 @@ func print(int8 num, view<[uint8]> end) -> void {
             kout[kj + 1] = krev[klen - 1 - kj]
         }
         uint32 ktotal = klen + 1
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
             if (end != null) {
@@ -628,7 +629,7 @@ func print(int8 num, view<[uint8]> end) -> void {
                     os::win32::WriteFile(kh, end, km, null)
                 }
             }
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
             if (end != null) {
                 uint32 km = $(end).length()
@@ -656,7 +657,7 @@ func print(int8 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -665,7 +666,7 @@ func print(int8 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -693,7 +694,7 @@ func print(int16 num, view<[uint8]> end) -> void {
             kout[kj + 1] = krev[klen - 1 - kj]
         }
         uint32 ktotal = klen + 1
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
             if (end != null) {
@@ -702,7 +703,7 @@ func print(int16 num, view<[uint8]> end) -> void {
                     os::win32::WriteFile(kh, end, km, null)
                 }
             }
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
             if (end != null) {
                 uint32 km = $(end).length()
@@ -730,7 +731,7 @@ func print(int16 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -739,7 +740,7 @@ func print(int16 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -767,7 +768,7 @@ func print(int32 num, view<[uint8]> end) -> void {
             kout[kj + 1] = krev[klen - 1 - kj]
         }
         uint32 ktotal = klen + 1
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
             if (end != null) {
@@ -776,7 +777,7 @@ func print(int32 num, view<[uint8]> end) -> void {
                     os::win32::WriteFile(kh, end, km, null)
                 }
             }
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
             if (end != null) {
                 uint32 km = $(end).length()
@@ -804,7 +805,7 @@ func print(int32 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -813,7 +814,7 @@ func print(int32 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -840,7 +841,7 @@ func print(int64 num, view<[uint8]> end) -> void {
             kout[kj + 1] = krev[klen - 1 - kj]
         }
         uint32 ktotal = klen + 1
-        if (os::IS_WINDOWS) {
+        static_if (static::IS_WINDOWS) {
             uint64 kh = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
             os::win32::WriteFile(kh, getptr(kout), ktotal, null)
             if (end != null) {
@@ -849,7 +850,7 @@ func print(int64 num, view<[uint8]> end) -> void {
                     os::win32::WriteFile(kh, end, km, null)
                 }
             }
-        } else if (os::IS_LINUX || os::IS_MACOS) {
+        } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
             os::posix::write(os::posix::STDOUT_FILENO, getptr(kout), cast<uint64>(ktotal))
             if (end != null) {
                 uint32 km = $(end).length()
@@ -877,7 +878,7 @@ func print(int64 num, view<[uint8]> end) -> void {
     for (uint32 j = 0; j < len; j++) {
         out[j] = rev[len - 1 - j]
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
         os::win32::WriteFile(h, getptr(out), len, null)
         if (end != null) {
@@ -886,7 +887,7 @@ func print(int64 num, view<[uint8]> end) -> void {
                 os::win32::WriteFile(h, end, m, null)
             }
         }
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(out), cast<uint64>(len))
         if (end != null) {
             uint32 m = $(end).length()
@@ -922,7 +923,7 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
     if ($(buf).length() < count) {
         return -1
     }
-    if (os::IS_WINDOWS) {
+    static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
         // GetStdHandle returns NULL or INVALID_HANDLE_VALUE on failure.
         if (h == 0 || h == 0xFFFFFFFFFFFFFFFF) {
@@ -937,7 +938,7 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
             return 0
         }
         return cast<int64>(n)
-    } else if (os::IS_LINUX || os::IS_MACOS) {
+    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
         return os::posix::read(os::posix::STDIN_FILENO, buf, cast<uint64>(count))
     }
     return -1

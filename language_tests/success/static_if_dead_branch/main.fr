@@ -1,0 +1,22 @@
+// ============================================================
+// LANGUAGE TEST: dead static_if branches are not analyzed
+// ============================================================
+// The unselected branch names a function and a variable that do not
+// exist. Compilation succeeds because only the selected branch enters
+// semantic analysis.
+// ============================================================
+
+import "franko/static"
+import "franko/io"
+
+func main() -> int32 {
+    static_if (static::IS_WINDOWS) {
+        no_such_function(1);
+        int32 x = no_such_variable;
+        print(x);
+    } static_else {
+        print("dead branch skipped");
+    }
+
+    return 0;
+}

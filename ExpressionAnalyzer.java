@@ -43,14 +43,18 @@ public final class ExpressionAnalyzer {
 
     private ArrayLiteralLowerer arrayLiteralLowerer = null;
 
+    private StaticIntrinsics staticIntrinsics = null;
+
     void wire(
             ArrayLowerer arrayLowerer,
             Function<TypeNode, SemanticType> typeResolver,
-            ArrayLiteralLowerer arrayLiteralLowerer
+            ArrayLiteralLowerer arrayLiteralLowerer,
+            StaticIntrinsics staticIntrinsics
     ) {
         this.arrayLowerer = Objects.requireNonNull(arrayLowerer);
         this.typeResolver = Objects.requireNonNull(typeResolver);
         this.arrayLiteralLowerer = Objects.requireNonNull(arrayLiteralLowerer);
+        this.staticIntrinsics = Objects.requireNonNull(staticIntrinsics);
     }
 
     public SemanticExprNode analyzeExprWithExpectedType(
@@ -738,7 +742,13 @@ public final class ExpressionAnalyzer {
         NamespaceSymbol namespace = ctx.resolveNamespace(namespaceSegments);
 
         if (namespace == null) {
-            ctx.error("Unknown namespace '" + namespacePath + "'");
+            if (namespaceSegments.size() == 1
+                    && "static".equals(namespaceSegments.get(0))) {
+                ctx.error("Unknown namespace 'static'; import "
+                        + "\"franko/static\" to use compile-time reflection");
+            } else {
+                ctx.error("Unknown namespace '" + namespacePath + "'");
+            }
 
             return new SemanticIntLiteralNode(
                     q.span,
@@ -843,6 +853,35 @@ public final class ExpressionAnalyzer {
                         "0"
                 );
             }
+        }
+
+        if (call.callee instanceof QualifiedNameNode calleeQ
+                && StaticIntrinsics.isStaticCallee(calleeQ)) {
+            if (ctx.resolveNamespace(List.of("static")) == null) {
+                ctx.error("Unknown namespace 'static'; import "
+                        + "\"franko/static\" to use compile-time reflection");
+
+                return new SemanticIntLiteralNode(
+                        call.span,
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            if (staticIntrinsics == null) {
+                ctx.error("Internal compiler error: no static intrinsics "
+                        + "wired into ExpressionAnalyzer");
+
+                return new SemanticIntLiteralNode(
+                        call.span,
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            return staticIntrinsics.analyzeCall(call, calleeQ);
         }
 
         if (call.callee instanceof VarNode calleeVar) {

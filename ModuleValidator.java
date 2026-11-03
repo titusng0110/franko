@@ -17,33 +17,11 @@ final class ModuleValidator {
             return diagnostics;
         }
 
-        Map<String, SourceSpan> variables = new LinkedHashMap<>();
-        Map<String, SourceSpan> structs = new LinkedHashMap<>();
         Map<String, SourceSpan> functions = new LinkedHashMap<>();
 
-        collectItems(
-                root.topLevelItems,
-                null,
-                variables,
-                structs,
-                functions
-        );
+        collectItems(root.topLevelItems, null, functions);
 
-        Set<String> seenVariables = new LinkedHashSet<>();
-        Set<String> seenStructs = new LinkedHashSet<>();
         Set<String> seenFunctions = new LinkedHashSet<>();
-
-        for (ModuleVariable variable : module.variables) {
-            String name = variable.qualifiedName();
-            requireUnique(module, "variable", name, seenVariables, diagnostics);
-            requireDeclared(module, "variable", name, variables, diagnostics);
-        }
-
-        for (ModuleStruct struct : module.structs) {
-            String name = struct.qualifiedName();
-            requireUnique(module, "struct", name, seenStructs, diagnostics);
-            requireDeclared(module, "struct", name, structs, diagnostics);
-        }
 
         for (ModuleFunction function : module.functions) {
             String name = function.qualifiedName();
@@ -57,8 +35,6 @@ final class ModuleValidator {
     private static void collectItems(
             List<ASTNode> items,
             String parentNamespace,
-            Map<String, SourceSpan> variables,
-            Map<String, SourceSpan> structs,
             Map<String, SourceSpan> functions
     ) {
         for (ASTNode item : items) {
@@ -66,23 +42,7 @@ final class ModuleValidator {
                 String fullName = parentNamespace == null
                         ? namespace.name
                         : parentNamespace + "::" + namespace.name;
-                collectItems(
-                        namespace.items,
-                        fullName,
-                        variables,
-                        structs,
-                        functions
-                );
-                continue;
-            }
-
-            if (item instanceof GlobalVarDeclNode global) {
-                variables.put(qualified(parentNamespace, global.name), global.span);
-                continue;
-            }
-
-            if (item instanceof StructDeclNode struct) {
-                structs.put(qualified(parentNamespace, struct.name), struct.span);
+                collectItems(namespace.items, fullName, functions);
                 continue;
             }
 

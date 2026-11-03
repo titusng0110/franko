@@ -629,11 +629,11 @@ public class TypeChecker {
         return !isSigned(kind);
     }
 
-    public boolean isTrivial(SemanticType t) {
-        return isTrivial(t, new HashSet<>());
+    public boolean isMemsetSafe(SemanticType t) {
+        return isMemsetSafe(t, new HashSet<>());
     }
 
-    private boolean isTrivial(SemanticType t, Set<SemanticType> visited) {
+    private boolean isMemsetSafe(SemanticType t, Set<SemanticType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
@@ -643,7 +643,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isTrivial(s.elementType, visited);
+            return isMemsetSafe(s.elementType, visited);
         }
 
         if (t instanceof SemanticStructType struct) {
@@ -652,10 +652,53 @@ public class TypeChecker {
                 return false;
             }
 
+            boolean memsetSafe = true;
+
+            for (FieldSymbol field : struct.structSymbol.fields) {
+                if (!isMemsetSafe(field.type, visited)) {
+                    memsetSafe = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return memsetSafe;
+        }
+
+        return false;
+    }
+
+    public boolean isStaticTrivial(SemanticType t) {
+        return isStaticTrivial(t, new HashSet<>());
+    }
+
+    private boolean isStaticTrivial(
+            SemanticType t,
+            Set<SemanticType> visited
+    ) {
+        if (t == null || isVoidType(t)) {
+            return false;
+        }
+
+        if (t instanceof SemanticPrimitiveType) {
+            return true;
+        }
+
+        if (t instanceof SemanticStaticArrayType s) {
+            return isStaticTrivial(s.elementType, visited);
+        }
+
+        if (t instanceof SemanticStructType struct) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
             boolean trivial = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
-                if (!isTrivial(field.type, visited)) {
+                if (field.foldedDefault != null
+                        || !isStaticTrivial(field.type, visited)) {
                     trivial = false;
                     break;
                 }
@@ -669,11 +712,11 @@ public class TypeChecker {
         return false;
     }
 
-    public boolean isCopiable(SemanticType t) {
-        return isCopiable(t, new HashSet<>());
+    public boolean isMemcpySafe(SemanticType t) {
+        return isMemcpySafe(t, new HashSet<>());
     }
 
-    private boolean isCopiable(SemanticType t, Set<SemanticType> visited) {
+    private boolean isMemcpySafe(SemanticType t, Set<SemanticType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
@@ -684,7 +727,7 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isCopiable(s.elementType, visited);
+            return isMemcpySafe(s.elementType, visited);
         }
 
         if (t instanceof SemanticStructType struct) {
@@ -693,18 +736,18 @@ public class TypeChecker {
                 return false;
             }
 
-            boolean copiable = true;
+            boolean memcpySafe = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
-                if (!isCopiable(field.type, visited)) {
-                    copiable = false;
+                if (!isMemcpySafe(field.type, visited)) {
+                    memcpySafe = false;
                     break;
                 }
             }
 
             visited.remove(t);
 
-            return copiable;
+            return memcpySafe;
         }
 
         return false;

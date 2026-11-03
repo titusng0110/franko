@@ -1125,7 +1125,7 @@ struct Franko_Fat_Pointer {
 
     // memcmp: lexicographic raw-byte comparison, C semantics (the sign
     // of the first differing byte; only the sign is meaningful).
-    // The compiler's copiable-element rule is the only gate; there is
+    // The compiler's memcpy-safe-element rule is the only gate; there is
     // deliberately no SFINAE backstop here. The whole form is
     // lexicographic across lengths: on an equal shared prefix the
     // shorter array is smaller. The ranged form compares exactly

@@ -115,6 +115,11 @@ public final class ASTSerializer {
             obj.put("condition", nodeToJson(n.condition, sources));
             obj.put("thenBranch", nodeToJson(n.thenBranch, sources));
             obj.put("elseBranch", nodeToJson(n.elseBranch, sources));
+        } else if (node instanceof StaticIfNode n) {
+            obj.put("node", "staticIf");
+            obj.put("condition", nodeToJson(n.condition, sources));
+            obj.put("thenBranch", nodeToJson(n.thenBranch, sources));
+            obj.put("elseBranch", nodeToJson(n.elseBranch, sources));
         } else if (node instanceof WhileNode n) {
             obj.put("node", "while");
             obj.put("condition", nodeToJson(n.condition, sources));
@@ -294,6 +299,12 @@ public final class ASTSerializer {
                     nodeFromJson(obj.requireObject("target"), sources)
             );
             case "if" -> new IfNode(
+                    span,
+                    nodeFromJson(obj.requireObject("condition"), sources),
+                    nodeFromJson(obj.requireObject("thenBranch"), sources),
+                    nodeFromJson(obj.optObject("elseBranch"), sources)
+            );
+            case "staticIf" -> new StaticIfNode(
                     span,
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodeFromJson(obj.requireObject("thenBranch"), sources),

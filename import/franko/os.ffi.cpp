@@ -42,11 +42,10 @@
 //
 //   - os::posix::read/write map to ::read/::write and are POSIX-only.
 //     On Windows the block is a #error, mirroring the win32 blocks
-//     below: there is no _read/_write fallback. The Franko compiler
-//     likewise rejects a live posix call when the target is Windows,
-//     so portable programs must guard it with os::IS_WINDOWS (the
-//     untaken branch is pruned before splicing, which is why such
-//     programs still compile on both targets). The buffer bound is
+//     below: there is no _read/_write fallback. Portable programs guard
+//     posix calls with static_if (static::IS_WINDOWS) / static_else;
+//     the untaken branch is never analyzed, so such programs compile on
+//     both targets. The buffer bound is
 //     checked against the array length first: count > length aborts
 //     via franko_panic, so the FFI cannot corrupt memory. A null or
 //     uninitialized buffer returns the stub failure value (-1) instead

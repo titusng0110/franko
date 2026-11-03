@@ -136,8 +136,8 @@ final class ArrayIntrinsicChecker {
                         + sourceElem.describe());
             }
 
-            if (sourceElem != null && !types.isCopiable(sourceElem)) {
-                diagnostics.error("memcmp() source array element type is not copiable: "
+            if (sourceElem != null && !types.isMemcpySafe(sourceElem)) {
+                diagnostics.error("memcmp() source array element type is not memcpy-safe: "
                         + sourceElem.describe());
             }
         }
@@ -370,18 +370,18 @@ final class ArrayIntrinsicChecker {
         switch (node.kind.elementRule) {
             case NONE -> { }
 
-            case TRIVIAL -> {
-                if (!types.isTrivial(elementType)) {
+            case MEMSET_SAFE -> {
+                if (!types.isMemsetSafe(elementType)) {
                     diagnostics.error(node.kind.runtimeName
-                            + "() receiver element type is not trivial: "
+                            + "() receiver element type is not memset-safe: "
                             + elementType.describe());
                 }
             }
 
-            case COPIABLE -> {
-                if (!types.isCopiable(elementType)) {
+            case MEMCPY_SAFE -> {
+                if (!types.isMemcpySafe(elementType)) {
                     diagnostics.error(node.kind.runtimeName
-                            + "() receiver element type is not copiable: "
+                            + "() receiver element type is not memcpy-safe: "
                             + elementType.describe());
                 }
             }
@@ -467,8 +467,8 @@ final class ArrayIntrinsicChecker {
 
         SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
 
-        if (elementType != null && !types.isTrivial(elementType)) {
-            diagnostics.error("memset() receiver element type is not trivial: "
+        if (elementType != null && !types.isMemsetSafe(elementType)) {
+            diagnostics.error("memset() receiver element type is not memset-safe: "
                     + elementType.describe());
         }
 
@@ -561,13 +561,13 @@ final class ArrayIntrinsicChecker {
                         + sourceElem.describe());
             }
 
-            if (targetElem != null && !types.isCopiable(targetElem)) {
-                diagnostics.error("memcpy() target array element type is not copiable: "
+            if (targetElem != null && !types.isMemcpySafe(targetElem)) {
+                diagnostics.error("memcpy() target array element type is not memcpy-safe: "
                         + targetElem.describe());
             }
 
-            if (sourceElem != null && !types.isCopiable(sourceElem)) {
-                diagnostics.error("memcpy() source array element type is not copiable: "
+            if (sourceElem != null && !types.isMemcpySafe(sourceElem)) {
+                diagnostics.error("memcpy() source array element type is not memcpy-safe: "
                         + sourceElem.describe());
             }
         }
@@ -635,8 +635,8 @@ final class ArrayIntrinsicChecker {
         SemanticType receiverElem =
                 types.elementTypeOfArray(node.receiver.type);
 
-        if (receiverElem != null && !types.isCopiable(receiverElem)) {
-            diagnostics.error("memmove() receiver array element type is not copiable: "
+        if (receiverElem != null && !types.isMemcpySafe(receiverElem)) {
+            diagnostics.error("memmove() receiver array element type is not memcpy-safe: "
                     + receiverElem.describe());
         }
 
