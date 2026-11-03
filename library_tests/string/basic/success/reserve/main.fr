@@ -1,0 +1,48 @@
+// ============================================================
+// LIBRARY TEST (string/basic): reserve and buffer growth
+// ============================================================
+// Covers the 128-byte default capacity, the payload + 128 growth
+// rule at the 127/128 boundary, reserve(0), and the fact that the
+// tracked capacity is retained when a string is cleared.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func main() -> int32 {
+    std::String s
+    print(s.length())
+    print(s.capacity())
+    print(s.reserve(0))
+    print(s.length())
+    print(s.capacity())
+
+    [byte] p127
+    p127.init_zero(127)
+    std::String a
+    print(a.from(getview(p127)))
+    print(a.length())
+    print(a.capacity())
+
+    [byte] p128
+    p128.init_zero(128)
+    std::String b
+    print(b.from(getview(p128)))
+    print(b.length())
+    print(b.capacity())
+
+    std::String c
+    print(c.from(getview(p128)))
+    print(c.capacity())
+    print(c.reserve(0))
+    print(c.length())
+    print(c.capacity())
+
+    p127.uninit()
+    p128.uninit()
+    s.uninit()
+    a.uninit()
+    b.uninit()
+    c.uninit()
+    return 0
+}

@@ -134,4 +134,4 @@ Compile and run them the same way as above.
 * **[Compiler Internals](compiler_docs.md)** — the compiler pipeline,
   C++14 generation, runtime, and build/test tooling.
 * **[Library Reference](library_docs/)** — `franko/io`, `franko/limit`,
-  `franko/os`, and `franko/pool`.
+  `franko/os`, `franko/pool`, and `franko/string`.

@@ -1,0 +1,45 @@
+// ============================================================
+// LIBRARY TEST (string/operators): comparisons
+// ============================================================
+// Covers all six comparators, equal strings, differing bytes,
+// prefixes, and empty strings. Comparisons are lexicographic over
+// the byte contents; the shorter string is less on a shared prefix.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func main() -> int32 {
+    std::String a
+    a = "abc"
+    std::String b
+    b = "abd"
+    std::String c
+    c = "abc"
+    std::String p
+    p = "ab"
+    std::String e1
+    std::String e2
+
+    print(a == c)
+    print(a != b)
+    print(a < b)
+    print(a > b)
+    print(a <= c)
+    print(a >= c)
+    print(p < a)
+    print(a > p)
+    print(e1 == e2)
+    print(e1 < a)
+    print(a > e1)
+    print(b < a)
+    print(b > a)
+
+    a.uninit()
+    b.uninit()
+    c.uninit()
+    p.uninit()
+    e1.uninit()
+    e2.uninit()
+    return 0
+}
