@@ -5,7 +5,7 @@ import "franko/io"
 // ============================================================
 // Covers: primitive declarations (int, int32, uint8, uint32),
 // dynamic and static array declarations, ptr<T> declarations with
-// getptr/deref, and call-init sugar.
+// getptr/deref.
 // ============================================================
 
 func main() -> int32 {

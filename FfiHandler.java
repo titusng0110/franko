@@ -48,14 +48,6 @@ final class FfiHandler {
         this.target = target;
     }
 
-    boolean hasFfiEntities() {
-        return registry.hasFfiEntities();
-    }
-
-    FfiCodegen codegen() {
-        return new FfiCodegen(this);
-    }
-
     FfiMatch matchFunction(FunctionSymbol function) {
         if (function == null || function instanceof MethodSymbol) {
             return null;

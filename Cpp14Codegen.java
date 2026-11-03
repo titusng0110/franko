@@ -21,40 +21,31 @@ public class Cpp14Codegen {
     private final List<LoopFrame> loopStack = new ArrayList<>();
     private int nextLoopId = 0;
 
-    private final FfiCodegen ffiCodegen;
+    final FfiHandler ffiHandler;
 
-    private final TargetInfo target;
+    final boolean uncheckedStaticArrayAccess;
 
-    private final boolean uncheckedStaticArrayAccess;
+    final Map<String, FfiMatch> usedFfiMatches = new LinkedHashMap<>();
 
-    private final Map<String, FfiMatch> usedFfiMatches = new LinkedHashMap<>();
+    private final Cpp14ExpressionEmitter expressionEmitter =
+            new Cpp14ExpressionEmitter();
 
     public Cpp14Codegen() {
-        this(null, null, false);
+        this(null, false);
     }
 
     public Cpp14Codegen(
-            FfiCodegen ffiCodegen,
-            TargetInfo target,
+            FfiHandler ffiHandler,
             boolean uncheckedStaticArrayAccess
     ) {
-        this.ffiCodegen = ffiCodegen;
-        this.target = target;
+        this.ffiHandler = ffiHandler;
         this.uncheckedStaticArrayAccess = uncheckedStaticArrayAccess;
     }
 
     private String currentEmitNamespace = null;
 
-    private static final SemanticType UINT32_TYPE =
+    static final SemanticType UINT32_TYPE =
             new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
-
-    public String generate(SastDocument document) {
-        return generate(document.root);
-    }
-
-    public String generate(String sastJson) {
-        return generate(SastDocument.fromJson(sastJson));
-    }
 
     public String generate(SemanticASTNode root) {
         if (root == null) {
@@ -71,8 +62,8 @@ public class Cpp14Codegen {
 
         String body = out.toString();
 
-        if (ffiCodegen != null && !usedFfiMatches.isEmpty()) {
-            return ffiCodegen.bridgePrelude(
+        if (ffiHandler != null && !usedFfiMatches.isEmpty()) {
+            return ffiHandler.buildBridge(
                     new ArrayList<>(usedFfiMatches.values())
             ) + body;
         }
@@ -111,7 +102,7 @@ public class Cpp14Codegen {
         }
 
         if (node instanceof SemanticExprNode expr) {
-            emitLine(emitExpr(expr) + ";");
+            emitLine(expressionEmitter.emitExpr(this, expr) + ";");
             return;
         }
 
@@ -153,7 +144,12 @@ public class Cpp14Codegen {
             openNamespace(entry.getKey());
 
             for (SemanticStructDeclNode struct : entry.getValue()) {
-                emitLine("struct " + emitStructName(struct.symbol) + ";");
+                emitLine("struct "
+                        + qualify(
+                                struct.symbol.namespace,
+                                "STRUCT_" + struct.symbol.name
+                        )
+                        + ";");
             }
 
             closeNamespace(entry.getKey());
@@ -161,7 +157,12 @@ public class Cpp14Codegen {
 
         if (!globalStructs.isEmpty()) {
             for (SemanticStructDeclNode struct : globalStructs) {
-                emitLine("struct " + emitStructName(struct.symbol) + ";");
+                emitLine("struct "
+                        + qualify(
+                                struct.symbol.namespace,
+                                "STRUCT_" + struct.symbol.name
+                        )
+                        + ";");
             }
         }
 
@@ -247,7 +248,7 @@ public class Cpp14Codegen {
                 openNamespace(entry.getKey());
 
                 for (SemanticFunctionDeclNode fn : combined) {
-                    emitFunctionPrototype(fn);
+                    emitLine(emitFunctionHeader(fn) + ";");
                 }
 
                 closeNamespace(entry.getKey());
@@ -265,18 +266,18 @@ public class Cpp14Codegen {
                 openNamespace(entry.getKey());
 
                 for (SemanticFunctionDeclNode fn : entry.getValue()) {
-                    emitFunctionPrototype(fn);
+                    emitLine(emitFunctionHeader(fn) + ";");
                 }
 
                 closeNamespace(entry.getKey());
             }
 
             for (SemanticFunctionDeclNode fn : globalFunctions) {
-                emitFunctionPrototype(fn);
+                emitLine(emitFunctionHeader(fn) + ";");
             }
 
             for (SemanticFunctionDeclNode fn : globalMethods) {
-                emitFunctionPrototype(fn);
+                emitLine(emitFunctionHeader(fn) + ";");
             }
 
             emitLine("");
@@ -497,7 +498,7 @@ public class Cpp14Codegen {
 
         openNamespace(node.symbol.namespace);
 
-        emitLine("struct " + emitStructName(node.symbol));
+        emitLine("struct " + qualify(node.symbol.namespace, "STRUCT_" + node.symbol.name));
         emitLine("{");
         indentLevel++;
 
@@ -524,7 +525,7 @@ public class Cpp14Codegen {
 
         if (field.foldedDefault != null) {
             sb.append(" = ");
-            sb.append(emitBigIntegerLiteral(field.foldedDefault));
+            sb.append(expressionEmitter.emitBigIntegerLiteral(this, field.foldedDefault));
         } else if (field.type instanceof SemanticPtrType) {
 
             sb.append(" = nullptr");
@@ -620,13 +621,9 @@ public class Cpp14Codegen {
         return names;
     }
 
-    private void emitFunctionPrototype(SemanticFunctionDeclNode node) {
-        emitLine(emitFunctionHeader(node) + ";");
-    }
-
     private void emitFunctionDecl(SemanticFunctionDeclNode node) {
 
-        if (ffiCodegen != null && ffiCodegen.isBridgedFunction(node.symbol)) {
+        if (ffiHandler != null && ffiHandler.matchFunction(node.symbol) != null) {
             return;
         }
 
@@ -721,7 +718,7 @@ public class Cpp14Codegen {
         }
 
         if (node instanceof SemanticExprStmtNode exprStmt) {
-            String expr = emitExpr(exprStmt.expr);
+            String expr = expressionEmitter.emitExpr(this, exprStmt.expr);
             emitLine(expr + ";");
             return;
         }
@@ -795,11 +792,11 @@ public class Cpp14Codegen {
 
         if (node.foldedConstInitializer != null) {
             initializer = " = "
-                    + emitBigIntegerLiteral(node.foldedConstInitializer);
+                    + expressionEmitter.emitBigIntegerLiteral(this, node.foldedConstInitializer);
         }
 
         if (node.staticInitializer != null) {
-            initializer = " = " + emitExpr(node.staticInitializer);
+            initializer = " = " + expressionEmitter.emitExpr(this, node.staticInitializer);
         }
 
         if (initializer.isEmpty()
@@ -850,7 +847,7 @@ public class Cpp14Codegen {
                     ? values.get(cursor[0]++)
                     : BigInteger.ZERO;
 
-            sb.append(emitBigIntegerLiteral(value));
+            sb.append(expressionEmitter.emitBigIntegerLiteral(this, value));
         }
 
         sb.append("}");
@@ -877,7 +874,7 @@ public class Cpp14Codegen {
             }
 
             return new BigInteger(text, 10).intValueExact();
-        } catch (Exception e) {
+        } catch (NumberFormatException | ArithmeticException e) {
             throw new IllegalStateException(
                     "Internal compiler error: invalid static array size "
                             + "literal for literal emission: "
@@ -905,8 +902,8 @@ public class Cpp14Codegen {
 
     private void emitAssign(SemanticAssignNode node) {
 
-        String target = emitLValue(node.target);
-        String value = emitExprAsType(node.value, node.target.type);
+        String target = expressionEmitter.emitLValue(this, node.target);
+        String value = expressionEmitter.emitAsType(this, node.value, node.target.type);
 
         emitLine(
                 target
@@ -920,7 +917,7 @@ public class Cpp14Codegen {
 
     private void emitIf(SemanticIfNode node) {
 
-        String condition = emitExpr(node.condition);
+        String condition = expressionEmitter.emitExpr(this, node.condition);
         emitLine("if (" + condition + ")");
         emitControlledStmt(node.thenBranch);
 
@@ -940,7 +937,7 @@ public class Cpp14Codegen {
         LoopFrame frame = new LoopFrame(nextLoopId++);
         loopStack.add(frame);
 
-        String condition = emitExpr(node.condition);
+        String condition = expressionEmitter.emitExpr(this, node.condition);
 
         emitLine("while (" + condition + ")");
 
@@ -1131,438 +1128,12 @@ public class Cpp14Codegen {
                 ? node.function.returnType()
                 : node.value.type;
 
-        String value = emitExprAsType(node.value, targetType);
+        String value = expressionEmitter.emitAsType(this, node.value, targetType);
 
         emitLine("return " + value + ";");
     }
 
-    private String emitExpr(SemanticExprNode node) {
-        if (node == null) {
-            throw new IllegalStateException(
-                    "Internal compiler error: cannot emit null expression"
-            );
-        }
-
-        if (node instanceof SemanticIntLiteralNode literal) {
-            return emitIntLiteral(literal);
-        }
-
-        if (node instanceof SemanticNullLiteralNode) {
-
-            return "nullptr";
-        }
-
-        if (node instanceof SemanticVarExprNode var) {
-            return emitSymbolName(var.symbol);
-        }
-
-        if (node instanceof SemanticUnaryOpNode unary) {
-            return emitUnaryOp(unary);
-        }
-
-        if (node instanceof SemanticBinOpNode bin) {
-            return emitBinOp(bin);
-        }
-
-        if (node instanceof SemanticArrayAccessNode access) {
-            return emitArrayAccess(access);
-        }
-
-        if (node instanceof SemanticFunctionCallNode call) {
-            return emitFunctionCall(call);
-        }
-
-        if (node instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-            return emitArrayIntrinsicCall(intrinsic);
-        }
-
-        if (node instanceof SemanticGetPtrNode getPtr) {
-            return emitGetPtr(getPtr);
-        }
-
-
-        if (node instanceof SemanticDerefNode deref) {
-            return emitDeref(deref);
-        }
-
-        if (node instanceof SemanticCastExprNode cast) {
-            return emitCast(cast);
-        }
-
-        if (node instanceof SemanticMemberAccessNode member) {
-            return emitMemberAccess(member);
-        }
-
-        throw new IllegalStateException(
-                "Internal compiler error: unsupported semantic expression for codegen: "
-                        + node.getClass().getSimpleName()
-        );
-    }
-
-    private String emitIntLiteral(SemanticIntLiteralNode node) {
-
-        String raw = node.rawValue;
-
-        if (isPlainDecimal(raw)
-                && node.constantValue != null
-                && node.constantValue.compareTo(
-                        BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
-            return raw + "ULL";
-        }
-
-        return raw;
-    }
-
-    private boolean isPlainDecimal(String raw) {
-        if (raw == null || raw.isEmpty()) {
-            return false;
-        }
-
-        if (raw.startsWith("0x") || raw.startsWith("0X")
-                || raw.startsWith("0b") || raw.startsWith("0B")) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private String emitBigIntegerLiteral(BigInteger value) {
-        boolean negative = value.signum() < 0;
-
-        BigInteger magnitude = value.abs();
-        String digits = magnitude.toString();
-
-        boolean needsUllSuffix =
-                magnitude.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0;
-
-        String core = needsUllSuffix ? digits + "ULL" : digits;
-
-        return negative ? "-" + core : core;
-    }
-
-    private String emitUnaryOp(SemanticUnaryOpNode node) {
-
-        if (node.isConstant() && node.constantValue != null) {
-            return emitBigIntegerLiteral(node.constantValue);
-        }
-
-        String inner = emitExpr(node.expr);
-        String raw = "(" + node.op + inner + ")";
-
-        return castToSemanticExprTypeIfNeeded(node, raw);
-    }
-
-    private String emitBinOp(SemanticBinOpNode node) {
-
-        if (node.isConstant() && node.constantValue != null) {
-            return emitBigIntegerLiteral(node.constantValue);
-        }
-
-        String left = emitExpr(node.left);
-        String right = emitExpr(node.right);
-
-        String raw = "(" + left + " " + node.op + " " + right + ")";
-
-        return castToSemanticExprTypeIfNeeded(node, raw);
-    }
-
-    private String emitArrayAccess(SemanticArrayAccessNode node) {
-        String index = emitExprAsType(node.index, UINT32_TYPE);
-
-        if (node.target instanceof SemanticDerefNode deref) {
-            return "(" + emitExpr(deref.expr) + "[" + index + "])";
-        }
-
-        if (node.target.type instanceof SemanticStaticArrayType
-                && !uncheckedStaticArrayAccess) {
-            return "(franko_static_array_at("
-                    + emitExpr(node.target) + ", " + index + "))";
-        }
-
-        return "(" + emitExpr(node.target) + "[" + index + "])";
-    }
-
-    private String emitFunctionCall(SemanticFunctionCallNode node) {
-        FunctionSymbol fn = node.function;
-
-        if (fn == null) {
-            throw new IllegalStateException(
-                    "Internal compiler error: function call has null resolved function"
-            );
-        }
-
-        if (ffiCodegen != null) {
-            FfiMatch match = ffiCodegen.matchFunction(fn);
-
-            if (match != null) {
-                usedFfiMatches.put(match.key(), match);
-            }
-        }
-
-        StringBuilder sb = new StringBuilder();
-
-        sb.append(emitFunctionName(fn));
-        sb.append("(");
-
-        List<SemanticType> parameterTypes = fn.parameterTypes();
-
-        if (parameterTypes.size() != node.args.size()) {
-            throw new IllegalStateException(
-                    "Internal compiler error: resolved function call arity mismatch for "
-                            + fn.fullSignatureString()
-                            + ": expected "
-                            + parameterTypes.size()
-                            + ", got "
-                            + node.args.size()
-            );
-        }
-
-        for (int i = 0; i < node.args.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-
-            SemanticExprNode arg = node.args.get(i);
-            SemanticType paramType = parameterTypes.get(i);
-
-            sb.append(emitExprAsType(arg, paramType));
-        }
-
-        sb.append(")");
-
-        return sb.toString();
-    }
-
-    private String emitArrayIntrinsicCall(SemanticArrayIntrinsicCallNode node) {
-        if (node.kind == null) {
-            throw new IllegalStateException(
-                    "Internal compiler error: array intrinsic call has null kind"
-            );
-        }
-
-        if (node.kind == SemanticArrayIntrinsicKind.LENGTH) {
-            return emitArrayLengthCall(node);
-        }
-
-        validateArrayIntrinsicArityForCodegen(node);
-
-        StringBuilder sb = new StringBuilder();
-
-        sb.append(emitIntrinsicReceiver(node));
-        sb.append(".");
-        sb.append(node.kind.runtimeName);
-        sb.append("(");
-
-        for (int i = 0; i < node.args.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-
-            sb.append(emitArrayIntrinsicArg(node, i));
-        }
-
-        sb.append(")");
-
-        return sb.toString();
-    }
-
-    private String emitIntrinsicReceiver(SemanticArrayIntrinsicCallNode node) {
-        if (node.kind.dynamicOnly) {
-            return emitLValue(node.receiver);
-        }
-
-        if (node.receiver instanceof SemanticDerefNode deref) {
-            return emitExpr(deref.expr);
-        }
-
-        if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
-            return "franko_make_fat_pointer("
-                    + emitLValue(node.receiver)
-                    + ", "
-                    + staticArray.sizeLiteral
-                    + ", 2)";
-        }
-
-        if (node.receiver.type instanceof SemanticDynamicArrayType) {
-            return "franko_make_dynamic_fat_pointer(&"
-                    + emitLValue(node.receiver)
-                    + ")";
-        }
-
-        throw new IllegalStateException(
-                "Internal compiler error: array intrinsic receiver is not an array"
-        );
-    }
-
-    private String emitArrayLengthCall(SemanticArrayIntrinsicCallNode node) {
-        if (!node.args.isEmpty()) {
-            throw new IllegalStateException(
-                    "Internal compiler error: invalid arity for array intrinsic 'length'"
-            );
-        }
-
-        if (node.receiver instanceof SemanticDerefNode deref) {
-            return emitExpr(deref.expr) + ".length()";
-        }
-
-        if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
-            return "static_cast<uint32_t>(" + staticArray.sizeLiteral + ")";
-        }
-
-        if (node.receiver.type instanceof SemanticDynamicArrayType) {
-            return emitExpr(node.receiver) + ".length()";
-        }
-
-        throw new IllegalStateException(
-                "Internal compiler error: length() receiver is not an array"
-        );
-    }
-
-    private String emitArrayIntrinsicArg(
-            SemanticArrayIntrinsicCallNode node,
-            int index
-    ) {
-        SemanticExprNode arg = node.args.get(index);
-        SemanticIntrinsicArgKind argKind = node.kind.argKind(index);
-
-        if (argKind.isPointer()) {
-            return emitExpr(arg);
-        }
-
-        return emitExprAsType(arg, argKind.primitiveType());
-    }
-
-    private void validateArrayIntrinsicArityForCodegen(
-            SemanticArrayIntrinsicCallNode node
-    ) {
-        if (!node.kind.acceptsArity(node.args.size())) {
-            throw new IllegalStateException(
-                    "Internal compiler error: invalid arity for array intrinsic '"
-                            + node.kind.runtimeName
-                            + "': got "
-                            + node.args.size()
-            );
-        }
-    }
-
-    private String emitGetPtr(SemanticGetPtrNode node) {
-        if (node.temporary) {
-            String value = emitExpr(node.target);
-
-            if (node.target.isConstant()
-                    && node.type instanceof SemanticPtrType ptr
-                    && ptr.referencedType instanceof SemanticPrimitiveType target
-                    && node.target.type instanceof SemanticPrimitiveType source
-                    && !target.equals(source)) {
-                value = "static_cast<"
-                        + emitType(target)
-                        + ">("
-                        + value
-                        + ")";
-            }
-
-            return "franko_borrow(" + value + ")";
-        }
-
-        if (node.target instanceof SemanticDerefNode deref) {
-            return emitExpr(deref.expr);
-        }
-
-        if (node.target.type instanceof SemanticStaticArrayType staticArray) {
-            return "franko_make_fat_pointer("
-                    + emitLValue(node.target)
-                    + ", "
-                    + staticArray.sizeLiteral
-                    + ", 2)";
-        }
-
-        if (node.target.type instanceof SemanticDynamicArrayType) {
-            return "franko_make_dynamic_fat_pointer(&"
-                    + emitLValue(node.target)
-                    + ")";
-        }
-
-        return "(&" + emitLValue(node.target) + ")";
-    }
-
-    private String emitDeref(SemanticDerefNode node) {
-        if (!(node.expr.type instanceof SemanticPtrType pointerType)) {
-            throw new IllegalStateException(
-                    "Internal compiler error: dereference operand is not a pointer type"
-            );
-        }
-
-        String pointer = emitExpr(node.expr);
-
-        if (pointerType.referencedType instanceof SemanticStaticArrayType staticArray) {
-            String elementType = emitType(staticArray.elementType);
-
-            return "franko_static_array_ref<"
-                    + elementType
-                    + ", "
-                    + staticArray.sizeLiteral
-                    + ">(static_cast<"
-                    + elementType
-                    + "*>("
-                    + pointer
-                    + ".data))";
-        }
-
-        if (pointerType.referencedType instanceof SemanticDynamicArrayType dynamicArray) {
-            return "(*static_cast<Franko_Dynamic_Array<"
-                    + emitType(dynamicArray.elementType)
-                    + ">*>("
-                    + pointer
-                    + ".data))";
-        }
-
-        return "(*" + pointer + ")";
-    }
-
-    private String emitCast(SemanticCastExprNode node) {
-
-        if (node.isConstant() && node.constantValue != null) {
-            return emitBigIntegerLiteral(node.constantValue);
-        }
-
-        String raw = emitExpr(node.expr);
-
-        if (!node.checked) {
-
-            return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
-        }
-
-        return "franko_unsafe_cast<" + emitType(node.type) + ">(" + raw + ")";
-    }
-
-    private String emitLValue(SemanticExprNode node) {
-        if (node instanceof SemanticVarExprNode var) {
-            return emitSymbolName(var.symbol);
-        }
-
-        if (node instanceof SemanticArrayAccessNode access) {
-            return emitArrayAccess(access);
-        }
-
-        if (node instanceof SemanticDerefNode deref) {
-            return emitDeref(deref);
-        }
-
-        if (node instanceof SemanticMemberAccessNode member) {
-            return emitMemberAccess(member);
-        }
-
-        throw new IllegalStateException(
-                "Internal compiler error: unsupported lvalue expression for codegen: "
-                        + node.getClass().getSimpleName()
-        );
-    }
-
-    private String emitMemberAccess(SemanticMemberAccessNode node) {
-        return emitExpr(node.target) + "." + node.field.name;
-    }
-
-    private String emitType(SemanticType type) {
+    String emitType(SemanticType type) {
         if (type instanceof SemanticVoidType) {
             return "void";
         }
@@ -1590,7 +1161,8 @@ public class Cpp14Codegen {
         }
 
         if (type instanceof SemanticPtrType ptr) {
-            if (isArrayType(ptr.referencedType)) {
+            if (ptr.referencedType instanceof SemanticStaticArrayType
+                    || ptr.referencedType instanceof SemanticDynamicArrayType) {
                 return "Franko_Fat_Pointer<"
                         + emitType(pointerElementType(ptr.referencedType))
                         + ">";
@@ -1601,7 +1173,7 @@ public class Cpp14Codegen {
 
         if (type instanceof SemanticStructType struct) {
 
-            return emitStructName(struct.structSymbol);
+            return qualify(struct.structSymbol.namespace, "STRUCT_" + struct.structSymbol.name);
         }
 
         if (type instanceof SemanticNullType) {
@@ -1633,11 +1205,6 @@ public class Cpp14Codegen {
         return emitType(type) + " " + name;
     }
 
-    private static boolean isArrayType(SemanticType type) {
-        return type instanceof SemanticStaticArrayType
-                || type instanceof SemanticDynamicArrayType;
-    }
-
     private static SemanticType pointerElementType(SemanticType referencedType) {
         if (referencedType instanceof SemanticStaticArrayType staticArray) {
             return staticArray.elementType;
@@ -1664,7 +1231,7 @@ public class Cpp14Codegen {
         };
     }
 
-    private String emitSymbolName(VariableSymbol symbol) {
+    String emitSymbolName(VariableSymbol symbol) {
 
         if (symbol == null) {
             throw new IllegalStateException(
@@ -1679,17 +1246,13 @@ public class Cpp14Codegen {
         return "VAR_" + symbol.name;
     }
 
-    private String emitFunctionName(FunctionSymbol symbol) {
+    String emitFunctionName(FunctionSymbol symbol) {
 
         if (symbol instanceof MethodSymbol method) {
             return qualify(method.owner.namespace, method.emittedLocalName());
         }
 
         return qualify(symbol.namespace, symbol.emittedLocalName());
-    }
-
-    private String emitStructName(StructSymbol symbol) {
-        return qualify(symbol.namespace, "STRUCT_" + symbol.name);
     }
 
     private String qualify(String symbolNamespace, String localName) {
@@ -1749,39 +1312,6 @@ public class Cpp14Codegen {
         currentEmitNamespace = null;
     }
 
-    private String emitExprAsType(
-            SemanticExprNode expr,
-            SemanticType targetType
-    ) {
-        String raw = emitExpr(expr);
-
-        if (targetType instanceof SemanticPrimitiveType) {
-
-            if (expr.isConstant()) {
-                return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
-            }
-
-            if (sameSemanticType(expr.type, targetType)) {
-                return raw;
-            }
-
-            return "static_cast<" + emitType(targetType) + ">(" + raw + ")";
-        }
-
-        return raw;
-    }
-
-    private String castToSemanticExprTypeIfNeeded(
-            SemanticExprNode node,
-            String raw
-    ) {
-        if (node.type instanceof SemanticPrimitiveType) {
-            return "static_cast<" + emitType(node.type) + ">(" + raw + ")";
-        }
-
-        return raw;
-    }
-
     private void emitLine(String s) {
         for (int i = 0; i < indentLevel; i++) {
             out.append("    ");
@@ -1790,11 +1320,4 @@ public class Cpp14Codegen {
         out.append(s).append('\n');
     }
 
-    private boolean sameSemanticType(SemanticType a, SemanticType b) {
-        if (a == null || b == null) {
-            return false;
-        }
-
-        return a.equals(b);
-    }
 }

@@ -44,7 +44,7 @@ public final class JsonArtifacts {
         }
 
         lastSources = doc.sources;
-        write(Path.of(base + "." + phase.artifactName() + ".ast.json"), doc.toJson());
+        write(Path.of(base + "." + phase.artifactName() + ".ast.json"), ASTSerializer.toJson(doc));
     }
 
     public void writeAst(Path source, AstPhase phase, AstDocument doc) {
@@ -52,7 +52,7 @@ public final class JsonArtifacts {
             return;
         }
 
-        write(perFileArtifact(source, phase.artifactName() + ".ast.json"), doc.toJson());
+        write(perFileArtifact(source, phase.artifactName() + ".ast.json"), ASTSerializer.toJson(doc));
     }
 
     public void writeSast(SastPhase phase, SastDocument doc) {
@@ -61,7 +61,7 @@ public final class JsonArtifacts {
         }
 
         lastSources = doc.sources;
-        write(Path.of(base + "." + phase.artifactName() + ".sast.json"), doc.toJson());
+        write(Path.of(base + "." + phase.artifactName() + ".sast.json"), SemanticASTSerializer.toJson(doc));
     }
 
     public void writeDiagnostics(DiagnosticLog log) {
@@ -106,20 +106,10 @@ public final class JsonArtifacts {
         JsonObject document = new JsonObject();
         document.put("format", "franko-diagnostics");
         document.put("version", 1);
-        document.put("sources", sourceArray(sources));
+        document.put("sources", JsonAstSupport.sourceArray(sources));
         document.put("diagnostics", diagnostics);
 
         write(Path.of(base + ".diagnostic.json"), Json.write(document, true));
-    }
-
-    private JsonArray sourceArray(SourceTable sources) {
-        JsonArray array = new JsonArray();
-
-        for (String source : sources.names()) {
-            array.add(source);
-        }
-
-        return array;
     }
 
     private Path perFileArtifact(Path source, String suffix) {

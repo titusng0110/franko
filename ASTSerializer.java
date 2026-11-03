@@ -20,19 +20,19 @@ public final class ASTSerializer {
         document.put("format", FORMAT);
         document.put("version", VERSION);
         document.put("phase", doc.phase.jsonName());
-        document.put("sources", sourceArray(doc.sources));
+        document.put("sources", JsonAstSupport.sourceArray(doc.sources));
         document.put("root", root);
 
         return Json.write(document, true) + "\n";
     }
 
     public static AstDocument fromJson(String json) {
-        JsonObject document = requireDocument(json);
-        AstPhase phase = requireEnumName(
+        JsonObject document = JsonAstSupport.requireDocument(json, "AST", FORMAT, VERSION);
+        AstPhase phase = JsonAstSupport.requireEnumName(
                 document.requireString("phase"),
                 AstPhase.class
         );
-        SourceTable sources = sourceTable(document.requireArray("sources"));
+        SourceTable sources = JsonAstSupport.sourceTable(document.requireArray("sources"), "AST");
         ProgramNode root = requireProgram(nodeFromJson(
                 document.requireObject("root"),
                 sources
@@ -87,7 +87,7 @@ public final class ASTSerializer {
             obj.put("type", typeToJson(n.type, sources));
             obj.put("name", n.name);
             obj.put("constInitializer", nodeToJson(n.constInitializer, sources));
-            obj.put("literalBytes", bigIntegerArray(n.literalBytes));
+            obj.put("literalBytes", JsonAstSupport.bigIntegerArray(n.literalBytes));
             obj.put("compileTimeConstant", n.compileTimeConstant);
         } else if (node instanceof VarDeclNode n) {
             obj.put("node", "varDecl");
@@ -98,11 +98,6 @@ public final class ASTSerializer {
             obj.put("type", typeToJson(n.type, sources));
             obj.put("name", n.name);
             obj.put("init", nodeToJson(n.init, sources));
-        } else if (node instanceof VarDeclArrayInitNode n) {
-            obj.put("node", "varDeclArrayInit");
-            obj.put("type", typeToJson(n.type, sources));
-            obj.put("name", n.name);
-            obj.put("size", nodeToJson(n.size, sources));
         } else if (node instanceof ExprStmtNode n) {
             obj.put("node", "exprStmt");
             obj.put("expr", nodeToJson(n.expr, sources));
@@ -214,7 +209,7 @@ public final class ASTSerializer {
             return type;
         }
 
-        String kind = requireString(obj, "node");
+        String kind = obj.requireString("node");
         SourceSpan span = spanFromJson(obj, sources);
 
         if (!obj.has("span")) {
@@ -282,12 +277,6 @@ public final class ASTSerializer {
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
                     nodeFromJson(obj.optObject("init"), sources)
-            );
-            case "varDeclArrayInit" -> new VarDeclArrayInitNode(
-                    span,
-                    typeFromJson(obj.requireObject("type"), sources),
-                    obj.requireString("name"),
-                    nodeFromJson(obj.optObject("size"), sources)
             );
             case "exprStmt" -> new ExprStmtNode(
                     span,
@@ -447,7 +436,7 @@ public final class ASTSerializer {
     }
 
     static TypeNode typeFromJson(JsonObject obj, SourceTable sources) {
-        String kind = requireString(obj, "type");
+        String kind = obj.requireString("type");
         SourceSpan span = spanFromJson(obj, sources);
 
         if (!obj.has("span")) {
@@ -522,62 +511,12 @@ public final class ASTSerializer {
         );
     }
 
-    private static JsonObject requireDocument(String json) {
-        JsonValue value = Json.parse(json);
-
-        if (!(value instanceof JsonObject document)) {
-            throw new IllegalArgumentException("AST document must be a JSON object");
-        }
-
-        String format = document.requireString("format");
-
-        if (!FORMAT.equals(format)) {
-            throw new IllegalArgumentException(
-                    "Unsupported document format '" + format + "', expected '" + FORMAT + "'"
-            );
-        }
-
-        int version = document.requireInt("version");
-
-        if (version != VERSION) {
-            throw new IllegalArgumentException(
-                    "Unsupported AST document version " + version
-            );
-        }
-
-        return document;
-    }
-
     private static ProgramNode requireProgram(ASTNode node) {
         if (!(node instanceof ProgramNode program)) {
             throw new IllegalArgumentException("AST document root must be a program node");
         }
 
         return program;
-    }
-
-    private static JsonArray sourceArray(SourceTable sources) {
-        JsonArray array = new JsonArray();
-
-        for (String source : sources.names()) {
-            array.add(source);
-        }
-
-        return array;
-    }
-
-    private static SourceTable sourceTable(JsonArray array) {
-        SourceTable table = new SourceTable();
-
-        for (JsonValue value : array.values()) {
-            if (!(value instanceof JsonString string)) {
-                throw new IllegalArgumentException("AST source entry must be a string");
-            }
-
-            table.intern(string.value());
-        }
-
-        return table;
     }
 
     private static JsonArray nodeArray(List<? extends ASTNode> nodes, SourceTable sources) {
@@ -626,7 +565,7 @@ public final class ASTSerializer {
         List<ASTNode> nodes = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
-            nodes.add(nodeFromJson(requireObject(value, "AST node"), sources));
+            nodes.add(nodeFromJson(JsonAstSupport.requireObject(value, "AST node"), sources));
         }
 
         return nodes;
@@ -639,7 +578,7 @@ public final class ASTSerializer {
         List<ParameterNode> nodes = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
-            ASTNode node = nodeFromJson(requireObject(value, "parameter"), sources);
+            ASTNode node = nodeFromJson(JsonAstSupport.requireObject(value, "parameter"), sources);
 
             if (!(node instanceof ParameterNode parameter)) {
                 throw new IllegalArgumentException("Expected a parameter AST node");
@@ -658,7 +597,10 @@ public final class ASTSerializer {
         List<StructFieldDeclNode> nodes = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
-            ASTNode node = nodeFromJson(requireObject(value, "struct field"), sources);
+            ASTNode node = nodeFromJson(
+                    JsonAstSupport.requireObject(value, "struct field"),
+                    sources
+            );
 
             if (!(node instanceof StructFieldDeclNode field)) {
                 throw new IllegalArgumentException("Expected a struct field AST node");
@@ -677,7 +619,7 @@ public final class ASTSerializer {
         List<FunctionDeclNode> nodes = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
-            ASTNode node = nodeFromJson(requireObject(value, "method"), sources);
+            ASTNode node = nodeFromJson(JsonAstSupport.requireObject(value, "method"), sources);
 
             if (!(node instanceof FunctionDeclNode method)) {
                 throw new IllegalArgumentException("Expected a method AST node");
@@ -713,20 +655,6 @@ public final class ASTSerializer {
         return values;
     }
 
-    private static JsonValue bigIntegerArray(List<BigInteger> values) {
-        if (values == null) {
-            return JsonNull.INSTANCE;
-        }
-
-        JsonArray array = new JsonArray();
-
-        for (BigInteger value : values) {
-            array.add(value.toString(10));
-        }
-
-        return array;
-    }
-
     private static List<BigInteger> bigIntegersFromArray(JsonArray array) {
         if (array == null) {
             return null;
@@ -745,23 +673,4 @@ public final class ASTSerializer {
         return values;
     }
 
-    private static JsonObject requireObject(JsonValue value, String description) {
-        if (!(value instanceof JsonObject object)) {
-            throw new IllegalArgumentException("Expected " + description + " to be an object");
-        }
-
-        return object;
-    }
-
-    private static String requireString(JsonObject obj, String key) {
-        return obj.requireString(key);
-    }
-
-    private static <T extends Enum<T>> T requireEnumName(String name, Class<T> type) {
-        try {
-            return Enum.valueOf(type, name.toUpperCase().replace('-', '_'));
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Unknown enum name '" + name + "'", e);
-        }
-    }
 }

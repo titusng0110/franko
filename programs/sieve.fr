@@ -14,7 +14,7 @@ struct Sieve {
     func init(ptr<Sieve> self, uint limit) -> int {
         int init_status = 0
 
-        init_status = $(self).is_prime(limit + 1)
+        init_status = $(self).is_prime.init(limit + 1)
 
         if (init_status != 0) {
             return -1

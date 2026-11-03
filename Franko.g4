@@ -429,11 +429,11 @@ simpleStmt
 //
 varDecl
     : type IDENTIFIER declSuffix?
+      { if (_input.LA(1) == LPAREN) notifyErrorListeners(_input.LT(1), "unexpected '(' after variable declaration", null); }
     ;
 
 declSuffix
     : ASSIGN expr # DeclAssignInit
-    | LPAREN expr RPAREN     # DeclArrayInit
     ;
 
 // ---------- RETURN ----------

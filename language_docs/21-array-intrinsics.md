@@ -1,6 +1,6 @@
 # 21. Array Intrinsics
 
-Array operations are written using call syntax, but they are built-in
+Array operations are written using member-call syntax, but they are built-in
 intrinsics recognized by the compiler, **not** general user-defined
 function calls. Only the named intrinsics below are recognized.
 
@@ -23,7 +23,7 @@ with `-1` and a retry is valid. See
 
 | Intrinsic | Receiver | Returns | Status |
 |---|---|---|---|
-| `target(size)`, `target.init(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
+| `target.init(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.init_zero(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.resize(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.uninit()` | dynamic array | `void` | — |
@@ -78,7 +78,7 @@ pointer dereference, the intrinsic needs that pointer's permission:
 
 | Intrinsic | Required receiver permission |
 |---|---|
-| `init`, `init_zero`, `resize`, `uninit`, `target(size)` | allocation (`ptr`) |
+| `init`, `init_zero`, `resize`, `uninit` | allocation (`ptr`) |
 | `memset`, `memcpy`, `memmove` (as target), `write_*`, `write_bit`, `flip_bit`, `bitwise_*_mask`, `shift_bits_*` | mutation (`mview` or `ptr`) |
 | `length()`, `memcmp`, `memchr`, `memmem`, `read_*`, `read_bit`, `count_set_bits`, and element reads | read (any permission) |
 
@@ -100,7 +100,7 @@ $(m).write_bit(3, 1); // allowed
 $(m).init(10);       // blocked: init needs allocation rights (ptr)
 ```
 
-## 21.2 `init`, `init_zero`, and `target(size)`
+## 21.2 `init` and `init_zero`
 
 Dynamic array initialization.
 
@@ -114,7 +114,7 @@ Rules:
   - a positive constant fitting `uint32`; or
   - a nonconstant expression of exactly type `uint32`.
 
-`init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage. `target(size)` is shorthand for `target.init(size)`.
+`init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage.
 
 Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
 

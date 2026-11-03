@@ -161,6 +161,10 @@ public final class ConstExpressionEvaluator {
     }
 
     public static BigInteger parseIntegerLiteralPure(String val) {
+        if (val == null) {
+            return null;
+        }
+
         try {
             String s = val.trim();
 
@@ -179,7 +183,7 @@ public final class ConstExpressionEvaluator {
             }
 
             return new BigInteger(s, 10);
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             return null;
         }
     }

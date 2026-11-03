@@ -721,25 +721,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return new VarDeclNode(span(ctx), type, name);
         }
 
-        if (ctx.declSuffix() instanceof FrankoParser.DeclAssignInitContext) {
-            FrankoParser.DeclAssignInitContext initCtx =
-                (FrankoParser.DeclAssignInitContext) ctx.declSuffix();
+        FrankoParser.DeclAssignInitContext initCtx =
+            (FrankoParser.DeclAssignInitContext) ctx.declSuffix();
 
-            ASTNode init = visit(initCtx.expr());
+        ASTNode init = visit(initCtx.expr());
 
-            return new VarDeclInitNode(span(ctx), type, name, init);
-        }
-
-        if (ctx.declSuffix() instanceof FrankoParser.DeclArrayInitContext) {
-            FrankoParser.DeclArrayInitContext initCtx =
-                (FrankoParser.DeclArrayInitContext) ctx.declSuffix();
-
-            ASTNode size = visit(initCtx.expr());
-
-            return new VarDeclArrayInitNode(span(ctx), type, name, size);
-        }
-
-        throw new RuntimeException("Unknown declSuffix: " + ctx.declSuffix().getText());
+        return new VarDeclInitNode(span(ctx), type, name, init);
     }
 
     @Override

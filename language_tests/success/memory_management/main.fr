@@ -30,7 +30,7 @@ func main() -> int32 {
 
     // --- Pointer of array ---
     [int32] arr;
-    arr.init(10); // or arr(10)
+    arr.init(10);
     ptr<[int32]> arr_ptr = getptr(arr);
     $(arr_ptr)[0] = 1;
     int32 arr_val = $(arr_ptr)[0];

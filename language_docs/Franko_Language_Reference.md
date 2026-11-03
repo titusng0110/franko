@@ -77,7 +77,6 @@ Franko is a small statically typed language with:
 - `return`;
 - string literals as read-only `view<[byte, N]>` values;
 - array intrinsics:
-  - `arr(size)` (shorthand for `arr.init(size)`);
   - `arr.init(size)`;
   - `arr.init_zero(size)`;
   - `arr.resize(size)`;
@@ -495,25 +494,7 @@ At global scope, declaration initializer sugar is currently invalid when
 its equivalent form is an assignment, because executable statements are
 not allowed at global scope.
 
-## 5.2 Dynamic Array Call-Init Declaration Sugar
-
-This:
-
-```franko
-[int] arr(20);
-```
-
-is shorthand for:
-
-```franko
-[int] arr;
-arr(20);
-```
-
-The call form itself (`arr(20)`) is array intrinsic `init` shorthand. See
-[Array Intrinsics](21-array-intrinsics.md).
-
-## 5.3 Array Literal Desugaring
+## 5.2 Array Literal Desugaring
 
 Array literals are not assignment sugar: they are `view<[T, N]>` values
 over immutable constant storage, exactly like string literals. An array
@@ -521,7 +502,7 @@ literal is never rewritten into statements; its element type is inferred
 from the surrounding assignment, return, or call-argument context. See
 [Array Literals](22-array-literals.md).
 
-## 5.4 String Literal Desugaring
+## 5.3 String Literal Desugaring
 
 Every string literal is a read-only `view<[byte, N]>` over immutable
 storage holding its UTF-8 bytes. No null terminator is added, and
@@ -536,7 +517,7 @@ dereference. Because a string literal is a view value, it cannot
 initialize or assign an array: copy the bytes with `memcpy` instead. See
 [String Literals](23-string-literals.md).
 
-## 5.5 Braceless Control-Flow Bodies
+## 5.4 Braceless Control-Flow Bodies
 
 `if`, `while`, and `for` bodies may be a single statement without braces:
 
@@ -558,7 +539,7 @@ This makes braceless and braced bodies scope identically: a declaration
 inside a braceless body is scoped to that implicit block and is not
 visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
 
-## 5.6 For Loop Desugaring
+## 5.5 For Loop Desugaring
 
 A `for` loop is equivalent to declaration/assignment statements and a
 `while` loop:
@@ -595,7 +576,7 @@ The `init` and `update` statements follow the ordinary statement sugar
 rules, so declaration initializer sugar in the header expands normally.
 See [Statements](19-statements.md).
 
-## 5.7 Inferred Static Array Sizes (`?`)
+## 5.6 Inferred Static Array Sizes (`?`)
 
 A static array size may be written as `?` in a `view<[...]>`
 declaration with an array-literal initializer:
@@ -633,11 +614,10 @@ Inference rules:
   size.
 
 Misplaced `?` (parameters, return types, struct fields, globals,
-pointers, call-style `arr(4)` initialization, non-literal initializers)
-is rejected. See [Arrays](20-arrays.md) and
-[Array Literals](22-array-literals.md).
+pointers, non-literal initializers) is rejected. See
+[Arrays](20-arrays.md) and [Array Literals](22-array-literals.md).
 
-## 5.8 Constant Expression Evaluation
+## 5.7 Constant Expression Evaluation
 
 Constant expressions are evaluated at compile time in every
 constant-expression position:
@@ -664,7 +644,7 @@ Evaluation failures are compile errors:
 Constant expressions inside ordinary code are also folded at compile
 time. See [Constant Folding](10-constant-folding.md).
 
-## 5.9 Increment and Decrement Desugaring
+## 5.8 Increment and Decrement Desugaring
 
 Postfix increment and decrement statements are sugar for compound
 assignment:
@@ -931,25 +911,6 @@ x = 1;
 
 The initializer must obey normal assignment rules and is only valid where the resulting assignment is legal.
 
-Dynamic array call-init declaration sugar:
-
-```franko
-[int32] d(10);
-```
-
-is equivalent to:
-
-```franko
-[int32] d;
-d(10);
-```
-
-The call form is only valid for dynamic arrays. Using it on a non-array declaration is an error:
-
-```franko
-int32 x(5);   // invalid: x is not a dynamic array
-```
-
 ## 11.1 Duplicate Declarations
 
 Declaring the same variable name twice in the same scope is illegal.
@@ -1000,7 +961,7 @@ literal):
 view<[int32, 4]> G = [1, 2, 3, 4]   // valid
 ```
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — are equivalent to executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+**Ordinary declaration initializer sugar.** The `= expr` form described in this chapter and in [Assignment](14-assignment.md), when the expression is not constant, is equivalent to an executable assignment statement. Executable statements are not allowed at global scope, so this form is invalid on global declarations:
 
 ```franko
 int32 g = h                     // invalid: the initializer must be constant
@@ -1142,7 +1103,7 @@ func f() -> int32 {
 f;    // invalid: Function name 'f' cannot be used as a value
 ```
 
-In a call position, `name(...)` resolves to a function even when a non-array variable with the same name is in scope. The one exception is a dynamic array variable: `xs(10)` on a dynamic array is array `init` shorthand, not a function call. See [Array Intrinsics](21-array-intrinsics.md).
+In a call position, `name(...)` resolves to a function even when a variable with the same name is in scope. Variables are not callable; using a variable name in call position is an error.
 
 ## 12.8 Function Call Expressions
 
@@ -2125,9 +2086,9 @@ func main() -> int32 {
 }
 ```
 
-A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(x, end)` writes `x` followed by `end` verbatim (a null or empty `end` means no suffix and no newline). `print()` writes a bare newline. Overloads exist for all eight integer types and for `view<[uint8]>` text; a null or empty view prints nothing.
+A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(x, end)` writes `x` followed by `end` verbatim (a null or empty `end` means no suffix and no newline). `print()` writes a bare newline. Overloads exist for all eight integer types, for `view<[uint8]>` text, and for `view<std::String>` from `franko/string`; a null or empty view/string prints nothing.
 
-`print` has no overloads for pointers, arrays, or structs. Print individual elements, fields, or bytes instead: `print(xs[0])`, `print(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `print(s[0])`.
+`print` has no overloads for pointers or arrays. Struct printing is limited to `std::String`; print individual elements, fields, or bytes for other structs: `print(xs[0])`, `print(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `print(s[0])`. A bare `print(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
 
 Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](12-functions.md).
 
@@ -2140,7 +2101,7 @@ Function calls are commonly used as expression statements.
 Array intrinsic calls are special expression-statement forms:
 
 ```franko
-arr(10);
+arr.init(10);
 arr.memset(0);
 arr.memcpy(getptr(other));
 arr.uninit();
@@ -2206,7 +2167,7 @@ Invalid:
 [int32, 999999999999999999999999999999999] c;
 ```
 
-Static arrays do not use `arr(size)` initialization.
+Static arrays cannot use `init`; fill them with `memset` or `memcpy`.
 
 The size may be written as `?` in a `view` declaration with an
 array-literal initializer (see [Desugaring](05-desugaring.md)):
@@ -2231,10 +2192,9 @@ A dynamic array has runtime size:
 [int32] xs;
 ```
 
-Dynamic arrays are initialized with the array intrinsic `init` (or one of its aliases):
+Dynamic arrays are initialized with the array intrinsics `init` and `init_zero`:
 
 ```franko
-xs(10);             // shorthand for xs.init(10)
 xs.init(10);        // allocate uninitialized storage
 xs.init_zero(10);   // allocate zeroed storage
 ```
@@ -2256,12 +2216,6 @@ Dynamic array declaration alone does not allocate element storage.
 The array must be initialized before ordinary indexed use.
 
 An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays), `init` and `init_zero` default-construct every element into the uninitialized state, so inner arrays are immediately ready for `init` without further setup.
-
-The call-initialization form is only valid for dynamic arrays:
-
-```franko
-int32 x(5);   // invalid: x is not a dynamic array
-```
 
 ## 20.3 Array Access
 
@@ -2345,7 +2299,7 @@ The check does not yet cover:
 
 # 21. Array Intrinsics
 
-Array operations are written using call syntax, but they are built-in
+Array operations are written using member-call syntax, but they are built-in
 intrinsics recognized by the compiler, **not** general user-defined
 function calls. Only the named intrinsics below are recognized.
 
@@ -2368,7 +2322,7 @@ with `-1` and a retry is valid. See
 
 | Intrinsic | Receiver | Returns | Status |
 |---|---|---|---|
-| `target(size)`, `target.init(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
+| `target.init(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.init_zero(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.resize(size)` | dynamic array | `int32` | `0` on success, `-1` on allocation failure |
 | `target.uninit()` | dynamic array | `void` | — |
@@ -2423,7 +2377,7 @@ pointer dereference, the intrinsic needs that pointer's permission:
 
 | Intrinsic | Required receiver permission |
 |---|---|
-| `init`, `init_zero`, `resize`, `uninit`, `target(size)` | allocation (`ptr`) |
+| `init`, `init_zero`, `resize`, `uninit` | allocation (`ptr`) |
 | `memset`, `memcpy`, `memmove` (as target), `write_*`, `write_bit`, `flip_bit`, `bitwise_*_mask`, `shift_bits_*` | mutation (`mview` or `ptr`) |
 | `length()`, `memcmp`, `memchr`, `memmem`, `read_*`, `read_bit`, `count_set_bits`, and element reads | read (any permission) |
 
@@ -2445,7 +2399,7 @@ $(m).write_bit(3, 1); // allowed
 $(m).init(10);       // blocked: init needs allocation rights (ptr)
 ```
 
-## 21.2 `init`, `init_zero`, and `target(size)`
+## 21.2 `init` and `init_zero`
 
 Dynamic array initialization.
 
@@ -2459,7 +2413,7 @@ Rules:
   - a positive constant fitting `uint32`; or
   - a nonconstant expression of exactly type `uint32`.
 
-`init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage. `target(size)` is shorthand for `target.init(size)`.
+`init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage.
 
 Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
 
@@ -2981,7 +2935,7 @@ For dynamic arrays, size the storage first:
 
 ```franko
 [int32] dyn;
-dyn(3);
+dyn.init(3);
 dyn.memcpy([1, 2, 3]);
 ```
 
@@ -3715,7 +3669,7 @@ Rules:
 
 - Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
-- Dynamic array fields are allocated explicitly with the allocation call (`field(n)`, see [Array Intrinsics](21-array-intrinsics.md)).
+- Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
 - Fields are kept in declaration order; that order is also the generated field order.
 - Field names are ordinary identifiers; keywords cannot be field names. By convention they use `lower_case_snake_case`: a field whose name starts with `_` is private to the struct and warns when accessed from outside it. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](33-naming-conventions.md).
@@ -3806,7 +3760,7 @@ xs[i].field           // element of a static or dynamic array
 - `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `$(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
 - `getptr(s.field)` is valid and yields `ptr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
-  `b.data(4)` (allocation shorthand for `b.data.init(4)`), `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
+  `b.data.init(4)`, `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
 - Struct methods also use member-call syntax (`s.increment()`); see [Methods](26-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
 
 ## 25.8 Initialization Semantics
@@ -4410,7 +4364,7 @@ state, because those permissions cannot allocate or free storage.
 
 | Operation | Required state | Result |
 |---|---|---|
-| `d.init(n)`, `d.init_zero(n)`, `d(n)` | any | `INITED`; repeated init is not diagnosed |
+| `d.init(n)`, `d.init_zero(n)` | any | `INITED`; repeated init is not diagnosed |
 | `d.resize(n)` | `INITED` | stays `INITED` |
 | `d.uninit()` | `INITED` | `UNINITED`; invalid free if never initialized, double free if already uninitialized |
 | `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |
@@ -5103,7 +5057,7 @@ func main() -> int32 {
 func main() -> int32 {
     [int32] xs;
 
-    xs(3);
+    xs.init(3);
 
     xs.memcpy([10, 20, 30]);
 
@@ -5164,9 +5118,9 @@ time:
 func main() -> int32 {
     [[int32]] matrix;
 
-    matrix(2);
-    matrix[0](3);
-    matrix[1](3);
+    matrix.init(2);
+    matrix[0].init(3);
+    matrix[1].init(3);
 
     matrix[0].memcpy([1, 2, 3]);
     matrix[1].memcpy([4, 5, 6]);
@@ -5261,9 +5215,9 @@ func main() -> int32 {
 
 ```franko
 func main() -> int32 {
-    [byte] str;     // dynamic array: str(200) and str.uninit() require one
+    [byte] str;     // dynamic array: str.init(200) and str.uninit() require one
 
-    str(200);
+    str.init(200);
     str.memset(0);
     str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
@@ -5446,7 +5400,7 @@ struct Buffer {
 func main() -> int32 {
     Buffer b;
 
-    b.data(4);          // allocate the dynamic array field
+    b.data.init(4);     // allocate the dynamic array field
     b.data.memset(0);
     b.size = 4;
 
@@ -5461,7 +5415,7 @@ func main() -> int32 {
 }
 ```
 
-Dynamic array fields are not part of the struct declaration; allocate them explicitly with `field(n)` as above.
+Dynamic array fields are not allocated as part of the struct declaration; allocate them explicitly with `field.init(n)` as above.
 
 ## 32.19 Struct Globals
 

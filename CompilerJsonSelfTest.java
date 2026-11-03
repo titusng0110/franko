@@ -26,8 +26,8 @@ public final class CompilerJsonSelfTest {
         String roundTripped;
 
         switch (format) {
-            case "franko-ast" -> roundTripped = AstDocument.fromJson(original).toJson();
-            case "franko-sast" -> roundTripped = SastDocument.fromJson(original).toJson();
+            case "franko-ast" -> roundTripped = ASTSerializer.toJson(ASTSerializer.fromJson(original));
+            case "franko-sast" -> roundTripped = SemanticASTSerializer.toJson(SemanticASTSerializer.fromJson(original));
             case "franko-diagnostics" -> roundTripped = Json.write(parsed, true);
             default -> {
                 fail(path, "unknown artifact format '" + format + "'");

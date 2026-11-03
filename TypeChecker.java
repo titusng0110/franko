@@ -10,7 +10,7 @@ public class TypeChecker {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
-    public boolean sameType(SemanticType a, SemanticType b) {
+    public static boolean sameType(SemanticType a, SemanticType b) {
         if (a == null || b == null) {
             return false;
         }
@@ -122,6 +122,43 @@ public class TypeChecker {
 
     public SemanticType referencedTypeOfPointer(SemanticType type) {
         return type instanceof SemanticPtrType a ? a.referencedType : null;
+    }
+
+    public boolean ensureValueExpression(
+            SemanticExprNode expr,
+            String where
+    ) {
+        if (expr == null) {
+            diagnostics.error(where + " cannot be null");
+            return false;
+        }
+
+        if (isVoidType(expr.type)) {
+            diagnostics.error(where + " cannot be void");
+            return false;
+        }
+
+        return true;
+    }
+
+    public static boolean isSelfTypeForOwner(
+            SemanticType type,
+            StructSymbol owner
+    ) {
+        if (!(type instanceof SemanticPtrType ptr)) {
+            return false;
+        }
+
+        if (!(ptr.referencedType instanceof SemanticStructType structType)) {
+            return false;
+        }
+
+        if (structType.structSymbol == null) {
+            return false;
+        }
+
+        return structType.structSymbol.qualifiedName().equals(
+                owner.qualifiedName());
     }
 
     public void ensureNotVoid(SemanticType t, String message) {
@@ -295,8 +332,8 @@ public class TypeChecker {
             return;
         }
 
-        if (isPermissionDowngrade(expr.type, targetType)
-                || isStaticArrayViewDecay(expr.type, targetType)) {
+        if (PointerPermissions.isPermissionDowngrade(expr.type, targetType)
+                || PointerPermissions.isStaticArrayViewDecay(expr.type, targetType)) {
             return;
         }
 
@@ -306,30 +343,6 @@ public class TypeChecker {
                     + ", got "
                     + expr.type.describe());
         }
-    }
-
-    public boolean isPermissionDowngrade(
-            SemanticType sourceType,
-            SemanticType targetType
-    ) {
-        return PointerPermissions.isPermissionDowngrade(sourceType, targetType);
-    }
-
-    public boolean isStaticArrayViewDecay(
-            SemanticType sourceType,
-            SemanticType targetType
-    ) {
-        return PointerPermissions.isStaticArrayViewDecay(
-                sourceType,
-                targetType
-        );
-    }
-
-    public boolean isPointerConversion(
-            SemanticType sourceType,
-            SemanticType targetType
-    ) {
-        return PointerPermissions.isPointerConversion(sourceType, targetType);
     }
 
     private static boolean isStringLiteralView(SemanticExprNode expr) {
@@ -697,7 +710,7 @@ public class TypeChecker {
         return false;
     }
 
-    public boolean isByteType(SemanticType t) {
+    public static boolean isByteType(SemanticType t) {
         return t instanceof SemanticPrimitiveType pt
                 && pt.kind == SemanticPrimitiveKind.UINT8;
     }

@@ -25,25 +25,7 @@ At global scope, declaration initializer sugar is currently invalid when
 its equivalent form is an assignment, because executable statements are
 not allowed at global scope.
 
-## 5.2 Dynamic Array Call-Init Declaration Sugar
-
-This:
-
-```franko
-[int] arr(20);
-```
-
-is shorthand for:
-
-```franko
-[int] arr;
-arr(20);
-```
-
-The call form itself (`arr(20)`) is array intrinsic `init` shorthand. See
-[Array Intrinsics](21-array-intrinsics.md).
-
-## 5.3 Array Literal Desugaring
+## 5.2 Array Literal Desugaring
 
 Array literals are not assignment sugar: they are `view<[T, N]>` values
 over immutable constant storage, exactly like string literals. An array
@@ -51,7 +33,7 @@ literal is never rewritten into statements; its element type is inferred
 from the surrounding assignment, return, or call-argument context. See
 [Array Literals](22-array-literals.md).
 
-## 5.4 String Literal Desugaring
+## 5.3 String Literal Desugaring
 
 Every string literal is a read-only `view<[byte, N]>` over immutable
 storage holding its UTF-8 bytes. No null terminator is added, and
@@ -66,7 +48,7 @@ dereference. Because a string literal is a view value, it cannot
 initialize or assign an array: copy the bytes with `memcpy` instead. See
 [String Literals](23-string-literals.md).
 
-## 5.5 Braceless Control-Flow Bodies
+## 5.4 Braceless Control-Flow Bodies
 
 `if`, `while`, and `for` bodies may be a single statement without braces:
 
@@ -88,7 +70,7 @@ This makes braceless and braced bodies scope identically: a declaration
 inside a braceless body is scoped to that implicit block and is not
 visible after the `if`/`while`/`for`. See [Statements](19-statements.md).
 
-## 5.6 For Loop Desugaring
+## 5.5 For Loop Desugaring
 
 A `for` loop is equivalent to declaration/assignment statements and a
 `while` loop:
@@ -125,7 +107,7 @@ The `init` and `update` statements follow the ordinary statement sugar
 rules, so declaration initializer sugar in the header expands normally.
 See [Statements](19-statements.md).
 
-## 5.7 Inferred Static Array Sizes (`?`)
+## 5.6 Inferred Static Array Sizes (`?`)
 
 A static array size may be written as `?` in a `view<[...]>`
 declaration with an array-literal initializer:
@@ -163,11 +145,10 @@ Inference rules:
   size.
 
 Misplaced `?` (parameters, return types, struct fields, globals,
-pointers, call-style `arr(4)` initialization, non-literal initializers)
-is rejected. See [Arrays](20-arrays.md) and
-[Array Literals](22-array-literals.md).
+pointers, non-literal initializers) is rejected. See
+[Arrays](20-arrays.md) and [Array Literals](22-array-literals.md).
 
-## 5.8 Constant Expression Evaluation
+## 5.7 Constant Expression Evaluation
 
 Constant expressions are evaluated at compile time in every
 constant-expression position:
@@ -194,7 +175,7 @@ Evaluation failures are compile errors:
 Constant expressions inside ordinary code are also folded at compile
 time. See [Constant Folding](10-constant-folding.md).
 
-## 5.9 Increment and Decrement Desugaring
+## 5.8 Increment and Decrement Desugaring
 
 Postfix increment and decrement statements are sugar for compound
 assignment:

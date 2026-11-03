@@ -11,7 +11,7 @@ public class LegalityChecker {
     private final FunctionChecker functionChecker;
 
     public LegalityChecker() {
-        this(new DiagnosticBag("Master checking failed:"));
+        this(new DiagnosticBag());
     }
 
     public LegalityChecker(DiagnosticBag diagnostics) {

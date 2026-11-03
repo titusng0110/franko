@@ -98,7 +98,7 @@ func f() -> int32 {
 f;    // invalid: Function name 'f' cannot be used as a value
 ```
 
-In a call position, `name(...)` resolves to a function even when a non-array variable with the same name is in scope. The one exception is a dynamic array variable: `xs(10)` on a dynamic array is array `init` shorthand, not a function call. See [Array Intrinsics](21-array-intrinsics.md).
+In a call position, `name(...)` resolves to a function even when a variable with the same name is in scope. Variables are not callable; using a variable name in call position is an error.
 
 ## 12.8 Function Call Expressions
 

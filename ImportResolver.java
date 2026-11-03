@@ -36,7 +36,7 @@ public class ImportResolver {
 
     public ImportResult resolve(AstDocument root, Path sourceFile) {
         Path rootPath = sourceFile.toAbsolutePath().normalize();
-        String rootKey = canonicalKey(rootPath);
+        String rootKey = SourcePaths.canonicalKey(rootPath);
 
         processedFiles.add(rootKey);
         importGraph.computeIfAbsent(rootKey, key -> new ArrayList<>());
@@ -109,10 +109,10 @@ public class ImportResolver {
         String pathText = computePathText(importNode, importingFile);
 
         Path target = resolveTarget(pathText, importingFile);
-        String targetKey = canonicalKey(target);
+        String targetKey = SourcePaths.canonicalKey(target);
 
         importGraph
-                .computeIfAbsent(canonicalKey(importingFile), key -> new ArrayList<>())
+                .computeIfAbsent(SourcePaths.canonicalKey(importingFile), key -> new ArrayList<>())
                 .add(targetKey);
 
         if (processedFiles.contains(targetKey)) {
@@ -258,14 +258,6 @@ public class ImportResolver {
         }
 
         return Path.of(root + relative).normalize();
-    }
-
-    private static String canonicalKey(Path path) {
-        try {
-            return path.toRealPath().toString();
-        } catch (Exception e) {
-            return path.toAbsolutePath().normalize().toString();
-        }
     }
 
     private static String typeKey(TypeNode type) {

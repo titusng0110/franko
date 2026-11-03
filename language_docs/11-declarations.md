@@ -39,25 +39,6 @@ x = 1;
 
 The initializer must obey normal assignment rules and is only valid where the resulting assignment is legal.
 
-Dynamic array call-init declaration sugar:
-
-```franko
-[int32] d(10);
-```
-
-is equivalent to:
-
-```franko
-[int32] d;
-d(10);
-```
-
-The call form is only valid for dynamic arrays. Using it on a non-array declaration is an error:
-
-```franko
-int32 x(5);   // invalid: x is not a dynamic array
-```
-
 ## 11.1 Duplicate Declarations
 
 Declaring the same variable name twice in the same scope is illegal.
@@ -108,7 +89,7 @@ literal):
 view<[int32, 4]> G = [1, 2, 3, 4]   // valid
 ```
 
-**Ordinary declaration initializer sugar.** The initializer forms described in this chapter and in [Assignment](14-assignment.md) — `= expr` with a nonconstant expression, and the dynamic-array call-init form `xs(n)` — are equivalent to executable statements (an assignment or an expression-statement call). Executable statements are not allowed at global scope, so these forms are invalid on global declarations:
+**Ordinary declaration initializer sugar.** The `= expr` form described in this chapter and in [Assignment](14-assignment.md), when the expression is not constant, is equivalent to an executable assignment statement. Executable statements are not allowed at global scope, so this form is invalid on global declarations:
 
 ```franko
 int32 g = h                     // invalid: the initializer must be constant

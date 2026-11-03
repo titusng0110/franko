@@ -19,17 +19,15 @@ public final class ArrayLiteralLowerer {
     private final SymbolTable ctx;
     private final ExpressionAnalyzer exprAnalyzer;
 
-    private Hoister hoister = null;
+    private final Hoister hoister;
 
     public ArrayLiteralLowerer(
             SymbolTable ctx,
-            ExpressionAnalyzer exprAnalyzer
+            ExpressionAnalyzer exprAnalyzer,
+            Hoister hoister
     ) {
         this.ctx = Objects.requireNonNull(ctx);
         this.exprAnalyzer = Objects.requireNonNull(exprAnalyzer);
-    }
-
-    public void setHoister(Hoister hoister) {
         this.hoister = Objects.requireNonNull(hoister);
     }
 
@@ -310,7 +308,7 @@ public final class ArrayLiteralLowerer {
     private static int parseSize(String sizeLiteral) {
         try {
             return new BigInteger(sizeLiteral.trim(), 10).intValueExact();
-        } catch (Exception e) {
+        } catch (NumberFormatException | ArithmeticException e) {
             return 1;
         }
     }

@@ -161,7 +161,7 @@ final class SemanticStaticArrayType extends SemanticType {
             }
 
             return new BigInteger(s, 10);
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             return null;
         }
     }
@@ -264,13 +264,6 @@ class SemanticPtrType extends SemanticType {
         return Objects.hash(getClass(), referencedType);
     }
 
-    public SemanticPtrType withPermission(PtrPermission newPermission) {
-        return switch (newPermission) {
-            case OWNER -> new SemanticPtrType(referencedType);
-            case MUTABLE -> new SemanticMViewType(referencedType);
-            case READ_ONLY -> new SemanticViewType(referencedType);
-        };
-    }
 }
 
 final class SemanticMViewType extends SemanticPtrType {

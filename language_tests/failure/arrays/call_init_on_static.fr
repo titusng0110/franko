@@ -1,7 +1,0 @@
-// Failure fixture: arrays/call_init_on_static
-// Static arrays do not use arr(size) call initialization.
-func main() -> int32 {
-    [int32, 4] xs;
-    xs(2);
-    return 0;
-}

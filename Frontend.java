@@ -7,6 +7,7 @@ import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,7 +40,7 @@ public final class Frontend {
 
         try {
             input = CharStreams.fromPath(file, StandardCharsets.UTF_8);
-        } catch (Exception e) {
+        } catch (IOException e) {
             diagnostics.add(Diagnostic.error(
                     "Failed to read '" + sourcePath + "': " + e.getMessage()
             ));
@@ -122,7 +123,7 @@ public final class Frontend {
             return new Result<>(null, List.of());
         }
 
-        DiagnosticBag diagnostics = new DiagnosticBag("Desugaring failed:");
+        DiagnosticBag diagnostics = new DiagnosticBag();
         Desugarer desugarer = new Desugarer(diagnostics);
         ASTNode root = desugarer.desugar(raw.root);
 

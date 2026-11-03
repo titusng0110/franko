@@ -13,14 +13,6 @@ public final class AstDocument {
     public AstDocument withPhase(AstPhase newPhase) {
         return new AstDocument(newPhase, sources, root);
     }
-
-    public String toJson() {
-        return ASTSerializer.toJson(this);
-    }
-
-    public static AstDocument fromJson(String json) {
-        return ASTSerializer.fromJson(json);
-    }
 }
 
 enum AstPhase {

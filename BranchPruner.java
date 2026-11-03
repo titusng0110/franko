@@ -320,7 +320,7 @@ final class BranchPruner {
 
     private static Node atomFor(SemanticExprNode expr, List<SemanticExprNode> atoms) {
 
-        if (!isBooleanTyped(expr.type) || !isEffectFree(expr)) {
+        if (!TypeChecker.isByteType(expr.type) || !isEffectFree(expr)) {
             return null;
         }
 
@@ -472,11 +472,6 @@ final class BranchPruner {
         }
 
         return false;
-    }
-
-    private static boolean isBooleanTyped(SemanticType type) {
-        return type instanceof SemanticPrimitiveType primitive
-                && primitive.kind == SemanticPrimitiveKind.UINT8;
     }
 
     private static boolean sameAtom(SemanticExprNode a, SemanticExprNode b) {
