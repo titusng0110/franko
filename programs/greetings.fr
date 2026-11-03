@@ -1,47 +1,46 @@
 // Console greeting: asks for a name on stdout, reads it from stdin,
 // and writes back "Hello, [NAME]~".
 //
-// Everything goes through `franko/io`: `print(text, end)` writes text
-// with `end` as the suffix (a null `end` means no suffix, so no
-// newline), and `read_line` fills a caller-owned buffer with the name
-// and reports its length. Input line endings depend on how stdin is
-// wired, so read_line tolerates both "\r\n" (interactive Windows
-// console) and "\n" (pipes). Run with:
+// Everything goes through `franko/io` and `franko/string`: the name is
+// read into a byte buffer, copied into a `std::String`, and the greeting
+// is assembled with `from`/`+=`. The final `print(str, end)` writes the
+// greeting with no suffix. Run with:
 //
 //   ./programs/greetings.out < programs/greetings.stdin
 
 import "franko/io"
+import "franko/string"
 
 func main() -> int {
     // Prompt without a trailing newline.
     print("What's your name? ", null)
 
-    // The name without its line ending, at most 32 bytes.
-    [byte] name;
-    name.init(32);
-    int64 got = read_line(getmview(name), 32);
-    uint len = 0;
+    // Read the name without its line ending, at most 32 bytes.
+    [byte] input;
+    input.init(32);
+    int64 got = read_line(getmview(input), 32);
+
+    std::String name;
     if (got > 0) {
-        len = unsafe_cast<uint>(got);
+        uint len = unsafe_cast<uint>(got);
+        input.resize(len);
+        name.from(getview(input));
     }
 
-    // "Hello, " + name + "~" in one exact-sized buffer. A string
-    // literal is a valid memcpy source, and $(...) over it gives its
-    // length; the result is printed verbatim (a null `end` means no
-    // suffix and no newline).
-    uint greeting_len = $("Hello, ").length();
-    uint total = greeting_len + len + 1;
-    [byte] out;
-    out.init(total);
-    out.memcpy("Hello, ");
-    for (uint j = 0; j < len; j++) {
-        out[greeting_len + j] = name[j];
+    // "Hello, " + name + "~".
+    std::String greeting;
+    greeting.from("Hello, ");
+    if (name.length() != 0) {
+        greeting += name;
     }
-    out[total - 1] = 126;
-    print(getview(out), null);
+    greeting += "~";
 
-    out.uninit();
+    view<[byte]> no_end = null;
+    print(getview(greeting), no_end);
+
+    greeting.uninit();
     name.uninit();
+    input.uninit();
 
     return 0;
 }

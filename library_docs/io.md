@@ -11,15 +11,16 @@ import "franko/io"
 Module files:
 
 ```text
-import/franko/io.fr      // Franko implementation (on top of franko/os)
+import/franko/io.fr      // Franko implementation (on top of franko/os and franko/string)
 ```
 
-`io` imports `franko/os` itself (via a file-relative `./os` import, so it
-works regardless of the user's `-p` search directory) and talks through
-the OS bridge: `os::posix::write` / `os::posix::read` on linux/macos,
-`os::win32::WriteFile` / `os::win32::ReadFile` on Windows. Output
-therefore shares a channel with raw fd writes and appears in program
-order, and input shares one with raw fd reads.
+`io` imports the standard `franko/os` and `franko/string` modules via
+file-relative `./os` and `./string` imports, so they work regardless of
+the user's `-p` search directory, and talks through the OS bridge:
+`os::posix::write` / `os::posix::read` on linux/macos,
+`os::win32::WriteFile` / `os::win32::ReadFile` on Windows.
+Output therefore shares a channel with raw fd writes and appears in
+program order, and input shares one with raw fd reads.
 
 Design rules:
 
@@ -29,11 +30,14 @@ Design rules:
 - `print()` writes a bare newline.
 - Text (`view<[uint8]>`) is written as raw UTF-8 bytes, verbatim.
   A null or empty view prints nothing (not even a newline).
+- `std::String` text is written as its live bytes, not the backing
+  buffer's unused capacity. A null or empty string prints nothing (not
+  even a newline) unless a non-empty `end` argument is supplied.
 - Integers are written in decimal. `int8`/`uint8` print as numbers,
   not characters. Negative values print with a leading `-`, including
   the minimum value of each signed type.
-- There are no overloads for pointers, arrays, or structs. Print
-  elements, fields, or bytes instead.
+- There are no overloads for pointers or arrays. Print elements or
+  bytes instead. Struct printing is limited to `std::String`.
 - Input fills a caller-provided buffer (arrays cannot be returned
   directly, so `read_bytes` / `read_line` write through an `mview`
   out-buffer, like the pool allocators do) and reports how much
@@ -67,6 +71,10 @@ func print(int64 num, view<[uint8]> end) -> void
 
 func print(view<[uint8]> utf8str, view<[uint8]> end) -> void
 
+func print(view<std::String> str) -> void
+func print(view<std::String> str, view<std::String> end) -> void
+func print(view<std::String> str, view<[byte]> end) -> void
+
 func read_bytes(mview<[byte]> buf, uint32 count) -> int64
 func read_line(mview<[byte]> buf, uint32 max) -> int64
 ```
@@ -97,6 +105,39 @@ matching the constant's own type wins when the value fits, otherwise the
 narrowest fitting type (signed before unsigned at equal width). See
 [Fluid Integer Constants](../language_docs/09-fluid-integer-constants.md)
 and [Functions](../language_docs/12-functions.md).
+
+## std::String output
+
+The `std::String` overloads accept a read-only `view<std::String>` and
+write only the live bytes reported by `length()`, not the backing
+buffer's unused capacity. A null or empty string writes nothing; the
+two-argument forms still write a non-empty `end` argument.
+
+A bare `print(null)` is ambiguous between the text and `std::String`
+overloads. Declare a typed null view (`view<[uint8]> nil = null`) when a
+null text argument is intended.
+
+```franko
+import "franko/io"
+import "franko/string"
+
+func main() -> int32 {
+    std::String s
+    s.from("hello")
+    print(getview(s))                 // hello + newline
+    print(getview(s), "!")            // hello!
+    print()                           // newline
+
+    std::String end
+    end.from(" world")
+    print(getview(s), getview(end))   // hello world
+    print()                           // newline
+
+    s.uninit()
+    end.uninit()
+    return 0
+}
+```
 
 ## Input
 
@@ -175,6 +216,7 @@ func main() -> int32 {
 library_tests/io/print/success/decimal/   // integer formatting per width
 library_tests/io/print/success/string/    // text, custom end, bare newline
 library_tests/io/print/success/text_end/  // print(text, end), null text/end
+library_tests/io/print/success/std_string/ // print(std::String), String/byte ends
 library_tests/io/read/success/read_bytes/      // chunked reads, short read, EOF
 library_tests/io/read/success/read_line/       // lines, empty line, EOF
 library_tests/io/read/success/read_line_long/  // over-long line splitting

@@ -19,40 +19,39 @@ Design rules:
 - `std::String` lives in `namespace std`, like the other standard
   modules.
 - A string only stores bytes; it is not NUL-terminated.
-- `_data.length()` is the current string length. `_buffer_size` is the
-  tracked growth capacity.
+- `length()` returns the number of stored bytes, not the internal
+  growth bookkeeping.
 - Strings are pointer-only because `_data` is a dynamic array. Use
   `view<String>` for read-only parameters and `ptr<String>` for
   mutation/lifecycle parameters.
-- The `_data` and `_buffer_size` fields are private by convention
-  (`_` prefix): direct access from outside `std::String` warns. Use the
-  methods below instead.
+- The `_data` and `_data_size` fields, the `_reserve` method, and the
+  `_compare` method are private by convention (`_` prefix): direct access
+  from outside `std::String` warns. Use the public methods below instead.
 - Methods return `int32` status where allocation or copying can fail:
   `0` on success and `-1` on failure.
+- `is_utf8_compliant()` returns `uint8`: `1` for valid UTF-8 and `0`
+  otherwise.
 
 ## Storage
 
 ```franko
 struct String {
-    [byte] _data
-    uint32 _buffer_size = 0
+    [byte] _data          // actual buffer; _data.length() is its capacity
+    uint32 _data_size = 0 // number of live bytes
 }
 ```
 
-`_data` always contains exactly the current bytes. `_buffer_size` is the
-tracked capacity target used by growth:
+`_data` is a real buffer and may be larger than the current string
+contents. `_data.length()` is the buffer capacity; `_data_size` is the
+number of live bytes and is what `length()` returns. Bytes past
+`_data_size` are unused buffer space.
 
-- `from` starts the tracked capacity at `128` bytes when the payload is
-  smaller than 128;
-- when the payload is 128 bytes or larger, the tracked capacity becomes
-  `payload length + 128`;
-- appending and multiplying raise the tracked capacity the same way when
-  the result no longer fits;
-- clearing a string keeps its tracked capacity (at least 128);
-- `uninit()` frees `_data` and resets the tracked capacity to 0.
+The buffer size is internal and is not exposed through the public API.
+`_reserve` grows the buffer when more room is needed, and clearing a
+string keeps the buffer allocated for reuse. `uninit()` frees it.
 
-A declaration starts empty: `_data` is uninitialized (length 0) and
-`_buffer_size` is 0.
+A declaration starts empty: `_data` is uninitialized (capacity 0) and
+`_data_size` is 0.
 
 ## API
 
@@ -65,10 +64,8 @@ func from(ptr<String> self, view<String> in) -> int32
 func to(view<String> self, ptr<[byte]> out) -> int32
 func to(view<String> self, ptr<String> out) -> int32
 
-func reserve(ptr<String> self, uint32 payload) -> int32
-
 func length(view<String> self) -> uint32
-func capacity(view<String> self) -> uint32
+func is_utf8_compliant(view<String> self) -> uint8
 func uninit(ptr<String> self) -> void
 ```
 
@@ -130,38 +127,58 @@ print(copy == s)       // 1
 copy.uninit()
 ```
 
-### reserve
-
-```franko
-func reserve(ptr<String> self, uint32 payload) -> int32
-```
-
-Prepares `_data` for a payload of exactly `payload` bytes and raises
-`_buffer_size` to the tracked growth target. It is the allocation step
-used by `from`, `+=`, and `*=`. Calling it directly resizes the backing
-array, so on a non-empty string it changes the logical length as well.
-`reserve(0)` releases `_data` while keeping the tracked capacity at least
-128.
-
-Returns `0` on success and `-1` when the backing array cannot be sized.
-
-### length and capacity
+### length
 
 ```franko
 func length(view<String> self) -> uint32
-func capacity(view<String> self) -> uint32
 ```
 
-`length()` returns `_data.length()`, the number of stored bytes.
-`capacity()` returns the tracked `_buffer_size` value.
+Returns the number of live bytes currently stored in the string. This is
+the logical string length, not the buffer capacity. A null or empty
+string reports `0`.
 
 ```franko
 std::String s
 print(s.length())      // 0
-print(s.capacity())    // 0
 s.from("hello")
 print(s.length())      // 5
-print(s.capacity())    // 128
+```
+
+### is_utf8_compliant
+
+```franko
+func is_utf8_compliant(view<String> self) -> uint8
+```
+
+Returns `1` when the stored bytes are a valid UTF-8 sequence and `0`
+otherwise. A null or empty string is valid.
+
+The check follows UTF-8 byte rules:
+
+- ASCII bytes (`0x00`–`0x7F`), including embedded NUL, are valid;
+- two-byte sequences must start with `0xC2`–`0xDF`;
+- three-byte sequences must not be overlong, and UTF-16 surrogate
+  encodings (`U+D800`–`U+DFFF`) are rejected;
+- four-byte sequences must not be overlong and must not exceed
+  `U+10FFFF`;
+- stray continuation bytes, truncated sequences, and invalid lead bytes
+  (`0xC0`, `0xC1`, `0xF5`–`0xFF`) are rejected.
+
+The function validates the encoding only; it does not normalize text or
+reject noncharacters.
+
+```franko
+std::String s
+s.from("hello")
+print(s.is_utf8_compliant())   // 1
+
+[byte] invalid
+invalid.init(2)
+invalid[0] = 0xC0              // overlong two-byte lead
+invalid[1] = 0x80
+s.from(getview(invalid))
+print(s.is_utf8_compliant())   // 0
+invalid.uninit()
 ```
 
 ### uninit
@@ -170,8 +187,8 @@ print(s.capacity())    // 128
 func uninit(ptr<String> self) -> void
 ```
 
-Frees the backing buffer and resets `_buffer_size` to 0. Safe to call on
-an already empty string.
+Frees the backing buffer and returns the string to the empty state. Safe
+to call on an already empty string.
 
 ## Operator methods
 
@@ -230,8 +247,7 @@ use the `view<[byte]>` forms and other strings use the `view<String>`
 forms.
 
 `*=` repeats the string. A multiplier of `0` clears the contents, `1` is
-a no-op, and larger values repeat the bytes. The tracked capacity is
-raised when the repeated result needs more room.
+a no-op, and larger values repeat the bytes.
 
 ```franko
 std::String s
@@ -243,7 +259,6 @@ print(s.length()) // 24
 
 s *= 0
 print(s.length()) // 0
-print(s.capacity()) // 128
 ```
 
 ## Example
@@ -259,7 +274,7 @@ func main() -> int32 {
     greeting *= 2
 
     print(greeting.length())
-    print(greeting.capacity())
+    print(greeting.is_utf8_compliant())
 
     [byte] out
     greeting.to(getptr(out))
@@ -281,7 +296,8 @@ func main() -> int32 {
 
 ```text
 library_tests/string/basic/success/from_to/               // from/to overloads, views, static arrays
-library_tests/string/basic/success/reserve/               // 128-byte default and payload + 128 growth
+library_tests/string/basic/success/reserve/               // growth across 127/128-byte payloads and clearing
+library_tests/string/basic/success/utf8/                  // valid and invalid UTF-8 sequences
 library_tests/string/operators/success/comparisons/       // all six comparators, prefixes, empties
 library_tests/string/operators/success/assign_append_multiply/ // =, +=, *=, clear
 ```

@@ -1,0 +1,180 @@
+// ============================================================
+// LIBRARY TEST (string/basic): UTF-8 validation
+// ============================================================
+// Covers ASCII, valid 2/3/4-byte sequences and their boundaries,
+// overlong encodings, UTF-16 surrogates, code points above U+10FFFF,
+// invalid lead bytes, stray continuation bytes, and truncation.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func check(view<[byte]> bytes) -> void {
+    std::String s
+    s.from(bytes)
+    print(s.is_utf8_compliant())
+    s.uninit()
+    return
+}
+
+func main() -> int32 {
+    std::String empty
+    print(empty.length())
+    print(empty.is_utf8_compliant())
+    empty.uninit()
+
+    std::String ascii
+    ascii.from("hello")
+    print(ascii.is_utf8_compliant())
+    ascii.uninit()
+
+    std::String unicode
+    unicode.from("你好, Franko 😭😍")
+    print(unicode.length())
+    print(unicode.is_utf8_compliant())
+    unicode.uninit()
+
+    [byte, 2] two
+    two[0] = 0xC2
+    two[1] = 0xA2
+    check(getview(two))
+
+    [byte, 3] three
+    three[0] = 0xE4
+    three[1] = 0xBD
+    three[2] = 0xA0
+    check(getview(three))
+
+    [byte, 4] four
+    four[0] = 0xF0
+    four[1] = 0x9F
+    four[2] = 0x98
+    four[3] = 0xAD
+    check(getview(four))
+
+    [byte, 2] two_min
+    two_min[0] = 0xC2
+    two_min[1] = 0x80
+    check(getview(two_min))
+
+    [byte, 2] two_max
+    two_max[0] = 0xDF
+    two_max[1] = 0xBF
+    check(getview(two_max))
+
+    [byte, 3] three_min
+    three_min[0] = 0xE0
+    three_min[1] = 0xA0
+    three_min[2] = 0x80
+    check(getview(three_min))
+
+    [byte, 3] three_surrogate_max
+    three_surrogate_max[0] = 0xED
+    three_surrogate_max[1] = 0x9F
+    three_surrogate_max[2] = 0xBF
+    check(getview(three_surrogate_max))
+
+    [byte, 3] three_private
+    three_private[0] = 0xEE
+    three_private[1] = 0x80
+    three_private[2] = 0x80
+    check(getview(three_private))
+
+    [byte, 3] three_max
+    three_max[0] = 0xEF
+    three_max[1] = 0xBF
+    three_max[2] = 0xBF
+    check(getview(three_max))
+
+    [byte, 4] four_min
+    four_min[0] = 0xF0
+    four_min[1] = 0x90
+    four_min[2] = 0x80
+    four_min[3] = 0x80
+    check(getview(four_min))
+
+    [byte, 4] four_max
+    four_max[0] = 0xF4
+    four_max[1] = 0x8F
+    four_max[2] = 0xBF
+    four_max[3] = 0xBF
+    check(getview(four_max))
+
+    [byte, 1] continuation
+    continuation[0] = 0x80
+    check(getview(continuation))
+
+    [byte, 2] overlong_two
+    overlong_two[0] = 0xC0
+    overlong_two[1] = 0x80
+    check(getview(overlong_two))
+
+    [byte, 3] overlong_three
+    overlong_three[0] = 0xE0
+    overlong_three[1] = 0x9F
+    overlong_three[2] = 0xBF
+    check(getview(overlong_three))
+
+    [byte, 3] surrogate
+    surrogate[0] = 0xED
+    surrogate[1] = 0xA0
+    surrogate[2] = 0x80
+    check(getview(surrogate))
+
+    [byte, 4] overlong_four
+    overlong_four[0] = 0xF0
+    overlong_four[1] = 0x8F
+    overlong_four[2] = 0xBF
+    overlong_four[3] = 0xBF
+    check(getview(overlong_four))
+
+    [byte, 4] above_max
+    above_max[0] = 0xF4
+    above_max[1] = 0x90
+    above_max[2] = 0x80
+    above_max[3] = 0x80
+    check(getview(above_max))
+
+    [byte, 4] bad_lead_five
+    bad_lead_five[0] = 0xF5
+    bad_lead_five[1] = 0x80
+    bad_lead_five[2] = 0x80
+    bad_lead_five[3] = 0x80
+    check(getview(bad_lead_five))
+
+    [byte, 1] truncated_two
+    truncated_two[0] = 0xC2
+    check(getview(truncated_two))
+
+    [byte, 2] truncated_three
+    truncated_three[0] = 0xE0
+    truncated_three[1] = 0xA0
+    check(getview(truncated_three))
+
+    [byte, 3] truncated_four
+    truncated_four[0] = 0xF0
+    truncated_four[1] = 0x90
+    truncated_four[2] = 0x80
+    check(getview(truncated_four))
+
+    [byte, 2] bad_second
+    bad_second[0] = 0xE0
+    bad_second[1] = 0x80
+    check(getview(bad_second))
+
+    [byte, 1] bad_lead_fe
+    bad_lead_fe[0] = 0xFE
+    check(getview(bad_lead_fe))
+
+    [byte, 1] bad_lead_ff
+    bad_lead_ff[0] = 0xFF
+    check(getview(bad_lead_ff))
+
+    [byte, 3] embedded_nul
+    embedded_nul[0] = 0x41
+    embedded_nul[1] = 0x00
+    embedded_nul[2] = 0x42
+    check(getview(embedded_nul))
+
+    return 0
+}

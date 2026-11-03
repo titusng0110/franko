@@ -2,7 +2,7 @@
 // LIBRARY TEST (string/basic): from and to
 // ============================================================
 // Covers both from() overloads, both to() overloads, static and
-// dynamic byte-array sources, null sources, length/capacity, and the
+// dynamic byte-array sources, null sources, length, and the
 // exact-length byte-array output produced by to(ptr<[byte]>).
 // ============================================================
 
@@ -12,10 +12,8 @@ import "franko/string"
 func main() -> int32 {
     std::String s
     print(s.length())
-    print(s.capacity())
     print(s.from("hello"))
     print(s.length())
-    print(s.capacity())
     ptr<[byte]> nil_out = null
     print(s.to(nil_out))
 
@@ -28,13 +26,11 @@ func main() -> int32 {
     std::String t
     print(t.from(getview(s)))
     print(t.length())
-    print(t.capacity())
     print(t == s)
 
     std::String u
     print(s.to(getptr(u)))
     print(u == s)
-    print(u.capacity())
 
     [byte, 3] fixed
     fixed[0] = 120
@@ -43,7 +39,6 @@ func main() -> int32 {
     std::String w
     print(w.from(getview(fixed)))
     print(w.length())
-    print(w.capacity())
     print(w.to(getptr(out)))
     print(getview(out))
     out.uninit()
@@ -51,7 +46,6 @@ func main() -> int32 {
     view<[byte]> nil = null
     print(s.from(nil))
     print(s.length())
-    print(s.capacity())
     print(s.to(nil_out))
 
     s.uninit()
