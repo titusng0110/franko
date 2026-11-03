@@ -152,6 +152,12 @@ public final class ExpressionAnalyzer {
             SemanticExprNode left = analyzeExpr(n.left);
             SemanticExprNode right = analyzeExpr(n.right);
 
+            if (OperatorMethods.isComparisonOperator(n.op)
+                    && (left.type instanceof SemanticStructType
+                        || right.type instanceof SemanticStructType)) {
+                return lowerStructComparison(n.op, left, right, node.span);
+            }
+
             SemanticType type = inferBinaryResultType(
                     n.op,
                     left,
@@ -454,6 +460,273 @@ public final class ExpressionAnalyzer {
         }
 
         return expr.isLValue();
+    }
+
+    private SemanticExprNode lowerStructComparison(
+            String op,
+            SemanticExprNode left,
+            SemanticExprNode right,
+            SourceSpan span
+    ) {
+        if (!(left.type instanceof SemanticStructType leftStruct)
+                || !(right.type instanceof SemanticStructType rightStruct)
+                || leftStruct.structSymbol != rightStruct.structSymbol) {
+            ctx.error("Cannot compare values of type '"
+                    + left.type.describe()
+                    + "' and type '"
+                    + right.type.describe()
+                    + "': comparison operators on structs require both "
+                    + "operands to have the same struct type");
+
+            return operatorFallbackLiteral(span);
+        }
+
+        StructSymbol owner = leftStruct.structSymbol;
+        String methodName = OperatorMethods.comparisonMethodName(op);
+
+        SemanticExprNode leftView = makeOperatorView(left, span);
+        SemanticExprNode rightView = makeOperatorView(right, span);
+
+        MethodSymbol method = ctx.resolveMethodWithLiterals(
+                owner,
+                methodName,
+                List.of(SymbolTable.CallArg.lowered(rightView))
+        );
+
+        if (method == null) {
+            ctx.error("No matching overload for operator '"
+                    + op
+                    + "' on struct '"
+                    + owner.qualifiedName()
+                    + "': expected '"
+                    + methodName
+                    + "(view<"
+                    + owner.qualifiedName()
+                    + "> self, view<"
+                    + owner.qualifiedName()
+                    + "> other) -> uint8'");
+
+            return operatorFallbackLiteral(span);
+        }
+
+        return new SemanticFunctionCallNode(
+                span,
+                method.returnType(),
+                method,
+                List.of(leftView, rightView)
+        );
+    }
+
+    private SemanticExprNode makeOperatorView(
+            SemanticExprNode value,
+            SourceSpan span
+    ) {
+        SemanticType viewType = new SemanticViewType(value.type);
+        boolean temporary = !isValidStorageBackedLValue(value);
+
+        return new SemanticGetPtrNode(span, viewType, value, temporary);
+    }
+
+    static final class OperatorAssignmentLowering {
+        final SemanticExprNode call;
+        final SemanticExprNode fallbackValue;
+        final boolean fallbackNeedsContext;
+
+        private OperatorAssignmentLowering(
+                SemanticExprNode call,
+                SemanticExprNode fallbackValue,
+                boolean fallbackNeedsContext
+        ) {
+            this.call = call;
+            this.fallbackValue = fallbackValue;
+            this.fallbackNeedsContext = fallbackNeedsContext;
+        }
+
+        static OperatorAssignmentLowering call(SemanticExprNode call) {
+            return new OperatorAssignmentLowering(
+                    Objects.requireNonNull(call),
+                    null,
+                    false
+            );
+        }
+
+        static OperatorAssignmentLowering fallback(SemanticExprNode value) {
+            return new OperatorAssignmentLowering(
+                    null,
+                    Objects.requireNonNull(value),
+                    false
+            );
+        }
+
+        static OperatorAssignmentLowering lowerRaw() {
+            return new OperatorAssignmentLowering(null, null, true);
+        }
+    }
+
+    public OperatorAssignmentLowering tryLowerOperatorAssignment(
+            SemanticExprNode target,
+            String op,
+            ASTNode rawValue,
+            SourceSpan span
+    ) {
+        if (!(target.type instanceof SemanticStructType structType)) {
+            return null;
+        }
+
+        String methodName = OperatorMethods.assignmentMethodName(op);
+
+        if (methodName == null) {
+            return null;
+        }
+
+        StructSymbol owner = structType.structSymbol;
+
+        if (!owner.hasMethod(methodName)) {
+            if ("=".equals(op)) {
+                return null;
+            }
+
+            ctx.error("Struct '"
+                    + owner.qualifiedName()
+                    + "' does not define operator '"
+                    + op
+                    + "' (expected method '"
+                    + methodName
+                    + "')");
+
+            return OperatorAssignmentLowering.call(
+                    operatorFallbackLiteral(span)
+            );
+        }
+
+        SemanticExprNode loweredValue = null;
+        SymbolTable.OperatorCallArg arg;
+
+        if (rawValue instanceof ArrayLiteralNode literal) {
+            arg = SymbolTable.OperatorCallArg.literal(literal);
+        } else {
+            loweredValue = analyzeExpr(rawValue);
+
+            if (loweredValue.type instanceof SemanticVoidType) {
+                ctx.error("Right-hand side of operator '"
+                        + op
+                        + "' cannot have void type");
+
+                return OperatorAssignmentLowering.call(
+                        operatorFallbackLiteral(span)
+                );
+            }
+
+            if (loweredValue.type instanceof SemanticNullType) {
+                if ("=".equals(op)) {
+                    return OperatorAssignmentLowering.fallback(
+                            loweredValue
+                    );
+                }
+
+                ctx.error("Struct '"
+                        + owner.qualifiedName()
+                        + "' cannot apply operator '"
+                        + op
+                        + "' to null");
+
+                return OperatorAssignmentLowering.call(
+                        operatorFallbackLiteral(span)
+                );
+            }
+
+            arg = SymbolTable.OperatorCallArg.lowered(loweredValue);
+        }
+
+        MethodSymbol method = ctx.resolveOperatorMethodWithLiterals(
+                owner,
+                methodName,
+                arg
+        );
+
+        if (method == null) {
+            if ("=".equals(op)) {
+                return arg.isLiteral()
+                        ? OperatorAssignmentLowering.lowerRaw()
+                        : OperatorAssignmentLowering.fallback(loweredValue);
+            }
+
+            ctx.error("No matching overload for operator '"
+                    + op
+                    + "' on struct '"
+                    + owner.qualifiedName()
+                    + "' (expected method '"
+                    + methodName
+                    + "' with signature '"
+                    + methodName
+                    + "(ptr<"
+                    + owner.qualifiedName()
+                    + "> self, view<T> other) -> void')");
+
+            return OperatorAssignmentLowering.call(
+                    operatorFallbackLiteral(span)
+            );
+        }
+
+        SemanticType parameterType = method.parameters.get(1).type;
+        SemanticExprNode userArg;
+
+        if (arg.isLiteral()) {
+            SemanticType inner =
+                    ((SemanticPtrType) parameterType).referencedType;
+
+            SemanticExprNode literalValue = lowerArrayLiteral(
+                    (ArrayLiteralNode) rawValue,
+                    inner
+            );
+
+            userArg = new SemanticGetPtrNode(
+                    span,
+                    parameterType,
+                    literalValue,
+                    true
+            );
+        } else {
+            boolean temporary = !isValidStorageBackedLValue(loweredValue);
+
+            userArg = new SemanticGetPtrNode(
+                    span,
+                    parameterType,
+                    loweredValue,
+                    temporary
+            );
+        }
+
+        SemanticType selfType = new SemanticPtrType(target.type);
+
+        if (!method.parameters.isEmpty()
+                && method.parameters.get(0).type instanceof SemanticPtrType declaredSelf) {
+            selfType = declaredSelf;
+        }
+
+        SemanticGetPtrNode selfArg = new SemanticGetPtrNode(
+                target.span,
+                selfType,
+                target
+        );
+
+        SemanticExprNode call = new SemanticFunctionCallNode(
+                span,
+                method.returnType(),
+                method,
+                List.of(selfArg, userArg)
+        );
+
+        return OperatorAssignmentLowering.call(call);
+    }
+
+    private SemanticExprNode operatorFallbackLiteral(SourceSpan span) {
+        return new SemanticIntLiteralNode(
+                span,
+                FALLBACK_TYPE,
+                BigInteger.ZERO,
+                "0"
+        );
     }
 
     private SemanticExprNode analyzeQualifiedNameExpr(QualifiedNameNode q) {

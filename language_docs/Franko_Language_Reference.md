@@ -1415,6 +1415,80 @@ Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x 
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](25-structs.md) for the full assignability rules.
 
+## 14.7 Operator Assignment
+
+A struct may customize assignment by declaring operator methods:
+
+| Syntax | Method |
+|---|---|
+| `=` | `OPERATOR_MOV` |
+| `+=` | `OPERATOR_ADDMOV` |
+| `-=` | `OPERATOR_SUBMOV` |
+| `*=` | `OPERATOR_MULMOV` |
+| `/=` | `OPERATOR_DIVMOV` |
+| `%=` | `OPERATOR_MODMOV` |
+| `\|=` | `OPERATOR_ORMOV` |
+| `&=` | `OPERATOR_ANDMOV` |
+| `^=` | `OPERATOR_XORMOV` |
+
+Each assignment operator method has the shape:
+
+```franko
+func OPERATOR_MOV(ptr<X> self, view<T> other) -> void
+```
+
+The assignment target must still be a storage-backed lvalue of the struct
+type `X`. `T` may be any non-void value type, including a nested view
+type, and multiple `view<T>` overloads are allowed.
+
+Plain `=` first tries to resolve an applicable `OPERATOR_MOV` overload.
+If none applies, it falls back to the built-in whole-struct assignment
+rules described in [Struct Assignment](#144-struct-assignment). Compound
+assignment has no built-in struct fallback: if no overload applies, the
+assignment is rejected.
+
+A pointer-only struct can opt into whole-value assignment with
+`OPERATOR_MOV` even though built-in assignment refuses it:
+
+```franko
+struct Blob {
+    [int32, 4] xs
+
+    func OPERATOR_MOV(ptr<Blob> self, view<Blob> other) -> void {
+        $(self).xs.memcpy(getview($(other).xs))
+        return
+    }
+}
+
+Blob a
+Blob b
+b = a          // calls b.OPERATOR_MOV(getview(a))
+```
+
+The right-hand side is always borrowed as `view<T>` where `T` is its
+static type. An lvalue is passed with `getview`; an rvalue is borrowed
+through a compiler-generated temporary that lives until the end of the
+full expression. There is no direct pass for view values, string literals,
+or array literals:
+
+```franko
+OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
+OPERATOR_MOV(ptr<X> self, view<view<[byte]>> other)  // x = "hello"
+```
+
+Integer constants are fluid-fitted to `view<primitive>` parameters and
+materialized as a temporary of the referenced primitive type.
+
+The borrowed view is valid only for the duration of the operator call.
+An operator method must not store or forward it into caller-owned or
+global storage; the dangling-pointer checker rejects that pattern (see
+[Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)).
+A local `view<T>` copy inside the operator body is allowed because the
+local dies before the operator call returns.
+
+See [Operators](17-operators.md#1710-struct-operator-overloading) for the
+complete operator overload rules.
+
 ---
 
 # 15. Lvalues and Storage-Backed Expressions
@@ -1739,6 +1813,96 @@ Pointers are not integers and cannot participate in arithmetic, bitwise, or shif
 Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants). Unary `~` preserves its operand's type.
 
 Comparisons and logical operators always produce `uint8` regardless of operand types.
+
+## 17.10 Struct Operator Overloading
+
+Only structs can overload operators, and only comparison and assignment
+operators participate. Free functions cannot use operator method names.
+Operator methods are ordinary struct methods named exactly:
+
+| Operator | Method |
+|---|---|
+| `==` | `OPERATOR_EQ` |
+| `!=` | `OPERATOR_NEQ` |
+| `>` | `OPERATOR_GT` |
+| `<` | `OPERATOR_LT` |
+| `>=` | `OPERATOR_GTEQ` |
+| `<=` | `OPERATOR_LTEQ` |
+| `=` | `OPERATOR_MOV` |
+| `+=` | `OPERATOR_ADDMOV` |
+| `-=` | `OPERATOR_SUBMOV` |
+| `*=` | `OPERATOR_MULMOV` |
+| `/=` | `OPERATOR_DIVMOV` |
+| `%=` | `OPERATOR_MODMOV` |
+| `\|=` | `OPERATOR_ORMOV` |
+| `&=` | `OPERATOR_ANDMOV` |
+| `^=` | `OPERATOR_XORMOV` |
+
+Comparison operators require exactly:
+
+```franko
+func OPERATOR_EQ(view<X> self, view<X> other) -> uint8
+```
+
+Both operands must be values of the same nominal struct type `X`.
+`view<X>`, `mview<X>`, and `ptr<X>` operands do not participate in struct
+comparison; dereference or copy the value first. Comparing structs of
+different types, or a struct with a non-struct, is an error.
+
+There is no implicit fallback between operators: `!=` needs
+`OPERATOR_NEQ`, and each ordering operator needs its own method. An
+operator comparison still produces the method's declared return type,
+which a valid method must declare as `uint8`.
+
+Assignment operators use the mapping in the table and require:
+
+```franko
+func OPERATOR_MOV(ptr<X> self, view<T> other) -> void
+```
+
+`T` may be any non-void value type, and multiple overloads are allowed.
+For plain `=`, the compiler first tries an applicable `OPERATOR_MOV`
+overload; if none applies it falls back to the normal whole-struct
+assignment rules. Compound assignment has no built-in struct fallback:
+`a += b` requires a matching `OPERATOR_ADDMOV`.
+
+Operator methods may still be called explicitly:
+
+```franko
+a.OPERATOR_EQ(getview(b))
+```
+
+Operator operands may be arbitrary value expressions. Lvalue operands use
+their address; rvalue operands are borrowed through a compiler-generated
+temporary whose lifetime is the full expression. User-written `getview`
+still requires a storage-backed lvalue, so `getview(5)` and
+`getview(make_x())` remain invalid. The left-hand side of an assignment
+must still be a storage-backed lvalue.
+
+The right-hand operand is always borrowed as `view<T>` where `T` is its
+static type. There is no direct pass for view-valued expressions, string
+literals, or array literals. A view value therefore needs a
+`view<view<...>>` parameter:
+
+```franko
+OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
+OPERATOR_MOV(ptr<X> self, view<view<[byte]>> other)  // x = "hello"
+```
+
+When the parameter is itself a view of a view, overload resolution checks
+the parameter's inner referenced type and applies the ordinary pointer
+conversion there. Thus the inner `view<[byte, 10]>` value decays to
+`view<[byte]>` for a `view<view<[byte]>>` parameter. The representation is
+unchanged: both inner types use the same fat-pointer value.
+
+Integer constants use the ordinary fluid-constant fitting rules against
+`view<primitive>` parameters: an exact natural-type match wins, otherwise
+the narrowest fitting type wins with signed before unsigned at equal
+width. The selected constant is materialized as a temporary of the
+parameter's referenced primitive type before being borrowed.
+
+See [Assignment](14-assignment.md) and [Methods](26-methods.md) for the
+full lowering, fallback, and lifetime rules.
 
 ---
 
@@ -3064,6 +3228,12 @@ least the requested permission: `getptr` needs owner access,
 `getmview` needs write access, `getview` always works. This is what
 prevents laundering a `view` into a `ptr`.
 
+User-written `getview`/`getmview`/`getptr` require a storage-backed
+lvalue. The compiler-generated borrow used to pass an rvalue operand to
+an overloaded struct operator is the only exception: it is internal to
+operator lowering, and `getview(5)` or `getview(make_x())` remains
+invalid in user code. See [Struct Operator Overloading](17-operators.md#1710-struct-operator-overloading).
+
 ## 24.2 Dereferencing with `$`
 
 If the operand has type `ptr<T>`, `mview<T>`, or `view<T>`, then
@@ -3613,14 +3783,14 @@ Static arrays, dynamic arrays, and `void` are not assignable, so a struct contai
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access).
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](14-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](14-assignment.md#147-operator-assignment)).
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](12-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
 Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
-Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` has no overload for a whole struct (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
+Structs are not integers: arithmetic, bitwise, shift, and logical operators reject whole structs, and `if`/`while` conditions reject bare struct values; `print` has no overload for a whole struct (see [Statements](19-statements.md)). The exception is the overloadable comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) and assignment operators (`=`, `+=`, ...), which use `OPERATOR_*` methods (see [Operators](17-operators.md#1710-struct-operator-overloading)). Operate on fields for everything else: `print(s.x)`.
 
 ## 25.7 Member Access and Field Lvalues
 
@@ -3666,11 +3836,11 @@ int32 scale = 2;
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](26-methods.md)).
-- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` has no struct overload — print individual fields instead.
+- No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](17-operators.md#1710-struct-operator-overloading)).
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is pointer-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access).
+- A struct with any non-assignable field is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -3860,6 +4030,63 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
 - No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.
 
+## 26.10 Operator Methods
+
+A struct may declare operator methods using the reserved names:
+
+```
+OPERATOR_EQ OPERATOR_NEQ OPERATOR_GT OPERATOR_LT OPERATOR_GTEQ OPERATOR_LTEQ
+OPERATOR_MOV OPERATOR_ADDMOV OPERATOR_SUBMOV OPERATOR_MULMOV OPERATOR_DIVMOV
+OPERATOR_MODMOV OPERATOR_ORMOV OPERATOR_ANDMOV OPERATOR_XORMOV
+```
+
+Comparison methods must have exactly this shape:
+
+```franko
+func OPERATOR_EQ(view<X> self, view<X> other) -> uint8
+```
+
+Assignment methods must have exactly this shape:
+
+```franko
+func OPERATOR_MOV(ptr<X> self, view<T> other) -> void
+```
+
+Rules:
+
+- Only struct methods may use these names. A free function with an
+  `OPERATOR_*` name is rejected.
+- An invalid operator method signature is a compile error at the
+  declaration even if the operator is never used.
+- Comparison methods require two parameters, the first named `self` and
+  typed `view<X>`, the second typed `view<X>` and not named `self`, and
+  return `uint8`.
+- Assignment methods require two parameters, the first named `self` and
+  typed `ptr<X>`, the second a `view<T>` for any non-void `T` and not
+  named `self`, and return `void`.
+- Each operator has its own method; there is no implicit `!=` from
+  `==`, and no implicit compound form from a plain operator.
+- Operator methods are still ordinary methods and remain callable with
+  member-call syntax: `a.OPERATOR_EQ(getview(b))`.
+
+The operator syntax is lowering sugar over a method call:
+
+```franko
+a == b       // a.OPERATOR_EQ(getview(b))
+a = b        // a.OPERATOR_MOV(getview(b))
+a += b       // a.OPERATOR_ADDMOV(getview(b))
+```
+
+Rvalue operands are borrowed through a compiler-generated temporary whose
+lifetime is the full expression (see [Operators](17-operators.md#1710-struct-operator-overloading)).
+
+The `other` parameter is call-scoped: in an operator method body it is
+treated as borrowed frame storage. Storing it into caller-owned or global
+storage is rejected by the dangling-pointer checker; storing it in a
+local variable is allowed because the local dies before the operator
+call returns (see
+[Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)).
+
 ---
 
 # 27. Memory Safety Checking
@@ -3981,10 +4208,10 @@ to the tightest pointer that fits. See the "Capability Linter" section of
 ## 27.9 Dangling-Pointer Checking
 
 The compiler checks `return` values for pointers that outlive the storage
-they refer to. The check is **return-only and intra-procedural**: each
-function or method body is analyzed separately, and only `return`
-expressions are classified. Dead functions and pruned branches cannot
-produce diagnostics.
+they refer to, and rejects pointer stores that move frame-scoped storage
+into global or caller-owned storage. The check is
+**intra-procedural**: each function or method body is analyzed separately.
+Dead functions and pruned branches cannot produce diagnostics.
 
 ### 27.9.1 What Is Tracked
 
@@ -4072,12 +4299,53 @@ Literal views refer to constant storage with static lifetime, so
 returning or keeping one is safe. Global initializers are never analyzed
 as function bodies.
 
-### 27.9.5 Limitations
+### 27.9.5 The Store Rule
+
+A pointer store is rejected when the stored value contains current-frame
+origins and the target storage is caller-owned (`UNKNOWN`) or global
+(`GLOBAL`):
+
+```franko
+ptr<int32> global_p
+
+func bad() -> void {
+    int32 x
+    global_p = getptr(x)      // error: x dies with this frame
+    return
+}
+```
+
+The same rule applies to stores through a pointer parameter:
+
+```franko
+func bad(ptr<ptr<int32>> out) -> void {
+    int32 x
+    $(out) = getptr(x)        // error: caller storage outlives x
+    return
+}
+```
+
+The diagnostic is:
+
+```text
+Cannot store a view of frame or operator-borrowed storage into a global or caller-owned location
+```
+
+A local target (`FRAME` storage) is intentionally allowed. For an
+operator method's borrowed `other` parameter this is safe because the
+local dies before the operator call returns. FRAME -> FRAME is a coarse
+rule, not a general local-lifetime ordering analysis: a view of an inner
+local stored into a longer-lived local can still dangle. That is the
+pre-existing local-view hazard. A local can also still escape indirectly
+if it is passed to a callee that stores it; see the forwarding gap in
+§27.9.6.
+
+### 27.9.6 Limitations
 
 The check intentionally does not detect:
 
-- pointers escaping through function calls, out-parameters, or stores into
-  globals;
+- pointers escaping through function calls or being forwarded to a callee
+  that stores them (there are no interprocedural summaries);
 - pointers hidden inside returned structs or arrays;
 - use after an inner block ends but before the function returns;
 - dynamic-array buffer invalidation after `resize`/`uninit`;
@@ -4085,9 +4353,14 @@ The check intentionally does not detect:
 - loop fixed points (the body is analyzed once, so loop-carried state is
   merged conservatively).
 
-Calls do conservatively forget state, so later diagnostics do not assume a
-callee left pointer variables untouched. None of these cases produce a
-false positive, but they can produce false negatives.
+The store rule closes the direct global/out-parameter store. An operator
+method's `other` parameter starts with a frame origin, so storing it into
+caller-owned or global storage is rejected. Ordinary non-operator methods
+with `view<T>` parameters still start as unknown and are not checked for
+that store. Calls do conservatively forget state, so later diagnostics do
+not assume a callee left pointer variables untouched. None of these cases
+produce a false positive in the modeled cases, but they can produce false
+negatives.
 
 ## 27.10 Dynamic-Array Lifecycle Checking
 
@@ -4400,8 +4673,9 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access);
-- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected.
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment;
+- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
+- comparison and assignment operators on structs are only those with `OPERATOR_*` methods; arithmetic, bitwise, shift, and logical operators are not overloadable (see [Operators](17-operators.md#1710-struct-operator-overloading)).
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](25-structs.md).
 
@@ -4456,13 +4730,14 @@ bounds properties. See
 
 ## 30.10 Pointer Lifetime Is Not Fully Tracked
 
-The compiler does not fully track dangling pointers or ownership. One
-class is now detected: returning a pointer to the current function's own
-frame storage. Escapes through calls, globals, out-parameters, and
-returned aggregates remain untracked. Decayed static-array views refer
-to their original array, so they are safe to return when that storage
-is a parameter or global; a decayed view of local array storage is still
-caught as a normal frame-storage escape. See
+The compiler does not fully track dangling pointers or ownership. Two
+classes are now detected: returning a pointer to the current function's
+own frame storage, and storing a pointer to frame or operator-borrowed
+storage into a global or caller-owned location. Escapes through forwarded
+calls and returned aggregates remain untracked. Decayed static-array
+views refer to their original array, so they are safe to return when
+that storage is a parameter or global; a decayed view of local array
+storage is still caught as a normal frame-storage escape. See
 [Dangling-Pointer Checking](27-memory-safety-checking.md#279-dangling-pointer-checking).
 
 ## 30.11 Output Is a Library Function
@@ -4478,6 +4753,8 @@ The unary plus operator does not exist in the language:
 ```
 
 Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](14-assignment.md)).
+
+Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. See [Operators](17-operators.md#1710-struct-operator-overloading).
 
 ## 30.13 String Literals Cannot Initialize Arrays
 
@@ -4518,6 +4795,24 @@ The following forms do not exist in the grammar:
 - C-style cast syntax (`(T)x` does not exist; explicit conversions use the `cast<T>(expr)` and `unsafe_cast<T>(expr)` intrinsics, and fluid integer constants still convert implicitly when they fit);
 - the ternary conditional operator (`?:`);
 - multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).
+
+## 30.17 Operator Overload Lifetime Limitation
+
+Operator operands may be rvalues: the compiler borrows them through a
+temporary whose lifetime is the full expression. This is the C++ `const&`
+temporary model, not Rust-style lifetime tracking. The operator method
+must not retain the borrowed `other` view beyond the call.
+
+The direct escape is closed by the operator signatures (`uint8`/`void`
+returns) and by the dangling-pointer store rule: storing the borrowed
+view into caller-owned or global storage is rejected. Storing it in a
+local `view<T>` is allowed because the local dies before the operator
+call returns. Forwarding the borrowed view to a callee that stores it is
+not detected; there are no interprocedural summaries. Ordinary
+non-operator methods with `view<T>` parameters are likewise still
+unchecked for stores. See
+[Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)
+and [Operators](17-operators.md#1710-struct-operator-overloading).
 
 ---
 
@@ -5398,6 +5693,12 @@ Franko functions and methods still use snake case.
 Built-in names are fixed and are not renamed. Array intrinsics (`memcpy`,
 `memset`, `length`, `read_uint16_LE`, ...) and pointer intrinsics (`getptr`,
 `getmview`, `getview`) keep their existing spelling.
+
+Operator methods are the other fixed-name exception: `OPERATOR_EQ`,
+`OPERATOR_MOV`, and the other reserved `OPERATOR_*` names are exact,
+uppercase, and not renamed to snake case. They are reserved for struct
+operator methods and rejected on free functions. See
+[Operator Methods](26-methods.md#2610-operator-methods).
 
 ## 33.4 Variables and Fields
 

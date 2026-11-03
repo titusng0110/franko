@@ -806,14 +806,25 @@ class SemanticFunctionCallNode extends SemanticExprNode {
 
 class SemanticGetPtrNode extends SemanticExprNode {
     public final SemanticExprNode target;
+    public final boolean temporary;
 
     public SemanticGetPtrNode(
             SourceSpan span,
             SemanticType type,
             SemanticExprNode target
     ) {
+        this(span, type, target, false);
+    }
+
+    public SemanticGetPtrNode(
+            SourceSpan span,
+            SemanticType type,
+            SemanticExprNode target,
+            boolean temporary
+    ) {
         super(span, type, null);
         this.target = Objects.requireNonNull(target);
+        this.temporary = temporary;
     }
 
     @Override

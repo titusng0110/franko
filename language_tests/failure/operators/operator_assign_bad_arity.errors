@@ -1,0 +1,1 @@
+Assignment operator method 'A.OPERATOR_MOV' must have signature 'func OPERATOR_MOV(ptr<A> self, view<T> other) -> void'

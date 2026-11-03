@@ -1,0 +1,2 @@
+Cannot compare values of type 'A' and type 'int32'
+comparison operators on structs require both operands to have the same struct type

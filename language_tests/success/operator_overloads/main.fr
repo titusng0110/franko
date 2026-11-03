@@ -1,0 +1,259 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Struct Operator Overloading
+// ============================================================
+// Covers comparison operators, assignment operators, rvalue operand
+// borrowing, custom whole-struct assignment, view/string/array-literal
+// right-hand sides, constant fitting through view<primitive>, explicit
+// operator method calls, and namespaced operator methods.
+// ============================================================
+
+struct Num {
+    int32 v = 0
+
+    func OPERATOR_EQ(view<Num> self, view<Num> other) -> uint8 {
+        view<Num> local = other
+        if ($(self).v == $(local).v) {
+            return 1
+        }
+        return 0
+    }
+
+    func OPERATOR_NEQ(view<Num> self, view<Num> other) -> uint8 {
+        if ($(self).v != $(other).v) {
+            return 1
+        }
+        return 0
+    }
+
+    func OPERATOR_LT(view<Num> self, view<Num> other) -> uint8 {
+        if ($(self).v < $(other).v) {
+            return 1
+        }
+        return 0
+    }
+
+    func OPERATOR_GT(view<Num> self, view<Num> other) -> uint8 {
+        if ($(self).v > $(other).v) {
+            return 1
+        }
+        return 0
+    }
+
+    func OPERATOR_LTEQ(view<Num> self, view<Num> other) -> uint8 {
+        if ($(self).v <= $(other).v) {
+            return 1
+        }
+        return 0
+    }
+
+    func OPERATOR_GTEQ(view<Num> self, view<Num> other) -> uint8 {
+        if ($(self).v >= $(other).v) {
+            return 1
+        }
+        return 0
+    }
+
+    // Detects that plain assignment selected this overload: the stored
+    // value is shifted to distinguish it from a built-in field copy.
+    func OPERATOR_MOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(other) * 2
+        return
+    }
+
+    // Detects that plain assignment selected the same-type overload.
+    func OPERATOR_MOV(ptr<Num> self, view<Num> other) -> void {
+        $(self).v = $(other).v + 100
+        return
+    }
+
+    func OPERATOR_ADDMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v + $(other)
+        return
+    }
+
+    func OPERATOR_SUBMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v - $(other)
+        return
+    }
+
+    func OPERATOR_MULMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v * $(other)
+        return
+    }
+
+    func OPERATOR_DIVMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v / $(other)
+        return
+    }
+
+    func OPERATOR_MODMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v % $(other)
+        return
+    }
+
+    func OPERATOR_ORMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v | $(other)
+        return
+    }
+
+    func OPERATOR_ANDMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v & $(other)
+        return
+    }
+
+    func OPERATOR_XORMOV(ptr<Num> self, view<int32> other) -> void {
+        $(self).v = $(self).v ^ $(other)
+        return
+    }
+}
+
+// A struct with a static array field is not assignable by the built-in
+// rules; OPERATOR_MOV provides whole-value assignment.
+struct Blob {
+    [int32, 4] xs
+
+    func OPERATOR_MOV(ptr<Blob> self, view<Blob> other) -> void {
+        $(self).xs.memcpy(getview($(other).xs))
+        return
+    }
+}
+
+struct TextHolder {
+    int32 n = 0
+
+    func OPERATOR_MOV(ptr<TextHolder> self, view<[byte]> other) -> void {
+        $(self).n = unsafe_cast<int32>($(other).length())
+        return
+    }
+
+    func OPERATOR_MOV(ptr<TextHolder> self, view<view<[byte]>> other) -> void {
+        $(self).n = unsafe_cast<int32>($($(other)).length()) + 100
+        return
+    }
+
+    func OPERATOR_MOV(ptr<TextHolder> self, view<view<[int32, 4]>> other) -> void {
+        $(self).n = $($(other))[0] + 200
+        return
+    }
+
+    func OPERATOR_MOV(ptr<TextHolder> self, view<uint8> other) -> void {
+        $(self).n = unsafe_cast<int32>($(other)) + 300
+        return
+    }
+}
+
+namespace ops {
+    struct Wrapped {
+        int32 v = 0
+
+        func OPERATOR_EQ(view<Wrapped> self, view<Wrapped> other) -> uint8 {
+            if ($(self).v == $(other).v) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_MOV(ptr<Wrapped> self, view<int32> other) -> void {
+            $(self).v = $(other) + 1
+            return
+        }
+    }
+}
+
+func make_num(int32 x) -> Num {
+    Num n
+    n.v = x
+    return n
+}
+
+func main() -> int32 {
+    Num a
+    Num b
+    a.v = 3
+    b.v = 7
+
+    print(a == b)
+    print(a != b)
+    print(a < b)
+    print(a > b)
+    print(a <= b)
+    print(a >= b)
+
+    Num n
+    n = 5
+    print(n.v)
+    n += 4
+    print(n.v)
+    n -= 2
+    print(n.v)
+    n *= 3
+    print(n.v)
+    n /= 4
+    print(n.v)
+    n %= 4
+    print(n.v)
+    n |= 6
+    print(n.v)
+    n &= 3
+    print(n.v)
+    n ^= 1
+    print(n.v)
+
+    n = b
+    print(n.v)
+    n = make_num(3)
+    print(n.v)
+    print(n == make_num(103))
+    print(make_num(103) == n)
+
+    if (a < b) {
+        print(42)
+    }
+
+    Num cur
+    Num limit
+    limit.v = 3
+    int32 iterations = 0
+    while (cur < limit) {
+        cur += 1
+        iterations += 1
+    }
+    print(iterations)
+
+    Blob b1
+    Blob b2
+    b1.xs[0] = 4
+    b1.xs[1] = 5
+    b1.xs[2] = 6
+    b1.xs[3] = 7
+    b2 = b1
+    print(b2.xs[0])
+    print(b2.xs[3])
+
+    TextHolder h
+    [byte] arr
+    arr.init_zero(5)
+    h = arr
+    print(h.n)
+    arr.uninit()
+    h = "helloworld"
+    print(h.n)
+    h = [1, 2, 3, 4]
+    print(h.n)
+    h = 5
+    print(h.n)
+
+    print(a.OPERATOR_EQ(getview(a)))
+
+    ops::Wrapped w1
+    ops::Wrapped w2
+    w1 = 9
+    print(w1.v)
+    w2 = w1
+    print(w2.v)
+    print(w1 == w2)
+
+    return 0
+}

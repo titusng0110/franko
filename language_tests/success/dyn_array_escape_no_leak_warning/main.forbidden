@@ -1,1 +1,3 @@
 missing explicit uninit
+
+# Taking the address of the local escapes it for lifecycle checking.

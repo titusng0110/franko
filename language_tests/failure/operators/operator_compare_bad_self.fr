@@ -1,0 +1,11 @@
+struct A {
+    int32 v = 0
+
+    func OPERATOR_EQ(ptr<A> self, view<A> other) -> uint8 {
+        return 1
+    }
+}
+
+func main() -> int32 {
+    return 0
+}

@@ -1,0 +1,1 @@
+'OPERATOR_EQ' is reserved for struct operator methods; only structs can overload operators

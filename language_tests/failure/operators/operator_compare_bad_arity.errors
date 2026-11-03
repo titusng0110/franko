@@ -1,0 +1,1 @@
+Comparison operator method 'A.OPERATOR_EQ' must have signature 'func OPERATOR_EQ(view<A> self, view<A> other) -> uint8'

@@ -1446,6 +1446,24 @@ public class Cpp14Codegen {
     }
 
     private String emitGetPtr(SemanticGetPtrNode node) {
+        if (node.temporary) {
+            String value = emitExpr(node.target);
+
+            if (node.target.isConstant()
+                    && node.type instanceof SemanticPtrType ptr
+                    && ptr.referencedType instanceof SemanticPrimitiveType target
+                    && node.target.type instanceof SemanticPrimitiveType source
+                    && !target.equals(source)) {
+                value = "static_cast<"
+                        + emitType(target)
+                        + ">("
+                        + value
+                        + ")";
+            }
+
+            return "franko_borrow(" + value + ")";
+        }
+
         if (node.target instanceof SemanticDerefNode deref) {
             return emitExpr(deref.expr);
         }

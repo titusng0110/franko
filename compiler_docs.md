@@ -506,6 +506,14 @@ analysis runs five internal phases:
 4. register all function signatures (enables forward references/recursion),
 5. lower items in source order (structs+methods, globals, function bodies).
 
+Assignment statements to struct-typed targets are first offered to
+`ExpressionAnalyzer.tryLowerOperatorAssignment`, which lowers them to an
+ordinary `SemanticFunctionCallNode` when an `OPERATOR_*MOV` overload
+applies; an already-analyzed RHS value is reused by the built-in
+`SemanticAssignNode` fallback, and a raw array literal falls back to the
+normal context-aware path. The same lowering is reused for local
+declaration initializers.
+
 Also determines `entryKind()` (`NONE`/`NO_ARGS`/`ARGS`) which selects the C++
 program template in `Main`, collects non-fatal `warnings()`, and owns the
 `ExpressionAnalyzer` (constructed with the shared `SymbolTable` +
@@ -547,7 +555,12 @@ separate receiver + args and full/ranged form predicates), and expressions
 `constantValue: BigInteger`, `isConstant()`; `isLValue()` abstract).
 `SemanticGetPtrNode` covers all three creation intrinsics; the permission
 created is `type`'s (`SemanticPtrType.permission`), which is exactly the
-level the target region must grant. `SemanticCastExprNode` has a `checked`
+level the target region must grant. Its `temporary` flag marks a
+compiler-generated operator borrow of an rvalue: the target is evaluated
+into a C++ temporary borrowed with `franko_borrow`, and the node may carry
+a selected operator parameter type that differs from `view<target.type>`
+(constant fitting or an inner array-view decay). User-written
+`getptr`/`getmview`/`getview` never set the flag. `SemanticCastExprNode` has a `checked`
 flag: `false` → plain `static_cast` (`cast`), `true` → runtime-checked
 `franko_unsafe_cast` (`unsafe_cast`). `SemanticVarDeclNode` carries either a
 folded `BigInteger` initializer (primitive globals) or a `staticInitializer`
@@ -646,6 +659,24 @@ with variables/functions is legal — the C++ backend's kind prefixes
 `VAR_`/`FUNC_`/`STRUCT_` keep generated names unambiguous); and diagnostic
 delegation to `DiagnosticBag`. `splitNamespacePath` is a static helper also
 used by `Cpp14Codegen`.
+`resolveOperatorMethodWithLiterals` is a separate, operator-only overload
+path used by assignment lowering. Its `OperatorCallArg` describes the RHS
+as either a lowered value or a raw array literal. Applicability and cost
+add three rules on top of ordinary method resolution: a `view<P>`
+parameter accepts a primitive constant that fits `P`; a nested value type
+`T` and the parameter's referenced type `P` use the ordinary pointer
+conversion at that inner level (so `view<[U, N]>` matches a `view<[U]>`
+parameter inside `view<view<...>>`); and a raw array literal is matched
+against the parameter's inner referenced type
+(`isArrayLiteralShapeApplicable`). Constant-fit cost is the ordinary exact/
+narrowest/signed-first scale; inner decay costs 2 and a plain inner
+conversion costs 1.
+
+#### `OperatorMethods`
+Package-private constant tables mapping the six comparison and nine
+assignment operators to their reserved `OPERATOR_*` method names, with
+predicates used by `ExpressionAnalyzer`, `SemanticAnalyzer`,
+`FunctionChecker`, and `DanglingPointerChecker`.
 
 #### `ExpressionAnalyzer`
 Expression lowering *inside* the SemanticAnalyzer phase: raw `ASTNode`
@@ -674,6 +705,23 @@ context of §4.13: assignment target type, return type, or call parameter
 type); call arguments are lowered in two phases through
 `SymbolTable.CallArg` so a literal argument participates in overload
 resolution before its element type is known (§4.13).
+
+Struct comparison operators are intercepted after both operands are
+analyzed: when either side has struct type, `lowerStructComparison` requires
+two values of the same `StructSymbol`, synthesizes read-only borrows for
+both operands (temporary when the operand is not a storage-backed lvalue,
+so rvalue comparisons such as `make_x() == a` work), resolves the matching
+`OPERATOR_*` method, and returns an ordinary `SemanticFunctionCallNode`
+(§4.17). `tryLowerOperatorAssignment` performs the analogous lowering for
+`SemanticAssignNode` targets of struct type: plain `=` falls back to the
+built-in assignment when no `OPERATOR_MOV` overload applies, while compound
+forms report a dedicated error and never fall back. The RHS is analyzed
+once; raw array literals are resolved through the operator-specific
+descriptor and then lowered with the selected parameter's inner referenced
+type before being borrowed. The explicit operator argument is always a
+`SemanticGetPtrNode`, with `temporary` set for rvalues and its node type set
+to the selected `view<...>` parameter type. The hidden `self` argument is
+`getptr(target)` using the method's declared first parameter type.
 
 #### `ArrayLowerer`
 Frontend lowering of array-intrinsic call syntax to
@@ -738,6 +786,15 @@ loop so returns there count). It does not prove full control-flow coverage.
 Intercepts `SemanticReturnNode` itself and delegates other statements to
 `StatementChecker`.
 
+Operator method names are validated by dedicated signature checks instead
+of the generic `self` shape: comparison methods require
+`(view<X> self, view<X> other) -> uint8`; assignment methods require
+`(ptr<X> self, view<T> other) -> void` with any non-void `T`. A free
+function with a reserved `OPERATOR_*` name is rejected. Invalid operator
+signatures are declaration errors even when the operator is never used;
+`SemanticAnalyzer.registerMethodSignature` skips its generic diagnostics
+for these names so the dedicated message is the only one.
+
 #### `DeclarationChecker`
 Declaration-level legality: declared types must be legal Franko types
 (primitive, array, ptr/mview/view, struct; void and arrays-as-values
@@ -796,7 +853,10 @@ decay — whose to-`ptr` form gets a dedicated "cannot decay ownership"
 error; `unsafe_cast` = checked integer
 conversion with compile-time constant range checks), creation-intrinsic
 legality (`getptr`/`getmview`/`getview` need an equally strong storage
-region, §4.9), deref legality, and void-in-value-context rules. Carries
+region, §4.9), deref legality, and void-in-value-context rules. A
+`SemanticGetPtrNode` with `temporary` set is accepted without the usual
+storage-backed-lvalue requirement: it can only be created by operator
+lowering, and its type is required to be a read-only view. Carries
 the "fluid integer constants" model: folded constants stay fluid until a
 context constrains them.
 
@@ -849,16 +909,17 @@ zero-trip exit states. Reports deref of definitely-NULL as error and
 maybe-null as warning (each pointer warns at most once per check site).
 
 #### `DanglingPointerChecker`
-Return-escape provenance analysis, run after both pruners and after
-`PointerNullStateChecker` (so dead functions/branches and dead returns
-cannot produce diagnostics), deliberately independent of the checker
+Return-escape and pointer-store provenance analysis, run after both pruners
+and after `PointerNullStateChecker` (so dead functions/branches and dead
+returns cannot produce diagnostics), deliberately independent of the checker
 cluster (only `DiagnosticBag`, `PointerPermissions`, and the semantic AST).
-It is **return-only and intra-procedural**: each function/method body is
-analyzed separately with a fresh state, and only `return` expressions are
-classified. Passing a pointer to a callee, storing one into a global or
-out-parameter, pointers hidden inside returned structs/arrays, use after
-an inner block, dynamic-array buffer lifetime, and nullness are out of
-scope (nullness stays `PointerNullStateChecker`'s job).
+It is **intra-procedural**: each function/method body is analyzed separately
+with a fresh state. It classifies `return` expressions and rejects stores
+whose value contains current-frame origins and whose target storage is
+caller-owned or global. Passing a pointer to a callee that later stores it,
+pointers hidden inside returned structs/arrays, use after an inner block,
+dynamic-array buffer lifetime, and nullness are out of scope (nullness stays
+`PointerNullStateChecker`'s job).
 
 The abstract domain is one immutable origin set per pointer-typed
 variable (locals, parameters, and globals alike), indexed by
@@ -928,6 +989,19 @@ and loop exit refinement:
   `while (p != null)` refines `p` to `EMPTY` before `break` states are
   merged;
 - block-local pointer states are reset to `UNKNOWN` when the block ends.
+
+At function entry every tracked symbol starts `UNKNOWN`, except that an
+operator method's second parameter (`other`) starts as `FRAME(other)`. The
+operator body cannot know whether the caller passed an lvalue or an
+auto-borrowed rvalue, so both are treated as frame-scoped storage. The
+store check then rejects a pointer-typed store whose value has any frame
+origin when the target storage is `UNKNOWN` (stores through pointer
+parameters, caller-owned `$(...)`) or `GLOBAL` (globals and fields reached
+through them). A `FRAME` target (local variable or local field) is allowed:
+the local dies before the operator call returns. The rule is conservative
+for merged origin sets (any frame cell triggers it) and also rejects the
+ordinary non-operator pattern of storing a local view into a global or
+through an out-parameter.
 
 At a return of pointer type, the checker classifies the value's origins:
 `mayDangle = FRAME non-empty`;
@@ -1149,6 +1223,12 @@ static array with count `N`, or 3 dynamic array with the
 `franko_make_dynamic_fat_pointer(&x)` for a dynamic array (a distinct
 name, because a static array of `Franko_Dynamic_Array<T>` is
 pointer-indistinguishable from a `Franko_Dynamic_Array<T>` lvalue). A
+`getPtr` node marked `temporary` (compiler-generated operator borrow)
+instead emits `franko_borrow(value)`; when a constant was fitted to a
+different primitive referenced type, the value is first wrapped in
+`static_cast<referenced-type>(value)` so the borrowed temporary has the
+selected operator parameter type. Representation-preserving inner
+array-view decays need no cast. A
 dereference emits `(*p)` for scalar/struct pointers,
 `(*static_cast<Franko_Dynamic_Array<T>*>(p.data))` for dynamic arrays,
 and `franko_static_array_ref<T, N>(static_cast<T*>(p.data))` for static
@@ -1416,7 +1496,7 @@ SAST node kinds and additional fields (all also carry `span`):
 | `memberAccess` | `field`, `target` plus expression metadata |
 | `functionCall` | `function`, `args` plus expression metadata |
 | `arrayIntrinsicCall` | `kind`, `receiver`, `args` plus expression metadata |
-| `getPtr` | `target` plus expression metadata |
+| `getPtr` | `target`, optional `temporary` (boolean, default false) plus expression metadata |
 | `deref` | `expr` plus expression metadata |
 | `cast` | `checked`, `expr` plus expression metadata |
 
@@ -1809,6 +1889,20 @@ never as a runtime call. Zero length and uninitialized coincide exactly:
 `data == nullptr, count == 0`, so `length() == 0` holds exactly when the
 array is uninitialized — there is no initialized empty array.
 
+**`franko_borrow`.** The runtime helper
+
+```cpp
+template <typename T>
+typename std::remove_reference<T>::type* franko_borrow(T&& value) {
+    return &value;
+}
+```
+
+backs compiler-generated operator operand borrows of rvalues. Binding the
+value to the `T&&` parameter extends its lifetime to the end of the
+full-expression containing the operator call, so the pointer stays valid
+while the operator method runs. `-O`/`-Omax` need no special handling.
+
 ## 4.12 Emission details
 
 **Integer literals.** Large integer literals are emitted so that they
@@ -1947,10 +2041,10 @@ globals may not (memcpy suggestion, §4.10 parity).
 
 ## 4.14 Dangling-pointer model (DanglingPointerChecker)
 
-A standalone return-only pass that rejects pointer/view values escaping a
-function while referring to storage owned by that function's frame. It
-runs after `BranchPruner`, `InactiveDeclarationPruner`, and
-`PointerNullStateChecker`, so only surviving code and live functions are
+A standalone return-escape and pointer-store pass that rejects pointer/view
+values escaping a function while referring to storage owned by that
+function's frame. It runs after `BranchPruner`, `InactiveDeclarationPruner`,
+and `PointerNullStateChecker`, so only surviving code and live functions are
 analyzed.
 
 **Origin lattice.** Each tracked pointer variable holds an immutable
@@ -1970,7 +2064,9 @@ merged value is definitely non-null only when every continuing path is,
 so null-or-frame is a possible escape (warning), not a definite one
 (error). At function entry
 every tracked symbol — parameters, globals, and locals — starts
-`UNKNOWN`. `storageOrigins` follows lvalue paths: a variable is
+`UNKNOWN`. An operator method's second parameter (`other`) starts as
+`FRAME(other)` because it may be a compiler-generated borrow of an rvalue.
+`storageOrigins` follows lvalue paths: a variable is
 `FRAME`/`GLOBAL`, `$(p)` is `valueOrigins(p)`, member/index access
 inherits its base's storage, and a cast inherits its operand's.
 `valueOrigins` maps pointer values: creation intrinsics use the target's
@@ -2015,6 +2111,19 @@ escapes are errors; possible escapes after a branch merge are warnings.
 There is no decay-specific diagnostic; a returned decayed view is simply
 a pointer over its backing storage.
 
+**Store rule.** A pointer-typed assignment whose value contains any
+`FRAME` origin is rejected when the target storage is `UNKNOWN`
+(caller-owned, e.g. through a pointer parameter) or `GLOBAL` (globals and
+fields reached through them). The diagnostic is `Cannot store a view of
+frame or operator-borrowed storage into a global or caller-owned
+location`. A `FRAME` target (local variable or local field) is allowed;
+for an operator method's `other` parameter this is safe because the local
+dies before the operator call returns. The rule is a coarse FRAME -> FRAME
+allowance, not a general local-lifetime ordering analysis: a view of an
+inner local stored in a longer-lived local can still dangle. It is also a
+general rule, not operator-only, so it now rejects ordinary programs that
+store a local view into a global or through an out-parameter.
+
 **Safe returns.** Pointer parameters and `getptr($(p))` over a pointer
 parameter are caller-owned (`UNKNOWN`); `getptr(G)` is global; literal
 array/string values (including decayed literals) point at hoisted
@@ -2024,11 +2133,13 @@ global address before the return carries only `GLOBAL`. Global
 initializers are never analyzed because global declarations are not
 function bodies.
 
-**v1 limitations.** No interprocedural escape facts, no global/
-out-parameter store escapes, no pointers hidden inside returned
-aggregates, no use-after-block detection, no dynamic-array buffer
-pointer invalidation across `resize`/`uninit`, and loops are analyzed
-once rather than to a fixed point.
+**v1 limitations.** No interprocedural escape facts: forwarding a view to
+a callee that stores it is invisible. Ordinary non-operator methods with
+`view<T>` parameters still start `UNKNOWN` and are not checked for stores
+(the `other` seed is operator-only). No pointers hidden inside returned
+aggregates, no use-after-block detection, no dynamic-array buffer pointer
+invalidation across `resize`/`uninit`, and loops are analyzed once rather
+than to a fixed point.
 
 ## 4.15 Dynamic-array lifecycle model (DynamicArrayMemoryChecker)
 
@@ -2166,6 +2277,69 @@ variables and fields, namespace spelling, constant casing, reserved
 `language_docs/33-naming-conventions.md`; only the prefix access rules above
 are compiler warnings.
 
+## 4.17 Operator overloading (structs)
+
+Only struct members participate. The reserved names are the six comparison
+methods (`OPERATOR_EQ`, `OPERATOR_NEQ`, `OPERATOR_GT`, `OPERATOR_LT`,
+`OPERATOR_GTEQ`, `OPERATOR_LTEQ`) and the nine assignment methods
+(`OPERATOR_MOV`, `OPERATOR_ADDMOV`, `OPERATOR_SUBMOV`, `OPERATOR_MULMOV`,
+`OPERATOR_DIVMOV`, `OPERATOR_MODMOV`, `OPERATOR_ORMOV`, `OPERATOR_ANDMOV`,
+`OPERATOR_XORMOV`); the tables live in `OperatorMethods`. A free function
+with a reserved name is rejected.
+
+**Signatures.** Comparisons are exactly
+`func OPERATOR_XXX(view<X> self, view<X> other) -> uint8`; assignments are
+exactly `func OPERATOR_XXX(ptr<X> self, view<T> other) -> void` with any
+non-void `T` and per-`T` overloads. `FunctionChecker` validates these
+declarations; `SemanticAnalyzer.registerMethodSignature` suppresses the
+generic `self`-shape diagnostics for the reserved names so the dedicated
+message is the only one. Invalid declarations fail even if unused.
+
+**Lowering.** Comparison lowering runs in `ExpressionAnalyzer` when either
+`BinOpNode` operand has struct type. It requires both operands to be values
+of the same nominal struct (not `view`/`mview`/`ptr`), synthesizes
+`view<X>` borrows, and produces a `SemanticFunctionCallNode`. Assignment
+lowering runs from the `AssignNode` statement analyzer through
+`tryLowerOperatorAssignment`; plain `=` falls back to built-in struct
+assignment when no `OPERATOR_MOV` overload applies, while compound forms
+have no fallback. Both paths reuse ordinary call checking, codegen,
+symbol registration, and pruning.
+
+**Operand borrowing.** Lvalue operands become `getview(lvalue)`. Rvalue
+operands (including comparison operands on either side) become a
+`SemanticGetPtrNode` with `temporary = true`, emitted as
+`franko_borrow(expr)`. The C++ temporary lives to the end of the full
+expression. User-written `getview` still requires a storage-backed lvalue,
+so `getview(5)` remains invalid. The RHS is always borrowed as `view<T>`
+where `T` is its static type; there is no direct pass for view values,
+string literals, or array literals, so a view RHS needs
+`view<view<...>>`.
+
+**Operator overload resolution.** `SymbolTable.resolveOperatorMethodWithLiterals`
+accepts a single `OperatorCallArg` (lowered value or raw array literal) and
+implements operator-only rules: constant fitting through a `view<P>`
+parameter, ordinary pointer conversion between the value type and the
+parameter's inner referenced type (one level), and array-literal shape
+matching against that inner type. Preference is constant-fit first (exact
+natural type, then narrowest fitting with signed before unsigned), then
+inner permission/decay cost (decay 2, plain conversion 1), then ambiguity.
+Array literals are lowered with the selected inner referenced type and then
+borrowed.
+
+**Constant fitting and codegen.** A primitive constant selected for
+`view<P>` is materialized with `static_cast<P>(value)` before
+`franko_borrow`. Inner array-view decays are representation-preserving and
+need no cast. Assignment's hidden `self` is `getptr(target)`, using the
+method's declared first parameter type.
+
+**Lifetime mitigation.** All operator methods return `uint8`/`void`, so
+they cannot return the borrowed view. `DanglingPointerChecker` seeds the
+operator `other` parameter as `FRAME` and rejects stores of frame-origin
+pointers into `UNKNOWN`/`GLOBAL` storage; local `FRAME` copies remain
+allowed. The residual gaps are forwarding to callees and ordinary
+non-operator `view<T>` parameters, which are not seeded and have no
+interprocedural summary.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -2213,6 +2387,7 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `ASTNode.java` + `ASTSerializer` |
 | Add/rename a semantic node | `SemanticASTNode.java` + `SemanticAnalyzer`/`ExpressionAnalyzer` + `SemanticASTSerializer` |
+| Add/change operator overloading | `OperatorMethods` + `ExpressionAnalyzer` (comparison/assignment lowering) + `SemanticAnalyzer` (assignment hook) + `SymbolTable.resolveOperatorMethodWithLiterals` + `FunctionChecker` (signatures) + `DanglingPointerChecker` (borrowed-`other` seed/store rule) + docs §4.17 |
 | Add or change JSON fields/artifacts | the relevant serializer + `AstDocument`/`SastDocument` + `JsonArtifacts` + §3.8 |
 | Add a diagnostic with a location | `DiagnosticBag.errorAt`/`warningAt`, then push the node span with `at(...)` at the pass dispatch |
 | Change source-path formatting | `SourcePaths.display` (spans and JSON) |

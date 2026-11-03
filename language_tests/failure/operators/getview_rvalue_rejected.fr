@@ -1,0 +1,5 @@
+func main() -> int32 {
+    view<int32> v = getview(5)
+
+    return 0
+}

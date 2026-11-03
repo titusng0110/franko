@@ -1,0 +1,17 @@
+struct X {
+    view<X> saved
+
+    func OPERATOR_MOV(ptr<X> self, view<X> other) -> void {
+        $(self).saved = other
+        return
+    }
+}
+
+func main() -> int32 {
+    X a
+    X b
+
+    a = b
+
+    return 0
+}

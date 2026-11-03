@@ -736,6 +736,19 @@ public class SemanticAnalyzer {
 
         String display = owner.qualifiedName() + "." + methodNode.name;
 
+        if (OperatorMethods.isOperatorMethodName(methodNode.name)) {
+            MethodSymbol symbol = new MethodSymbol(
+                    owner,
+                    methodNode.name,
+                    params,
+                    analyzeReturnType(methodNode.returnType),
+                    false
+            );
+
+            symbolTable.declareMethod(owner, methodNode, symbol);
+            return;
+        }
+
         if (params.isEmpty()) {
             symbolTable.error("Method '"
                     + display
@@ -1033,6 +1046,34 @@ public class SemanticAnalyzer {
                             "Assignment target"
                     );
 
+            if (target.type instanceof SemanticStructType) {
+                ExpressionAnalyzer.OperatorAssignmentLowering lowered =
+                        exprAnalyzer.tryLowerOperatorAssignment(
+                                target,
+                                n.op,
+                                n.value,
+                                n.span
+                        );
+
+                if (lowered != null) {
+                    if (lowered.call != null) {
+                        return new SemanticExprStmtNode(
+                                n.span,
+                                lowered.call
+                        );
+                    }
+
+                    if (lowered.fallbackValue != null) {
+                        return new SemanticAssignNode(
+                                n.span,
+                                n.op,
+                                target,
+                                lowered.fallbackValue
+                        );
+                    }
+                }
+            }
+
             SemanticExprNode value =
                     exprAnalyzer.analyzeExprWithExpectedType(
                             n.value,
@@ -1151,6 +1192,32 @@ public class SemanticAnalyzer {
         if (n.init != null) {
             SemanticExprNode target =
                     new SemanticVarExprNode(n.span, sym.type, sym);
+
+            ExpressionAnalyzer.OperatorAssignmentLowering lowered = null;
+
+            if (target.type instanceof SemanticStructType) {
+                lowered = exprAnalyzer.tryLowerOperatorAssignment(
+                        target,
+                        "=",
+                        n.init,
+                        n.span
+                );
+            }
+
+            if (lowered != null) {
+                if (lowered.call != null) {
+                    stmts.add(new SemanticExprStmtNode(n.span, lowered.call));
+                    return stmts;
+                }
+
+                if (lowered.fallbackValue != null) {
+                    stmts.add(new SemanticAssignNode(
+                            n.span,
+                            target,
+                            lowered.fallbackValue));
+                    return stmts;
+                }
+            }
 
             SemanticExprNode value =
                     exprAnalyzer.analyzeExprWithExpectedType(n.init, type);
