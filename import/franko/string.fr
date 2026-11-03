@@ -1,0 +1,383 @@
+// ============================================================
+// franko/string — dynamically sized byte strings
+//
+// Import with:
+//
+//   import "franko/string"
+//
+//   std::String s
+//   s.from("hello")
+//   s += " world"
+//   s *= 3
+//   s = "reset"
+//
+// Storage:
+//
+//   struct String {
+//       [byte] _data          // exactly the current bytes
+//       uint32 _buffer_size   // tracked growth capacity
+//   }
+//
+// `_data.length()` is the current string length. `_buffer_size` is the
+// tracked capacity target used for growth: from() starts it at 128, or
+// at `payload length + 128` when the payload does not fit in 128.
+// `_data` itself always holds exactly the current bytes.
+//
+// The backing array is pointer-only, so String is pointer-only: it
+// cannot be passed or returned by value. Methods use `view<String>`
+// for read-only access and `ptr<String>` for lifecycle/mutation.
+//
+// Lifecycle:
+//
+//   - `from(view<[byte]>)` / `from(view<String>)` replace the contents;
+//   - `to(ptr<[byte]>)` copies the contents into a byte array, resizing
+//     it to the exact logical length;
+//   - `to(ptr<String>)` replaces another String;
+//   - `uninit()` frees the backing buffer.
+//
+// `length()` reports the logical byte length and `capacity()` reports
+// `_buffer_size`.
+// ============================================================
+
+namespace std {
+    func __string_default_buffer_size(uint32 payload) -> uint32 {
+        if (payload < 128) {
+            return 128
+        }
+        return payload + 128
+    }
+
+    struct String {
+        [byte] _data
+        uint32 _buffer_size = 0
+
+        // Replace this string with the bytes in `in`. A null view clears
+        // the string. Returns 0 on success, -1 on allocation failure.
+        func from(ptr<String> self, view<[byte]> in) -> int32 {
+            if (in == null) {
+                return $(self).reserve(0)
+            }
+            uint8 self_source = 0
+            if (in == getview($(self)._data)) {
+                self_source = 1
+            }
+            uint32 n = $(in).length()
+            int32 st = $(self).reserve(n)
+            if (st != 0) {
+                return -1
+            }
+            if (n != 0 && self_source == 0) {
+                $(self)._data.memcpy(in)
+            }
+            return 0
+        }
+
+        // Replace this string with another string. A null view clears the
+        // string. Returns 0 on success, -1 on allocation failure.
+        func from(ptr<String> self, view<String> in) -> int32 {
+            if (in == null) {
+                return $(self).reserve(0)
+            }
+            if (in == getview($(self))) {
+                return 0
+            }
+            uint32 n = $(in)._data.length()
+            int32 st = $(self).reserve(n)
+            if (st != 0) {
+                return -1
+            }
+            if (n != 0) {
+                view<[byte]> src = getview($(in)._data)
+                $(self)._data.memcpy(src)
+            }
+            return 0
+        }
+
+        // Ensure `_data` holds exactly `payload` bytes and raise
+        // `_buffer_size` to the tracked growth target when needed.
+        // Returns 0 on success, -1 on allocation failure.
+        func reserve(ptr<String> self, uint32 payload) -> int32 {
+            uint32 target = __string_default_buffer_size(payload)
+            if (payload == 0) {
+                if ($(self)._data.length() != 0) {
+                    $(self)._data.uninit()
+                }
+                if ($(self)._buffer_size < target) {
+                    $(self)._buffer_size = target
+                }
+                return 0
+            }
+            if ($(self)._data.length() == 0) {
+                int32 st = $(self)._data.init(payload)
+                if (st != 0) {
+                    return -1
+                }
+            } else if ($(self)._data.length() != payload) {
+                int32 st = $(self)._data.resize(payload)
+                if (st != 0) {
+                    return -1
+                }
+            }
+            if ($(self)._buffer_size < target) {
+                $(self)._buffer_size = target
+            }
+            return 0
+        }
+
+        // Copy this string's bytes into `out`, resizing it to exactly the
+        // logical length. Returns 0 on success, -1 for a null destination
+        // or allocation failure.
+        func to(view<String> self, ptr<[byte]> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            if (self == null) {
+                if ($(out).length() != 0) {
+                    $(out).uninit()
+                }
+                return 0
+            }
+            uint32 n = $(self)._data.length()
+            if (n == 0) {
+                if ($(out).length() != 0) {
+                    $(out).uninit()
+                }
+                return 0
+            }
+            if ($(out).length() == 0) {
+                int32 st = $(out).init(n)
+                if (st != 0) {
+                    return -1
+                }
+            } else if ($(out).length() != n) {
+                int32 st = $(out).resize(n)
+                if (st != 0) {
+                    return -1
+                }
+            }
+            view<[byte]> src = getview($(self)._data)
+            $(out).memcpy(src)
+            return 0
+        }
+
+        // Replace `out` with a copy of this string. Returns 0 on success,
+        // -1 for a null destination or allocation failure.
+        func to(view<String> self, ptr<String> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            return $(out).from(self)
+        }
+
+        // Current logical byte length.
+        func length(view<String> self) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            return $(self)._data.length()
+        }
+
+        // Tracked growth capacity.
+        func capacity(view<String> self) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            return $(self)._buffer_size
+        }
+
+        // Free the backing buffer and return to the empty state.
+        func uninit(ptr<String> self) -> void {
+            if ($(self)._data.length() != 0) {
+                $(self)._data.uninit()
+            }
+            $(self)._buffer_size = 0
+            return
+        }
+
+        func OPERATOR_EQ(view<String> self, view<String> other) -> uint8 {
+            if ($(self)._compare(other) == 0) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_NEQ(view<String> self, view<String> other) -> uint8 {
+            if ($(self)._compare(other) != 0) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_LT(view<String> self, view<String> other) -> uint8 {
+            if ($(self)._compare(other) < 0) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_GT(view<String> self, view<String> other) -> uint8 {
+            if ($(self)._compare(other) > 0) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_LTEQ(view<String> self, view<String> other) -> uint8 {
+            if ($(self)._compare(other) <= 0) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_GTEQ(view<String> self, view<String> other) -> uint8 {
+            if ($(self)._compare(other) >= 0) {
+                return 1
+            }
+            return 0
+        }
+
+        func OPERATOR_MOV(ptr<String> self, view<[byte]> other) -> void {
+            $(self).from(other)
+            return
+        }
+
+        func OPERATOR_MOV(ptr<String> self, view<String> other) -> void {
+            $(self).from(other)
+            return
+        }
+
+        func OPERATOR_MOV(ptr<String> self, view<view<[byte]>> other) -> void {
+            if (other == null) {
+                $(self).reserve(0)
+                return
+            }
+            $(self).from($(other))
+            return
+        }
+
+        func OPERATOR_ADDMOV(ptr<String> self, view<[byte]> other) -> void {
+            if (other == null) {
+                return
+            }
+            uint32 n = $(other).length()
+            if (n == 0) {
+                return
+            }
+            uint8 self_source = 0
+            if (other == getview($(self)._data)) {
+                self_source = 1
+            }
+            uint32 old = $(self)._data.length()
+            if (self_source != 0) {
+                n = old
+            }
+            if (old > 0xFFFFFFFF - n) {
+                return
+            }
+            int32 st = $(self).reserve(old + n)
+            if (st != 0) {
+                return
+            }
+            if (self_source != 0) {
+                $(self)._data.memmove(old, 0, n)
+            } else {
+                $(self)._data.memcpy(other, old, 0, n)
+            }
+            return
+        }
+
+        func OPERATOR_ADDMOV(ptr<String> self, view<String> other) -> void {
+            if (other == null) {
+                return
+            }
+            uint32 n = $(other)._data.length()
+            if (n == 0) {
+                return
+            }
+            uint8 self_source = 0
+            if (other == getview($(self))) {
+                self_source = 1
+            }
+            uint32 old = $(self)._data.length()
+            if (old > 0xFFFFFFFF - n) {
+                return
+            }
+            int32 st = $(self).reserve(old + n)
+            if (st != 0) {
+                return
+            }
+            if (self_source != 0) {
+                $(self)._data.memmove(old, 0, n)
+            } else {
+                view<[byte]> src = getview($(other)._data)
+                $(self)._data.memcpy(src, old, 0, n)
+            }
+            return
+        }
+
+        func OPERATOR_ADDMOV(ptr<String> self, view<view<[byte]>> other) -> void {
+            if (other == null) {
+                return
+            }
+            $(self).OPERATOR_ADDMOV($(other))
+            return
+        }
+
+        func OPERATOR_MULMOV(ptr<String> self, view<uint32> other) -> void {
+            if (other == null) {
+                return
+            }
+            uint32 multiplier = $(other)
+            if (multiplier == 0) {
+                $(self).reserve(0)
+                return
+            }
+            uint32 len = $(self)._data.length()
+            if (len == 0) {
+                return
+            }
+            if (multiplier > 0xFFFFFFFF / len) {
+                return
+            }
+            uint32 total = len * multiplier
+            int32 st = $(self).reserve(total)
+            if (st != 0) {
+                return
+            }
+            uint32 filled = len
+            while (filled < total) {
+                uint32 chunk = filled
+                if (chunk > total - filled) {
+                    chunk = total - filled
+                }
+                $(self)._data.memmove(filled, 0, chunk)
+                filled = filled + chunk
+            }
+            return
+        }
+
+        func _compare(view<String> self, view<String> other) -> int32 {
+            if (self == null && other == null) {
+                return 0
+            }
+            if (self == null) {
+                return -1
+            }
+            if (other == null) {
+                return 1
+            }
+            uint32 a = $(self)._data.length()
+            uint32 b = $(other)._data.length()
+            if (a == 0 || b == 0) {
+                if (a < b) {
+                    return -1
+                }
+                if (a > b) {
+                    return 1
+                }
+                return 0
+            }
+            return $(self)._data.memcmp(getview($(other)._data))
+        }
+    }
+}

@@ -1,0 +1,77 @@
+// ============================================================
+// LIBRARY TEST (string/operators): assign, append, multiply
+// ============================================================
+// Covers = with string literals, String values, and byte arrays;
+// += with literals, String values, and byte arrays; *= with 1, 2,
+// and 0 (clear). Every result is inspected through to(ptr<[byte]>).
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func main() -> int32 {
+    [byte] out
+    std::String a
+    a = "ab"
+    std::String b
+    b = "cd"
+    a += b
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a += "ef"
+    print(a.to(getptr(out)))
+    print(getview(out))
+    print(a.length())
+
+    [byte] arr
+    arr.init(2)
+    arr[0] = 88
+    arr[1] = 89
+    a = arr
+    print(a.to(getptr(out)))
+    print(getview(out))
+    print(a.length())
+
+    a += arr
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a *= 2
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a *= 1
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a *= 0
+    print(a.length())
+    print(a.capacity())
+    print(a.to(getptr(out)))
+    print(out.length())
+
+    std::String c
+    c = a
+    print(c.length())
+    print(c.capacity())
+
+    std::String dup
+    dup = "xy"
+    print(dup.from(getview(dup)))
+    print(dup.length())
+    print(dup.to(getptr(out)))
+    print(getview(out))
+    out.uninit()
+    dup += dup
+    print(dup.to(getptr(out)))
+    print(getview(out))
+    out.uninit()
+
+    a.uninit()
+    b.uninit()
+    c.uninit()
+    dup.uninit()
+    arr.uninit()
+    return 0
+}

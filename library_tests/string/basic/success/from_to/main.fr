@@ -1,0 +1,62 @@
+// ============================================================
+// LIBRARY TEST (string/basic): from and to
+// ============================================================
+// Covers both from() overloads, both to() overloads, static and
+// dynamic byte-array sources, null sources, length/capacity, and the
+// exact-length byte-array output produced by to(ptr<[byte]>).
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func main() -> int32 {
+    std::String s
+    print(s.length())
+    print(s.capacity())
+    print(s.from("hello"))
+    print(s.length())
+    print(s.capacity())
+    ptr<[byte]> nil_out = null
+    print(s.to(nil_out))
+
+    [byte] out
+    print(s.to(getptr(out)))
+    print(out.length())
+    print(getview(out))
+    out.uninit()
+
+    std::String t
+    print(t.from(getview(s)))
+    print(t.length())
+    print(t.capacity())
+    print(t == s)
+
+    std::String u
+    print(s.to(getptr(u)))
+    print(u == s)
+    print(u.capacity())
+
+    [byte, 3] fixed
+    fixed[0] = 120
+    fixed[1] = 121
+    fixed[2] = 122
+    std::String w
+    print(w.from(getview(fixed)))
+    print(w.length())
+    print(w.capacity())
+    print(w.to(getptr(out)))
+    print(getview(out))
+    out.uninit()
+
+    view<[byte]> nil = null
+    print(s.from(nil))
+    print(s.length())
+    print(s.capacity())
+    print(s.to(nil_out))
+
+    s.uninit()
+    t.uninit()
+    u.uninit()
+    w.uninit()
+    return 0
+}
