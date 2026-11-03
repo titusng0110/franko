@@ -908,6 +908,9 @@ public final class SemanticASTSerializer {
         } else if (expr instanceof SemanticGetPtrNode getPtr) {
             obj.put("node", "getPtr");
             obj.put("target", nodeToJson(getPtr.target, registry));
+            if (getPtr.temporary) {
+                obj.put("temporary", true);
+            }
         } else if (expr instanceof SemanticDerefNode deref) {
             obj.put("node", "deref");
             obj.put("expr", nodeToJson(deref.expr, registry));
@@ -1193,7 +1196,8 @@ public final class SemanticASTSerializer {
                             obj.requireObject("target"),
                             registry,
                             sources
-                    )
+                    ),
+                    obj.has("temporary") && obj.requireBool("temporary")
             );
             case "deref" -> new SemanticDerefNode(
                     span,

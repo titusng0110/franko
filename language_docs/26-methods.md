@@ -181,3 +181,60 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
 - No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.
+
+## 26.10 Operator Methods
+
+A struct may declare operator methods using the reserved names:
+
+```
+OPERATOR_EQ OPERATOR_NEQ OPERATOR_GT OPERATOR_LT OPERATOR_GTEQ OPERATOR_LTEQ
+OPERATOR_MOV OPERATOR_ADDMOV OPERATOR_SUBMOV OPERATOR_MULMOV OPERATOR_DIVMOV
+OPERATOR_MODMOV OPERATOR_ORMOV OPERATOR_ANDMOV OPERATOR_XORMOV
+```
+
+Comparison methods must have exactly this shape:
+
+```franko
+func OPERATOR_EQ(view<X> self, view<X> other) -> uint8
+```
+
+Assignment methods must have exactly this shape:
+
+```franko
+func OPERATOR_MOV(ptr<X> self, view<T> other) -> void
+```
+
+Rules:
+
+- Only struct methods may use these names. A free function with an
+  `OPERATOR_*` name is rejected.
+- An invalid operator method signature is a compile error at the
+  declaration even if the operator is never used.
+- Comparison methods require two parameters, the first named `self` and
+  typed `view<X>`, the second typed `view<X>` and not named `self`, and
+  return `uint8`.
+- Assignment methods require two parameters, the first named `self` and
+  typed `ptr<X>`, the second a `view<T>` for any non-void `T` and not
+  named `self`, and return `void`.
+- Each operator has its own method; there is no implicit `!=` from
+  `==`, and no implicit compound form from a plain operator.
+- Operator methods are still ordinary methods and remain callable with
+  member-call syntax: `a.OPERATOR_EQ(getview(b))`.
+
+The operator syntax is lowering sugar over a method call:
+
+```franko
+a == b       // a.OPERATOR_EQ(getview(b))
+a = b        // a.OPERATOR_MOV(getview(b))
+a += b       // a.OPERATOR_ADDMOV(getview(b))
+```
+
+Rvalue operands are borrowed through a compiler-generated temporary whose
+lifetime is the full expression (see [Operators](17-operators.md#1710-struct-operator-overloading)).
+
+The `other` parameter is call-scoped: in an operator method body it is
+treated as borrowed frame storage. Storing it into caller-owned or global
+storage is rejected by the dangling-pointer checker; storing it in a
+local variable is allowed because the local dies before the operator
+call returns (see
+[Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)).

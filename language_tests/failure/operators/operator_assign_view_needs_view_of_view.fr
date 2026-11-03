@@ -1,0 +1,15 @@
+struct A {
+    int32 n = 0
+
+    func OPERATOR_MOV(ptr<A> self, view<[byte]> other) -> void {
+        $(self).n = 1
+        return
+    }
+}
+
+func main() -> int32 {
+    A a
+    a = "hi"
+
+    return 0
+}

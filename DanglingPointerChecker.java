@@ -556,6 +556,17 @@ public final class DanglingPointerChecker {
 
         Arrays.fill(pointerState, OriginSet.UNKNOWN);
 
+        if (node.symbol instanceof MethodSymbol method
+                && OperatorMethods.isOperatorMethodName(method.name)
+                && node.parameterVariables.size() > 1) {
+            VariableSymbol other = node.parameterVariables.get(1);
+            int index = pointerIndexOfSymbol(other);
+
+            if (index >= 0) {
+                pointerState[index] = OriginSet.frame(other);
+            }
+        }
+
         loopStack.clear();
         addressTakenPointers.clear();
         reportedReturnSites.clear();
@@ -682,12 +693,24 @@ public final class DanglingPointerChecker {
         checkExpr(node.target);
         checkExpr(node.value);
 
-        if (!(node.target.type instanceof SemanticPtrType)
-                || node.isCompound()) {
+        if (!(node.target.type instanceof SemanticPtrType)) {
             return;
         }
 
         OriginSet value = valueOrigins(node.value);
+        OriginSet targetStorage = storageOrigins(node.target);
+
+        if (!value.frameCells.isEmpty()
+                && (targetStorage.unknown
+                    || !targetStorage.globalCells.isEmpty())) {
+            diagnostics.error(
+                    "Cannot store a view of frame or operator-borrowed storage"
+                    + " into a global or caller-owned location");
+        }
+
+        if (node.isCompound()) {
+            return;
+        }
 
         applyPointerStore(node.target, value);
     }

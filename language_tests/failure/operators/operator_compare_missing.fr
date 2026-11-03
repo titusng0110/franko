@@ -1,0 +1,14 @@
+struct A {
+    int32 v = 0
+}
+
+func main() -> int32 {
+    A a
+    A b
+
+    if (a == b) {
+        return 0
+    }
+
+    return 1
+}

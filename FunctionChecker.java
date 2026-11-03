@@ -47,7 +47,16 @@ public class FunctionChecker {
         validateParameters(node);
 
         if (node.symbol instanceof MethodSymbol method) {
-            validateMethodSelf(method);
+            if (OperatorMethods.isOperatorMethodName(method.name)) {
+                validateOperatorMethod(method);
+            } else {
+                validateMethodSelf(method);
+            }
+        } else if (OperatorMethods.isOperatorMethodName(node.symbol.name)) {
+            diagnostics.error("'"
+                    + node.symbol.name
+                    + "' is reserved for struct operator methods; only structs"
+                    + " can overload operators");
         }
 
         boolean sawReturn = false;
@@ -166,6 +175,92 @@ public class FunctionChecker {
 
         return structType.structSymbol.qualifiedName().equals(owner.qualifiedName());
     }
+
+    private void validateOperatorMethod(MethodSymbol method) {
+        if (OperatorMethods.isComparisonMethodName(method.name)) {
+            validateComparisonOperatorMethod(method);
+        } else {
+            validateAssignmentOperatorMethod(method);
+        }
+    }
+
+    private void validateComparisonOperatorMethod(MethodSymbol method) {
+        boolean valid = method.parameters.size() == 2
+                && "self".equals(method.parameters.get(0).name)
+                && isViewOfOwner(
+                        method.parameters.get(0).type,
+                        method.owner)
+                && isViewOfOwner(
+                        method.parameters.get(1).type,
+                        method.owner)
+                && !"self".equals(method.parameters.get(1).name)
+                && isUInt8Type(method.returnType());
+
+        if (valid) {
+            return;
+        }
+
+        String ownerName = method.owner.qualifiedName();
+
+        diagnostics.error("Comparison operator method '"
+                + method.qualifiedName()
+                + "' must have signature 'func "
+                + method.name
+                + "(view<"
+                + ownerName
+                + "> self, view<"
+                + ownerName
+                + "> other) -> uint8'");
+    }
+
+    private void validateAssignmentOperatorMethod(MethodSymbol method) {
+        boolean valid = method.parameters.size() == 2
+                && "self".equals(method.parameters.get(0).name)
+                && isOwnerPtrOfOwner(
+                        method.parameters.get(0).type,
+                        method.owner)
+                && method.parameters.get(1).type instanceof SemanticViewType other
+                && !(other.referencedType instanceof SemanticVoidType)
+                && !"self".equals(method.parameters.get(1).name)
+                && types.isVoidType(method.returnType());
+
+        if (valid) {
+            return;
+        }
+
+        String ownerName = method.owner.qualifiedName();
+
+        diagnostics.error("Assignment operator method '"
+                + method.qualifiedName()
+                + "' must have signature 'func "
+                + method.name
+                + "(ptr<"
+                + ownerName
+                + "> self, view<T> other) -> void'");
+    }
+
+    private boolean isViewOfOwner(SemanticType type, StructSymbol owner) {
+        return type instanceof SemanticViewType view
+                && view.referencedType instanceof SemanticStructType struct
+                && struct.structSymbol != null
+                && struct.structSymbol.qualifiedName().equals(
+                        owner.qualifiedName());
+    }
+
+    private boolean isOwnerPtrOfOwner(SemanticType type, StructSymbol owner) {
+        return type instanceof SemanticPtrType ptr
+                && ptr.permission == PtrPermission.OWNER
+                && ptr.referencedType instanceof SemanticStructType struct
+                && struct.structSymbol != null
+                && struct.structSymbol.qualifiedName().equals(
+                        owner.qualifiedName());
+    }
+
+    private boolean isUInt8Type(SemanticType type) {
+        return type instanceof SemanticPrimitiveType primitive
+                && primitive.kind == SemanticPrimitiveKind.UINT8;
+    }
+
     private void validateReturnType(FunctionSymbol fn) {
         SemanticType returnType = fn.returnType();
 

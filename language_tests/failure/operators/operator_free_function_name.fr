@@ -1,0 +1,7 @@
+func OPERATOR_EQ(int32 a, int32 b) -> uint8 {
+    return 1
+}
+
+func main() -> int32 {
+    return 0
+}

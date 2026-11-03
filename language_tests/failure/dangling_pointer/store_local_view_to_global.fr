@@ -1,0 +1,15 @@
+// Failure fixture: dangling_pointer/store_local_view_to_global
+// Storing a view/ptr of frame-local storage into a global would leave a
+// dangling pointer after the function returns; the store rule rejects it.
+ptr<[int32]> global_value
+
+func f() -> int32 {
+    [int32] d
+    d.init(1)
+    global_value = getptr(d)
+    return 0
+}
+
+func main() -> int32 {
+    return f()
+}

@@ -1,0 +1,2 @@
+No matching overload for operator '+=' on struct 'A'
+expected method 'OPERATOR_ADDMOV' with signature 'OPERATOR_ADDMOV(ptr<A> self, view<T> other) -> void'

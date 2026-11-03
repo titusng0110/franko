@@ -25,6 +25,7 @@ struct Box {
 }
 
 ptr<int32> g
+int32 g_target = 0
 
 func take_ptr(ptr<int32> q) -> int32 {
     if (q != null) {
@@ -93,7 +94,7 @@ func main() -> int32 {
 
     // Global pointer variable is null-initialized.
     print(g == null)
-    g = getptr(x)
+    g = getptr(g_target)
     print(g != null)
 
     print(4)

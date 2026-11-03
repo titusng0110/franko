@@ -117,10 +117,10 @@ to the tightest pointer that fits. See the "Capability Linter" section of
 ## 27.9 Dangling-Pointer Checking
 
 The compiler checks `return` values for pointers that outlive the storage
-they refer to. The check is **return-only and intra-procedural**: each
-function or method body is analyzed separately, and only `return`
-expressions are classified. Dead functions and pruned branches cannot
-produce diagnostics.
+they refer to, and rejects pointer stores that move frame-scoped storage
+into global or caller-owned storage. The check is
+**intra-procedural**: each function or method body is analyzed separately.
+Dead functions and pruned branches cannot produce diagnostics.
 
 ### 27.9.1 What Is Tracked
 
@@ -208,12 +208,53 @@ Literal views refer to constant storage with static lifetime, so
 returning or keeping one is safe. Global initializers are never analyzed
 as function bodies.
 
-### 27.9.5 Limitations
+### 27.9.5 The Store Rule
+
+A pointer store is rejected when the stored value contains current-frame
+origins and the target storage is caller-owned (`UNKNOWN`) or global
+(`GLOBAL`):
+
+```franko
+ptr<int32> global_p
+
+func bad() -> void {
+    int32 x
+    global_p = getptr(x)      // error: x dies with this frame
+    return
+}
+```
+
+The same rule applies to stores through a pointer parameter:
+
+```franko
+func bad(ptr<ptr<int32>> out) -> void {
+    int32 x
+    $(out) = getptr(x)        // error: caller storage outlives x
+    return
+}
+```
+
+The diagnostic is:
+
+```text
+Cannot store a view of frame or operator-borrowed storage into a global or caller-owned location
+```
+
+A local target (`FRAME` storage) is intentionally allowed. For an
+operator method's borrowed `other` parameter this is safe because the
+local dies before the operator call returns. FRAME -> FRAME is a coarse
+rule, not a general local-lifetime ordering analysis: a view of an inner
+local stored into a longer-lived local can still dangle. That is the
+pre-existing local-view hazard. A local can also still escape indirectly
+if it is passed to a callee that stores it; see the forwarding gap in
+§27.9.6.
+
+### 27.9.6 Limitations
 
 The check intentionally does not detect:
 
-- pointers escaping through function calls, out-parameters, or stores into
-  globals;
+- pointers escaping through function calls or being forwarded to a callee
+  that stores them (there are no interprocedural summaries);
 - pointers hidden inside returned structs or arrays;
 - use after an inner block ends but before the function returns;
 - dynamic-array buffer invalidation after `resize`/`uninit`;
@@ -221,9 +262,14 @@ The check intentionally does not detect:
 - loop fixed points (the body is analyzed once, so loop-carried state is
   merged conservatively).
 
-Calls do conservatively forget state, so later diagnostics do not assume a
-callee left pointer variables untouched. None of these cases produce a
-false positive, but they can produce false negatives.
+The store rule closes the direct global/out-parameter store. An operator
+method's `other` parameter starts with a frame origin, so storing it into
+caller-owned or global storage is rejected. Ordinary non-operator methods
+with `view<T>` parameters still start as unknown and are not checked for
+that store. Calls do conservatively forget state, so later diagnostics do
+not assume a callee left pointer variables untouched. None of these cases
+produce a false positive in the modeled cases, but they can produce false
+negatives.
 
 ## 27.10 Dynamic-Array Lifecycle Checking
 

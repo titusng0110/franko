@@ -106,6 +106,12 @@ Built-in names are fixed and are not renamed. Array intrinsics (`memcpy`,
 `memset`, `length`, `read_uint16_LE`, ...) and pointer intrinsics (`getptr`,
 `getmview`, `getview`) keep their existing spelling.
 
+Operator methods are the other fixed-name exception: `OPERATOR_EQ`,
+`OPERATOR_MOV`, and the other reserved `OPERATOR_*` names are exact,
+uppercase, and not renamed to snake case. They are reserved for struct
+operator methods and rejected on free functions. See
+[Operator Methods](26-methods.md#2610-operator-methods).
+
 ## 33.4 Variables and Fields
 
 Variable and field names use `lower_case_snake_case`:

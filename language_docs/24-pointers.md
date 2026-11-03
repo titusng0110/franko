@@ -47,6 +47,12 @@ least the requested permission: `getptr` needs owner access,
 `getmview` needs write access, `getview` always works. This is what
 prevents laundering a `view` into a `ptr`.
 
+User-written `getview`/`getmview`/`getptr` require a storage-backed
+lvalue. The compiler-generated borrow used to pass an rvalue operand to
+an overloaded struct operator is the only exception: it is internal to
+operator lowering, and `getview(5)` or `getview(make_x())` remains
+invalid in user code. See [Struct Operator Overloading](17-operators.md#1710-struct-operator-overloading).
+
 ## 24.2 Dereferencing with `$`
 
 If the operand has type `ptr<T>`, `mview<T>`, or `view<T>`, then

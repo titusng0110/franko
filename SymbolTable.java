@@ -410,6 +410,56 @@ public final class SymbolTable {
         return resolveMethodFromOverloads(owner, name, overloads, userArgs);
     }
 
+    public MethodSymbol resolveOperatorMethodWithLiterals(
+            StructSymbol owner,
+            String name,
+            OperatorCallArg arg
+    ) {
+        List<MethodSymbol> overloads = owner.methods.get(name);
+
+        if (overloads == null || overloads.isEmpty()) {
+            return null;
+        }
+
+        List<MethodSymbol> matches = new ArrayList<>();
+
+        for (MethodSymbol method : overloads) {
+            if (isOperatorArgumentApplicable(method, arg)) {
+                matches.add(method);
+            }
+        }
+
+        matches = preferOperatorConstantFitMatches(matches, arg);
+
+        matches = preferExactPermissionMatches(
+                matches,
+                method -> operatorArgumentDowngradeCost(
+                        arg,
+                        method.parameters.get(1).type
+                )
+        );
+
+        if (matches.size() == 1) {
+            return matches.get(0);
+        }
+
+        if (matches.size() > 1) {
+            error("Ambiguous call to overloaded method '"
+                    + owner.qualifiedName()
+                    + "."
+                    + formatCallSignature(
+                            name,
+                            List.of(arg.describeForSignature()))
+                    + "': multiple overloads match equally well (no single "
+                    + "overload has the lowest constant-fit and "
+                    + "permission-downgrade costs)");
+
+            return matches.get(0);
+        }
+
+        return null;
+    }
+
     static List<CallArg> toCallArgs(List<SemanticExprNode> args) {
         List<CallArg> out = new ArrayList<>(args.size());
 
@@ -453,6 +503,45 @@ public final class SymbolTable {
             }
 
             return lowered.type == null ? "<null>" : lowered.type.describe();
+        }
+    }
+
+    static final class OperatorCallArg {
+        final SemanticExprNode lowered;
+        final ArrayLiteralNode literal;
+
+        private OperatorCallArg(
+                SemanticExprNode lowered,
+                ArrayLiteralNode literal
+        ) {
+            this.lowered = lowered;
+            this.literal = literal;
+        }
+
+        static OperatorCallArg lowered(SemanticExprNode expr) {
+            return new OperatorCallArg(Objects.requireNonNull(expr), null);
+        }
+
+        static OperatorCallArg literal(ArrayLiteralNode literal) {
+            return new OperatorCallArg(null, Objects.requireNonNull(literal));
+        }
+
+        boolean isLiteral() {
+            return literal != null;
+        }
+
+        String describeForSignature() {
+            if (isLiteral()) {
+                return "[array literal with "
+                        + literal.elements.size()
+                        + " element(s)]";
+            }
+
+            if (lowered == null || lowered.type == null) {
+                return "<null>";
+            }
+
+            return "view<" + lowered.type.describe() + ">";
         }
     }
 
@@ -1087,6 +1176,146 @@ public final class SymbolTable {
         }
 
         return count;
+    }
+
+    private static boolean isOperatorArgumentApplicable(
+            MethodSymbol method,
+            OperatorCallArg arg
+    ) {
+        if (method.parameters.size() != 2) {
+            return false;
+        }
+
+        SemanticType parameterType = method.parameters.get(1).type;
+
+        if (!(parameterType instanceof SemanticPtrType pointer)
+                || pointer.permission != PtrPermission.READ_ONLY) {
+            return false;
+        }
+
+        SemanticType referenced = pointer.referencedType;
+
+        if (arg.isLiteral()) {
+            return isArrayLiteralShapeApplicable(arg.literal, referenced);
+        }
+
+        if (arg.lowered == null || arg.lowered.type == null) {
+            return false;
+        }
+
+        SemanticExprNode lowered = arg.lowered;
+
+        if (lowered.type instanceof SemanticNullType) {
+            return false;
+        }
+
+        if (lowered.isConstant()
+                && referenced instanceof SemanticPrimitiveType primitive) {
+            return fitsBigIntegerToPrimitive(
+                    lowered.constantValue,
+                    primitive.kind
+            );
+        }
+
+        if (sameType(lowered.type, referenced)) {
+            return true;
+        }
+
+        return lowered.type instanceof SemanticPtrType
+                && referenced instanceof SemanticPtrType
+                && PointerPermissions.isPointerConversion(
+                        lowered.type,
+                        referenced);
+    }
+
+    private static List<MethodSymbol> preferOperatorConstantFitMatches(
+            List<MethodSymbol> matches,
+            OperatorCallArg arg
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (MethodSymbol method : matches) {
+            best = Math.min(
+                    best,
+                    operatorConstantFitCost(
+                            arg,
+                            method.parameters.get(1).type)
+            );
+        }
+
+        List<MethodSymbol> preferred = new ArrayList<>();
+
+        for (MethodSymbol method : matches) {
+            if (operatorConstantFitCost(
+                    arg,
+                    method.parameters.get(1).type) == best) {
+                preferred.add(method);
+            }
+        }
+
+        return preferred;
+    }
+
+    private static int operatorConstantFitCost(
+            OperatorCallArg arg,
+            SemanticType parameterType
+    ) {
+        if (arg.isLiteral() || arg.lowered == null
+                || !arg.lowered.isConstant()) {
+            return 0;
+        }
+
+        if (!(parameterType instanceof SemanticPtrType pointer)
+                || !(pointer.referencedType instanceof SemanticPrimitiveType primitive)) {
+            return 0;
+        }
+
+        if (sameType(arg.lowered.type, pointer.referencedType)) {
+            return 0;
+        }
+
+        int bits = bitWidth(primitive.kind);
+        int unsignedPenalty = isSigned(primitive.kind) ? 0 : 1;
+
+        return 1 + 2 * bits + unsignedPenalty;
+    }
+
+    private static int operatorArgumentDowngradeCost(
+            OperatorCallArg arg,
+            SemanticType parameterType
+    ) {
+        if (!(parameterType instanceof SemanticPtrType pointer)) {
+            return 0;
+        }
+
+        SemanticType referenced = pointer.referencedType;
+
+        if (arg.isLiteral()) {
+            return arrayLiteralDowngradeCost(arg.literal, referenced);
+        }
+
+        if (arg.lowered == null || arg.lowered.type == null) {
+            return 0;
+        }
+
+        if (sameType(arg.lowered.type, referenced)) {
+            return 0;
+        }
+
+        if (arg.lowered.type instanceof SemanticPtrType
+                && referenced instanceof SemanticPtrType) {
+            return PointerPermissions.isStaticArrayViewDecay(
+                    arg.lowered.type,
+                    referenced)
+                    ? 2
+                    : 1;
+        }
+
+        return 0;
     }
 
     private static boolean isArgumentApplicableToParameter(

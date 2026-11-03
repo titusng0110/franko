@@ -187,3 +187,77 @@ for (int32 i = 0; i < n; i++) {
 Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `print(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](19-statements.md).
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](25-structs.md) for the full assignability rules.
+
+## 14.7 Operator Assignment
+
+A struct may customize assignment by declaring operator methods:
+
+| Syntax | Method |
+|---|---|
+| `=` | `OPERATOR_MOV` |
+| `+=` | `OPERATOR_ADDMOV` |
+| `-=` | `OPERATOR_SUBMOV` |
+| `*=` | `OPERATOR_MULMOV` |
+| `/=` | `OPERATOR_DIVMOV` |
+| `%=` | `OPERATOR_MODMOV` |
+| `\|=` | `OPERATOR_ORMOV` |
+| `&=` | `OPERATOR_ANDMOV` |
+| `^=` | `OPERATOR_XORMOV` |
+
+Each assignment operator method has the shape:
+
+```franko
+func OPERATOR_MOV(ptr<X> self, view<T> other) -> void
+```
+
+The assignment target must still be a storage-backed lvalue of the struct
+type `X`. `T` may be any non-void value type, including a nested view
+type, and multiple `view<T>` overloads are allowed.
+
+Plain `=` first tries to resolve an applicable `OPERATOR_MOV` overload.
+If none applies, it falls back to the built-in whole-struct assignment
+rules described in [Struct Assignment](#144-struct-assignment). Compound
+assignment has no built-in struct fallback: if no overload applies, the
+assignment is rejected.
+
+A pointer-only struct can opt into whole-value assignment with
+`OPERATOR_MOV` even though built-in assignment refuses it:
+
+```franko
+struct Blob {
+    [int32, 4] xs
+
+    func OPERATOR_MOV(ptr<Blob> self, view<Blob> other) -> void {
+        $(self).xs.memcpy(getview($(other).xs))
+        return
+    }
+}
+
+Blob a
+Blob b
+b = a          // calls b.OPERATOR_MOV(getview(a))
+```
+
+The right-hand side is always borrowed as `view<T>` where `T` is its
+static type. An lvalue is passed with `getview`; an rvalue is borrowed
+through a compiler-generated temporary that lives until the end of the
+full expression. There is no direct pass for view values, string literals,
+or array literals:
+
+```franko
+OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
+OPERATOR_MOV(ptr<X> self, view<view<[byte]>> other)  // x = "hello"
+```
+
+Integer constants are fluid-fitted to `view<primitive>` parameters and
+materialized as a temporary of the referenced primitive type.
+
+The borrowed view is valid only for the duration of the operator call.
+An operator method must not store or forward it into caller-owned or
+global storage; the dangling-pointer checker rejects that pattern (see
+[Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)).
+A local `view<T>` copy inside the operator body is allowed because the
+local dies before the operator call returns.
+
+See [Operators](17-operators.md#1710-struct-operator-overloading) for the
+complete operator overload rules.

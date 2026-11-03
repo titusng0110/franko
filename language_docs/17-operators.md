@@ -105,3 +105,93 @@ Pointers are not integers and cannot participate in arithmetic, bitwise, or shif
 Arithmetic (`+`, `-`, `*`, `/`), bitwise (`&`, `|`, `^`), and shift (`<<`, `>>`) expressions take the type of their nonconstant operand when exactly one operand is a folded integer constant, and the left operand's type otherwise (including when both operands are constants). Unary `~` preserves its operand's type.
 
 Comparisons and logical operators always produce `uint8` regardless of operand types.
+
+## 17.10 Struct Operator Overloading
+
+Only structs can overload operators, and only comparison and assignment
+operators participate. Free functions cannot use operator method names.
+Operator methods are ordinary struct methods named exactly:
+
+| Operator | Method |
+|---|---|
+| `==` | `OPERATOR_EQ` |
+| `!=` | `OPERATOR_NEQ` |
+| `>` | `OPERATOR_GT` |
+| `<` | `OPERATOR_LT` |
+| `>=` | `OPERATOR_GTEQ` |
+| `<=` | `OPERATOR_LTEQ` |
+| `=` | `OPERATOR_MOV` |
+| `+=` | `OPERATOR_ADDMOV` |
+| `-=` | `OPERATOR_SUBMOV` |
+| `*=` | `OPERATOR_MULMOV` |
+| `/=` | `OPERATOR_DIVMOV` |
+| `%=` | `OPERATOR_MODMOV` |
+| `\|=` | `OPERATOR_ORMOV` |
+| `&=` | `OPERATOR_ANDMOV` |
+| `^=` | `OPERATOR_XORMOV` |
+
+Comparison operators require exactly:
+
+```franko
+func OPERATOR_EQ(view<X> self, view<X> other) -> uint8
+```
+
+Both operands must be values of the same nominal struct type `X`.
+`view<X>`, `mview<X>`, and `ptr<X>` operands do not participate in struct
+comparison; dereference or copy the value first. Comparing structs of
+different types, or a struct with a non-struct, is an error.
+
+There is no implicit fallback between operators: `!=` needs
+`OPERATOR_NEQ`, and each ordering operator needs its own method. An
+operator comparison still produces the method's declared return type,
+which a valid method must declare as `uint8`.
+
+Assignment operators use the mapping in the table and require:
+
+```franko
+func OPERATOR_MOV(ptr<X> self, view<T> other) -> void
+```
+
+`T` may be any non-void value type, and multiple overloads are allowed.
+For plain `=`, the compiler first tries an applicable `OPERATOR_MOV`
+overload; if none applies it falls back to the normal whole-struct
+assignment rules. Compound assignment has no built-in struct fallback:
+`a += b` requires a matching `OPERATOR_ADDMOV`.
+
+Operator methods may still be called explicitly:
+
+```franko
+a.OPERATOR_EQ(getview(b))
+```
+
+Operator operands may be arbitrary value expressions. Lvalue operands use
+their address; rvalue operands are borrowed through a compiler-generated
+temporary whose lifetime is the full expression. User-written `getview`
+still requires a storage-backed lvalue, so `getview(5)` and
+`getview(make_x())` remain invalid. The left-hand side of an assignment
+must still be a storage-backed lvalue.
+
+The right-hand operand is always borrowed as `view<T>` where `T` is its
+static type. There is no direct pass for view-valued expressions, string
+literals, or array literals. A view value therefore needs a
+`view<view<...>>` parameter:
+
+```franko
+OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
+OPERATOR_MOV(ptr<X> self, view<view<[byte]>> other)  // x = "hello"
+```
+
+When the parameter is itself a view of a view, overload resolution checks
+the parameter's inner referenced type and applies the ordinary pointer
+conversion there. Thus the inner `view<[byte, 10]>` value decays to
+`view<[byte]>` for a `view<view<[byte]>>` parameter. The representation is
+unchanged: both inner types use the same fat-pointer value.
+
+Integer constants use the ordinary fluid-constant fitting rules against
+`view<primitive>` parameters: an exact natural-type match wins, otherwise
+the narrowest fitting type wins with signed before unsigned at equal
+width. The selected constant is materialized as a temporary of the
+parameter's referenced primitive type before being borrowed.
+
+See [Assignment](14-assignment.md) and [Methods](26-methods.md) for the
+full lowering, fallback, and lifetime rules.

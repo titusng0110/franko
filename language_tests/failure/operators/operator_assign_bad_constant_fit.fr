@@ -1,0 +1,15 @@
+struct A {
+    int32 n = 0
+
+    func OPERATOR_MOV(ptr<A> self, view<uint8> other) -> void {
+        $(self).n = unsafe_cast<int32>($(other))
+        return
+    }
+}
+
+func main() -> int32 {
+    A a
+    a = 500
+
+    return 0
+}

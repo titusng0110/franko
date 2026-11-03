@@ -1207,6 +1207,15 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node.temporary) {
+            if (!(node.type instanceof SemanticViewType)) {
+                diagnostics.error("Internal error: temporary operator borrow"
+                        + " is not a read-only view");
+            }
+
+            return;
+        }
+
         if (!isStorageBackedLValue(node.target)) {
             diagnostics.error("Operand of '" + intrinsicName
                     + "' must be a pointable storage-backed lvalue");

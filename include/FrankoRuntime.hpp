@@ -53,6 +53,21 @@
 }
 
 // ============================================================
+// franko_borrow(value): borrow a temporary for the full expression
+// ============================================================
+//
+// Emitted for compiler-generated operator operand borrows when the
+// operand is not a storage-backed lvalue (a literal, a call result, or
+// another temporary). Binding the value to the T&& parameter keeps it
+// alive until the end of the full-expression containing the operator
+// call, which is the C++ temporary-lifetime rule for reference-bound
+// temporaries.
+template <typename T>
+typename std::remove_reference<T>::type* franko_borrow(T&& value) {
+    return &value;
+}
+
+// ============================================================
 // franko_unsafe_cast<To>(v): runtime-checked integer conversion
 // ============================================================
 //

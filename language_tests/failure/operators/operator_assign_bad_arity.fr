@@ -1,0 +1,11 @@
+struct A {
+    int32 v = 0
+
+    func OPERATOR_MOV(ptr<A> self, view<A> other, int32 extra) -> void {
+        return
+    }
+}
+
+func main() -> int32 {
+    return 0
+}

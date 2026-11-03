@@ -1,0 +1,2 @@
+No matching overload for operator '==' on struct 'A'
+expected 'OPERATOR_EQ(view<A> self, view<A> other) -> uint8'

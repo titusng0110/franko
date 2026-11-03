@@ -121,14 +121,14 @@ Static arrays, dynamic arrays, and `void` are not assignable, so a struct contai
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the assignment is rejected (see [Assignment](14-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access).
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](14-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](14-assignment.md#147-operator-assignment)).
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](12-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
 Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](21-array-intrinsics.md).
 
-Structs are not integers: operators and `if`/`while` conditions reject whole structs, and `print` has no overload for a whole struct (see [Statements](19-statements.md)). Operate on fields instead: `print(s.x)`.
+Structs are not integers: arithmetic, bitwise, shift, and logical operators reject whole structs, and `if`/`while` conditions reject bare struct values; `print` has no overload for a whole struct (see [Statements](19-statements.md)). The exception is the overloadable comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) and assignment operators (`=`, `+=`, ...), which use `OPERATOR_*` methods (see [Operators](17-operators.md#1710-struct-operator-overloading)). Operate on fields for everything else: `print(s.x)`.
 
 ## 25.7 Member Access and Field Lvalues
 
@@ -174,10 +174,10 @@ int32 scale = 2;
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](26-methods.md)).
-- No operators on whole structs: arithmetic, comparison, and conditions reject them; `print` has no struct overload — print individual fields instead.
+- No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](17-operators.md#1710-struct-operator-overloading)).
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is pointer-only: whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access).
+- A struct with any non-assignable field is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).

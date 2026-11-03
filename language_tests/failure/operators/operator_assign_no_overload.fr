@@ -1,0 +1,17 @@
+struct A {
+    int32 v = 0
+
+    func OPERATOR_ADDMOV(ptr<A> self, view<int32> other) -> void {
+        $(self).v = $(self).v + $(other)
+        return
+    }
+}
+
+func main() -> int32 {
+    A a
+    A b
+
+    a += b
+
+    return 0
+}
