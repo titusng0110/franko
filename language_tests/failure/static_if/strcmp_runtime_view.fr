@@ -1,0 +1,17 @@
+// ============================================================
+// FAILURE FIXTURE: runtime view values are not compile-time strings
+// ============================================================
+// Storing a what_type result in a view variable loses its compile-time
+// origin, so passing that variable to strcmp is rejected.
+// ============================================================
+
+import "franko/static"
+
+func main() -> int32 {
+    int32 i = 1;
+    view<[byte, 5]> spelling = static::what_type(i);
+
+    print(static::strcmp(spelling, "int32"));
+
+    return 0;
+}

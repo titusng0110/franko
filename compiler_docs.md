@@ -414,9 +414,11 @@ semantic analysis. Array literals are passed through untouched
 (§4.13). `StaticIfNode` is preserved: its condition is desugared normally,
 its branches go through `desugarControlledStmt` so braceless bodies become
 blocks, and nested `static_if` nodes survive for semantic selection (§4.18).
-String-literal arguments of `static::strcmp` and `static::panic` are
-deliberately **not** hoisted, so `StaticIntrinsics` can inspect the literal
-text. Global initializers pass through the statically
+String-literal arguments of any `static::` call are deliberately **not**
+hoisted, so `StaticIntrinsics` can inspect the literal text; nested
+compile-time producers such as `static::what_type` stay evaluable as
+compile-time values while analyzing the call. Global initializers pass
+through the statically
 representable forms (`null`, `getptr`/`getmview`/`getview` over a global,
 an array literal) and reject everything else. Error-recovery style: it accumulates diagnostics in
 a `DiagnosticBag` (placeholder values on failure); `Frontend`/`Main` check
@@ -557,9 +559,13 @@ type checking, FFI verification, memory-safety diagnostics, or codegen
 (§4.18).
 It also owns semantic static-string hoisting for `static::what_type`
 (`hoistStaticStringGlobal`, wired into `StaticIntrinsics` through its
-`StringHoister`): the UTF-8 spelling bytes become a literal-backed
-`_STR_<hash>` `[byte, N]` global, reused when an identical desugared string
-global already exists, and prepended alongside hoisted array literals.
+`StringHoister`): when a `what_type` result is used as an ordinary
+expression, its UTF-8 spelling bytes become a literal-backed `_STR_<hash>`
+`[byte, N]` global, reused when an identical desugared string global already
+exists, and prepended alongside hoisted array literals. When the result is
+consumed by another static intrinsic (for example
+`static::strcmp(static::what_type(x), "int32")`), it stays a compile-time
+string and no global is hoisted.
 The entry-point signature must remain exactly `view<[[byte]]>`
 (read-only) for the raw-args `main`; the template marshals argv behind a
 const pointer, so the program cannot mutate its arguments.
@@ -758,7 +764,7 @@ corresponding pointer permission; qualified `ns::name` references resolve
 strictly against declared namespaces, and compile-time constants
 (such as the injected `static::IS_*` flags) fold into integer literals;
 calls whose callee is exactly `static::<name>` are delegated to
-`StaticIntrinsics` before ordinary function resolution (identifier and raw
+`StaticIntrinsics` before ordinary function resolution (identifier and
 string-literal arguments are inspected, not lowered); when the `static`
 namespace is undeclared the diagnostic names the required
 `import "franko/static"`. `inferBinaryResultType` implements the fluid-constant rule
@@ -793,23 +799,35 @@ to the selected `view<...>` parameter type. The hidden `self` argument is
 
 #### `StaticIntrinsics`
 Compile-time reflection analyzer for the `static::` namespace. Wired into
-`ExpressionAnalyzer` through `ExpressionLowering`. Responsibilities:
-recognize the twelve static functions; validate arity; resolve bare identifier
-arguments (`VarNode` through `SymbolTable.resolve`, `QualifiedNameNode`
-through namespace + global lookup) without evaluating them; decode raw
-string literals through `StringLiteralDecoder`; and return semantic
-expression nodes:
+`ExpressionAnalyzer` through `ExpressionLowering`. `analyzeCall` delegates
+to `evaluateStaticCall`, which validates arity and resolves arguments, then
+materializes the returned compile-time value. The private `StaticValue` model
+has three cases: `StaticIntValue(value, type)`, `StaticStringValue(bytes)`,
+and `StaticVoidValue`. `evaluateStaticCall` owns all intrinsic semantics:
 
 - boolean predicates (`is_primitive`, `is_memcpy_safe`, `is_trivial`,
   `is_memset_safe`, `is_same_type`, `is_matchable`, `is_comparable`,
-  `is_same_type_assignable`, `is_passable_by_value`) → `uint8`
-  `SemanticIntLiteralNode` 0/1;
-- `strcmp` → `int32` `SemanticIntLiteralNode` (lexicographic UTF-8 byte
+  `is_same_type_assignable`, `is_passable_by_value`) → `StaticIntValue`
+  0/1 with type `uint8`;
+- `strcmp` → `StaticIntValue` `int32` (lexicographic UTF-8 byte
   comparison);
-- `what_type` → a hoisted `_STR_<hash>` `[byte, N]` global wrapped in a
-  read-only `SemanticGetPtrNode` of type `view<[byte, N]>`, using the
-  `StringHoister` callback owned by `SemanticAnalyzer`;
-- `panic` → `ctx.error(message)` plus a fallback node (compilation aborts).
+- `what_type` → `StaticStringValue` containing the UTF-8 type spelling;
+- `panic` → reports `ctx.error(message)` and returns `StaticVoidValue`.
+
+String consumers call `evaluateStaticStringArgument`, which accepts a raw
+`StringLiteralNode` (decoded through `StringLiteralDecoder`) or a nested
+`static::<name>` call whose `StaticStringValue` is used directly. Other
+compile-time results and runtime expressions are rejected as not being
+compile-time strings. `strcmp` and `panic` share this path, so any future
+string producer is accepted without consumer-specific logic. Empty strings
+are rejected with the same `N >= 1` rule as ordinary strings. `materialize`
+turns `StaticIntValue` into `SemanticIntLiteralNode`, `StaticStringValue`
+into the hoisted `_STR_<hash>` `[byte, N]` global wrapped in a read-only
+`SemanticGetPtrNode` of type `view<[byte, N]>` via the `StringHoister`
+callback owned by `SemanticAnalyzer`, `StaticVoidValue` into the void-typed
+fallback, and a null value into the ordinary integer fallback. Because
+materialization happens only for the outer call, a `what_type` consumed by
+`strcmp` or `panic` never hoists a global.
 
 Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
 `isAssignableValueType`, the new `isStaticTrivial`) and
@@ -1717,9 +1735,11 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   `IntNode` — later phases see only integers. `break N` levels are folded
   during semantic analysis by `ConstExpressionEvaluator`.
 - String literals are hoisted to literal-backed globals and replaced with
-  `getview(<global>)` everywhere (§4.10); array literals get the same
-  treatment during semantic analysis (§4.13). Assigning a literal to an
-  array is a checked error that suggests `memcpy`.
+  `getview(<global>)` everywhere (§4.10), except direct arguments of
+  `static::<name>` calls, which remain raw literals for compile-time
+  evaluation; array literals get the same treatment during semantic
+  analysis (§4.13). Assigning a literal to an array is a checked error that
+  suggests `memcpy`.
 
 ### 4.2 Fluid integer constants
 Integer literals and folded constant expressions are **fluid**: a constant is
@@ -1939,6 +1959,12 @@ a `const uint8_t VAR__STR_<hash>[N] = {…}` (constant initialization),
 so declaration order and static-init order never matter. A string
 literal expression is `franko_make_fat_pointer(VAR__STR_<hash>, N, 2)`;
 decaying it to `view<[byte]>` copies the same mode-2 fat pointer.
+
+Exception: direct string-literal arguments of any `static::<name>` call are
+not hoisted; they remain raw `StringLiteralNode`s so `StaticIntrinsics` can
+inspect them. A `what_type` result consumed by another static intrinsic
+(for example `strcmp` or `panic`) stays a compile-time string and never
+materializes a `_STR_<hash>` global.
 
 Consequences of strings being views:
 * `s = "text"` / `[byte, N] s = "text"` are compile errors suggesting
@@ -2519,13 +2545,19 @@ is delegated before ordinary function resolution; if the `static` namespace
 is undeclared, the diagnostic explicitly asks for
 `import "franko/static"`. Identifier arguments are resolved symbolically
 (`VarNode` via `SymbolTable.resolve`, `QualifiedNameNode` via namespace +
-global lookup) and never lowered/evaluated. String arguments to `strcmp`
-and `panic` must remain raw `StringLiteralNode`s, so the Desugarer skips
-their hoisting; other arguments are desugared normally. Results are folded
-semantic literals (`uint8`/`int32`), except `what_type`, which hoists the
-UTF-8 spelling as a `_STR_<hash>` literal global and returns a read-only
-`SemanticGetPtrNode` of type `view<[byte, N]>`, and `panic`, which reports
-the message as an error and returns a fallback node.
+global lookup) and never lowered/evaluated. The Desugarer preserves raw
+string-literal arguments of every `static::` call so they reach the
+evaluator unhoisted; other arguments are desugared normally, including
+nested `static::` calls. `evaluateStaticCall` produces a `StaticValue`
+(`StaticIntValue`, `StaticStringValue`, or `StaticVoidValue`) and
+`materialize` turns only the outer result into a semantic node: integer
+results become folded semantic literals (`uint8`/`int32`), `what_type`
+becomes a hoisted `_STR_<hash>` literal global wrapped in a read-only
+`SemanticGetPtrNode` of type `view<[byte, N]>`, and `panic` reports the
+message as an error and returns a void-typed fallback. String consumers use
+`evaluateStaticStringArgument`, which accepts raw literals and nested
+compile-time string producers such as `what_type`; runtime views and
+non-string compile-time results are rejected.
 
 **Predicates.** `is_primitive` checks `SemanticPrimitiveType`;
 `is_memcpy_safe` reuses `TypeChecker.isMemcpySafe`; `is_memset_safe` reuses
@@ -2541,13 +2573,13 @@ accepts built-in whole-value assignability; `is_passable_by_value` reuses
 `TypeChecker.isAssignableValueType` (the by-value parameter and built-in
 whole-value assignment rule) and intentionally ignores custom
 `OPERATOR_MOV`. `strcmp` compares decoded
-UTF-8 bytes lexicographically. Empty literals are rejected with the same
-`N >= 1` rule as ordinary strings.
+UTF-8 bytes lexicographically. Empty static-string arguments are rejected
+with the same `N >= 1` rule as ordinary strings.
 
 **Limits.** The intrinsics are not first-class values, are rejected in
-`constExpr`-only slots, and `what_type` cannot feed `strcmp`/`panic`
-(which require syntactic literals). `static_if` is not allowed at global
-scope or in a `for` header.
+`constExpr`-only slots, and runtime `view<[byte]>` values cannot feed
+`strcmp`/`panic` (their arguments must be compile-time strings).
+`static_if` is not allowed at global scope or in a `for` header.
 
 ## 5. Build & test quick reference
 

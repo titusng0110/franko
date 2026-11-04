@@ -39,38 +39,63 @@ final class StaticIntrinsics {
                 && "static".equals(callee.segments.get(0));
     }
 
+    private sealed interface StaticValue
+            permits StaticIntValue, StaticStringValue, StaticVoidValue {
+    }
+
+    private record StaticIntValue(
+            BigInteger value,
+            SemanticType type
+    ) implements StaticValue {
+    }
+
+    private record StaticStringValue(
+            List<BigInteger> bytes
+    ) implements StaticValue {
+    }
+
+    private record StaticVoidValue() implements StaticValue {
+    }
+
     SemanticExprNode analyzeCall(
+            CallNode call,
+            QualifiedNameNode callee
+    ) {
+        return materialize(evaluateStaticCall(call, callee), call.span);
+    }
+
+    private StaticValue evaluateStaticCall(
             CallNode call,
             QualifiedNameNode callee
     ) {
         String name = callee.segments.get(1);
 
         return switch (name) {
-            case "is_primitive" -> analyzeTypePredicate(
+            case "is_primitive" -> evaluateTypePredicate(
                     call, name, type -> type instanceof SemanticPrimitiveType);
-            case "is_memcpy_safe" -> analyzeTypePredicate(
+            case "is_memcpy_safe" -> evaluateTypePredicate(
                     call, name, typeChecker::isMemcpySafe);
-            case "is_trivial" -> analyzeTypePredicate(
+            case "is_trivial" -> evaluateTypePredicate(
                     call, name, typeChecker::isStaticTrivial);
-            case "is_memset_safe" -> analyzeTypePredicate(
+            case "is_memset_safe" -> evaluateTypePredicate(
                     call, name, typeChecker::isMemsetSafe);
-            case "is_same_type" -> analyzeSameType(call, name);
-            case "what_type" -> analyzeWhatType(call, name);
-            case "strcmp" -> analyzeStrcmp(call, name);
-            case "panic" -> analyzePanic(call, name);
-            case "is_matchable" -> analyzeTypePredicate(
+            case "is_same_type" -> evaluateSameType(call, name);
+            case "what_type" -> evaluateWhatType(call, name);
+            case "strcmp" -> evaluateStrcmp(call, name);
+            case "panic" -> evaluatePanic(call, name);
+            case "is_matchable" -> evaluateTypePredicate(
                     call, name, this::isMatchable);
-            case "is_comparable" -> analyzeTypePredicate(
+            case "is_comparable" -> evaluateTypePredicate(
                     call, name, this::isComparable);
-            case "is_same_type_assignable" -> analyzeTypePredicate(
+            case "is_same_type_assignable" -> evaluateTypePredicate(
                     call, name, this::isSameTypeAssignable);
-            case "is_passable_by_value" -> analyzeTypePredicate(
+            case "is_passable_by_value" -> evaluateTypePredicate(
                     call, name, typeChecker::isAssignableValueType);
             default -> {
                 ctx.error("Unknown compile-time reflection function 'static::"
                         + name
                         + "'");
-                yield fallback(call.span);
+                yield null;
             }
         };
     }
@@ -79,54 +104,200 @@ final class StaticIntrinsics {
         boolean test(SemanticType type);
     }
 
-    private SemanticExprNode analyzeTypePredicate(
+    private StaticValue evaluateTypePredicate(
             CallNode call,
             String name,
             TypePredicate predicate
     ) {
         if (!requireArity(call, name, 1)) {
-            return fallback(call.span);
+            return null;
         }
 
         SemanticType type = resolveIdentifierArgument(call.args.get(0), name);
 
         if (type == null) {
-            return fallback(call.span);
+            return null;
         }
 
-        return bool(call.span, predicate.test(type));
+        BigInteger folded = predicate.test(type)
+                ? BigInteger.ONE
+                : BigInteger.ZERO;
+
+        return new StaticIntValue(folded, BOOL_TYPE);
     }
 
-    private SemanticExprNode analyzeSameType(CallNode call, String name) {
+    private StaticValue evaluateSameType(CallNode call, String name) {
         if (!requireArity(call, name, 2)) {
-            return fallback(call.span);
+            return null;
         }
 
         SemanticType left = resolveIdentifierArgument(call.args.get(0), name);
         SemanticType right = resolveIdentifierArgument(call.args.get(1), name);
 
         if (left == null || right == null) {
-            return fallback(call.span);
+            return null;
         }
 
-        return bool(call.span, TypeChecker.sameType(left, right));
+        BigInteger folded = TypeChecker.sameType(left, right)
+                ? BigInteger.ONE
+                : BigInteger.ZERO;
+
+        return new StaticIntValue(folded, BOOL_TYPE);
     }
 
-    private SemanticExprNode analyzeWhatType(CallNode call, String name) {
+    private StaticValue evaluateWhatType(CallNode call, String name) {
         if (!requireArity(call, name, 1)) {
-            return fallback(call.span);
+            return null;
         }
 
         SemanticType type = resolveIdentifierArgument(call.args.get(0), name);
 
         if (type == null) {
-            return fallback(call.span);
+            return null;
         }
 
-        List<BigInteger> bytes = utf8Bytes(type.describe());
+        return new StaticStringValue(utf8Bytes(type.describe()));
+    }
+
+    private StaticValue evaluateStrcmp(CallNode call, String name) {
+        if (!requireArity(call, name, 2)) {
+            return null;
+        }
+
+        List<BigInteger> left = evaluateStaticStringArgument(
+                call.args.get(0),
+                name
+        );
+        List<BigInteger> right = evaluateStaticStringArgument(
+                call.args.get(1),
+                name
+        );
+
+        if (left == null || right == null) {
+            return null;
+        }
+
+        int comparison = compareBytes(left, right);
+
+        return new StaticIntValue(
+                BigInteger.valueOf(comparison),
+                INT32_TYPE
+        );
+    }
+
+    private StaticValue evaluatePanic(CallNode call, String name) {
+        if (!requireArity(call, name, 1)) {
+            return null;
+        }
+
+        List<BigInteger> message = evaluateStaticStringArgument(
+                call.args.get(0),
+                name
+        );
+
+        if (message == null) {
+            return null;
+        }
+
+        ctx.error(decodeText(message));
+
+        return new StaticVoidValue();
+    }
+
+    private List<BigInteger> evaluateStaticStringArgument(
+            ASTNode arg,
+            String consumerName
+    ) {
+        List<BigInteger> bytes;
+
+        if (arg instanceof StringLiteralNode literal) {
+            bytes = decodeStringBytes(literal);
+        } else if (arg instanceof CallNode call
+                && call.callee instanceof QualifiedNameNode callee
+                && isStaticCallee(callee)) {
+            StaticValue value = evaluateStaticCall(call, callee);
+
+            if (value == null || value instanceof StaticVoidValue) {
+                return null;
+            }
+
+            if (!(value instanceof StaticStringValue string)) {
+                ctx.error("static::"
+                        + consumerName
+                        + " argument must be a compile-time string literal,"
+                        + " got "
+                        + describeStaticValue(value));
+                return null;
+            }
+
+            bytes = string.bytes();
+        } else {
+            ctx.error("static::"
+                    + consumerName
+                    + " argument must be a compile-time string literal, got "
+                    + describeArgumentKind(arg));
+            return null;
+        }
+
+        if (bytes == null) {
+            return null;
+        }
+
+        if (bytes.isEmpty()) {
+            ctx.error("Empty string literals are not supported: "
+                    + "a string literal is a view<[byte, N]> value with "
+                    + "N >= 1");
+            return null;
+        }
+
+        return bytes;
+    }
+
+    private SemanticExprNode materialize(
+            StaticValue value,
+            SourceSpan span
+    ) {
+        if (value instanceof StaticIntValue integer) {
+            return new SemanticIntLiteralNode(
+                    span,
+                    integer.type(),
+                    integer.value(),
+                    integer.value().toString(10)
+            );
+        }
+
+        if (value instanceof StaticStringValue string) {
+            return materializeStaticString(string.bytes(), span);
+        }
+
+        if (value instanceof StaticVoidValue) {
+            return new SemanticIntLiteralNode(
+                    span,
+                    VOID_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        return fallback(span);
+    }
+
+    private SemanticExprNode fallback(SourceSpan span) {
+        return new SemanticIntLiteralNode(
+                span,
+                INT32_TYPE,
+                BigInteger.ZERO,
+                "0"
+        );
+    }
+
+    private SemanticExprNode materializeStaticString(
+            List<BigInteger> bytes,
+            SourceSpan span
+    ) {
         GlobalVariableSymbol global = stringHoister.hoistStaticString(
                 bytes,
-                call.span
+                span
         );
 
         SemanticStaticArrayType arrayType = new SemanticStaticArrayType(
@@ -135,58 +306,15 @@ final class StaticIntrinsics {
         );
 
         SemanticExprNode target = new SemanticVarExprNode(
-                call.span,
+                span,
                 arrayType,
                 global
         );
 
         return new SemanticGetPtrNode(
-                call.span,
+                span,
                 new SemanticViewType(arrayType),
                 target
-        );
-    }
-
-    private SemanticExprNode analyzeStrcmp(CallNode call, String name) {
-        if (!requireArity(call, name, 2)) {
-            return fallback(call.span);
-        }
-
-        List<BigInteger> left = decodeStringLiteral(call.args.get(0), name);
-        List<BigInteger> right = decodeStringLiteral(call.args.get(1), name);
-
-        if (left == null || right == null) {
-            return fallback(call.span);
-        }
-
-        int comparison = compareBytes(left, right);
-
-        return new SemanticIntLiteralNode(
-                call.span,
-                INT32_TYPE,
-                BigInteger.valueOf(comparison),
-                Integer.toString(comparison)
-        );
-    }
-
-    private SemanticExprNode analyzePanic(CallNode call, String name) {
-        if (!requireArity(call, name, 1)) {
-            return fallback(call.span);
-        }
-
-        List<BigInteger> message = decodeStringLiteral(call.args.get(0), name);
-
-        if (message == null) {
-            return fallback(call.span);
-        }
-
-        ctx.error(decodeText(message));
-
-        return new SemanticIntLiteralNode(
-                call.span,
-                VOID_TYPE,
-                BigInteger.ZERO,
-                "0"
         );
     }
 
@@ -274,32 +402,29 @@ final class StaticIntrinsics {
         return null;
     }
 
-    private List<BigInteger> decodeStringLiteral(ASTNode arg, String name) {
-        if (!(arg instanceof StringLiteralNode literal)) {
-            ctx.error("static::"
-                    + name
-                    + " argument must be a raw string literal, got "
-                    + describeArgumentKind(arg));
-            return null;
-        }
-
-        List<BigInteger> bytes;
-
+    private List<BigInteger> decodeStringBytes(StringLiteralNode literal) {
         try {
-            bytes = StringLiteralDecoder.toUtf8Bytes(literal);
+            return StringLiteralDecoder.toUtf8Bytes(literal);
         } catch (RuntimeException e) {
             ctx.error(e.getMessage());
             return null;
         }
+    }
 
-        if (bytes.isEmpty()) {
-            ctx.error("Empty string literals are not supported: "
-                    + "a string literal is a view<[byte, N]> value with "
-                    + "N >= 1");
-            return null;
+    private static String describeStaticValue(StaticValue value) {
+        if (value instanceof StaticIntValue) {
+            return "a compile-time integer result";
         }
 
-        return bytes;
+        if (value instanceof StaticStringValue) {
+            return "a compile-time string result";
+        }
+
+        if (value instanceof StaticVoidValue) {
+            return "a compile-time void result";
+        }
+
+        return "a compile-time value";
     }
 
     private boolean isMatchable(SemanticType type) {
@@ -486,23 +611,4 @@ final class StaticIntrinsics {
         return "an expression";
     }
 
-    private static SemanticExprNode fallback(SourceSpan span) {
-        return new SemanticIntLiteralNode(
-                span,
-                INT32_TYPE,
-                BigInteger.ZERO,
-                "0"
-        );
-    }
-
-    private static SemanticExprNode bool(SourceSpan span, boolean value) {
-        BigInteger folded = value ? BigInteger.ONE : BigInteger.ZERO;
-
-        return new SemanticIntLiteralNode(
-                span,
-                BOOL_TYPE,
-                folded,
-                folded.toString(10)
-        );
-    }
 }

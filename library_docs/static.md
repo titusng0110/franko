@@ -78,7 +78,7 @@ constant.
 | `static::is_trivial(x)` | `1` when raw uninitialized storage is safe |
 | `static::is_memset_safe(x)` | `1` when `memset` may byte-fill the type |
 | `static::is_same_type(x, y)` | `1` for exact structural type equality |
-| `static::what_type(x)` | canonical type spelling as a `view<[byte, N]>` |
+| `static::what_type(x)` | canonical type spelling as a compile-time string (`view<[byte, N]>` in expression position) |
 | `static::is_matchable(x)` | `1` for primitives/pointers, or structs with `OPERATOR_EQ` |
 | `static::is_comparable(x)` | `1` for primitives, or structs with `OPERATOR_LT` |
 | `static::is_same_type_assignable(x)` | `1` when same-type assignment is legal |
@@ -88,9 +88,11 @@ constant.
 pointers, and structs whose fields are all passable by value. It does not
 consider a custom `OPERATOR_MOV`; use `is_same_type_assignable` for that.
 
-`static::strcmp(a, b)` compares two raw string literals bytewise and
+`static::strcmp(a, b)` compares two compile-time strings bytewise and
 returns `int32` (`-1`, `0`, or `1`). `static::panic(message)` aborts
-compilation with the raw string literal as the diagnostic.
+compilation with the compile-time string as the diagnostic. A compile-time
+string is a raw string literal or another compile-time string producer,
+such as `static::what_type(...)`.
 
 ```franko
 import "franko/static"
@@ -112,14 +114,20 @@ func main() -> int32 {
     print(static::is_primitive(i));            // 1
     print(static::is_matchable(p));            // 1
     print(static::what_type(p));               // Point
-    print(static::strcmp("abc", "abd"));     // -1
+    print(static::strcmp("abc", "abd"));       // -1
+    print(static::strcmp(static::what_type(i), "int32")); // 0
+    print(static::strcmp("int32", static::what_type(i))); // 0
     return 0;
 }
 ```
 
-`what_type` produces a real read-only byte view backed by immutable
-static storage, so it can be printed or assigned but not passed to
-`strcmp` or `panic`.
+As an ordinary expression, `what_type` produces a real read-only byte view
+backed by immutable static storage, so it can be printed or assigned. It is
+also a compile-time string, so it can be passed to `strcmp` or `panic`
+without materializing storage. For example,
+`static::panic(static::what_type(p))` aborts compilation with `Point` as
+the diagnostic. A runtime view variable cannot be passed to either
+function.
 
 ## FFI target selection
 

@@ -6,3 +6,8 @@ uint32
 ptr<int32>
 view<[uint8, 5]>
 a::b::Point
+0
+0
+0
+-1
+int32 branch
