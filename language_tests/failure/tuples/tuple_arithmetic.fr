@@ -1,0 +1,6 @@
+func main() -> int32 {
+    (int32, int32) a
+    (int32, int32) b
+    int32 x = a + b
+    return 0
+}

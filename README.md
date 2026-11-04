@@ -7,7 +7,7 @@ builds native executables.
 
 - **A small, no-brainer syntax.** C-like and regular, with explicit
   `self` receivers and no hidden control flow.
-- **Easy type model.** Fixed-width integers, structs, arrays, and pointers;
+- **Easy type model.** Fixed-width integers, structs, tuples, arrays, and pointers;
   no inheritance or implicit width changes.
 - **Compile-time memory safety.** Per-function (intraprocedural) checks
   catch null dereferences, dangling returns, and dynamic-array lifecycle

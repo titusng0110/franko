@@ -311,6 +311,12 @@ final class InactiveDeclarationPruner {
             return;
         }
 
+        if (type instanceof SemanticTupleType tuple) {
+            markStruct(tuple.cppSymbol);
+
+            return;
+        }
+
         if (type instanceof SemanticPtrType ptr) {
             markType(ptr.referencedType);
 

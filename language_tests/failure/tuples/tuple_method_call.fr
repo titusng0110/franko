@@ -1,0 +1,5 @@
+func main() -> int32 {
+    (int32, int32) t
+    t.length()
+    return 0
+}

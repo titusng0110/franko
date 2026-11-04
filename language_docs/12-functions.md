@@ -34,7 +34,8 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](25-structs.md).
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](25-structs.md); or
+- a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array, dynamic array, or `void` is pointer-only, exactly like a struct with such a field. See [Tuples](06-types.md#61-tuples).
 
 Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `getptr`/`getmview`/`getview` expression at the call site.
 
@@ -60,6 +61,23 @@ Declaring two functions with the same identifier and the same ordered parameter 
 Return type is not part of overload identity, but two declarations with
 the same identifier and parameter types are still an error when their
 return types differ. Functions may be called recursively.
+
+Tuple element names are not part of a function signature. These two
+declarations have the same normalized signature and are duplicates:
+
+```franko
+func f((int32 a, int32 b) x) -> int32 { ... }
+func f((int32 c, int32 d) y) -> int32 { ... }
+```
+
+The normalized signature is:
+
+```text
+fn((int32, int32)) -> int32
+```
+
+For example, `func foo((int32 x, int32 y) coord, uint8 data) -> (int32 val, int32 err)`
+normalizes to `fn((int32, int32), uint8) -> (int32, int32)`.
 
 ## 12.6 Function Call Resolution
 
@@ -123,9 +141,10 @@ A function return type must be either:
 - `void`;
 - a primitive integer type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
-- a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)).
+- a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)); or
+- a tuple type whose elements are all assignable value types, recursively (see [Tuples](06-types.md#61-tuples)).
 
-Arrays cannot currently be returned directly.
+Arrays cannot currently be returned directly. A tuple containing an array or another non-assignable element cannot be returned by value; use a pointer to the tuple instead.
 
 ## 12.11 Forward References and Recursion
 

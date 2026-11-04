@@ -59,6 +59,7 @@ public final class SemanticAnalyzer {
 
     public SemanticASTNode analyze(ASTNode root) {
         symbolTable.clear();
+        typeResolver.resetTupleTypes();
         hoistedArrayLiteralGlobals.clear();
         pendingHoistedArrayLiterals.clear();
         hoistedStaticStringGlobals.clear();
@@ -123,6 +124,7 @@ public final class SemanticAnalyzer {
 
     public List<SemanticStmtNode> analyze(List<ASTNode> nodes) {
         symbolTable.clear();
+        typeResolver.resetTupleTypes();
         hoistedArrayLiteralGlobals.clear();
         pendingHoistedArrayLiterals.clear();
         hoistedStaticStringGlobals.clear();
@@ -561,6 +563,13 @@ public final class SemanticAnalyzer {
 
         for (int i = pendingHoistedArrayLiterals.size() - 1; i >= 0; i--) {
             semanticItems.add(0, pendingHoistedArrayLiterals.get(i));
+        }
+
+        List<SemanticStructDeclNode> pendingTuples =
+                typeResolver.pendingTupleDecls();
+
+        for (int i = pendingTuples.size() - 1; i >= 0; i--) {
+            semanticItems.add(0, pendingTuples.get(i));
         }
 
         symbolTable.warnStructNameClashes();

@@ -82,3 +82,17 @@ X == X
 ```
 
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](25-structs.md) for the complete struct reference.
+
+## 28.7 Tuple Equality
+
+Tuple types are structural. Two tuple types are equal if and only if their ordered element types are equal. Element names are declaration-site aliases and are not part of type identity:
+
+```text
+(int32, int32)              == (int32 val, int32 err)
+(int32, int32)              == (int32 left, int32 right)
+(int32, uint32)             != (uint32, int32)
+(int32, int32)              != (int32, int32, int32)
+(int32, [int32, 3])         == (int32, [int32, 3])
+```
+
+Order matters even when the element sets match. Nested tuple types compare recursively by the same rule. See [Tuples](06-types.md#61-tuples).

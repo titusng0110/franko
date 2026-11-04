@@ -147,7 +147,7 @@ public class Cpp14Codegen {
                 emitLine("struct "
                         + qualify(
                                 struct.symbol.namespace,
-                                "STRUCT_" + struct.symbol.name
+                                emittedStructTypeName(struct.symbol)
                         )
                         + ";");
             }
@@ -160,7 +160,7 @@ public class Cpp14Codegen {
                 emitLine("struct "
                         + qualify(
                                 struct.symbol.namespace,
-                                "STRUCT_" + struct.symbol.name
+                                emittedStructTypeName(struct.symbol)
                         )
                         + ";");
             }
@@ -498,7 +498,10 @@ public class Cpp14Codegen {
 
         openNamespace(node.symbol.namespace);
 
-        emitLine("struct " + qualify(node.symbol.namespace, "STRUCT_" + node.symbol.name));
+        emitLine("struct " + qualify(
+                node.symbol.namespace,
+                emittedStructTypeName(node.symbol)
+        ));
         emitLine("{");
         indentLevel++;
 
@@ -521,7 +524,7 @@ public class Cpp14Codegen {
 
         StringBuilder sb = new StringBuilder();
 
-        sb.append(emitDecl(field.type, field.name));
+        sb.append(emitDecl(field.type, field.emittedName()));
 
         if (field.foldedDefault != null) {
             sb.append(" = ");
@@ -611,6 +614,11 @@ public class Cpp14Codegen {
 
         if (type instanceof SemanticStructType struct) {
             names.add(struct.structSymbol.qualifiedName());
+            return names;
+        }
+
+        if (type instanceof SemanticTupleType tuple) {
+            names.add(tuple.cppSymbol.qualifiedName());
             return names;
         }
 
@@ -1173,7 +1181,17 @@ public class Cpp14Codegen {
 
         if (type instanceof SemanticStructType struct) {
 
-            return qualify(struct.structSymbol.namespace, "STRUCT_" + struct.structSymbol.name);
+            return qualify(
+                    struct.structSymbol.namespace,
+                    emittedStructTypeName(struct.structSymbol)
+            );
+        }
+
+        if (type instanceof SemanticTupleType tuple) {
+            return qualify(
+                    tuple.cppSymbol.namespace,
+                    emittedStructTypeName(tuple.cppSymbol)
+            );
         }
 
         if (type instanceof SemanticNullType) {
@@ -1253,6 +1271,10 @@ public class Cpp14Codegen {
         }
 
         return qualify(symbol.namespace, symbol.emittedLocalName());
+    }
+
+    private static String emittedStructTypeName(StructSymbol symbol) {
+        return symbol.isTuple ? symbol.name : "STRUCT_" + symbol.name;
     }
 
     private String qualify(String symbolNamespace, String localName) {

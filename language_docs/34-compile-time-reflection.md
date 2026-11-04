@@ -184,17 +184,17 @@ be stored in a variable or passed as a callback.
 | Function | Argument contract | Result | Semantics |
 |---|---|---|---|
 | `static::is_primitive(x)` | one variable identifier | `uint8` | `1` iff `x` has a primitive integer type |
-| `static::is_memcpy_safe(x)` | one variable identifier | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, or struct with all fields memcpy-safe. Dynamic arrays are not memcpy-safe. |
-| `static::is_trivial(x)` | one variable identifier | `uint8` | `1` iff raw uninitialized storage is safe: primitives and static arrays of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or any non-trivial field are not. |
-| `static::is_memset_safe(x)` | one variable identifier | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, and structs whose field types are all memset-safe. Pointers, dynamic arrays, and `void` are not. Field defaults do not affect this predicate. |
-| `static::is_same_type(x, y)` | two variable identifiers | `uint8` | `1` iff the declared types are exactly equal |
-| `static::what_type(x)` | one variable identifier | compile-time string (`view<[byte, N]>` in expression position) | canonical type spelling |
+| `static::is_memcpy_safe(x)` | one variable identifier | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, struct with all fields memcpy-safe, or tuple with all elements memcpy-safe. Dynamic arrays are not memcpy-safe. |
+| `static::is_trivial(x)` | one variable identifier | `uint8` | `1` iff raw uninitialized storage is safe: primitives, static arrays of trivial elements, and tuples of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or any non-trivial field are not. |
+| `static::is_memset_safe(x)` | one variable identifier | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose field types are all memset-safe, and tuples whose element types are all memset-safe. Pointers, dynamic arrays, and `void` are not. Field defaults do not affect this predicate. |
+| `static::is_same_type(x, y)` | two variable identifiers | `uint8` | `1` iff the declared types are exactly equal; tuple element order matters and element names do not |
+| `static::what_type(x)` | one variable identifier | compile-time string (`view<[byte, N]>` in expression position) | canonical type spelling, including `(int32, int32)` for tuples |
 | `static::strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `static::panic(message)` | one compile-time string | `void` | stops compilation with the message |
-| `static::is_matchable(x)` | one variable identifier | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; arrays and `void` are `0` |
-| `static::is_comparable(x)` | one variable identifier | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; pointers, arrays, and `void` are `0` |
-| `static::is_same_type_assignable(x)` | one variable identifier | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; arrays and `void` are `0` |
-| `static::is_passable_by_value(x)` | one variable identifier | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, and structs whose fields are all passable by value. Static arrays, dynamic arrays, and `void` are not. |
+| `static::is_matchable(x)` | one variable identifier | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples, arrays, and `void` are `0` |
+| `static::is_comparable(x)` | one variable identifier | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, arrays, and `void` are `0` |
+| `static::is_same_type_assignable(x)` | one variable identifier | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays and `void` are `0` |
+| `static::is_passable_by_value(x)` | one variable identifier | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all passable, and tuples whose elements are all passable. Static arrays, dynamic arrays, and `void` are not. |
 
 ### Identifier arguments
 
@@ -272,6 +272,8 @@ Spellings use canonical Franko type names:
 | `[int32]` | `[int32]` |
 | `ptr<int32>` | `ptr<int32>` |
 | `view<[byte, 5]>` | `view<[uint8, 5]>` |
+| `(int32 val, int32 err)` | `(int32, int32)` |
+| `(uint8, [int32, 3])` | `(uint8, [int32, 3])` |
 | `a::b::Point` | `a::b::Point` |
 
 `byte` is an alias for `uint8`, so canonical spellings use `uint8`.
@@ -293,17 +295,19 @@ These predicates answer different questions:
 | Can I pass a value of this type to a function by value? | `static::is_passable_by_value(x)` |
 
 `is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
-elements, and structs whose fields are all memcpy-safe. Dynamic arrays are
-not memcpy-safe, because copying a dynamic array would duplicate ownership
-of its elements.
+elements, structs whose fields are all memcpy-safe, and tuples whose elements
+are all memcpy-safe. Dynamic arrays are not memcpy-safe, because copying a
+dynamic array would duplicate ownership of its elements.
 
 `is_memset_safe` covers primitives, static arrays of memset-safe elements,
-and structs whose field types are all memset-safe. Field defaults do not
-affect it, because `memset` deliberately overwrites the storage.
+structs whose field types are all memset-safe, and tuples whose element types
+are all memset-safe. Field defaults do not affect it, because `memset`
+deliberately overwrites the storage.
 
 `is_trivial` is stricter: it asks whether a value can be created from raw
 storage. A struct with a field default is memset-safe but not trivial,
-because raw storage would violate the default.
+because raw storage would violate the default. Tuple elements recurse
+through the same predicate; a tuple has no defaults of its own.
 
 ```franko
 struct WithDefault {
@@ -325,13 +329,16 @@ print(static::is_same_type_assignable(b)); // 0: no built-in assignment
 ```
 
 A struct that is not assignable by default can opt in with a same-type
-`OPERATOR_MOV`; `is_same_type_assignable` then returns `1`.
+`OPERATOR_MOV`; `is_same_type_assignable` then returns `1`. Tuples cannot
+declare operator methods, so for a tuple this predicate is exactly built-in
+element assignability.
 
-`is_passable_by_value` covers primitives, pointers, and structs whose
-fields are all passable by value. This is the same rule as built-in
+`is_passable_by_value` covers primitives, pointers, structs whose
+fields are all passable by value, and tuples whose elements are all passable
+by value. This is the same rule as built-in
 whole-value assignment; it does not consider a custom `OPERATOR_MOV`
 (use `is_same_type_assignable` for that). Static arrays and dynamic arrays
-are not passable by value, so a struct containing one is not either:
+are not passable by value, so a struct or tuple containing one is not either:
 
 ```franko
 struct WithArray {

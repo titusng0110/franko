@@ -73,7 +73,7 @@ See [Array Literals](22-array-literals.md) for literal-source rules.
 
 ## 14.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields.
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](#148-tuple-assignment).
 
 Valid:
 
@@ -261,3 +261,28 @@ local dies before the operator call returns.
 
 See [Operators](17-operators.md#1710-struct-operator-overloading) for the
 complete operator overload rules.
+
+## 14.8 Tuple Assignment
+
+Tuple assignment uses the same built-in whole-value rule as struct assignment:
+
+```franko
+(int32 val, int32 err) a
+(int32 left, int32 right) b
+
+b = a
+```
+
+The ordered element types must match exactly; element names are irrelevant. `(int32 val, int32 err)` and `(int32, int32)` are the same type, so assignment between them is valid. `(int32, uint32)` and `(uint32, int32)` are different types and cannot be assigned even when the overall element sets are the same.
+
+A tuple is assignable as a whole only when every element is an assignable value type (primitive, pointer, struct with assignable fields, or another assignable tuple). A tuple containing a static array, dynamic array, or `void` is pointer-only:
+
+```franko
+(int32, [int32, 3]) a
+(int32, [int32, 3]) b
+a = b          // invalid: non-assignable element
+```
+
+Tuples cannot define `OPERATOR_MOV` or any other operator method, so whole-tuple assignment always uses the built-in rule. Assign individual elements when a tuple contains a non-assignable element.
+
+See [Tuples](06-types.md#61-tuples) and [Type Equality](28-type-equality.md#287-tuple-equality).

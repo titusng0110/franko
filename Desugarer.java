@@ -1097,6 +1097,20 @@ public class Desugarer {
             return type;
         }
 
+        if (type instanceof TupleTypeNode n) {
+            List<TupleTypeElementNode> elements = new ArrayList<>();
+
+            for (TupleTypeElementNode element : n.elements) {
+                elements.add(new TupleTypeElementNode(
+                    element.span,
+                    desugarType(element.type),
+                    element.name
+                ));
+            }
+
+            return new TupleTypeNode(n.span, elements);
+        }
+
         if (type instanceof DynamicArrayTypeNode) {
             DynamicArrayTypeNode n = (DynamicArrayTypeNode) type;
 

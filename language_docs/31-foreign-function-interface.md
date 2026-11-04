@@ -137,3 +137,5 @@ The compiler rejects an FFI module when:
 - a listed function does not exist in the `.fr` file;
 - a bridged function has no bridge file or no matching block;
 - a bridged function block does not contain the expected mangled name.
+
+Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.

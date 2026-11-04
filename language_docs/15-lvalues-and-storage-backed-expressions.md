@@ -10,6 +10,7 @@ Current storage-backed lvalues are:
 | array element of storage-backed array | yes |
 | `$(pointer)` | yes |
 | struct field access whose base is an lvalue (`obj.field`) | yes |
+| tuple element access whose base is an lvalue (`t.val`, `t._0`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
 | comparison expression | no |
@@ -18,7 +19,9 @@ Current storage-backed lvalues are:
 
 Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
-See [Structs](25-structs.md) for the complete struct reference.
+Tuple element access follows exactly the same rule: `t.val` and `t._0` are lvalues when `t` is storage-backed, and tuple elements can be assigned, passed to `getptr`/`getview`/`getmview`, and nested in longer access chains.
+
+See [Structs](25-structs.md) for the complete struct reference and [Tuples](06-types.md#61-tuples) for tuple types.
 
 This distinction matters for:
 

@@ -338,11 +338,19 @@ public final class SemanticASTSerializer {
             }
 
             obj.put("methods", methods);
+
+            if (struct.isTuple) {
+                obj.put("tuple", true);
+            }
         } else if (symbol instanceof FieldSymbol field) {
             obj.put("kind", "field");
             obj.put("name", field.name);
             obj.put("type", typeToJson(field.type, registry));
             obj.put("foldedDefault", stringOrNull(field.foldedDefault));
+
+            if (field.tupleIndex >= 0) {
+                obj.put("tupleIndex", field.tupleIndex);
+            }
         } else if (symbol instanceof MethodSymbol method) {
             obj.put("kind", "method");
             obj.put("name", method.name);
@@ -421,7 +429,8 @@ public final class SemanticASTSerializer {
                 case "struct" -> {
                     StructSymbol struct = new StructSymbol(
                             obj.optString("namespace"),
-                            obj.requireString("name")
+                            obj.requireString("name"),
+                            obj.has("tuple") && obj.requireBool("tuple")
                     );
                     registry.registerWithId(id, struct);
                     structShells.put(id, obj);
@@ -441,7 +450,8 @@ public final class SemanticASTSerializer {
             FieldSymbol field = new FieldSymbol(
                     obj.requireString("name"),
                     typeFromJson(obj.requireObject("type"), registry),
-                    bigIntegerOrNull(obj.get("foldedDefault"))
+                    bigIntegerOrNull(obj.get("foldedDefault")),
+                    obj.has("tupleIndex") ? obj.requireInt("tupleIndex") : -1
             );
             registry.registerWithId(entry.getKey(), field);
         }
@@ -641,6 +651,20 @@ public final class SemanticASTSerializer {
         } else if (type instanceof SemanticStructType struct) {
             obj.put("type", "struct");
             obj.put("symbol", registry.idFor(struct.structSymbol));
+        } else if (type instanceof SemanticTupleType tuple) {
+            obj.put("type", "tuple");
+            obj.put("symbol", registry.idFor(tuple.cppSymbol));
+
+            JsonArray elements = new JsonArray();
+
+            for (FieldSymbol field : tuple.fields) {
+                JsonObject element = new JsonObject();
+                element.put("name", field.name);
+                element.put("type", typeToJson(field.type, registry));
+                elements.add(element);
+            }
+
+            obj.put("elements", elements);
         } else if (type instanceof SemanticFunctionType function) {
             obj.put("type", "function");
             JsonArray parameters = new JsonArray();
@@ -693,6 +717,38 @@ public final class SemanticASTSerializer {
             case "struct" -> new SemanticStructType(
                     (StructSymbol) registry.require(obj.requireString("symbol"))
             );
+            case "tuple" -> {
+                StructSymbol cppSymbol = (StructSymbol) registry.require(
+                        obj.requireString("symbol")
+                );
+                List<FieldSymbol> fields = new ArrayList<>();
+                int index = 0;
+
+                for (JsonValue value : obj.requireArray("elements").values()) {
+                    JsonObject element = JsonAstSupport.requireObject(
+                            value,
+                            "tuple element"
+                    );
+                    String name = element.optString("name");
+
+                    if (name == null) {
+                        name = "_" + index;
+                    }
+
+                    fields.add(new FieldSymbol(
+                            name,
+                            typeFromJson(
+                                    element.requireObject("type"),
+                                    registry
+                            ),
+                            null,
+                            index
+                    ));
+                    index++;
+                }
+
+                yield new SemanticTupleType(fields, cppSymbol);
+            }
             case "function" -> {
                 List<SemanticType> parameters = new ArrayList<>();
 

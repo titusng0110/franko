@@ -558,3 +558,52 @@ func main() -> int32 {
     return 0;
 }
 ```
+
+## 32.24 Tuple Values
+
+Named and unnamed tuple declarations, assignment across different names, and a function round-trip:
+
+```franko
+import "franko/io"
+import "franko/static"
+
+func swap((int32 x, int32 y) pair) -> (int32 left, int32 right) {
+    (int32 first, int32 second) copy = pair
+    (int32 upper, int32 lower) result
+    result.upper = copy.second
+    result.lower = copy.first
+    return result
+}
+
+func main() -> int32 {
+    (int32 val, int32 err) res
+    (int32, int32) lazy
+
+    res.val = 1
+    res.err = 2
+    lazy._0 = 3
+    lazy._1 = 4
+
+    (uint hello, int world) a
+    (uint different, int name) b
+    a.hello = 5
+    a.world = 6
+    b = a
+    b.different = b.different + 1
+
+    (int32 low, int32 high) swapped = swap(res)
+
+    print(res.val)                 // 1
+    print(lazy._1)                 // 4
+    print(b.different)             // 6
+    print(b.name)                  // 6
+    print(swapped.low)             // 2
+    print(swapped.high)            // 1
+    print(static::is_same_type(res, lazy))   // 1
+    print(static::what_type(res))            // (int32, int32)
+
+    return 0
+}
+```
+
+There is no tuple literal: values are built by writing elements, copying whole tuples with different element names, or returning them from functions. See [Tuples](06-types.md#61-tuples).

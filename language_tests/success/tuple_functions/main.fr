@@ -1,0 +1,18 @@
+import "franko/io"
+
+func foo((int32 x, int32 y) coord, uint8 somedata) -> (int32 val, int32 err) {
+    (int32 strange, int32 verystrange) copy = coord
+    return copy
+}
+
+func main() -> int32 {
+    (int32 x, int32 y) coord
+    coord.x = 3
+    coord.y = 4
+
+    (int32 left, int32 right) result = foo(coord, 9)
+    print(result.left)
+    print(result.right)
+
+    return 0
+}

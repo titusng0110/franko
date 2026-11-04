@@ -198,11 +198,26 @@ class FieldSymbol {
     final String name;
     final SemanticType type;
     final BigInteger foldedDefault;
+    final int tupleIndex;
 
     FieldSymbol(String name, SemanticType type, BigInteger foldedDefault) {
+        this(name, type, foldedDefault, -1);
+    }
+
+    FieldSymbol(
+            String name,
+            SemanticType type,
+            BigInteger foldedDefault,
+            int tupleIndex
+    ) {
         this.name = Objects.requireNonNull(name);
         this.type = Objects.requireNonNull(type);
         this.foldedDefault = foldedDefault;
+        this.tupleIndex = tupleIndex;
+    }
+
+    String emittedName() {
+        return tupleIndex >= 0 ? "_" + tupleIndex : name;
     }
 }
 
@@ -212,21 +227,35 @@ class StructSymbol {
 
     final String namespace;
 
+    final boolean isTuple;
+
     final Map<String, List<MethodSymbol>> methods = new LinkedHashMap<>();
 
     final IdentityHashMap<FunctionDeclNode, MethodSymbol> methodDeclSymbols =
             new IdentityHashMap<>();
 
     StructSymbol(String namespace, String name) {
-        this.namespace = namespace;
-        this.name = Objects.requireNonNull(name);
-        this.fields = new ArrayList<>();
+        this(namespace, name, List.of(), false);
     }
 
     StructSymbol(String namespace, String name, List<FieldSymbol> fields) {
+        this(namespace, name, fields, false);
+    }
+
+    StructSymbol(String namespace, String name, boolean isTuple) {
+        this(namespace, name, List.of(), isTuple);
+    }
+
+    StructSymbol(
+            String namespace,
+            String name,
+            List<FieldSymbol> fields,
+            boolean isTuple
+    ) {
         this.namespace = namespace;
         this.name = Objects.requireNonNull(name);
         this.fields = new ArrayList<>(fields);
+        this.isTuple = isTuple;
     }
 
     public String qualifiedName() {

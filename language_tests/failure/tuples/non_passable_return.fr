@@ -1,0 +1,6 @@
+func give() -> (int32, [int32, 3]) {
+}
+
+func main() -> int32 {
+    return 0
+}

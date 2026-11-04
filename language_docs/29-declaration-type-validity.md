@@ -4,6 +4,7 @@ A declared variable type is valid if it is one of:
 
 - primitive integer type;
 - a declared struct type;
+- a tuple of valid non-`void` element types (at least two elements);
 - dynamic array of a valid non-`void` type;
 - static array of a valid non-`void` type with valid size;
 - pointer of a valid non-`void` type.
@@ -15,11 +16,14 @@ struct X { int32 n }
 
 int32 x;
 X s;
+(int32, int32) pair;
+(int32 val, X) named;
 [X] xs;
 [uint8, 64] bytes;
 [[byte, 20], 12] grid;
 ptr<int32> p;
 ptr<[int32]> ap;
+ptr<(int32, int32)> tp;
 ```
 
 Invalid:
@@ -38,6 +42,7 @@ A function return type has separate rules. It may be:
 - `void`;
 - a primitive integer type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
-- a struct whose fields are all assignable value types, recursively.
+- a struct whose fields are all assignable value types, recursively; or
+- a tuple whose elements are all assignable value types, recursively.
 
-Array return types are invalid.
+Array return types are invalid. A tuple containing an array or another non-assignable element cannot be returned by value; return a pointer to it instead.

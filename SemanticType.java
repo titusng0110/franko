@@ -338,6 +338,88 @@ final class SemanticStructType extends SemanticType {
     }
 }
 
+final class SemanticTupleType extends SemanticType {
+    final List<FieldSymbol> fields;
+    final StructSymbol cppSymbol;
+
+    SemanticTupleType(List<FieldSymbol> fields, StructSymbol cppSymbol) {
+        this.fields = List.copyOf(fields);
+        this.cppSymbol = Objects.requireNonNull(cppSymbol);
+    }
+
+    @Override
+    public String describe() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(");
+
+        for (int i = 0; i < fields.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            sb.append(fields.get(i).type.describe());
+        }
+
+        sb.append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String mangleKey() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(");
+
+        for (int i = 0; i < fields.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+
+            sb.append(fields.get(i).type.mangleKey());
+        }
+
+        sb.append(")");
+        return sb.toString();
+    }
+
+    FieldSymbol resolveField(String name) {
+        for (FieldSymbol field : fields) {
+            if (field.name.equals(name)) {
+                return field;
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof SemanticTupleType other)) {
+            return false;
+        }
+
+        if (fields.size() != other.fields.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < fields.size(); i++) {
+            if (!fields.get(i).type.equals(other.fields.get(i).type)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        List<SemanticType> elementTypes = fields.stream()
+                .map(field -> field.type)
+                .toList();
+
+        return Objects.hash(SemanticTupleType.class, elementTypes);
+    }
+}
+
 final class SemanticFunctionType extends SemanticType {
     final List<SemanticType> parameterTypes;
     final SemanticType returnType;

@@ -437,6 +437,19 @@ public final class ASTSerializer {
                             : String.join("::", n.namespaceSegments)
             );
             obj.put("name", n.name);
+        } else if (type instanceof TupleTypeNode n) {
+            obj.put("type", "tuple");
+            JsonArray elements = new JsonArray();
+
+            for (TupleTypeElementNode element : n.elements) {
+                JsonObject elementObj = new JsonObject();
+                elementObj.put("span", spanToJson(element.span, sources));
+                elementObj.put("name", element.name);
+                elementObj.put("type", typeToJson(element.type, sources));
+                elements.add(elementObj);
+            }
+
+            obj.put("elements", elements);
         } else {
             throw new IllegalArgumentException(
                     "Unknown AST type node: " + type.getClass().getName()
@@ -480,6 +493,26 @@ public final class ASTSerializer {
                         ? List.of()
                         : List.of(namespace.split("::"));
                 yield new StructTypeNode(span, segments, obj.requireString("name"));
+            }
+            case "tuple" -> {
+                List<TupleTypeElementNode> elements = new ArrayList<>();
+
+                for (JsonValue elementValue : obj.requireArray("elements").values()) {
+                    JsonObject element = JsonAstSupport.requireObject(
+                            elementValue,
+                            "tuple element"
+                    );
+                    elements.add(new TupleTypeElementNode(
+                            spanFromJson(element, sources),
+                            typeFromJson(
+                                    element.requireObject("type"),
+                                    sources
+                            ),
+                            element.optString("name")
+                    ));
+                }
+
+                yield new TupleTypeNode(span, elements);
             }
             default -> throw new IllegalArgumentException(
                     "Unknown AST type kind '" + kind + "'"
