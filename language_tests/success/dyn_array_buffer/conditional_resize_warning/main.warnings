@@ -1,0 +1,1 @@
+Intraprocedural: Pointer 'e' may have been invalidated by resize or uninit of dynamic array 'd'

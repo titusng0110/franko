@@ -1,0 +1,10 @@
+func clear(ptr<ptr<int32>> out) -> void {
+    $(out) = null
+}
+
+func main() -> int32 {
+    int32 x = 0
+    ptr<int32> p = getptr(x)
+    clear(getptr(p))
+    return $(p)
+}

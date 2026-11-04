@@ -1,879 +1,981 @@
-import java.math.BigInteger;
 import java.util.Arrays;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 final class DynamicArrayAnalysisState {
-    private static final int MAX_BRANCH_DEPTH = 12;
+    static final byte UNINITED = 0;
+    static final byte INITED = 1;
+    static final byte MAYBE_INITED = 2;
 
-    final IdentityHashMap<VariableSymbol, Integer> arrayIndexBySymbol =
-            new IdentityHashMap<>();
+    static final byte FREED_NEVER = 0;
+    static final byte FREED_MAYBE = 1;
+    static final byte FREED_YES = 2;
 
-    VariableSymbol[] arraySymbols = new VariableSymbol[0];
-    int arrayCount = 0;
+    static final byte POST_UNCHANGED = 0;
+    static final byte POST_INITED = 1;
+    static final byte POST_UNINITED = 2;
+    static final byte POST_MAYBE = 3;
+    static final byte POST_HAVOC = 4;
 
-    final IdentityHashMap<VariableSymbol, Integer> pointerIndexBySymbol =
-            new IdentityHashMap<>();
+    static final int ALIAS_NONE = -1;
+    static final int ALIAS_UNKNOWN = -2;
 
-    VariableSymbol[] pointerSymbols = new VariableSymbol[0];
-    int pointerCount = 0;
+    static final int BINDING_STRIDE = 7;
+    static final int BINDING_ARRAY = 0;
+    static final int BINDING_LIFECYCLE = 1;
+    static final int BINDING_FREED = 2;
+    static final int BINDING_ALIAS_ROOT = 3;
+    static final int BINDING_ALIAS_EPOCH = 4;
+    static final int BINDING_EPOCH = 5;
+    static final int BINDING_ROOT_ARG = 6;
 
-    ArrayState[] arrayState = new ArrayState[0];
-    FreedState[] freedState = new FreedState[0];
-    boolean[] escaped = new boolean[0];
+    final MemoryAnalysisContext context;
+    final MemoryTemplateRegistry templates;
 
-    ArrayOrigin[] pointerState = new ArrayOrigin[0];
+    final int arrayCount;
+    final int[] arrayVariableIds;
+    final int[] arrayIndexByVariable;
 
-    ArrayState[][] arraySnapshots = new ArrayState[0][];
-    FreedState[][] freedSnapshots = new FreedState[0][];
-    ArrayOrigin[][] pointerSnapshots = new ArrayOrigin[0][];
+    final int ownerCount;
+    final int[] ownerVariableIds;
+    final int[] ownerIndexByVariable;
 
-    int snapshotCount = 0;
+    final int pointerCount;
+    final int[] pointerVariableIds;
+    final int[] pointerIndexByVariable;
 
-    void prepare(SemanticASTNode root) {
-        arrayIndexBySymbol.clear();
-        arraySymbols = new VariableSymbol[16];
-        arrayCount = 0;
+    final int arrayWords;
+    final int paramCount;
+    final int paramWords;
+    final int siteCount;
+    final int siteWords;
+    final int templateWords;
 
-        pointerIndexBySymbol.clear();
-        pointerSymbols = new VariableSymbol[16];
-        pointerCount = 0;
+    byte[] lifecycle;
+    byte[] freed;
+    boolean[] escaped;
+    int[] epochMin;
+    int[] epochMax;
+    long[] ownerArrayBits;
+    boolean[] ownerUnknown;
+    int[] aliasRoot;
+    int[] aliasEpoch;
 
-        collectSymbols(root);
+    byte[] paramPost;
+    long[] requireMust;
+    long[] requireMay;
+    long[] invalidateMust;
+    long[] invalidateMay;
+    long[] freeMust;
+    long[] freeMay;
+    long[] useMust;
+    long[] useMay;
+    long[] escapeMust;
+    long[] escapeMay;
+    long[] symAlias;
 
-        arraySymbols = Arrays.copyOf(arraySymbols, arrayCount);
-        pointerSymbols = Arrays.copyOf(pointerSymbols, pointerCount);
+    private byte[] lifecycleSnapshots = new byte[0];
+    private byte[] freedSnapshots = new byte[0];
+    private boolean[] escapedSnapshots = new boolean[0];
+    private int[] epochMinSnapshots = new int[0];
+    private int[] epochMaxSnapshots = new int[0];
+    private long[] ownerBitsSnapshots = new long[0];
+    private boolean[] ownerUnknownSnapshots = new boolean[0];
+    private int[] aliasRootSnapshots = new int[0];
+    private int[] aliasEpochSnapshots = new int[0];
+    private byte[] paramPostSnapshots = new byte[0];
+    private long[] requireMustSnapshots = new long[0];
+    private long[] requireMaySnapshots = new long[0];
+    private long[] invalidateMustSnapshots = new long[0];
+    private long[] invalidateMaySnapshots = new long[0];
+    private long[] freeMustSnapshots = new long[0];
+    private long[] freeMaySnapshots = new long[0];
+    private long[] useMustSnapshots = new long[0];
+    private long[] useMaySnapshots = new long[0];
+    private long[] escapeMustSnapshots = new long[0];
+    private long[] escapeMaySnapshots = new long[0];
+    private long[] symAliasSnapshots = new long[0];
 
-        arrayState = new ArrayState[arrayCount];
-        freedState = new FreedState[arrayCount];
+    int capacity;
+    int snapshotCount;
+
+    private int[][] blockLocals = new int[32][];
+
+    DynamicArrayAnalysisState(MemoryAnalysisContext context) {
+        this.context = context;
+        this.templates = context.templates;
+
+        int arrayTotal = 0;
+        int ownerTotal = 0;
+        int pointerTotal = 0;
+
+        for (int i = 0; i < context.variables.length; i++) {
+            VariableSymbol symbol = context.variables[i];
+
+            if (symbol instanceof GlobalVariableSymbol) {
+                continue;
+            }
+
+            if (symbol.type instanceof SemanticDynamicArrayType) {
+                arrayTotal++;
+            }
+
+            if (symbol.type instanceof SemanticPtrType pointer
+                    && pointer.permission == PtrPermission.OWNER
+                    && pointer.referencedType instanceof SemanticDynamicArrayType) {
+                ownerTotal++;
+            }
+
+            if (symbol.type instanceof SemanticPtrType) {
+                pointerTotal++;
+            }
+        }
+
+        arrayCount = arrayTotal;
+        ownerCount = ownerTotal;
+        pointerCount = pointerTotal;
+        arrayVariableIds = new int[arrayCount];
+        ownerVariableIds = new int[ownerCount];
+        pointerVariableIds = new int[pointerCount];
+        arrayIndexByVariable = new int[context.variables.length];
+        ownerIndexByVariable = new int[context.variables.length];
+        pointerIndexByVariable = new int[context.variables.length];
+        Arrays.fill(arrayIndexByVariable, -1);
+        Arrays.fill(ownerIndexByVariable, -1);
+        Arrays.fill(pointerIndexByVariable, -1);
+
+        int arrayIndex = 0;
+        int ownerIndex = 0;
+        int pointerIndex = 0;
+
+        for (int i = 0; i < context.variables.length; i++) {
+            VariableSymbol symbol = context.variables[i];
+
+            if (symbol instanceof GlobalVariableSymbol) {
+                continue;
+            }
+
+            if (symbol.type instanceof SemanticDynamicArrayType) {
+                arrayVariableIds[arrayIndex] = i;
+                arrayIndexByVariable[i] = arrayIndex++;
+            }
+
+            if (symbol.type instanceof SemanticPtrType pointer
+                    && pointer.permission == PtrPermission.OWNER
+                    && pointer.referencedType instanceof SemanticDynamicArrayType) {
+                ownerVariableIds[ownerIndex] = i;
+                ownerIndexByVariable[i] = ownerIndex++;
+            }
+
+            if (symbol.type instanceof SemanticPtrType) {
+                pointerVariableIds[pointerIndex] = i;
+                pointerIndexByVariable[i] = pointerIndex++;
+            }
+        }
+
+        arrayWords = Math.max(1, (arrayCount + 63) >>> 6);
+        paramCount = context.templates.paramCount;
+        paramWords = Math.max(1, (paramCount + 63) >>> 6);
+        siteCount = context.siteCount;
+        siteWords = Math.max(1, (siteCount + 63) >>> 6);
+        templateWords = context.templates.words;
+
+        lifecycle = new byte[arrayCount];
+        freed = new byte[arrayCount];
         escaped = new boolean[arrayCount];
+        epochMin = new int[arrayCount];
+        epochMax = new int[arrayCount];
+        ownerArrayBits = new long[ownerCount * arrayWords];
+        ownerUnknown = new boolean[ownerCount];
+        aliasRoot = new int[pointerCount];
+        aliasEpoch = new int[pointerCount];
 
-        Arrays.fill(arrayState, ArrayState.UNINITED);
-        Arrays.fill(freedState, FreedState.NEVER);
+        paramPost = new byte[paramCount];
+        requireMust = new long[paramWords];
+        requireMay = new long[paramWords];
+        invalidateMust = new long[paramWords];
+        invalidateMay = new long[paramWords];
+        freeMust = new long[paramWords];
+        freeMay = new long[paramWords];
+        useMust = new long[paramWords];
+        useMay = new long[paramWords];
+        escapeMust = new long[paramWords];
+        escapeMay = new long[paramWords];
+        symAlias = new long[pointerCount * templateWords];
+    }
 
-        pointerState = new ArrayOrigin[pointerCount];
-        Arrays.fill(pointerState, ArrayOrigin.UNKNOWN);
+    void reset() {
+        Arrays.fill(lifecycle, UNINITED);
+        Arrays.fill(freed, FREED_NEVER);
+        Arrays.fill(escaped, false);
+        Arrays.fill(epochMin, 0);
+        Arrays.fill(epochMax, 0);
+        Arrays.fill(ownerArrayBits, 0L);
+        Arrays.fill(ownerUnknown, false);
+        Arrays.fill(aliasRoot, ALIAS_NONE);
+        Arrays.fill(aliasEpoch, 0);
+        Arrays.fill(paramPost, POST_UNCHANGED);
+        Arrays.fill(requireMust, 0L);
+        Arrays.fill(requireMay, 0L);
+        Arrays.fill(invalidateMust, 0L);
+        Arrays.fill(invalidateMay, 0L);
+        Arrays.fill(freeMust, 0L);
+        Arrays.fill(freeMay, 0L);
+        Arrays.fill(useMust, 0L);
+        Arrays.fill(useMay, 0L);
+        Arrays.fill(escapeMust, 0L);
+        Arrays.fill(escapeMay, 0L);
+        Arrays.fill(symAlias, 0L);
+        snapshotCount = 0;
+    }
 
-        int estimatedSnapshots = Math.max(
-                2 * MAX_BRANCH_DEPTH,
-                estimateSnapshotDemand(root, 0) + MAX_BRANCH_DEPTH
+    int arrayIndexOf(VariableSymbol symbol) {
+        int variableId = context.variableId(symbol);
+
+        if (variableId < 0) {
+            return -1;
+        }
+
+        return arrayIndexByVariable[variableId];
+    }
+
+    int ownerIndexOf(VariableSymbol symbol) {
+        int variableId = context.variableId(symbol);
+
+        if (variableId < 0) {
+            return -1;
+        }
+
+        return ownerIndexByVariable[variableId];
+    }
+
+    int pointerIndexOf(VariableSymbol symbol) {
+        int variableId = context.variableId(symbol);
+
+        if (variableId < 0) {
+            return -1;
+        }
+
+        return pointerIndexByVariable[variableId];
+    }
+
+    int ownerIndexOfVariable(int variableId) {
+        if (variableId < 0 || variableId >= ownerIndexByVariable.length) {
+            return -1;
+        }
+
+        return ownerIndexByVariable[variableId];
+    }
+
+    int pointerIndexOfVariable(int variableId) {
+        if (variableId < 0 || variableId >= pointerIndexByVariable.length) {
+            return -1;
+        }
+
+        return pointerIndexByVariable[variableId];
+    }
+
+    int arrayIndexOfVariable(int variableId) {
+        if (variableId < 0 || variableId >= arrayIndexByVariable.length) {
+            return -1;
+        }
+
+        return arrayIndexByVariable[variableId];
+    }
+
+    void clearOwner(int ownerIndex) {
+        int offset = ownerIndex * arrayWords;
+        Arrays.fill(ownerArrayBits, offset, offset + arrayWords, 0L);
+        ownerUnknown[ownerIndex] = false;
+    }
+
+    void addOwner(int ownerIndex, int arrayIndex) {
+        if (arrayIndex < 0) {
+            return;
+        }
+
+        ownerArrayBits[ownerIndex * arrayWords + (arrayIndex >>> 6)]
+                |= 1L << (arrayIndex & 63);
+    }
+
+    void setOwnerUnknown(int ownerIndex) {
+        ownerUnknown[ownerIndex] = true;
+    }
+
+    void copyOwner(int target, int source) {
+        int targetOffset = target * arrayWords;
+        int sourceOffset = source * arrayWords;
+        System.arraycopy(
+                ownerArrayBits,
+                sourceOffset,
+                ownerArrayBits,
+                targetOffset,
+                arrayWords
         );
-
-        arraySnapshots = new ArrayState[estimatedSnapshots][arrayCount];
-        freedSnapshots = new FreedState[estimatedSnapshots][arrayCount];
-        pointerSnapshots = new ArrayOrigin[estimatedSnapshots][pointerCount];
-
-        for (int i = 0; i < estimatedSnapshots; i++) {
-            Arrays.fill(arraySnapshots[i], ArrayState.UNINITED);
-            Arrays.fill(freedSnapshots[i], FreedState.NEVER);
-            Arrays.fill(pointerSnapshots[i], ArrayOrigin.UNKNOWN);
-        }
+        ownerUnknown[target] = ownerUnknown[source];
     }
 
-    private void collectSymbols(SemanticASTNode node) {
-        if (node == null) {
-            return;
-        }
-
-        if (node instanceof SemanticProgramNode n) {
-            for (SemanticASTNode item : n.topLevelItems) {
-                collectSymbols(item);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticNamespaceNode n) {
-            for (SemanticASTNode item : n.items) {
-                collectSymbols(item);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticFunctionDeclNode n) {
-            for (VariableSymbol parameter : n.parameterVariables) {
-                addPointerSymbolIfNeeded(parameter);
-            }
-
-            collectSymbols(n.body);
-            return;
-        }
-
-        if (node instanceof SemanticStructDeclNode n) {
-            for (SemanticFunctionDeclNode method : n.methods) {
-                collectSymbols(method);
-            }
-
-            return;
-        }
-
-        if (node instanceof SemanticBlockNode n) {
-            for (SemanticStmtNode stmt : n.statements) {
-                collectSymbols(stmt);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticVarDeclNode n) {
-            addArraySymbolIfNeeded(n.symbol);
-            addPointerSymbolIfNeeded(n.symbol);
-            collectSymbolsFromExpr(n.staticInitializer);
-            return;
-        }
-
-        if (node instanceof SemanticAssignNode n) {
-            collectSymbolsFromExpr(n.target);
-            collectSymbolsFromExpr(n.value);
-            return;
-        }
-
-        if (node instanceof SemanticIfNode n) {
-            collectSymbolsFromExpr(n.condition);
-            collectSymbols(n.thenBranch);
-            collectSymbols(n.elseBranch);
-            return;
-        }
-
-        if (node instanceof SemanticWhileNode n) {
-            collectSymbolsFromExpr(n.condition);
-            collectSymbols(n.body);
-
-            for (SemanticStmtNode updateStmt : n.update) {
-                collectSymbols(updateStmt);
-            }
-            return;
-        }
-
-        if (node instanceof SemanticReturnNode n) {
-            collectSymbolsFromExpr(n.value);
-            return;
-        }
-
-        if (node instanceof SemanticExprStmtNode n) {
-            collectSymbolsFromExpr(n.expr);
-            return;
-        }
-
-        if (node instanceof SemanticExprNode expr) {
-            collectSymbolsFromExpr(expr);
-        }
-    }
-
-    private void collectSymbolsFromExpr(SemanticExprNode expr) {
-        if (expr == null) {
-            return;
-        }
-
-        if (expr instanceof SemanticIntLiteralNode
-                || expr instanceof SemanticNullLiteralNode) {
-            return;
-        }
-
-        if (expr instanceof SemanticVarExprNode n) {
-            addArraySymbolIfNeeded(n.symbol);
-            addPointerSymbolIfNeeded(n.symbol);
-            return;
-        }
-
-        if (expr instanceof SemanticUnaryOpNode n) {
-            collectSymbolsFromExpr(n.expr);
-            return;
-        }
-
-        if (expr instanceof SemanticBinOpNode n) {
-            collectSymbolsFromExpr(n.left);
-            collectSymbolsFromExpr(n.right);
-            return;
-        }
-
-        if (expr instanceof SemanticArrayAccessNode n) {
-            collectSymbolsFromExpr(n.target);
-            collectSymbolsFromExpr(n.index);
-            return;
-        }
-
-        if (expr instanceof SemanticMemberAccessNode n) {
-            collectSymbolsFromExpr(n.target);
-            return;
-        }
-
-        if (expr instanceof SemanticFunctionCallNode n) {
-            for (SemanticExprNode arg : n.args) {
-                collectSymbolsFromExpr(arg);
-            }
-            return;
-        }
-
-        if (expr instanceof SemanticArrayIntrinsicCallNode n) {
-            collectSymbolsFromExpr(n.receiver);
-
-            for (SemanticExprNode arg : n.args) {
-                collectSymbolsFromExpr(arg);
-            }
-
-            return;
-        }
-
-        if (expr instanceof SemanticGetPtrNode n) {
-            collectSymbolsFromExpr(n.target);
-            return;
-        }
-
-        if (expr instanceof SemanticDerefNode n) {
-            collectSymbolsFromExpr(n.expr);
-            return;
-        }
-
-        if (expr instanceof SemanticCastExprNode n) {
-            collectSymbolsFromExpr(n.expr);
-        }
-    }
-
-    private void addArraySymbolIfNeeded(VariableSymbol symbol) {
-        if (symbol == null
-                || symbol instanceof GlobalVariableSymbol
-                || !(symbol.type instanceof SemanticDynamicArrayType)) {
-            return;
-        }
-
-        if (arrayIndexBySymbol.containsKey(symbol)) {
-            return;
-        }
-
-        if (arrayCount == arraySymbols.length) {
-            arraySymbols = Arrays.copyOf(
-                    arraySymbols,
-                    Math.max(4, arraySymbols.length * 2)
-            );
-        }
-
-        arrayIndexBySymbol.put(symbol, arrayCount);
-        arraySymbols[arrayCount] = symbol;
-        arrayCount++;
-    }
-
-    private void addPointerSymbolIfNeeded(VariableSymbol symbol) {
-        if (symbol == null
-                || !(symbol.type instanceof SemanticPtrType pointer)
-                || pointer.permission != PtrPermission.OWNER
-                || !(pointer.referencedType instanceof SemanticDynamicArrayType)) {
-            return;
-        }
-
-        if (pointerIndexBySymbol.containsKey(symbol)) {
-            return;
-        }
-
-        if (pointerCount == pointerSymbols.length) {
-            pointerSymbols = Arrays.copyOf(
-                    pointerSymbols,
-                    Math.max(4, pointerSymbols.length * 2)
-            );
-        }
-
-        pointerIndexBySymbol.put(symbol, pointerCount);
-        pointerSymbols[pointerCount] = symbol;
-        pointerCount++;
-    }
-
-    int arrayIndexOfSymbol(VariableSymbol symbol) {
-        if (symbol == null) {
+    int singleOwner(int ownerIndex) {
+        if (ownerUnknown[ownerIndex]) {
             return -1;
         }
 
-        Integer index = arrayIndexBySymbol.get(symbol);
+        int offset = ownerIndex * arrayWords;
+        int found = -1;
 
-        return index == null ? -1 : index;
+        for (int word = 0; word < arrayWords; word++) {
+            long bits = ownerArrayBits[offset + word];
+
+            while (bits != 0L) {
+                int bit = Long.numberOfTrailingZeros(bits);
+                int arrayIndex = (word << 6) + bit;
+
+                if (found >= 0) {
+                    return -1;
+                }
+
+                found = arrayIndex;
+                bits &= bits - 1;
+            }
+        }
+
+        return found;
     }
 
-    int pointerIndexOfSymbol(VariableSymbol symbol) {
-        if (symbol == null) {
-            return -1;
-        }
-
-        Integer index = pointerIndexBySymbol.get(symbol);
-
-        return index == null ? -1 : index;
+    void setAlias(int pointerIndex, int root, int epoch) {
+        aliasRoot[pointerIndex] = root;
+        aliasEpoch[pointerIndex] = epoch;
     }
 
-    private int estimateSnapshotDemand(
-            SemanticASTNode node,
-            int depth
-    ) {
-        if (node == null) {
-            return 0;
+    void clearAlias(int pointerIndex) {
+        aliasRoot[pointerIndex] = ALIAS_NONE;
+        aliasEpoch[pointerIndex] = 0;
+    }
+
+    void copyAlias(int target, int source) {
+        aliasRoot[target] = aliasRoot[source];
+        aliasEpoch[target] = aliasEpoch[source];
+    }
+
+    void enterBlock(SemanticBlockNode node, int depth) {
+        if (depth >= blockLocals.length) {
+            blockLocals = Arrays.copyOf(blockLocals, blockLocals.length * 2);
         }
 
-        if (node instanceof SemanticProgramNode n) {
-            int total = 0;
+        blockLocals[depth] = context.blockLocalIds(node);
+    }
 
-            for (SemanticASTNode item : n.topLevelItems) {
-                total += estimateSnapshotDemand(item, depth);
+    void leaveBlock(SemanticBlockNode node, int depth, boolean terminated) {
+        int[] locals = blockLocals[depth];
+
+        if (locals != null) {
+            for (int variableId : locals) {
+                int arrayIndex = arrayIndexByVariable[variableId];
+
+                if (arrayIndex >= 0) {
+                    clearArrayAliases(arrayIndex);
+                    lifecycle[arrayIndex] = UNINITED;
+                    freed[arrayIndex] = FREED_NEVER;
+                    escaped[arrayIndex] = false;
+                    epochMin[arrayIndex] = 0;
+                    epochMax[arrayIndex] = 0;
+                }
             }
-
-            return total;
         }
 
-        if (node instanceof SemanticNamespaceNode n) {
-            int total = 0;
+        blockLocals[depth] = null;
+    }
 
-            for (SemanticASTNode item : n.items) {
-                total += estimateSnapshotDemand(item, depth);
+    void clearArrayAliases(int arrayIndex) {
+        for (int i = 0; i < pointerCount; i++) {
+            if (aliasRoot[i] == arrayIndex) {
+                aliasRoot[i] = ALIAS_NONE;
+                aliasEpoch[i] = 0;
             }
-
-            return total;
         }
 
-        if (node instanceof SemanticFunctionDeclNode n) {
-            return 1 + estimateSnapshotDemand(n.body, depth);
+        for (int i = 0; i < ownerCount; i++) {
+            int offset = i * arrayWords;
+            ownerArrayBits[offset + (arrayIndex >>> 6)]
+                    &= ~(1L << (arrayIndex & 63));
         }
-
-        if (node instanceof SemanticStructDeclNode n) {
-            int total = 0;
-
-            for (SemanticFunctionDeclNode method : n.methods) {
-                total += 1 + estimateSnapshotDemand(method.body, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticBlockNode n) {
-            int total = 0;
-
-            for (SemanticStmtNode stmt : n.statements) {
-                total += estimateSnapshotDemand(stmt, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticIfNode n) {
-            int local = n.elseBranch == null ? 2 : 3;
-
-            int nextDepth = depth < MAX_BRANCH_DEPTH
-                    ? depth + 1
-                    : depth;
-
-            return local
-                    + estimateSnapshotDemand(n.thenBranch, nextDepth)
-                    + estimateSnapshotDemand(n.elseBranch, nextDepth);
-        }
-
-        if (node instanceof SemanticWhileNode n) {
-            int total = 2 + estimateSnapshotDemand(n.body, depth);
-
-            for (SemanticStmtNode updateStmt : n.update) {
-                total += estimateSnapshotDemand(updateStmt, depth);
-            }
-
-            return total;
-        }
-
-        if (node instanceof SemanticBreakNode
-                || node instanceof SemanticContinueNode) {
-            return 1;
-        }
-
-        return 0;
     }
 
     int snapshot() {
-        ensureSnapshotCapacity();
+        ensureCapacity(snapshotCount + 1);
 
         int slot = snapshotCount++;
 
         System.arraycopy(
-                arrayState,
+                lifecycle,
                 0,
-                arraySnapshots[slot],
-                0,
+                lifecycleSnapshots,
+                slot * arrayCount,
                 arrayCount
         );
-
         System.arraycopy(
-                freedState,
+                freed,
                 0,
-                freedSnapshots[slot],
-                0,
+                freedSnapshots,
+                slot * arrayCount,
                 arrayCount
         );
-
         System.arraycopy(
-                pointerState,
+                escaped,
                 0,
-                pointerSnapshots[slot],
+                escapedSnapshots,
+                slot * arrayCount,
+                arrayCount
+        );
+        System.arraycopy(
+                epochMin,
                 0,
+                epochMinSnapshots,
+                slot * arrayCount,
+                arrayCount
+        );
+        System.arraycopy(
+                epochMax,
+                0,
+                epochMaxSnapshots,
+                slot * arrayCount,
+                arrayCount
+        );
+        System.arraycopy(
+                ownerArrayBits,
+                0,
+                ownerBitsSnapshots,
+                slot * ownerCount * arrayWords,
+                ownerCount * arrayWords
+        );
+        System.arraycopy(
+                ownerUnknown,
+                0,
+                ownerUnknownSnapshots,
+                slot * ownerCount,
+                ownerCount
+        );
+        System.arraycopy(
+                aliasRoot,
+                0,
+                aliasRootSnapshots,
+                slot * pointerCount,
                 pointerCount
+        );
+        System.arraycopy(
+                aliasEpoch,
+                0,
+                aliasEpochSnapshots,
+                slot * pointerCount,
+                pointerCount
+        );
+        System.arraycopy(
+                paramPost,
+                0,
+                paramPostSnapshots,
+                slot * paramCount,
+                paramCount
+        );
+        System.arraycopy(
+                requireMust,
+                0,
+                requireMustSnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                requireMay,
+                0,
+                requireMaySnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                invalidateMust,
+                0,
+                invalidateMustSnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                invalidateMay,
+                0,
+                invalidateMaySnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                freeMust,
+                0,
+                freeMustSnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                freeMay,
+                0,
+                freeMaySnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                useMust,
+                0,
+                useMustSnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                useMay,
+                0,
+                useMaySnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                escapeMust,
+                0,
+                escapeMustSnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                escapeMay,
+                0,
+                escapeMaySnapshots,
+                slot * paramWords,
+                paramWords
+        );
+        System.arraycopy(
+                symAlias,
+                0,
+                symAliasSnapshots,
+                slot * pointerCount * templateWords,
+                pointerCount * templateWords
         );
 
         return slot;
     }
 
-    void restore(int snapshotSlot) {
-        if (snapshotSlot < 0) {
+    void restore(int slot) {
+        if (slot < 0) {
             return;
         }
 
         System.arraycopy(
-                arraySnapshots[snapshotSlot],
-                0,
-                arrayState,
-                0,
-                arrayCount
-        );
-
-        System.arraycopy(
-                freedSnapshots[snapshotSlot],
-                0,
-                freedState,
+                lifecycleSnapshots,
+                slot * arrayCount,
+                lifecycle,
                 0,
                 arrayCount
         );
-
         System.arraycopy(
-                pointerSnapshots[snapshotSlot],
+                freedSnapshots,
+                slot * arrayCount,
+                freed,
                 0,
-                pointerState,
+                arrayCount
+        );
+        System.arraycopy(
+                escapedSnapshots,
+                slot * arrayCount,
+                escaped,
+                0,
+                arrayCount
+        );
+        System.arraycopy(
+                epochMinSnapshots,
+                slot * arrayCount,
+                epochMin,
+                0,
+                arrayCount
+        );
+        System.arraycopy(
+                epochMaxSnapshots,
+                slot * arrayCount,
+                epochMax,
+                0,
+                arrayCount
+        );
+        System.arraycopy(
+                ownerBitsSnapshots,
+                slot * ownerCount * arrayWords,
+                ownerArrayBits,
+                0,
+                ownerCount * arrayWords
+        );
+        System.arraycopy(
+                ownerUnknownSnapshots,
+                slot * ownerCount,
+                ownerUnknown,
+                0,
+                ownerCount
+        );
+        System.arraycopy(
+                aliasRootSnapshots,
+                slot * pointerCount,
+                aliasRoot,
                 0,
                 pointerCount
         );
+        System.arraycopy(
+                aliasEpochSnapshots,
+                slot * pointerCount,
+                aliasEpoch,
+                0,
+                pointerCount
+        );
+        System.arraycopy(
+                paramPostSnapshots,
+                slot * paramCount,
+                paramPost,
+                0,
+                paramCount
+        );
+        System.arraycopy(
+                requireMustSnapshots,
+                slot * paramWords,
+                requireMust,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                requireMaySnapshots,
+                slot * paramWords,
+                requireMay,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                invalidateMustSnapshots,
+                slot * paramWords,
+                invalidateMust,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                invalidateMaySnapshots,
+                slot * paramWords,
+                invalidateMay,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                freeMustSnapshots,
+                slot * paramWords,
+                freeMust,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                freeMaySnapshots,
+                slot * paramWords,
+                freeMay,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                useMustSnapshots,
+                slot * paramWords,
+                useMust,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                useMaySnapshots,
+                slot * paramWords,
+                useMay,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                escapeMustSnapshots,
+                slot * paramWords,
+                escapeMust,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                escapeMaySnapshots,
+                slot * paramWords,
+                escapeMay,
+                0,
+                paramWords
+        );
+        System.arraycopy(
+                symAliasSnapshots,
+                slot * pointerCount * templateWords,
+                symAlias,
+                0,
+                pointerCount * templateWords
+        );
     }
 
-    void ensureSnapshotCapacity() {
-        if (snapshotCount < arraySnapshots.length) {
+    private void ensureCapacity(int required) {
+        if (required <= capacity) {
             return;
         }
 
-        int oldLength = arraySnapshots.length;
-        int newLength = Math.max(16, oldLength * 2);
+        int newCapacity = Math.max(16, capacity);
 
-        arraySnapshots = Arrays.copyOf(arraySnapshots, newLength);
-        freedSnapshots = Arrays.copyOf(freedSnapshots, newLength);
-        pointerSnapshots = Arrays.copyOf(pointerSnapshots, newLength);
-
-        for (int i = oldLength; i < newLength; i++) {
-            arraySnapshots[i] = new ArrayState[arrayCount];
-            freedSnapshots[i] = new FreedState[arrayCount];
-            pointerSnapshots[i] = new ArrayOrigin[pointerCount];
-
-            Arrays.fill(arraySnapshots[i], ArrayState.UNINITED);
-            Arrays.fill(freedSnapshots[i], FreedState.NEVER);
-            Arrays.fill(pointerSnapshots[i], ArrayOrigin.UNKNOWN);
+        while (newCapacity < required) {
+            newCapacity *= 2;
         }
+
+        lifecycleSnapshots = grow(lifecycleSnapshots, newCapacity * arrayCount);
+        freedSnapshots = grow(freedSnapshots, newCapacity * arrayCount);
+        escapedSnapshots = grow(escapedSnapshots, newCapacity * arrayCount);
+        epochMinSnapshots = grow(epochMinSnapshots, newCapacity * arrayCount);
+        epochMaxSnapshots = grow(epochMaxSnapshots, newCapacity * arrayCount);
+        ownerBitsSnapshots = grow(
+                ownerBitsSnapshots,
+                newCapacity * ownerCount * arrayWords
+        );
+        ownerUnknownSnapshots = grow(
+                ownerUnknownSnapshots,
+                newCapacity * ownerCount
+        );
+        aliasRootSnapshots = grow(
+                aliasRootSnapshots,
+                newCapacity * pointerCount
+        );
+        aliasEpochSnapshots = grow(
+                aliasEpochSnapshots,
+                newCapacity * pointerCount
+        );
+        paramPostSnapshots = grow(
+                paramPostSnapshots,
+                newCapacity * paramCount
+        );
+        requireMustSnapshots = grow(
+                requireMustSnapshots,
+                newCapacity * paramWords
+        );
+        requireMaySnapshots = grow(
+                requireMaySnapshots,
+                newCapacity * paramWords
+        );
+        invalidateMustSnapshots = grow(
+                invalidateMustSnapshots,
+                newCapacity * paramWords
+        );
+        invalidateMaySnapshots = grow(
+                invalidateMaySnapshots,
+                newCapacity * paramWords
+        );
+        freeMustSnapshots = grow(
+                freeMustSnapshots,
+                newCapacity * paramWords
+        );
+        freeMaySnapshots = grow(
+                freeMaySnapshots,
+                newCapacity * paramWords
+        );
+        useMustSnapshots = grow(
+                useMustSnapshots,
+                newCapacity * paramWords
+        );
+        useMaySnapshots = grow(
+                useMaySnapshots,
+                newCapacity * paramWords
+        );
+        escapeMustSnapshots = grow(
+                escapeMustSnapshots,
+                newCapacity * paramWords
+        );
+        escapeMaySnapshots = grow(
+                escapeMaySnapshots,
+                newCapacity * paramWords
+        );
+        symAliasSnapshots = grow(
+                symAliasSnapshots,
+                newCapacity * pointerCount * templateWords
+        );
+
+        capacity = newCapacity;
+    }
+
+    private static byte[] grow(byte[] array, int size) {
+        return Arrays.copyOf(array, size);
+    }
+
+    private static int[] grow(int[] array, int size) {
+        return Arrays.copyOf(array, size);
+    }
+
+    private static long[] grow(long[] array, int size) {
+        return Arrays.copyOf(array, size);
+    }
+
+    private static boolean[] grow(boolean[] array, int size) {
+        return Arrays.copyOf(array, size);
     }
 
     void mergeAfterIf(
             int before,
             int thenState,
-            boolean thenTerminates,
+            boolean thenLeaves,
             int elseState,
-            boolean elseTerminates,
+            boolean elseLeaves,
             boolean hasElse,
             int fallthroughState
     ) {
+        int[] continuing = new int[3];
+        int count = 0;
+
+        if (!thenLeaves) {
+            continuing[count++] = thenState;
+        }
+
+        if (hasElse) {
+            if (!elseLeaves) {
+                continuing[count++] = elseState;
+            }
+        } else if (fallthroughState >= 0) {
+            continuing[count++] = fallthroughState;
+        }
+
+        if (count == 0) {
+            restore(before);
+            return;
+        }
+
+        restore(continuing[0]);
+
+        for (int i = 1; i < count; i++) {
+            mergeFromSnapshot(continuing[i]);
+        }
+    }
+
+    void mergeLoopExitStates(int[] slots, int count) {
+        if (count <= 0) {
+            return;
+        }
+
+        restore(slots[0]);
+
+        for (int i = 1; i < count; i++) {
+            mergeFromSnapshot(slots[i]);
+        }
+    }
+
+    void mergeStateIntoCurrent(int slot) {
+        mergeFromSnapshot(slot);
+    }
+
+    long[] requireMustSnapshots(int slot) {
+        return requireMustSnapshots;
+    }
+
+    long[] requireMaySnapshots(int slot) {
+        return requireMaySnapshots;
+    }
+
+    long[] invalidateMustSnapshots(int slot) {
+        return invalidateMustSnapshots;
+    }
+
+    long[] invalidateMaySnapshots(int slot) {
+        return invalidateMaySnapshots;
+    }
+
+    long[] freeMustSnapshots(int slot) {
+        return freeMustSnapshots;
+    }
+
+    long[] freeMaySnapshots(int slot) {
+        return freeMaySnapshots;
+    }
+
+    long[] escapeMustSnapshots(int slot) {
+        return escapeMustSnapshots;
+    }
+
+    long[] escapeMaySnapshots(int slot) {
+        return escapeMaySnapshots;
+    }
+
+    long[] useMustSnapshots(int slot) {
+        return useMustSnapshots;
+    }
+
+    long[] useMaySnapshots(int slot) {
+        return useMaySnapshots;
+    }
+
+    byte paramPostSnapshot(int slot, int param) {
+        return paramPostSnapshots[slot * paramCount + param];
+    }
+
+    private void mergeFromSnapshot(int slot) {
         for (int i = 0; i < arrayCount; i++) {
-            boolean hasContinuingPath = false;
-            ArrayState mergedState = null;
-            FreedState mergedFreed = null;
+            byte incomingLifecycle = lifecycleSnapshots[slot * arrayCount + i];
+            byte incomingFreed = freedSnapshots[slot * arrayCount + i];
 
-            if (!thenTerminates) {
-                hasContinuingPath = true;
-                mergedState = mergeArrayState(
-                        mergedState,
-                        arrayStateFromSnapshot(thenState, i, before)
-                );
-                mergedFreed = mergeFreedState(
-                        mergedFreed,
-                        freedStateFromSnapshot(thenState, i, before)
-                );
+            if (lifecycle[i] != incomingLifecycle) {
+                lifecycle[i] = MAYBE_INITED;
             }
 
-            if (hasElse) {
-                if (!elseTerminates) {
-                    hasContinuingPath = true;
-                    mergedState = mergeArrayState(
-                            mergedState,
-                            arrayStateFromSnapshot(elseState, i, before)
-                    );
-                    mergedFreed = mergeFreedState(
-                            mergedFreed,
-                            freedStateFromSnapshot(elseState, i, before)
-                    );
-                }
-            } else if (fallthroughState >= 0) {
-                hasContinuingPath = true;
-                mergedState = mergeArrayState(
-                        mergedState,
-                        arrayStateFromSnapshot(fallthroughState, i, before)
-                );
-                mergedFreed = mergeFreedState(
-                        mergedFreed,
-                        freedStateFromSnapshot(fallthroughState, i, before)
-                );
+            if (freed[i] != incomingFreed) {
+                freed[i] = FREED_MAYBE;
             }
 
-            if (hasContinuingPath && mergedState != null) {
-                arrayState[i] = mergedState;
-                freedState[i] = mergedFreed == null
-                        ? FreedState.MAYBE
-                        : mergedFreed;
+            escaped[i] |= escapedSnapshots[slot * arrayCount + i];
+            epochMin[i] = Math.min(
+                    epochMin[i],
+                    epochMinSnapshots[slot * arrayCount + i]
+            );
+            epochMax[i] = Math.max(
+                    epochMax[i],
+                    epochMaxSnapshots[slot * arrayCount + i]
+            );
+        }
 
-                if (arrayState[i] == ArrayState.INITED) {
-                    freedState[i] = FreedState.NEVER;
-                } else if (arrayState[i] == ArrayState.MAYBE_INITED) {
-                    freedState[i] = FreedState.MAYBE;
-                }
-            } else {
-                arrayState[i] = arrayStateFromSnapshot(before, i, before);
-                freedState[i] = freedStateFromSnapshot(before, i, before);
-            }
+        for (int i = 0; i < ownerCount * arrayWords; i++) {
+            ownerArrayBits[i] |= ownerBitsSnapshots[
+                    slot * ownerCount * arrayWords + i];
+        }
+
+        for (int i = 0; i < ownerCount; i++) {
+            ownerUnknown[i] |= ownerUnknownSnapshots[slot * ownerCount + i];
         }
 
         for (int i = 0; i < pointerCount; i++) {
-            boolean hasContinuingPath = false;
-            ArrayOrigin merged = null;
+            int incomingRoot = aliasRootSnapshots[slot * pointerCount + i];
+            int incomingEpoch = aliasEpochSnapshots[slot * pointerCount + i];
 
-            if (!thenTerminates) {
-                hasContinuingPath = true;
-                merged = mergeOrigins(
-                        merged,
-                        pointerOriginFromSnapshot(thenState, i, before)
-                );
+            if (aliasRoot[i] != incomingRoot || aliasEpoch[i] != incomingEpoch) {
+                aliasRoot[i] = ALIAS_UNKNOWN;
+                aliasEpoch[i] = 0;
             }
+        }
 
-            if (hasElse) {
-                if (!elseTerminates) {
-                    hasContinuingPath = true;
-                    merged = mergeOrigins(
-                            merged,
-                            pointerOriginFromSnapshot(elseState, i, before)
-                    );
+        for (int i = 0; i < paramCount; i++) {
+            byte incoming = paramPostSnapshots[slot * paramCount + i];
+
+            if (paramPost[i] != incoming) {
+                if (paramPost[i] == POST_HAVOC || incoming == POST_HAVOC) {
+                    paramPost[i] = POST_HAVOC;
+                } else {
+                    paramPost[i] = POST_MAYBE;
                 }
-            } else if (fallthroughState >= 0) {
-                hasContinuingPath = true;
-                merged = mergeOrigins(
-                        merged,
-                        pointerOriginFromSnapshot(fallthroughState, i, before)
-                );
-            }
-
-            if (hasContinuingPath && merged != null) {
-                pointerState[i] = merged;
-            } else {
-                pointerState[i] =
-                        pointerOriginFromSnapshot(before, i, before);
-            }
-        }
-    }
-
-    ArrayState arrayStateFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= arrayCount) {
-            return ArrayState.UNINITED;
-        }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && arraySnapshots[snapshotSlot] != null) {
-            ArrayState value = arraySnapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
             }
         }
 
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && arraySnapshots[fallbackSlot] != null) {
-            ArrayState fallback = arraySnapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
+        for (int i = 0; i < paramWords; i++) {
+            requireMust[i] &= requireMustSnapshots[slot * paramWords + i];
+            requireMay[i] |= requireMaySnapshots[slot * paramWords + i];
+            invalidateMust[i] &= invalidateMustSnapshots[slot * paramWords + i];
+            invalidateMay[i] |= invalidateMaySnapshots[slot * paramWords + i];
+            freeMust[i] &= freeMustSnapshots[slot * paramWords + i];
+            freeMay[i] |= freeMaySnapshots[slot * paramWords + i];
+            useMust[i] &= useMustSnapshots[slot * paramWords + i];
+            useMay[i] |= useMaySnapshots[slot * paramWords + i];
+            escapeMust[i] &= escapeMustSnapshots[slot * paramWords + i];
+            escapeMay[i] |= escapeMaySnapshots[slot * paramWords + i];
         }
 
-        return ArrayState.UNINITED;
-    }
-
-    FreedState freedStateFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= arrayCount) {
-            return FreedState.NEVER;
+        for (int i = 0; i < pointerCount * templateWords; i++) {
+            symAlias[i] |= symAliasSnapshots[
+                    slot * pointerCount * templateWords + i];
         }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && freedSnapshots[snapshotSlot] != null) {
-            FreedState value = freedSnapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
-            }
-        }
-
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && freedSnapshots[fallbackSlot] != null) {
-            FreedState fallback = freedSnapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
-        }
-
-        return FreedState.NEVER;
-    }
-
-    ArrayOrigin pointerOriginFromSnapshot(
-            int snapshotSlot,
-            int index,
-            int fallbackSlot
-    ) {
-        if (index < 0 || index >= pointerCount) {
-            return ArrayOrigin.UNKNOWN;
-        }
-
-        if (snapshotSlot >= 0
-                && snapshotSlot < snapshotCount
-                && pointerSnapshots[snapshotSlot] != null) {
-            ArrayOrigin value = pointerSnapshots[snapshotSlot][index];
-
-            if (value != null) {
-                return value;
-            }
-        }
-
-        if (fallbackSlot >= 0
-                && fallbackSlot < snapshotCount
-                && pointerSnapshots[fallbackSlot] != null) {
-            ArrayOrigin fallback =
-                    pointerSnapshots[fallbackSlot][index];
-
-            if (fallback != null) {
-                return fallback;
-            }
-        }
-
-        return ArrayOrigin.UNKNOWN;
-    }
-
-    ArrayState mergeArrayState(
-            ArrayState left,
-            ArrayState right
-    ) {
-        if (right == null) {
-            right = ArrayState.UNINITED;
-        }
-
-        if (left == null) {
-            return right;
-        }
-
-        if (left == right) {
-            return left;
-        }
-
-        return ArrayState.MAYBE_INITED;
-    }
-
-    FreedState mergeFreedState(
-            FreedState left,
-            FreedState right
-    ) {
-        if (right == null) {
-            right = FreedState.NEVER;
-        }
-
-        if (left == null) {
-            return right;
-        }
-
-        if (left == right) {
-            return left;
-        }
-
-        return FreedState.MAYBE;
-    }
-
-    ArrayOrigin mergeOrigins(
-            ArrayOrigin left,
-            ArrayOrigin right
-    ) {
-        if (left == null) {
-            return right == null ? ArrayOrigin.UNKNOWN : right;
-        }
-
-        if (right == null) {
-            return left;
-        }
-
-        return left.union(right);
-    }
-
-    static boolean isLengthCall(SemanticExprNode expr) {
-        return expr instanceof SemanticArrayIntrinsicCallNode n
-                && n.kind == SemanticArrayIntrinsicKind.LENGTH;
-    }
-
-    static boolean isComparison(String op) {
-        return op.equals("==")
-                || op.equals("!=")
-                || op.equals("<")
-                || op.equals("<=")
-                || op.equals(">")
-                || op.equals(">=");
-    }
-
-    static String negate(String op) {
-        return switch (op) {
-            case "==" -> "!=";
-            case "!=" -> "==";
-            case "<" -> ">=";
-            case "<=" -> ">";
-            case ">" -> "<=";
-            case ">=" -> "<";
-            default -> op;
-        };
-    }
-
-    static String reverse(String op) {
-        return switch (op) {
-            case "<" -> ">";
-            case "<=" -> ">=";
-            case ">" -> "<";
-            case ">=" -> "<=";
-            default -> op;
-        };
-    }
-
-    static String functionDisplayName(FunctionSymbol function) {
-        if (function == null) {
-            return "<unknown>";
-        }
-
-        return function.qualifiedName();
-    }
-}
-
-enum ArrayState {
-    UNINITED,
-    INITED,
-    MAYBE_INITED
-}
-
-enum FreedState {
-    NEVER,
-    MAYBE,
-    YES
-}
-
-enum LengthAssertion {
-    NONE,
-    ZERO,
-    NONZERO
-}
-
-final class ArrayOrigin {
-    static final ArrayOrigin EMPTY =
-            new ArrayOrigin(Set.of(), false);
-
-    static final ArrayOrigin UNKNOWN =
-            new ArrayOrigin(Set.of(), true);
-
-    final Set<VariableSymbol> arrays;
-    final boolean unknown;
-
-    private ArrayOrigin(
-            Set<VariableSymbol> arrays,
-            boolean unknown
-    ) {
-        this.arrays = arrays;
-        this.unknown = unknown;
-    }
-
-    static ArrayOrigin of(VariableSymbol symbol) {
-        return new ArrayOrigin(Set.of(symbol), false);
-    }
-
-    ArrayOrigin union(ArrayOrigin other) {
-        if (other == null) {
-            other = UNKNOWN;
-        }
-
-        if (this == other) {
-            return this;
-        }
-
-        Set<VariableSymbol> merged = new LinkedHashSet<>(arrays);
-        merged.addAll(other.arrays);
-
-        return new ArrayOrigin(
-                Set.copyOf(merged),
-                unknown || other.unknown
-        );
-    }
-}
-
-final class LengthGuard {
-    final SemanticExprNode receiver;
-    final String op;
-    final BigInteger constant;
-
-    LengthGuard(
-            SemanticExprNode receiver,
-            String op,
-            BigInteger constant
-    ) {
-        this.receiver = receiver;
-        this.op = op;
-        this.constant = constant;
-    }
-
-    LengthAssertion assertion(boolean holds) {
-        String effective = holds ? op : negate(op);
-        int sign = constant.signum();
-
-        return switch (effective) {
-            case "==" -> sign == 0
-                    ? LengthAssertion.ZERO
-                    : sign > 0
-                            ? LengthAssertion.NONZERO
-                            : LengthAssertion.NONE;
-            case "!=" -> sign == 0
-                    ? LengthAssertion.NONZERO
-                    : LengthAssertion.NONE;
-            case "<" -> constant.equals(BigInteger.ONE)
-                    ? LengthAssertion.ZERO
-                    : LengthAssertion.NONE;
-            case "<=" -> sign == 0
-                    ? LengthAssertion.ZERO
-                    : LengthAssertion.NONE;
-            case ">" -> sign >= 0
-                    ? LengthAssertion.NONZERO
-                    : LengthAssertion.NONE;
-            case ">=" -> constant.compareTo(BigInteger.ONE) >= 0
-                    ? LengthAssertion.NONZERO
-                    : LengthAssertion.NONE;
-            default -> LengthAssertion.NONE;
-        };
-    }
-
-    private static String negate(String op) {
-        return switch (op) {
-            case "==" -> "!=";
-            case "!=" -> "==";
-            case "<" -> ">=";
-            case "<=" -> ">";
-            case ">" -> "<=";
-            case ">=" -> "<";
-            default -> op;
-        };
     }
 }

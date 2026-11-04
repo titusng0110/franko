@@ -1,0 +1,12 @@
+import "franko/io"
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    d[0] = 5
+    view<[int32]> v = getview(d)
+    d.resize(4)
+    print($(v)[0])
+    d.uninit()
+    return 0
+}

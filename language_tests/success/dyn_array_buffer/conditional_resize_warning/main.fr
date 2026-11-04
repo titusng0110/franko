@@ -1,0 +1,16 @@
+import "franko/io"
+
+int32 C = 0
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    d[0] = 7
+    ptr<int32> e = getptr(d[0])
+    if (C != 0) {
+        d.resize(4)
+    }
+    print($(e))
+    d.uninit()
+    return 0
+}

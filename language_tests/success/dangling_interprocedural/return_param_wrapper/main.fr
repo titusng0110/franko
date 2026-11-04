@@ -1,0 +1,12 @@
+import "franko/io"
+
+func id(ptr<int32> p) -> ptr<int32> {
+    return p
+}
+
+func main() -> int32 {
+    int32 x = 4
+    ptr<int32> p = id(getptr(x))
+    print($(p))
+    return 0
+}

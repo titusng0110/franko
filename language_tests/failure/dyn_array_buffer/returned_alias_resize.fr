@@ -1,0 +1,11 @@
+func first(ptr<[int32]> p) -> ptr<int32> {
+    return getptr($(p)[0])
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    ptr<int32> e = first(getptr(d))
+    d.resize(4)
+    return $(e)
+}

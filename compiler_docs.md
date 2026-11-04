@@ -48,6 +48,7 @@ semantic SastDocument                   -> <base>.semantic.sast.json
    │  LegalityChecker                     -> <base>.legality.sast.json
    │  BranchPruner                        -> <base>.branch-pruned.sast.json
    │  InactiveDeclarationPruner           -> <base>.inactive-pruned.sast.json
+   │  MemoryAnalysisContext.build         (dense IDs, call graph, shapes)
    │  PointerNullStateChecker             -> <base>.null-state.sast.json
    │  DanglingPointerChecker              -> <base>.dangling.sast.json
    │  DynamicArrayMemoryChecker           -> <base>.dyn-array.sast.json
@@ -70,6 +71,22 @@ Every AST/SAST boundary is represented by `AstDocument` / `SastDocument`.
 `.cpp`; read-only checker snapshots intentionally differ only in their
 `phase` field. Without `--emit-json` the normal path is object-based and never
 parses or serializes JSON.
+
+After inactive-declaration pruning, `Main` builds one `MemoryAnalysisContext`
+from the surviving SAST and passes it to all three memory checkers. The context
+assigns dense IDs to functions, variables, call sites, and diagnostic sites,
+builds the exact Franko call graph (including methods), caches recursive
+struct/tuple memory shapes, records block-local declaration lists, and
+estimates per-function snapshot demand. The context itself is not a SAST phase
+and produces no JSON artifact.
+
+Each of the three memory checkers now runs two phases internally: a
+**direct-summary pass** with symbolic parameter states (no diagnostics) and a
+**summary-aware check pass** that resolves call effects through a bounded
+call-graph BFS. The pass order, `SastPhase` names, `PassResult` API, and JSON
+artifacts are unchanged; summary data is internal analysis state. Intraprocedural
+warnings from the old checkers are preserved, and interprocedural diagnostics
+are additive.
 
 Raw AST nodes and semantic AST nodes carry a `SourceSpan` (stable display
 path + 1-based line/column range). `DiagnosticBag` stores structured
@@ -150,10 +167,24 @@ flowchart TD
     DeclarationChecker --> TypeChecker
     Main --> BranchPruner
     Main --> InactiveDeclarationPruner
+    Main --> MemoryAnalysisContext
     Main --> PointerNullStateChecker
+    PointerNullStateChecker --> MemoryShapeIndex
+    PointerNullStateChecker --> MemoryCallGraph
+    PointerNullStateChecker --> MemoryDataflowDriver
+    PointerNullStateChecker --> MemorySummaryBfs
+    PointerNullStateChecker --> PointerNullAnalysisState
     Main --> DanglingPointerChecker
+    DanglingPointerChecker --> MemoryShapeIndex
+    DanglingPointerChecker --> MemoryCallGraph
+    DanglingPointerChecker --> MemoryDataflowDriver
+    DanglingPointerChecker --> MemorySummaryBfs
     DanglingPointerChecker --> DanglingPointerState
     Main --> DynamicArrayMemoryChecker
+    DynamicArrayMemoryChecker --> MemoryShapeIndex
+    DynamicArrayMemoryChecker --> MemoryCallGraph
+    DynamicArrayMemoryChecker --> MemoryDataflowDriver
+    DynamicArrayMemoryChecker --> MemorySummaryBfs
     DynamicArrayMemoryChecker --> DynamicArrayAnalysisState
     Main --> PointerPermissionChecker
     PointerPermissionChecker -. reads Semantic AST only .-> SemanticASTNode
@@ -178,7 +209,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
+| `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `MemoryAnalysisContext`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
 | `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ModuleRegistry`, `ModuleValidator`, `Desugarer`, `JsonArtifacts` |
 | `ImportResolver` | `Frontend`, `AstDocument`, `ASTNode` |
 | `DeclarationSelector` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `TargetInfo`, `ASTNode` |
@@ -201,11 +232,18 @@ flowchart TD
 | `DeclarationChecker` | `TypeChecker` (incl. static `fitsBigIntegerToPrimitive`) |
 | `ExpressionChecker` | `TypeChecker`, `ArrayIntrinsicChecker` |
 | `ArrayIntrinsicChecker` | `ExpressionChecker` (nested-expression checks), `TypeChecker` |
-| `PointerNullStateChecker` | `DiagnosticBag` only (deliberately standalone) |
-| `DanglingPointerChecker` | `DiagnosticBag`, `PointerPermissions`, `DanglingPointerState`, `OperatorMethods` (deliberately standalone) |
-| `DanglingPointerState` | Semantic AST value objects only (no diagnostics) |
-| `DynamicArrayMemoryChecker` | `DiagnosticBag`, `DynamicArrayAnalysisState` (deliberately standalone) |
-| `DynamicArrayAnalysisState` | Semantic AST value objects and state/snapshot model only |
+| `PointerNullStateChecker` | `DiagnosticBag`, `MemoryAnalysisContext`, `MemoryCallGraph`, `MemoryDataflowDriver`, `MemorySummaryBfs`, `MemoryTemplate`, `PointerNullAnalysisState` |
+| `PointerNullAnalysisState` | `MemoryTemplateRegistry` and semantic AST value objects (no diagnostics) |
+| `DanglingPointerChecker` | `DiagnosticBag`, `MemoryAnalysisContext`, `MemoryCallGraph`, `MemoryDataflowDriver`, `MemorySummaryBfs`, `MemoryTemplate`, `PointerPermissions`, `DanglingPointerState`, `OperatorMethods` |
+| `DanglingPointerState` | `MemoryTemplateRegistry` and semantic AST value objects (no diagnostics) |
+| `DynamicArrayMemoryChecker` | `DiagnosticBag`, `MemoryAnalysisContext`, `MemoryCallGraph`, `MemoryDataflowDriver`, `MemorySummaryBfs`, `MemoryTemplate`, `DynamicArrayAnalysisState` |
+| `DynamicArrayAnalysisState` | `MemoryTemplateRegistry` and semantic AST value objects (no diagnostics) |
+| `MemoryAnalysisContext` | `MemoryCallGraph`, `MemoryShapeIndex`, `MemoryTemplateRegistry`, semantic AST/symbols |
+| `MemoryShapeIndex` | `SemanticType`, `StructSymbol`, `FieldSymbol` |
+| `MemoryCallGraph` | `FunctionSymbol`, `SemanticFunctionCallNode`, `SemanticFunctionDeclNode` |
+| `MemoryDataflowDriver` | `MemoryAnalysisContext`, `DiagnosticBag`, a `MemoryDataflowDriver.Domain` |
+| `MemorySummaryBfs` | `MemoryAnalysisContext`, a `MemorySummaryBfs.NodeProcessor` |
+| `MemoryTemplate` | `MemoryTemplateRegistry`/`MemoryTemplateSetPool` value data only |
 | `PointerPermissionChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
 | `PrivateIdentifierLinter` | `DiagnosticBag` only (deliberately standalone) |
 | `Cpp14Codegen` | `Cpp14ExpressionEmitter`, `FfiHandler`, `Symbol` (mangled names), `SymbolTable.splitNamespacePath` (static) |
@@ -1084,160 +1122,154 @@ when the source is a hoisted literal view (`getview(<global>)` over a
 `literalBytes`/`literalValues` global).
 It does not traverse the AST.
 
+#### `MemoryAnalysisContext`
+Package-private build-stage index shared by the three memory checkers. `Main`
+calls `MemoryAnalysisContext.build(inactivePruned.root)` after
+`InactiveDeclarationPruner` and passes the same instance to
+`PointerNullStateChecker`, `DanglingPointerChecker`, and
+`DynamicArrayMemoryChecker`. It assigns dense IDs to every free function and
+method with a body (plus called functions without a SAST body, such as FFI and
+built-ins), every local/parameter/global variable, every
+`SemanticFunctionCallNode`, and every statement/expression diagnostic site. It
+records per-function parameter IDs, local IDs, block-local declaration lists,
+loop-body local lists, the exact call graph, a `MemoryShapeIndex`, a
+`MemoryTemplateRegistry`, and a per-function snapshot-demand estimate. Build
+time may use `IdentityHashMap`/`ArrayList`; all checker hot paths use the
+resulting flat arrays and dense indices.
+
+#### `MemoryShapeIndex`
+Recursive, boundary-stopped shape cache over `SemanticType`:
+`containsPointer`, `containsDynamicArray`, and `containsOwnerArrayPointer`.
+Primitives and `void` have no flags; any pointer sets `containsPointer` and
+stops descending (an owner `ptr` to a static or dynamic array also sets
+`containsOwnerArrayPointer`); a dynamic array sets `containsDynamicArray` and
+stops; static arrays recurse into their element; structs recurse through fields
+with a visited set; tuples recurse through elements. The cache is coarse: it
+classifies values that can carry hidden memory but creates no field-sensitive
+state.
+
+#### `MemoryCallGraph`
+Flat call-graph tables built by the context: function symbols and declarations,
+parameter variable IDs, `hasBody`, per-function edge ranges, flat edge call-site
+IDs, call-site nodes/callers/callees, each call site's index within its caller's
+edge range, and Tarjan SCC IDs. `sameScc(a, b)` is the conservative recursion
+test used by the BFS: any edge inside an SCC becomes silent TOP instead of a
+recursive expansion.
+
+#### `MemoryTemplate`
+Flat symbolic template algebra shared by all three domains. Templates are
+interned integers in a `MemoryTemplateRegistry`: `NULL`, `NONNULL`, `UNKNOWN`,
+`CONST`, `LOCAL`, `UNKNOWN_CELL`, `LOCAL_CELL`, per-parameter value templates
+with `ANY`/`NONNULL`/`NULL` constraints, per-parameter pointee templates,
+`PARAM_CELL`, `GLOBAL`, `CALL_RESULT`, `ELEMENT_OF`, `ALIAS_OF_POINTER`,
+`WHOLE_ARRAY`, local-array and local-element templates, and global-cell
+templates. `MemoryTemplateSetPool` interns bitsets for BFS bindings. Bitsets
+are `long[]`; template IDs are stable for the whole context.
+
+#### `MemoryDataflowDriver`
+Shared branch-12 statement/expression traversal for the three checkers. It
+owns the branch depth (`MAX_BRANCH_DEPTH = 12`), the flat loop-frame stack
+(linked break/continue snapshot slots), the function exit-slot list, and the
+infeasible-path suppression flag. `Domain` hooks provide function begin/end,
+block enter/leave, variable/assignment/expression transfer, return/fallthrough
+collection, guard feasibility/refinement, snapshot/restore/merge, and jump
+liveness. Beyond depth 12 the driver falls back to a path-insensitive merge.
+Loops analyze the body once, replay the update epilogue for normal and
+`continue` edges, filter zero-trip/back-edge exits by the condition-false
+guard, merge `break` snapshots separately, and treat a loop with no feasible
+exit as non-falling-through.
+
+#### `MemorySummaryBfs`
+Bounded call-graph BFS shared by the checkers. The node identity is
+`(functionId, bindingKey)`. The queue, binding pool, visited table, and node
+table are flat primitive arrays; the visited table is a custom open-addressed
+hash table that verifies the actual binding arrays on collision. The budget is
+`MAX_BFS_VISITED = 2048` dequeues per call site per checker. A callee without a
+SAST body or an edge inside a recursive SCC is silent TOP; budget exhaustion is
+also silent TOP. TOP emits no new diagnostic and is not reused as a completed
+memo entry. `MemoryBfsResult` exposes the root node, each call site's node, and
+the TOP flags while the checker immediately composes the effects.
+
 #### `PointerNullStateChecker`
-Intra-procedural pointer null-state dataflow, run after legality checking and
-deliberately independent of the checker cluster (only `DiagnosticBag`). It
-is **strictly intra-procedural by design** — no facts cross function
-boundaries (interprocedural nullability is an unsolved problem), and state is
-reset at every function entry; the only cross-function assumptions are the
-two documented entry seeds below. One
-lattice fact per pointer-typed variable (`ptr`/`mview`/`view` are all
-tracked): `POINTING` / `NULL` / `MAYBE_NULL`,
-initialized to `MAYBE_NULL` at function entry (except method `self` and
-`main`'s args param, seeded `POINTING`). Transfer rules: pointer decls are guaranteed NULL-initialized;
-`p = getptr(x)` / `getmview(x)` / `getview(x)` → POINTING (the only
-certifications); `p = null` → NULL; `p = q` copies state; anything else →
-MAYBE_NULL. Guard refinement: `p == null` / `p != null` conditions refine
-states on each path; exploration is path-sensitive up to
-`MAX_BRANCH_DEPTH = 12`, with an insensitive fallback beyond the cap.
-Loops track break/continue jump states via snapshot slots (`LoopFrame`,
-preallocated `PointerState[][]` store), merge back-edge states, and compute
-zero-trip exit states. Reports deref of definitely-NULL as error and
-maybe-null as warning (each pointer variable warns at most once across the
-whole document analysis).
+Two-phase, summary-aware pointer null-state checker, run after both pruners and
+before `DanglingPointerChecker`. The direct-summary pass uses symbolic
+parameter states (`PARAM_VALUE(i, ANY|NONNULL|NULL)`,
+`PARAM_POINTEE_VALUE(i, ...)`, `CALL_RESULT`, `UNKNOWN`, `NULL`, `NONNULL`) and
+emits no diagnostics. It records per-parameter dereference requirements
+(`MAY_DEREF`/`MUST_DEREF`, with guarded non-null dereferences excluded),
+one-level `POINTEE(param i)` slot writes, return alternatives, and call-edge
+argument templates. The summary-aware pass runs the same traversal with
+concrete `NULL`/`POINTING`/`MAYBE_NULL` state, resolves calls through
+`MemorySummaryBfs`, emits call-site argument diagnostics, applies slot writes
+to the caller's pointer cells, and continues with the resolved return state.
+Intraprocedural deref diagnostics are preserved: definitely-null is an error,
+possibly-null is a warning (at most one warning per pointer variable). Entry
+seeds remain `MAYBE_NULL` for parameters/globals, `POINTING` for method `self`
+and the args-form `main` parameter; pointer declarations are NULL.
+
+#### `PointerNullAnalysisState`
+Flat state/snapshot layer for the null checker. Concrete state is
+`byte[] nullState` plus `long[] cellTargets` (one-level pointer-cell targets).
+Summary state is `long[] symValue`, `symPointee`, and `symCell` template
+bitsets. Requirement/event state is `derefMust`/`derefMay`,
+`pointeeDerefMust`/`pointeeDerefMay`, `slotMust`/`slotMay`, and
+`slotSource` per diagnostic site. Snapshot stores are preallocated flat arrays
+copied with `System.arraycopy`; branch merge keeps equal null states, turns
+differing states into `MAYBE_NULL`, unions cell targets and symbolic bitsets,
+intersects must-bitsets, and unions may-bitsets.
 
 #### `DanglingPointerChecker`
-Return-escape and pointer-store provenance analysis, run after both pruners
-and after `PointerNullStateChecker` (so dead functions/branches and dead
-returns cannot produce diagnostics), deliberately independent of the checker
-cluster (only `DiagnosticBag`, `PointerPermissions`, `OperatorMethods`,
-`DanglingPointerState`, and the semantic AST).
-It is **intra-procedural**: each function/method body is analyzed separately
-with a fresh state. It classifies `return` expressions and rejects stores
-whose value contains current-frame origins and whose target storage is
-caller-owned or global. Passing a pointer to a callee that later stores it,
-pointers hidden inside returned structs/arrays, use after an inner block,
-dynamic-array buffer lifetime, and nullness are out of scope (nullness stays
-`PointerNullStateChecker`'s job).
-
-The abstract domain is one immutable origin set per pointer-typed
-variable (locals, parameters, and globals alike), indexed by
-`IdentityHashMap<VariableSymbol, Integer>`:
-
-- `FRAME(s)` — the pointer may refer to symbol `s`'s current-frame slot
-  (a local or parameter);
-- `GLOBAL(s)` — the pointer may refer to global `s`'s storage;
-- `UNKNOWN` — caller-owned/untracked (pointer parameters, call results,
-  pointer-typed field/element reads); it may also be null;
-- `EMPTY` — definitely null: no frame/global origin and no `UNKNOWN`;
-- **definitely non-null** — set for every `getptr`/`getmview`/`getview`
-  result, even when its storage origin is `UNKNOWN` (for example
-  `getptr($(p))` over a pointer parameter).
-
-Merging is set union. Nullness is a separate definite-non-null flag: a
-merged value is definitely non-null only when every continuing path is,
-so a null-or-frame value is a *possible* escape (warning) rather than a
-definite one (error).
-Snapshots store immutable `OriginSet` references, so branch/loop
-snapshots are cheap and never alias mutable state. The checker
-preallocates the contiguous `OriginSet[][]` snapshot store from an AST
-demand estimate, like `PointerNullStateChecker`, and grows it only if the
-estimate is low.
-
-`storageOrigins(expr)` maps an lvalue to the region it occupies
-(variable → `FRAME`/`GLOBAL`; `$(p)` → `valueOrigins(p)`; member/index
-access → its base's storage; cast → its operand). `valueOrigins(expr)`
-maps a pointer value to what it points at: `getptr`/`getmview`/`getview`
-→ `storageOrigins` of the target; a pointer variable → its current state;
-`$(p)` whose result is a pointer → the states of the tracked pointer
-cells in `valueOrigins(p)` (with `UNKNOWN` if any cell is untracked);
-`cast<T>(e)` → `valueOrigins(e)`; call results and pointer-typed
-field/element reads → `UNKNOWN`.
-
-Transfer rules mirror `PointerNullStateChecker` structurally, including
-its bounded path-sensitive branch handling, guard feasibility/refinement,
-and loop exit refinement:
-
-- pointer declarations start `EMPTY` (they are null-initialized and null
-  does not dangle); at function entry every tracked symbol is `UNKNOWN`,
-  including parameters and globals;
-- a direct pointer-variable assignment is a strong update with the RHS
-  origins; a store through `$(d)` strong-updates the single tracked
-  pointer cell `valueOrigins(d)` resolves to; any other pointer-typed
-  store path invalidates all tracked states to `UNKNOWN`;
-- static-to-dynamic view decay adds no origin: it preserves the fat
-  pointer's mode/count and creates no frame object, so a decayed
-  parameter/global view is safe to return, while a decayed view of local
-  array storage carries that local's `FRAME` origin and is caught by the
-  ordinary rule; global initializer decays are never analyzed;
-- function calls emit no escape diagnostic, but conservatively forget
-  state: all global pointer states, tracked pointer cells reachable from
-  pointer-typed arguments, and pointer locals whose address was taken by
-  `getptr`/`getmview` become `UNKNOWN`;
-- `if`/`else` analyzes both branches from the pre-branch snapshot and
-  merges only continuing paths. Exploration is path-sensitive to
-  `MAX_BRANCH_DEPTH = 12` nested branches, then falls back to a
-  path-insensitive merge;
-- a null guard refines the origin state: the `p == null` path sets `p`
-  to `EMPTY`; `p != null` over an `EMPTY` pointer and `p == null` over a
-  definitely-pointing pointer are infeasible. Returns inside an
-  infeasible path are not diagnosed;
-- `while` analyzes the body once, replays the update epilogue for normal
-  and `continue` edges, merges zero-trip and back-edge states, then
-  merges `break` snapshots. The condition-false exit of
-  `while (p != null)` refines `p` to `EMPTY` before `break` states are
-  merged;
-- block-local pointer states are reset to `UNKNOWN` when the block ends.
-
-At function entry every tracked symbol starts `UNKNOWN`, except that an
-operator method's second parameter (`other`) starts as `FRAME(other)`. The
-operator body cannot know whether the caller passed an lvalue or an
-auto-borrowed rvalue, so both are treated as frame-scoped storage. The
-store check then rejects a pointer-typed store whose value has any frame
-origin when the target storage is `UNKNOWN` (stores through pointer
-parameters, caller-owned `$(...)`) or `GLOBAL` (globals and fields reached
-through them). A `FRAME` target (local variable or local field) is allowed:
-the local dies before the operator call returns. The rule is conservative
-for merged origin sets (any frame cell triggers it) and also rejects the
-ordinary non-operator pattern of storing a local view into a global or
-through an out-parameter.
-
-At a return of pointer type, the checker classifies the value's origins:
-`mayDangle = FRAME non-empty`;
-`definiteDangle = FRAME non-empty, no UNKNOWN, no GLOBAL, and definitely non-null`;
-`possibleDangle = mayDangle and not definiteDangle`. Definite frame
-escapes are errors; possible escapes after a branch merge are warnings.
-There is no separate decay classification: a decayed view is just a fat
-pointer over its original storage.
+Two-phase, summary-aware dangling-pointer and frame-lifetime checker, run after
+the null checker. The direct-summary pass records return origin templates,
+capture edges (`source template -> GLOBAL`, `POINTEE(param i)`, or
+`POINTEE_PATH(param i, field)`), and call-edge argument templates with
+must/may certainty. The summary-aware pass tracks concrete frame/global origin
+bitsets, a definite-non-null flag, and per-path frame liveness
+(`mustDead`/`mayDead`). It classifies returns (definite frame escape = error,
+possible = warning), rejects stores of frame origins into global/caller-owned
+storage, resolves forwarded captures through the BFS, and diagnoses
+use-after-scope on dereference. Inner-block locals and loop-body locals are
+marked dead when their block ends; loop-body locals are also dead on all
+post-loop paths. An operator method's `other` parameter starts as frame
+storage. The existing intraprocedural store/return warnings remain additive.
 
 #### `DanglingPointerState`
-Package-private value/helper layer for the dangling-pointer analysis. It
-holds the immutable `OriginSet` (frame/global cells plus `unknown` and
-`nonNull` flags), the `NullGuard` pair, origin-set union/merge, guard
-recognition, and diagnostic formatting for origin sets and function names.
-`DanglingPointerChecker` keeps the traversal, snapshots/live pointer state,
-and store/return rules; the helper only supplies the algebraic and
-formatting pieces shared across those rules.
+Flat origin/liveness/snapshot layer for the dangling checker. `DanglingOrigin`
+holds frame/global `long[]` bitsets plus `unknown` and `nonNull` flags.
+Concrete state is `frameBits`, `globalBits`, `originFlags`, `mustDead`, and
+`mayDead`; summary state is `symValue`, `symPointee`, and `symCell` template
+bitsets plus capture must/may/source site bitsets. Block-local lists come from
+the context; branch merge unions frame/global bits, ORs unknown, ANDs non-null,
+intersects `mustDead`, unions `mayDead`, intersects capture-must, and unions
+capture-may.
 
 #### `DynamicArrayMemoryChecker`
-Intra-procedural lifecycle analysis for function-local dynamic arrays,
-run after both pruners and before `PointerPermissionChecker`. Tracks
-`UNINITED`/`INITED`/`MAYBE_INITED`, owner `ptr<[T]>` alias sets,
-`length()` guard refinement, loop exits, and owner-pointer call
-invalidation. Missing explicit `uninit()` is a warning because
-`Franko_Dynamic_Array`'s destructor already frees local buffers. Struct
-fields, nested dynamic-array elements, element pointers, and
-`mview`/`view` aliases are not tracked.
+Two-phase, summary-aware dynamic-array lifecycle and buffer-invalidation
+checker, run after the dangling checker. The direct-summary pass records, per
+owner `ptr<[T]>` parameter, the `INITED` requirement certainty, post-state
+(`UNCHANGED`/`INITED`/`UNINITED`/`MAYBE`/`HAVOC`), must/may invalidate,
+must/may free, and escape; it also records per-pointer-parameter use and return
+alias templates (`ELEMENT_OF`, `ALIAS_OF_POINTER`, `WHOLE_ARRAY`, `NULL`,
+`LOCAL`, `UNKNOWN`, `CALL_RESULT`). The summary-aware pass tracks
+`UNINITED`/`INITED`/`MAYBE_INITED`, `FreedState`, escaped arrays, owner-array
+origin bitsets, and per-element-alias root/epoch. It resolves callee
+requirements/post-states, advances buffer epochs for must/may
+`init`/`resize`/`uninit`, applies returned element aliases, and emits
+buffer-invalidation and cross-parameter-alias diagnostics. Whole-array
+`view<[T]>`/`mview<[T]>` values are not element aliases and are not invalidated
+by resize. Missing explicit `uninit` remains a warning; escaped arrays suppress
+leak warnings.
 
 #### `DynamicArrayAnalysisState`
-Package-private state/snapshot layer for `DynamicArrayMemoryChecker`. It
-collects tracked function-local dynamic arrays and owner
-`ptr<[T]>` aliases, owns the symbol-to-index maps, live
-`UNINITED`/`INITED`/`MAYBE_INITED` and freed/escaped/pointer-origin arrays,
-preallocates the branch snapshot store from an AST demand estimate, and
-implements snapshot/restore and state/origin merge. The checker keeps the
-traversal and lifecycle transfer rules; this helper owns the mutable state
-substrate and its branch-merge mechanics.
+Flat lifecycle/alias/snapshot layer for the dynamic checker. It owns dense
+array, owner-pointer, and pointer-variable indices; `lifecycle`, `freed`,
+`escaped`, `epochMin`, `epochMax`; owner-array bitsets and unknown flags;
+per-pointer `aliasRoot`/`aliasEpoch`; summary `paramPost`, requirement,
+invalidate, free, use, and escape bitsets; and `symAlias` template bitsets.
+Branch merge degrades lifecycle to `MAYBE_INITED`, freed to `MAYBE`, epochs to
+`[min, max]`, differing aliases to `UNKNOWN`, intersects must-bitsets, and
+unions may-bitsets. Leaving a block clears aliases rooted at that block's
+arrays and resets their lifecycle state.
 
 #### `PointerPermissionChecker`
 The capability linter: run after branch/declaration pruning (so only
@@ -1913,22 +1945,56 @@ type it would have in C++. Consequences:
   types.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
-- Strictly intra-procedural: one analysis per function, state reset at every
-  function entry, no facts cross function boundaries (interprocedural
-  nullability is deliberately not attempted). Dangling pointers are handled
-  separately by the return-only `DanglingPointerChecker` (§4.14), and
-  dynamic-array init/uninit lifecycle by `DynamicArrayMemoryChecker`
-  (§4.15).
-- `getptr(x)`/`getmview(x)`/`getview(x)` are the only certifications of
-  POINTING; every other value source is MAYBE_NULL unless it is `null` (NULL)
-  or a pointer copy.
-- Deref of definitely-NULL = error; maybe-null deref = warning.
-- Guards (`p == null`/`p != null`) refine per-path; branch exploration is
-  path-sensitive to depth 12, then falls back to insensitive checking.
-- Loops include zero-trip and back-edge exits only when the
-  condition-false guard is feasible for that state, merge `break` and
-  `continue` snapshots separately, and treat a loop with no feasible exit
-  as non-falling-through.
+
+The null-state check is now a two-phase interprocedural analysis. The
+intraprocedural state machine is unchanged: one lattice fact per pointer-typed
+variable (`ptr`/`mview`/`view` all tracked) is `POINTING`, `NULL`, or
+`MAYBE_NULL`; pointer declarations start `NULL`; `getptr`/`getmview`/`getview`
+are the only certifications; `p = q` copies state; anything else is
+`MAYBE_NULL`; guard refinement, branch-12 path sensitivity, loop zero-trip/
+back-edge/break/continue handling, and the entry seeds (parameters and globals
+`MAYBE_NULL`, method `self` and args-form `main` `POINTING`) are preserved.
+Dereference of a definitely-null variable is an error; a possibly-null
+dereference is a warning, emitted at most once per pointer variable.
+
+**Direct summaries.** The first phase runs the same traversal with symbolic
+parameter states and no diagnostics. Per pointer variable it tracks template
+bitsets: `NULL`, `NONNULL`, `UNKNOWN`, `PARAM_VALUE(i, ANY|NONNULL|NULL)`,
+`PARAM_POINTEE_VALUE(i, ANY|NONNULL|NULL)`, `CALL_RESULT(site)`, and
+`PARAM_CELL(i)`. Guard refinement rewrites `PARAM_VALUE(i, ANY)` to the
+`NONNULL`/`NULL` variant, so a guarded return keeps the constraint. At every
+exit the checker records `derefMust`/`derefMay` per parameter (a dereference
+under a `p != null` guard is self-satisfied and is not recorded as a
+requirement), `pointeeDerefMust`/`pointeeDerefMay`, slot-write sites with
+must/may certainty and a unioned source template, return alternatives, and
+call-edge argument templates. `must` is the intersection over exits; `may` is
+the union.
+
+**Summary-aware pass.** The second phase runs the same traversal with concrete
+state and resolves each call through `MemorySummaryBfs` (node =
+`(functionId, bindingKey)`, budget 2048, recursive SCC/budget cutoff = silent
+TOP). A call binding carries, per callee parameter, the actual value state, the
+actual pointee state, a one-level cell-target variable, and the root argument
+index. Callee requirements map back to the caller's argument index through the
+binding; a definitely-null argument to `MUST_DEREF` is an error, a
+possibly-null argument to either requirement is a warning, and a
+definitely-null argument to `MAY_DEREF` is a warning. Callee slot writes
+strong-update the caller's pointer variable when the target cell resolves to
+exactly one tracked pointer; unresolved writes degrade to `MAYBE_NULL`.
+`CALL_RESULT` templates are resolved recursively through the recorded call-site
+nodes. TOP returns `MAYBE_NULL` and havocs the cell targets reachable from the
+actual arguments, without a new diagnostic.
+
+**What remains intraprocedural.** Local state, guard refinement, branch
+exploration, loop exit filtering, and the existing deref warnings are still
+computed per function body. Interprocedural facts are additive; the callee's
+own intraprocedural warning is not suppressed because a summary exists. A
+non-variable dereference (for example `$(f())`) is diagnosed as an error when
+the resolved return state is definitely null and as a warning when it is
+possibly null.
+Struct/tuple field and array-element nullness, pointers hidden in returned
+aggregates, global null-state writes, and deeper-than-one-level pointer-cell
+aliasing remain out of scope.
 
 ### 4.6 Analyzer vs checker split
 - `ExpressionAnalyzer` (SemanticAnalyzer phase) **infers**: it resolves
@@ -2325,203 +2391,139 @@ globals may not (memcpy suggestion, §4.10 parity).
 
 ## 4.14 Dangling-pointer model (DanglingPointerChecker)
 
-A standalone return-escape and pointer-store pass that rejects pointer/view
-values escaping a function while referring to storage owned by that
-function's frame. It runs after `BranchPruner`, `InactiveDeclarationPruner`,
-and `PointerNullStateChecker`, so only surviving code and live functions are
-analyzed.
+The dangling check is a two-phase interprocedural provenance and frame-lifetime
+analysis. It still rejects pointer values escaping a function while referring
+to that function's frame storage, and pointer stores that move frame storage
+into global or caller-owned storage. It now also detects inner-block and
+loop-body lifetime ends and forwarded captures through callees.
 
-**Origin lattice.** Each tracked pointer variable holds an immutable
-origin set:
+**Origin lattice.** Concrete state per pointer variable is a pair of dense
+`long[]` bitsets (`FRAME(variableId)`, `GLOBAL(variableId)`) plus `unknown` and
+`nonNull` flags. `EMPTY` is definitely null (no origins, not non-null);
+`UNKNOWN` is caller-owned/untracked. Merging unions frame/global bits, ORs
+`unknown`, and ANDs `nonNull`. A value is a definite dangle only when it has a
+frame origin, no unknown/global origin, and is definitely non-null; otherwise a
+frame origin is a possible dangle. `storageOrigins(expr)` maps an lvalue to the
+region it occupies (variable → frame/global, `$(p)` → `valueOrigins(p)`,
+member/index → base, cast → operand). `valueOrigins(expr)` maps a pointer value
+to its origins (creation intrinsics → target storage plus non-null, pointer
+variable → current state, `$(p)` pointer read → tracked pointer-cell states,
+cast → operand, calls/field/element reads → unknown).
 
-- `FRAME(s)` — may refer to local/parameter `s`'s current-frame slot;
-- `GLOBAL(s)` — may refer to global `s`'s storage;
-- `UNKNOWN` — caller-owned/untracked: pointer parameters, call results,
-  pointer-typed field/element reads; it may also be null;
-- `EMPTY` — definitely null: no frame/global origin and no `UNKNOWN`;
-- **definitely non-null** — set for every
-  `getptr`/`getmview`/`getview` result, even when its storage origin is
-  `UNKNOWN` (for example `getptr($(p))` over a pointer parameter).
+**Direct summaries.** The first phase uses symbolic origin templates
+`PARAM_VALUE(i)`, `PARAM_POINTEE_VALUE(i)`, `GLOBAL(i)`, `LOCAL(variableId)`,
+`CONST`, `NULL`, `UNKNOWN`, and `CALL_RESULT(site)`. It records return origin
+sets, capture edges (source template → `GLOBAL`, `POINTEE(param i)`, or
+`POINTEE_PATH(param i, field)`), must/may capture certainty per capture site,
+and call-edge argument templates. A return/capture containing `LOCAL` is a
+callee-side error and is not propagated as a safe caller fact.
 
-Merging is union. Nullness is a separate definite-non-null flag: a
-merged value is definitely non-null only when every continuing path is,
-so null-or-frame is a possible escape (warning), not a definite one
-(error). At function entry
-every tracked symbol — parameters, globals, and locals — starts
-`UNKNOWN`. An operator method's second parameter (`other`) starts as
-`FRAME(other)` because it may be a compiler-generated borrow of an rvalue.
-`storageOrigins` follows lvalue paths: a variable is
-`FRAME`/`GLOBAL`, `$(p)` is `valueOrigins(p)`, member/index access
-inherits its base's storage, and a cast inherits its operand's.
-`valueOrigins` maps pointer values: creation intrinsics use the target's
-storage; pointer variables use their current state; a pointer-typed
-`$(p)` reads the states of the tracked pointer cells `p` may point at
-(any untracked cell contributes `UNKNOWN`); a cast inherits its
-operand's origins; calls and pointer-typed field/element reads are
-`UNKNOWN`; `null` is `EMPTY`.
+**Summary-aware pass.** The second phase tracks concrete origins, the
+definite-non-null flag, and per-path liveness (`mustDead`/`mayDead` over
+variable IDs). Pointer declarations start `EMPTY`; parameters and globals start
+`UNKNOWN`; an operator method's second parameter starts `FRAME(other)`. Direct
+pointer assignment is a strong update; `$(d) = value` strong-updates the single
+tracked pointer cell `valueOrigins(d)` resolves to; other pointer stores
+invalidate tracked state. Calls resolve capture and return summaries through
+the bounded BFS. Capture diagnostics map the source template through the call
+binding: source definitely frame + `MUST_CAPTURE` = error; definitely frame +
+`MAY_CAPTURE` = warning; possibly frame + either = warning. A resolved return
+origin is installed as the call result so a later return/store/deref can
+diagnose it. TOP returns `UNKNOWN` and havocs globals, address-taken pointer
+locals, and pointer cells reachable from the actual arguments, silently.
 
-**Transfers.** Pointer declarations start `EMPTY` (they are
-null-initialized and null does not dangle). Direct pointer-variable
-assignment is a strong update; `$(d) = value` strong-updates the single
-tracked pointer cell `valueOrigins(d)` resolves to, and any other
-pointer-typed store path invalidates every tracked state.
-Static-to-dynamic decay is representation-preserving and adds no origin;
-a decayed parameter/global view therefore keeps the value's
-caller-owned/global state, while a decayed view of a local array keeps
-that local's `FRAME` origin. Calls emit no escape diagnostic but forget
-state: global pointer states, tracked cells reachable from pointer-typed
-arguments, and address-taken pointer locals (from `getptr`/`getmview`)
-become `UNKNOWN`.
+**Frame liveness.** Declaring a local marks it alive; leaving a block marks its
+direct locals dead (`mustDead |=`, `mayDead |=`). Branch merge intersects
+`mustDead` and unions `mayDead`. A `break`/`continue` snapshot is marked dead
+for every block exited up to the target loop body. After a loop, the loop body
+locals are marked dead on all exit paths, including zero-trip and break paths,
+so a pointer that may refer to a loop-body local is diagnosed on use. Using a
+pointer whose frame origins intersect `mustDead` is a definite use-after-scope
+error; intersecting `mayDead` is a warning. Parameters stay alive for the whole
+function.
 
-`if`/`else` analyzes both branches from the pre-branch snapshot and
-merges only continuing paths. Like the null-state check, exploration is
-path-sensitive to `MAX_BRANCH_DEPTH = 12` nested branches and then falls
-back to a path-insensitive merge. A null guard refines the origin state:
-the `p == null` path sets `p` to `EMPTY`; the `p != null` path marks the
-surviving value definitely non-null (so a guarded return can be a
-definite dangle rather than only a possible one). `p != null` over an
-`EMPTY` pointer and `p == null` over a definitely-pointing pointer are
-infeasible, and returns inside those dead paths are not diagnosed.
-`while` analyzes the body once and replays the update epilogue for
-normal and `continue` edges. Each zero-trip/back-edge exit is included
-only when the condition-false guard is feasible for that state; `break`
-snapshots are merged separately. A loop with no feasible exit is treated
-as non-falling-through. Block-local pointer states reset at block end.
-
-**Return classification.** `mayDangle = FRAME non-empty`;
-`definiteDangle = FRAME non-empty, no UNKNOWN, no GLOBAL, and definitely non-null`;
-`possibleDangle = mayDangle and not definiteDangle`. Definite frame
-escapes are errors; possible escapes after a branch merge are warnings.
-There is no decay-specific diagnostic; a returned decayed view is simply
-a pointer over its backing storage.
-
-**Store rule.** A pointer-typed assignment whose value contains any
-`FRAME` origin is rejected when the target storage is `UNKNOWN`
-(caller-owned, e.g. through a pointer parameter) or `GLOBAL` (globals and
-fields reached through them). The diagnostic is `Cannot store a view of
-frame or operator-borrowed storage into a global or caller-owned
-location`. A `FRAME` target (local variable or local field) is allowed;
-for an operator method's `other` parameter this is safe because the local
-dies before the operator call returns. The rule is a coarse FRAME -> FRAME
-allowance, not a general local-lifetime ordering analysis: a view of an
-inner local stored in a longer-lived local can still dangle. It is also a
-general rule, not operator-only, so it now rejects ordinary programs that
-store a local view into a global or through an out-parameter.
-
-**Safe returns.** Pointer parameters and `getptr($(p))` over a pointer
-parameter are caller-owned (`UNKNOWN`); `getptr(G)` is global; literal
-array/string values (including decayed literals) point at hoisted
-constant globals; an existing global view is `UNKNOWN`; decayed views of
-parameters or globals are safe; and a local pointer reassigned to a
-global address before the return carries only `GLOBAL`. Global
-initializers are never analyzed because global declarations are not
-function bodies.
-
-**v1 limitations.** No interprocedural escape facts: forwarding a view to
-a callee that stores it is invisible. Ordinary non-operator methods with
-`view<T>` parameters still start `UNKNOWN` and are not checked for stores
-(the `other` seed is operator-only). No pointers hidden inside returned
-structs, tuples, or arrays, no use-after-block detection, no dynamic-array
-buffer pointer
-invalidation across `resize`/`uninit`, and loops are analyzed once rather
-than to a fixed point.
+**Store and return rules.** A pointer store whose value has any frame origin is
+rejected when the target storage is `UNKNOWN` (caller-owned, e.g. through a
+pointer parameter) or `GLOBAL` (globals and fields reached through them). A
+`FRAME` target is allowed; the coarse FRAME → FRAME allowance is unchanged.
+At a pointer return: definite frame escape is an error; possible frame escape
+is a warning; a definite/possible dead frame origin is an error/warning with
+the same wording. Static-to-dynamic view decay adds no origin. Inner-block
+locals, loop-body locals, and forwarded captures are new; field-sensitive
+struct tracking, pointers hidden in returned aggregates, global dynamic-array
+lifecycle, and nullness remain out of scope.
 
 ## 4.15 Dynamic-array lifecycle model (DynamicArrayMemoryChecker)
 
-A standalone intra-procedural pass over function-local dynamic arrays.
-It runs after `BranchPruner`, `InactiveDeclarationPruner`, and
-`DanglingPointerChecker`, so only surviving code is analyzed. Each
-function starts with fresh array and alias state.
+The dynamic-array check is a two-phase interprocedural lifecycle and buffer
+analysis. It still tracks function-local dynamic arrays and owner `ptr<[T]>`
+aliases; it now adds callee summaries, buffer epochs, element aliases, and
+cross-parameter invalidation warnings.
 
 **Lifecycle lattice.** One value per tracked local dynamic array:
+`UNINITED`, `INITED`, or `MAYBE_INITED`; a separate `FreedState`
+(`NEVER`/`MAYBE`/`YES`) distinguishes use-before-init from use-after-`uninit`.
+Transfers: declaration → `UNINITED`/`NEVER`; `init`/`init_zero` → `INITED`;
+`resize` requires `INITED` and stays `INITED`; `uninit` requires `INITED` then
+stores `UNINITED`/`YES`; element access, `memset`, `memcpy` destination,
+`memmove`, and the read/search/bit intrinsics except `length()` require
+`INITED`; `length()` is always safe. Repeated `init` is not diagnosed. Missing
+explicit `uninit` is a warning; escaped arrays suppress leak warnings.
 
-- `UNINITED` — no element storage;
-- `INITED` — element storage is allocated;
-- `MAYBE_INITED` — initialized on some continuing paths, or possibly
-  changed by an owner-pointer call.
+**Owner pointers and epochs.** Owner `ptr<[T]>` values carry an array-origin
+bitset plus an unknown flag. Each array has `epochMin`/`epochMax`; a single path
+has `epochMin == epochMax`. `init`/`init_zero`/`resize`/`uninit` advance both
+epochs on a definite path. Callee effects advance both for a must-invalidate
+and only `epochMax` for a may-invalidate. Branch merge takes the minimum and
+maximum epoch.
 
-A separate three-valued `FreedState` (`NEVER` / `MAYBE` / `YES`)
-distinguishes use-before-init from use-after-`uninit()`; it does not add
-a fourth lifecycle state. Merges produce `MAYBE_INITED` whenever the
-paths disagree; `FreedState` merges to `MAYBE` on disagreement.
+**Element aliases.** Only element pointers/views are buffer aliases:
+`getptr`/`getmview`/`getview(d[i])` where `d` is a tracked dynamic array creates
+an alias rooted at `d` with the current epoch. `getptr(d)` points at the array
+object and is not an element alias. Static arrays never create aliases. Copies,
+casts, and returned/forwarded aliases propagate root and epoch; differing
+roots/epochs merge to `UNKNOWN`. Owner `ptr<[T]>` values and whole-array
+`view<[T]>`/`mview<[T]>` values point at the stable `Franko_Dynamic_Array`
+descriptor and are not invalidated by `resize`/`uninit`; only element
+pointers/views into the element buffer are invalidated. At any use of an element alias (deref,
+index, assignment target, call argument, return, or creation intrinsic over it),
+`aliasEpoch < epochMin` is a definite invalidation error and
+`epochMin <= aliasEpoch < epochMax` is a possible invalidation warning. When an
+array's block ends, the dynamic checker clears aliases rooted at it so the
+dangling checker owns the scope-end diagnostic.
 
-**Tracked entities.** Function-local variables of type `[T]`, including
-the outer value of nested dynamic arrays. Also tracked are owner
-`ptr<[T]>` values whose origins are `getptr(localArray)`, pointer copies,
-casts, and `getptr($(p))`. Global dynamic arrays themselves, dynamic
-array fields, dynamic-array elements nested inside tuple values, nested
-elements, element pointers, and
-`mview<[T]>`/`view<[T]>` aliases are untracked. `mview`/`view` call
-arguments never invalidate array state because those permissions cannot
-allocate or free storage.
+**Direct summaries.** Per owner-array parameter the first phase records the
+`INITED` requirement certainty (`MAY_REQUIRE_INITED`/`MUST_REQUIRE_INITED`),
+post-state (`UNCHANGED`/`INITED`/`UNINITED`/`MAYBE`/`HAVOC`), must/may
+invalidate, must/may free, and escape. Per pointer parameter it records
+may-use. Return aliases are `ELEMENT_OF(i)`, `ALIAS_OF_POINTER(i)`,
+`WHOLE_ARRAY(i)`, `NULL`, `UNKNOWN`, `LOCAL`, or `CALL_RESULT(site)`. Call
+edges carry alias templates for every parameter. Must/may bitsets use the same
+intersection/union exit rule as the other domains.
 
-Origin sets are `ArrayOrigin` values (a set of `VariableSymbol`
-identity plus an `UNKNOWN` flag). Exactly one known origin enables a
-strong update or definite diagnostic; multiple known or unknown origins
-degrade to `MAYBE_INITED` or no diagnostic.
+**Summary-aware pass.** The BFS binding carries, per callee parameter, the
+actual array index, lifecycle, freed state, alias root/epoch, current epoch, and
+root argument index. Callee requirements are checked against the actual
+lifecycle: definite uninitialized/freed to `MUST_REQUIRE_INITED` is an error;
+possible to `MUST_REQUIRE_INITED` is a warning; definite uninitialized/freed to
+`MAY_REQUIRE_INITED` is a warning. Post-states update the caller array
+(`INITED`, `UNINITED`/freed, `MAYBE`), invalidations advance epochs, frees mark
+the array freed, and escapes set the escaped flag. `init`/`init_zero`,
+`resize`, and `uninit` are **strong** post-state updates within a path: the
+summary post-state is set directly, not merged with the pre-call state.
+Length guards refine owner-parameter post-states (`length() == 0` →
+`UNINITED`, nonzero → `INITED`), so a callee that initializes an output array
+on one path and resizes it on the other does not require the caller to
+pre-initialize it. A returned element alias installs a caller alias at the
+current epoch. The cross-parameter rule warns when a callee may invalidate
+array parameter `i` and may use element-pointer parameter `j`, and the
+caller's actual `j` is an element alias of actual `i`. TOP marks owner
+arguments `MAYBE_INITED`/escaped and emits no new diagnostic.
 
-**Transfers.**
-
-- local dynamic array declaration → `UNINITED`, `FreedState.NEVER`;
-- `init(n)` and `init_zero(n)` → `INITED`; repeated init is
-  not diagnosed because an earlier init may have failed with `-1` and a
-  retry is valid;
-- `resize(n)` requires `INITED` and leaves the array `INITED`;
-- `uninit()` requires `INITED`, then stores `UNINITED` +
-  `FreedState.YES`; calling it before init is an invalid free, and
-  calling it when already uninitialized is a double free;
-- element access, `memset`, `memcpy` destination, `memmove`, and every
-  read/search/bit intrinsic except `length()` require `INITED`;
-- `length()` is always safe, including after `uninit()`;
-- `getptr`/`getmview`/`getview` create pointers without changing
-  lifecycle state;
-- pointer assignments copy origin sets; `null` clears them;
-- owner `ptr<[T]>` call arguments mark the target `MAYBE_INITED` and
-  escaped. Arrays whose owner pointer is stored into a global or an
-  owner-pointer-typed field/element are also escaped. Escaped arrays are
-  havocked to `MAYBE_INITED` by later calls or untracked lifecycle
-  operations, and are excluded from leak warnings. Global pointer
-  origins are forgotten after calls, like address-taken locals.
-
-**Length guards.** Direct comparisons of `d.length()` with a constant
-are recognized in either operand order. The zero-asserting paths
-(`== 0`, `<= 0`, `< 1`) refine `d` to `UNINITED`; the nonzero-asserting
-paths (`!= 0`, `> 0`, `>= 1`, `== k` for `k > 0`) refine it to `INITED`.
-Infeasible paths (for example `length() == 0` on an `INITED` array) are
-suppressed and do not contribute state. Nonzero constant comparisons
-certify only the nonzero side.
-
-**Branches and loops.** `if`/`else` uses the same pre-branch snapshot,
-continuing-path merge, no-else fallthrough, infeasible-branch
-suppression, and dead-tail handling as the null/dangling checks.
-Exploration is path-sensitive to `MAX_BRANCH_DEPTH = 12`; beyond that it
-falls back to a path-insensitive merge.
-
-`while` analyzes the body once and replays the update epilogue for
-normal and `continue` edges. Exit states are filtered and refined per
-path before merging: the zero-trip path is included only when the
-condition-false guard is feasible at entry, and each back-edge state is
-included only when the condition-false guard is feasible after that
-iteration. `break` snapshots are merged separately. If neither a normal
-exit nor a `break` is feasible, the loop is treated as
-non-falling-through, so its tail is not analyzed. `for` loops receive
-the same treatment after desugaring.
-
-**Diagnostics and severity.** Definite use before init, use after
-`uninit()`, invalid free, and double free are errors. `MAYBE_INITED`
-equivalents are warnings. Repeated `init` is deliberately not diagnosed because
-`init`/`init_zero` can fail with `-1` and a retry is valid; the runtime
-still aborts on a true double init. Missing explicit `uninit()` at a
-return or scope exit is a warning, not a leak error, because the runtime
-destructor frees local dynamic arrays. Leak warnings are suppressed for
-escaped arrays.
-
-**v1 limitations.** No struct-field or nested-element tracking, no
-`mview`/`view` alias tracking for use checks, no interprocedural callee
-summaries, no allocation-failure status modeling (`init` is treated as
-successful, so repeated init is left to the runtime), no
-element-buffer pointer invalidation after `resize`/`uninit`, and no loop
-fixed point.
+**Remaining limits.** Struct-field arrays, nested dynamic-array elements below
+the outermost tracked array, global dynamic-array lifecycle, and allocation
+failure status are not tracked. `mview`/`view` parameters carry may-use but no
+lifecycle post-state. Loops are analyzed once, not to a fixed point.
 
 ## 4.16 Identifier visibility (PrivateIdentifierLinter)
 
@@ -2755,6 +2757,123 @@ uses raw `"type": "tuple"` with an `elements` array, SAST `"type": "tuple"`
 with a `symbol` plus element names/types, optional `"tuple": true` on
 synthetic struct symbols, and optional `"tupleIndex"` on tuple field symbols.
 
+## 4.20 Memory shape analysis
+
+`MemoryShapeIndex` answers three coarse questions for a type: can it carry a
+pointer, can it carry a dynamic array, and can it carry an owner pointer to an
+array. The walk stops at pointer and dynamic-array boundaries, recurses through
+static-array elements, struct fields, and tuple elements, and uses a visited
+set for struct cycles. This is enough to classify direct memory effects and to
+know whether a value can hide memory, without introducing field-sensitive
+state. It is a build-stage cache; the checkers never mutate it.
+
+## 4.21 Interprocedural summaries and bounded BFS
+
+Every memory checker has the same two-phase shape:
+
+1. **Direct summary pass** — run the intraprocedural traversal with symbolic
+   parameter states. Emit no diagnostics. Record requirements, direct
+   mutations/captures, return templates, and call edges. Nested call results
+   remain `CALL_RESULT(site)` templates.
+2. **Summary-aware check pass** — run the same traversal with concrete state.
+   At each call site evaluate the arguments, build a binding, resolve the
+   callee and its transitive call edges with `MemorySummaryBfs`, apply
+   preconditions/diagnostics, apply post-state (returns, pointer-cell writes,
+   captures, lifecycle, epochs), and continue with the updated caller state.
+
+A BFS node is `(functionId, bindingKey)`. The budget is
+`MAX_BFS_VISITED = 2048` dequeued nodes per call site per checker; a memo hit
+still consumes one unit. A node already in the same recursive SCC, a callee
+with no SAST body (FFI/builtin), or budget exhaustion is silent TOP. TOP emits
+no new diagnostic and is never memoized as a completed result. Must/may
+severity is uniform: definite bad input + `MUST_*` = error; definite bad input
++ `MAY_*` = warning; possible bad input + either = warning; `NONE` = safe.
+
+The BFS uses flat `int[]` queue/binding pools and a custom open-addressed
+primitive visited table. Collision verification compares the actual binding
+arrays. Bindings are domain-defined `int[]` records; no `HashMap` or
+`ArrayList` is allocated per branch, merge, or call node.
+
+## 4.22 Dynamic-array buffer invalidation
+
+Buffer generations are tracked with `epochMin`/`epochMax` per tracked dynamic
+array. Element aliases (`getptr`/`getmview`/`getview(d[i])`) store
+`aliasRoot` and `aliasEpoch`. A use of an alias is a definite invalidation
+error when `aliasEpoch < epochMin`, a possible invalidation warning when
+`epochMin <= aliasEpoch < epochMax`, and valid otherwise. The check applies at
+dereference, indexing, assignment through the alias, call argument, return, and
+creation intrinsics over the alias. `resize` and `uninit` advance the epoch;
+`init`/`init_zero` do too because they replace the buffer. Callee summaries
+advance both epochs for a must-invalidate and only `epochMax` for a
+may-invalidate. Owner pointers and whole-array views are not element aliases:
+they point at the stable `Franko_Dynamic_Array` descriptor and are not
+invalidated by `init`/`resize`/`uninit`. When a tracked array's block ends, its
+aliases are cleared so the dangling checker owns the scope-end diagnostic.
+
+## 4.23 Frame liveness and inner-block lifetime
+
+The dangling checker maintains `mustDead` and `mayDead` bitsets over variable
+IDs. Declaring a local marks it alive. Leaving a block marks its direct locals
+dead. Branch merge intersects `mustDead` and unions `mayDead`. Break/continue
+snapshots mark every exited block up to the target loop body dead, and the
+post-loop merge marks loop-body locals dead on all exit paths. A pointer whose
+frame origins intersect `mustDead` is a definite use-after-scope error; an
+intersection with `mayDead` is a warning. Parameters remain alive for the whole
+function. The frame-origin algebra is otherwise unchanged: returning or storing
+a frame-origin pointer into caller/global storage is diagnosed by the existing
+return/store rules.
+
+## 4.24 Memory checker diagnostics matrix
+
+Every diagnostic emitted by the three memory checkers is prefixed with
+`Intraprocedural:` or `Interprocedural:` so the source of the fact is visible
+at the diagnostic site.
+
+| Check | Definite | Possible |
+|---|---|---|
+| Null dereference | error `Intraprocedural: Cannot dereference null variable 'p'` | warning `Intraprocedural: Deref of possibly null variable 'p'` |
+| Null argument to `MUST_DEREF` | error `Interprocedural: Passing null to parameter ... which is dereferenced` | warning `Interprocedural: Passing a possibly null value ... which may be dereferenced` |
+| Null argument to `MAY_DEREF` | warning `Interprocedural: Passing null to parameter ... which may be dereferenced` | warning `Interprocedural: Passing a possibly null value ...` |
+| Return frame escape | error `Intraprocedural: Returning a pointer to ... (dangling after return)` | warning `Intraprocedural: ... (possibly dangling after return)` |
+| Store frame → global/caller | error `Intraprocedural: Cannot store a view of frame ... into a global or caller-owned location` | — |
+| Forwarded capture | error `Interprocedural: Call to 'f' stores a view of frame storage ...` | warning `Interprocedural: Call to 'f' may store a view of frame storage ...` |
+| Use after inner block/loop body | error `Intraprocedural: Cannot dereference pointer to ... after its scope ended` / `Intraprocedural: Cannot use pointer to ... after its scope ended` | warning `Intraprocedural: Pointer may refer to ... after its scope ended` |
+| Dynamic use before init | error `Intraprocedural: Use of uninitialized dynamic array 'd' before init` | warning `Intraprocedural: Possible use of uninitialized dynamic array 'd'` |
+| Dynamic use after uninit | error `Intraprocedural: Use of dynamic array 'd' after uninit` | warning `Intraprocedural: Dynamic array 'd' may be uninitialized or freed` |
+| Invalid/double free | error `Intraprocedural: Invalid free ...` / `Intraprocedural: Double free ...` | warning `Intraprocedural: Possible invalid free or double free ...` |
+| Missing explicit uninit | — | warning `Intraprocedural: ... (missing explicit uninit)` |
+| Callee requires initialized | error `Interprocedural: Passing uninitialized/freed dynamic array ...` | warning `Interprocedural: Passing possibly uninitialized ...` |
+| Buffer invalidation | error `Intraprocedural: Pointer 'e' was invalidated by resize ...` | warning `Intraprocedural: Pointer 'e' may have been invalidated ...` |
+| Cross-parameter alias | — | warning `Interprocedural: Call to 'f' may invalidate array 'd' while using element pointer ...` |
+
+Diagnostics keep span push/pop discipline, deterministic source-order
+emission, and dense site-ID dedup (no per-warning hash sets). Intraprocedural
+warnings from the pre-rewrite checkers are preserved; interprocedural
+diagnostics are additive.
+
+## 4.25 Memory checker limitations
+
+Deliberately out of scope for this rewrite:
+
+- scalar definite assignment / uninitialized primitive reads;
+- nullness of struct fields and array elements;
+- pointers hidden inside returned structs or tuples;
+- full field-sensitive tracking of struct fields;
+- nested dynamic-array path tracking below the outermost tracked array;
+- global dynamic-array lifecycle tracking;
+- global null-state writes;
+- FFI resource leaks;
+- deeper-than-one-level pointer-cell aliasing;
+- taint/sensitive-data analysis;
+- concurrency;
+- performance/dead-store checks;
+- C++/ObjC-specific Infer categories.
+
+Additional accepted trade-offs: loops are analyzed once rather than to a fixed
+point; recursion and budget cutoffs are silent TOP; aggregate pointers remain
+opaque; and the FRAME → FRAME store allowance is a coarse rule, not a general
+local-lifetime ordering analysis.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -2798,6 +2917,25 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
   bare static-index emission in the generated C++.
 - `build/` and `.antlr/` are generated and gitignored; never edit them.
 
+Memory-checker fixtures added by the rewrite:
+
+```text
+language_tests/failure/null_interprocedural/
+language_tests/success/null_interprocedural/
+language_tests/failure/dangling_interprocedural/
+language_tests/success/dangling_interprocedural/
+language_tests/failure/dangling_lifetime/
+language_tests/success/dangling_lifetime/
+language_tests/failure/dyn_array_interprocedural/
+language_tests/success/dyn_array_interprocedural/
+language_tests/failure/dyn_array_buffer/
+language_tests/success/dyn_array_buffer/
+```
+
+`language_tests/success/dyn_array_call_ptr_maybe` is intentionally warning-free
+now: the callee only writes elements, so it does not require `INITED` on the
+owner argument.
+
 ## 6. Adding a new phase or check — where things go
 
 | You want to… | Put it in |
@@ -2829,3 +2967,11 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 | Add/adjust a pointer permission rule | the region rule lives in `PointerPermissions`; enforce it in the relevant checker (`ExpressionChecker`/`StatementChecker`) and teach use-site attribution to `PointerPermissionChecker` (§4.9) |
 | Change how string literals are represented | `Desugarer` (hoisting, §4.10) + `StringLiteralDecoder` + `GlobalVariableSymbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
 | Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `GlobalVariableSymbol.literalValues` + `CallArg`/`OverloadResolution.isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |
+| Change summary fields | the relevant checker + `MemoryTemplate` (§4.21) |
+| Change BFS budget or memoization | `MemorySummaryBfs` (§4.21) |
+| Change shape flags | `MemoryShapeIndex` (§4.20) |
+| Add a new memory effect | the domain summary + its check pass + §4.21–§4.24 |
+| Change buffer invalidation | `DynamicArrayAnalysisState` + `DynamicArrayMemoryChecker` (§4.15, §4.22) |
+| Change frame liveness | `DanglingPointerState` + `DanglingPointerChecker` (§4.14, §4.23) |
+| Change dense IDs / call graph / block locals | `MemoryAnalysisContext` + `MemoryCallGraph` |
+| Change the shared branch/loop traversal | `MemoryDataflowDriver` |

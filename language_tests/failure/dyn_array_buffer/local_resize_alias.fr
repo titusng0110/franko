@@ -1,0 +1,7 @@
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    ptr<int32> e = getptr(d[0])
+    d.resize(4)
+    return $(e)
+}

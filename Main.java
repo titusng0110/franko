@@ -206,6 +206,9 @@ public class Main {
                 new InactiveDeclarationPruner().prune(branchPruned);
         artifacts.writeSast(SastPhase.INACTIVE_PRUNED, inactivePruned);
 
+        MemoryAnalysisContext memoryContext =
+                MemoryAnalysisContext.build(inactivePruned.root);
+
         PassResult pointerStateResult = runPass(
                 log,
                 artifacts,
@@ -214,7 +217,7 @@ public class Main {
                 "==== Pointer Null-State Checking ====",
                 "==== Pointer Null-State Warnings ====",
                 "Pointer null-state checking failed:",
-                () -> new PointerNullStateChecker(new DiagnosticBag())
+                () -> new PointerNullStateChecker(new DiagnosticBag(), memoryContext)
                         .check(inactivePruned)
         );
 
@@ -226,7 +229,7 @@ public class Main {
                 "==== Dangling Pointer Checking ====",
                 "==== Dangling Pointer Warnings ====",
                 "Dangling pointer checking failed:",
-                () -> new DanglingPointerChecker(new DiagnosticBag())
+                () -> new DanglingPointerChecker(new DiagnosticBag(), memoryContext)
                         .check(pointerStateResult.document)
         );
 
@@ -238,7 +241,7 @@ public class Main {
                 "==== Dynamic Array Memory Checking ====",
                 "==== Dynamic Array Memory Warnings ====",
                 "Dynamic array memory checking failed:",
-                () -> new DynamicArrayMemoryChecker(new DiagnosticBag())
+                () -> new DynamicArrayMemoryChecker(new DiagnosticBag(), memoryContext)
                         .check(danglingResult.document)
         );
 

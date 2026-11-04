@@ -1,0 +1,7 @@
+func deref(ptr<int32> p) -> int32 {
+    return $(p)
+}
+
+func main() -> int32 {
+    return deref(null)
+}

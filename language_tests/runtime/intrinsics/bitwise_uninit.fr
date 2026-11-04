@@ -1,12 +1,17 @@
 // Runtime fixture: intrinsics/bitwise_uninit
-// The operation happens through a caller-owned pointer, so the checker
-// cannot prove the array is uninitialized; the runtime aborts.
+// The array is only possibly initialized, so the checker reports a warning
+// and the runtime still aborts on the uninitialized intrinsic.
+int32 C = 0
+
 func invert(ptr<[byte]> p) -> void {
     $(p).bitwise_not_mask()
 }
 
 func main() -> int32 {
     [byte] buf
+    if (C != 0) {
+        buf.init(1)
+    }
     invert(getptr(buf))
     return 0
 }

@@ -1,0 +1,9 @@
+func fill(ptr<[int32]> p) -> void {
+    $(p)[0] = 1
+}
+
+func main() -> int32 {
+    [int32] d
+    fill(getptr(d))
+    return 0
+}

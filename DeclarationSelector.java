@@ -29,7 +29,6 @@ final class DeclarationSelector {
         }
     }
 
-    private final TargetInfo target;
     private final DiagnosticBag diagnostics = new DiagnosticBag();
     private final SymbolTable ctx = new SymbolTable(diagnostics);
     private final ConstExpressionEvaluator constEval;
@@ -52,7 +51,6 @@ final class DeclarationSelector {
             new IdentityHashMap<>();
 
     DeclarationSelector(TargetInfo target) {
-        this.target = target;
         this.constEval = new ConstExpressionEvaluator(ctx);
 
         ExpressionLowering lowering = new ExpressionLowering(

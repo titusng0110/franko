@@ -1,0 +1,15 @@
+ptr<int32> G
+
+func inner(ptr<ptr<int32>> out, ptr<int32> p) -> void {
+    $(out) = p
+}
+
+func forward(ptr<ptr<int32>> out, ptr<int32> p) -> void {
+    inner(out, p)
+}
+
+func main() -> int32 {
+    int32 x = 1
+    forward(getptr(G), getptr(x))
+    return 0
+}

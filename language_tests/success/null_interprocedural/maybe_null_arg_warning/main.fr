@@ -1,0 +1,19 @@
+import "franko/io"
+
+int32 C = 1
+
+func deref(ptr<int32> p) -> int32 {
+    return $(p)
+}
+
+func main() -> int32 {
+    int32 x = 1
+    ptr<int32> p
+    if (C != 0) {
+        p = getptr(x)
+    } else {
+        p = null
+    }
+    print(deref(p))
+    return 0
+}

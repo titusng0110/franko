@@ -339,10 +339,15 @@ Assignment from another pointer variable copies that variable's exact state, so 
 
 Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
-The analysis is **intra-procedural**: no nullness facts cross function
-boundaries (a returned pointer is always maybe-null at the call site).
-Dangling pointers are checked separately, and only for values escaping a
-function through `return` (see
+The analysis is **interprocedural through summaries**. A callee's
+parameter dereferences become requirements on the caller's arguments, so
+passing a definitely-null argument to a parameter that is always
+dereferenced is an error and passing a possibly-null argument is a warning.
+A parameter guarded with `p != null` on the dereferencing path produces no
+requirement. Callee returns propagate their null-state alternatives, and a
+callee that writes through a `ptr<ptr<T>>` parameter updates the caller's
+pointer variable. Each function body still has its own intraprocedural
+warnings. Dangling pointers are checked separately (see
 [Pointer Lifetime Limitations](#2511-pointer-lifetime-limitations) and
 [Memory Safety Checking](29-memory-safety-checking.md)).
 
@@ -399,13 +404,16 @@ memory corruption.
 
 ## 25.11 Pointer Lifetime Limitations
 
-Pointer lifetime is not fully tracked, but the compiler does detect one
-important class of dangling pointers: a pointer/view returned from a
-function while it refers to that function's own stack storage.
+Pointer lifetime is not fully tracked, but the compiler detects dangling
+pointers returned from a function, stored into global or caller-owned
+storage, forwarded through callees that perform such a store, and used after
+an inner block or loop body has ended.
 
 The compiler rejects a `return` of a pointer to a local variable, a
 parameter, or any field/element of one, including through pointer copies,
-`$(...)` aliases, and branch merges.
+`$(...)` aliases, and branch merges. It also rejects a dereference of a
+pointer whose pointee is a local variable from a block that has already
+ended, and it follows capture/return summaries through called functions.
 
 A return that only *may* refer to local storage after a branch merge is a
 warning; a definite escape is an error. Safe returns include pointer
@@ -417,15 +425,17 @@ the view refers to the local array itself.
 
 What remains untracked:
 
-- pointers escaping through function calls (out-parameters, globals, or
-  return values of other functions);
-- pointers hidden inside returned structs or arrays;
-- use of a pointer after the block that owns its pointee ends, but before
-  the function returns;
-- dynamic-array buffer lifetime across `resize`/`uninit`;
-- aliasing and interprocedural ownership in general.
+- pointers hidden inside returned structs or tuples;
+- field-sensitive struct tracking;
+- global dynamic-array lifecycle;
+- pointers escaping through aggregate stores that are not modeled as a
+  direct global/out-parameter sink;
+- recursion and the 2048-node call-graph budget (silent conservative
+  result).
 
-The remaining cases are not currently checked at compile time.
+Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
+by the dynamic-array lifecycle checker (see
+[Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking)).
 
 ## 25.12 Prefer Pool Indices to Linked Nodes
 

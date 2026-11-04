@@ -1,0 +1,17 @@
+import "franko/io"
+
+int32 C = 0
+
+func main() -> int32 {
+    ptr<int32> p
+    if (C != 0) {
+        int32 y = 1
+        p = getptr(y)
+    }
+    int32 v = 0
+    if (p != null) {
+        v = $(p)
+    }
+    print(v)
+    return 0
+}

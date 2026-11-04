@@ -1,0 +1,16 @@
+int32 C = 0
+
+func mutate(ptr<[int32]> d, ptr<int32> e) -> void {
+    if (C != 0) {
+        $(d).resize(4)
+    }
+    $(e) = 1
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    mutate(getptr(d), getptr(d[0]))
+    d.uninit()
+    return 0
+}
