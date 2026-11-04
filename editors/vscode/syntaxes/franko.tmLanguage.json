@@ -1,0 +1,229 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Franko",
+  "scopeName": "source.franko",
+  "fileTypes": [
+    "fr",
+    "franko"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#builtin-namespace"
+    },
+    {
+      "include": "#member-access"
+    },
+    {
+      "include": "#qualified-names"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#builtin-functions"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "match": "//.*$",
+      "name": "comment.line.double-slash.franko"
+    },
+    "strings": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.franko",
+      "patterns": [
+        {
+          "match": "\\\\(?:[\\\\\"abfnrtv])",
+          "name": "constant.character.escape.franko"
+        },
+        {
+          "match": "\\\\.",
+          "name": "invalid.illegal.unknown-escape.franko"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b0[xX][0-9a-fA-F]+\\b",
+          "name": "constant.numeric.hex.franko"
+        },
+        {
+          "match": "\\b0[bB][01]+\\b",
+          "name": "constant.numeric.binary.franko"
+        },
+        {
+          "match": "\\b[0-9]+\\b",
+          "name": "constant.numeric.integer.franko"
+        }
+      ]
+    },
+    "builtin-namespace": {
+      "match": "\\b(static)(::)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "support.namespace.franko"
+        },
+        "2": {
+          "name": "punctuation.separator.namespace.franko"
+        },
+        "3": {
+          "name": "support.function.builtin.franko"
+        }
+      }
+    },
+    "member-access": {
+      "patterns": [
+        {
+          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.dot.franko"
+            },
+            "2": {
+              "name": "entity.name.function.member.franko"
+            }
+          }
+        },
+        {
+          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.dot.franko"
+            },
+            "2": {
+              "name": "variable.other.property.franko"
+            }
+          }
+        }
+      ]
+    },
+    "qualified-names": {
+      "match": "\\b(?:[A-Za-z_][A-Za-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*",
+      "name": "entity.name.namespace.franko"
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "entity.name.function.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "entity.name.type.struct.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(namespace)\\s+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "entity.name.namespace.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(import)\\b",
+          "name": "keyword.other.declaration.franko"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(static_if|static_else)\\b",
+          "name": "keyword.control.compile-time.franko"
+        },
+        {
+          "match": "\\b(return|if|else|while|for|break|continue)\\b",
+          "name": "keyword.control.franko"
+        },
+        {
+          "match": "\\b(self)\\b",
+          "name": "variable.language.self.franko"
+        },
+        {
+          "match": "\\b(null)\\b",
+          "name": "constant.language.null.franko"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(void)\\b",
+          "name": "storage.type.void.franko"
+        },
+        {
+          "match": "\\b(int8|int16|int32|int64|uint8|uint16|uint32|uint64|int|uint|byte)\\b",
+          "name": "storage.type.primitive.franko"
+        },
+        {
+          "match": "\\b(ptr|mview|view)\\b",
+          "name": "storage.type.pointer.franko"
+        }
+      ]
+    },
+    "builtin-functions": {
+      "patterns": [
+        {
+          "match": "\\b(cast|unsafe_cast|getptr|getmview|getview)\\b",
+          "name": "support.function.builtin.franko"
+        },
+        {
+          "match": "\\$",
+          "name": "keyword.operator.dereference.franko"
+        },
+        {
+          "match": "\\?",
+          "name": "keyword.operator.inferred-size.franko"
+        }
+      ]
+    },
+    "operators": {
+      "match": "->|::|\\+\\+|--|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|==|!=|<=|>=|&&|\\|\\||<<|>>|[+\\-*/%&|^~!<>=]",
+      "name": "keyword.operator.franko"
+    },
+    "punctuation": {
+      "match": "[()\\[\\]{},;]",
+      "name": "punctuation.franko"
+    }
+  }
+}

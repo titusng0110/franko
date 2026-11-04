@@ -1,0 +1,54 @@
+{
+  "Function": {
+    "prefix": "func",
+    "body": [
+      "func ${1:name}(${2}) -> ${3:void} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko function declaration"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko struct declaration"
+  },
+  "Namespace": {
+    "prefix": "namespace",
+    "body": [
+      "namespace ${1:name} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko namespace declaration"
+  },
+  "If": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko if statement"
+  },
+  "For": {
+    "prefix": "for",
+    "body": [
+      "for (${1:int32 i = 0}; ${2:i < n}; ${3:i++}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko for loop"
+  },
+  "Tuple return": {
+    "prefix": "tuple",
+    "body": [
+      "(${1:uint32 idx}, ${2:int32 err})"
+    ],
+    "description": "Franko two-element tuple type"
+  }
+}
