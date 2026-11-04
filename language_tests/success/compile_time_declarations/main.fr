@@ -1,4 +1,9 @@
 // LANGUAGE TEST: declaration-level #if splicing and scoping
+//
+// The target-constant conditions below are disjunctions over every
+// supported OS/architecture. Exactly one OS constant and one architecture
+// constant are 1 for any supported target, so the same branch is selected
+// everywhere and main.expected stays portable.
 
 import "franko/io"
 
@@ -28,7 +33,7 @@ struct Point {
 }
 
 namespace n {
-    #if (#IS_LINUX) {
+    #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
         int32 V = 3
     } #else {
         int32 V = 4
@@ -37,7 +42,7 @@ namespace n {
 
 namespace outer {
     namespace inner {
-        #if (#IS_X86_64) {
+        #if (#IS_X86_64 || #IS_ARM64) {
             int32 W = 5
         } #else {
             int32 W = 6
@@ -65,7 +70,7 @@ namespace outer {
     int32 chain_value = 3
 }
 
-#if (#IS_LINUX) {
+#if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
     namespace chosen_namespace {
         int32 A = 11
     }
