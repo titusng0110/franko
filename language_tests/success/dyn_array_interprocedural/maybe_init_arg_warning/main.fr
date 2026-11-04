@@ -1,0 +1,15 @@
+int32 C = 1
+
+func fill(ptr<[int32]> p) -> void {
+    $(p)[0] = 1
+}
+
+func main() -> int32 {
+    [int32] d
+    if (C != 0) {
+        d.init(2)
+    }
+    fill(getptr(d))
+    d.uninit()
+    return 0
+}

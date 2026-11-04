@@ -1,0 +1,15 @@
+import "franko/io"
+
+func pick(int32 n, ptr<int32> p) -> ptr<int32> {
+    if (n == 0) {
+        return p
+    }
+    return pick(n - 1, p)
+}
+
+func main() -> int32 {
+    int32 x = 3
+    ptr<int32> p = pick(2, getptr(x))
+    print($(p))
+    return 0
+}

@@ -1,0 +1,10 @@
+func main() -> int32 {
+    ptr<int32> p
+    int32 i = 0
+    while (i < 1) {
+        int32 y = 2
+        p = getptr(y)
+        i = i + 1
+    }
+    return $(p)
+}

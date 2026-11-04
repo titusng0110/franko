@@ -1,0 +1,8 @@
+func main() -> int32 {
+    ptr<int32> p
+    {
+        int32 y = 1
+        p = getptr(y)
+    }
+    return $(p)
+}

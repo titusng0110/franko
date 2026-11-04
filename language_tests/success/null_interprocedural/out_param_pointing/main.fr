@@ -1,0 +1,14 @@
+import "franko/io"
+
+int32 G = 7
+
+func set(ptr<ptr<int32>> out, ptr<int32> value) -> void {
+    $(out) = getptr($(value))
+}
+
+func main() -> int32 {
+    ptr<int32> p
+    set(getptr(p), getptr(G))
+    print($(p))
+    return 0
+}

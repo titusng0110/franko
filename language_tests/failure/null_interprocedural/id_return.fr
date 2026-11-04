@@ -1,0 +1,8 @@
+func id(ptr<int32> p) -> ptr<int32> {
+    return p
+}
+
+func main() -> int32 {
+    ptr<int32> p = id(null)
+    return $(p)
+}

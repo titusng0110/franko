@@ -1,0 +1,1 @@
+Intraprocedural: Cannot dereference pointer to local variable 'y' after its scope ended

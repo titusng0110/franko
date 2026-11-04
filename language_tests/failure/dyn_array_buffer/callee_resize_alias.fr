@@ -1,0 +1,11 @@
+func grow(ptr<[int32]> p) -> void {
+    $(p).resize(4)
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    ptr<int32> e = getptr(d[0])
+    grow(getptr(d))
+    return $(e)
+}

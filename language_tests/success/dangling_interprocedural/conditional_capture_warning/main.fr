@@ -1,0 +1,14 @@
+ptr<int32> G
+int32 C = 1
+
+func maybe_capture(ptr<ptr<int32>> out, ptr<int32> p) -> void {
+    if (C != 0) {
+        $(out) = p
+    }
+}
+
+func main() -> int32 {
+    int32 x = 1
+    maybe_capture(getptr(G), getptr(x))
+    return 0
+}

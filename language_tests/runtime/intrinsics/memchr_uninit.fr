@@ -1,14 +1,19 @@
 import "franko/io"
 
 // Runtime fixture: intrinsics/memchr_uninit
-// Searching through a caller-owned pointer hides the definite state from
-// the intra-procedural checker; the runtime aborts.
+// The array is only possibly initialized, so the checker reports a warning
+// and the runtime still aborts on the uninitialized search.
+int32 C = 0
+
 func search(ptr<[byte]> p) -> uint32 {
     return $(p).memchr(0)
 }
 
 func main() -> int32 {
     [byte] buf
+    if (C != 0) {
+        buf.init(1)
+    }
     print(search(getptr(buf)))
     return 0
 }

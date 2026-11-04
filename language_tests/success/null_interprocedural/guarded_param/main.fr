@@ -1,0 +1,15 @@
+import "franko/io"
+
+func check(ptr<int32> p) -> int32 {
+    if (p != null) {
+        return $(p)
+    }
+    return -1
+}
+
+func main() -> int32 {
+    print(check(null))
+    int32 x = 5
+    print(check(getptr(x)))
+    return 0
+}

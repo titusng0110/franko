@@ -1,14 +1,19 @@
 import "franko/io"
 
 // Runtime fixture: arrays/uninit_dynamic_index
-// The uninitialized read happens through a caller-owned pointer, so the
-// intra-procedural checker cannot prove it and the array runtime aborts.
+// The array is only possibly initialized, so the checker reports a warning
+// and the runtime still aborts on the uninitialized element read.
+int32 C = 0
+
 func read_first(ptr<[int32]> p) -> int32 {
     return $(p)[0]
 }
 
 func main() -> int32 {
     [int32] xs
+    if (C != 0) {
+        xs.init(1)
+    }
     print(read_first(getptr(xs)))
     return 0
 }

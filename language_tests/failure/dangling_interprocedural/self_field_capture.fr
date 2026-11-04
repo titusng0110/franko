@@ -1,0 +1,14 @@
+struct Box {
+    ptr<int32> p
+
+    func set(ptr<Box> self) -> void {
+        int32 x = 1
+        $(self).p = getptr(x)
+    }
+}
+
+func main() -> int32 {
+    Box b
+    b.set()
+    return 0
+}
