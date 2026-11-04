@@ -1,0 +1,32 @@
+import "franko/io"
+import "franko/static"
+
+func main() -> int32 {
+    (int32 val, int32 err) res
+    (int32, int32) lazy
+    (uint hello, int world) a
+    (uint different, int name) b
+
+    res.val = (1 + 2) * 3
+    res.err = 22
+    lazy._0 = 33
+    lazy._1 = 44
+
+    a.hello = 55
+    a.world = 66
+
+    b = a
+    b.different = b.different + 1
+
+    print(res.val)
+    print(res.err)
+    print(lazy._0)
+    print(lazy._1)
+    print(a.hello)
+    print(a.world)
+    print(b.different)
+    print(b.name)
+    print(static::is_same_type(res, lazy))
+
+    return 0
+}

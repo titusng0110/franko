@@ -4,7 +4,9 @@ Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
 - structs with named fields (`struct X { int32 n }`);
+- tuple types with optional element names (`(int32 val, int32 err)`);
 - struct member access using `obj.field` (see [Structs](25-structs.md));
+- tuple element access using `t.element` or `t._0` (see [Tuples](06-types.md#61-tuples));
 - dynamic arrays;
 - static arrays;
 - typed pointers using `ptr<T>`, `mview<T>`, and `view<T>`;
@@ -61,7 +63,8 @@ Franko currently does **not** implement:
 - C-style cast syntax;
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
-- multiple declarators in one declaration (`int a, b;`).
+- multiple declarators in one declaration (`int a, b;`);
+- tuple literals, destructuring, tuple methods, tuple operators, and tuple casts (see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md#3018-tuple-restrictions)).
 
 Build instructions and compiler flags are in the repository
 [README](../README.md).

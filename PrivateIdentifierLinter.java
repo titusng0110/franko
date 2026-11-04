@@ -63,6 +63,10 @@ public final class PrivateIdentifierLinter {
         }
 
         if (node instanceof SemanticStructDeclNode n) {
+            if (n.symbol.isTuple) {
+                return;
+            }
+
             checkStruct(n);
             return;
         }
@@ -274,6 +278,10 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkFieldAccess(SemanticMemberAccessNode node) {
+        if (node.field.tupleIndex >= 0) {
+            return;
+        }
+
         if (!node.field.name.startsWith("_")) {
             return;
         }
@@ -342,6 +350,14 @@ public final class PrivateIdentifierLinter {
 
         if (type instanceof SemanticStructType structType) {
             checkStructAccess(structType.structSymbol);
+            return;
+        }
+
+        if (type instanceof SemanticTupleType tupleType) {
+            for (FieldSymbol field : tupleType.fields) {
+                checkType(field.type);
+            }
+
             return;
         }
 

@@ -192,6 +192,17 @@ The prefix composes with the base convention for the kind of declaration. For
 example, a private field uses snake case after `_`, while an internal struct
 uses CamelCase after `__`.
 
+Tuple element names are declaration-site aliases, not symbols: `(int32 val,
+int32 err)` and `(int32 left, int32 right)` are the same tuple type, and the
+names are only used for member access in their own declaration. Unnamed tuple
+elements are accessed as `_0`, `_1`, and so on. These names are not struct
+members, so the `_` private-field warning does not apply to them.
+
+Compiler-generated tuple structs use the C++ type name
+`_TMP_STRUCT_<hash>`. Ordinary user structs always emit with the `STRUCT_`
+prefix (`STRUCT_<Name>`), so a user struct whose Franko name begins with
+`_TMP_STRUCT_` still emits a distinct C++ name and is allowed.
+
 The compiler currently warns about the following public accesses:
 
 - accessing a field or method whose name starts with `_` from outside its

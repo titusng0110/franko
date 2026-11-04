@@ -351,6 +351,26 @@ class StructTypeNode extends TypeNode {
     }
 }
 
+class TupleTypeNode extends TypeNode {
+    List<TupleTypeElementNode> elements;
+
+    TupleTypeNode(SourceSpan span, List<TupleTypeElementNode> elements) {
+        super(span);
+        this.elements = elements;
+    }
+}
+
+class TupleTypeElementNode extends ASTNode {
+    TypeNode type;
+    String name;
+
+    TupleTypeElementNode(SourceSpan span, TypeNode type, String name) {
+        super(span);
+        this.type = type;
+        this.name = name;
+    }
+}
+
 class VarNode extends ASTNode {
     String name;
 

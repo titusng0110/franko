@@ -947,6 +947,19 @@ nullLiteral
 //
 // Static array sizes accept constExpr.
 //
+// Tuple types are written as an ordered, parenthesized list of element
+// types. Each element may carry an optional declaration-site name
+// (an alias for that use of the tuple; names are not part of type
+// identity). At least two elements are required:
+//
+//   (int32, int32)
+//   (int32 val, int32 err)
+//   (int32 val, uint8)
+//
+// There is deliberately no tuple literal or destructuring expression
+// syntax; tuple values are produced by declarations, assignment, and
+// function calls.
+//
 // Examples:
 //   [int, 10]
 //   [int, 1 + 1]
@@ -994,6 +1007,11 @@ type
     | PTR LT type GT                          # PtrType
     | MVIEW LT type GT                        # MViewType
     | VIEW LT type GT                         # ViewType
+    | LPAREN tupleTypeElement (COMMA tupleTypeElement)+ RPAREN # TupleType
+    ;
+
+tupleTypeElement
+    : type IDENTIFIER?
     ;
 
 // ---------- LEXER ----------

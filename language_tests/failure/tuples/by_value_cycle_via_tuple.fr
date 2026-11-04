@@ -1,0 +1,7 @@
+struct S {
+    (int32, S) t
+}
+
+func main() -> int32 {
+    return 0
+}

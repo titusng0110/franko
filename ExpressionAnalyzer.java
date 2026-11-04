@@ -204,10 +204,36 @@ public final class ExpressionAnalyzer {
         if (node instanceof MemberAccessNode n) {
             SemanticExprNode target = analyzeExpr(n.target);
 
+            if (target.type instanceof SemanticTupleType tupleType) {
+                FieldSymbol field = tupleType.resolveField(n.memberName);
+
+                if (field == null) {
+                    ctx.error("Tuple type '"
+                            + tupleType.describe()
+                            + "' has no element named '"
+                            + n.memberName
+                            + "'");
+
+                    return new SemanticIntLiteralNode(
+                            node.span,
+                            FALLBACK_TYPE,
+                            BigInteger.ZERO,
+                            "0"
+                    );
+                }
+
+                return new SemanticMemberAccessNode(
+                        node.span,
+                        field.type,
+                        target,
+                        field
+                );
+            }
+
             if (!(target.type instanceof SemanticStructType structType)) {
                 ctx.error("Member access '"
                         + n.memberName
-                        + "' is only valid on struct values, got type "
+                        + "' is only valid on struct or tuple values, got type "
                         + target.type.describe());
 
                 return new SemanticIntLiteralNode(
@@ -1036,6 +1062,20 @@ public final class ExpressionAnalyzer {
             MemberAccessNode mac
     ) {
         SemanticExprNode target = analyzeExpr(mac.target);
+
+        if (target.type instanceof SemanticTupleType) {
+            ctx.error("Method call '"
+                    + mac.memberName
+                    + "' is only valid on struct values; tuple values have"
+                    + " no methods");
+
+            return new SemanticIntLiteralNode(
+                    call.span,
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
 
         if (!(target.type instanceof SemanticStructType structType)
                 || structType.structSymbol == null) {

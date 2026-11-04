@@ -51,7 +51,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), tuple types, and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -88,7 +88,10 @@ A struct name used in a type position is resolved against the struct namespace:
 A struct may not reach itself by value through its fields. The by-value edges are:
 
 - a field whose type is a struct;
-- a field whose type is a static array of structs (recursively, including nested static arrays).
+- a field whose type is a static array of structs (recursively, including nested static arrays);
+- a field whose type is a tuple containing a struct by value (recursively through tuple elements).
+
+Tuple element types are by-value edges for cycle checking: a struct cannot contain itself through a tuple field.
 
 An infinite by-value chain would have no size, so such cycles are rejected at compile time:
 
@@ -96,6 +99,14 @@ An infinite by-value chain would have no size, so such cycles are rejected at co
 struct Node {
     int32 v
     [Node, 4] kids    // invalid: static array of Node inside Node
+}
+```
+
+A tuple edge has the same effect:
+
+```franko
+struct S {
+    (int32, S) t     // invalid: tuple element S is a by-value edge
 }
 ```
 
@@ -115,9 +126,10 @@ A type is **assignable** when a value of that type can participate in ordinary a
 
 - primitive integer types are assignable;
 - pointer types (`ptr<T>`, `mview<T>`, `view<T>`) are assignable;
-- a struct is assignable if and only if all of its fields are assignable, recursively.
+- a struct is assignable if and only if all of its fields are assignable, recursively;
+- a tuple is assignable if and only if all of its elements are assignable, recursively.
 
-Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **pointer-only**.
+Static arrays, dynamic arrays, and `void` are not assignable, so a struct or tuple containing any of them is **pointer-only**.
 
 Consequences:
 
@@ -146,12 +158,15 @@ xs[i].field           // element of a static or dynamic array
 - A field may itself be an array, and array intrinsics work on fields:
   `b.data.init(4)`, `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
 - Struct methods also use member-call syntax (`s.increment()`); see [Methods](26-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
+- A field whose type is a tuple is accessed with the tuple's own element names; tuple elements are lvalues by the same base-expression rule. See [Tuples](06-types.md#61-tuples).
 
 ## 25.8 Initialization Semantics
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](11-declarations.md)).
 - **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null); fields with defaults receive their default values. Global initialization happens before `main` runs.
+
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
 
 ## 25.9 Struct Globals
 
@@ -177,7 +192,7 @@ int32 scale = 2;
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](17-operators.md#1710-struct-operator-overloading)).
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
-- A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value assignment.
+- A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
+- A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).

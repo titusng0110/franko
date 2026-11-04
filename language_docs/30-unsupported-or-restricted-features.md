@@ -31,7 +31,7 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](06-types.md#61-tuples));
 - structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
 - comparison and assignment operators on structs are only those with `OPERATOR_*` methods; arithmetic, bitwise, shift, and logical operators are not overloadable (see [Operators](17-operators.md#1710-struct-operator-overloading)).
 
@@ -171,3 +171,19 @@ non-operator methods with `view<T>` parameters are likewise still
 unchecked for stores. See
 [Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)
 and [Operators](17-operators.md#1710-struct-operator-overloading).
+
+## 30.18 Tuple Restrictions
+
+Tuples are intentionally limited to ordinary aggregate values:
+
+- no tuple literals or construction sugar (`(1, 2)` is not an expression value);
+- no destructuring declarations or tuple-pattern parameters;
+- no tuple methods (including intrinsic-named calls such as `t.length()`);
+- no tuple operators, including `OPERATOR_*` overloads;
+- no tuple casts (`cast<(int32, int32)>(x)` is rejected);
+- no named tuple type aliases; write the tuple type at each declaration or signature;
+- at least two elements are required, so `(int32)` is not a tuple type.
+
+Tuple values are produced by declarations, element writes, whole-tuple assignment, and function returns. A tuple whose elements are not all assignable value types is pointer-only.
+
+See [Tuples](06-types.md#61-tuples), [Tuple Declarations](11-declarations.md#117-tuple-declarations), and [Tuple Assignment](14-assignment.md#148-tuple-assignment).

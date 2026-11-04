@@ -193,5 +193,7 @@ the narrowest fitting type wins with signed before unsigned at equal
 width. The selected constant is materialized as a temporary of the
 parameter's referenced primitive type before being borrowed.
 
+Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
+
 See [Assignment](14-assignment.md) and [Methods](26-methods.md) for the
 full lowering, fallback, and lifetime rules.

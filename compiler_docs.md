@@ -7,7 +7,7 @@ From now on please do not add comments in the Java source files. All comments
 about the compiler design should reside here.
 
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
-  integer constants, dynamic/static arrays, a capability-based pointer system
+  integer constants, dynamic/static arrays, tuples, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
 - **Compiler**: 68 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
@@ -248,7 +248,7 @@ carries the originating `SourceSpan`, consumed by every
 
 ### 3.1 Front end
 
-#### `Franko.g4` (grammar, 1137 lines)
+#### `Franko.g4` (grammar)
 The single source of truth for Franko syntax: combined ANTLR4 lexer+parser
 grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
@@ -257,9 +257,13 @@ labeled-alternative `statement` rule (including the `static_if` statement
 form), a full precedence-climbing expression
 layer (including unary `-`, `!`, `~` and the compound assignments `+=`, `-=`,
 `*=`, `/=`, `%=`, `&=`, `|=`, `^=`), a mirrored `constExpr` sub-grammar, and
-the `type` rule with
+the `type` rule with primitive types, struct names, tuple types,
 `[T]` / `[T, size]` / `ptr<T>` / `mview<T>` / `view<T>` and the `?`
-inferred-size alternative. Pointer permissions are created by the intrinsic
+inferred-size alternative. Tuple types use
+`LPAREN tupleTypeElement (COMMA tupleTypeElement)+ RPAREN`, where each
+`tupleTypeElement` is `type IDENTIFIER?`; at least two elements are
+required. There is deliberately no tuple-literal expression form. Pointer
+permissions are created by the intrinsic
 forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
 by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening
 or pointer permission downgrade; the target is a full `type`) and
@@ -285,6 +289,8 @@ stable display path used by every `SourceSpan`. Left-folds precedence levels int
 tokens, builds access/call/postfix chains from `lvalueSuffix` rules, joins
 `a::b` namespace headers into one name string, and dispatches declarations,
 statements, types, and the `constExpr` sub-grammar to their node classes.
+`visitTupleType` resolves each element's type and keeps its optional
+declaration-site identifier (or `null` for an unnamed element).
 Every rule/statement/declaration/type/literal construction attaches a
 `SourceSpan`; postfix and lvalue suffix chains merge the base span with the
 suffix span. Calls `StringLiteralDecoder.decodeRawContent` for import-path
@@ -301,7 +307,8 @@ then/else raw statements), `WhileNode` with its desugared-for update epilogue,
 `VarDeclInitNode`, `ImportNode`, `NamespaceNode`, `QualifiedNameNode`);
 types (`PrimitiveKind` enum, `PrimitiveTypeNode`,
 `VoidTypeNode`, `DynamicArrayTypeNode`, `StaticArrayTypeNode`, `PtrTypeNode`
-(carrying a `PtrPermission kind`: `ptr`/`mview`/`view`), `StructTypeNode`);
+(carrying a `PtrPermission kind`: `ptr`/`mview`/`view`), `StructTypeNode`,
+`TupleTypeNode` + `TupleTypeElementNode`);
 expressions (`VarNode`, `IntNode`, `InferredSizeNode`, `ArrayLiteralNode`,
 `StringLiteralNode`, `UnaryOpNode`, `BinOpNode`, `ArrayAccessNode`,
 `MemberAccessNode`, `CallNode`, `GetPtrNode` (kind: which of
@@ -337,7 +344,9 @@ parses them back through `ASTSerializer.fromJson`. Shared envelope/source/
 enum/big-integer JSON helpers live in `JsonAstSupport`. Node kinds are lowercase JSON
 names independent of Java class names; enums are serialized by name; every
 node carries `"node"` and `"span"`, and every type carries `"type"` and
-`"span"`. Unknown node kinds are hard errors.
+`"span"`. Raw tuple types are serialized as `"type": "tuple"` with an
+`elements` array, where each element carries its own span, optional `name`,
+and `type`. Unknown node kinds are hard errors.
 
 #### `AstDocument` / `SourceTable` / `SourceSpan` / `SourcePaths`
 `AstDocument` is the pass-boundary raw-AST document (`phase`, `sources`,
@@ -414,6 +423,9 @@ semantic analysis. Array literals are passed through untouched
 (§4.13). `StaticIfNode` is preserved: its condition is desugared normally,
 its branches go through `desugarControlledStmt` so braceless bodies become
 blocks, and nested `static_if` nodes survive for semantic selection (§4.18).
+Tuple types are passed through with their element types recursively
+desugared and their declaration-site names preserved; no tuple expression
+syntax exists, so there is no tuple-specific expression desugaring.
 String-literal arguments of any `static::` call are deliberately **not**
 hoisted, so `StaticIntrinsics` can inspect the literal text; nested
 compile-time producers such as `static::what_type` stay evaluable as
@@ -551,6 +563,10 @@ also owns array-literal hoisting (`hoistArrayLiteralGlobal`, wired into
 (element type, values) pair becomes one `_ARR_<hash>` global registered in
 the global-namespace table (no namespace, so calls from any namespace see
 the same global) and prepended to the program items.
+Tuple resolution uses the same caching idea through `SemanticTypeResolver`:
+`analyze` resets the tuple cache at entry, and `analyzeProgram` prepends
+every pending synthetic `SemanticStructDeclNode` to the semantic items so
+the normal pruning/codegen pipeline sees the generated tuple structs.
 `analyzeStmt` handles `StaticIfNode` before ordinary `IfNode`: it analyzes
 the condition, requires a primitive compile-time constant, and lowers only
 the selected branch (returning that branch's semantic statement directly).
@@ -582,6 +598,16 @@ pushed while resolution runs. `SemanticAnalyzer` calls
 `analyzeNormalType`/`analyzeReturnType` directly, and `ExpressionLowering`
 wires `typeResolver::analyzeNormalType` into the analyzer, keeping
 type-resolution rules separate from statement/declaration lowering.
+Tuple resolution walks the element types recursively, computes effective
+element names (declared name, otherwise `_<index>`), rejects duplicate
+effective names, and interns one synthetic `StructSymbol` per canonical
+ordered-element-type key (`mangleKey()` sequence). The synthetic symbol is
+`_TMP_STRUCT_<fnv1a32-hex>`, lives in the global namespace, has canonical
+fields `_0`, `_1`, … with `tupleIndex >= 0`, and is recorded as a pending
+`SemanticStructDeclNode`. A generated-name collision between distinct
+structural keys is an internal compiler error. `resetTupleTypes()` clears
+the intern map and pending declarations at the start of analysis, and
+`pendingTupleDecls()` exposes the declarations to prepend.
 
 #### `SemanticASTNode`
 The lowered AST data model (pure data classes): program/namespace/block
@@ -625,11 +651,17 @@ canonical folded decimal so `[int32,5+5]` equals `[int32,10]`),
 `SemanticPtrType` (the pointer family; see below),
 `SemanticNullType` (type of `null`; `mangleKey()` throws),
 `SemanticStructType` (nominal identity via its `StructSymbol`),
+`SemanticTupleType` (structural identity via its ordered element types),
 `SemanticFunctionType` (with `signatureKey()` like
 `fn(int32,ptr<std.X>)->void` for mangling). Two distinct text APIs:
 `describe()` (diagnostic text, free to change) and `mangleKey()` (canonical
 C++-spelling key embedded in generated names — must stay stable). Structural
 `equals`/`hashCode` everywhere.
+`SemanticTupleType` stores the declaration-site `FieldSymbol`s (names and
+types) plus a shared synthetic `cppSymbol`; equality and hashing ignore
+element names and the `cppSymbol`, so differently named tuples with the same
+ordered element types are the same type. `describe()` spells the canonical
+form `(int32, int32)` and `mangleKey()` the space-free `(int32,int32)`.
 
 The pointer family is one class with a `PtrPermission` level (OWNER
 `ptr<T>`, MUTABLE `mview<T>`, READ_ONLY `view<T>`), exposed as the
@@ -668,7 +700,11 @@ The symbol hierarchy and mangling policy:
   global, §4.10), and `literalValues` (the row-major folded element values
   of a hoisted array-literal global, §4.13).
 - `FieldSymbol`, `StructSymbol` (ordered fields, per-name method overloads,
-  field/method clash detection).
+  field/method clash detection). `FieldSymbol.tupleIndex` is `-1` for
+  ordinary fields and the element index for tuple fields; `emittedName()`
+  returns `_<index>` for tuple fields and the declared name otherwise.
+  `StructSymbol.isTuple` marks the synthetic `_TMP_STRUCT_<hash>` symbols
+  created for tuple types (no namespace, no methods).
 - `NamespaceSymbol` — parent/children tree with per-namespace tables for
   structs, functions, globals.
 
@@ -779,6 +815,12 @@ context of §4.13: assignment target type, return type, or call parameter
 type); call arguments are lowered in two phases through
 `CallArg` so a literal argument participates in overload
 resolution before its element type is known (§4.13).
+Tuple member access resolves the requested name against the tuple's
+declaration-site fields and builds the same `SemanticMemberAccessNode` used
+for struct fields; an unknown element is a diagnostic naming the canonical
+tuple spelling. Tuple method calls are rejected explicitly ("tuple values
+have no methods") rather than falling into struct-method resolution, and
+tuple values never enter the operator comparison/assignment lowering paths.
 
 Struct comparison operators are intercepted after both operands are
 analyzed: when either side has struct type, `lowerStructComparison` requires
@@ -833,9 +875,17 @@ Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
 `isAssignableValueType`, the new `isStaticTrivial`) and
 `StructSymbol.getMethods` for the exact
 `OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signature checks (§4.18).
+Tuple predicates recurse through `TypeChecker`: all-primitive tuples are
+passable, same-type assignable, memcpy/memset safe, and trivial; a tuple
+with a static-array element is not passable/assignable, and a tuple with a
+dynamic-array element is not memcpy/memset safe or trivial. Tuples have no
+methods, so `is_matchable`/`is_comparable` return `0`. `what_type` prints
+the canonical `(int32, int32)` form.
 `is_passable_by_value` is exactly `TypeChecker.isAssignableValueType`
 (the by-value parameter and built-in whole-value assignment rule); unlike
 `is_same_type_assignable` it does not consider a custom `OPERATOR_MOV`.
+For tuples, `is_same_type_assignable` is built-in assignment only; tuples
+cannot declare operator methods.
 
 #### `ArrayLowerer`
 Frontend lowering of array-intrinsic member-call syntax to
@@ -844,10 +894,13 @@ intrinsics (`xs.init(n)`, `xs.init_zero()`, `xs.resize(n)`, `xs.uninit()`,
 `xs.memset(v)`/`xs.memset(s,n,v)`, `xs.memcpy(src)`/`xs.memcpy(src,dst,sr,n)`,
 `xs.memmove(dst,sr,n)`, `xs.length()`, `xs.memcmp(src)`/`xs.memcmp(src,dst,sr,n)`,
 and the byte-array search/endian/bit intrinsics. Type-directed dispatch: a
-struct-typed receiver is a method call, never an intrinsic, even when a method
-name coincides with an intrinsic name; `shouldSuppressCallDiagnostic` avoids
-misleading "no matching overload" errors when intrinsic-named member-call
-fallthrough would be noise. The dispatcher "peeks" at member-call receivers
+struct- or tuple-typed receiver is an aggregate method/member receiver,
+never an array intrinsic, even when a name coincides with an intrinsic name;
+`shouldSuppressCallDiagnostic` avoids misleading "no matching overload"
+errors when intrinsic-named member-call fallthrough would be noise. This
+keeps an intrinsic-named tuple call (`t.length()`) visible to
+`ExpressionAnalyzer`, which reports that tuples have no methods. The
+dispatcher "peeks" at member-call receivers
 before full callee analysis to avoid spurious errors alongside real method
 resolution. The per-kind signature descriptor drives arity checks, receiver
 lvalue requirements (mutating kinds only), and argument lowering; pointer
@@ -897,6 +950,9 @@ missing-return detection**: a non-void
 function must syntactically contain a return somewhere in its body (recursing
 through blocks/ifs/whiles; the desugared for-update epilogue runs inside the
 loop so returns there count). It does not prove full control-flow coverage.
+Tuple parameter and return types follow the same rules through
+`TypeChecker.isAssignableValueType`: a tuple is passable/returnable exactly
+when every element is.
 Intercepts `SemanticReturnNode` itself and delegates other statements to
 `StatementChecker`.
 
@@ -911,15 +967,18 @@ for these names so the dedicated message is the only one.
 
 #### `DeclarationChecker`
 Declaration-level legality: declared types must be legal Franko types
-(primitive, array, ptr/mview/view, struct; void and arrays-as-values
+(primitive, array, ptr/mview/view, struct, tuple; void and arrays-as-values
 rejected),
 static array sizes must be constant, positive, and fit `uint32` (zero is
 rejected — the backend emits `T data[N]`), struct field graphs must not have
 infinite-size **by-value** cycles (cycle detection via `StructWalkState`;
-the by-value path is intentionally reset when descending through dynamic array
+tuple elements and static array elements are by-value edges; the by-value
+path is intentionally reset when descending through dynamic array
 elements because those live behind a pointer), method names must not collide
 with field names, and folded const initializers/field defaults must fit their
-primitive type. Pointer globals initialized with a statically representable
+primitive type. Synthetic tuple struct declarations (`StructSymbol.isTuple`)
+are skipped: the tuple is validated at its real use sites. Pointer globals
+initialized with a statically representable
 address (`getptr`/`getmview`/`getview` over a global) are validated here:
 the initializer must be a pointer type match or pointer conversion
 (permission downgrade or array-view decay).
@@ -996,6 +1055,11 @@ structs with any field default and is separate from `isMemsetSafe`;
 `isByteType` — the byte/bit intrinsic element type) — recursive with
 path-scoped cycle detection so diamond-shaped field graphs stay fine while
 by-value cycles terminate.
+Tuple types participate in the same recursive rules: a tuple is an
+assignable value type iff every element is; `isMemsetSafe`,
+`isStaticTrivial`, and `isMemcpySafe` recurse through tuple elements exactly
+as through struct fields; and `ensureAssignable` reports the dedicated
+"contains non-assignable elements" message for a whole-tuple assignment.
 `ensureAssignable`
 accepts the pointer conversions alongside exact matches and
 also special-cases array targets fed a pointer-to-array source: the error
@@ -1318,6 +1382,10 @@ dead-store analysis:
   method. Struct liveness is expanded transitively through the fields and
   kept methods of live structs (by-value composition). A kept struct prunes
   its never-called methods; a pruned struct takes all its methods with it.
+  A live `SemanticTupleType` marks its shared synthetic `cppSymbol` as a kept
+  struct, so the generated `_TMP_STRUCT_<hash>` declaration survives whenever
+  the tuple appears in a kept signature/declaration/expression/field; the
+  synthetic struct's fields then pull in nested element types transitively.
 - If pruning empties a namespace, the namespace node itself is dropped.
   Blocks are never flattened (same scoping rule as `BranchPruner`).
 - If no `main` is found (cannot happen after successful analysis), the pass
@@ -1338,7 +1406,13 @@ by-value field dependency (with NSDMI initializers for folded field defaults,
 per global, reopening each `NS_<segment>`) → global definitions → function
 prototypes →
 function definitions, all under mangled names and inside `NS_<segment>`
-namespaces where applicable. The global forward declarations let a
+namespaces where applicable. Ordinary structs emit as `STRUCT_<Name>`;
+synthetic tuple structs emit as their `_TMP_STRUCT_<hash>` name directly and
+their fields as `_0`, `_1`, … (`FieldSymbol.emittedName()`), so differently
+named but structurally identical tuple declarations share one C++ type. Tuple
+types participate in `byValueStructDependencies` through `cppSymbol`, keeping
+tuple-containing structs, nested tuples, and tuples containing user structs
+in the existing topological order. The global forward declarations let a
 pointer global's static address initializer reference a global declared
 later in the source (or across namespaces); uninitialized pointer
 variables (globals and locals alike) emit `= nullptr`, implementing the
@@ -1417,7 +1491,9 @@ block per used function) and suppresses the Franko stub bodies.
 The expression/lvalue emitter split from `Cpp14Codegen`. It owns
 `emitExpr`/`emitLValue` and the concrete forms for literals, unary/binary
 operators, array access, function calls, array intrinsics, `getptr`, deref,
-casts, and member access. `Cpp14Codegen` keeps the statement/declaration
+casts, and member access. Member access uses `FieldSymbol.emittedName()`, so
+tuple elements emit as `_0`/`_1` while ordinary struct fields keep their
+declared names. `Cpp14Codegen` keeps the statement/declaration
 emitter, namespace/type/name formatting, struct ordering, and program-level
 ordering; its call sites invoke this helper directly. The helper calls back
 into `Cpp14Codegen` for type/name emission and the FFI match set.
@@ -1427,7 +1503,7 @@ Stateless FNV-1a 32-bit hash utility: `hashHex(key)` → 8 lowercase hex digits
 over the UTF-8 bytes of the canonical signature key. Deterministic across
 runs/JVMs/platforms. Called from `Symbol` (`FunctionSymbol.mangledName`,
 `MethodSymbol.mangledName`), `Desugarer`/`SemanticAnalyzer` (literal global
-names), and its outputs are pinned in the bridge block
+names), synthetic tuple struct names (`_TMP_STRUCT_<hash>`), and its outputs are pinned in the bridge block
 checks performed by `FfiHandler`, both program templates
 (`FUNC_main_HASH_d7d11c43` / `FUNC_main_HASH_747cdf98`), and `Main`'s
 entry-point sanity check.
@@ -1631,7 +1707,9 @@ AST node kinds and additional fields (all also carry `span`):
 
 AST type kinds (also carry `span`): `primitive` (`kind`), `void`, `dynamicArray`
 (`elementType`), `staticArray` (`elementType`, `sizeExpr`), `ptr` (`permission`,
-`referencedType`), `struct` (`namespace`, `name`). Enums are serialized by name
+`referencedType`), `struct` (`namespace`, `name`), `tuple` (`elements`, an
+array of `{span, name, type}` objects where `name` is `null` for an unnamed
+element). Enums are serialized by name
 (`"INT32"`, `"OWNER"`, `"READ_ONLY"`).
 
 SAST node kinds and additional fields (all also carry `span`). There is no
@@ -1669,8 +1747,10 @@ that branch's statements.
 Expression metadata is always `type` (a semantic type object) and
 `constantValue` (decimal string or `null`).
 
-Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`), `field`
-(`name`, `type`, `foldedDefault`), `function` (`name`, `namespace`,
+Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
+`tuple: true` for synthetic tuple structs), `field`
+(`name`, `type`, `foldedDefault`, optional `tupleIndex` when `>= 0`),
+`function` (`name`, `namespace`,
 `parameters`, `returnType`, `isBuiltin`), `method` (function fields plus
 `owner`), `parameter` (`name`, `index`, `type`), `variable` (`name`,
 `namespace`, `type`), `global` (variable fields plus
@@ -1678,6 +1758,7 @@ Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`), `field`
 is a name → overload-ID array map. Semantic type kinds: `primitive` (`kind`),
 `void`, `dynamicArray` (`elementType`), `staticArray` (`elementType`, `size`),
 `ptr` (`permission`, `referencedType`), `null`, `struct` (`symbol`),
+`tuple` (`symbol`, `elements` with `{name, type}`), and
 `function` (`parameters`, `returnType`).
 
 Diagnostic document:
@@ -1761,7 +1842,11 @@ type it would have in C++. Consequences:
   where the hash is FNV-1a 32-bit of the canonical `signatureKey()`.
 - `STRUCT_<name>`, `VAR_<name>`, `NS_<segment>` prefixes/namespaces make
   kinds unambiguous, so struct names may legally clash with variable/function
-  names.
+  names. Synthetic tuple structs use `_TMP_STRUCT_<hash>` directly rather
+  than the `STRUCT_` prefix; ordinary user structs keep `STRUCT_<name>` even
+  if their declared name starts with `_TMP_STRUCT_`.
+- Tuple mangling keys are canonical ordered element keys with names ignored,
+  e.g. `(int32,int32)` or `(int32,[uint8,4])`.
 - Overload identity = name + ordered parameter types (return type excluded).
 - Pinned-hash drift guards: `Main` (template entry call) and
   `FfiHandler` (bridge block contains the computed emitted name).
@@ -1795,7 +1880,9 @@ type it would have in C++. Consequences:
   `#include "FrankoRuntime.hpp"` in `common`; `#pragma once` keeps the
   duplicate include harmless while making the bridge standalone-lintable.
 - Only function bridging exists. Variables and structs are ordinary Franko
-  declarations.
+  declarations. Struct and tuple parameters/returns are outside the current
+  bridge prelude model; bridged signatures should use primitive or pointer
+  types.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
 - Strictly intra-procedural: one analysis per function, state reset at every
@@ -2087,7 +2174,8 @@ hash of the canonical signature key: declared parameter types in order
 (including `self` for methods), then the return type, each in canonical
 spelling (`int`/`byte`/`uint` aliases normalize to `int32`/`uint8`/`uint32`;
 `void`, `[T]`, `[T,N]` with canonical folded decimal size and no space,
-`ptr<T>`, qualified struct names such as `a::b::X`), joined as
+`ptr<T>`, qualified struct names such as `a::b::X`, and tuples as
+`(T0,T1,...)` with element names ignored), joined as
 `fn(P1,P2,...)->R` (§4.3). When a variable or function shares its name
 with a declared struct, semantic analysis emits a warning (the program
 still compiles):
@@ -2304,7 +2392,8 @@ function bodies.
 a callee that stores it is invisible. Ordinary non-operator methods with
 `view<T>` parameters still start `UNKNOWN` and are not checked for stores
 (the `other` seed is operator-only). No pointers hidden inside returned
-aggregates, no use-after-block detection, no dynamic-array buffer pointer
+structs, tuples, or arrays, no use-after-block detection, no dynamic-array
+buffer pointer
 invalidation across `resize`/`uninit`, and loops are analyzed once rather
 than to a fixed point.
 
@@ -2331,7 +2420,8 @@ paths disagree; `FreedState` merges to `MAYBE` on disagreement.
 the outer value of nested dynamic arrays. Also tracked are owner
 `ptr<[T]>` values whose origins are `getptr(localArray)`, pointer copies,
 casts, and `getptr($(p))`. Global dynamic arrays themselves, dynamic
-array fields, nested elements, element pointers, and
+array fields, dynamic-array elements nested inside tuple values, nested
+elements, element pointers, and
 `mview<[T]>`/`view<[T]>` aliases are untracked. `mview`/`view` call
 arguments never invalidate array state because those permissions cannot
 allocate or free storage.
@@ -2415,7 +2505,9 @@ their symbols. No new symbol or AST data is required.
 **Rules.**
 - Struct fields and methods starting with `_` are private to their struct.
   Access from the declaring struct's own method body is allowed; access from
-  a free function or another struct's method warns.
+  a free function or another struct's method warns. Tuple elements are not
+  struct fields: `t._0` is an ordinary tuple element access and never
+  produces a private-field warning.
 - Free functions and structs starting with `__` are internal to their
   declaring namespace. Access is allowed from that namespace and from
   namespaces nested beneath it; access from another namespace warns.
@@ -2428,8 +2520,10 @@ their symbols. No new symbol or AST data is required.
   occur syntactically in declarations, function signatures, field types, and
   cast targets. It is not applied to inferred expression types, so using a
   value whose type happens to be an internal struct does not warn again.
-- Type walking recurses through dynamic arrays, static arrays, and pointers.
-  Local declaration types use the enclosing function's namespace because
+- Type walking recurses through dynamic arrays, static arrays, pointers, and
+  tuple elements. Synthetic tuple struct declarations are skipped to avoid
+  duplicate warnings at the generated declaration site. Local declaration
+  types use the enclosing function's namespace because
   local `VariableSymbol`s carry no namespace.
 - One warning is emitted per syntactic access site; private-member warnings
   are not deduplicated globally. This is a lint pass, so warnings never fail
@@ -2564,15 +2658,19 @@ non-string compile-time results are rejected.
 `TypeChecker.isMemsetSafe`; `is_trivial` uses the new
 `TypeChecker.isStaticTrivial` (primitive or static array of static-trivial;
 struct fields must all have no folded default and be static-trivial;
-pointers, dynamic arrays, and void are false), deliberately separate from
+tuple elements recurse through the same predicate; pointers, dynamic arrays,
+and void are false), deliberately separate from
 the `memset`-oriented `isMemsetSafe`; `is_same_type` uses structural
 `SemanticType.equals`; `is_matchable`/`is_comparable`/
 `is_same_type_assignable` inspect struct operator methods for the exact
 `OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signatures, and the latter also
-accepts built-in whole-value assignability; `is_passable_by_value` reuses
+accepts built-in whole-value assignability; tuples have no operator methods,
+so they are never matchable/comparable and `is_same_type_assignable` for a
+tuple is exactly built-in element assignability; `is_passable_by_value` reuses
 `TypeChecker.isAssignableValueType` (the by-value parameter and built-in
 whole-value assignment rule) and intentionally ignores custom
-`OPERATOR_MOV`. `strcmp` compares decoded
+`OPERATOR_MOV`. `what_type` prints tuples as `(int32, int32)`. `strcmp`
+compares decoded
 UTF-8 bytes lexicographically. Empty static-string arguments are rejected
 with the same `N >= 1` rule as ordinary strings.
 
@@ -2580,6 +2678,49 @@ with the same `N >= 1` rule as ordinary strings.
 `constExpr`-only slots, and runtime `view<[byte]>` values cannot feed
 `strcmp`/`panic` (their arguments must be compile-time strings).
 `static_if` is not allowed at global scope or in a `for` header.
+
+## 4.19 Tuples
+
+Tuples are ordered, structural aggregate types. Syntax allows optional
+declaration-site element names and requires at least two elements:
+
+```franko
+(int32 val, int32 err) res
+(int32, int32) lazy
+```
+
+Unnamed elements receive the effective names `_0`, `_1`, …; mixed forms are
+allowed (`(int32 val, int32)` gives `val` and `_1`). Element names are
+per-declaration aliases, not part of type identity: `(int32 val, int32 err)`
+equals `(int32, int32)`, and a tuple declared with one set of names can be
+assigned to a tuple with another. Element order does matter, so
+`(int32, uint32)` and `(uint32, int32)` are different types. Access uses the
+declaration's own names (`res.val`, `lazy._0`); names from a different
+declaration of the same structural type are unknown.
+
+There is no tuple literal, construction sugar, destructuring, tuple cast, or
+tuple method/operator overloading. Values come from declarations, whole-tuple
+assignment, field writes, and function returns. Declaration-initializer sugar
+still applies normally: `(int32, int32) x = f();` is a declaration followed
+by an assignment.
+
+A tuple is assignable/passable/returnable iff every element is an assignable
+value type. A tuple containing a static array, dynamic array, or `void` is
+pointer-only, exactly like a struct with a non-assignable field. Nested
+tuples, arrays of tuples, pointers to tuples, and tuples containing structs
+compose with the ordinary type rules.
+
+Each distinct canonical ordered element-type sequence is interned as one
+synthetic C++ struct `_TMP_STRUCT_<fnv1a32-hex>` with fields `_0`, `_1`, ….
+Differently named tuples with the same element types share that C++ type;
+ordinary user structs keep `STRUCT_<Name>`, so a user struct whose declared
+name begins with `_TMP_STRUCT_` still emits a distinct `STRUCT__TMP_STRUCT_…`
+C++ name. Synthetic tuple declarations live in the Semantic AST, are kept
+alive by `InactiveDeclarationPruner` whenever their tuple type is live, and
+participate in the normal topological struct-definition ordering. Tuple JSON
+uses raw `"type": "tuple"` with an `elements` array, SAST `"type": "tuple"`
+with a `symbol` plus element names/types, optional `"tuple": true` on
+synthetic struct symbols, and optional `"tupleIndex"` on tuple field symbols.
 
 ## 5. Build & test quick reference
 

@@ -60,7 +60,7 @@ final class Cpp14ExpressionEmitter {
         }
 
         if (node instanceof SemanticMemberAccessNode member) {
-            return emitExpr(owner, member.target) + "." + member.field.name;
+            return emitExpr(owner, member.target) + "." + member.field.emittedName();
         }
 
         throw new IllegalStateException(
@@ -425,7 +425,7 @@ final class Cpp14ExpressionEmitter {
         }
 
         if (node instanceof SemanticMemberAccessNode member) {
-            return emitExpr(owner, member.target) + "." + member.field.name;
+            return emitExpr(owner, member.target) + "." + member.field.emittedName();
         }
 
         throw new IllegalStateException(

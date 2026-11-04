@@ -37,11 +37,14 @@ public final class ArrayLowerer {
         return SemanticArrayIntrinsicKind.fromRuntimeName(name) != null;
     }
 
-    private boolean isStructReceiver(MemberAccessNode mac) {
+    private boolean isAggregateReceiver(MemberAccessNode mac) {
         SemanticExprNode target = exprAnalyzer.analyzeExpr(mac.target);
 
-        return target.type instanceof SemanticStructType structType
-                && structType.structSymbol != null;
+        if (target.type instanceof SemanticStructType structType) {
+            return structType.structSymbol != null;
+        }
+
+        return target.type instanceof SemanticTupleType;
     }
 
     public boolean shouldSuppressCallDiagnostic(CallNode call) {
@@ -53,7 +56,7 @@ public final class ArrayLowerer {
             return false;
         }
 
-        return !isStructReceiver(mac);
+        return !isAggregateReceiver(mac);
     }
 
     private SemanticArrayIntrinsicCallNode tryLowerMemberIntrinsic(
@@ -61,7 +64,7 @@ public final class ArrayLowerer {
             MemberAccessNode mac
     ) {
 
-        if (isStructReceiver(mac)) {
+        if (isAggregateReceiver(mac)) {
             return null;
         }
 

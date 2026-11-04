@@ -1,0 +1,6 @@
+func take((int32, [int32, 3]) value) -> void {
+}
+
+func main() -> int32 {
+    return 0
+}

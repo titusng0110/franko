@@ -740,6 +740,27 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
+    public ASTNode visitTupleType(FrankoParser.TupleTypeContext ctx) {
+        List<TupleTypeElementNode> elements = new ArrayList<>();
+
+        for (FrankoParser.TupleTypeElementContext elementCtx
+                : ctx.tupleTypeElement()) {
+            TypeNode elementType = (TypeNode) visit(elementCtx.type());
+            String elementName = elementCtx.IDENTIFIER() == null
+                    ? null
+                    : elementCtx.IDENTIFIER().getText();
+
+            elements.add(new TupleTypeElementNode(
+                    span(elementCtx),
+                    elementType,
+                    elementName
+            ));
+        }
+
+        return new TupleTypeNode(span(ctx), elements);
+    }
+
+    @Override
     public ASTNode visitVarDecl(FrankoParser.VarDeclContext ctx) {
         TypeNode type = (TypeNode) visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();

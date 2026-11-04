@@ -81,6 +81,10 @@ public class DeclarationChecker {
             return;
         }
 
+        if (node.symbol.isTuple) {
+            return;
+        }
+
         checkDeclaredType(
             new SemanticStructType(node.symbol),
             "Struct '" + node.symbol.qualifiedName() + "'"
@@ -167,6 +171,37 @@ public class DeclarationChecker {
             return;
         }
 
+        if (type instanceof SemanticTupleType tuple) {
+            for (int i = 0; i < tuple.fields.size(); i++) {
+                FieldSymbol field = tuple.fields.get(i);
+
+                if (field == null) {
+                    diagnostics.error(where
+                            + " has a null tuple element at index " + i);
+                    continue;
+                }
+
+                String elementWhere = where
+                        + " tuple element '"
+                        + field.name
+                        + "'";
+
+                if (types.isVoidType(field.type)) {
+                    diagnostics.error(elementWhere + " cannot have void type");
+                    continue;
+                }
+
+                checkDeclaredType(
+                    field.type,
+                    elementWhere,
+                    structWalkStates,
+                    byValuePath
+                );
+            }
+
+            return;
+        }
+
         if (type instanceof SemanticPtrType pointer) {
 
             checkDeclaredType(
@@ -215,7 +250,7 @@ public class DeclarationChecker {
                 diagnostics.error(where + " creates a by-value struct cycle: "
                     + "struct '"
                     + structName
-                    + "' cannot contain itself through its fields");
+                    + "' cannot contain itself through its fields, tuple elements, or static array elements");
             }
 
             return;

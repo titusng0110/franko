@@ -128,3 +128,39 @@ struct X {
 Field defaults must be constant expressions on primitive fields only, and duplicate field names are rejected.
 
 The complete struct reference — field rules, by-value cycles, assignability, member access, and globals — is in [Structs](25-structs.md).
+
+## 11.7 Tuple Declarations
+
+A tuple declaration uses the tuple type syntax followed by the variable name:
+
+```franko
+(int32 val, int32 err) res
+(int32, int32) lazy
+(uint hello, int world) a
+(uint different, int name) b
+```
+
+Named elements are accessed by their declared names, and unnamed elements by `_0`, `_1`, …:
+
+```franko
+res.val = 1
+res.err = 2
+lazy._0 = 3
+lazy._1 = 4
+```
+
+Element names are per-declaration aliases, not part of the tuple type. This makes assignment between differently named tuples valid:
+
+```franko
+b = a          // valid: (uint, int) and (uint, int) are the same structural type
+b.different    // valid: b declared this name
+b.hello        // invalid: b's tuple type has no element named hello
+```
+
+Tuple values are produced by declarations, whole-tuple assignment, element writes, and function returns; there is no `(1, 2)` literal form. Declaration-initializer sugar still applies normally:
+
+```franko
+(int32, int32) x = f()
+```
+
+is sugar for a declaration followed by an assignment. Tuple element values follow the same initialization rules as struct fields: locals without initializers are indeterminate unless a function returns a value, while globals are zero-initialized. See [Assignment](14-assignment.md#148-tuple-assignment) and [Structs](25-structs.md#258-initialization-semantics).

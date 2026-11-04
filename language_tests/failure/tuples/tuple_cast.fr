@@ -1,0 +1,5 @@
+func main() -> int32 {
+    (int32, int32) x
+    int32 y = cast<(int32, int32)>(x)
+    return 0
+}

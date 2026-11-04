@@ -458,6 +458,10 @@ final class StaticIntrinsics {
             return true;
         }
 
+        if (type instanceof SemanticTupleType) {
+            return typeChecker.isAssignableValueType(type);
+        }
+
         if (type instanceof SemanticStructType struct) {
             return typeChecker.isAssignableValueType(type)
                     || hasSameTypeMoveMethod(struct.structSymbol);

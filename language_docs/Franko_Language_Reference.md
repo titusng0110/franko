@@ -55,7 +55,9 @@ Franko is a small statically typed language with:
 
 - fixed-width signed and unsigned integer types;
 - structs with named fields (`struct X { int32 n }`);
+- tuple types with optional element names (`(int32 val, int32 err)`);
 - struct member access using `obj.field` (see [Structs](25-structs.md));
+- tuple element access using `t.element` or `t._0` (see [Tuples](06-types.md#61-tuples));
 - dynamic arrays;
 - static arrays;
 - typed pointers using `ptr<T>`, `mview<T>`, and `view<T>`;
@@ -112,7 +114,8 @@ Franko currently does **not** implement:
 - C-style cast syntax;
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
-- multiple declarators in one declaration (`int a, b;`).
+- multiple declarators in one declaration (`int a, b;`);
+- tuple literals, destructuring, tuple methods, tuple operators, and tuple casts (see [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md#3018-tuple-restrictions)).
 
 Build instructions and compiler flags are in the repository
 [README](../README.md).
@@ -681,6 +684,7 @@ Franko has the following semantic type categories:
 ```text
 primitive integers
 structs
+tuples
 dynamic arrays
 static arrays
 typed pointers (ptr / mview / view)
@@ -696,6 +700,37 @@ Structs are nominal types: two distinct struct declarations are distinct types e
 Pointers come in three permission levels — `ptr<T>` (owner), `mview<T>` (mutable view), `view<T>` (read-only view) — one capability model for all of them. See [Pointers](24-pointers.md).
 
 A static array size may be written as the inferred-size marker `?` (for example `view<[int32, ?]>`) only in a local `view` declaration with an array-literal initializer. The size is inferred at compile time, so every type carries a concrete size.
+
+## 6.1 Tuples
+
+A tuple is an ordered aggregate written as a parenthesized, comma-separated list of at least two element types:
+
+```franko
+(int32, int32) pair
+(int32 val, int32 err) result
+(int32 val, uint8) mixed
+```
+
+Element names are optional and are aliases for that declaration or type use only. Unnamed elements have the effective names `_0`, `_1`, and so on; mixed forms such as `(int32 val, uint8)` give `val` and `_1`.
+
+Tuple type identity is structural and depends only on the ordered element types:
+
+```franko
+(int32 val, int32 err) == (int32, int32)
+(int32, uint32) != (uint32, int32)
+```
+
+Names do not participate in equality, so a value declared with one set of names can be assigned to a tuple declared with another set. Order does participate, so swapping element types produces a different tuple type.
+
+Tuples nest, may contain structs, and may be elements of arrays or pointer referents wherever the ordinary type rules allow it:
+
+```franko
+((int32, int32) inner, int32 outer) nested
+[(int32, int32), 4] table
+ptr<(int32, int32)> tuplePtr
+```
+
+There are no tuple literals, destructuring forms, tuple methods, tuple operators, or tuple casts. A tuple value comes from a declaration, a field write, assignment from another tuple, or a function return. See [Declarations](11-declarations.md#117-tuple-declarations), [Assignment](14-assignment.md#148-tuple-assignment), and [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md#3018-tuple-restrictions).
 
 ---
 
@@ -1007,6 +1042,42 @@ Field defaults must be constant expressions on primitive fields only, and duplic
 
 The complete struct reference — field rules, by-value cycles, assignability, member access, and globals — is in [Structs](25-structs.md).
 
+## 11.7 Tuple Declarations
+
+A tuple declaration uses the tuple type syntax followed by the variable name:
+
+```franko
+(int32 val, int32 err) res
+(int32, int32) lazy
+(uint hello, int world) a
+(uint different, int name) b
+```
+
+Named elements are accessed by their declared names, and unnamed elements by `_0`, `_1`, …:
+
+```franko
+res.val = 1
+res.err = 2
+lazy._0 = 3
+lazy._1 = 4
+```
+
+Element names are per-declaration aliases, not part of the tuple type. This makes assignment between differently named tuples valid:
+
+```franko
+b = a          // valid: (uint, int) and (uint, int) are the same structural type
+b.different    // valid: b declared this name
+b.hello        // invalid: b's tuple type has no element named hello
+```
+
+Tuple values are produced by declarations, whole-tuple assignment, element writes, and function returns; there is no `(1, 2)` literal form. Declaration-initializer sugar still applies normally:
+
+```franko
+(int32, int32) x = f()
+```
+
+is sugar for a declaration followed by an assignment. Tuple element values follow the same initialization rules as struct fields: locals without initializers are indeterminate unless a function returns a value, while globals are zero-initialized. See [Assignment](14-assignment.md#148-tuple-assignment) and [Structs](25-structs.md#258-initialization-semantics).
+
 ---
 
 # 12. Functions
@@ -1045,7 +1116,8 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](25-structs.md).
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](25-structs.md); or
+- a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array, dynamic array, or `void` is pointer-only, exactly like a struct with such a field. See [Tuples](06-types.md#61-tuples).
 
 Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `getptr`/`getmview`/`getview` expression at the call site.
 
@@ -1071,6 +1143,23 @@ Declaring two functions with the same identifier and the same ordered parameter 
 Return type is not part of overload identity, but two declarations with
 the same identifier and parameter types are still an error when their
 return types differ. Functions may be called recursively.
+
+Tuple element names are not part of a function signature. These two
+declarations have the same normalized signature and are duplicates:
+
+```franko
+func f((int32 a, int32 b) x) -> int32 { ... }
+func f((int32 c, int32 d) y) -> int32 { ... }
+```
+
+The normalized signature is:
+
+```text
+fn((int32, int32)) -> int32
+```
+
+For example, `func foo((int32 x, int32 y) coord, uint8 data) -> (int32 val, int32 err)`
+normalizes to `fn((int32, int32), uint8) -> (int32, int32)`.
 
 ## 12.6 Function Call Resolution
 
@@ -1134,9 +1223,10 @@ A function return type must be either:
 - `void`;
 - a primitive integer type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
-- a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)).
+- a struct type whose fields are all assignable value types, recursively (see [Structs](25-structs.md)); or
+- a tuple type whose elements are all assignable value types, recursively (see [Tuples](06-types.md#61-tuples)).
 
-Arrays cannot currently be returned directly.
+Arrays cannot currently be returned directly. A tuple containing an array or another non-assignable element cannot be returned by value; use a pointer to the tuple instead.
 
 ## 12.11 Forward References and Recursion
 
@@ -1276,7 +1366,7 @@ See [Array Literals](22-array-literals.md) for literal-source rules.
 
 ## 14.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields.
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](#148-tuple-assignment).
 
 Valid:
 
@@ -1465,6 +1555,31 @@ local dies before the operator call returns.
 See [Operators](17-operators.md#1710-struct-operator-overloading) for the
 complete operator overload rules.
 
+## 14.8 Tuple Assignment
+
+Tuple assignment uses the same built-in whole-value rule as struct assignment:
+
+```franko
+(int32 val, int32 err) a
+(int32 left, int32 right) b
+
+b = a
+```
+
+The ordered element types must match exactly; element names are irrelevant. `(int32 val, int32 err)` and `(int32, int32)` are the same type, so assignment between them is valid. `(int32, uint32)` and `(uint32, int32)` are different types and cannot be assigned even when the overall element sets are the same.
+
+A tuple is assignable as a whole only when every element is an assignable value type (primitive, pointer, struct with assignable fields, or another assignable tuple). A tuple containing a static array, dynamic array, or `void` is pointer-only:
+
+```franko
+(int32, [int32, 3]) a
+(int32, [int32, 3]) b
+a = b          // invalid: non-assignable element
+```
+
+Tuples cannot define `OPERATOR_MOV` or any other operator method, so whole-tuple assignment always uses the built-in rule. Assign individual elements when a tuple contains a non-assignable element.
+
+See [Tuples](06-types.md#61-tuples) and [Type Equality](28-type-equality.md#287-tuple-equality).
+
 ---
 
 # 15. Lvalues and Storage-Backed Expressions
@@ -1479,6 +1594,7 @@ Current storage-backed lvalues are:
 | array element of storage-backed array | yes |
 | `$(pointer)` | yes |
 | struct field access whose base is an lvalue (`obj.field`) | yes |
+| tuple element access whose base is an lvalue (`t.val`, `t._0`) | yes |
 | integer literal | no |
 | arithmetic expression | no |
 | comparison expression | no |
@@ -1487,7 +1603,9 @@ Current storage-backed lvalues are:
 
 Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
-See [Structs](25-structs.md) for the complete struct reference.
+Tuple element access follows exactly the same rule: `t.val` and `t._0` are lvalues when `t` is storage-backed, and tuple elements can be assigned, passed to `getptr`/`getview`/`getmview`, and nested in longer access chains.
+
+See [Structs](25-structs.md) for the complete struct reference and [Tuples](06-types.md#61-tuples) for tuple types.
 
 This distinction matters for:
 
@@ -1656,6 +1774,7 @@ Raw integers can never be converted to pointers.
 
 ## 16.6 What Casts Do Not Cover
 
+- A tuple type can be written as a cast target because `cast<T>` accepts a full type, but tuple casts are rejected: `cast<(int32, int32)>(x)` is a compile error. Tuples have no conversion operations.
 - Casts do not appear in constant-expression slots (static array
   sizes, global initializers, struct field defaults): those contexts
   accept only plain integer literals and operators.
@@ -1876,6 +1995,8 @@ Integer constants use the ordinary fluid-constant fitting rules against
 the narrowest fitting type wins with signed before unsigned at equal
 width. The selected constant is materialized as a temporary of the
 parameter's referenced primitive type before being borrowed.
+
+Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
 
 See [Assignment](14-assignment.md) and [Methods](26-methods.md) for the
 full lowering, fallback, and lifetime rules.
@@ -3713,7 +3834,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), and other declared struct types.
+- Field types may be: primitive integer types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), tuple types, and other declared struct types.
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](21-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -3750,7 +3871,10 @@ A struct name used in a type position is resolved against the struct namespace:
 A struct may not reach itself by value through its fields. The by-value edges are:
 
 - a field whose type is a struct;
-- a field whose type is a static array of structs (recursively, including nested static arrays).
+- a field whose type is a static array of structs (recursively, including nested static arrays);
+- a field whose type is a tuple containing a struct by value (recursively through tuple elements).
+
+Tuple element types are by-value edges for cycle checking: a struct cannot contain itself through a tuple field.
 
 An infinite by-value chain would have no size, so such cycles are rejected at compile time:
 
@@ -3758,6 +3882,14 @@ An infinite by-value chain would have no size, so such cycles are rejected at co
 struct Node {
     int32 v
     [Node, 4] kids    // invalid: static array of Node inside Node
+}
+```
+
+A tuple edge has the same effect:
+
+```franko
+struct S {
+    (int32, S) t     // invalid: tuple element S is a by-value edge
 }
 ```
 
@@ -3777,9 +3909,10 @@ A type is **assignable** when a value of that type can participate in ordinary a
 
 - primitive integer types are assignable;
 - pointer types (`ptr<T>`, `mview<T>`, `view<T>`) are assignable;
-- a struct is assignable if and only if all of its fields are assignable, recursively.
+- a struct is assignable if and only if all of its fields are assignable, recursively;
+- a tuple is assignable if and only if all of its elements are assignable, recursively.
 
-Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is **pointer-only**.
+Static arrays, dynamic arrays, and `void` are not assignable, so a struct or tuple containing any of them is **pointer-only**.
 
 Consequences:
 
@@ -3808,12 +3941,15 @@ xs[i].field           // element of a static or dynamic array
 - A field may itself be an array, and array intrinsics work on fields:
   `b.data.init(4)`, `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
 - Struct methods also use member-call syntax (`s.increment()`); see [Methods](26-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
+- A field whose type is a tuple is accessed with the tuple's own element names; tuple elements are lvalues by the same base-expression rule. See [Tuples](06-types.md#61-tuples).
 
 ## 25.8 Initialization Semantics
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](11-declarations.md)).
 - **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null); fields with defaults receive their default values. Global initialization happens before `main` runs.
+
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
 
 ## 25.9 Struct Globals
 
@@ -3839,8 +3975,8 @@ int32 scale = 2;
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](17-operators.md#1710-struct-operator-overloading)).
 - No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
 - Field defaults are `constExpr` on primitive fields only.
-- A struct may not reach itself by value (through struct fields or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
-- A struct with any non-assignable field is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value assignment.
+- A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
+- A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](30-unsupported-or-restricted-features.md).
 
@@ -4592,6 +4728,20 @@ X == X
 
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](25-structs.md) for the complete struct reference.
 
+## 28.7 Tuple Equality
+
+Tuple types are structural. Two tuple types are equal if and only if their ordered element types are equal. Element names are declaration-site aliases and are not part of type identity:
+
+```text
+(int32, int32)              == (int32 val, int32 err)
+(int32, int32)              == (int32 left, int32 right)
+(int32, uint32)             != (uint32, int32)
+(int32, int32)              != (int32, int32, int32)
+(int32, [int32, 3])         == (int32, [int32, 3])
+```
+
+Order matters even when the element sets match. Nested tuple types compare recursively by the same rule. See [Tuples](06-types.md#61-tuples).
+
 ---
 
 # 29. Declaration Type Validity
@@ -4600,6 +4750,7 @@ A declared variable type is valid if it is one of:
 
 - primitive integer type;
 - a declared struct type;
+- a tuple of valid non-`void` element types (at least two elements);
 - dynamic array of a valid non-`void` type;
 - static array of a valid non-`void` type with valid size;
 - pointer of a valid non-`void` type.
@@ -4611,11 +4762,14 @@ struct X { int32 n }
 
 int32 x;
 X s;
+(int32, int32) pair;
+(int32 val, X) named;
 [X] xs;
 [uint8, 64] bytes;
 [[byte, 20], 12] grid;
 ptr<int32> p;
 ptr<[int32]> ap;
+ptr<(int32, int32)> tp;
 ```
 
 Invalid:
@@ -4634,9 +4788,10 @@ A function return type has separate rules. It may be:
 - `void`;
 - a primitive integer type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
-- a struct whose fields are all assignable value types, recursively.
+- a struct whose fields are all assignable value types, recursively; or
+- a tuple whose elements are all assignable value types, recursively.
 
-Array return types are invalid.
+Array return types are invalid. A tuple containing an array or another non-assignable element cannot be returned by value; return a pointer to it instead.
 
 ---
 
@@ -4673,7 +4828,7 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays, dynamic arrays, and `void` are not assignable, so a struct containing any of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](06-types.md#61-tuples));
 - structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](26-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
 - comparison and assignment operators on structs are only those with `OPERATOR_*` methods; arithmetic, bitwise, shift, and logical operators are not overloadable (see [Operators](17-operators.md#1710-struct-operator-overloading)).
 
@@ -4813,6 +4968,22 @@ non-operator methods with `view<T>` parameters are likewise still
 unchecked for stores. See
 [Memory Safety Checking](27-memory-safety-checking.md#279-dangling-pointer-checking)
 and [Operators](17-operators.md#1710-struct-operator-overloading).
+
+## 30.18 Tuple Restrictions
+
+Tuples are intentionally limited to ordinary aggregate values:
+
+- no tuple literals or construction sugar (`(1, 2)` is not an expression value);
+- no destructuring declarations or tuple-pattern parameters;
+- no tuple methods (including intrinsic-named calls such as `t.length()`);
+- no tuple operators, including `OPERATOR_*` overloads;
+- no tuple casts (`cast<(int32, int32)>(x)` is rejected);
+- no named tuple type aliases; write the tuple type at each declaration or signature;
+- at least two elements are required, so `(int32)` is not a tuple type.
+
+Tuple values are produced by declarations, element writes, whole-tuple assignment, and function returns. A tuple whose elements are not all assignable value types is pointer-only.
+
+See [Tuples](06-types.md#61-tuples), [Tuple Declarations](11-declarations.md#117-tuple-declarations), and [Tuple Assignment](14-assignment.md#148-tuple-assignment).
 
 ---
 
@@ -4955,6 +5126,8 @@ The compiler rejects an FFI module when:
 - a listed function does not exist in the `.fr` file;
 - a bridged function has no bridge file or no matching block;
 - a bridged function block does not contain the expected mangled name.
+
+Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.
 
 ---
 
@@ -5519,6 +5692,55 @@ func main() -> int32 {
 }
 ```
 
+## 32.24 Tuple Values
+
+Named and unnamed tuple declarations, assignment across different names, and a function round-trip:
+
+```franko
+import "franko/io"
+import "franko/static"
+
+func swap((int32 x, int32 y) pair) -> (int32 left, int32 right) {
+    (int32 first, int32 second) copy = pair
+    (int32 upper, int32 lower) result
+    result.upper = copy.second
+    result.lower = copy.first
+    return result
+}
+
+func main() -> int32 {
+    (int32 val, int32 err) res
+    (int32, int32) lazy
+
+    res.val = 1
+    res.err = 2
+    lazy._0 = 3
+    lazy._1 = 4
+
+    (uint hello, int world) a
+    (uint different, int name) b
+    a.hello = 5
+    a.world = 6
+    b = a
+    b.different = b.different + 1
+
+    (int32 low, int32 high) swapped = swap(res)
+
+    print(res.val)                 // 1
+    print(lazy._1)                 // 4
+    print(b.different)             // 6
+    print(b.name)                  // 6
+    print(swapped.low)             // 2
+    print(swapped.high)            // 1
+    print(static::is_same_type(res, lazy))   // 1
+    print(static::what_type(res))            // (int32, int32)
+
+    return 0
+}
+```
+
+There is no tuple literal: values are built by writing elements, copying whole tuples with different element names, or returning them from functions. See [Tuples](06-types.md#61-tuples).
+
 ---
 
 # 33. Naming Conventions
@@ -5714,6 +5936,17 @@ Underscore prefixes communicate visibility:
 The prefix composes with the base convention for the kind of declaration. For
 example, a private field uses snake case after `_`, while an internal struct
 uses CamelCase after `__`.
+
+Tuple element names are declaration-site aliases, not symbols: `(int32 val,
+int32 err)` and `(int32 left, int32 right)` are the same tuple type, and the
+names are only used for member access in their own declaration. Unnamed tuple
+elements are accessed as `_0`, `_1`, and so on. These names are not struct
+members, so the `_` private-field warning does not apply to them.
+
+Compiler-generated tuple structs use the C++ type name
+`_TMP_STRUCT_<hash>`. Ordinary user structs always emit with the `STRUCT_`
+prefix (`STRUCT_<Name>`), so a user struct whose Franko name begins with
+`_TMP_STRUCT_` still emits a distinct C++ name and is allowed.
 
 The compiler currently warns about the following public accesses:
 
@@ -5948,17 +6181,17 @@ be stored in a variable or passed as a callback.
 | Function | Argument contract | Result | Semantics |
 |---|---|---|---|
 | `static::is_primitive(x)` | one variable identifier | `uint8` | `1` iff `x` has a primitive integer type |
-| `static::is_memcpy_safe(x)` | one variable identifier | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, or struct with all fields memcpy-safe. Dynamic arrays are not memcpy-safe. |
-| `static::is_trivial(x)` | one variable identifier | `uint8` | `1` iff raw uninitialized storage is safe: primitives and static arrays of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or any non-trivial field are not. |
-| `static::is_memset_safe(x)` | one variable identifier | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, and structs whose field types are all memset-safe. Pointers, dynamic arrays, and `void` are not. Field defaults do not affect this predicate. |
-| `static::is_same_type(x, y)` | two variable identifiers | `uint8` | `1` iff the declared types are exactly equal |
-| `static::what_type(x)` | one variable identifier | compile-time string (`view<[byte, N]>` in expression position) | canonical type spelling |
+| `static::is_memcpy_safe(x)` | one variable identifier | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, struct with all fields memcpy-safe, or tuple with all elements memcpy-safe. Dynamic arrays are not memcpy-safe. |
+| `static::is_trivial(x)` | one variable identifier | `uint8` | `1` iff raw uninitialized storage is safe: primitives, static arrays of trivial elements, and tuples of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or any non-trivial field are not. |
+| `static::is_memset_safe(x)` | one variable identifier | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose field types are all memset-safe, and tuples whose element types are all memset-safe. Pointers, dynamic arrays, and `void` are not. Field defaults do not affect this predicate. |
+| `static::is_same_type(x, y)` | two variable identifiers | `uint8` | `1` iff the declared types are exactly equal; tuple element order matters and element names do not |
+| `static::what_type(x)` | one variable identifier | compile-time string (`view<[byte, N]>` in expression position) | canonical type spelling, including `(int32, int32)` for tuples |
 | `static::strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `static::panic(message)` | one compile-time string | `void` | stops compilation with the message |
-| `static::is_matchable(x)` | one variable identifier | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; arrays and `void` are `0` |
-| `static::is_comparable(x)` | one variable identifier | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; pointers, arrays, and `void` are `0` |
-| `static::is_same_type_assignable(x)` | one variable identifier | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; arrays and `void` are `0` |
-| `static::is_passable_by_value(x)` | one variable identifier | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, and structs whose fields are all passable by value. Static arrays, dynamic arrays, and `void` are not. |
+| `static::is_matchable(x)` | one variable identifier | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples, arrays, and `void` are `0` |
+| `static::is_comparable(x)` | one variable identifier | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, arrays, and `void` are `0` |
+| `static::is_same_type_assignable(x)` | one variable identifier | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays and `void` are `0` |
+| `static::is_passable_by_value(x)` | one variable identifier | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all passable, and tuples whose elements are all passable. Static arrays, dynamic arrays, and `void` are not. |
 
 ### Identifier arguments
 
@@ -6036,6 +6269,8 @@ Spellings use canonical Franko type names:
 | `[int32]` | `[int32]` |
 | `ptr<int32>` | `ptr<int32>` |
 | `view<[byte, 5]>` | `view<[uint8, 5]>` |
+| `(int32 val, int32 err)` | `(int32, int32)` |
+| `(uint8, [int32, 3])` | `(uint8, [int32, 3])` |
 | `a::b::Point` | `a::b::Point` |
 
 `byte` is an alias for `uint8`, so canonical spellings use `uint8`.
@@ -6057,17 +6292,19 @@ These predicates answer different questions:
 | Can I pass a value of this type to a function by value? | `static::is_passable_by_value(x)` |
 
 `is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
-elements, and structs whose fields are all memcpy-safe. Dynamic arrays are
-not memcpy-safe, because copying a dynamic array would duplicate ownership
-of its elements.
+elements, structs whose fields are all memcpy-safe, and tuples whose elements
+are all memcpy-safe. Dynamic arrays are not memcpy-safe, because copying a
+dynamic array would duplicate ownership of its elements.
 
 `is_memset_safe` covers primitives, static arrays of memset-safe elements,
-and structs whose field types are all memset-safe. Field defaults do not
-affect it, because `memset` deliberately overwrites the storage.
+structs whose field types are all memset-safe, and tuples whose element types
+are all memset-safe. Field defaults do not affect it, because `memset`
+deliberately overwrites the storage.
 
 `is_trivial` is stricter: it asks whether a value can be created from raw
 storage. A struct with a field default is memset-safe but not trivial,
-because raw storage would violate the default.
+because raw storage would violate the default. Tuple elements recurse
+through the same predicate; a tuple has no defaults of its own.
 
 ```franko
 struct WithDefault {
@@ -6089,13 +6326,16 @@ print(static::is_same_type_assignable(b)); // 0: no built-in assignment
 ```
 
 A struct that is not assignable by default can opt in with a same-type
-`OPERATOR_MOV`; `is_same_type_assignable` then returns `1`.
+`OPERATOR_MOV`; `is_same_type_assignable` then returns `1`. Tuples cannot
+declare operator methods, so for a tuple this predicate is exactly built-in
+element assignability.
 
-`is_passable_by_value` covers primitives, pointers, and structs whose
-fields are all passable by value. This is the same rule as built-in
+`is_passable_by_value` covers primitives, pointers, structs whose
+fields are all passable by value, and tuples whose elements are all passable
+by value. This is the same rule as built-in
 whole-value assignment; it does not consider a custom `OPERATOR_MOV`
 (use `is_same_type_assignable` for that). Static arrays and dynamic arrays
-are not passable by value, so a struct containing one is not either:
+are not passable by value, so a struct or tuple containing one is not either:
 
 ```franko
 struct WithArray {

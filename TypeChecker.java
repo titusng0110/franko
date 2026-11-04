@@ -97,6 +97,25 @@ public class TypeChecker {
             return assignable;
         }
 
+        if (t instanceof SemanticTupleType tuple) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean assignable = true;
+
+            for (FieldSymbol field : tuple.fields) {
+                if (!isAssignableValueType(field.type, visited)) {
+                    assignable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return assignable;
+        }
+
         return false;
     }
 
@@ -308,6 +327,15 @@ public class TypeChecker {
                     + targetType.describe()
                     + " contains non-assignable fields and cannot be assigned"
                     + " as a whole value");
+            return;
+        }
+
+        if (targetType instanceof SemanticTupleType
+                && !isAssignableValueType(targetType)) {
+            diagnostics.error(message + ": tuple type "
+                    + targetType.describe()
+                    + " contains non-assignable elements and cannot be"
+                    + " assigned as a whole value");
             return;
         }
 
@@ -666,6 +694,25 @@ public class TypeChecker {
             return memsetSafe;
         }
 
+        if (t instanceof SemanticTupleType tuple) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean memsetSafe = true;
+
+            for (FieldSymbol field : tuple.fields) {
+                if (!isMemsetSafe(field.type, visited)) {
+                    memsetSafe = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return memsetSafe;
+        }
+
         return false;
     }
 
@@ -709,6 +756,25 @@ public class TypeChecker {
             return trivial;
         }
 
+        if (t instanceof SemanticTupleType tuple) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean trivial = true;
+
+            for (FieldSymbol field : tuple.fields) {
+                if (!isStaticTrivial(field.type, visited)) {
+                    trivial = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return trivial;
+        }
+
         return false;
     }
 
@@ -739,6 +805,25 @@ public class TypeChecker {
             boolean memcpySafe = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
+                if (!isMemcpySafe(field.type, visited)) {
+                    memcpySafe = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return memcpySafe;
+        }
+
+        if (t instanceof SemanticTupleType tuple) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean memcpySafe = true;
+
+            for (FieldSymbol field : tuple.fields) {
                 if (!isMemcpySafe(field.type, visited)) {
                     memcpySafe = false;
                     break;
