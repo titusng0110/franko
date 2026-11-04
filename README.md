@@ -126,6 +126,12 @@ programs/greetings.fr    reading stdin
 
 Compile and run them the same way as above.
 
+## Editor support
+
+A VS Code syntax-highlighting extension lives in
+[`editors/vscode`](editors/vscode/). See its README for local packaging and
+installation instructions.
+
 ## Documentation
 
 * **[Franko Language Reference](language_docs/Franko_Language_Reference.md)**

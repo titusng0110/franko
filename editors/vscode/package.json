@@ -1,0 +1,59 @@
+{
+  "name": "franko",
+  "displayName": "Franko",
+  "description": "Franko language support for Visual Studio Code",
+  "version": "0.1.1",
+  "publisher": "titusng0110",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/titusng0110/franko.git"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "franko",
+    "language",
+    "syntax",
+    "highlighting"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "franko",
+        "aliases": [
+          "Franko",
+          "franko"
+        ],
+        "extensions": [
+          ".fr",
+          ".franko"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "franko",
+        "scopeName": "source.franko",
+        "path": "./syntaxes/franko.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "franko",
+        "path": "./snippets/franko.json"
+      }
+    ]
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^4.1.0"
+  }
+}
