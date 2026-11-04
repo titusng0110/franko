@@ -35,7 +35,10 @@ public final class SemanticAnalyzer {
     private EntryKind entryKind = EntryKind.NONE;
     private int globalMainCount = 0;
 
-    public SemanticAnalyzer() {
+    private final TargetInfo target;
+
+    public SemanticAnalyzer(TargetInfo target) {
+        this.target = target;
         this.constEval = new ConstExpressionEvaluator(symbolTable);
 
         ExpressionLowering lowering = new ExpressionLowering(
@@ -50,7 +53,8 @@ public final class SemanticAnalyzer {
                         return hoistArrayLiteralGlobal(arrayType, values, span);
                     }
                 },
-                this::hoistStaticStringGlobal
+                this::hoistStaticStringGlobal,
+                target
         );
 
         this.exprAnalyzer = lowering.analyzer;
@@ -71,7 +75,10 @@ public final class SemanticAnalyzer {
         SemanticASTNode result;
 
         if (root instanceof ProgramNode p) {
-            result = analyzeProgram(p);
+            DeclarationSelector.Selection selection =
+                    new DeclarationSelector(target).select(p);
+            symbolTable.diagnostics().addAll(selection.diagnostics);
+            result = analyzeProgram(selection.program);
         } else if (root instanceof FunctionDeclNode fn) {
 
             registerFunctionSignature(fn);
@@ -174,7 +181,7 @@ public final class SemanticAnalyzer {
             return new SemanticVarExprNode(span, existing.type, existing);
         }
 
-        String baseName = "_ARR_" + Mangler.hashHex(keyText);
+        String baseName = "ARRLIT_" + Mangler.hashHex64(keyText);
         String name = baseName;
         int suffix = 0;
 
@@ -224,7 +231,7 @@ public final class SemanticAnalyzer {
                 Integer.toString(bytes.size())
         );
 
-        String baseName = "_STR_" + Mangler.hashHex(keyText);
+        String baseName = "STRLIT_" + Mangler.hashHex64(keyText);
         String name = baseName;
         int suffix = 0;
 
@@ -1011,6 +1018,11 @@ public final class SemanticAnalyzer {
             return;
         }
 
+        if (stmt instanceof CompileTimeIfNode n) {
+            appendCompileTimeIf(n, out);
+            return;
+        }
+
         if (stmt instanceof VarDeclInitNode n) {
             out.addAll(analyzeVarDeclInitStmtList(n));
             return;
@@ -1020,6 +1032,59 @@ public final class SemanticAnalyzer {
 
         if (lowered != null) {
             out.add(lowered);
+        }
+    }
+
+    private void appendCompileTimeIf(
+            CompileTimeIfNode node,
+            List<SemanticStmtNode> out
+    ) {
+        ASTNode selected = selectCompileTimeBranch(node);
+
+        if (selected == null) {
+            return;
+        }
+
+        appendCompileTimeBranch(selected, out);
+    }
+
+    private void appendCompileTimeBranch(
+            ASTNode selected,
+            List<SemanticStmtNode> out
+    ) {
+        if (selected instanceof BlockNode block) {
+            for (ASTNode stmt : block.statements) {
+                appendAnalyzedStmt(stmt, out);
+            }
+            return;
+        }
+
+        appendAnalyzedStmt(selected, out);
+    }
+
+    private ASTNode selectCompileTimeBranch(CompileTimeIfNode node) {
+        symbolTable.diagnostics().push(node.span);
+        try {
+            SemanticExprNode condition =
+                    exprAnalyzer.analyzeExpr(node.condition);
+
+            if (!(condition.type instanceof SemanticPrimitiveType)) {
+                symbolTable.error("#if condition must be an integer, got "
+                        + condition.type.describe());
+                return null;
+            }
+
+            if (!condition.isConstant()) {
+                symbolTable.error(
+                        "#if condition must be a compile-time constant");
+                return null;
+            }
+
+            return condition.constantValue.signum() != 0
+                    ? node.thenBranch
+                    : node.elseBranch;
+        } finally {
+            symbolTable.diagnostics().pop();
         }
     }
 
@@ -1117,31 +1182,16 @@ public final class SemanticAnalyzer {
             return new SemanticAssignNode(n.span, n.op, target, value);
         }
 
-        if (node instanceof StaticIfNode n) {
-            SemanticExprNode condition =
-                    exprAnalyzer.analyzeExpr(n.condition);
-
-            if (!(condition.type instanceof SemanticPrimitiveType)) {
-                symbolTable.error("static_if condition must be an integer, got "
-                        + condition.type.describe());
-                return null;
-            }
-
-            if (!condition.isConstant()) {
-                symbolTable.error(
-                        "static_if condition must be a compile-time constant");
-                return null;
-            }
-
-            ASTNode selected = condition.constantValue.signum() != 0
-                    ? n.thenBranch
-                    : n.elseBranch;
+        if (node instanceof CompileTimeIfNode n) {
+            ASTNode selected = selectCompileTimeBranch(n);
 
             if (selected == null) {
                 return null;
             }
 
-            return analyzeStmt(selected);
+            List<SemanticStmtNode> stmts = new ArrayList<>();
+            appendCompileTimeBranch(selected, stmts);
+            return new SemanticBlockNode(n.span, stmts);
         }
 
         if (node instanceof IfNode n) {

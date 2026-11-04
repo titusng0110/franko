@@ -1,0 +1,20 @@
+// ============================================================
+// LANGUAGE TEST: #strcmp
+// ============================================================
+// Covers: lexicographic byte comparison with negative, zero, and
+// positive results, plus prefix ordering.
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    print(#strcmp("abc", "abd"));
+    print(#strcmp("abc", "abc"));
+    print(#strcmp("abd", "abc"));
+    print(#strcmp("ab", "abc"));
+    print(#strcmp("abc", "ab"));
+    print(#strcmp("a", "b"));
+    print(#strcmp("b", "a"));
+
+    return 0;
+}

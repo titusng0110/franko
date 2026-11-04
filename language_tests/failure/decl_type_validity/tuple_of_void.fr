@@ -1,0 +1,6 @@
+// Failure fixture: decl_type_validity/tuple_of_void
+// `void` is not an ordinary value type, so it cannot be a tuple element.
+func main() -> int32 {
+    (int32, void) bad;
+    return 0;
+}

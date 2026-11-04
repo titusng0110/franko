@@ -46,6 +46,12 @@ final class ModuleValidator {
                 continue;
             }
 
+            if (item instanceof DeclIfNode declIf) {
+                collectItems(declIf.thenItems, parentNamespace, functions);
+                collectItems(declIf.elseItems, parentNamespace, functions);
+                continue;
+            }
+
             if (item instanceof FunctionDeclNode function) {
                 functions.put(qualified(parentNamespace, function.name), function.span);
             }

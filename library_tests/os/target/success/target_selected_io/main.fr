@@ -2,7 +2,7 @@
 // LIBRARY TEST (os/target): portable target-selected I/O
 // ============================================================
 // Covers: selecting between os::win32 and os::posix intrinsics with
-// static_if / static_else and the injected static::IS_* constants.
+// #if / #else and the built-in #IS_* constants.
 //
 // The condition is a compile-time constant, so only the branch for the
 // current target is semantically analyzed: the other platform's FFI
@@ -11,7 +11,6 @@
 // to stdout through whichever API matches the target.
 // ============================================================
 
-import "franko/static"
 import "franko/os"
 
 func main() -> int32 {
@@ -19,10 +18,10 @@ func main() -> int32 {
     msg.init(5);
     msg.memcpy("hello");
 
-    static_if (static::IS_WINDOWS) {
+    #if (#IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
         os::win32::WriteFile(h, getptr(msg), 5, null);
-    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
+    } #else #if (#IS_LINUX || #IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getptr(msg), 5);
     }
 

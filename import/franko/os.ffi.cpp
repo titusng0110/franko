@@ -21,9 +21,9 @@
 //
 //   - Every function block defines its function under the exact mangled C++
 //     name the backend emits for the Franko declaration in ../os.fr
-//     (FUNC_<name>_HASH_<8hex>, the FNV-1a hash of the canonical signature
+//     (FUNC_<name>_<8hex>, the FNV-1a hash of the canonical signature
 //     key). This is the same trick ProgramTemplateWithRawCArgs.cpp uses to
-//     call FUNC_main_HASH_747cdf98. The compiler checks that each used
+//     call FUNC_main_b3b049d8. The compiler checks that each used
 //     mangled name is present here and fails loudly on drift.
 //
 //   - Signatures must match the prototypes Cpp14Codegen emits for the
@@ -41,21 +41,17 @@
 // Platform notes:
 //
 //   - os::posix::read/write map to ::read/::write and are POSIX-only.
-//     On Windows the block is a #error, mirroring the win32 blocks
-//     below: there is no _read/_write fallback. Portable programs guard
-//     posix calls with static_if (static::IS_WINDOWS) / static_else;
-//     the untaken branch is never analyzed, so such programs compile on
-//     both targets. The buffer bound is
-//     checked against the array length first: count > length aborts
-//     via franko_panic, so the FFI cannot corrupt memory. A null or
-//     uninitialized buffer returns the stub failure value (-1) instead
-//     of crashing.
+//     os.fr declares the posix namespace only for linux/macos, so this
+//     block is never inserted into a Windows build.
 //   - os::win32::* are the Win32 File API (fileapi.h: ReadFile/WriteFile;
-//     processenv.h: GetStdHandle; both arrive via <windows.h>, which is the
-//     only portable way to include them). lpOverlapped is dropped: the
-//     bridge always passes NULL (synchronous I/O). Off Windows the block is
-//     a #error, so a win32 call compiled for the wrong target fails with a
-//     clear message at the C++ stage instead of a link error.
+//     processenv.h: GetStdHandle; both arrive via <windows.h>). os.fr
+//     declares the win32 namespace only for Windows, so this block is
+//     never inserted into a POSIX build. lpOverlapped is dropped: the
+//     bridge always passes NULL (synchronous I/O).
+//   - Both FFI families check the array bound first: count > length aborts
+//     via franko_panic, so the FFI cannot corrupt memory. A null or
+//     uninitialized buffer returns the stub failure value instead of
+//     crashing.
 
 // @@common
 #include "FrankoRuntime.hpp"
@@ -75,7 +71,7 @@
 // @@os::posix::read
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
+int64_t FUNC_read_bee7609e(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
 {
     uint8_t* buffer;
     uint32_t length;
@@ -96,11 +92,7 @@ int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_
     if (VAR_count > static_cast<uint64_t>(length)) {
         franko_panic("os::posix::read: count exceeds buffer length");
     }
-#ifdef _WIN32
-#error "os::posix::read is only available when compiling for a non-Windows target (linux, macos)"
-#else
     return static_cast<int64_t>(::read(VAR_fd, buffer, static_cast<size_t>(VAR_count)));
-#endif
 }
 }
 }
@@ -109,7 +101,7 @@ int64_t FUNC_read_HASH_247cb6de(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_
 // @@os::posix::write
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
+int64_t FUNC_write_7c35a12f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
 {
     uint8_t* buffer;
     uint32_t length;
@@ -130,11 +122,7 @@ int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR
     if (VAR_count > static_cast<uint64_t>(length)) {
         franko_panic("os::posix::write: count exceeds buffer length");
     }
-#ifdef _WIN32
-#error "os::posix::write is only available when compiling for a non-Windows target (linux, macos)"
-#else
     return static_cast<int64_t>(::write(VAR_fd, buffer, static_cast<size_t>(VAR_count)));
-#endif
 }
 }
 }
@@ -143,14 +131,10 @@ int64_t FUNC_write_HASH_3a46712f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR
 // @@os::win32::GetStdHandle
 namespace NS_os {
 namespace NS_win32 {
-uint64_t FUNC_GetStdHandle_HASH_31d0af80(uint32_t VAR_nStdHandle)
+uint64_t FUNC_GetStdHandle_882a7740(uint32_t VAR_nStdHandle)
 {
-#ifdef _WIN32
     HANDLE h = ::GetStdHandle(static_cast<DWORD>(VAR_nStdHandle));
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(h));
-#else
-#error "os::win32::GetStdHandle is only available when compiling for Windows"
-#endif
 }
 }
 }
@@ -159,9 +143,8 @@ uint64_t FUNC_GetStdHandle_HASH_31d0af80(uint32_t VAR_nStdHandle)
 // @@os::win32::ReadFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
+int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
 {
-#ifdef _WIN32
     uint8_t* buffer;
     uint32_t length;
 
@@ -187,9 +170,6 @@ int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8
         *VAR_bytesRead = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
-#else
-#error "os::win32::ReadFile is only available when compiling for Windows"
-#endif
 }
 }
 }
@@ -198,9 +178,8 @@ int32_t FUNC_ReadFile_HASH_955d9645(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8
 // @@os::win32::WriteFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_WriteFile_HASH_ab68bdd0(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
+int32_t FUNC_WriteFile_0f393550(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
 {
-#ifdef _WIN32
     uint8_t* buffer;
     uint32_t length;
 
@@ -226,9 +205,6 @@ int32_t FUNC_WriteFile_HASH_ab68bdd0(uint64_t VAR_hFile, Franko_Fat_Pointer<uint
         *VAR_bytesWritten = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
-#else
-#error "os::win32::WriteFile is only available when compiling for Windows"
-#endif
 }
 }
 }

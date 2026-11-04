@@ -1,0 +1,35 @@
+// ============================================================
+// LANGUAGE TEST: #if target selection and #IS_* values
+// ============================================================
+// Covers: the five built-in #IS_* target constants and #if / #else
+// selection.
+//
+// Each OS/arch group has exactly one constant set to 1 for the
+// compilation target, so the sums are portable across the hosts the
+// suite runs on. The selection fixtures print fixed text from the
+// branch chosen for the current target.
+// ============================================================
+
+import "franko/io"
+
+func main() -> int32 {
+    int32 os_sum = #IS_LINUX + #IS_WINDOWS + #IS_MACOS;
+    int32 arch_sum = #IS_X86_64 + #IS_ARM64;
+
+    print(os_sum);
+    print(arch_sum);
+
+    #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
+        print("os-selected");
+    } #else {
+        print("os-missing");
+    }
+
+    #if (#IS_X86_64 || #IS_ARM64) {
+        print("arch-selected");
+    } #else {
+        print("arch-missing");
+    }
+
+    return 0;
+}

@@ -21,7 +21,7 @@ Struct field lvalue-ness follows the base expression: `s.field` is an lvalue whe
 
 Tuple element access follows exactly the same rule: `t.val` and `t._0` are lvalues when `t` is storage-backed, and tuple elements can be assigned, passed to `getptr`/`getview`/`getmview`, and nested in longer access chains.
 
-See [Structs](25-structs.md) for the complete struct reference and [Tuples](06-types.md#61-tuples) for tuple types.
+See [Structs](26-structs.md) for the complete struct reference and [Tuples](28-tuples.md) for tuple types.
 
 This distinction matters for:
 

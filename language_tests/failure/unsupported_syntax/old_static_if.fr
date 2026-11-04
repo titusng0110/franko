@@ -1,0 +1,6 @@
+func main() -> int32 {
+    static_if (1) {
+        return 1;
+    }
+    return 0;
+}

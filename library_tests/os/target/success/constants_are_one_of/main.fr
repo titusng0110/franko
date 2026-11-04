@@ -1,7 +1,7 @@
 // ============================================================
-// LIBRARY TEST (os/target): franko/static target constants
+// LIBRARY TEST (os/target): #IS_* target constants
 // ============================================================
-// Covers: the injected static::IS_* constants.
+// Covers: the built-in #IS_* constants.
 //
 // The compiler stamps exactly one of the three OS constants and
 // exactly one of the two arch constants to 1 for the compilation
@@ -13,12 +13,11 @@
 // literals during expression lowering, so the sums fold to 1 as well.
 // ============================================================
 
-import "franko/static"
 import "franko/io"
 
 func main() -> int32 {
-    int32 os_sum = static::IS_LINUX + static::IS_WINDOWS + static::IS_MACOS;
-    int32 arch_sum = static::IS_X86_64 + static::IS_ARM64;
+    int32 os_sum = #IS_LINUX + #IS_WINDOWS + #IS_MACOS;
+    int32 arch_sum = #IS_X86_64 + #IS_ARM64;
     print(os_sum);
     print(arch_sum);
     return 0;

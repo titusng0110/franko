@@ -2,7 +2,7 @@
 
 Franko string literals are **read-only views of byte arrays**. A string
 literal is an ordinary expression whose type is `view<[byte, N]>`
-(see [Pointers](24-pointers.md)): a read-only pointer to a static byte
+(see [Pointers](25-pointers.md)): a read-only pointer to a static byte
 array of `N` UTF-8 bytes, where `N` is the literal's byte length.
 
 ```franko
@@ -78,7 +78,7 @@ buf.memcpy("hello");
 For the same reason `[byte, ?]` cannot infer its size from a string
 literal; declare the size explicitly. (`?` size inference works in
 `view<[...]>` declarations with an array literal; see
-[Array Literals](22-array-literals.md).)
+[Array Literals](21-array-literals.md).)
 
 ## 23.5 Global String Views
 

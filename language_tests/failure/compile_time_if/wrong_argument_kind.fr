@@ -1,0 +1,16 @@
+// ============================================================
+// FAILURE FIXTURE: compile-time introspection argument kinds
+// ============================================================
+// is_primitive takes a bare variable identifier, not a string literal;
+// strcmp takes compile-time strings, not runtime values.
+// ============================================================
+
+
+func main() -> int32 {
+    print(#is_primitive("x"));
+
+    int32 x = 1;
+    print(#strcmp(x, "a"));
+
+    return 0;
+}

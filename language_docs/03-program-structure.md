@@ -8,9 +8,11 @@ Current valid top-level items are:
 - global variable declarations;
 - function declarations;
 - import directives;
-- namespace declarations.
+- namespace declarations;
+- `#if` declaration conditionals that select among the above (except
+  imports).
 
-Struct declarations are described in full in [Structs](25-structs.md). Import directives are described in full in [Source Files](02-source-files.md).
+Struct declarations are described in full in [Structs](26-structs.md). Import directives are described in full in [Source Files](02-source-files.md).
 
 ## Namespaces
 
@@ -31,7 +33,7 @@ namespace util {
 }
 ```
 
-A namespace body may contain only struct declarations, global variable declarations, function declarations, and nested namespace declarations. Imports and executable statements are not allowed inside a namespace body.
+A namespace body may contain struct declarations, global variable declarations, function declarations, nested namespace declarations, and `#if` declaration conditionals. Imports and executable statements are not allowed inside a namespace body.
 
 Nested namespaces may be written in two equivalent forms:
 
@@ -53,7 +55,7 @@ Both forms declare the same namespace, whose full path is `a::b`. A path header 
 
 The same namespace may be declared more than once, in the same file or across imported files, in either form; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
 
-By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](33-naming-conventions.md).
+By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](34-naming-conventions.md).
 
 ### Qualified References
 

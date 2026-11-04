@@ -136,7 +136,6 @@ public class Main {
 
         ModuleRegistry modules = new ModuleRegistry();
         Frontend frontend = new Frontend(artifacts, modules);
-        CompileTimeInjector compileTimeInjector = new CompileTimeInjector(target);
 
         Result<AstDocument> rawResult = frontend.parseFile(sourceFile);
         log.add("parse", rawResult.diagnostics);
@@ -168,8 +167,7 @@ public class Main {
 
         ImportResolver importResolver = new ImportResolver(
                 importSearchDir,
-                frontend,
-                compileTimeInjector
+                frontend
         );
         ImportResult importResult = importResolver.resolve(desugared, sourceFile);
         log.add("imports", importResult.diagnostics);
@@ -187,7 +185,7 @@ public class Main {
                 null,
                 "==== Warnings ====",
                 "Semantic analysis failed:",
-                () -> new SemanticAnalyzer().analyze(importResult.document)
+                () -> new SemanticAnalyzer(target).analyze(importResult.document)
         );
 
         PassResult legalityResult = runPass(
@@ -314,8 +312,8 @@ public class Main {
         }
 
         String expectedEntryCall = switch (checkedDocument.entryKind) {
-            case ARGS -> "FUNC_main_HASH_747cdf98";
-            case NO_ARGS -> "FUNC_main_HASH_d7d11c43";
+            case ARGS -> "FUNC_main_b3b049d8";
+            case NO_ARGS -> "FUNC_main_72623263";
             case NONE -> throw new RuntimeException(
                 "Internal compiler error: no entry-point function 'main' after successful analysis"
             );

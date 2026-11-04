@@ -144,7 +144,7 @@ class FunctionSymbol extends CallableSymbol {
     }
 
     public String mangledName() {
-        return "FUNC_" + name + "_HASH_" + Mangler.hashHex(functionType().signatureKey());
+        return "FUNC_" + name + "_" + Mangler.hashHex(functionType().signatureKey());
     }
 
     public String emittedLocalName() {
@@ -184,7 +184,7 @@ class MethodSymbol extends FunctionSymbol {
                 + name
                 + "_OFSTRUCT_"
                 + owner.name
-                + "_HASH_"
+                + "_"
                 + Mangler.hashHex(functionType().signatureKey());
     }
 

@@ -229,7 +229,7 @@ final class SemanticTypeResolver {
             return existing;
         }
 
-        String emittedName = "_TMP_STRUCT_" + Mangler.hashHex(structuralKey);
+        String emittedName = "TUPLE_" + Mangler.hashHex(structuralKey);
         String previousKey = tupleNameKeys.get(emittedName);
 
         if (previousKey != null && !previousKey.equals(structuralKey)) {

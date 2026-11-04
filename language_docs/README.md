@@ -12,36 +12,37 @@ The cleaned section ordering is:
 2. Source Files
 3. Program Structure
 4. Lexical Scoping and Symbols
-5. Desugaring
-6. Types
-7. Primitive Integer Types
-8. Integer Literals
-9. Fluid Integer Constants
-10. Constant Folding
-11. Declarations
-12. Functions
-13. Pool Allocation
-14. Assignment
+5. Primitive Integer Types
+6. Integer Literals
+7. Fluid Integer Constants
+8. Constant Folding
+9. Types
+10. Type Equality
+11. Declaration Type Validity
+12. Casts
+13. Operators
+14. Conditions
 15. Lvalues and Storage-Backed Expressions
-16. Casts
-17. Operators
-18. Conditions
-19. Statements
+16. Assignment
+17. Statements
+18. Declarations
+19. Functions
 20. Arrays
-21. Array Intrinsics
-22. Array Literals
+21. Array Literals
+22. Array Intrinsics
 23. String Literals
-24. Pointers
-25. Structs
-26. Methods
-27. Memory Safety Checking
-28. Type Equality
-29. Declaration Type Validity
-30. Unsupported or Restricted Features
+24. Desugaring
+25. Pointers
+26. Structs
+27. Methods
+28. Tuples
+29. Memory Safety Checking
+30. Pool Allocation
 31. Foreign Function Interface
-32. Examples
-33. Naming Conventions
-34. Compile-Time Reflection
+32. Compile-Time Reflection
+33. Unsupported or Restricted Features
+34. Naming Conventions
+35. Examples
 
 ## How to rebuild one combined document
 
@@ -72,7 +73,7 @@ uv run python language_docs/build_reference.py
 
 ### Renumbering sections
 
-Section numbers are embedded in filenames (`25-structs.md`), headings
+Section numbers are embedded in filenames (`26-structs.md`), headings
 (`# 24. Structs`, `## 24.1 ...`), cross-links, and the three navigation files
 (`SUMMARY.md`, `00-title-and-toc.md`, `README.md`). Inserting or removing a
 chapter means shifting every later number. `renumber_sections.py` propagates

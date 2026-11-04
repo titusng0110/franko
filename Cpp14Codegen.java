@@ -1258,6 +1258,10 @@ public class Cpp14Codegen {
         }
 
         if (symbol instanceof GlobalVariableSymbol global) {
+            if (global.literalBytes != null || global.literalValues != null) {
+                return qualify(global.namespace, symbol.name);
+            }
+
             return qualify(global.namespace, "VAR_" + symbol.name);
         }
 
