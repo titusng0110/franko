@@ -1274,9 +1274,12 @@ import "franko/pool"
 std::SparseSetAllocator pool;
 pool.init(1024);
 
-uint32 idx = pool.new_index();
-// ... use idx as a row index into the program's own payload array ...
-pool.free_index(idx);
+(uint32 idx, int32 err) allocated = pool.new_index();
+if (allocated.err != 0) {
+    // pool is uninitialized or exhausted
+}
+// ... use allocated.idx as a row index into the program's own payload array ...
+pool.free_index(allocated.idx);
 
 pool.uninit();
 ```
@@ -3752,8 +3755,13 @@ func main() -> int32 {
     std::SparseSetAllocator nodes;
     nodes.init(8);
 
-    uint32 a = nodes.new_index();
-    uint32 b = nodes.new_index();
+    (uint32 idx, int32 err) first = nodes.new_index();
+    (uint32 idx, int32 err) second = nodes.new_index();
+    if (first.err != 0 || second.err != 0) {
+        return 1;
+    }
+    uint32 a = first.idx;
+    uint32 b = second.idx;
 
     payload[a] = 10;
     payload[b] = 20;
@@ -5802,7 +5810,7 @@ namespace bignum {
 Function and method names use `lower_case_snake_case`:
 
 ```franko
-func read_line(view<[byte]> buffer) -> uint32 {
+func count_items(view<[byte]> buffer) -> uint32 {
     return 0
 }
 

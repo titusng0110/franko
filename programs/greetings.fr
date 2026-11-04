@@ -18,11 +18,11 @@ func main() -> int {
     // Read the name without its line ending, at most 32 bytes.
     [byte] input;
     input.init(32);
-    int64 got = read_line(getmview(input), 32);
+    (int64 val, int32 err) line = read_line(getmview(input), 32);
 
     std::String name;
-    if (got > 0) {
-        uint len = unsafe_cast<uint>(got);
+    if (line.err == 0 && line.val > 0) {
+        uint len = unsafe_cast<uint>(line.val);
         input.resize(len);
         name.from(getview(input));
     }

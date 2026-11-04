@@ -40,9 +40,11 @@ Design rules:
   bytes instead. Struct printing is limited to `std::String`.
 - Input fills a caller-provided buffer (arrays cannot be returned
   directly, so `read_bytes` / `read_line` write through an `mview`
-  out-buffer, like the pool allocators do) and reports how much
-  arrived as `int64`. A null buffer, or a `count`/`max` larger than
-  the buffer, returns `-1` without consuming any input.
+  out-buffer, like the pool allocators do) and returns
+  `(int64 val, int32 err)`. `val` is the number of bytes stored; `err`
+  is `0` on success and `-1` on error. A null buffer, or a
+  `count`/`max` larger than the buffer, returns `(0, -1)` without
+  consuming any input.
 
 ## API
 
@@ -75,8 +77,8 @@ func print(view<std::String> str) -> void
 func print(view<std::String> str, view<std::String> end) -> void
 func print(view<std::String> str, view<[byte]> end) -> void
 
-func read_bytes(mview<[byte]> buf, uint32 count) -> int64
-func read_line(mview<[byte]> buf, uint32 max) -> int64
+func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err)
+func read_line(mview<[byte]> buf, uint32 max) -> (int64 val, int32 err)
 ```
 
 The two-argument forms exist so multi-value lines keep their old
@@ -142,23 +144,24 @@ func main() -> int32 {
 ## Input
 
 Both read functions read from stdin through the OS bridge and fill a
-buffer the caller owns. The return value is the number of bytes stored,
-`0` at end of input, or `-1` on error.
+buffer the caller owns. They return `(int64 val, int32 err)`: `val` is
+the number of bytes stored, `err` is `0` on success, and `err` is `-1`
+on error. `val` is `0` at end of input or for an empty line.
 
 ### read_bytes
 
 ```franko
-func read_bytes(mview<[byte]> buf, uint32 count) -> int64
+func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err)
 ```
 
-Read up to `count` bytes from stdin into `buf`. Returns the number of
-bytes read, `0` at end of input, or `-1` on error (a null `buf`, or
-`count` larger than the buffer's length).
+Read up to `count` bytes from stdin into `buf`. Returns `(val, err)`,
+where `val` is the number of bytes read and `err` is `0` on success or
+`-1` on error (a null `buf`, or `count` larger than the buffer's
+length). End of input is `(0, 0)`.
 
-A short result is normal: the return value may be smaller than `count`
-even before end of input. Loop until the return is `0` (or the wanted
-total arrives) when the exact byte count matters. Bytes past the
-returned count are untouched.
+A short result is normal: `val` may be smaller than `count` even before
+end of input. Loop until `val` is `0` (or the wanted total arrives) when
+the exact byte count matters. Bytes past `val` are untouched.
 
 ```franko
 import "franko/io"
@@ -166,8 +169,12 @@ import "franko/io"
 func main() -> int32 {
     [byte] buf;
     buf.init(64);
-    int64 n = read_bytes(getmview(buf), 64);
-    print(n);           // bytes read (or 0 at end of input, -1 on error)
+    (int64 val, int32 err) result = read_bytes(getmview(buf), 64);
+    if (result.err != 0) {
+        print(result.err);
+    } else {
+        print(result.val);   // bytes read, or 0 at end of input
+    }
     buf.uninit();
     return 0;
 }
@@ -176,25 +183,26 @@ func main() -> int32 {
 ### read_line
 
 ```franko
-func read_line(mview<[byte]> buf, uint32 max) -> int64
+func read_line(mview<[byte]> buf, uint32 max) -> (int64 val, int32 err)
 ```
 
 Read one line from stdin into `buf`, at most `max` bytes. Reading stops
-at a `\n`, at `max` bytes, or at end of input. Returns the number of
-bytes stored, or `-1` on error (a null `buf`, `max` zero, or `max`
-larger than the buffer's length).
+at a `\n`, at `max` bytes, or at end of input. Returns `(val, err)`,
+where `val` is the number of bytes stored and `err` is `0` on success or
+`-1` on error (a null `buf`, `max` zero, or `max` larger than the
+buffer's length).
 
-- The line ending is consumed but not stored: the returned count is the
-  line's length. A `\r\n` ending counts as one terminator — the `\r`
-  is dropped too — so lines read the same from an interactive Windows
+- The line ending is consumed but not stored: `val` is the line's
+  length. A `\r\n` ending counts as one terminator — the `\r` is
+  dropped too — so lines read the same from an interactive Windows
   console and from a pipe.
 - A line longer than `max` is split: the remainder, including its line
   ending, stays in stdin for the next call.
 - A final line without a terminator (end of input mid-line) is returned
   normally.
-- A `0` return means an empty line **or** end of input with nothing
-  pending. Read again (or track the expected line count) to tell them
-  apart; `-1` always means an error.
+- `(0, 0)` means an empty line **or** end of input with nothing pending.
+  Read again (or track the expected line count) to tell them apart;
+  `err == -1` always means an error.
 
 ```franko
 import "franko/io"
@@ -203,8 +211,12 @@ func main() -> int32 {
     [byte] name;
     name.init(32);
     print("What's your name? ", null);
-    int64 len = read_line(getmview(name), 32);   // name without the newline
-    print(len);
+    (int64 val, int32 err) line = read_line(getmview(name), 32);
+    if (line.err != 0) {
+        print(line.err);
+    } else {
+        print(line.val);   // name length without the newline
+    }
     name.uninit();
     return 0;
 }

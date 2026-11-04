@@ -7,26 +7,35 @@
 //   success path: uninit() returns 0 and resets capacity/used
 //   failure paths: uninit() before init returns -1, a second
 //     uninit returns -1, and slots are gone after teardown
-//     (exist 0, new_index _END)
+//     (exist 0, new_index err -1)
 //
 // Every line below is asserted exactly: status codes are int32
-// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
 // ============================================================
 
 import "franko/pool"
 import "franko/io"
 
+func show_new((uint32 idx, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
 func main() -> int32 {
     std::SparseSetAllocator a;
     print(a.uninit());
     print(a.init(3));
-    uint32 i = a.new_index();
+    (uint32 idx, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
     print(a.used());
     print(a.uninit());
     print(a.used());
     print(a.capacity());
     print(a.exist(i));
-    print(a.new_index());
+    show_new(a.new_index());
     print(a.init(1));
     print(a.uninit());
     print(a.uninit());

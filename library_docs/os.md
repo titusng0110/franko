@@ -34,6 +34,11 @@ Design rules:
   returns the stub failure value instead of crashing.
 - Stub bodies in `os.fr` report failure (`-1` for posix, `0` for win32),
   so a missing bridge can never look like silent success.
+- These are FFI primitives and intentionally keep the OS/C return
+  conventions: `os::posix::read`/`write` return a byte count or `-1`, and
+  the win32 functions return a status plus an out-parameter. They are
+  not tuple-based; `franko/io` wraps the input path into
+  `(int64 val, int32 err)` tuples.
 
 ## Target selection
 
