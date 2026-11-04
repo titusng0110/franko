@@ -41,11 +41,11 @@ func main() -> int {
     s.set(0, 99)
     print(s.get(0))
 
-    int top = 0
-    st = s.pop(getmview(top))
-    print(st, " "); print(top)
-    st = s.pop(getmview(top))
-    print(st, " "); print(top)
+    (int32 val, int32 err) popped
+    popped = s.pop()
+    print(popped.err, " "); print(popped.val)
+    popped = s.pop()
+    print(popped.err, " "); print(popped.val)
 
     print(app::stats::remaining(getview(s)))
     n = s.length()

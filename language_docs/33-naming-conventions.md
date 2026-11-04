@@ -57,7 +57,7 @@ namespace bignum {
 Function and method names use `lower_case_snake_case`:
 
 ```franko
-func read_line(view<[byte]> buffer) -> uint32 {
+func count_items(view<[byte]> buffer) -> uint32 {
     return 0
 }
 

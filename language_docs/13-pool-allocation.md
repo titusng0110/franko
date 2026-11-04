@@ -27,9 +27,12 @@ import "franko/pool"
 std::SparseSetAllocator pool;
 pool.init(1024);
 
-uint32 idx = pool.new_index();
-// ... use idx as a row index into the program's own payload array ...
-pool.free_index(idx);
+(uint32 idx, int32 err) allocated = pool.new_index();
+if (allocated.err != 0) {
+    // pool is uninitialized or exhausted
+}
+// ... use allocated.idx as a row index into the program's own payload array ...
+pool.free_index(allocated.idx);
 
 pool.uninit();
 ```

@@ -8,34 +8,51 @@
 //     every free_index; the counter follows the slot across
 //     reuse, so (index, generation) identifies one allocation
 //   failure paths: generation before init or after uninit returns
-//     _END (4294967295), an out-of-range index returns _END, and
+//     err -1, an out-of-range index returns err -1, and
 //     a failed double release leaves the counter unchanged
 //
 // Every line below is asserted exactly: status codes are int32
-// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
 // ============================================================
 
 import "franko/pool"
 import "franko/io"
 
+func show_new((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+func show_gen((uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.gen)
+    }
+}
+
 func main() -> int32 {
     std::GenerationalNextAllocator a;
-    print(a.generation(0));
+    show_gen(a.generation(0));
     print(a.init(3));
-    uint32 i = a.new_index();
-    print(a.generation(i));
-    print(a.generation(2));
-    print(a.generation(9));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    show_gen(a.generation(i));
+    show_gen(a.generation(2));
+    show_gen(a.generation(9));
     print(a.free_index(i));
-    print(a.generation(i));
+    show_gen(a.generation(i));
     print(a.free_index(i));
-    print(a.generation(i));
-    uint32 j = a.new_index();
+    show_gen(a.generation(i));
+    (uint32 idx, uint32 gen, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
     print(j);
-    print(a.generation(j));
+    show_gen(a.generation(j));
     print(a.free_index(j));
-    print(a.generation(j));
+    show_gen(a.generation(j));
     print(a.uninit());
-    print(a.generation(0));
+    show_gen(a.generation(0));
     return 0
 }

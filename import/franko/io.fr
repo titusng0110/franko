@@ -906,28 +906,32 @@ func print(int64 num, view<[uint8]> end) -> void {
 // linux/macos, os::win32::ReadFile on windows, so input shares a
 // channel with raw fd reads.
 
-// Read up to `count` bytes from stdin into `buf`; return the number of
-// bytes read, 0 at end of input, or -1 on error (a null `buf`, or
-// `count` larger than the buffer). A short result is normal: the
-// return value may be smaller than `count` even before end of input.
+// Read up to `count` bytes from stdin into `buf`; return (val, err),
+// where val is the number of bytes read, 0 at end of input, and err
+// is 0 on success or -1 on error (a null `buf`, or `count` larger
+// than the buffer). A short result is normal: val may be smaller than
+// `count` even before end of input.
 //
 // On Windows, reading a stdin pipe whose writer has closed makes
 // ReadFile report failure (ERROR_BROKEN_PIPE) with zero bytes instead
 // of succeeding with 0 bytes as POSIX read does. The os::win32 bridge
 // stays a thin ReadFile wrapper, so that end-of-input normalization
 // lives here.
-func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
+func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err) {
+    (int64 val, int32 err) result
+    result.val = 0
+    result.err = -1
     if (buf == null) {
-        return -1
+        return result
     }
     if ($(buf).length() < count) {
-        return -1
+        return result
     }
     static_if (static::IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
         // GetStdHandle returns NULL or INVALID_HANDLE_VALUE on failure.
         if (h == 0 || h == 0xFFFFFFFFFFFFFFFF) {
-            return -1
+            return result
         }
         uint32 n = 0
         int32 ok = os::win32::ReadFile(h, buf, count, getmview(n))
@@ -935,41 +939,54 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> int64 {
             // A failed read that delivered no bytes: on Windows a closed
             // stdin pipe is reported this way (ERROR_BROKEN_PIPE) rather
             // than as a successful zero-byte read, so treat it as EOF.
-            return 0
+            result.err = 0
+            return result
         }
-        return cast<int64>(n)
+        result.val = cast<int64>(n)
+        result.err = 0
+        return result
     } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
-        return os::posix::read(os::posix::STDIN_FILENO, buf, cast<uint64>(count))
+        int64 n = os::posix::read(os::posix::STDIN_FILENO, buf, cast<uint64>(count))
+        if (n < 0) {
+            return result
+        }
+        result.val = n
+        result.err = 0
+        return result
     }
-    return -1
+    return result
 }
 
 // Read one line from stdin into `buf`, at most `max` bytes. Reading
 // stops at a `\n` (consumed and not stored; a preceding `\r` is
 // dropped too, so `\r\n` counts as one terminator), at `max` bytes, or
-// at end of input. Returns the number of bytes stored, or -1 on error
-// (a null `buf`, `max` zero, or `max` larger than the buffer).
+// at end of input. Returns (val, err), where val is the number of
+// bytes stored and err is 0 on success or -1 on error (a null `buf`,
+// `max` zero, or `max` larger than the buffer).
 // A line longer than `max` is split: the remainder, including its line
-// ending, stays in stdin for the next call. A zero return means an
+// ending, stays in stdin for the next call. A zero val means an
 // empty line or end of input with nothing pending.
-func read_line(mview<[byte]> buf, uint32 max) -> int64 {
+func read_line(mview<[byte]> buf, uint32 max) -> (int64 val, int32 err) {
+    (int64 val, int32 err) result
+    result.val = 0
+    result.err = -1
     if (buf == null) {
-        return -1
+        return result
     }
     if (max == 0) {
-        return -1
+        return result
     }
     if ($(buf).length() < max) {
-        return -1
+        return result
     }
     [byte, 1] one
     uint32 n = 0
     for (; n < max; n++) {
-        int64 r = read_bytes(getmview(one), 1)
-        if (r < 0) {
-            return -1
+        (int64 val, int32 err) read_result = read_bytes(getmview(one), 1)
+        if (read_result.err != 0) {
+            return result
         }
-        if (r == 0) {
+        if (read_result.val == 0) {
             break
         }
         byte b = one[0]
@@ -983,5 +1000,7 @@ func read_line(mview<[byte]> buf, uint32 max) -> int64 {
         }
         $(buf)[n] = b
     }
-    return cast<int64>(n)
+    result.val = cast<int64>(n)
+    result.err = 0
+    return result
 }

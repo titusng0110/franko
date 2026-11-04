@@ -11,11 +11,19 @@
 //     exist before init or after uninit returns 0
 //
 // Every line below is asserted exactly: status codes are int32
-// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
 // ============================================================
 
 import "franko/pool"
 import "franko/io"
+
+func show_new((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
 
 func main() -> int32 {
     std::GenerationalSparseSetAllocator a;
@@ -23,7 +31,8 @@ func main() -> int32 {
     print(a.init(2));
     print(a.exist(0));
     print(a.exist(5));
-    uint32 i = a.new_index();
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
     print(a.exist(i));
     print(a.exist(1));
     print(a.free_index(i));

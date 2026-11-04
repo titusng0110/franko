@@ -83,18 +83,19 @@ namespace std {
             return 0
         }
 
-        // Pop the top value into `out`. Returns 0 on success, -1 when the
-        // vector is empty or `out` is null.
-        func pop(mview<Vector> self, mview<int32> out) -> int32 {
-            if (out == null) {
-                return -1
-            }
+        // Pop the top value. Returns (val, err): err is 0 on success
+        // and -1 when the vector is empty; val is 0 on failure.
+        func pop(mview<Vector> self) -> (int32 val, int32 err) {
+            (int32 val, int32 err) result
+            result.val = 0
+            result.err = -1
             if ($(self).len == 0) {
-                return -1
+                return result
             }
             $(self).len--
-            $(out) = $(self).data[$(self).len]
-            return 0
+            result.val = $(self).data[$(self).len]
+            result.err = 0
+            return result
         }
 
         // Read element `index`. The caller must ensure index < len.

@@ -450,8 +450,13 @@ func main() -> int32 {
     std::SparseSetAllocator nodes;
     nodes.init(8);
 
-    uint32 a = nodes.new_index();
-    uint32 b = nodes.new_index();
+    (uint32 idx, int32 err) first = nodes.new_index();
+    (uint32 idx, int32 err) second = nodes.new_index();
+    if (first.err != 0 || second.err != 0) {
+        return 1;
+    }
+    uint32 a = first.idx;
+    uint32 b = second.idx;
 
     payload[a] = 10;
     payload[b] = 20;

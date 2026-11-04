@@ -10,25 +10,35 @@
 //     after uninit
 //
 // Every line below is asserted exactly: status codes are int32
-// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
 // ============================================================
 
 import "franko/pool"
 import "franko/io"
+
+func show_new((uint32 idx, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
 
 func main() -> int32 {
     std::SparseSetAllocator a;
     print(a.used());
     print(a.init(4));
     print(a.used());
-    uint32 i = a.new_index();
-    uint32 j = a.new_index();
+    (uint32 idx, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    (uint32 idx, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
     print(a.used());
     print(a.free_index(i));
     print(a.used());
     print(a.free_index(j));
     print(a.used());
-    print(a.new_index());
+    show_new(a.new_index());
     print(a.used());
     print(a.uninit());
     print(a.used());

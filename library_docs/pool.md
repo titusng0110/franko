@@ -22,10 +22,16 @@ Design rules:
   selects — an element of a dynamic array, a row of a component table —
   belongs to the program; the pool never touches it. `uninit()` frees
   the pool's own tables, never the payload.
-- Status codes are `int32`: `0` on success, `-1` on failure. Sizes,
-  indices, and generations are `uint32`.
-- `new_index()` and `generation()` report failure with the `_END`
-  sentinel (`0xFFFFFFFF`) instead of a status code.
+- Status-only methods return `int32`: `0` on success, `-1` on failure.
+  Sizes, indices, and generations are `uint32`.
+- Fallible value-returning methods return a tuple. `new_index()` returns
+  `(uint32 idx, int32 err)`, and the generational variants return the
+  full handle `(uint32 idx, uint32 gen, int32 err)`. `generation()`
+  returns `(uint32 gen, int32 err)`. In every tuple, `err` is `0` on
+  success and `-1` on failure; the value fields are placeholders when
+  `err != 0`.
+- `_END` (`0xFFFFFFFF`) is an internal free-list terminator, not a
+  public failure result.
 - Methods are called on a pool lvalue and declare the permission they
   need: `ptr<X> self` for the lifecycle operations (`init`, `uninit`,
   `grow`), `mview<X> self` for `new_index`/`free_index`, and
@@ -38,26 +44,28 @@ Design rules:
   enlarges it, `uninit()` frees it. A pool may be `init`-ed again after
   `uninit()`.
 
-## Sentinels
+## Internal sentinels
 
-Two `uint32` sentinel values run through the whole module, spelled as
-literals in Franko code:
+Two `uint32` sentinel values are used inside the allocator tables,
+spelled as literals in Franko code:
 
 ```franko
-// _END       = 0xFFFFFFFF   end of the free list, failure result
+// _END       = 0xFFFFFFFF   end of the free list (internal)
 // _ALLOCATED = 0xFFFFFFFE   slot is live
 ```
 
-They are documented names, not exported constants: write
-`0xFFFFFFFF` / `0xFFFFFFFE` in your own code. A slot holds `_ALLOCATED`
-exactly when it is live; the free-list pools also store the next free
-index in the slot, with `_END` terminating the list.
+They are implementation details, not exported constants and not
+returned by the public API. A slot holds `_ALLOCATED` exactly when it is
+live; the free-list pools also store the next free index in the slot,
+with `_END` terminating the list.
 
 ## Common API
 
 All four allocators expose the same nine methods, so the API is
 documented once. The signatures below are spelled with
-`NextAllocator`; substitute whichever allocator you use.
+`NextAllocator`; substitute whichever allocator you use. The one
+signature difference is `new_index()`: the generational variants also
+return the allocated generation.
 
 ### init
 
@@ -98,14 +106,24 @@ leaves the pool at its old capacity.
 ### new_index
 
 ```franko
-func new_index(mview<NextAllocator> self) -> uint32
+func new_index(mview<NextAllocator> self) -> (uint32 idx, int32 err)
 ```
 
-Takes one free slot and returns its index. Returns `0xFFFFFFFF`
-(`_END`) when the pool is not initialized or when every slot is live —
-check for `_END` before using the result, or call `grow` and retry.
-The caller owns the payload of the returned index until it is passed
-to `free_index`.
+Takes one free slot and returns `(idx, err)`. `err` is `0` on success
+and `-1` when the pool is not initialized or every slot is live. `idx`
+is only meaningful when `err == 0`; check `err` before using it, or
+call `grow` and retry. The caller owns the payload of the returned
+index until it is passed to `free_index`.
+
+The generational variants return the whole handle in one call:
+
+```franko
+func new_index(mview<GenerationalNextAllocator> self)
+        -> (uint32 idx, uint32 gen, int32 err)
+```
+
+On success `idx` and `gen` form a handle; on failure both are `0` and
+`err` is `-1`.
 
 ### free_index
 
@@ -166,16 +184,18 @@ The two generational allocators add one method.
 ### generation
 
 ```franko
-func generation(view<GenerationalNextAllocator> self, uint32 idx) -> uint32
+func generation(view<GenerationalNextAllocator> self, uint32 idx)
+        -> (uint32 gen, int32 err)
 ```
 
-Returns the generation counter of slot `idx`. A counter starts at `0`
-and is bumped by every successful `free_index` of that slot, so it
-follows the slot across reuse. An `(index, generation)` pair captured
+Returns the generation counter of slot `idx` as `(gen, err)`. A counter
+starts at `0` and is bumped by every successful `free_index` of that
+slot, so it follows the slot across reuse. An `(idx, gen)` pair captured
 at allocation time therefore identifies one specific allocation: when
 the slot is reused, `generation(idx)` no longer matches and the pair
-proves the reference is stale. Returns `0xFFFFFFFF` (`_END`) when the
-pool is not initialized or `idx` is out of range.
+proves the reference is stale. `err` is `0` on success and `-1` when
+the pool is not initialized or `idx` is out of range; `gen` is `0` on
+failure.
 
 ## std::NextAllocator
 
@@ -189,8 +209,8 @@ released index comes back first.
 ```franko
 std::NextAllocator a;
 int32 st = a.init(4);        // 0
-uint32 idx = a.new_index();  // 0
-st = a.free_index(idx);        // 0
+(uint32 idx, int32 err) slot = a.new_index();  // 0, 0
+st = a.free_index(slot.idx);        // 0
 st = a.uninit();               // 0
 ```
 
@@ -209,9 +229,9 @@ last dense entry.
 ```franko
 std::SparseSetAllocator a;
 int32 st = a.init(4);        // 0
-uint32 i = a.new_index();    // 0
-uint32 j = a.new_index();    // 1
-st = a.free_index(i);          // 0
+(uint32 i, int32 err_i) slot_i = a.new_index();  // 0, 0
+(uint32 j, int32 err_j) slot_j = a.new_index();  // 1, 0
+st = a.free_index(slot_i.idx);          // 0
 st = a.uninit();               // 0
 ```
 
@@ -227,10 +247,9 @@ generation `0`.
 ```franko
 std::GenerationalNextAllocator a;
 int32 st = a.init(4);          // 0
-uint32 idx = a.new_index();    // 0
-uint32 gen = a.generation(idx); // 0
-st = a.free_index(idx);          // 0
-gen = a.generation(idx);         // 1
+(uint32 idx, uint32 gen, int32 err) handle = a.new_index(); // 0, 0, 0
+st = a.free_index(handle.idx);   // 0
+(uint32 gen, int32 err) current = a.generation(handle.idx); // 1, 0
 st = a.uninit();                 // 0
 ```
 
@@ -246,10 +265,9 @@ generation `0`.
 ```franko
 std::GenerationalSparseSetAllocator a;
 int32 st = a.init(4);          // 0
-uint32 idx = a.new_index();    // 0
-uint32 gen = a.generation(idx); // 0
-st = a.free_index(idx);          // 0
-gen = a.generation(idx);         // 1
+(uint32 idx, uint32 gen, int32 err) handle = a.new_index(); // 0, 0, 0
+st = a.free_index(handle.idx);   // 0
+(uint32 gen, int32 err) current = a.generation(handle.idx); // 1, 0
 st = a.uninit();                 // 0
 ```
 
@@ -290,32 +308,33 @@ func main() -> int32 {
     pool.init(8);
 
     // Allocate a slot and store data in its payload cell.
-    uint32 idx = pool.new_index();
-    uint32 gen = pool.generation(idx);
-    payload[idx] = 42;
-    print(payload[idx]);
+    (uint32 idx, uint32 gen, int32 err) handle = pool.new_index();
+    payload[handle.idx] = 42;
+    print(payload[handle.idx]);
 
     // Release the slot and take a new one: the slot comes back with
     // a bumped generation.
-    pool.free_index(idx);
-    uint32 idx2 = pool.new_index();
+    pool.free_index(handle.idx);
+    (uint32 idx, uint32 gen, int32 err) next = pool.new_index();
 
     // The handle captured before the release is stale: the index is
     // live again, but the generation no longer matches.
-    if (pool.exist(idx) == 1 && pool.generation(idx) == gen) {
+    (uint32 gen, int32 err) current = pool.generation(handle.idx);
+    if (pool.exist(handle.idx) == 1 && current.err == 0 && current.gen == handle.gen) {
         print(1);
     } else {
         print(0);
     }
 
     // A handle captured now matches.
-    if (pool.exist(idx2) == 1 && pool.generation(idx2) == pool.generation(idx)) {
+    (uint32 gen, int32 err) current_next = pool.generation(next.idx);
+    if (pool.exist(next.idx) == 1 && current_next.err == 0 && next.gen == current_next.gen) {
         print(1);
     } else {
         print(0);
     }
 
-    pool.free_index(idx2);
+    pool.free_index(next.idx);
     pool.uninit();
     payload.uninit();
     return 0

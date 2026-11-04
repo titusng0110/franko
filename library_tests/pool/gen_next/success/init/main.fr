@@ -9,7 +9,7 @@
 //     init on a live pool returns -1, and init after uninit works
 //
 // Every line below is asserted exactly: status codes are int32
-// 0 (success) / -1 (failure), and _END is 4294967295 (0xFFFFFFFF).
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
 // ============================================================
 
 import "franko/pool"

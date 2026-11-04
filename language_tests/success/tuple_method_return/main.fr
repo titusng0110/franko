@@ -1,0 +1,40 @@
+import "franko/io"
+
+struct Box {
+    int32 value = 0
+
+    func take(view<Box> self) -> (int32 val, int32 err) {
+        (int32 val, int32 err) result
+        result.val = $(self).value
+        result.err = 0
+        return result
+    }
+
+    func handle(view<Box> self) -> (uint32 idx, uint32 gen, int32 err) {
+        (uint32 idx, uint32 gen, int32 err) result
+        result.idx = 7
+        result.gen = 3
+        if ($(self).value == 42) {
+            result.err = 0
+        } else {
+            result.err = -1
+        }
+        return result
+    }
+}
+
+func main() -> int32 {
+    Box box
+    box.value = 42
+
+    (int32 val, int32 err) taken = box.take()
+    print(taken.val)
+    print(taken.err)
+
+    (uint32 idx, uint32 gen, int32 err) handle = box.handle()
+    print(handle.idx)
+    print(handle.gen)
+    print(handle.err)
+
+    return 0
+}

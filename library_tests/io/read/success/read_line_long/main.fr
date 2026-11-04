@@ -4,26 +4,34 @@
 // stdin is "abcdef\nxy\n". A line longer than `max` is split: the
 // remainder, including its line ending, stays in stdin for the
 // next call:
-//   read_line(max 3) -> 3  ("abc")
-//   read_line(max 3) -> 3  ("def"; still the same line)
-//   read_line(max 3) -> 0  (the leftover \n: an empty line)
-//   read_line(max 3) -> 2  ("xy")
-//   read_line(max 3) -> 0  (end of input)
+//   read_line(max 3) -> 3, 0  ("abc")
+//   read_line(max 3) -> 3, 0  ("def"; still the same line)
+//   read_line(max 3) -> 0, 0  (the leftover \n: an empty line)
+//   read_line(max 3) -> 2, 0  ("xy")
+//   read_line(max 3) -> 0, 0  (end of input)
 // ============================================================
 
 import "franko/io"
 
+func show_read((int64 val, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.val)
+    }
+}
+
 func main() -> int32 {
     [byte] buf;
     buf.init(3);
-    print(read_line(getmview(buf), 3));
+    show_read(read_line(getmview(buf), 3));
     print(buf[0], " "); print(buf[1], " "); print(buf[2]);
-    print(read_line(getmview(buf), 3));
+    show_read(read_line(getmview(buf), 3));
     print(buf[0], " "); print(buf[1], " "); print(buf[2]);
-    print(read_line(getmview(buf), 3));
-    print(read_line(getmview(buf), 3));
+    show_read(read_line(getmview(buf), 3));
+    show_read(read_line(getmview(buf), 3));
     print(buf[0], " "); print(buf[1]);
-    print(read_line(getmview(buf), 3));
+    show_read(read_line(getmview(buf), 3));
     buf.uninit();
     return 0;
 }
