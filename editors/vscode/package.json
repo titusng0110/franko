@@ -55,5 +55,8 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^4.1.0"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign@2.1.0": true
   }
 }

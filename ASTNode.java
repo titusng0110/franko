@@ -79,16 +79,54 @@ class IfNode extends ASTNode {
     }
 }
 
-class StaticIfNode extends ASTNode {
+class CompileTimeIfNode extends ASTNode {
     ASTNode condition;
     ASTNode thenBranch;
     ASTNode elseBranch;
 
-    StaticIfNode(SourceSpan span, ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
+    CompileTimeIfNode(SourceSpan span, ASTNode condition, ASTNode thenBranch, ASTNode elseBranch) {
         super(span);
         this.condition = condition;
         this.thenBranch = thenBranch;
         this.elseBranch = elseBranch;
+    }
+}
+
+class CompileTimeCallNode extends ASTNode {
+    String name;
+    List<ASTNode> args;
+
+    CompileTimeCallNode(SourceSpan span, String name, List<ASTNode> args) {
+        super(span);
+        this.name = name;
+        this.args = args;
+    }
+}
+
+class CompileTimeNameNode extends ASTNode {
+    String name;
+
+    CompileTimeNameNode(SourceSpan span, String name) {
+        super(span);
+        this.name = name;
+    }
+}
+
+class DeclIfNode extends ASTNode {
+    ASTNode condition;
+    List<ASTNode> thenItems;
+    List<ASTNode> elseItems;
+
+    DeclIfNode(
+            SourceSpan span,
+            ASTNode condition,
+            List<ASTNode> thenItems,
+            List<ASTNode> elseItems
+    ) {
+        super(span);
+        this.condition = condition;
+        this.thenItems = thenItems;
+        this.elseItems = elseItems;
     }
 }
 
@@ -184,6 +222,7 @@ class StructDeclNode extends ASTNode {
     String name;
     List<StructFieldDeclNode> fields;
     List<FunctionDeclNode> methods;
+    List<ASTNode> memberItems;
 
     StructDeclNode(
         SourceSpan span,
@@ -191,10 +230,31 @@ class StructDeclNode extends ASTNode {
         List<StructFieldDeclNode> fields,
         List<FunctionDeclNode> methods
     ) {
+        this(span, name, fields, methods, mergeMembers(fields, methods));
+    }
+
+    StructDeclNode(
+        SourceSpan span,
+        String name,
+        List<StructFieldDeclNode> fields,
+        List<FunctionDeclNode> methods,
+        List<ASTNode> memberItems
+    ) {
         super(span);
         this.name = name;
         this.fields = fields;
         this.methods = methods;
+        this.memberItems = memberItems;
+    }
+
+    private static List<ASTNode> mergeMembers(
+            List<StructFieldDeclNode> fields,
+            List<FunctionDeclNode> methods
+    ) {
+        List<ASTNode> merged = new java.util.ArrayList<>();
+        merged.addAll(fields);
+        merged.addAll(methods);
+        return merged;
     }
 }
 

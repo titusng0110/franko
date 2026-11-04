@@ -54,26 +54,26 @@ The descriptor lists only the functions that are bridged:
   duplicate it.
 - The descriptor does not declare variables, structs, target filters, or
   target-dependent constants. Platform selection is ordinary Franko code
-  using `static_if` and the `franko/static` target constants.
+  using `#if` and the built-in `#IS_*` target constants.
 
 ## 31.2 Target Selection
 
-Target-specific FFI calls are guarded with `static_if`:
+Target-specific FFI calls are guarded with `#if`:
 
 ```franko
-import "franko/static"
-
-static_if (static::IS_WINDOWS) {
+#if (#IS_WINDOWS) {
     os::win32::WriteFile(...)
-} static_else static_if (static::IS_LINUX || static::IS_MACOS) {
+} #else #if (#IS_LINUX || #IS_MACOS) {
     os::posix::write(...)
 }
 ```
 
 Only the selected branch is compiled. The other platform's functions do
 not need to exist on the current target, so the module does not need
-target filters. See
-[Compile-Time Reflection](34-compile-time-reflection.md).
+target filters. `franko/os` itself declares `os::posix` only for
+linux/macos and `os::win32` only for Windows, so off-target FFI functions
+are absent from the symbol table entirely. See
+[Compile-Time Reflection](32-compile-time-reflection.md).
 
 An unguarded off-target call still fails when building for that target.
 
@@ -93,7 +93,7 @@ static int32_t mathx_bias()
 
 // @@mathx::add
 namespace NS_mathx {
-int32_t FUNC_add_HASH_1d94001d(int32_t VAR_a, int32_t VAR_b)
+int32_t FUNC_add_da8ad4dd(int32_t VAR_a, int32_t VAR_b)
 {
     return VAR_a + VAR_b + mathx_bias();
 }

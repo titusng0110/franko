@@ -77,6 +77,7 @@ public final class ASTSerializer {
             obj.put("name", n.name);
             obj.put("fields", fieldArray(n.fields, sources));
             obj.put("methods", methodArray(n.methods, sources));
+            obj.put("members", nodeArray(n.memberItems, sources));
         } else if (node instanceof StructFieldDeclNode n) {
             obj.put("node", "structFieldDecl");
             obj.put("type", typeToJson(n.type, sources));
@@ -115,11 +116,23 @@ public final class ASTSerializer {
             obj.put("condition", nodeToJson(n.condition, sources));
             obj.put("thenBranch", nodeToJson(n.thenBranch, sources));
             obj.put("elseBranch", nodeToJson(n.elseBranch, sources));
-        } else if (node instanceof StaticIfNode n) {
-            obj.put("node", "staticIf");
+        } else if (node instanceof CompileTimeIfNode n) {
+            obj.put("node", "compileTimeIf");
             obj.put("condition", nodeToJson(n.condition, sources));
             obj.put("thenBranch", nodeToJson(n.thenBranch, sources));
             obj.put("elseBranch", nodeToJson(n.elseBranch, sources));
+        } else if (node instanceof CompileTimeCallNode n) {
+            obj.put("node", "compileTimeCall");
+            obj.put("name", n.name);
+            obj.put("args", nodeArray(n.args, sources));
+        } else if (node instanceof CompileTimeNameNode n) {
+            obj.put("node", "compileTimeName");
+            obj.put("name", n.name);
+        } else if (node instanceof DeclIfNode n) {
+            obj.put("node", "declIf");
+            obj.put("condition", nodeToJson(n.condition, sources));
+            obj.put("thenItems", nodeArray(n.thenItems, sources));
+            obj.put("elseItems", nodeArray(n.elseItems, sources));
         } else if (node instanceof WhileNode n) {
             obj.put("node", "while");
             obj.put("condition", nodeToJson(n.condition, sources));
@@ -252,7 +265,8 @@ public final class ASTSerializer {
                     span,
                     obj.requireString("name"),
                     fieldsFromArray(obj.requireArray("fields"), sources),
-                    methodsFromArray(obj.requireArray("methods"), sources)
+                    methodsFromArray(obj.requireArray("methods"), sources),
+                    nodesFromArray(obj.requireArray("members"), sources)
             );
             case "structFieldDecl" -> new StructFieldDeclNode(
                     span,
@@ -304,11 +318,26 @@ public final class ASTSerializer {
                     nodeFromJson(obj.requireObject("thenBranch"), sources),
                     nodeFromJson(obj.optObject("elseBranch"), sources)
             );
-            case "staticIf" -> new StaticIfNode(
+            case "compileTimeIf" -> new CompileTimeIfNode(
                     span,
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodeFromJson(obj.requireObject("thenBranch"), sources),
                     nodeFromJson(obj.optObject("elseBranch"), sources)
+            );
+            case "compileTimeCall" -> new CompileTimeCallNode(
+                    span,
+                    obj.requireString("name"),
+                    nodesFromArray(obj.requireArray("args"), sources)
+            );
+            case "compileTimeName" -> new CompileTimeNameNode(
+                    span,
+                    obj.requireString("name")
+            );
+            case "declIf" -> new DeclIfNode(
+                    span,
+                    nodeFromJson(obj.requireObject("condition"), sources),
+                    nodesFromArray(obj.requireArray("thenItems"), sources),
+                    nodesFromArray(obj.requireArray("elseItems"), sources)
             );
             case "while" -> new WhileNode(
                     span,

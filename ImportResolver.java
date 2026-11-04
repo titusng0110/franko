@@ -24,8 +24,6 @@ public class ImportResolver {
 
     private final Frontend frontend;
 
-    private final CompileTimeInjector compileTimeInjector;
-
     private final List<Diagnostic> diagnostics = new ArrayList<>();
 
     private final Map<String, GlobalVarDeclNode> hoistedStringGlobals =
@@ -33,12 +31,10 @@ public class ImportResolver {
 
     public ImportResolver(
             Path importSearchDir,
-            Frontend frontend,
-            CompileTimeInjector compileTimeInjector
+            Frontend frontend
     ) {
         this.importSearchDir = importSearchDir;
         this.frontend = frontend;
-        this.compileTimeInjector = compileTimeInjector;
     }
 
     public ImportResult resolve(AstDocument root, Path sourceFile) {
@@ -90,7 +86,7 @@ public class ImportResolver {
     private void addItem(ASTNode item, List<ASTNode> out) {
         if (item instanceof GlobalVarDeclNode global
                 && global.literalBytes != null
-                && global.name.startsWith("_STR_")) {
+                && global.name.startsWith("STRLIT_")) {
             String key = global.name
                     + "|"
                     + typeKey(global.type)
@@ -114,27 +110,6 @@ public class ImportResolver {
             SourceTable sources
     ) {
         String pathText = computePathText(importNode, importingFile);
-
-        if (CompileTimeInjector.isStaticModule(pathText)) {
-            importGraph
-                    .computeIfAbsent(
-                            SourcePaths.canonicalKey(importingFile),
-                            key -> new ArrayList<>())
-                    .add(CompileTimeInjector.STATIC_MODULE_KEY);
-
-            if (processedFiles.contains(CompileTimeInjector.STATIC_MODULE_KEY)) {
-                return;
-            }
-
-            processedFiles.add(CompileTimeInjector.STATIC_MODULE_KEY);
-            importGraph.computeIfAbsent(
-                    CompileTimeInjector.STATIC_MODULE_KEY,
-                    key -> new ArrayList<>()
-            );
-
-            out.add(compileTimeInjector.injectStaticNamespace(importNode.span));
-            return;
-        }
 
         Path target = resolveTarget(pathText, importingFile);
         String targetKey = SourcePaths.canonicalKey(target);

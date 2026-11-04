@@ -1,0 +1,114 @@
+// ============================================================
+// LANGUAGE TEST: compile-time reflection predicates
+// ============================================================
+// Covers: #is_primitive, is_memcpy_safe, is_trivial, is_memset_safe,
+// is_same_type, what_type, strcmp, panic, is_matchable, is_comparable,
+// is_same_type_assignable, and is_passable_by_value.
+//
+// Point declares OPERATOR_EQ, OPERATOR_LT, and OPERATOR_MOV; Plain has
+// only primitive fields; WithDefault has a field default; HasDyn holds
+// a dynamic array. Pointers, dynamic arrays, and static arrays cover
+// the remaining type shapes.
+// ============================================================
+
+import "franko/io"
+
+struct Point {
+    int32 x
+    int32 y
+
+    func OPERATOR_EQ(view<Point> self, view<Point> other) -> uint8 {
+        return $(self).x == $(other).x && $(self).y == $(other).y
+    }
+
+    func OPERATOR_LT(view<Point> self, view<Point> other) -> uint8 {
+        return $(self).x < $(other).x
+    }
+
+    func OPERATOR_MOV(ptr<Point> self, view<Point> other) -> void {
+        $(self).x = $(other).x
+        $(self).y = $(other).y
+    }
+}
+
+struct Plain {
+    int32 x
+    int32 y
+}
+
+struct WithDefault {
+    int32 x = 5
+}
+
+struct HasDyn {
+    [int32] xs
+}
+
+struct HasStaticArray {
+    [int32, 3] values
+}
+
+func main() -> int32 {
+    int32 i = 1
+    Point p
+    Plain q
+    WithDefault d
+    HasDyn h
+    HasStaticArray hsa
+    ptr<int32> ip = null
+    [int32, 3] sa
+    [int32] da
+
+    print(#is_primitive(i));
+    print(#is_primitive(p));
+
+    print(#is_memcpy_safe(p));
+    print(#is_memcpy_safe(da));
+
+    print(#is_trivial(i));
+    print(#is_trivial(p));
+    print(#is_trivial(d));
+    print(#is_trivial(ip));
+
+    print(#is_memset_safe(i));
+    print(#is_memset_safe(p));
+    print(#is_memset_safe(d));
+    print(#is_memset_safe(ip));
+
+    print(#is_same_type(i, i));
+    print(#is_same_type(i, sa));
+
+    print(#what_type(i));
+
+    print(#strcmp("abc", "abd"));
+    print(#strcmp("abc", "abc"));
+    print(#strcmp("abd", "abc"));
+
+    print(#is_matchable(i));
+    print(#is_matchable(ip));
+    print(#is_matchable(p));
+    print(#is_matchable(q));
+
+    print(#is_comparable(i));
+    print(#is_comparable(p));
+    print(#is_comparable(ip));
+    print(#is_comparable(sa));
+
+    print(#is_same_type_assignable(i));
+    print(#is_same_type_assignable(ip));
+    print(#is_same_type_assignable(q));
+    print(#is_same_type_assignable(d));
+    print(#is_same_type_assignable(h));
+
+    print(#is_passable_by_value(i));
+    print(#is_passable_by_value(ip));
+    print(#is_passable_by_value(q));
+    print(#is_passable_by_value(hsa));
+    print(#is_passable_by_value(da));
+
+    #if (0) {
+        #panic("unreachable");
+    }
+
+    return 0;
+}

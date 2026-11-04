@@ -17,7 +17,7 @@
       "include": "#numbers"
     },
     {
-      "include": "#builtin-namespace"
+      "include": "#compile-time"
     },
     {
       "include": "#member-access"
@@ -80,19 +80,25 @@
         }
       ]
     },
-    "builtin-namespace": {
-      "match": "\\b(static)(::)([A-Za-z_][A-Za-z0-9_]*)",
-      "captures": {
-        "1": {
-          "name": "support.namespace.franko"
+    "compile-time": {
+      "patterns": [
+        {
+          "match": "#(if|else)\\b",
+          "name": "keyword.control.compile-time.franko"
         },
-        "2": {
-          "name": "punctuation.separator.namespace.franko"
+        {
+          "match": "#(IS_LINUX|IS_WINDOWS|IS_MACOS|IS_X86_64|IS_ARM64)\\b",
+          "name": "support.constant.compile-time.franko"
         },
-        "3": {
-          "name": "support.function.builtin.franko"
+        {
+          "match": "#(is_primitive|is_memcpy_safe|is_trivial|is_memset_safe|is_same_type|what_type|strcat|strcmp|panic|is_matchable|is_comparable|is_same_type_assignable|is_passable_by_value)\\b",
+          "name": "support.function.builtin.compile-time.franko"
+        },
+        {
+          "match": "#",
+          "name": "punctuation.definition.compile-time.franko"
         }
-      }
+      ]
     },
     "member-access": {
       "patterns": [
@@ -167,10 +173,6 @@
     },
     "keywords": {
       "patterns": [
-        {
-          "match": "\\b(static_if|static_else)\\b",
-          "name": "keyword.control.compile-time.franko"
-        },
         {
           "match": "\\b(return|if|else|while|for|break|continue)\\b",
           "name": "keyword.control.franko"

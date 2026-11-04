@@ -676,6 +676,7 @@ class SemanticNullLiteralNode extends SemanticExprNode {
     }
 }
 
+
 class SemanticVarExprNode extends SemanticExprNode {
     public final VariableSymbol symbol;
 

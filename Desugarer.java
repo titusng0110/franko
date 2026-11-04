@@ -74,7 +74,7 @@ public class Desugarer {
                     new PrimitiveTypeNode(literal.span, PrimitiveKind.UINT8),
                     new IntNode(literal.span, Integer.toString(bytes.size()))
                 ),
-                "_STR_" + Mangler.hashHex(key),
+                "STRLIT_" + Mangler.hashHex64(key),
                 null
             );
 
@@ -130,6 +130,17 @@ public class Desugarer {
             return;
         }
 
+        if (item instanceof DeclIfNode declIf) {
+            out.add(desugarDeclIfTopLevel(declIf));
+            return;
+        }
+
+        if (item instanceof CompileTimeCallNode
+                || item instanceof CompileTimeNameNode) {
+            out.add(desugarExpr(item));
+            return;
+        }
+
         appendDesugaredStmt(item, out);
         } finally {
             diagnostics.pop();
@@ -140,25 +151,80 @@ public class Desugarer {
         return new NamespaceNode(n.span, n.name, desugarTopLevelItemList(n.items));
     }
 
-    private StructDeclNode desugarStructDecl(StructDeclNode n) {
-        List<StructFieldDeclNode> fields = new ArrayList<>();
+    private DeclIfNode desugarDeclIfTopLevel(DeclIfNode n) {
+        return new DeclIfNode(
+            n.span,
+            desugarExpr(n.condition),
+            desugarTopLevelItemList(n.thenItems),
+            desugarTopLevelItemList(n.elseItems)
+        );
+    }
 
-        for (StructFieldDeclNode field : n.fields) {
-            fields.add(new StructFieldDeclNode(
+    private DeclIfNode desugarDeclIfStruct(DeclIfNode n) {
+        return new DeclIfNode(
+            n.span,
+            desugarExpr(n.condition),
+            desugarStructMemberList(n.thenItems),
+            desugarStructMemberList(n.elseItems)
+        );
+    }
+
+    private List<ASTNode> desugarStructMemberList(List<ASTNode> items) {
+        List<ASTNode> out = new ArrayList<>();
+
+        for (ASTNode item : items) {
+            out.add(desugarStructMember(item));
+        }
+
+        return out;
+    }
+
+    private ASTNode desugarStructMember(ASTNode item) {
+        if (item instanceof StructFieldDeclNode field) {
+            return new StructFieldDeclNode(
                 field.span,
                 desugarType(field.type),
                 field.name,
                 evalConstExpr(field.constInitializer, "struct field initializer")
-            ));
+            );
         }
 
+        if (item instanceof FunctionDeclNode method) {
+            return desugarFunctionDecl(method);
+        }
+
+        if (item instanceof DeclIfNode declIf) {
+            return desugarDeclIfStruct(declIf);
+        }
+
+        if (item instanceof CompileTimeCallNode
+                || item instanceof CompileTimeNameNode) {
+            return desugarExpr(item);
+        }
+
+        throw new RuntimeException(
+            "Unsupported struct member in desugarer: "
+                + item.getClass().getSimpleName()
+        );
+    }
+
+    private StructDeclNode desugarStructDecl(StructDeclNode n) {
+        List<StructFieldDeclNode> fields = new ArrayList<>();
         List<FunctionDeclNode> methods = new ArrayList<>();
+        List<ASTNode> members = new ArrayList<>();
 
-        for (FunctionDeclNode method : n.methods) {
-            methods.add(desugarFunctionDecl(method));
+        for (ASTNode member : n.memberItems) {
+            ASTNode desugared = desugarStructMember(member);
+            members.add(desugared);
+
+            if (desugared instanceof StructFieldDeclNode field) {
+                fields.add(field);
+            } else if (desugared instanceof FunctionDeclNode method) {
+                methods.add(method);
+            }
         }
 
-        return new StructDeclNode(n.span, n.name, fields, methods);
+        return new StructDeclNode(n.span, n.name, fields, methods, members);
     }
 
     private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {
@@ -318,8 +384,8 @@ public class Desugarer {
             return;
         }
 
-        if (stmt instanceof StaticIfNode) {
-            out.add(desugarStaticIf((StaticIfNode) stmt));
+        if (stmt instanceof CompileTimeIfNode) {
+            out.add(desugarCompileTimeIf((CompileTimeIfNode) stmt));
             return;
         }
 
@@ -755,8 +821,8 @@ public class Desugarer {
             );
         }
 
-        if (stmt instanceof StaticIfNode) {
-            return desugarStaticIf((StaticIfNode) stmt);
+        if (stmt instanceof CompileTimeIfNode) {
+            return desugarCompileTimeIf((CompileTimeIfNode) stmt);
         }
 
         if (stmt instanceof WhileNode) {
@@ -824,8 +890,8 @@ public class Desugarer {
         );
     }
 
-    private ASTNode desugarStaticIf(StaticIfNode n) {
-        return new StaticIfNode(
+    private ASTNode desugarCompileTimeIf(CompileTimeIfNode n) {
+        return new CompileTimeIfNode(
             n.span,
             desugarExpr(n.condition),
             desugarControlledStmt(n.thenBranch),
@@ -878,6 +944,18 @@ public class Desugarer {
         ));
 
         return new BlockNode(n.span, outer);
+    }
+
+    private ASTNode desugarReflectionArgument(ASTNode arg) {
+        if (arg instanceof StringLiteralNode) {
+            return arg;
+        }
+
+        if (arg instanceof TypeNode type) {
+            return desugarType(type);
+        }
+
+        return desugarExpr(arg);
     }
 
     private ASTNode desugarExpr(ASTNode expr) {
@@ -943,22 +1021,26 @@ public class Desugarer {
             );
         }
 
+        if (expr instanceof CompileTimeCallNode n) {
+            List<ASTNode> args = new ArrayList<>();
+
+            for (ASTNode arg : n.args) {
+                args.add(desugarReflectionArgument(arg));
+            }
+
+            return new CompileTimeCallNode(expr.span, n.name, args);
+        }
+
+        if (expr instanceof CompileTimeNameNode) {
+            return expr;
+        }
+
         if (expr instanceof CallNode) {
             CallNode n = (CallNode) expr;
-
-            boolean preserveStringLiterals =
-                n.callee instanceof QualifiedNameNode q
-                    && StaticIntrinsics.isStaticCallee(q);
 
             List<ASTNode> args = new ArrayList<>();
 
             for (ASTNode arg : n.args) {
-                if (preserveStringLiterals
-                        && arg instanceof StringLiteralNode) {
-                    args.add(arg);
-                    continue;
-                }
-
                 args.add(desugarExpr(arg));
             }
 

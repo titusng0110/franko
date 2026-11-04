@@ -250,6 +250,14 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.namespaceDecl());
         }
 
+        if (ctx.compileTimeDeclIf() != null) {
+            return visit(ctx.compileTimeDeclIf());
+        }
+
+        if (ctx.compileTimeDeclItem() != null) {
+            return visit(ctx.compileTimeDeclItem());
+        }
+
         throw new RuntimeException("Unknown topLevelItem: " + ctx.getText());
     }
 
@@ -294,6 +302,14 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.namespaceDecl());
         }
 
+        if (ctx.compileTimeDeclIf() != null) {
+            return visit(ctx.compileTimeDeclIf());
+        }
+
+        if (ctx.compileTimeDeclItem() != null) {
+            return visit(ctx.compileTimeDeclItem());
+        }
+
         throw new RuntimeException("Unknown namespaceItem: " + ctx.getText());
     }
 
@@ -335,18 +351,29 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         List<StructFieldDeclNode> fields = new ArrayList<>();
         List<FunctionDeclNode> methods = new ArrayList<>();
+        List<ASTNode> nodes = new ArrayList<>();
 
         for (FrankoParser.StructMemberContext memberCtx : ctx.structMember()) {
             if (memberCtx.structFieldDecl() != null) {
-                fields.add((StructFieldDeclNode) visit(memberCtx.structFieldDecl()));
+                StructFieldDeclNode field =
+                        (StructFieldDeclNode) visit(memberCtx.structFieldDecl());
+                fields.add(field);
+                nodes.add(field);
             } else if (memberCtx.functionDecl() != null) {
-                methods.add((FunctionDeclNode) visit(memberCtx.functionDecl()));
+                FunctionDeclNode method =
+                        (FunctionDeclNode) visit(memberCtx.functionDecl());
+                methods.add(method);
+                nodes.add(method);
+            } else if (memberCtx.structMemberIf() != null) {
+                nodes.add(visit(memberCtx.structMemberIf()));
+            } else if (memberCtx.compileTimeDeclItem() != null) {
+                nodes.add(visit(memberCtx.compileTimeDeclItem()));
             } else {
                 throw new RuntimeException("Unknown structMember: " + memberCtx.getText());
             }
         }
 
-        return new StructDeclNode(span(ctx), name, fields, methods);
+        return new StructDeclNode(span(ctx), name, fields, methods, nodes);
     }
 
     @Override
@@ -465,30 +492,192 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitStaticIfStatement(FrankoParser.StaticIfStatementContext ctx) {
-        return visit(ctx.staticIfStmt());
+    public ASTNode visitCompileTimeIfStatement(
+            FrankoParser.CompileTimeIfStatementContext ctx
+    ) {
+        return visit(ctx.compileTimeIfStmt());
     }
 
     @Override
-    public ASTNode visitStaticIfStmt(FrankoParser.StaticIfStmtContext ctx) {
+    public ASTNode visitCompileTimeIfStmt(FrankoParser.CompileTimeIfStmtContext ctx) {
         ASTNode condition = visit(ctx.expr());
         ASTNode thenBranch = visit(ctx.statement());
         ASTNode elseBranch = null;
 
-        if (ctx.staticElseClause() != null) {
-            elseBranch = visit(ctx.staticElseClause().staticElseBody());
+        if (ctx.compileTimeElseClause() != null) {
+            elseBranch = visit(ctx.compileTimeElseClause().compileTimeElseBody());
         }
 
-        return new StaticIfNode(span(ctx), condition, thenBranch, elseBranch);
+        return new CompileTimeIfNode(span(ctx), condition, thenBranch, elseBranch);
     }
 
     @Override
-    public ASTNode visitStaticElseBody(FrankoParser.StaticElseBodyContext ctx) {
-        if (ctx.staticIfStmt() != null) {
-            return visit(ctx.staticIfStmt());
+    public ASTNode visitCompileTimeElseBody(
+            FrankoParser.CompileTimeElseBodyContext ctx
+    ) {
+        if (ctx.compileTimeIfStmt() != null) {
+            return visit(ctx.compileTimeIfStmt());
         }
 
         return visit(ctx.statement());
+    }
+
+    @Override
+    public ASTNode visitCompileTimeDeclIf(
+            FrankoParser.CompileTimeDeclIfContext ctx
+    ) {
+        ASTNode condition = visit(ctx.expr());
+        List<ASTNode> thenItems = declarationItems(ctx.declIfBody());
+        List<ASTNode> elseItems = List.of();
+
+        if (ctx.declIfElse() != null) {
+            FrankoParser.DeclIfElseContext elseCtx = ctx.declIfElse();
+
+            if (elseCtx.compileTimeDeclIf() != null) {
+                elseItems = List.of(visit(elseCtx.compileTimeDeclIf()));
+            } else {
+                elseItems = declarationItems(elseCtx.declIfBody());
+            }
+        }
+
+        return new DeclIfNode(span(ctx), condition, thenItems, elseItems);
+    }
+
+    private List<ASTNode> declarationItems(FrankoParser.DeclIfBodyContext ctx) {
+        List<ASTNode> items = new ArrayList<>();
+
+        if (ctx.declarationItem() != null) {
+            for (FrankoParser.DeclarationItemContext itemCtx : ctx.declarationItem()) {
+                items.add(visit(itemCtx));
+            }
+        }
+
+        return items;
+    }
+
+    private List<ASTNode> structMemberItems(FrankoParser.StructMemberBodyContext ctx) {
+        List<ASTNode> items = new ArrayList<>();
+
+        if (ctx.structMember() != null) {
+            for (FrankoParser.StructMemberContext itemCtx : ctx.structMember()) {
+                items.add(visit(itemCtx));
+            }
+        }
+
+        return items;
+    }
+
+    @Override
+    public ASTNode visitStructMemberIf(FrankoParser.StructMemberIfContext ctx) {
+        ASTNode condition = visit(ctx.expr());
+        List<ASTNode> thenItems = structMemberItems(ctx.structMemberBody());
+        List<ASTNode> elseItems = List.of();
+
+        if (ctx.structMemberElse() != null) {
+            FrankoParser.StructMemberElseContext elseCtx = ctx.structMemberElse();
+
+            if (elseCtx.structMemberIf() != null) {
+                elseItems = List.of(visit(elseCtx.structMemberIf()));
+            } else {
+                elseItems = structMemberItems(elseCtx.structMemberBody());
+            }
+        }
+
+        return new DeclIfNode(span(ctx), condition, thenItems, elseItems);
+    }
+
+    @Override
+    public ASTNode visitStructMember(FrankoParser.StructMemberContext ctx) {
+        if (ctx.structFieldDecl() != null) {
+            return visit(ctx.structFieldDecl());
+        }
+
+        if (ctx.functionDecl() != null) {
+            return visit(ctx.functionDecl());
+        }
+
+        if (ctx.structMemberIf() != null) {
+            return visit(ctx.structMemberIf());
+        }
+
+        if (ctx.compileTimeDeclItem() != null) {
+            return visit(ctx.compileTimeDeclItem());
+        }
+
+        throw new RuntimeException("Unknown structMember: " + ctx.getText());
+    }
+
+    @Override
+    public ASTNode visitDeclarationItem(FrankoParser.DeclarationItemContext ctx) {
+        if (ctx.structDecl() != null) {
+            return visit(ctx.structDecl());
+        }
+
+        if (ctx.functionDecl() != null) {
+            return visit(ctx.functionDecl());
+        }
+
+        if (ctx.globalVarDecl() != null) {
+            return visit(ctx.globalVarDecl());
+        }
+
+        if (ctx.namespaceDecl() != null) {
+            return visit(ctx.namespaceDecl());
+        }
+
+        if (ctx.compileTimeDeclIf() != null) {
+            return visit(ctx.compileTimeDeclIf());
+        }
+
+        if (ctx.compileTimeDeclItem() != null) {
+            return visit(ctx.compileTimeDeclItem());
+        }
+
+        throw new RuntimeException("Unknown declarationItem: " + ctx.getText());
+    }
+
+    @Override
+    public ASTNode visitCompileTimeDeclItem(
+            FrankoParser.CompileTimeDeclItemContext ctx
+    ) {
+        String name = ctx.IDENTIFIER().getText();
+        List<ASTNode> args = new ArrayList<>();
+
+        if (ctx.hashArgList() != null) {
+            for (FrankoParser.HashArgContext argCtx : ctx.hashArgList().hashArg()) {
+                args.add(visit(argCtx));
+            }
+        }
+
+        return new CompileTimeCallNode(span(ctx), name, args);
+    }
+
+    @Override
+    public ASTNode visitCompileTimeCall(FrankoParser.CompileTimeCallContext ctx) {
+        String name = ctx.IDENTIFIER().getText();
+        List<ASTNode> args = new ArrayList<>();
+
+        if (ctx.hashArgList() != null) {
+            for (FrankoParser.HashArgContext argCtx : ctx.hashArgList().hashArg()) {
+                args.add(visit(argCtx));
+            }
+        }
+
+        return new CompileTimeCallNode(span(ctx), name, args);
+    }
+
+    @Override
+    public ASTNode visitCompileTimeName(FrankoParser.CompileTimeNameContext ctx) {
+        return new CompileTimeNameNode(span(ctx), ctx.IDENTIFIER().getText());
+    }
+
+    @Override
+    public ASTNode visitHashArg(FrankoParser.HashArgContext ctx) {
+        if (ctx.type() != null) {
+            return visit(ctx.type());
+        }
+
+        return visit(ctx.expr());
     }
 
     @Override
@@ -1027,6 +1216,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.nullLiteral() != null) {
             return visit(ctx.nullLiteral());
+        }
+
+        if (ctx.hashExpr() != null) {
+            return visit(ctx.hashExpr());
         }
 
         if (ctx.IDENTIFIER() != null) {

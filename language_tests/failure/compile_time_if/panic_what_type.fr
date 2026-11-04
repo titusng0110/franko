@@ -1,0 +1,23 @@
+// ============================================================
+// FAILURE FIXTURE: #panic accepts compile-time strings
+// ============================================================
+// what_type produces a compile-time string, so panic can use it as its
+// message. The diagnostic is the canonical type spelling.
+// ============================================================
+
+
+namespace a {
+    namespace b {
+        struct Point {
+            int32 x
+        }
+    }
+}
+
+func main() -> int32 {
+    a::b::Point p
+
+    #panic(#what_type(p));
+
+    return 0;
+}

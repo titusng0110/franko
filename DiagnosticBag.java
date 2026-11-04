@@ -43,6 +43,12 @@ public final class DiagnosticBag {
         return List.copyOf(diagnostics);
     }
 
+    public void addAll(List<Diagnostic> incoming) {
+        if (incoming != null) {
+            diagnostics.addAll(incoming);
+        }
+    }
+
     public static String formatErrors(
             String header,
             List<Diagnostic> diagnostics

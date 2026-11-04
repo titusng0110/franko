@@ -16,6 +16,8 @@ topLevelItem
     | globalVarDecl
     | importDecl
     | namespaceDecl
+    | compileTimeDeclIf
+    | compileTimeDeclItem
     ;
 
 // ---------- NAMESPACES ----------
@@ -84,6 +86,39 @@ namespaceItem
     | functionDecl
     | globalVarDecl
     | namespaceDecl
+    | compileTimeDeclIf
+    | compileTimeDeclItem
+    ;
+
+// A declaration-level compile-time conditional. Its selected branch is
+// spliced directly into the enclosing global, namespace, or struct scope.
+// Imports are deliberately not allowed inside these branches.
+compileTimeDeclIf
+    : HASH IF LPAREN expr RPAREN separators* declIfBody
+      (separators* HASH ELSE separators* declIfElse)?
+    ;
+
+declIfBody
+    : LBRACE separators* (declarationItem separators*)* RBRACE
+    | declarationItem
+    ;
+
+declIfElse
+    : compileTimeDeclIf
+    | declIfBody
+    ;
+
+declarationItem
+    : structDecl
+    | functionDecl
+    | globalVarDecl
+    | namespaceDecl
+    | compileTimeDeclIf
+    | compileTimeDeclItem
+    ;
+
+compileTimeDeclItem
+    : HASH IDENTIFIER LPAREN hashArgList? RPAREN
     ;
 
 // A qualified name requires at least one '::', so it can never be
@@ -184,6 +219,23 @@ structDecl
 structMember
     : structFieldDecl
     | functionDecl
+    | structMemberIf
+    | compileTimeDeclItem
+    ;
+
+structMemberIf
+    : HASH IF LPAREN expr RPAREN separators* structMemberBody
+      (separators* HASH ELSE separators* structMemberElse)?
+    ;
+
+structMemberBody
+    : LBRACE separators* (structMember separators*)* RBRACE
+    | structMember
+    ;
+
+structMemberElse
+    : structMemberIf
+    | structMemberBody
     ;
 
 structFieldDecl
@@ -290,7 +342,7 @@ returnType
 statement
     : simpleStmt   # SimpleStatement
     | ifStmt       # IfStatement
-    | staticIfStmt # StaticIfStatement
+    | compileTimeIfStmt # CompileTimeIfStatement
     | whileStmt    # WhileStatement
     | forStmt      # ForStatement
     | breakStmt    # BreakStatement
@@ -316,16 +368,16 @@ ifStmt
       (separators* ELSE separators* statement)?
     ;
 
-staticIfStmt
-    : STATIC_IF LPAREN expr RPAREN separators* statement staticElseClause?
+compileTimeIfStmt
+    : HASH IF LPAREN expr RPAREN separators* statement compileTimeElseClause?
     ;
 
-staticElseClause
-    : separators* STATIC_ELSE separators* staticElseBody
+compileTimeElseClause
+    : separators* HASH ELSE separators* compileTimeElseBody
     ;
 
-staticElseBody
-    : staticIfStmt
+compileTimeElseBody
+    : compileTimeIfStmt
     | statement
     ;
 
@@ -653,6 +705,7 @@ primary
     | stringLiteral
     | arrayLiteral
     | nullLiteral
+    | hashExpr
     | IDENTIFIER
     | SELF
     | qualifiedName
@@ -943,6 +996,24 @@ nullLiteral
     : NULL
     ;
 
+// Compile-time reflection expressions. `#name(...)` is an intrinsic call and
+// `#name` is a built-in compile-time constant such as #IS_LINUX. Reflection
+// arguments accept either a full type or an ordinary expression; a bare
+// identifier is resolved as a variable first by the semantic analyzer.
+hashExpr
+    : HASH IDENTIFIER LPAREN hashArgList? RPAREN   # CompileTimeCall
+    | HASH IDENTIFIER                               # CompileTimeName
+    ;
+
+hashArgList
+    : hashArg (COMMA hashArg)*
+    ;
+
+hashArg
+    : type
+    | expr
+    ;
+
 // ---------- TYPES ----------
 //
 // Static array sizes accept constExpr.
@@ -1028,8 +1099,6 @@ STRUCT : 'struct' ;
 // functions resolved by the normal overload rules.
 IF      : 'if' ;
 ELSE    : 'else' ;
-STATIC_IF   : 'static_if' ;
-STATIC_ELSE : 'static_else' ;
 WHILE   : 'while' ;
 FOR     : 'for' ;
 BREAK    : 'break' ;
@@ -1102,6 +1171,7 @@ CARET   : '^' ;
 DOT     : '.' ;
 COMMA   : ',' ;
 SEMI    : ';' ;
+HASH    : '#' ;
 LT      : '<' ;
 GT      : '>' ;
 QUESTION: '?' ;

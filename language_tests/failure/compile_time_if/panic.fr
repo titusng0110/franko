@@ -1,0 +1,10 @@
+// ============================================================
+// FAILURE FIXTURE: #panic aborts compilation with its message
+// ============================================================
+
+
+func main() -> int32 {
+    #panic("selected panic message");
+
+    return 0;
+}

@@ -42,17 +42,15 @@ Design rules:
 
 ## Target selection
 
-Target constants live in the compiler-provided `franko/static` module
-(see [`franko/static`](static.md)):
+Compile-time target constants are built into the language (see
+[Compile-Time Reflection](../language_docs/32-compile-time-reflection.md)):
 
 ```franko
-import "franko/static"
-
-static::IS_LINUX    // 1 when targeting linux
-static::IS_WINDOWS  // 1 when targeting windows
-static::IS_MACOS    // 1 when targeting macos
-static::IS_X86_64   // 1 when targeting x86_64
-static::IS_ARM64    // 1 when targeting arm64
+#IS_LINUX    // 1 when targeting linux
+#IS_WINDOWS  // 1 when targeting windows
+#IS_MACOS    // 1 when targeting macos
+#IS_X86_64   // 1 when targeting x86_64
+#IS_ARM64    // 1 when targeting arm64
 ```
 
 The target comes from the compiler's required
@@ -61,10 +59,9 @@ The target comes from the compiler's required
 fold to integer literals, so assignment or `getptr(...)` on them is
 rejected with the ordinary "not a storage-backed lvalue" error.
 
-Select platform-specific FFI calls with `static_if`:
+Select platform-specific FFI calls with `#if`:
 
 ```franko
-import "franko/static"
 import "franko/os"
 
 func main() -> int32 {
@@ -72,10 +69,10 @@ func main() -> int32 {
     msg.init(5);
     msg.memcpy("hello");
 
-    static_if (static::IS_WINDOWS) {
+    #if (#IS_WINDOWS) {
         uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
         os::win32::WriteFile(h, getview(msg), 5, null);
-    } static_else static_if (static::IS_LINUX || static::IS_MACOS) {
+    } #else #if (#IS_LINUX || #IS_MACOS) {
         os::posix::write(os::posix::STDOUT_FILENO, getview(msg), 5);
     }
 
@@ -85,18 +82,19 @@ func main() -> int32 {
 ```
 
 Only the selected branch is analyzed, verified against the module
-descriptor, and emitted. The other platform's FFI functions are never
-required to exist on this target.
+descriptor, and emitted. The descriptor lists both platform families;
+module validation accepts declarations from either branch, while FFI
+verification and code generation only see the selected one. The other
+platform's FFI functions are never required to exist on this target.
 
 ## os::posix
 
-POSIX file-descriptor I/O, available on the non-Windows targets
-(linux, macos): the bridge calls `::read` / `::write` from
-`<unistd.h>`, and on Windows the block is a `#error` — there is no
-`_read` / `_write` fallback. Guard portable posix calls with
-`static_if (static::IS_WINDOWS)` / `static_else` (see
+POSIX file-descriptor I/O, available on linux and macos. `os.fr`
+declares the `os::posix` namespace only for those targets; the bridge
+calls `::read` / `::write` from `<unistd.h>`. Guard portable posix calls
+with `#if (#IS_LINUX || #IS_MACOS)` (see
 [Target selection](#target-selection)) when the program must compile
-for both.
+for Windows too.
 
 ```franko
 int32 STDIN_FILENO = 0
@@ -146,15 +144,13 @@ Note: `print` (from `franko/io`) goes through the same OS bridge as raw fd write
 
 ## os::win32
 
-Win32 File API I/O. Windows-only: calling any of these functions in
-code that is actually reachable when compiling for another target
-fails at the C++ stage because the bridge block is a `#error`. Guard
-portable win32 calls with `static_if (static::IS_WINDOWS)` (see
+Win32 File API I/O. Windows-only: `os.fr` declares the `os::win32`
+namespace only for Windows, so an off-target call is a compile error.
+Guard portable win32 calls with `#if (#IS_WINDOWS)` (see
 [Target selection](#target-selection) above): the untaken branch is
-never analyzed, so portable programs still compile anywhere. The
-`#error` bodies in `os.ffi.cpp` remain as a second line of
-defense. `lpOverlapped` is dropped throughout: the bridge always
-passes `NULL` (synchronous I/O).
+never analyzed, so portable programs still compile anywhere.
+`lpOverlapped` is dropped throughout: the bridge always passes `NULL`
+(synchronous I/O).
 
 ```franko
 uint32 STD_INPUT_HANDLE = 0xFFFFFFF6
@@ -221,6 +217,6 @@ library_tests/os/posix/success/   // read/write behavior goldens
 library_tests/os/posix/runtime/   // buffer-bound aborts (exit status only)
 library_tests/os/posix/failure/   // rejected misuses (pinned diagnostics)
 library_tests/os/win32/success/   // File API goldens (Windows only)
-library_tests/os/target/success/  // static::IS_* + static_if target selection
-library_tests/os/target/failure/  // writes to static:: constants
+library_tests/os/target/success/  // #IS_* + #if target selection
+library_tests/os/target/failure/  // writes to #IS_* constants
 ```

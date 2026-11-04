@@ -106,17 +106,13 @@ those standard modules:
 ```franko
 import "franko/io"
 import "franko/os"
-import "franko/static"
+import "franko/pool"
 ```
-
-`franko/static` is a built-in module: there is no `static.fr` file in
-your project. It provides the compile-time reflection namespace described
-in [Compile-Time Reflection](34-compile-time-reflection.md).
 
 User code must not add files under the compiler's `import/franko/` directory
 or use the `franko/` prefix for user modules. Use a project-relative path or
 your own search-directory path instead, such as `import "./lib/my_module"` or
-`import "myproject/my_module"` (see [Naming Conventions](33-naming-conventions.md)).
+`import "myproject/my_module"` (see [Naming Conventions](34-naming-conventions.md)).
 
 ### How Imports Resolve
 

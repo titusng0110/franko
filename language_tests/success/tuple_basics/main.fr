@@ -1,5 +1,4 @@
 import "franko/io"
-import "franko/static"
 
 func main() -> int32 {
     (int32 val, int32 err) res
@@ -26,7 +25,7 @@ func main() -> int32 {
     print(a.world)
     print(b.different)
     print(b.name)
-    print(static::is_same_type(res, lazy))
+    print(#is_same_type(res, lazy))
 
     return 0
 }

@@ -14,7 +14,7 @@ This is a declarative TextMate highlighting extension. It does not provide
 compiler diagnostics, IntelliSense, or a language server.
 
 The grammar covers the syntax in `Franko.g4`: primitive integer types and
-aliases, `ptr`/`mview`/`view`, tuple types, `static_if`/`static_else`,
+aliases, `ptr`/`mview`/`view`, tuple types, `#if`/`#else`,
 `$()` dereference, `cast`/`unsafe_cast`, `getptr`/`getmview`/`getview`,
 namespace qualification with `::`, return arrows, and compound assignment
 operators.
@@ -24,7 +24,9 @@ Highlighting categories are separated by TextMate scope:
 - `func`, `struct`, `namespace`, and `import` share the declaration category.
 - `if`, `else`, `while`, `for`, `break`, `continue`, and `return` share the
   control-flow category.
-- `static_if` and `static_else` use a compile-time-control category.
+- `#if` and `#else` use a compile-time-control category.
+- `#IS_*` target constants and `#name(...)` reflection functions use
+  compile-time constant/function categories.
 - All primitive integer types and their `int`/`uint`/`byte` aliases share one
   storage-type category.
 - `ptr`, `mview`, and `view` share a pointer-type category.

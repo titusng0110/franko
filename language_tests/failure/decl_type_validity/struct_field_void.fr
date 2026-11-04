@@ -1,0 +1,9 @@
+// Failure fixture: decl_type_validity/struct_field_void
+// `void` is return-type-only and cannot be a struct field.
+struct Bad {
+    void field
+}
+
+func main() -> int32 {
+    return 0;
+}

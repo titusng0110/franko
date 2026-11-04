@@ -1,0 +1,22 @@
+// ============================================================
+// LANGUAGE TEST: #panic in a dead #if branch
+// ============================================================
+// The unselected branch is never semantically analyzed, so its
+// #panic call must not abort compilation.
+// ============================================================
+
+import "franko/io"
+
+#if (0) {
+    #panic("dead declaration panic must never appear")
+}
+
+func main() -> int32 {
+    #if (0) {
+        #panic("this message must never appear");
+    } #else {
+        print("alive");
+    }
+
+    return 0;
+}

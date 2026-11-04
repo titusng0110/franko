@@ -1,0 +1,11 @@
+// ============================================================
+// FAILURE FIXTURE: #panic at declaration level
+// ============================================================
+
+#if (1) {
+    #panic("selected declaration panic message")
+}
+
+func main() -> int32 {
+    return 0
+}

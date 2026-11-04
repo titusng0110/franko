@@ -1,0 +1,52 @@
+// ============================================================
+// LANGUAGE TEST: #what_type spellings
+// ============================================================
+// Covers: canonical type spellings from SemanticType.describe() for
+// primitive aliases, arrays, pointers, structs, qualified structs, and
+// string views. The result is a real read-only view backed by immutable
+// static storage, and it is also a compile-time string that can feed
+// #strcmp.
+// ============================================================
+
+import "franko/io"
+
+namespace a {
+    namespace b {
+        struct Point {
+            int32 x
+        }
+    }
+}
+
+func main() -> int32 {
+    int i = 1
+    byte b = 2
+    uint u = 3
+    [int32, 3] sa
+    [int32] da
+    ptr<int32> ip = null
+    view<[byte, 5]> text = "hello"
+    a::b::Point p
+
+    print(#what_type(i));
+    print(#what_type(b));
+    print(#what_type(u));
+    print(#what_type(sa));
+    print(#what_type(da));
+    print(#what_type(ip));
+    print(#what_type(text));
+    print(#what_type(p));
+
+    print(#strcmp(#what_type(i), "int32"));
+    print(#strcmp("int32", #what_type(i)));
+    print(#strcmp(#what_type(i), #what_type(i)));
+    print(#strcmp(#what_type(i), "int64"));
+
+    #if (#strcmp(#what_type(i), "int32") == 0) {
+        print("int32 branch");
+    } #else {
+        print("wrong branch");
+    }
+
+    return 0;
+}

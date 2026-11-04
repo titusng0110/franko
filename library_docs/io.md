@@ -105,8 +105,8 @@ func main() -> int32 {
 Integer constants resolve by the overload preference rule: the parameter
 matching the constant's own type wins when the value fits, otherwise the
 narrowest fitting type (signed before unsigned at equal width). See
-[Fluid Integer Constants](../language_docs/09-fluid-integer-constants.md)
-and [Functions](../language_docs/12-functions.md).
+[Fluid Integer Constants](../language_docs/07-fluid-integer-constants.md)
+and [Functions](../language_docs/19-functions.md).
 
 ## std::String output
 
