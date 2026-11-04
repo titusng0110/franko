@@ -4,7 +4,8 @@
 // Covers: canonical type spellings from SemanticType.describe() for
 // primitive aliases, arrays, pointers, structs, qualified structs, and
 // string views. The result is a real read-only view backed by immutable
-// static storage.
+// static storage, and it is also a compile-time string that can feed
+// static::strcmp.
 // ============================================================
 
 import "franko/static"
@@ -36,6 +37,17 @@ func main() -> int32 {
     print(static::what_type(ip));
     print(static::what_type(text));
     print(static::what_type(p));
+
+    print(static::strcmp(static::what_type(i), "int32"));
+    print(static::strcmp("int32", static::what_type(i)));
+    print(static::strcmp(static::what_type(i), static::what_type(i)));
+    print(static::strcmp(static::what_type(i), "int64"));
+
+    static_if (static::strcmp(static::what_type(i), "int32") == 0) {
+        print("int32 branch");
+    } static_else {
+        print("wrong branch");
+    }
 
     return 0;
 }

@@ -947,7 +947,8 @@ public class Desugarer {
             CallNode n = (CallNode) expr;
 
             boolean preserveStringLiterals =
-                isStaticStringIntrinsicCallee(n.callee);
+                n.callee instanceof QualifiedNameNode q
+                    && StaticIntrinsics.isStaticCallee(q);
 
             List<ASTNode> args = new ArrayList<>();
 
@@ -1010,18 +1011,6 @@ public class Desugarer {
         } finally {
             diagnostics.pop();
         }
-    }
-
-    private static boolean isStaticStringIntrinsicCallee(ASTNode callee) {
-        if (!(callee instanceof QualifiedNameNode q)
-                || q.segments.size() != 2
-                || !"static".equals(q.segments.get(0))) {
-            return false;
-        }
-
-        String name = q.segments.get(1);
-
-        return "strcmp".equals(name) || "panic".equals(name);
     }
 
     private ASTNode evalConstExpr(ASTNode expr, String role) {

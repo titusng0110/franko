@@ -5935,7 +5935,8 @@ read its value. Their results are available while compiling:
 
 - predicate results are integer constants (`0` or `1`);
 - `strcmp` produces an integer constant;
-- `what_type` produces a read-only byte view;
+- `what_type` produces a compile-time string (and a read-only byte view
+  when used as an ordinary expression);
 - `panic` stops compilation.
 
 They can be used in ordinary expressions and in `static_if`, but not in
@@ -5951,9 +5952,9 @@ be stored in a variable or passed as a callback.
 | `static::is_trivial(x)` | one variable identifier | `uint8` | `1` iff raw uninitialized storage is safe: primitives and static arrays of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or any non-trivial field are not. |
 | `static::is_memset_safe(x)` | one variable identifier | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, and structs whose field types are all memset-safe. Pointers, dynamic arrays, and `void` are not. Field defaults do not affect this predicate. |
 | `static::is_same_type(x, y)` | two variable identifiers | `uint8` | `1` iff the declared types are exactly equal |
-| `static::what_type(x)` | one variable identifier | `view<[byte, N]>` | canonical type spelling as a read-only string |
-| `static::strcmp(a, b)` | two raw string literals | `int32` | lexicographic byte comparison; negative, zero, or positive |
-| `static::panic(message)` | one raw string literal | `void` | stops compilation with the message |
+| `static::what_type(x)` | one variable identifier | compile-time string (`view<[byte, N]>` in expression position) | canonical type spelling |
+| `static::strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
+| `static::panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `static::is_matchable(x)` | one variable identifier | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; arrays and `void` are `0` |
 | `static::is_comparable(x)` | one variable identifier | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; pointers, arrays, and `void` are `0` |
 | `static::is_same_type_assignable(x)` | one variable identifier | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; arrays and `void` are `0` |
@@ -5977,11 +5978,13 @@ print(static::is_primitive(1));     // error
 print(static::is_primitive(x + 1)); // error
 ```
 
-### String-literal arguments
+### Static string arguments
 
-`static::strcmp` and `static::panic` accept only syntactic string
-literals. Runtime `view<[byte]>` values, variables, and
-`static::what_type(...)` calls are rejected. Empty string literals are
+`static::strcmp` and `static::panic` accept compile-time string
+arguments. A compile-time string is a raw string literal or the result of
+another compile-time string producer such as `static::what_type(...)`.
+Runtime `view<[byte]>` values and variables are rejected, even when they
+were initialized from a compile-time string. Empty string literals are
 rejected consistently with the rest of the language (`N >= 1`).
 
 ```franko
@@ -5991,10 +5994,23 @@ print(static::strcmp("abd", "abc"));   // 1
 print(static::strcmp("ab", "abc"));    // -1 (prefix sorts first)
 ```
 
+Both operand positions accept `what_type`:
+
+```franko
+int32 i = 1;
+
+print(static::strcmp(static::what_type(i), "int32")); // 0
+print(static::strcmp("int32", static::what_type(i))); // 0
+print(static::strcmp(static::what_type(i), "int64")); // -1
+```
+
 `static::panic` stops compilation with its message:
 
 ```franko
+int32 i = 1;
+
 static::panic("unsupported configuration");
+static::panic(static::what_type(i));  // reports: int32
 ```
 
 In a dead `static_if` branch it is ignored, so it does not stop
@@ -6002,10 +6018,12 @@ compilation.
 
 ### `what_type` spellings
 
-`static::what_type(x)` returns a real `view<[byte, N]>` value backed by
-read-only storage that lives for the whole program. It can be printed,
-assigned, or passed to a function that accepts a byte view. It cannot
-feed `strcmp` or `panic`, which require literal tokens.
+`static::what_type(x)` produces a compile-time string. When used as an
+ordinary expression, it materializes as a real `view<[byte, N]>` value
+backed by read-only storage that lives for the whole program; it can be
+printed, assigned, or passed to a function that accepts a byte view. When
+passed to `static::strcmp` or `static::panic`, it is consumed at compile
+time and no string storage is emitted.
 
 Spellings use canonical Franko type names:
 
@@ -6165,6 +6183,7 @@ target.
 - `static_if` is statement-only; it never produces a value.
 - `static::` introspection functions are built-in compile-time
   functions, not callable values.
-- `static::what_type` cannot feed `static::strcmp` or `static::panic`.
+- A runtime `view<[byte]>` variable cannot be passed to `static::strcmp`
+  or `static::panic`; those arguments must be compile-time strings.
 - Empty string literals are rejected in `static::strcmp` and
   `static::panic`.
