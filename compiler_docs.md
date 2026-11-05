@@ -2694,8 +2694,8 @@ mode 3). Byte intrinsics exist only on `Franko_Fat_Pointer`, never on
 in a temporary fat pointer. `memchr`/`memmem` return `MEM_NOT_FOUND` (`0xFFFFFFFF`) on no
 match; the endian accessors are unaligned byte loads/stores built on
 `std::memcpy`; bit index `i` means byte `i / 8`, bit `i % 8` counted from
-the LSB. Every kernel is SFINAE-restricted to `uint8` elements at the C++
-layer as a backstop behind the compiler's byte-only rule.
+the LSB. The compiler's byte-only rule is the only gate; the C++ layer does
+not duplicate it.
 
 The dynamic array length is stored in a `count` field with a `length()`
 accessor returning `uint32` (a field and method may not share a name in
