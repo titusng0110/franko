@@ -61,11 +61,11 @@ public class TypeChecker {
         return t instanceof SemanticNullType;
     }
 
-    public boolean isPureValueType(SemanticType t) {
-        return isPureValueType(t, new HashSet<>());
+    public boolean isValueAssignableType(SemanticType t) {
+        return isValueAssignableType(t, new HashSet<>());
     }
 
-    private boolean isPureValueType(
+    private boolean isValueAssignableType(
             SemanticType t,
             Set<SemanticType> visited
     ) {
@@ -86,7 +86,7 @@ public class TypeChecker {
             boolean assignable = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
-                if (!isPureValueType(field.type, visited)) {
+                if (!isValueAssignableType(field.type, visited)) {
                     assignable = false;
                     break;
                 }
@@ -105,7 +105,7 @@ public class TypeChecker {
             boolean assignable = true;
 
             for (FieldSymbol field : tuple.fields) {
-                if (!isPureValueType(field.type, visited)) {
+                if (!isValueAssignableType(field.type, visited)) {
                     assignable = false;
                     break;
                 }
@@ -120,7 +120,7 @@ public class TypeChecker {
     }
 
     public boolean isValidFunctionReturnType(SemanticType t) {
-        return isVoidType(t) || isPureValueType(t);
+        return isVoidType(t) || isValueAssignableType(t);
     }
 
     public SemanticPrimitiveKind primitiveKindOf(SemanticType type) {
@@ -322,7 +322,7 @@ public class TypeChecker {
         }
 
         if (targetType instanceof SemanticStructType
-                && !isPureValueType(targetType)) {
+                && !isValueAssignableType(targetType)) {
             diagnostics.error(message + ": struct type "
                     + targetType.describe()
                     + " contains non-assignable fields and cannot be assigned"
@@ -331,7 +331,7 @@ public class TypeChecker {
         }
 
         if (targetType instanceof SemanticTupleType
-                && !isPureValueType(targetType)) {
+                && !isValueAssignableType(targetType)) {
             diagnostics.error(message + ": tuple type "
                     + targetType.describe()
                     + " contains non-assignable elements and cannot be"

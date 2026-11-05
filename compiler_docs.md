@@ -903,7 +903,7 @@ outermost result. The private `StaticValue` model has three cases:
   `#IS_ARM64`) → `StaticIntValue` `uint8`, from `TargetInfo`;
 - boolean predicates (`is_primitive`, `is_memcpy_safe`, `has_default_value`,
   `is_memset_safe`, `is_same_type`, `is_matchable`, `is_comparable`,
-  `is_assignable`, `is_pure_value`) → `StaticIntValue`
+  `is_assignable`, `is_value_assignable`) → `StaticIntValue`
   0/1 with type `uint8`;
 - `what_type` → `StaticStringValue` containing the canonical UTF-8
   `mangleKey()` type spelling (no spaces after commas);
@@ -931,17 +931,17 @@ materialization happens only for the outer call, a `what_type` consumed by
 `strcmp` or `panic` never hoists a global.
 
 Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
-`isPureValueType`, `hasDefaultValue`) and
+`isValueAssignableType`, `hasDefaultValue`) and
 `StructSymbol.getMethods` for the exact
 `OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signature checks (§4.18).
 Tuple predicates recurse through `TypeChecker`: all-primitive tuples are
-pure values, assignable, memcpy/memset safe, and have no default value; a
-tuple with a static-array element is not a pure value or assignable, and a
+value-assignable, assignable, memcpy/memset safe, and have no default value; a
+tuple with a static-array element is not value-assignable or assignable, and a
 tuple with a dynamic-array element is not memcpy/memset safe but has a
 default value. Tuples have no methods, so `is_matchable`/`is_comparable`
 return `0`. `what_type` prints the canonical `mangleKey()` form, for
 example `(int32,int32)`.
-`is_pure_value` is exactly `TypeChecker.isPureValueType`
+`is_value_assignable` is exactly `TypeChecker.isValueAssignableType`
 (the by-value parameter and built-in whole-value assignment rule); unlike
 `is_assignable` it does not consider a custom `OPERATOR_MOV`.
 For tuples, `is_assignable` is built-in assignment only; tuples
@@ -1011,7 +1011,7 @@ function must syntactically contain a return somewhere in its body (recursing
 through blocks/ifs/whiles; the desugared for-update epilogue runs inside the
 loop so returns there count). It does not prove full control-flow coverage.
 Tuple parameter and return types follow the same rules through
-`TypeChecker.isPureValueType`: a tuple is passable/returnable exactly
+`TypeChecker.isValueAssignableType`: a tuple is passable/returnable exactly
 when every element is.
 Intercepts `SemanticReturnNode` itself and delegates other statements to
 `StatementChecker`.
@@ -1098,7 +1098,7 @@ and pointer/region rules remain in one place.
 #### `TypeChecker`
 The shared leaf utility: type predicates (`isVoidType`, `isIntegral`,
 `isPointerType`, `isDynamicArrayType`, …), classification
-(`isPureValueType`, `isValidFunctionReturnType`), `ensure*` helpers that
+(`isValueAssignableType`, `isValidFunctionReturnType`), `ensure*` helpers that
 report diagnostics, assignment compatibility (`ensureAssignable`), operator
 operand rules (`ensureSameIntegralTypeOrFit`,
 `ensureMixedIntegralOperandsWithConstantFit`, `ensureValidShiftOperands`),
@@ -1118,7 +1118,7 @@ intrinsic element type) — recursive with
 path-scoped cycle detection so diamond-shaped field graphs stay fine while
 by-value cycles terminate.
 Tuple types participate in the same recursive rules: a tuple is a
-pure value type iff every element is; `isMemsetSafe`,
+value-assignable type iff every element is; `isMemsetSafe`,
 `hasDefaultValue`, and `isMemcpySafe` recurse through tuple elements exactly
 as through struct fields; and `ensureAssignable` reports the dedicated
 "contains non-assignable elements" message for a whole-tuple assignment.
@@ -3251,7 +3251,7 @@ and `#strcat`; runtime views are rejected.
 
 **Intrinsic set.** The type predicates are `is_primitive`,
 `is_memcpy_safe`, `has_default_value`, `is_memset_safe`, `is_matchable`,
-`is_comparable`, `is_assignable`, `is_pure_value`, and
+`is_comparable`, `is_assignable`, `is_value_assignable`, and
 `is_same_type`. Each accepts a type or a value; `#what_type` prints the
 canonical `SemanticType.mangleKey()` spelling (no spaces after commas,
 matching function signature hashing keys). `#strcat` accepts one or more

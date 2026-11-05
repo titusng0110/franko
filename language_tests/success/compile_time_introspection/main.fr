@@ -3,7 +3,7 @@
 // ============================================================
 // Covers: #is_primitive, is_memcpy_safe, has_default_value, is_memset_safe,
 // is_same_type, what_type, strcmp, panic, is_matchable, is_comparable,
-// is_assignable, and is_pure_value.
+// is_assignable, and is_value_assignable.
 //
 // Point declares OPERATOR_EQ, OPERATOR_LT, and OPERATOR_MOV; Plain has
 // only primitive fields; WithDefault has a field default; HasDyn holds
@@ -109,11 +109,11 @@ func main() -> int32 {
     print(#is_assignable(d));
     print(#is_assignable(h));
 
-    print(#is_pure_value(i));
-    print(#is_pure_value(ip));
-    print(#is_pure_value(q));
-    print(#is_pure_value(hsa));
-    print(#is_pure_value(da));
+    print(#is_value_assignable(i));
+    print(#is_value_assignable(ip));
+    print(#is_value_assignable(q));
+    print(#is_value_assignable(hsa));
+    print(#is_value_assignable(da));
 
     #if (0) {
         #panic("unreachable");

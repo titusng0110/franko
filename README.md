@@ -5,23 +5,77 @@ builds native executables.
 
 ## Why Franko?
 
-- **A small, no-brainer syntax.** C-like and regular, with explicit
-  `self` receivers and no hidden control flow.
-- **Easy type model.** Fixed-width integers, structs, tuples, arrays, and pointers;
-  no inheritance or implicit width changes.
-- **Compile-time memory safety.** Per-function (intraprocedural) checks
-  catch null dereferences, dangling returns, and dynamic-array lifecycle
-  misuse. Pointer permissions are explicit: `ptr<T>` owns, `mview<T>`
-  mutates, and `view<T>` only reads.
-- **Fast, statically checked array intrinsics.** `memcpy`, `memset`,
-  `memmove`, `memcmp`, searches, endian accessors, and bit operations are
-  built in; element types, ranges, and receiver permissions are checked
-  at compile time.
-- **Native performance.** Ahead-of-time C++14 output with no VM or GC;
-  the [red-black benchmark](benchmark/redblack.md) is competitive with
-  C++ and beats `std::set` at `-Omax`.
-- **Readable C++14 output.** C++14 is mature and very portable, and the
-  generated C++ is ordinary source you can inspect and debug.
+Franko's philosophy is clean, non-cryptic syntax like Python; low-level control without C++ footguns; and a much easier learning curve than Rust.
+Its defining features are:
+
+- **Pointer capabilities.** `ptr<T>` owns, `mview<T>` mutates, and `view<T>`
+  reads. The permission lattice is enforced by the compiler, with no raw
+  pointer arithmetic or ownership annotations.
+- **Interprocedural memory safety checkers.** The compiler follows pointer
+  values across calls and checks null state, dangling frame pointers, and
+  dynamic-array lifecycle.
+- **Compile-time `#if` / `#else` splices.** Select statements or declarations
+  at function, global, namespace, and struct scope. The selected branch is
+  ordinary code; the other branch does not exist. No trait solver, SFINAE, or
+  template metaprogramming. There are built-in type predicates such as `#is_memcpy_safe`, `#is_value_assignable`, and `#is_comparable`.
+- **No hidden heap allocation or copying.** Dynamic arrays have a monopoly
+  on the heap: they are explicitly `init`/`resize`/`uninit`ed. No garbage collection (GC), implicit deep copy, or hidden
+  memory allocation.
+- **Readable, regular syntax.** C-like but predictable, with explicit `$(x)`
+  dereferencing and no semicolons. Declaration is always `TYPE IDENTIFIER`.
+- **Small type model.** Fixed-width integers, structs with methods and
+  operators, tuples, namespaces, arrays, and typed pointers. No inheritance
+  or implicit integer type casting.
+- **Byte-level array intrinsics without pointer arithmetic.** `memcpy`,
+  `memset`, `memmove`, `memcmp`, searches, endian access, and bit operations
+  are built in. They work on arrays and views directly, so byte-level work
+  needs no pointer arithmetic; the language enforces their receiver and
+  element rules.
+- **FFI without binding generators.** Small JSON sidecars plus C++ bridge
+  blocks; target selection uses the same `#if`.
+- **Native performance, readable output.** Ahead-of-time C++14 with no VM or
+  GC; the [red-black benchmark](benchmark/redblack.md) is competitive with C++
+  and beats `std::set` at `-Omax`, and the generated source is ordinary C++14.
+
+## A taste
+
+```franko
+import "franko/io"
+
+struct Counter {
+    int32 value = 0
+
+    func add(mview<Counter> self, int32 amount) -> void {
+        $(self).value = $(self).value + amount
+    }
+
+    func get(view<Counter> self) -> int32 {
+        return $(self).value
+    }
+}
+
+func main() -> int32 {
+    Counter c
+    c.add(41)
+    c.add(1)
+    print(c.get())
+
+    #if (#IS_WINDOWS) {
+        print("windows")
+    } #else {
+        print("posix")
+    }
+
+    for (int32 i = 0; i < 3; i++) {
+        for (int32 j = 0; j < 3; j++) {
+            if (j == 1) { break 2 }   // exits both loops
+            print(i + j)
+        }
+    }
+
+    return 0
+}
+```
 
 ## Requirements
 
@@ -89,25 +143,6 @@ uv run python compile.py --target native programs/bfs.fr
 (for example `linux-x86_64`) transpiles without building a native binary
 on a different host.
 
-## JSON pipeline artifacts
-
-`--emit-json` writes a snapshot after every top-level compiler pass next
-to the generated `.cpp`:
-
-```bash
-uv run python compile.py --emit-json programs/bfs.fr
-```
-
-This produces `programs/bfs.raw.ast.json`, `bfs.desugared.ast.json`,
-`bfs.imports.ast.json`, one `.sast.json` per semantic pass, and
-`bfs.diagnostic.json`. Imported files get per-file AST snapshots under
-`programs/bfs.ast/`. Diagnostics print with `file:line:column:` locations.
-Round-trip validation is available without a new dependency:
-
-```bash
-java -cp build/classes CompilerJsonSelfTest programs/bfs.checked.sast.json
-```
-
 ## Example programs
 
 Working programs live in [`programs/`](programs/):
@@ -122,9 +157,21 @@ programs/stack.fr        stack data structure
 programs/string.fr       string handling
 programs/args.fr         command-line arguments
 programs/greetings.fr    reading stdin
+programs/helloworld.fr   hello world
 ```
 
 Compile and run them the same way as above.
+
+## Tests
+
+Run the same suites as CI:
+
+```bash
+uv run python language_tests/run_language_tests.py
+uv run python language_tests/run_omax_smoke.py
+uv run python library_tests/run_library_tests.py
+uv run python programs/run_programs.py
+```
 
 ## Editor support
 

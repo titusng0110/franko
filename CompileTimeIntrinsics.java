@@ -74,8 +74,8 @@ final class CompileTimeIntrinsics {
                     name, args, this::isComparable);
             case "is_assignable" -> evaluateTypePredicate(
                     name, args, this::isAssignable);
-            case "is_pure_value" -> evaluateTypePredicate(
-                    name, args, typeChecker::isPureValueType);
+            case "is_value_assignable" -> evaluateTypePredicate(
+                    name, args, typeChecker::isValueAssignableType);
             default -> {
                 ctx.error("Unknown compile-time reflection function '#"
                         + name
@@ -572,11 +572,11 @@ final class CompileTimeIntrinsics {
         }
 
         if (type instanceof SemanticTupleType) {
-            return typeChecker.isPureValueType(type);
+            return typeChecker.isValueAssignableType(type);
         }
 
         if (type instanceof SemanticStructType struct) {
-            return typeChecker.isPureValueType(type)
+            return typeChecker.isValueAssignableType(type)
                     || hasSameTypeMoveMethod(struct.structSymbol);
         }
 

@@ -95,7 +95,7 @@ public class FunctionChecker {
 
             declarations.checkVarDecl(new SemanticVarDeclNode(node.span, param));
 
-            if (!types.isPureValueType(param.type)) {
+            if (!types.isValueAssignableType(param.type)) {
                 diagnostics.error("Parameter '"
                         + param.name
                         + "' in function '"

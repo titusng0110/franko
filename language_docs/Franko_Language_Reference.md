@@ -4530,7 +4530,7 @@ by-value-cycle rule: a struct may not reach itself through a tuple element.
 Tuple types participate in the normal reflection predicates. A tuple is:
 
 - assignable by value iff every element is assignable;
-- a pure value iff every element is a pure value;
+- value-assignable iff every element is value-assignable;
 - memset-safe iff every element is memset-safe;
 - memcpy-safe iff every element is memcpy-safe;
 - a type with a default value iff at least one element's type has a default.
@@ -4541,9 +4541,9 @@ assignability for tuples.
 
 ```franko
 (int32, int32) pair
-print(#is_pure_value(pair))            // 1
+print(#is_value_assignable(pair))      // 1
 print(#has_default_value(pair))        // 0
-print(#what_type(pair))                // (int32,int32)
+print(#what_type(pair))                 // (int32,int32)
 print(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
@@ -5587,7 +5587,7 @@ All introspection calls use `#name(...)`.
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
 | `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
-| `#is_pure_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all pure values, and tuples whose elements are all pure values. Static arrays and dynamic arrays are not. |
+| `#is_value_assignable(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all value-assignable, and tuples whose elements are all value-assignable. Static arrays and dynamic arrays are not. |
 
 The predicates are built-in compile-time functions. They cannot be stored
 in variables, passed as callbacks, or referred to without a call.
@@ -5697,7 +5697,7 @@ In a dead `#if` branch it is ignored.
 | Can I compare two values for equality? | `#is_matchable(x)` |
 | Can I order two values with `<`? | `#is_comparable(x)` |
 | Can I assign one value of this type to another? | `#is_assignable(x)` |
-| Can I pass a value of this type to a function by value? | `#is_pure_value(x)` |
+| Can I assign or pass a value of this type by value? | `#is_value_assignable(x)` |
 
 `#is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
 elements, structs whose fields are all memcpy-safe, and tuples whose
@@ -5742,10 +5742,10 @@ A struct that is not assignable by default can opt in with a same-type
 declare operator methods, so for a tuple this predicate is exactly built-in
 element assignability.
 
-`#is_pure_value` covers primitives, pointers, structs whose fields
-are all pure values, and tuples whose elements are all pure values. This is
-the same rule as built-in whole-value assignment and by-value parameters; it
-does not consider a custom `OPERATOR_MOV`.
+`#is_value_assignable` covers primitives, pointers, structs whose fields
+are all value-assignable, and tuples whose elements are all
+value-assignable. This is the same rule as built-in whole-value assignment
+and by-value parameters; it does not consider a custom `OPERATOR_MOV`.
 
 ```franko
 struct WithArray {
@@ -5753,7 +5753,7 @@ struct WithArray {
 }
 
 WithArray w;
-print(#is_pure_value(w)); // 0: static array field
+print(#is_value_assignable(w)); // 0: static array field
 ```
 
 `#is_same_type` compares exact types. Aliases normalize first, so `int` and
