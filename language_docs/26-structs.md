@@ -162,11 +162,11 @@ xs[i].field           // element of a static or dynamic array
 
 ## 26.8 Initialization Semantics
 
-- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](18-declarations.md)).
+- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables, except pointer fields, which are null (see [Declarations](18-declarations.md)).
 - **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
-Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
 
 ## 26.9 Struct Globals
 

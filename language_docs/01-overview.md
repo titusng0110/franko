@@ -52,7 +52,7 @@ Franko is a small statically typed language with:
     global, namespace, and struct declaration level;
   - target constants `#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`,
     `#IS_X86_64`, and `#IS_ARM64`;
-  - type predicates such as `#is_trivial`, `#is_memcpy_safe`, and
+  - type predicates such as `#has_default_value`, `#is_memcpy_safe`, and
     `#is_same_type`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
   - compile-time strings with `#strcat`, `#strcmp`, and `#panic`

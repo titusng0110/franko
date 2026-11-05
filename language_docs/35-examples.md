@@ -599,7 +599,7 @@ func main() -> int32 {
     print(swapped.low)             // 2
     print(swapped.high)            // 1
     print(#is_same_type(res, lazy))   // 1
-    print(#what_type(res))            // (int32, int32)
+    print(#what_type(res))            // (int32,int32)
 
     return 0
 }

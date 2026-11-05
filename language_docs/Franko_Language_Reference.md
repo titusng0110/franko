@@ -52,7 +52,7 @@ Franko is a small statically typed language with:
     global, namespace, and struct declaration level;
   - target constants `#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`,
     `#IS_X86_64`, and `#IS_ARM64`;
-  - type predicates such as `#is_trivial`, `#is_memcpy_safe`, and
+  - type predicates such as `#has_default_value`, `#is_memcpy_safe`, and
     `#is_same_type`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
   - compile-time strings with `#strcat`, `#strcmp`, and `#panic`
@@ -1885,13 +1885,13 @@ are the only ways to initialize a global at its declaration.
 A **local** declaration without an initializer default-initializes the variable:
 
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
-- static array elements start with indeterminate values;
+- static array elements start with indeterminate values, except pointer elements, which are null;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **pointer variables are the exception: a pointer declaration is guaranteed null-initialized** (see [Pointers](25-pointers.md)).
+- **pointer storage is guaranteed null-initialized**: pointer variables, pointer struct fields, pointer tuple elements, pointer static-array elements, and pointer elements of initialized dynamic arrays are all null (see [Pointers](25-pointers.md)).
 
-There is no implicit zero-initialization for locals other than pointer variables and pointer fields. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals other than pointer storage. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: primitives, static array elements, and struct fields without an explicit default start at zero (pointer fields start null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated: primitives, static array elements, and aggregate storage without an explicit default start at zero (pointer storage starts null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
 
 ## 18.6 Struct Fields
 
@@ -2184,7 +2184,7 @@ Dynamic array declaration alone does not allocate element storage.
 
 The array must be initialized before ordinary indexed use.
 
-An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays), `init` and `init_zero` default-construct every element into the uninitialized state, so inner arrays are immediately ready for `init` without further setup.
+An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays and pointers), `init` and `init_zero` default-construct every element. Inner arrays start in the uninitialized state (length `0`), ready for `init`, and pointer elements start null. Growing `resize` default-constructs the new tail elements, so pointer elements added by a resize are null too.
 
 ## 20.3 Array Access
 
@@ -2630,11 +2630,11 @@ Rules:
 
 `init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage.
 
-Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
+Element types that need construction (for example nested dynamic arrays and pointers) are default-constructed by `init` and `init_zero`: inner arrays start in the uninitialized state (length `0`), ready for `init`, and pointer elements start null. Element types that are trivially default-constructible keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
 
 ## 22.3 `resize`
 
-Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements; shrinking destroys the dropped tail elements. Trivial element types skip both.
+Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements, so pointer elements added by the growth start null; shrinking destroys the dropped tail elements. Element types with a trivial default constructor skip construction, and trivially destructible element types skip destruction.
 
 Rules:
 
@@ -2695,8 +2695,8 @@ Current memset-safe types:
 
 `#is_memset_safe(x)` exposes this predicate at compile time (see
 [Compile-Time Reflection](32-compile-time-reflection.md)). It is
-deliberately distinct from `#is_trivial`: a struct with a field
-default is memset-safe but not `is_trivial`.
+deliberately distinct from `#has_default_value`: a struct with a field
+default is memset-safe and also has a defined default value.
 
 ## 22.7 `memcpy`
 
@@ -3628,20 +3628,24 @@ functions.
 
 `print(null)` matches the `print(view<[uint8]>)` overload and prints nothing (a null view is treated as empty).
 
-### 25.9.1 Null-Initialized Pointer Declarations
+### 25.9.1 Null-Initialized Pointer Storage
 
-Pointer declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
+Pointer storage is **guaranteed null-initialized**, unlike ordinary storage, which starts indeterminate:
 
 ```franko
 ptr<int32> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
-This guarantee also applies to pointer-typed struct fields and to
-`mview`/`view` variables. Pointer elements inside a local static array
-follow the ordinary static-array rule and are indeterminate until
-assigned; a global static array is zero-initialized, so its pointer
-elements are null before `main` runs.
+The guarantee covers every pointer storage slot:
+
+- pointer variables (`ptr<T>`, `mview<T>`, and `view<T>`);
+- pointer-typed struct fields;
+- pointer tuple elements;
+- pointer elements of local static arrays;
+- pointer elements of initialized dynamic arrays, after `init`, `init_zero`, or a growing `resize`.
+
+A global static array is zero-initialized, so its pointer elements are null before `main` runs. The same rule applies recursively to pointer storage nested inside structs, tuples, and arrays.
 
 ### 25.9.2 Nullness Certification
 
@@ -3981,11 +3985,11 @@ xs[i].field           // element of a static or dynamic array
 
 ## 26.8 Initialization Semantics
 
-- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](18-declarations.md)).
+- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables, except pointer fields, which are null (see [Declarations](18-declarations.md)).
 - **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
-Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
 
 ## 26.9 Struct Globals
 
@@ -4373,7 +4377,7 @@ pair._0 = 1
 pair._1 = 2
 ```
 
-- local tuple elements without a value are indeterminate until assigned;
+- local tuple elements without a value are indeterminate until assigned, except pointer elements, which are null;
 - global tuple storage is zero-initialized before `main` runs;
 - tuple values are produced by declarations, element writes, whole-tuple
   assignment, and function returns.
@@ -4526,25 +4530,25 @@ by-value-cycle rule: a struct may not reach itself through a tuple element.
 Tuple types participate in the normal reflection predicates. A tuple is:
 
 - assignable by value iff every element is assignable;
-- passable by value iff every element is passable by value;
+- a pure value iff every element is a pure value;
 - memset-safe iff every element is memset-safe;
 - memcpy-safe iff every element is memcpy-safe;
-- trivial iff every element is trivial.
+- a type with a default value iff at least one element's type has a default.
 
 Tuples have no operator methods, so `#is_matchable` and `#is_comparable`
-return `0` for a tuple. `#is_same_type_assignable` is built-in element
+return `0` for a tuple. `#is_assignable` is built-in element
 assignability for tuples.
 
 ```franko
 (int32, int32) pair
-print(#is_passable_by_value(pair))     // 1
-print(#is_trivial(pair))               // 1
-print(#what_type(pair))                // (int32, int32)
+print(#is_pure_value(pair))            // 1
+print(#has_default_value(pair))        // 0
+print(#what_type(pair))                // (int32,int32)
 print(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
-`#what_type` prints the canonical tuple form `(int32, int32)` with element
-names removed. See [Compile-Time Reflection](32-compile-time-reflection.md).
+`#what_type` prints the canonical tuple form `(int32,int32)` with element
+names removed and no spaces after commas. See [Compile-Time Reflection](32-compile-time-reflection.md).
 
 ---
 
@@ -4597,7 +4601,7 @@ Output:
 ```text
 10
 20
-(int32, int32)
+(int32,int32)
 ```
 
 ---
@@ -5215,9 +5219,13 @@ Rules:
 - Put `#include "FrankoRuntime.hpp"` in the `common` block. Bridge files are
   spliced into the generated program, which already includes the runtime, but
   the include keeps each bridge valid for standalone C++ linting and gives the
-  compiler a clear place to expose the runtime types (`Franko_Fat_Pointer`,
-  `franko_panic`, fixed-width integers). The header is `#pragma once`, so the
-  duplicate include is harmless.
+  compiler a clear place to expose the runtime types (`Franko_Thin_Pointer`,
+  `Franko_Fat_Pointer`, `franko_panic`, fixed-width integers). The header is
+  `#pragma once`, so the duplicate include is harmless.
+- Bridge ABI: a pointer parameter or return whose pointee is not an array
+  (`ptr<T>`, `mview<T>`, or `view<T>`) is `Franko_Thin_Pointer<T>` in C++;
+  access its raw pointer through `.data`. A pointer to an array is
+  `Franko_Fat_Pointer<element(T)>`.
 - The bridge block must define a function under the exact mangled C++ name the
   compiler emits for the Franko declaration. The compiler checks this and
   reports a compile-time error if the block is missing or the name does not
@@ -5537,12 +5545,12 @@ struct Point {
 Point p;
 int32 i;
 
-print(#is_trivial(p));       // from a variable
-print(#is_trivial(Point));   // from a type
-print(#is_trivial(int32));
-print(#is_trivial([int32, 4]));
-print(#is_trivial(ptr<Point>));
-print(#is_trivial((int32, int32)));
+print(#has_default_value(p));       // from a variable
+print(#has_default_value(Point));   // from a type
+print(#has_default_value(int32));
+print(#has_default_value([int32, 4]));
+print(#has_default_value(ptr<Point>));
+print(#has_default_value((int32, int32)));
 ```
 
 A bare identifier resolves as a variable first when that name exists;
@@ -5569,17 +5577,17 @@ All introspection calls use `#name(...)`.
 |---|---|---|---|
 | `#is_primitive(x)` | one type or value | `uint8` | `1` iff the type is a primitive integer |
 | `#is_memcpy_safe(x)` | one type or value | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, struct with all fields memcpy-safe, or tuple with all elements memcpy-safe. Dynamic arrays are not memcpy-safe. |
-| `#is_trivial(x)` | one type or value | `uint8` | `1` iff raw uninitialized storage is a valid value: primitives, static arrays of trivial elements, and tuples of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or non-trivial field are not. |
+| `#has_default_value(x)` | one type or value | `uint8` | `1` iff at least one part of the type has a defined default: pointers (null), dynamic arrays (empty), static arrays whose element type has a default, structs with any field default or any field whose type has a default, and tuples with any such element. `0` for primitive integers, static arrays of primitives, and aggregates whose parts are all raw-indeterminate. |
 | `#is_memset_safe(x)` | one type or value | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose fields are all memset-safe, and tuples whose elements are all memset-safe. Pointers and dynamic arrays are not. Field defaults do not affect this predicate. |
 | `#is_same_type(x, y)` | two types/values | `uint8` | `1` iff the types are exactly equal; tuple element order matters, names do not |
-| `#what_type(x)` | one type or value | compile-time string | canonical type spelling, including `(int32, int32)` for tuples |
+| `#what_type(x)` | one type or value | compile-time string | canonical type spelling with no spaces after commas, including `(int32,int32)` for tuples; matches the function signature hashing key |
 | `#strcat(a, b, ...)` | one or more compile-time strings | compile-time string | concatenates all arguments |
 | `#strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
-| `#is_same_type_assignable(x)` | one type or value | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
-| `#is_passable_by_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all passable, and tuples whose elements are all passable. Static arrays and dynamic arrays are not. |
+| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
+| `#is_pure_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all pure values, and tuples whose elements are all pure values. Static arrays and dynamic arrays are not. |
 
 The predicates are built-in compile-time functions. They cannot be stored
 in variables, passed as callbacks, or referred to without a call.
@@ -5600,19 +5608,21 @@ a function accepting a byte view.
 When consumed by `#strcmp`, `#panic`, or `#strcat`, it stays a compile-time
 string and no string storage is emitted.
 
-Spellings use canonical Franko type names:
+Spellings use canonical Franko type names. Commas are followed directly by
+the next item with no space, so the spelling matches the function signature
+hashing key:
 
 | Type | `#what_type` result |
 |---|---|
 | `int` / `int32` | `int32` |
 | `byte` | `uint8` |
 | `uint` | `uint32` |
-| `[int32, 3]` | `[int32, 3]` |
+| `[int32, 3]` | `[int32,3]` |
 | `[int32]` | `[int32]` |
 | `ptr<int32>` | `ptr<int32>` |
-| `view<[byte, 5]>` | `view<[uint8, 5]>` |
-| `(int32 val, int32 err)` | `(int32, int32)` |
-| `(uint8, [int32, 3])` | `(uint8, [int32, 3])` |
+| `view<[byte, 5]>` | `view<[uint8,5]>` |
+| `(int32 val, int32 err)` | `(int32,int32)` |
+| `(uint8, [int32, 3])` | `(uint8,[int32,3])` |
 | `a::b::Point` | `a::b::Point` |
 
 `byte` is an alias for `uint8`, so canonical spellings use `uint8`.
@@ -5683,11 +5693,11 @@ In a dead `#if` branch it is ignored.
 |---|---|
 | Can I copy this type byte-for-byte with `memcpy`/`memcmp`? | `#is_memcpy_safe(x)` |
 | Can I byte-fill this type with `memset`? | `#is_memset_safe(x)` |
-| Is raw uninitialized storage a valid value of this type? | `#is_trivial(x)` |
+| Does at least one part of this type have a defined default value? | `#has_default_value(x)` |
 | Can I compare two values for equality? | `#is_matchable(x)` |
 | Can I order two values with `<`? | `#is_comparable(x)` |
-| Can I assign one value of this type to another? | `#is_same_type_assignable(x)` |
-| Can I pass a value of this type to a function by value? | `#is_passable_by_value(x)` |
+| Can I assign one value of this type to another? | `#is_assignable(x)` |
+| Can I pass a value of this type to a function by value? | `#is_pure_value(x)` |
 
 `#is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
 elements, structs whose fields are all memcpy-safe, and tuples whose
@@ -5699,10 +5709,14 @@ structs whose field types are all memset-safe, and tuples whose element
 types are all memset-safe. Field defaults do not affect it because
 `memset` deliberately overwrites storage.
 
-`#is_trivial` is stricter: it asks whether a value can be created from raw
-storage. A struct with a field default is memset-safe but not trivial,
-because raw storage would violate the default. Tuple elements recurse
-through the same predicate; a tuple has no defaults of its own.
+`#has_default_value` asks whether at least one part of a value has a
+defined default. Pointers default to null and dynamic arrays to empty.
+A static array follows its element type. A struct or tuple returns `1`
+when any field or element has a default or its type has one; it does not
+claim that every part is initialized. A struct with a pointer field and a
+primitive field therefore returns `1` even though the primitive field
+remains indeterminate. Primitive integers and static arrays of primitives
+return `0`.
 
 ```franko
 struct WithDefault {
@@ -5717,21 +5731,21 @@ WithDefault d;
 Blob b;
 
 print(#is_memset_safe(d));           // 1
-print(#is_trivial(d));               // 0: field default
+print(#has_default_value(d));        // 1: field default
 print(#is_memcpy_safe(b));           // 0: dynamic array field
-print(#is_trivial(b));               // 0: dynamic array field
-print(#is_same_type_assignable(b));  // 0: no built-in assignment
+print(#has_default_value(b));        // 1: dynamic array field
+print(#is_assignable(b));            // 0: no built-in assignment
 ```
 
 A struct that is not assignable by default can opt in with a same-type
-`OPERATOR_MOV`; `#is_same_type_assignable` then returns `1`. Tuples cannot
+`OPERATOR_MOV`; `#is_assignable` then returns `1`. Tuples cannot
 declare operator methods, so for a tuple this predicate is exactly built-in
 element assignability.
 
-`#is_passable_by_value` covers primitives, pointers, structs whose fields
-are all passable by value, and tuples whose elements are all passable by
-value. This is the same rule as built-in whole-value assignment; it does
-not consider a custom `OPERATOR_MOV`.
+`#is_pure_value` covers primitives, pointers, structs whose fields
+are all pure values, and tuples whose elements are all pure values. This is
+the same rule as built-in whole-value assignment and by-value parameters; it
+does not consider a custom `OPERATOR_MOV`.
 
 ```franko
 struct WithArray {
@@ -5739,7 +5753,7 @@ struct WithArray {
 }
 
 WithArray w;
-print(#is_passable_by_value(w)); // 0: static array field
+print(#is_pure_value(w)); // 0: static array field
 ```
 
 `#is_same_type` compares exact types. Aliases normalize first, so `int` and
@@ -5831,7 +5845,7 @@ Use `#IS_*` or a reflection call instead:
 
 ```franko
 #if (#IS_LINUX) { ... }                 // valid
-#if (#is_trivial(x)) { ... }            // valid
+#if (#has_default_value(x)) { ... }     // valid
 ```
 
 A `#` name is not a runtime variable:
@@ -6914,7 +6928,7 @@ func main() -> int32 {
     print(swapped.low)             // 2
     print(swapped.high)            // 1
     print(#is_same_type(res, lazy))   // 1
-    print(#what_type(res))            // (int32, int32)
+    print(#what_type(res))            // (int32,int32)
 
     return 0
 }

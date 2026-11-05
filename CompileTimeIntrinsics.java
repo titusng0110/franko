@@ -59,8 +59,8 @@ final class CompileTimeIntrinsics {
                     name, args, type -> type instanceof SemanticPrimitiveType);
             case "is_memcpy_safe" -> evaluateTypePredicate(
                     name, args, typeChecker::isMemcpySafe);
-            case "is_trivial" -> evaluateTypePredicate(
-                    name, args, typeChecker::isStaticTrivial);
+            case "has_default_value" -> evaluateTypePredicate(
+                    name, args, typeChecker::hasDefaultValue);
             case "is_memset_safe" -> evaluateTypePredicate(
                     name, args, typeChecker::isMemsetSafe);
             case "is_same_type" -> evaluateSameType(name, args);
@@ -72,10 +72,10 @@ final class CompileTimeIntrinsics {
                     name, args, this::isMatchable);
             case "is_comparable" -> evaluateTypePredicate(
                     name, args, this::isComparable);
-            case "is_same_type_assignable" -> evaluateTypePredicate(
-                    name, args, this::isSameTypeAssignable);
-            case "is_passable_by_value" -> evaluateTypePredicate(
-                    name, args, typeChecker::isAssignableValueType);
+            case "is_assignable" -> evaluateTypePredicate(
+                    name, args, this::isAssignable);
+            case "is_pure_value" -> evaluateTypePredicate(
+                    name, args, typeChecker::isPureValueType);
             default -> {
                 ctx.error("Unknown compile-time reflection function '#"
                         + name
@@ -167,7 +167,7 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        return new StaticStringValue(utf8Bytes(type.describe()));
+        return new StaticStringValue(utf8Bytes(type.mangleKey()));
     }
 
     private StaticValue evaluateStrcat(String name, List<ASTNode> args) {
@@ -565,18 +565,18 @@ final class CompileTimeIntrinsics {
         return false;
     }
 
-    private boolean isSameTypeAssignable(SemanticType type) {
+    private boolean isAssignable(SemanticType type) {
         if (type instanceof SemanticPrimitiveType
                 || type instanceof SemanticPtrType) {
             return true;
         }
 
         if (type instanceof SemanticTupleType) {
-            return typeChecker.isAssignableValueType(type);
+            return typeChecker.isPureValueType(type);
         }
 
         if (type instanceof SemanticStructType struct) {
-            return typeChecker.isAssignableValueType(type)
+            return typeChecker.isPureValueType(type)
                     || hasSameTypeMoveMethod(struct.structSymbol);
         }
 

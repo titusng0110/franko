@@ -23,3 +23,16 @@ int32_t FUNC_scale_da8ad4dd(int32_t VAR_value, int32_t VAR_factor)
 }
 }
 // @@end
+
+// @@mathx::bump
+namespace NS_mathx {
+int32_t FUNC_bump_a0a001d7(Franko_Thin_Pointer<int32_t> VAR_value)
+{
+    if (VAR_value.data == nullptr) {
+        return -1;
+    }
+    *VAR_value.data = *VAR_value.data + 1;
+    return *VAR_value.data;
+}
+}
+// @@end

@@ -61,11 +61,11 @@ public class TypeChecker {
         return t instanceof SemanticNullType;
     }
 
-    public boolean isAssignableValueType(SemanticType t) {
-        return isAssignableValueType(t, new HashSet<>());
+    public boolean isPureValueType(SemanticType t) {
+        return isPureValueType(t, new HashSet<>());
     }
 
-    private boolean isAssignableValueType(
+    private boolean isPureValueType(
             SemanticType t,
             Set<SemanticType> visited
     ) {
@@ -86,7 +86,7 @@ public class TypeChecker {
             boolean assignable = true;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
-                if (!isAssignableValueType(field.type, visited)) {
+                if (!isPureValueType(field.type, visited)) {
                     assignable = false;
                     break;
                 }
@@ -105,7 +105,7 @@ public class TypeChecker {
             boolean assignable = true;
 
             for (FieldSymbol field : tuple.fields) {
-                if (!isAssignableValueType(field.type, visited)) {
+                if (!isPureValueType(field.type, visited)) {
                     assignable = false;
                     break;
                 }
@@ -120,7 +120,7 @@ public class TypeChecker {
     }
 
     public boolean isValidFunctionReturnType(SemanticType t) {
-        return isVoidType(t) || isAssignableValueType(t);
+        return isVoidType(t) || isPureValueType(t);
     }
 
     public SemanticPrimitiveKind primitiveKindOf(SemanticType type) {
@@ -322,7 +322,7 @@ public class TypeChecker {
         }
 
         if (targetType instanceof SemanticStructType
-                && !isAssignableValueType(targetType)) {
+                && !isPureValueType(targetType)) {
             diagnostics.error(message + ": struct type "
                     + targetType.describe()
                     + " contains non-assignable fields and cannot be assigned"
@@ -331,7 +331,7 @@ public class TypeChecker {
         }
 
         if (targetType instanceof SemanticTupleType
-                && !isAssignableValueType(targetType)) {
+                && !isPureValueType(targetType)) {
             diagnostics.error(message + ": tuple type "
                     + targetType.describe()
                     + " contains non-assignable elements and cannot be"
@@ -716,11 +716,11 @@ public class TypeChecker {
         return false;
     }
 
-    public boolean isStaticTrivial(SemanticType t) {
-        return isStaticTrivial(t, new HashSet<>());
+    public boolean hasDefaultValue(SemanticType t) {
+        return hasDefaultValue(t, new HashSet<>());
     }
 
-    private boolean isStaticTrivial(
+    private boolean hasDefaultValue(
             SemanticType t,
             Set<SemanticType> visited
     ) {
@@ -729,11 +729,16 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticPrimitiveType) {
+            return false;
+        }
+
+        if (t instanceof SemanticPtrType
+                || t instanceof SemanticDynamicArrayType) {
             return true;
         }
 
         if (t instanceof SemanticStaticArrayType s) {
-            return isStaticTrivial(s.elementType, visited);
+            return hasDefaultValue(s.elementType, visited);
         }
 
         if (t instanceof SemanticStructType struct) {
@@ -741,19 +746,19 @@ public class TypeChecker {
                 return false;
             }
 
-            boolean trivial = true;
+            boolean hasDefault = false;
 
             for (FieldSymbol field : struct.structSymbol.fields) {
                 if (field.foldedDefault != null
-                        || !isStaticTrivial(field.type, visited)) {
-                    trivial = false;
+                        || hasDefaultValue(field.type, visited)) {
+                    hasDefault = true;
                     break;
                 }
             }
 
             visited.remove(t);
 
-            return trivial;
+            return hasDefault;
         }
 
         if (t instanceof SemanticTupleType tuple) {
@@ -761,18 +766,18 @@ public class TypeChecker {
                 return false;
             }
 
-            boolean trivial = true;
+            boolean hasDefault = false;
 
             for (FieldSymbol field : tuple.fields) {
-                if (!isStaticTrivial(field.type, visited)) {
-                    trivial = false;
+                if (hasDefaultValue(field.type, visited)) {
+                    hasDefault = true;
                     break;
                 }
             }
 
             visited.remove(t);
 
-            return trivial;
+            return hasDefault;
         }
 
         return false;

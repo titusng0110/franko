@@ -1176,7 +1176,9 @@ public class Cpp14Codegen {
                         + ">";
             }
 
-            return emitType(ptr.referencedType) + "*";
+            return "Franko_Thin_Pointer<"
+                    + emitType(ptr.referencedType)
+                    + ">";
         }
 
         if (type instanceof SemanticStructType struct) {

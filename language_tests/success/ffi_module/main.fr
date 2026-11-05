@@ -6,5 +6,9 @@ func main() -> int32 {
     print(mathx::add(20, 22))
     print(mathx::scale(6, 7))
 
+    int32 counter = 41
+    print(mathx::bump(getptr(counter)))
+    print(counter)
+
     return 0
 }

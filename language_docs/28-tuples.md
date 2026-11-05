@@ -111,7 +111,7 @@ pair._0 = 1
 pair._1 = 2
 ```
 
-- local tuple elements without a value are indeterminate until assigned;
+- local tuple elements without a value are indeterminate until assigned, except pointer elements, which are null;
 - global tuple storage is zero-initialized before `main` runs;
 - tuple values are produced by declarations, element writes, whole-tuple
   assignment, and function returns.
@@ -264,25 +264,25 @@ by-value-cycle rule: a struct may not reach itself through a tuple element.
 Tuple types participate in the normal reflection predicates. A tuple is:
 
 - assignable by value iff every element is assignable;
-- passable by value iff every element is passable by value;
+- a pure value iff every element is a pure value;
 - memset-safe iff every element is memset-safe;
 - memcpy-safe iff every element is memcpy-safe;
-- trivial iff every element is trivial.
+- a type with a default value iff at least one element's type has a default.
 
 Tuples have no operator methods, so `#is_matchable` and `#is_comparable`
-return `0` for a tuple. `#is_same_type_assignable` is built-in element
+return `0` for a tuple. `#is_assignable` is built-in element
 assignability for tuples.
 
 ```franko
 (int32, int32) pair
-print(#is_passable_by_value(pair))     // 1
-print(#is_trivial(pair))               // 1
-print(#what_type(pair))                // (int32, int32)
+print(#is_pure_value(pair))            // 1
+print(#has_default_value(pair))        // 0
+print(#what_type(pair))                // (int32,int32)
 print(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
-`#what_type` prints the canonical tuple form `(int32, int32)` with element
-names removed. See [Compile-Time Reflection](32-compile-time-reflection.md).
+`#what_type` prints the canonical tuple form `(int32,int32)` with element
+names removed and no spaces after commas. See [Compile-Time Reflection](32-compile-time-reflection.md).
 
 ---
 
@@ -335,5 +335,5 @@ Output:
 ```text
 10
 20
-(int32, int32)
+(int32,int32)
 ```

@@ -1,9 +1,9 @@
 // ============================================================
 // LANGUAGE TEST: compile-time reflection predicates
 // ============================================================
-// Covers: #is_primitive, is_memcpy_safe, is_trivial, is_memset_safe,
+// Covers: #is_primitive, is_memcpy_safe, has_default_value, is_memset_safe,
 // is_same_type, what_type, strcmp, panic, is_matchable, is_comparable,
-// is_same_type_assignable, and is_passable_by_value.
+// is_assignable, and is_pure_value.
 //
 // Point declares OPERATOR_EQ, OPERATOR_LT, and OPERATOR_MOV; Plain has
 // only primitive fields; WithDefault has a field default; HasDyn holds
@@ -48,6 +48,11 @@ struct HasStaticArray {
     [int32, 3] values
 }
 
+struct Mixed {
+    ptr<int32> link
+    int32 value
+}
+
 func main() -> int32 {
     int32 i = 1
     Point p
@@ -55,6 +60,7 @@ func main() -> int32 {
     WithDefault d
     HasDyn h
     HasStaticArray hsa
+    Mixed mixed
     ptr<int32> ip = null
     [int32, 3] sa
     [int32] da
@@ -65,10 +71,13 @@ func main() -> int32 {
     print(#is_memcpy_safe(p));
     print(#is_memcpy_safe(da));
 
-    print(#is_trivial(i));
-    print(#is_trivial(p));
-    print(#is_trivial(d));
-    print(#is_trivial(ip));
+    print(#has_default_value(i));
+    print(#has_default_value(p));
+    print(#has_default_value(d));
+    print(#has_default_value(ip));
+    print(#has_default_value(sa));
+    print(#has_default_value(da));
+    print(#has_default_value(mixed));
 
     print(#is_memset_safe(i));
     print(#is_memset_safe(p));
@@ -94,17 +103,17 @@ func main() -> int32 {
     print(#is_comparable(ip));
     print(#is_comparable(sa));
 
-    print(#is_same_type_assignable(i));
-    print(#is_same_type_assignable(ip));
-    print(#is_same_type_assignable(q));
-    print(#is_same_type_assignable(d));
-    print(#is_same_type_assignable(h));
+    print(#is_assignable(i));
+    print(#is_assignable(ip));
+    print(#is_assignable(q));
+    print(#is_assignable(d));
+    print(#is_assignable(h));
 
-    print(#is_passable_by_value(i));
-    print(#is_passable_by_value(ip));
-    print(#is_passable_by_value(q));
-    print(#is_passable_by_value(hsa));
-    print(#is_passable_by_value(da));
+    print(#is_pure_value(i));
+    print(#is_pure_value(ip));
+    print(#is_pure_value(q));
+    print(#is_pure_value(hsa));
+    print(#is_pure_value(da));
 
     #if (0) {
         #panic("unreachable");
