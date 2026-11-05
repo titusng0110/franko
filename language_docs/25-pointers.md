@@ -339,15 +339,14 @@ Assignment from another pointer variable copies that variable's exact state, so 
 
 Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
-The analysis is **interprocedural through summaries**. A callee's
-parameter dereferences become requirements on the caller's arguments, so
-passing a definitely-null argument to a parameter that is always
-dereferenced is an error and passing a possibly-null argument is a warning.
-A parameter guarded with `p != null` on the dereferencing path produces no
-requirement. Callee returns propagate their null-state alternatives, and a
-callee that writes through a `ptr<ptr<T>>` parameter updates the caller's
-pointer variable. Each function body still has its own intraprocedural
-warnings. Dangling pointers are checked separately (see
+The check also follows pointers across function calls. If a callee always
+dereferences a parameter, passing a definitely-null argument is an error and
+passing a possibly-null argument is a warning. A parameter guarded with
+`p != null` on the dereferencing path does not require a non-null argument.
+A callee's return carries the null state of the value it returns, and a callee
+that writes through a `ptr<ptr<T>>` parameter can update the caller's pointer
+variable. Each function still reports its own local maybe-null warnings.
+Dangling pointers are checked separately (see
 [Pointer Lifetime Limitations](#2511-pointer-lifetime-limitations) and
 [Memory Safety Checking](29-memory-safety-checking.md)).
 
@@ -355,7 +354,7 @@ warnings. Dangling pointers are checked separately (see
 
 Dereferencing a variable that is **definitely null** is an error.
 
-Dereferencing a variable that is **possibly null** (null on some path, for example after a branch merge) is a **warning**, not an error:
+Dereferencing a variable that is **possibly null** (null on some path, for example after an `if`/`else`) is a **warning**, not an error:
 
 ```franko
 ptr<int32> p;
@@ -375,7 +374,7 @@ To encourage safe, data-oriented design, the compiler tracks the
 highest permission each `ptr`/`mview` local variable and parameter
 actually exercises and produces a non-fatal **warning** recommending a
 downgrade when elevated permissions go unused (global variables are not
-linted: their uses span functions, so no per-use summary would be
+linted: their uses span functions, so a per-variable recommendation is not
 meaningful):
 
 - a `ptr<T>` that never exercises allocation or lifecycle rights
@@ -411,11 +410,12 @@ an inner block or loop body has ended.
 
 The compiler rejects a `return` of a pointer to a local variable, a
 parameter, or any field/element of one, including through pointer copies,
-`$(...)` aliases, and branch merges. It also rejects a dereference of a
-pointer whose pointee is a local variable from a block that has already
-ended, and it follows capture/return summaries through called functions.
+`$(...)` aliases, and branches. It also rejects a dereference of a pointer
+whose pointee is a local variable from a block that has already ended. Pointer
+values are followed through function calls, so an escape performed by a
+callee is reported at the call site.
 
-A return that only *may* refer to local storage after a branch merge is a
+A return that only *may* refer to local storage after a branch is a
 warning; a definite escape is an error. Safe returns include pointer
 parameters, pointers obtained from global storage or from
 `getptr($(pointerParameter))`, literal-backed views, existing global
@@ -426,15 +426,13 @@ the view refers to the local array itself.
 What remains untracked:
 
 - pointers hidden inside returned structs or tuples;
-- field-sensitive struct tracking;
+- pointer fields inside structs or other aggregates when the escape does not
+  go through a direct global or out-parameter store;
 - global dynamic-array lifecycle;
-- pointers escaping through aggregate stores that are not modeled as a
-  direct global/out-parameter sink;
-- recursion and the 2048-node call-graph budget (silent conservative
-  result).
+- escapes that occur only through very deep or recursive call chains.
 
 Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
-by the dynamic-array lifecycle checker (see
+(see
 [Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking)).
 
 ## 25.12 Prefer Pool Indices to Linked Nodes

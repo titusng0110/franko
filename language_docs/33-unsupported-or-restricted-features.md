@@ -75,18 +75,17 @@ Array literal elements must be compile-time constant expressions
 ## 33.9 Dynamic Array Lifetime Checking Is Partial
 
 The compiler tracks the init/uninit lifecycle of function-local dynamic
-array variables and owner `ptr<[T]>` aliases, including callee requirements
-and post-states through summaries. It rejects definite use before init, use
-after `uninit`, invalid free, and double free; possible cases and missing
-explicit `uninit()` calls are warnings. Repeated `init` is not diagnosed
-because an earlier call may have failed with `-1` and a retry is valid.
-Element pointers/views created from `getptr`/`getmview`/`getview(d[i])` are
-tracked as buffer aliases and diagnosed when a `resize`/`uninit` invalidates
-them; owner pointers and whole-array views point at the stable
-`Franko_Dynamic_Array` descriptor and remain valid. The check does not track
-dynamic arrays in struct fields or nested elements below the outermost
-tracked array, global dynamic-array lifecycle, allocation failure status, or
-all runtime bounds properties. See
+array variables and owner `ptr<[T]>` aliases, including what called functions
+require and change. It rejects definite use before init, use after `uninit`,
+invalid free, and double free; possible cases and missing explicit `uninit()`
+calls are warnings. Repeated `init` is not diagnosed because an earlier call
+may have failed with `-1` and a retry is valid. Element pointers/views created
+from `getptr`/`getmview`/`getview(d[i])` are diagnosed when a
+`resize`/`uninit` invalidates them; owner pointers and whole-array views point
+at the stable array object and remain valid. The check
+does not track dynamic arrays in struct fields or nested elements below the
+outermost tracked array, global dynamic-array lifecycle, allocation failure
+status, or all runtime bounds properties. See
 [Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
 
 ## 33.10 Pointer Lifetime Is Not Fully Tracked
@@ -95,13 +94,12 @@ The compiler does not fully track dangling pointers or ownership. It detects
 returning a pointer to the current function's own frame storage, storing a
 pointer to frame or operator-borrowed storage into a global or caller-owned
 location, using a pointer after an inner block or loop body has ended, and
-forwarding a frame pointer through callees that capture it. Pointers hidden
-inside returned structs or tuples and field-sensitive struct tracking remain
+forwarding a frame pointer through called functions that store it. Pointers hidden
+inside returned structs or tuples and pointer fields inside aggregates remain
 untracked. Decayed static-array views refer to their original array, so they
 are safe to return when that storage is a parameter or global; a decayed view
 of local array storage is still caught as a normal frame-storage escape.
-Recursion and the 2048-node call-graph budget fall back to a silent
-conservative result. See
+Escapes through very deep or recursive call chains may be missed. See
 [Dangling-Pointer Checking](29-memory-safety-checking.md#299-dangling-pointer-checking).
 
 ## 33.11 Output Is a Library Function
@@ -172,9 +170,9 @@ returns) and by the dangling-pointer store rule: storing the borrowed
 view into caller-owned or global storage is rejected. Storing it in a
 local `view<T>` is allowed because the local dies before the operator
 call returns. Forwarding the borrowed view to a callee that stores it is
-now covered by the interprocedural capture summary. Ordinary non-operator
-methods with `view<T>` parameters are also covered when their arguments are
-forwarded to a capturing callee. See
+also rejected. Ordinary non-operator methods with `view<T>` parameters are
+checked the same way when their arguments are forwarded to a function that
+stores them. See
 [Memory Safety Checking](29-memory-safety-checking.md#299-dangling-pointer-checking)
 and [Operators](13-operators.md#1310-struct-operator-overloading).
 

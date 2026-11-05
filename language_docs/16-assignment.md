@@ -254,7 +254,7 @@ materialized as a temporary of the referenced primitive type.
 
 The borrowed view is valid only for the duration of the operator call.
 An operator method must not store or forward it into caller-owned or
-global storage; the dangling-pointer checker rejects that pattern (see
+global storage; the compiler rejects that pattern (see
 [Memory Safety Checking](29-memory-safety-checking.md#299-dangling-pointer-checking)).
 A local `view<T>` copy inside the operator body is allowed because the
 local dies before the operator call returns.

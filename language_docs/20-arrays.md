@@ -165,7 +165,7 @@ elements through `memcpy` (see [Array Literals](21-array-literals.md)).
 
 ## 20.6 Array Lifetime Checking
 
-The compiler validates intrinsic legality and tracks the initialization
+The compiler validates intrinsic legality and checks the initialization
 lifecycle of function-local dynamic array variables and owner `ptr<[T]>`
 aliases. Definite use before init, use after `uninit`, invalid free, and
 double free are compile errors; possible cases are warnings. Repeated `init`
@@ -174,22 +174,23 @@ retry is valid; the runtime still aborts on a true double init. Missing an
 explicit `uninit()` is a warning because the runtime destructor still frees
 local buffers.
 
-Callee effects are resolved through summaries: a callee can require `INITED`,
-can `init`/`resize`/`uninit` the caller's array, and can return an element
-alias. An owner `ptr<[T]>` or whole-array `view<[T]>`/`mview<[T]>` points at
-the `Franko_Dynamic_Array` descriptor, which is stable across `init`,
-`resize`, and `uninit`; those whole-array pointers remain valid. Only element
-pointers/views created from `getptr`/`getmview`/`getview(d[i])` point into the
-element buffer and are invalidated when the buffer is replaced or freed.
+A call is checked against what the callee does: a callee can require an
+initialized array, initialize, resize, or free the caller's array, or return
+an element pointer into it. An owner `ptr<[T]>` or whole-array
+`view<[T]>`/`mview<[T]>` points at the array object, which keeps the same
+address across `init`, `resize`, and `uninit`; those whole-array pointers
+remain valid. Only element pointers/views created from
+`getptr`/`getmview`/`getview(d[i])` point into the element buffer and are
+invalidated when the buffer is replaced or freed.
 
-The compiler tracks a buffer generation for each dynamic array. A use of an
-element alias whose generation is definitely older than the current buffer is
-an error; a possibly stale alias is a warning. This applies at dereference,
-indexing, assignment through the alias, call argument, return, and creation
-intrinsics over the alias. A whole-array view is not an element alias and is
-never invalidated by `resize`/`uninit`. A call that may invalidate array
-parameter `i` while using an element-pointer parameter `j` that aliases `i`
-produces a possible cross-parameter invalidation warning. See
+An element pointer/view is tied to the buffer that existed when it was
+created. Using one whose buffer has definitely been replaced is an error; a
+possibly stale one is a warning. This applies at dereference, indexing,
+assignment through the alias, call argument, return, and creation intrinsics
+over the alias. A whole-array view is not an element alias and is never
+invalidated by `resize`/`uninit`. A call that may invalidate array parameter
+`i` while using an element-pointer parameter `j` that aliases `i` produces a
+possible cross-parameter invalidation warning. See
 [Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
 
 The check does not yet cover:

@@ -24,8 +24,8 @@ There are two related features:
 - `#name` / `#name(...)` is a compile-time value or function call.
 - `#if` / `#else` chooses which code exists in the compiled program.
 
-Compile-time reflection happens during semantic analysis. By the time the
-program reaches legal checking and code generation, every `#if` has already
+Compile-time reflection happens during compilation. By the time the
+program is fully checked and code is generated, every `#if` has already
 chosen one branch, and every `#` expression has folded to an ordinary value
 or declaration. The generated C++ contains none of the compile-time
 machinery.
@@ -424,8 +424,8 @@ branch:
 }
 ```
 
-The selected `#panic` is reported during semantic analysis, before legality
-checking. In a dead `#if` branch it is ignored.
+The selected `#panic` is reported during compilation, before other checks.
+In a dead `#if` branch it is ignored.
 
 ---
 
