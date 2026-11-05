@@ -42,7 +42,7 @@
 #include <new>       // for placement new
 #include <stdexcept> // for std::runtime_error
 #include <string>    // for std::string (franko_byte_arrays::fail message assembly)
-#include <type_traits> // for std::is_integral, std::is_signed, std::make_unsigned
+#include <type_traits> // for std::is_signed, std::make_unsigned, std::enable_if, and trivial-construction traits
 
 #if FRANKO_USE_JEMALLOC
 #include <jemalloc/jemalloc.h> // for je_malloc, je_calloc, je_realloc, je_free
@@ -128,11 +128,6 @@ struct franko_unsafe_cast_range<To, From, false, true> {
 
 template <typename To, typename From>
 To franko_unsafe_cast(From v) {
-    static_assert(std::is_integral<To>::value, "franko_unsafe_cast requires an integral target type");
-    static_assert(std::is_integral<From>::value, "franko_unsafe_cast requires an integral source type");
-    static_assert(!std::is_same<To, bool>::value, "franko_unsafe_cast does not support bool");
-    static_assert(!std::is_same<From, bool>::value, "franko_unsafe_cast does not support bool");
-
 #if !FRANKO_BOUNDS_UNCHECKED
     if (franko_unsafe_cast_range<To, From>::below_min(v) || franko_unsafe_cast_range<To, From>::above_max(v)) {
         franko_panic("franko_unsafe_cast: value out of range for target type");
@@ -331,10 +326,8 @@ T (&franko_static_array_ref(T* data))[N] {
 // * The kernels are free templates over (pointer, length) pairs, so
 //   Franko_Fat_Pointer<T> stays a thin delegate that supplies the
 //   compiled-in class tag (for panic messages) and its length.
-// * The members on the fat pointer are SFINAE-restricted with
-//   std::enable_if: every intrinsic here exists only when the element
-//   type is uint8_t (Franko's byte). This mirrors the Franko-level
-//   restriction the compiler enforces; the C++ layer is the backstop.
+// * The compiler enforces the byte-only rule before emitting any of
+//   these members; the C++ layer does not duplicate that check.
 // * All kernels are portable C++14 written so GCC/Clang -O3 can
 //   auto-vectorize them. Hand-written SIMD paths can replace the
 //   bodies later without changing any signature.
@@ -1125,11 +1118,10 @@ struct Franko_Fat_Pointer {
 
     // memcmp: lexicographic raw-byte comparison, C semantics (the sign
     // of the first differing byte; only the sign is meaningful).
-    // The compiler's memcpy-safe-element rule is the only gate; there is
-    // deliberately no SFINAE backstop here. The whole form is
-    // lexicographic across lengths: on an equal shared prefix the
-    // shorter array is smaller. The ranged form compares exactly
-    // `elementCount` elements.
+    // The compiler's memcpy-safe-element rule is the only gate. The
+    // whole form is lexicographic across lengths: on an equal shared
+    // prefix the shorter array is smaller. The ranged form compares
+    // exactly `elementCount` elements.
 
     int32_t memcmp(const Franko_Fat_Pointer<T> other) const {
         if (mode == 2 && other.mode == 2) {
@@ -1271,11 +1263,9 @@ struct Franko_Fat_Pointer {
 
     // ==========================================================
     // Byte-array and bit intrinsics (see franko_byte_arrays above).
-    // These exist only when T is byte (uint8_t); the compiler
-    // guarantees the receiver is an array of bytes.
+    // The compiler only emits these for byte (uint8_t) arrays.
     // ==========================================================
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint32_t memchr(uint8_t value) const {
         if (mode == 2)
             return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<T*>(data), count, 0, count, value);
@@ -1285,7 +1275,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer memchr called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint32_t memchr(uint8_t value, uint32_t start, uint32_t elementCount) const {
         if (mode == 2)
             return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<T*>(data), count, start, elementCount, value);
@@ -1295,7 +1284,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer memchr called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint32_t memmem(const Franko_Fat_Pointer<T> needle) const {
         if (needle.mode == 0)
             franko_byte_arrays::fail("Franko_Fat_Pointer", "memmem", "source pointer is null");
@@ -1313,7 +1301,6 @@ struct Franko_Fat_Pointer {
         franko_panic("Internal compiler error: Franko_Fat_Pointer memmem called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint32_t memmem(const Franko_Fat_Pointer<T> needle, uint32_t start, uint32_t elementCount) const {
         if (needle.mode == 0)
             franko_byte_arrays::fail("Franko_Fat_Pointer", "memmem", "source pointer is null");
@@ -1331,7 +1318,6 @@ struct Franko_Fat_Pointer {
         franko_panic("Internal compiler error: Franko_Fat_Pointer memmem called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint16_t read_uint16_LE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<uint16_t, true>("Franko_Fat_Pointer", "read_uint16_LE", static_cast<T*>(data), count, offset);
@@ -1341,7 +1327,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint16_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint16_t read_uint16_BE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<uint16_t, false>("Franko_Fat_Pointer", "read_uint16_BE", static_cast<T*>(data), count, offset);
@@ -1351,7 +1336,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint16_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_uint16_LE(uint32_t offset, uint16_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<uint16_t, true>("Franko_Fat_Pointer", "write_uint16_LE", static_cast<T*>(data), count, offset, value);
@@ -1361,7 +1345,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint16_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_uint16_BE(uint32_t offset, uint16_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<uint16_t, false>("Franko_Fat_Pointer", "write_uint16_BE", static_cast<T*>(data), count, offset, value);
@@ -1371,7 +1354,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint16_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint32_t read_uint32_LE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<uint32_t, true>("Franko_Fat_Pointer", "read_uint32_LE", static_cast<T*>(data), count, offset);
@@ -1381,7 +1363,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint32_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint32_t read_uint32_BE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<uint32_t, false>("Franko_Fat_Pointer", "read_uint32_BE", static_cast<T*>(data), count, offset);
@@ -1391,7 +1372,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint32_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_uint32_LE(uint32_t offset, uint32_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<uint32_t, true>("Franko_Fat_Pointer", "write_uint32_LE", static_cast<T*>(data), count, offset, value);
@@ -1401,7 +1381,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint32_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_uint32_BE(uint32_t offset, uint32_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<uint32_t, false>("Franko_Fat_Pointer", "write_uint32_BE", static_cast<T*>(data), count, offset, value);
@@ -1411,7 +1390,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint32_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint64_t read_uint64_LE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<uint64_t, true>("Franko_Fat_Pointer", "read_uint64_LE", static_cast<T*>(data), count, offset);
@@ -1421,7 +1399,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint64_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint64_t read_uint64_BE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<uint64_t, false>("Franko_Fat_Pointer", "read_uint64_BE", static_cast<T*>(data), count, offset);
@@ -1431,7 +1408,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint64_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_uint64_LE(uint32_t offset, uint64_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<uint64_t, true>("Franko_Fat_Pointer", "write_uint64_LE", static_cast<T*>(data), count, offset, value);
@@ -1441,7 +1417,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint64_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_uint64_BE(uint32_t offset, uint64_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<uint64_t, false>("Franko_Fat_Pointer", "write_uint64_BE", static_cast<T*>(data), count, offset, value);
@@ -1451,7 +1426,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint64_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     int16_t read_int16_LE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<int16_t, true>("Franko_Fat_Pointer", "read_int16_LE", static_cast<T*>(data), count, offset);
@@ -1461,7 +1435,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_int16_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     int16_t read_int16_BE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<int16_t, false>("Franko_Fat_Pointer", "read_int16_BE", static_cast<T*>(data), count, offset);
@@ -1471,7 +1444,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_int16_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_int16_LE(uint32_t offset, int16_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<int16_t, true>("Franko_Fat_Pointer", "write_int16_LE", static_cast<T*>(data), count, offset, value);
@@ -1481,7 +1453,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_int16_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_int16_BE(uint32_t offset, int16_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<int16_t, false>("Franko_Fat_Pointer", "write_int16_BE", static_cast<T*>(data), count, offset, value);
@@ -1491,7 +1462,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_int16_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     int32_t read_int32_LE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<int32_t, true>("Franko_Fat_Pointer", "read_int32_LE", static_cast<T*>(data), count, offset);
@@ -1501,7 +1471,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_int32_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     int32_t read_int32_BE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<int32_t, false>("Franko_Fat_Pointer", "read_int32_BE", static_cast<T*>(data), count, offset);
@@ -1511,7 +1480,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_int32_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_int32_LE(uint32_t offset, int32_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<int32_t, true>("Franko_Fat_Pointer", "write_int32_LE", static_cast<T*>(data), count, offset, value);
@@ -1521,7 +1489,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_int32_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_int32_BE(uint32_t offset, int32_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<int32_t, false>("Franko_Fat_Pointer", "write_int32_BE", static_cast<T*>(data), count, offset, value);
@@ -1531,7 +1498,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_int32_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     int64_t read_int64_LE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<int64_t, true>("Franko_Fat_Pointer", "read_int64_LE", static_cast<T*>(data), count, offset);
@@ -1541,7 +1507,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_int64_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     int64_t read_int64_BE(uint32_t offset) const {
         if (mode == 2)
             return franko_byte_arrays::read_int_impl<int64_t, false>("Franko_Fat_Pointer", "read_int64_BE", static_cast<T*>(data), count, offset);
@@ -1551,7 +1516,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_int64_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_int64_LE(uint32_t offset, int64_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<int64_t, true>("Franko_Fat_Pointer", "write_int64_LE", static_cast<T*>(data), count, offset, value);
@@ -1561,7 +1525,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_int64_LE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_int64_BE(uint32_t offset, int64_t value) {
         if (mode == 2)
             franko_byte_arrays::write_int_impl<int64_t, false>("Franko_Fat_Pointer", "write_int64_BE", static_cast<T*>(data), count, offset, value);
@@ -1571,7 +1534,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_int64_BE called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint8_t read_bit(uint64_t bitIndex) const {
         if (mode == 2)
             return franko_byte_arrays::read_bit_impl("Franko_Fat_Pointer", "read_bit", static_cast<T*>(data), count, bitIndex);
@@ -1581,7 +1543,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer read_bit called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void write_bit(uint64_t bitIndex, uint8_t value) {
         if (mode == 2)
             franko_byte_arrays::write_bit_impl("Franko_Fat_Pointer", "write_bit", static_cast<T*>(data), count, bitIndex, value);
@@ -1591,7 +1552,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer write_bit called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void flip_bit(uint64_t bitIndex) {
         if (mode == 2)
             franko_byte_arrays::flip_bit_impl("Franko_Fat_Pointer", "flip_bit", static_cast<T*>(data), count, bitIndex);
@@ -1601,7 +1561,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer flip_bit called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void bitwise_not_mask() {
         if (mode == 2)
             franko_byte_arrays::bitwise_not_impl("Franko_Fat_Pointer", "bitwise_not_mask", static_cast<T*>(data), count);
@@ -1611,7 +1570,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_not_mask called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void bitwise_xor_mask(uint8_t mask) {
         if (mode == 2)
             franko_byte_arrays::bitwise_xor_impl("Franko_Fat_Pointer", "bitwise_xor_mask", static_cast<T*>(data), count, mask);
@@ -1621,7 +1579,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_xor_mask called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void bitwise_and_mask(uint8_t mask) {
         if (mode == 2)
             franko_byte_arrays::bitwise_and_impl("Franko_Fat_Pointer", "bitwise_and_mask", static_cast<T*>(data), count, mask);
@@ -1631,7 +1588,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_and_mask called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void bitwise_or_mask(uint8_t mask) {
         if (mode == 2)
             franko_byte_arrays::bitwise_or_impl("Franko_Fat_Pointer", "bitwise_or_mask", static_cast<T*>(data), count, mask);
@@ -1641,7 +1597,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_or_mask called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void shift_bits_left(uint64_t bitCount) {
         if (mode == 2)
             franko_byte_arrays::shift_bits_left_impl("Franko_Fat_Pointer", "shift_bits_left", static_cast<T*>(data), count, bitCount);
@@ -1651,7 +1606,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer shift_bits_left called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     void shift_bits_right(uint64_t bitCount) {
         if (mode == 2)
             franko_byte_arrays::shift_bits_right_impl("Franko_Fat_Pointer", "shift_bits_right", static_cast<T*>(data), count, bitCount);
@@ -1661,7 +1615,6 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer shift_bits_right called on non-array");
     }
 
-    template <typename U = T, typename std::enable_if<std::is_same<U, uint8_t>::value, int>::type = 0>
     uint64_t count_set_bits() const {
         if (mode == 2)
             return franko_byte_arrays::count_set_bits_impl("Franko_Fat_Pointer", "count_set_bits", static_cast<T*>(data), count);
