@@ -4,9 +4,10 @@
 // Franko runtime
 // ============================================================
 //
-// One runtime for all three build modes. Scalar/struct pointers are
-// emitted as raw T*; pointers to arrays are Franko_Fat_Pointer<T>. The
-// C++ compile flags select the build mode:
+// One runtime for all three build modes. Pointers whose pointee is not
+// an array are emitted as Franko_Thin_Pointer<T>; pointers to arrays
+// are Franko_Fat_Pointer<T>. The C++ compile flags select the build
+// mode:
 //
 //   FRANKO_USE_JEMALLOC=1      bundled jemalloc instead of the system
 //   FRANKO_BOUNDS_UNCHECKED=1  strip bounds/range/bit/offset checks
@@ -65,6 +66,59 @@
 template <typename T>
 typename std::remove_reference<T>::type* franko_borrow(T&& value) {
     return &value;
+}
+
+// ============================================================
+// Franko_Thin_Pointer<T>
+// ============================================================
+//
+// C++ representation of a pointer whose pointee is not an array:
+// ptr<T>, mview<T>, and view<T> for scalar, struct, tuple, and pointer
+// T. The wrapper has exactly one data field and default-constructs to
+// null, so pointer variables, fields, tuple elements, and array
+// elements are null-initialized.
+template <typename T>
+struct Franko_Thin_Pointer {
+    T* data = nullptr;
+
+    constexpr Franko_Thin_Pointer() : data(nullptr) {}
+    constexpr Franko_Thin_Pointer(std::nullptr_t) : data(nullptr) {}
+    constexpr explicit Franko_Thin_Pointer(T* value) : data(value) {}
+};
+
+template <typename T>
+constexpr Franko_Thin_Pointer<T> franko_make_thin_pointer(T* data) {
+    return Franko_Thin_Pointer<T>(data);
+}
+
+template <typename T>
+constexpr bool operator==(const Franko_Thin_Pointer<T>& left, const Franko_Thin_Pointer<T>& right) {
+    return left.data == right.data;
+}
+
+template <typename T>
+constexpr bool operator!=(const Franko_Thin_Pointer<T>& left, const Franko_Thin_Pointer<T>& right) {
+    return left.data != right.data;
+}
+
+template <typename T>
+constexpr bool operator==(const Franko_Thin_Pointer<T>& pointer, std::nullptr_t) {
+    return pointer.data == nullptr;
+}
+
+template <typename T>
+constexpr bool operator!=(const Franko_Thin_Pointer<T>& pointer, std::nullptr_t) {
+    return pointer.data != nullptr;
+}
+
+template <typename T>
+constexpr bool operator==(std::nullptr_t, const Franko_Thin_Pointer<T>& pointer) {
+    return pointer.data == nullptr;
+}
+
+template <typename T>
+constexpr bool operator!=(std::nullptr_t, const Franko_Thin_Pointer<T>& pointer) {
+    return pointer.data != nullptr;
 }
 
 // ============================================================
@@ -324,7 +378,7 @@ T (&franko_static_array_ref(T* data))[N] {
 // Design:
 //
 // * The kernels are free templates over (pointer, length) pairs, so
-//   Franko_Fat_Pointer<T> stays a thin delegate that supplies the
+//   Franko_Fat_Pointer<T> stays a small delegate that supplies the
 //   compiled-in class tag (for panic messages) and its length.
 // * The compiler enforces the byte-only rule before emitting any of
 //   these members; the C++ layer does not duplicate that check.
@@ -822,7 +876,7 @@ inline uint64_t count_set_bits_impl(const char* cls, const char* op, const uint8
 
 } // namespace franko_byte_arrays
 
-/*  this fat pointer is the C++ representation of pointers to arrays (static and dynamic). Pointers to scalars and structs are emitted as raw T* and never use this type. Functions are done without check because the compiler should have already checked access permissions to functions.
+/*  this fat pointer is the C++ representation of pointers to arrays (static and dynamic). Pointers to scalars, structs, tuples, and other pointers use Franko_Thin_Pointer<T> and never use this type. Functions are done without check because the compiler should have already checked access permissions to functions.
     Example:
     Franko code:
     [int, 5] imstatic
@@ -851,10 +905,10 @@ inline uint64_t count_set_bits_impl(const char* cls, const char* op, const uint8
     Franko_Fat_Pointer<uint64_t> VAR_v2 = franko_make_dynamic_fat_pointer(&VAR_imdynamic) // the fat pointer points to the dynamic array, and mode = 3 means it is a dynamic array, note count is 0 because the fat pointer doesn't know the length of the dynamic array, but it can call functions on the dynamic array
     VAR_v2.memset(0xFF) // legal, the fat pointer points to a dynamic array, so it can call all functions of dynamic array
     STRUCT_CustomStruct VAR_imstruct
-    STRUCT_CustomStruct* VAR_v3 = (&VAR_imstruct) // scalar/struct pointers are raw T*
-    VAR_v3->myfieldvar // this is how the field access is compiled
+    Franko_Thin_Pointer<STRUCT_CustomStruct> VAR_v3 = franko_make_thin_pointer(&VAR_imstruct) // non-array pointers use the thin wrapper
+    (*VAR_v3.data).myfieldvar // this is how the field access is compiled
 
-    Therefore, basically Franko_Fat_Pointer inherits the union of all functions of static arrays and dynamic arrays of the previous version of the runtime,
+    Therefore, basically Franko_Fat_Pointer provides the union of the static-array and dynamic-array intrinsic surface,
     and the compiler should have already checked that the function is legal to call on the fat pointer, so the C++ backend doesn't need to check for legality of function calls.
     However, there is a quirk. the new Franko_Dynamic_Array and the new static array does not have full capability, and need to make a temporary fat pointer to call the functions that are lost
     Example:
@@ -876,7 +930,7 @@ template <typename T>
 struct Franko_Fat_Pointer {
     void* data = nullptr; // mode 2: first element. mode 3: the Franko_Dynamic_Array<T> object. mode 0: null
     uint32_t count = 0;
-    uint8_t mode = 0; // 0 = null, 2 = static array, 3 = dynamic array (scalar pointers are raw T*)
+    uint8_t mode = 0; // 0 = null, 2 = static array, 3 = dynamic array (non-array pointers use Franko_Thin_Pointer<T>)
 
     Franko_Fat_Pointer() = default;
 
@@ -1625,9 +1679,8 @@ struct Franko_Fat_Pointer {
     }
 };
 
-// Pointer identity is address identity, like the old raw pointer
-// representation. Count/mode are derived from the pointee and never
-// distinguish two pointers to the same storage.
+// Pointer identity is address identity. Count/mode are derived from the
+// pointee and never distinguish two pointers to the same storage.
 template <typename T>
 constexpr bool operator==(const Franko_Fat_Pointer<T>& left, const Franko_Fat_Pointer<T>& right) {
     return left.data == right.data;

@@ -303,20 +303,24 @@ functions.
 
 `print(null)` matches the `print(view<[uint8]>)` overload and prints nothing (a null view is treated as empty).
 
-### 25.9.1 Null-Initialized Pointer Declarations
+### 25.9.1 Null-Initialized Pointer Storage
 
-Pointer declarations are **guaranteed null-initialized**, unlike ordinary declarations, which start uninitialized:
+Pointer storage is **guaranteed null-initialized**, unlike ordinary storage, which starts indeterminate:
 
 ```franko
 ptr<int32> p;        // p is null here, guaranteed
 print(p == null);       // true
 ```
 
-This guarantee also applies to pointer-typed struct fields and to
-`mview`/`view` variables. Pointer elements inside a local static array
-follow the ordinary static-array rule and are indeterminate until
-assigned; a global static array is zero-initialized, so its pointer
-elements are null before `main` runs.
+The guarantee covers every pointer storage slot:
+
+- pointer variables (`ptr<T>`, `mview<T>`, and `view<T>`);
+- pointer-typed struct fields;
+- pointer tuple elements;
+- pointer elements of local static arrays;
+- pointer elements of initialized dynamic arrays, after `init`, `init_zero`, or a growing `resize`.
+
+A global static array is zero-initialized, so its pointer elements are null before `main` runs. The same rule applies recursively to pointer storage nested inside structs, tuples, and arrays.
 
 ### 25.9.2 Nullness Certification
 

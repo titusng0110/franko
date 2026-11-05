@@ -10,7 +10,7 @@ import "franko/io"
 struct Point {
     int32 x
 
-    #if (#is_trivial(int32)) {
+    #if (!#has_default_value(int32)) {
         func get(view<Point> self) -> int32 {
             return $(self).x
         }
@@ -21,7 +21,7 @@ struct Point {
     }
 }
 
-#if (#is_trivial(Point)) {
+#if (!#has_default_value(Point)) {
     struct Chosen {
         int32 y
     }
@@ -56,7 +56,7 @@ namespace outer {
     }
 }
 
-#if (#is_trivial(G)) {
+#if (!#has_default_value(G)) {
     int32 H = 8
 } #else {
     int32 H = 0
@@ -95,7 +95,7 @@ func main() -> int32 {
     print(chosen_namespace::A)
     print(chain_value)
 
-    #if (#is_trivial(Chosen)) {
+    #if (!#has_default_value(Chosen)) {
         int32 visible = 9
     }
     print(visible)

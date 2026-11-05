@@ -34,9 +34,10 @@
 //
 //   - The bridge is spliced after the program template's runtime
 //     `#include` (selected via the `__FRANKO_RUNTIME_HEADER__`
-//     placeholder), so Franko_Fat_Pointer, franko_panic,
-//     and the fixed-width integer types are available. Keep every block
-//     warning-clean under -Wall -Wextra -Wpedantic -Wshadow.
+//     placeholder), so Franko_Thin_Pointer, Franko_Fat_Pointer,
+//     franko_panic, and the fixed-width integer types are available.
+//     Keep every block warning-clean under
+//     -Wall -Wextra -Wpedantic -Wshadow.
 //
 // Platform notes:
 //
@@ -143,7 +144,7 @@ uint64_t FUNC_GetStdHandle_882a7740(uint32_t VAR_nStdHandle)
 // @@os::win32::ReadFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesRead)
+int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, Franko_Thin_Pointer<uint32_t> VAR_bytesRead)
 {
     uint8_t* buffer;
     uint32_t length;
@@ -166,8 +167,8 @@ int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> V
     }
     DWORD n = 0;
     BOOL ok = ::ReadFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), buffer, static_cast<DWORD>(VAR_count), &n, nullptr);
-    if (VAR_bytesRead != nullptr) {
-        *VAR_bytesRead = static_cast<uint32_t>(n);
+    if (VAR_bytesRead.data != nullptr) {
+        *VAR_bytesRead.data = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
 }
@@ -178,7 +179,7 @@ int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> V
 // @@os::win32::WriteFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_WriteFile_0f393550(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, uint32_t* VAR_bytesWritten)
+int32_t FUNC_WriteFile_0f393550(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, Franko_Thin_Pointer<uint32_t> VAR_bytesWritten)
 {
     uint8_t* buffer;
     uint32_t length;
@@ -201,8 +202,8 @@ int32_t FUNC_WriteFile_0f393550(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> 
     }
     DWORD n = 0;
     BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), buffer, static_cast<DWORD>(VAR_count), &n, nullptr);
-    if (VAR_bytesWritten != nullptr) {
-        *VAR_bytesWritten = static_cast<uint32_t>(n);
+    if (VAR_bytesWritten.data != nullptr) {
+        *VAR_bytesWritten.data = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
 }

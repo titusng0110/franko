@@ -12,6 +12,10 @@
     {
       "namespace": "mathx",
       "name": "scale"
+    },
+    {
+      "namespace": "mathx",
+      "name": "bump"
     }
   ]
 }

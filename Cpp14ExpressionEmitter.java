@@ -335,7 +335,15 @@ final class Cpp14ExpressionEmitter {
                         + ")";
             }
 
-            return "franko_borrow(" + value + ")";
+            String borrowed = "franko_borrow(" + value + ")";
+
+            if (node.type instanceof SemanticPtrType ptr
+                    && !(ptr.referencedType instanceof SemanticStaticArrayType)
+                    && !(ptr.referencedType instanceof SemanticDynamicArrayType)) {
+                return "franko_make_thin_pointer(" + borrowed + ")";
+            }
+
+            return borrowed;
         }
 
         if (node.target instanceof SemanticDerefNode deref) {
@@ -356,7 +364,7 @@ final class Cpp14ExpressionEmitter {
                     + ")";
         }
 
-        return "(&" + emitLValue(owner, node.target) + ")";
+        return "franko_make_thin_pointer(&" + emitLValue(owner, node.target) + ")";
     }
 
     private String emitDeref(SemanticDerefNode node) {
@@ -390,7 +398,7 @@ final class Cpp14ExpressionEmitter {
                     + ".data))";
         }
 
-        return "(*" + pointer + ")";
+        return "(*(" + pointer + ").data)";
     }
 
     private String emitCast(SemanticCastExprNode node) {

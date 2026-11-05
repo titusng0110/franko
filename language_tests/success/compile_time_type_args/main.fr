@@ -25,17 +25,17 @@ func main() -> int32 {
     print(#is_primitive(int32))                       // 1
     print(#is_primitive(S))                           // 0
     print(#is_memcpy_safe([int32, 4]))                // 1
-    print(#is_trivial([int32, 4]))                    // 1
+    print(#has_default_value([int32, 4]))             // 0
     print(#is_memset_safe(ptr<int32>))                // 0
     print(#is_same_type(S, x))                        // 0
     print(#is_same_type(int32, int))                  // 1
     print(#is_same_type(t, (int32, int32)))           // 1
-    print(#what_type([int32, 4]))                     // [int32, 4]
-    print(#what_type((int32, uint8)))                 // (int32, uint8)
+    print(#what_type([int32, 4]))                     // [int32,4]
+    print(#what_type((int32, uint8)))                 // (int32,uint8)
     print(#what_type(ptr<[int32]>))                   // ptr<[int32]>
-    print(#is_passable_by_value(S))                   // 1
+    print(#is_pure_value(S))                          // 1
     print(#is_matchable(Cmp))                         // 1
     print(#is_comparable(Cmp))                        // 0
-    print(#is_same_type_assignable(Cmp))              // 1
+    print(#is_assignable(Cmp))                        // 1
     return 0
 }

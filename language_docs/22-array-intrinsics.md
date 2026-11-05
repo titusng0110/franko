@@ -114,11 +114,11 @@ Rules:
 
 `init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage.
 
-Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`, so inner arrays start in the uninitialized state (length `0`), ready for `init`; trivially constructible element types keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
+Element types that need construction (for example nested dynamic arrays and pointers) are default-constructed by `init` and `init_zero`: inner arrays start in the uninitialized state (length `0`), ready for `init`, and pointer elements start null. Element types that are trivially default-constructible keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
 
 ## 22.3 `resize`
 
-Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements; shrinking destroys the dropped tail elements. Trivial element types skip both.
+Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements, so pointer elements added by the growth start null; shrinking destroys the dropped tail elements. Element types with a trivial default constructor skip construction, and trivially destructible element types skip destruction.
 
 Rules:
 
@@ -179,8 +179,8 @@ Current memset-safe types:
 
 `#is_memset_safe(x)` exposes this predicate at compile time (see
 [Compile-Time Reflection](32-compile-time-reflection.md)). It is
-deliberately distinct from `#is_trivial`: a struct with a field
-default is memset-safe but not `is_trivial`.
+deliberately distinct from `#has_default_value`: a struct with a field
+default is memset-safe and also has a defined default value.
 
 ## 22.7 `memcpy`
 

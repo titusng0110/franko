@@ -8,4 +8,8 @@ namespace mathx {
     func scale(int32 value, int32 factor) -> int32 {
         return -1
     }
+
+    func bump(ptr<int32> value) -> int32 {
+        return -1
+    }
 }

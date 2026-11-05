@@ -1,11 +1,12 @@
 // ============================================================
 // LANGUAGE TEST: #what_type spellings
 // ============================================================
-// Covers: canonical type spellings from SemanticType.describe() for
+// Covers: canonical type spellings from SemanticType.mangleKey() for
 // primitive aliases, arrays, pointers, structs, qualified structs, and
-// string views. The result is a real read-only view backed by immutable
-// static storage, and it is also a compile-time string that can feed
-// #strcmp.
+// string views. Spellings have no spaces after commas and match the
+// function signature hashing keys. The result is a real read-only view
+// backed by immutable static storage, and it is also a compile-time
+// string that can feed #strcmp.
 // ============================================================
 
 import "franko/io"

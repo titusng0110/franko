@@ -15,8 +15,9 @@ about the compiler design should reside here.
   `.cpp` is compiled with the host C++ toolchain.
 - **Runtime**: `include/FrankoRuntime.hpp`, one header for all build
   modes: `Franko_Dynamic_Array<T>` (owning dynamic arrays), raw C++ static
-  arrays, `Franko_Fat_Pointer<T>` (pointers to arrays; scalar and struct
-  pointers are raw `T*`), the byte intrinsics, and `franko_unsafe_cast`. Two C++ defines select the mode:
+  arrays, `Franko_Thin_Pointer<T>` (pointers whose pointee is not an array;
+  null by default), `Franko_Fat_Pointer<T>` (pointers to arrays), the byte
+  intrinsics, and `franko_unsafe_cast`. Two C++ defines select the mode:
   `FRANKO_USE_JEMALLOC=1` links the bundled jemalloc (`third_party/`)
   instead of the system allocator, and `FRANKO_BOUNDS_UNCHECKED=1`
   strips bounds/range/bit/offset checks. Defaults (no defines) are the
@@ -705,13 +706,15 @@ canonical folded decimal so `[int32,5+5]` equals `[int32,10]`),
 `SemanticFunctionType` (with `signatureKey()` like
 `fn(int32,ptr<std.X>)->void` for mangling). Two distinct text APIs:
 `describe()` (diagnostic text, free to change) and `mangleKey()` (canonical
-C++-spelling key embedded in generated names — must stay stable). Structural
+space-free C++-spelling key embedded in generated names and returned by
+`#what_type` — must stay stable). Structural
 `equals`/`hashCode` everywhere.
 `SemanticTupleType` stores the declaration-site `FieldSymbol`s (names and
 types) plus a shared synthetic `cppSymbol`; equality and hashing ignore
 element names and the `cppSymbol`, so differently named tuples with the same
 ordered element types are the same type. `describe()` spells the canonical
-form `(int32, int32)` and `mangleKey()` the space-free `(int32,int32)`.
+diagnostic form `(int32, int32)` and `mangleKey()` the space-free
+`(int32,int32)`.
 
 The pointer family is one class with a `PtrPermission` level (OWNER
 `ptr<T>`, MUTABLE `mview<T>`, READ_ONLY `view<T>`), exposed as the
@@ -719,10 +722,11 @@ subclasses `SemanticPtrType`/`SemanticMViewType`/`SemanticViewType` so
 every `instanceof SemanticPtrType` check covers all three while type
 equality keeps them distinct (`getClass()` + referenced type). Emission
 depends on the referenced type: a pointer to an array becomes
-`Franko_Fat_Pointer<element(T)>`, while a pointer to a scalar, struct, or
-another pointer is raw `T*`; permission is not part of the C++ type
-(see §4.9). `mangleKey()` spells them `ptr<…>`/`mview<…>`/`view<…>`, so owner
-signatures (and every pinned mangling) are unchanged.
+`Franko_Fat_Pointer<element(T)>`, while a pointer to a scalar, struct,
+tuple, or another pointer becomes `Franko_Thin_Pointer<T>`; permission is
+not part of the C++ type (see §4.9). `mangleKey()` spells them
+`ptr<…>`/`mview<…>`/`view<…>`, so owner signatures (and every pinned
+mangling) are unchanged.
 `PtrPermission.allows(other)` encodes the downgrade lattice: permissions
 only ever downgrade (owner → mutable → read-only), so a stronger level
 allows a weaker-or-equal one.
@@ -737,9 +741,9 @@ The symbol hierarchy and mangling policy:
   not part of overload identity** (so `f(int32)->int32` and
   `f(int32)->uint32` conflict).
 - `MethodSymbol` — adds `owner: StructSymbol`; emitted as
-  `METH_<name>_OFSTRUCT_<Struct>_<hex>` free functions taking a raw
-  `STRUCT_X*` for `VAR_self` (a struct pointer is scalar, so it uses the
-  raw-pointer representation; the self permission is compile-time only).
+  `METH_<name>_OFSTRUCT_<Struct>_<hex>` free functions taking a
+  `Franko_Thin_Pointer<STRUCT_X>` for `VAR_self` (the self permission is
+  compile-time only).
   **Method overload identity excludes the `self` parameter's type**: name +
   the remaining parameter types must be unique, so a struct may not carry
   both a `view<X> self` and an `mview<X> self` method with otherwise
@@ -897,11 +901,12 @@ outermost result. The private `StaticValue` model has three cases:
 
 - target names (`#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`, `#IS_X86_64`,
   `#IS_ARM64`) → `StaticIntValue` `uint8`, from `TargetInfo`;
-- boolean predicates (`is_primitive`, `is_memcpy_safe`, `is_trivial`,
+- boolean predicates (`is_primitive`, `is_memcpy_safe`, `has_default_value`,
   `is_memset_safe`, `is_same_type`, `is_matchable`, `is_comparable`,
-  `is_same_type_assignable`, `is_passable_by_value`) → `StaticIntValue`
+  `is_assignable`, `is_pure_value`) → `StaticIntValue`
   0/1 with type `uint8`;
-- `what_type` → `StaticStringValue` containing the UTF-8 type spelling;
+- `what_type` → `StaticStringValue` containing the canonical UTF-8
+  `mangleKey()` type spelling (no spaces after commas);
 - `strcat` → `StaticStringValue` containing the concatenated bytes;
 - `strcmp` → `StaticIntValue` `int32` (lexicographic UTF-8 byte
   comparison);
@@ -926,19 +931,20 @@ materialization happens only for the outer call, a `what_type` consumed by
 `strcmp` or `panic` never hoists a global.
 
 Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
-`isAssignableValueType`, the new `isStaticTrivial`) and
+`isPureValueType`, `hasDefaultValue`) and
 `StructSymbol.getMethods` for the exact
 `OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signature checks (§4.18).
 Tuple predicates recurse through `TypeChecker`: all-primitive tuples are
-passable, same-type assignable, memcpy/memset safe, and trivial; a tuple
-with a static-array element is not passable/assignable, and a tuple with a
-dynamic-array element is not memcpy/memset safe or trivial. Tuples have no
-methods, so `is_matchable`/`is_comparable` return `0`. `what_type` prints
-the canonical `(int32, int32)` form.
-`is_passable_by_value` is exactly `TypeChecker.isAssignableValueType`
+pure values, assignable, memcpy/memset safe, and have no default value; a
+tuple with a static-array element is not a pure value or assignable, and a
+tuple with a dynamic-array element is not memcpy/memset safe but has a
+default value. Tuples have no methods, so `is_matchable`/`is_comparable`
+return `0`. `what_type` prints the canonical `mangleKey()` form, for
+example `(int32,int32)`.
+`is_pure_value` is exactly `TypeChecker.isPureValueType`
 (the by-value parameter and built-in whole-value assignment rule); unlike
-`is_same_type_assignable` it does not consider a custom `OPERATOR_MOV`.
-For tuples, `is_same_type_assignable` is built-in assignment only; tuples
+`is_assignable` it does not consider a custom `OPERATOR_MOV`.
+For tuples, `is_assignable` is built-in assignment only; tuples
 cannot declare operator methods.
 
 #### `ArrayLowerer`
@@ -1005,7 +1011,7 @@ function must syntactically contain a return somewhere in its body (recursing
 through blocks/ifs/whiles; the desugared for-update epilogue runs inside the
 loop so returns there count). It does not prove full control-flow coverage.
 Tuple parameter and return types follow the same rules through
-`TypeChecker.isAssignableValueType`: a tuple is passable/returnable exactly
+`TypeChecker.isPureValueType`: a tuple is passable/returnable exactly
 when every element is.
 Intercepts `SemanticReturnNode` itself and delegates other statements to
 `StatementChecker`.
@@ -1092,7 +1098,7 @@ and pointer/region rules remain in one place.
 #### `TypeChecker`
 The shared leaf utility: type predicates (`isVoidType`, `isIntegral`,
 `isPointerType`, `isDynamicArrayType`, …), classification
-(`isAssignableValueType`, `isValidFunctionReturnType`), `ensure*` helpers that
+(`isPureValueType`, `isValidFunctionReturnType`), `ensure*` helpers that
 report diagnostics, assignment compatibility (`ensureAssignable`), operator
 operand rules (`ensureSameIntegralTypeOrFit`,
 `ensureMixedIntegralOperandsWithConstantFit`, `ensureValidShiftOperands`),
@@ -1103,15 +1109,17 @@ constant-fit machinery (`requireConstantFitsType`, static
 `ExpressionAnalyzer`), pointer conversions (delegated directly to
 `PointerPermissions`), literal parsing (`parseIntegerLiteral`:
 0b/0x/decimal), element classification (`isMemsetSafe` — memset-filled
-byte-wise; `isMemcpySafe` — memcpy/memcmp-copied byte-wise; `isStaticTrivial`
-— raw-garbage-safe for `#is_trivial`, which additionally rejects
-structs with any field default and is separate from `isMemsetSafe`;
-`isByteType` — the byte/bit intrinsic element type) — recursive with
+byte-wise; `isMemcpySafe` — memcpy/memcmp-copied byte-wise; `hasDefaultValue`
+— the complement of raw-garbage validity: pointers and dynamic arrays
+return `true`, primitives and static arrays of primitives return `false`,
+and structs/tuples return `true` when at least one part has a defined
+default; separate from `isMemsetSafe`; `isByteType` — the byte/bit
+intrinsic element type) — recursive with
 path-scoped cycle detection so diamond-shaped field graphs stay fine while
 by-value cycles terminate.
-Tuple types participate in the same recursive rules: a tuple is an
-assignable value type iff every element is; `isMemsetSafe`,
-`isStaticTrivial`, and `isMemcpySafe` recurse through tuple elements exactly
+Tuple types participate in the same recursive rules: a tuple is a
+pure value type iff every element is; `isMemsetSafe`,
+`hasDefaultValue`, and `isMemcpySafe` recurse through tuple elements exactly
 as through struct fields; and `ensureAssignable` reports the dedicated
 "contains non-assignable elements" message for a whole-tuple assignment.
 `ensureAssignable`
@@ -1914,8 +1922,11 @@ tuple-containing structs, nested tuples, and tuples containing user structs
 in the existing topological order. The global forward declarations let a
 pointer global's static address initializer reference a global declared
 later in the source (or across namespaces); uninitialized pointer
-variables (globals and locals alike) emit `= nullptr`, implementing the
-guaranteed null-initialization rule. Statement lowering assumes dead branches
+variables and pointer fields emit `= nullptr`, which selects the pointer
+wrapper's `std::nullptr_t` constructor. Pointer elements of static and
+dynamic arrays are default-constructed by the thin wrapper. All of these
+paths produce null, implementing the guaranteed null-initialization rule.
+Statement lowering assumes dead branches
 were already removed by `BranchPruner`; `while` uses goto-based
 `L_brk_<id>`/`L_cont_<id>` labels plus
 the desugared for-update epilogue (continue label placed *before* the
@@ -1927,31 +1938,35 @@ text directly, so `~`, `&=`, `|=`, and `^=` need no special backend path. A
 pointer to an array emits
 `Franko_Fat_Pointer<element(T)>`, where `element(T)` is the immediate
 element type (`ptr<[U, N]>` and `ptr<[U]>` both emit
-`Franko_Fat_Pointer<U>`). A pointer to a scalar, struct, or another
-pointer emits raw `T*`. The fat pointer records the array mode: 2
-static array with count `N`, or 3 dynamic array with the
-`Franko_Dynamic_Array<T>` descriptor pointer. `getptr`/`getmview`/
-`getview(x)` emit `(&x)` for a scalar/struct lvalue,
+`Franko_Fat_Pointer<U>`). A pointer to a scalar, struct, tuple, or another
+pointer emits `Franko_Thin_Pointer<T>`. The fat pointer records the array
+mode: 2 static array with count `N`, or 3 dynamic array with the
+`Franko_Dynamic_Array<T>` descriptor pointer. The thin pointer is a
+one-field wrapper whose default constructor sets `data` to `nullptr`.
+`getptr`/`getmview`/`getview(x)` emit
+`franko_make_thin_pointer(&x)` for a scalar/struct/tuple/pointer lvalue,
 `franko_make_fat_pointer(x, N, 2)` for a static array, and
 `franko_make_dynamic_fat_pointer(&x)` for a dynamic array (a distinct
 name, because a static array of `Franko_Dynamic_Array<T>` is
 pointer-indistinguishable from a `Franko_Dynamic_Array<T>` lvalue). A
 `getPtr` node marked `temporary` (compiler-generated operator borrow)
-instead emits `franko_borrow(value)`; when a constant was fitted to a
-different primitive referenced type, the value is first wrapped in
-`static_cast<referenced-type>(value)` so the borrowed temporary has the
-selected operator parameter type. Representation-preserving inner
+instead emits `franko_borrow(value)` and wraps the result in
+`franko_make_thin_pointer` for a thin-pointer result; when a constant was
+fitted to a different primitive referenced type, the value is first
+wrapped in `static_cast<referenced-type>(value)` so the borrowed temporary
+has the selected operator parameter type. Representation-preserving inner
 array-view decays need no cast. A
-dereference emits `(*p)` for scalar/struct pointers,
+dereference emits `(*(p).data)` for thin pointers,
 `(*static_cast<Franko_Dynamic_Array<T>*>(p.data))` for dynamic arrays,
 and `franko_static_array_ref<T, N>(static_cast<T*>(p.data))` for static
-arrays. Method `self` is a struct pointer, so it is raw `STRUCT_X*` at
-the call boundary. Static arrays are raw C++ arrays (`int32_t VAR_x[3][2]`, outer
-dimension first); locals, globals, fields, and parameters use a
-declarator emitter, while return types and template arguments use a
-type-id emitter. Pre-folded constants are emitted directly; contextual
-`static_cast` via `emitAsType` preserves Franko's constant typing and
-already-chosen overloads; `unsafe_cast` emits `franko_unsafe_cast`.
+arrays. Method `self` is an ordinary thin pointer parameter, so it is
+`Franko_Thin_Pointer<STRUCT_X>` at the call boundary. Static arrays are
+raw C++ arrays (`int32_t VAR_x[3][2]`, outer dimension first); locals,
+globals, fields, and parameters use a declarator emitter, while return
+types and template arguments use a type-id emitter. Pre-folded constants
+are emitted directly; contextual `static_cast` via `emitAsType` preserves
+Franko's constant typing and already-chosen overloads; `unsafe_cast`
+emits `franko_unsafe_cast`.
 
 Array indexing through a raw static array emits
 `franko_static_array_at(array, index)` in ASan and `-O` builds; `-Omax`
@@ -2394,12 +2409,20 @@ type it would have in C++. Consequences:
   declarations. Struct and tuple parameters/returns are outside the current
   bridge prelude model; bridged signatures should use primitive or pointer
   types.
+- Bridge ABI: a thin pointer parameter or return (`ptr<T>`, `mview<T>`, or
+  `view<T>` whose pointee is not an array) is `Franko_Thin_Pointer<T>` in
+  the C++ bridge; use `.data` for the raw pointer and null checks. A
+  pointer to an array is `Franko_Fat_Pointer<element(T)>`.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
 
 The null-state check is a two-phase interprocedural analysis. One lattice fact
 per pointer-typed variable (`ptr`/`mview`/`view` all tracked) is `POINTING`,
-`NULL`, or `MAYBE_NULL`. Pointer declarations start `NULL`;
+`NULL`, or `MAYBE_NULL`. Pointer declarations start `NULL`; the language's
+null-initialization guarantee makes that seed exact for a local pointer
+variable. Pointer fields, tuple elements, and array elements are not tracked:
+a read of one remains `MAYBE_NULL` because the slot may have been assigned
+after initialization.
 `getptr`/`getmview`/`getview` are the only certifications; direct pointer
 assignment copies the source state and its one-level cell targets; a null
 literal is `NULL`; anything else is `MAYBE_NULL`. Parameters and globals enter
@@ -2513,13 +2536,15 @@ strongest first): `ptr<T>` (OWNER), `mview<T>` (MUTABLE), and `view<T>`
 not represented in the C++ type. A pointer to an array emits
 `Franko_Fat_Pointer<element(T)>`, whose runtime mode records static
 array (2) or dynamic array (3) and whose count records a static array's
-length. A pointer to a scalar, struct, or another pointer emits raw
-`T*`, which keeps scalar/struct method calls and pointer fields at the
-raw-pointer ABI. This split is deliberate: a scalar pointer has no array
-mode or count to carry, and passing a 16-byte fat pointer by value for
-every method `self`/pointer parameter makes ASan debug builds
-materialize an instrumented stack copy per call. Array pointers are the
-only representation that needs `{data, count, mode}`.
+length. A pointer to a scalar, struct, tuple, or another pointer emits
+`Franko_Thin_Pointer<T>`, a one-field wrapper whose default constructor
+sets `data = nullptr`. The split is deliberate: only array pointers need
+the `{data, count, mode}` payload. A non-array pointer has no array mode
+or count to carry, so the thin wrapper adds no storage over a raw pointer
+while making every pointer storage slot deterministically null on
+default construction. This is what extends the null-initialization
+guarantee from pointer variables and fields to pointer tuple elements
+and pointer elements of static and dynamic arrays.
 
 **The region rule.** Every storage-backed lvalue access path touches one
 *storage region*. The region's permission is the permission of the operand
@@ -2581,8 +2606,9 @@ carries the checked conversions (`franko_unsafe_cast`).
 `ptr<[T, N]>`/`mview<[T, N]>`/`view<[T, N]>` and their dynamic
 counterparts all emit `Franko_Fat_Pointer<T>`; a static array pointer
 carries mode 2 with count `N`, and a dynamic array pointer mode 3 with
-the `Franko_Dynamic_Array<T>` descriptor address. Scalar/struct
-pointers are raw `T*` and are never involved in decay. Converting
+the `Franko_Dynamic_Array<T>` descriptor address. Pointers whose pointee
+is not an array use `Franko_Thin_Pointer<T>` and are never involved in
+decay. Converting
 `view<[T, N]>` to `view<[T]>` creates no object: the C++ value is copied
 unchanged and remains mode 2/count `N`. `Cpp14Codegen` therefore emits
 nothing for the conversion (no prelude, no `_TMP_VIEW_*`, no temporary
@@ -2651,16 +2677,19 @@ descriptor, so there is no borrowed-header marker.
 Element construction follows the C++ type of the elements: buffers for
 trivially default-constructible element types keep raw storage, while any
 other element type is default-constructed (placement new) when the buffer
-is allocated. `uninit()` and the array destructor destroy constructed
-elements before freeing the buffer. Trivially destructible element types
-skip destruction entirely. Element lifetime in the dynamic array runtime:
+is allocated. Pointer element types are not trivially default-constructible,
+so their wrapper is constructed and its `data` field starts null. `uninit()`
+and the array destructor destroy constructed elements before freeing the
+buffer. Trivially destructible element types skip destruction entirely.
+Element lifetime in the dynamic array runtime:
 
 - `init(n)` and `init_zero(n)` default-construct all `n` elements when the
-  element type needs construction; trivially constructible element types
-  keep raw (`init`) or zeroed (`init_zero`) storage with no per-element
-  work.
-- `resize(n)` default-constructs the grown tail when growing and destroys
-  the dropped tail when shrinking; trivial element types skip both. The
+  element type needs construction; pointer elements start null. Trivially
+  constructible element types keep raw (`init`) or zeroed (`init_zero`)
+  storage with no per-element work.
+- `resize(n)` default-constructs the grown tail when growing (pointer
+  elements in the grown tail start null) and destroys the dropped tail when
+  shrinking; trivial element types skip both. The
   dropped tail is destroyed **before** the buffer is reallocated (its
   storage must still be alive for the elements' destructors to run), and
   on a failed shrink the surviving `count` is narrowed so already-destroyed
@@ -2686,7 +2715,7 @@ initialization, or zero-size allocation.
 
 The byte-array intrinsics (`memchr`/`memmem`, the endian accessors, the bit
 intrinsics) share one kernel layer (`franko_byte_arrays`) of free templates
-over `(pointer, length)` pairs; each `Franko_Fat_Pointer` member is a thin
+over `(pointer, length)` pairs; each `Franko_Fat_Pointer` member is a small
 delegate that supplies its class tag and the data/count for its runtime
 mode (static storage for mode 2, the `Franko_Dynamic_Array` descriptor for
 mode 3). Byte intrinsics exist only on `Franko_Fat_Pointer`, never on
@@ -2896,7 +2925,10 @@ unioned in live state, while must/may certainty is intersected/unioned over
 exit snapshots. Both capture bits are set at the store; the exit rule turns that
 into `MUST_CAPTURE` or `MAY_CAPTURE`.
 
-**Summary-aware pass.** Pointer declarations start `EMPTY`; ordinary parameters
+**Summary-aware pass.** Pointer declarations start `EMPTY`; the
+null-initialization guarantee makes that seed exact for a local pointer
+variable. Field and element reads remain `UNKNOWN` because the checker does
+not track writes to those slots. Ordinary parameters
 and globals start `UNKNOWN`; an operator method's `other` parameter starts
 `FRAME(otherVariable)`. In the summary pass `other` is instead
 `{NONNULL, LOCAL(otherVariable)}` / `{UNKNOWN}` / `{LOCAL(otherVariable)}`.
@@ -2951,7 +2983,9 @@ remain out of scope.
 
 The dynamic-array check is a two-phase interprocedural lifecycle and buffer
 analysis. It tracks function-local dynamic arrays, owner `ptr<[T]>` aliases,
-element buffer aliases, and callee effects.
+element buffer aliases, and callee effects. Pointer element construction
+(including null initialization) is a runtime detail: the lifecycle lattice
+tracks storage and aliases, not element values.
 
 **Lifecycle lattice.** One value per tracked local dynamic array:
 `UNINITED`, `INITED`, or `MAYBE_INITED`; a separate `FreedState`
@@ -3121,9 +3155,11 @@ symbol registration, and pruning.
 **Operand borrowing.** Lvalue operands become `getview(lvalue)`. Rvalue
 operands (including comparison operands on either side) become a
 `SemanticGetPtrNode` with `temporary = true`, emitted as
-`franko_borrow(expr)`. The C++ temporary lives to the end of the full
-expression. User-written `getview` still requires a storage-backed lvalue,
-so `getview(5)` remains invalid. Comparison operands are always borrowed as `view<their static type>`,
+`franko_borrow(expr)` and, for a thin-pointer result, wrapped in
+`franko_make_thin_pointer(...)`. The C++ temporary lives to the end of the
+full expression. User-written `getview` still requires a storage-backed
+lvalue, so `getview(5)` remains invalid. Comparison operands are always
+borrowed as `view<their static type>`,
 so a comparison view RHS needs `view<view<...>>`; assignment lowering
 handles raw array literals separately through its operator-specific
 descriptor before borrowing.
@@ -3171,7 +3207,7 @@ are never emitted. Unknown `#` names are diagnostics.
 `#else #if` chains at every level. Imports are deliberately excluded from
 declaration branches. `hashArg` accepts either a full `type` or an ordinary
 `expr`; a bare identifier parsed as a type is resolved as a variable first
-and as a type second, so `#is_trivial(x)` and `#is_trivial(T)` both work.
+and as a type second, so `#has_default_value(x)` and `#has_default_value(T)` both work.
 The visitor builds `CompileTimeIfNode`, `CompileTimeCallNode`,
 `CompileTimeNameNode`, and `DeclIfNode`. `ASTSerializer` writes
 `compileTimeIf`, `compileTimeCall`, `compileTimeName`, and `declIf`.
@@ -3214,10 +3250,11 @@ void-typed fallback. String consumers accept raw literals, `#what_type`,
 and `#strcat`; runtime views are rejected.
 
 **Intrinsic set.** The type predicates are `is_primitive`,
-`is_memcpy_safe`, `is_trivial`, `is_memset_safe`, `is_matchable`,
-`is_comparable`, `is_same_type_assignable`, `is_passable_by_value`, and
+`is_memcpy_safe`, `has_default_value`, `is_memset_safe`, `is_matchable`,
+`is_comparable`, `is_assignable`, `is_pure_value`, and
 `is_same_type`. Each accepts a type or a value; `#what_type` prints the
-canonical `SemanticType.describe()` spelling. `#strcat` accepts one or more
+canonical `SemanticType.mangleKey()` spelling (no spaces after commas,
+matching function signature hashing keys). `#strcat` accepts one or more
 compile-time strings and concatenates their decoded UTF-8 bytes.
 `#strcmp` compares decoded UTF-8 bytes lexicographically. `#panic` reports
 its compile-time string as an error. Empty strings are rejected with the

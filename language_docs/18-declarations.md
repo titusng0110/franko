@@ -105,13 +105,13 @@ are the only ways to initialize a global at its declaration.
 A **local** declaration without an initializer default-initializes the variable:
 
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
-- static array elements start with indeterminate values;
+- static array elements start with indeterminate values, except pointer elements, which are null;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **pointer variables are the exception: a pointer declaration is guaranteed null-initialized** (see [Pointers](25-pointers.md)).
+- **pointer storage is guaranteed null-initialized**: pointer variables, pointer struct fields, pointer tuple elements, pointer static-array elements, and pointer elements of initialized dynamic arrays are all null (see [Pointers](25-pointers.md)).
 
-There is no implicit zero-initialization for locals other than pointer variables and pointer fields. Use `init_zero` for zeroed dynamic array storage.
+There is no implicit zero-initialization for locals other than pointer storage. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: primitives, static array elements, and struct fields without an explicit default start at zero (pointer fields start null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated: primitives, static array elements, and aggregate storage without an explicit default start at zero (pointer storage starts null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
 
 ## 18.6 Struct Fields
 

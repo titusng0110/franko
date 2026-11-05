@@ -289,12 +289,12 @@ struct Point {
 Point p;
 int32 i;
 
-print(#is_trivial(p));       // from a variable
-print(#is_trivial(Point));   // from a type
-print(#is_trivial(int32));
-print(#is_trivial([int32, 4]));
-print(#is_trivial(ptr<Point>));
-print(#is_trivial((int32, int32)));
+print(#has_default_value(p));       // from a variable
+print(#has_default_value(Point));   // from a type
+print(#has_default_value(int32));
+print(#has_default_value([int32, 4]));
+print(#has_default_value(ptr<Point>));
+print(#has_default_value((int32, int32)));
 ```
 
 A bare identifier resolves as a variable first when that name exists;
@@ -321,17 +321,17 @@ All introspection calls use `#name(...)`.
 |---|---|---|---|
 | `#is_primitive(x)` | one type or value | `uint8` | `1` iff the type is a primitive integer |
 | `#is_memcpy_safe(x)` | one type or value | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, struct with all fields memcpy-safe, or tuple with all elements memcpy-safe. Dynamic arrays are not memcpy-safe. |
-| `#is_trivial(x)` | one type or value | `uint8` | `1` iff raw uninitialized storage is a valid value: primitives, static arrays of trivial elements, and tuples of trivial elements are trivial; pointers, `mview`, `view`, dynamic arrays, and structs with any field default or non-trivial field are not. |
+| `#has_default_value(x)` | one type or value | `uint8` | `1` iff at least one part of the type has a defined default: pointers (null), dynamic arrays (empty), static arrays whose element type has a default, structs with any field default or any field whose type has a default, and tuples with any such element. `0` for primitive integers, static arrays of primitives, and aggregates whose parts are all raw-indeterminate. |
 | `#is_memset_safe(x)` | one type or value | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose fields are all memset-safe, and tuples whose elements are all memset-safe. Pointers and dynamic arrays are not. Field defaults do not affect this predicate. |
 | `#is_same_type(x, y)` | two types/values | `uint8` | `1` iff the types are exactly equal; tuple element order matters, names do not |
-| `#what_type(x)` | one type or value | compile-time string | canonical type spelling, including `(int32, int32)` for tuples |
+| `#what_type(x)` | one type or value | compile-time string | canonical type spelling with no spaces after commas, including `(int32,int32)` for tuples; matches the function signature hashing key |
 | `#strcat(a, b, ...)` | one or more compile-time strings | compile-time string | concatenates all arguments |
 | `#strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
-| `#is_same_type_assignable(x)` | one type or value | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
-| `#is_passable_by_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all passable, and tuples whose elements are all passable. Static arrays and dynamic arrays are not. |
+| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
+| `#is_pure_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all pure values, and tuples whose elements are all pure values. Static arrays and dynamic arrays are not. |
 
 The predicates are built-in compile-time functions. They cannot be stored
 in variables, passed as callbacks, or referred to without a call.
@@ -352,19 +352,21 @@ a function accepting a byte view.
 When consumed by `#strcmp`, `#panic`, or `#strcat`, it stays a compile-time
 string and no string storage is emitted.
 
-Spellings use canonical Franko type names:
+Spellings use canonical Franko type names. Commas are followed directly by
+the next item with no space, so the spelling matches the function signature
+hashing key:
 
 | Type | `#what_type` result |
 |---|---|
 | `int` / `int32` | `int32` |
 | `byte` | `uint8` |
 | `uint` | `uint32` |
-| `[int32, 3]` | `[int32, 3]` |
+| `[int32, 3]` | `[int32,3]` |
 | `[int32]` | `[int32]` |
 | `ptr<int32>` | `ptr<int32>` |
-| `view<[byte, 5]>` | `view<[uint8, 5]>` |
-| `(int32 val, int32 err)` | `(int32, int32)` |
-| `(uint8, [int32, 3])` | `(uint8, [int32, 3])` |
+| `view<[byte, 5]>` | `view<[uint8,5]>` |
+| `(int32 val, int32 err)` | `(int32,int32)` |
+| `(uint8, [int32, 3])` | `(uint8,[int32,3])` |
 | `a::b::Point` | `a::b::Point` |
 
 `byte` is an alias for `uint8`, so canonical spellings use `uint8`.
@@ -435,11 +437,11 @@ In a dead `#if` branch it is ignored.
 |---|---|
 | Can I copy this type byte-for-byte with `memcpy`/`memcmp`? | `#is_memcpy_safe(x)` |
 | Can I byte-fill this type with `memset`? | `#is_memset_safe(x)` |
-| Is raw uninitialized storage a valid value of this type? | `#is_trivial(x)` |
+| Does at least one part of this type have a defined default value? | `#has_default_value(x)` |
 | Can I compare two values for equality? | `#is_matchable(x)` |
 | Can I order two values with `<`? | `#is_comparable(x)` |
-| Can I assign one value of this type to another? | `#is_same_type_assignable(x)` |
-| Can I pass a value of this type to a function by value? | `#is_passable_by_value(x)` |
+| Can I assign one value of this type to another? | `#is_assignable(x)` |
+| Can I pass a value of this type to a function by value? | `#is_pure_value(x)` |
 
 `#is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
 elements, structs whose fields are all memcpy-safe, and tuples whose
@@ -451,10 +453,14 @@ structs whose field types are all memset-safe, and tuples whose element
 types are all memset-safe. Field defaults do not affect it because
 `memset` deliberately overwrites storage.
 
-`#is_trivial` is stricter: it asks whether a value can be created from raw
-storage. A struct with a field default is memset-safe but not trivial,
-because raw storage would violate the default. Tuple elements recurse
-through the same predicate; a tuple has no defaults of its own.
+`#has_default_value` asks whether at least one part of a value has a
+defined default. Pointers default to null and dynamic arrays to empty.
+A static array follows its element type. A struct or tuple returns `1`
+when any field or element has a default or its type has one; it does not
+claim that every part is initialized. A struct with a pointer field and a
+primitive field therefore returns `1` even though the primitive field
+remains indeterminate. Primitive integers and static arrays of primitives
+return `0`.
 
 ```franko
 struct WithDefault {
@@ -469,21 +475,21 @@ WithDefault d;
 Blob b;
 
 print(#is_memset_safe(d));           // 1
-print(#is_trivial(d));               // 0: field default
+print(#has_default_value(d));        // 1: field default
 print(#is_memcpy_safe(b));           // 0: dynamic array field
-print(#is_trivial(b));               // 0: dynamic array field
-print(#is_same_type_assignable(b));  // 0: no built-in assignment
+print(#has_default_value(b));        // 1: dynamic array field
+print(#is_assignable(b));            // 0: no built-in assignment
 ```
 
 A struct that is not assignable by default can opt in with a same-type
-`OPERATOR_MOV`; `#is_same_type_assignable` then returns `1`. Tuples cannot
+`OPERATOR_MOV`; `#is_assignable` then returns `1`. Tuples cannot
 declare operator methods, so for a tuple this predicate is exactly built-in
 element assignability.
 
-`#is_passable_by_value` covers primitives, pointers, structs whose fields
-are all passable by value, and tuples whose elements are all passable by
-value. This is the same rule as built-in whole-value assignment; it does
-not consider a custom `OPERATOR_MOV`.
+`#is_pure_value` covers primitives, pointers, structs whose fields
+are all pure values, and tuples whose elements are all pure values. This is
+the same rule as built-in whole-value assignment and by-value parameters; it
+does not consider a custom `OPERATOR_MOV`.
 
 ```franko
 struct WithArray {
@@ -491,7 +497,7 @@ struct WithArray {
 }
 
 WithArray w;
-print(#is_passable_by_value(w)); // 0: static array field
+print(#is_pure_value(w)); // 0: static array field
 ```
 
 `#is_same_type` compares exact types. Aliases normalize first, so `int` and
@@ -583,7 +589,7 @@ Use `#IS_*` or a reflection call instead:
 
 ```franko
 #if (#IS_LINUX) { ... }                 // valid
-#if (#is_trivial(x)) { ... }            // valid
+#if (#has_default_value(x)) { ... }     // valid
 ```
 
 A `#` name is not a runtime variable:
