@@ -264,7 +264,7 @@ by-value-cycle rule: a struct may not reach itself through a tuple element.
 Tuple types participate in the normal reflection predicates. A tuple is:
 
 - assignable by value iff every element is assignable;
-- a pure value iff every element is a pure value;
+- value-assignable iff every element is value-assignable;
 - memset-safe iff every element is memset-safe;
 - memcpy-safe iff every element is memcpy-safe;
 - a type with a default value iff at least one element's type has a default.
@@ -275,9 +275,9 @@ assignability for tuples.
 
 ```franko
 (int32, int32) pair
-print(#is_pure_value(pair))            // 1
+print(#is_value_assignable(pair))      // 1
 print(#has_default_value(pair))        // 0
-print(#what_type(pair))                // (int32,int32)
+print(#what_type(pair))                 // (int32,int32)
 print(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 

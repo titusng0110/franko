@@ -33,7 +33,7 @@ func main() -> int32 {
     print(#what_type([int32, 4]))                     // [int32,4]
     print(#what_type((int32, uint8)))                 // (int32,uint8)
     print(#what_type(ptr<[int32]>))                   // ptr<[int32]>
-    print(#is_pure_value(S))                          // 1
+    print(#is_value_assignable(S))                    // 1
     print(#is_matchable(Cmp))                         // 1
     print(#is_comparable(Cmp))                        // 0
     print(#is_assignable(Cmp))                        // 1
