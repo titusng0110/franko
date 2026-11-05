@@ -13,10 +13,8 @@ status = xs.init(10);
 
 Void-returning intrinsics are invalid in value contexts.
 
-For function-local dynamic arrays, the compiler also tracks
-`init`/`init_zero`/`resize`/`uninit` lifecycle state and reports
-definite use before init, use after `uninit`, invalid free, and double
-free.
+For function-local dynamic arrays, the compiler also reports definite use
+before init, use after `uninit`, invalid free, and double free.
 Repeated `init` is not diagnosed because an earlier call may have failed
 with `-1` and a retry is valid. See
 [Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).

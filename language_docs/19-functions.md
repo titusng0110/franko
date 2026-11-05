@@ -131,8 +131,8 @@ A `void` function may use bare `return` and must not use `return expr`.
 A non-`void` function must return an expression compatible with the declared return type.
 
 A non-`void` function must contain at least one `return` statement somewhere in its body (a bare `return;` still counts for this presence check, but is separately rejected for lacking an expression). Missing-return detection is presence-based: a `return` nested inside an
-`if` or `while` body counts as appearing in the function, and full
-path-sensitive "all paths return" analysis is not performed.
+`if` or `while` body counts as appearing in the function, and the compiler
+does not prove that every path returns.
 
 ## 19.10 Function Return Types
 

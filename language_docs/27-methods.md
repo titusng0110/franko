@@ -232,9 +232,8 @@ a += b       // a.OPERATOR_ADDMOV(getview(b))
 Rvalue operands are borrowed through a compiler-generated temporary whose
 lifetime is the full expression (see [Operators](13-operators.md#1310-struct-operator-overloading)).
 
-The `other` parameter is call-scoped: in an operator method body it is
-treated as borrowed frame storage. Storing it into caller-owned or global
-storage is rejected by the dangling-pointer checker; storing it in a
-local variable is allowed because the local dies before the operator
+The `other` parameter is call-scoped: it may only be used during the operator
+call. Storing it into caller-owned or global storage is rejected; storing it
+in a local variable is allowed because the local dies before the operator
 call returns (see
 [Memory Safety Checking](29-memory-safety-checking.md#299-dangling-pointer-checking)).

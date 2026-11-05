@@ -3,25 +3,15 @@
 Franko checks two independent properties of pointers: **null state**
 and **dangling storage**. Both checks cover all three pointer types
 (`ptr`, `mview`, and `view`). A third check tracks the initialization
-lifecycle and buffer generations of function-local dynamic arrays (see
+lifecycle and buffer reuse of function-local dynamic arrays (see
 [Dynamic-Array Lifecycle Checking](#2910-dynamic-array-lifecycle-checking)).
 
-All three checks use a two-phase interprocedural analysis. Each function
-gets a **direct summary** of its parameter requirements, direct effects,
-and return templates; a second pass resolves calls through a bounded
-call-graph search and applies the callee's effects to the caller. The
-call-graph search is capped at 2048 nodes per call site. Recursion and
-budget exhaustion fall back to a silent conservative result: no new
-diagnostic is emitted, but state is treated conservatively. Every diagnostic
-from these checks is prefixed with `Intraprocedural:` or
-`Interprocedural:` so the source of the fact is visible at the diagnostic
-site.
-
-The null-state check tracks one fact per pointer variable: whether it is
-definitely null, definitely pointing, or possibly null on the current
-execution path. The dangling-storage check tracks where a returned
-pointer's storage lives (see
-[Dangling-Pointer Checking](#299-dangling-pointer-checking)).
+The checks also follow values across function calls. Passing a null pointer to
+a function that uses it, forwarding a pointer to local storage into global or
+caller-owned storage through a callee, or changing a caller's dynamic array
+through a callee are diagnosed at the relevant call site. Messages are prefixed
+with `Intraprocedural:` when the problem is inside the function being checked
+and with `Interprocedural:` when it is discovered at a call.
 
 The null-state check covers:
 
@@ -29,17 +19,12 @@ The null-state check covers:
 - dereferencing a possibly-null pointer (a warning);
 - that `null` is only used for pointer types (see [Types](09-types.md)).
 
-The null-state check is **interprocedural through summaries**. A callee's
-parameter dereferences become requirements on the caller's arguments: passing
-a definitely-null argument to a parameter that is always dereferenced is an
-error, and passing a possibly-null argument is a warning. A parameter that is
-guarded with `p != null` on the dereferencing path produces no requirement.
-Callee returns are resolved to null-state alternatives, so a function that
-returns its parameter or `null` propagates the state to the caller. One level
-of out-parameter writes is tracked: a callee that assigns through a
-`ptr<ptr<T>>` parameter updates the caller's pointer variable. Each function
-body is still analyzed separately for its own local warnings, so
-intraprocedural maybe-null warnings remain.
+The null-state check also covers values crossing function boundaries: a
+callee's parameter use becomes a requirement on the caller's argument, a
+callee's return carries the null state of the value it returns, and a
+callee that writes through a `ptr<ptr<T>>` parameter can update the caller's
+pointer variable. A function still reports its own local maybe-null warnings
+as well.
 
 ## 29.1 Pointer States
 
@@ -58,33 +43,37 @@ For each pointer variable the compiler tracks one of:
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, every tracked pointer variable is maybe-null, because parameters and globals carry values the compiler cannot see. Exceptions: a method's `self` parameter enters pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter enters pointing, because it always receives a live view.
+- at function entry, a pointer parameter or global starts as maybe-null because the compiler cannot see the value it receives. Exceptions: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
 
 ## 29.3 Dereference Checking
 
 - `$(p)` where `p` is **null** is an **error**;
 - `$(p)` where `p` is **possibly null** is a **warning**.
 
-A variable warns at most once per check, so a path-sensitive traversal that revisits the same deref site does not repeat the warning.
+A variable warns at most once per check, so revisiting the same dereference on
+another path does not repeat the warning.
 
 ## 29.4 Branch Handling
 
-`if` / `else` is analyzed by checking each branch from the pre-branch state and merging the states of the continuing paths.
+`if` / `else` is checked branch by branch. Only branches that continue past the
+statement affect later checks. A branch that **definitely returns** does not
+affect the code following the `if`, because that path never continues there.
+A branch whose condition contradicts a known state cannot execute and produces
+no diagnostics.
 
-A branch that **definitely returns** does not contribute its state to the code following the `if`, because that path never continues there.
-
-Branch-sensitive analysis is bounded by a maximum nesting depth. Beyond that depth the compiler falls back to a conservative path-insensitive merge.
+Very deeply nested conditions may be handled more conservatively, so some
+warnings can be missed.
 
 ## 29.5 Loop Handling
 
-`while` loops are handled with a bounded abstraction:
+`while` loops are checked without proving termination:
 
 - the body is checked once;
-- zero-trip and back-edge exit states are included only when the
-  condition-false guard is feasible for that state;
-- `break` and `continue` states are merged separately;
-- if neither a normal exit nor a `break` is feasible, the loop is
-  treated as non-falling-through, so its tail is not analyzed.
+- the state after the loop accounts for zero iterations, normal exits, and
+  `break`;
+- `break` and `continue` paths are handled separately;
+- if neither a normal exit nor a `break` is possible, the loop is treated as
+  non-falling-through, so its tail is not checked.
 
 Loop termination is not proven; the post-loop state is conservative.
 
@@ -113,8 +102,6 @@ if (p != null) {
 $(p);          // valid: p is still pointing; the else path was infeasible
 ```
 
-Refinement is path-sensitive up to the nesting-depth limit described above; beyond the limit, refinement stops and states merge conservatively.
-
 The same refinement runs for loop conditions, so `while (p != null) { ... }` sees `p` as pointing inside the body and as null after the loop.
 
 ## 29.7 Limitations
@@ -125,9 +112,10 @@ Current limitations of the pointer null-state check:
 - only plain pointer **variables** are tracked. A pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
 - pointers hidden inside returned structs or tuples are not tracked;
 - global null-state writes are not tracked across functions;
-- deeper-than-one-level pointer-cell aliasing and unresolved out-parameter targets degrade to maybe-null;
-- branch-path sensitivity is capped by the nesting-depth limit described above;
-- recursion and the 2048-node call-graph budget fall back to a conservative maybe-null result without a new diagnostic;
+- only one level of pointer-to-pointer writes is followed;
+- deeply nested conditions may reduce precision;
+- recursive or very deep call chains are handled conservatively, so some
+  nullness problems may be missed;
 - a non-variable dereference such as `$(f())` is an error when the resolved return state is definitely null and a warning when it is possibly null.
 
 ## 29.8 Capability Linting
@@ -142,12 +130,11 @@ to the tightest pointer that fits. See the "Capability Linter" section of
 The compiler checks `return` values for pointers that outlive the storage
 they refer to, rejects pointer stores that move frame-scoped storage into
 global or caller-owned storage, and detects use of a pointer after its
-inner block or loop body has ended. The check is **interprocedural through
-summaries**: a callee's capture and return templates are resolved against the
-caller's actual arguments, so a frame pointer forwarded through one or more
-functions into global or caller-owned storage is diagnosed. Each function body
-is still analyzed separately for its own return/store/lifetime diagnostics.
-Dead functions and pruned branches cannot produce diagnostics.
+inner block or loop body has ended. The check follows pointers through
+function calls: a frame pointer forwarded through one or more functions into
+global or caller-owned storage is diagnosed at the call. Each function still
+reports its own return/store/lifetime diagnostics, and code removed as
+unreachable produces no diagnostics.
 
 ### 29.9.1 What Is Tracked
 
@@ -169,25 +156,22 @@ func ok(ptr<int32> p) -> ptr<int32> {
 }
 ```
 
-The analysis follows assignments, pointer copies, `$(...)` aliases, and
+The check follows assignments, pointer copies, `$(...)` aliases, and
 `getptr`/`getmview`/`getview` of lvalues. Pointer parameters and globals
-are never assumed to point into the current frame.
+are never assumed to point into the current function's frame.
 
 ### 29.9.2 Path and Loop Handling
 
-The dangling-storage check uses the same bounded path-sensitive traversal
-as the null-state check: `if`/`else` is followed branch by branch up to
-the nesting-depth limit, then merged conservatively. For `while`, each
-zero-trip and back-edge exit is included only when the condition-false
-guard is feasible for that state; `break` and `continue` states are
-merged separately, and a loop with no feasible exit is treated as
-non-falling-through. `for` loops receive the same treatment as their
-equivalent block and `while` loop.
+`if`/`else` is followed branch by branch, and a branch whose condition cannot
+hold is not diagnosed. For `while`, the state after the loop accounts for zero
+iterations, normal exits, and `break`; `continue` paths are kept separate, and
+a loop with no possible exit is treated as non-falling-through. `for` loops
+receive the same treatment as their equivalent block and `while` loop.
 
 Null guards refine what is known about the storage too:
 
-- in an `if (p == null)` path, `p` is null, so any recorded local or
-  global storage origin for `p` is discarded;
+- in an `if (p == null)` path, `p` is null, so returning it on that path is
+  safe;
 - in an `if (p != null)` path, the surviving value is marked definitely
   non-null, so a later return can be classified as definitely dangling
   rather than only possibly dangling;
@@ -200,7 +184,7 @@ Null guards refine what is known about the storage too:
 
 On the condition-false exit of `while (p != null)`, `p` is null, so
 returning `p` is safe on that path even though the loop body saw a
-non-null pointer. Paths that leave the loop through `break` are merged
+non-null pointer. Paths that leave the loop through `break` are handled
 separately and may still return a non-null `p`.
 
 ### 29.9.3 The Return Rule
@@ -208,7 +192,7 @@ separately and may still return a non-null `p`.
 At a pointer-typed `return`:
 
 - a value that definitely refers to the current frame → **error**;
-- a value that may refer to the current frame after a branch merge, or
+- a value that may refer to the current frame after a branch, or
   may refer elsewhere → **warning**.
 
 The diagnostic names the local variable or parameter:
@@ -232,14 +216,13 @@ the converted view refers to the same array. Therefore:
   other pointer to a local.
 
 Literal views refer to constant storage with static lifetime, so
-returning or keeping one is safe. Global initializers are never analyzed
+returning or keeping one is safe. Global initializers are never checked
 as function bodies.
 
 ### 29.9.5 The Store Rule
 
-A pointer store is rejected when the stored value contains current-frame
-origins and the target storage is caller-owned (`UNKNOWN`) or global
-(`GLOBAL`):
+A pointer store is rejected when the stored value refers to current-frame
+storage and the target storage is caller-owned or global:
 
 ```franko
 ptr<int32> global_p
@@ -267,45 +250,38 @@ The diagnostic is:
 Intraprocedural: Cannot store a view of frame or operator-borrowed storage into a global or caller-owned location
 ```
 
-A local target (`FRAME` storage) is intentionally allowed. For an
-operator method's borrowed `other` parameter this is safe because the
-local dies before the operator call returns. FRAME -> FRAME is a coarse
-rule, not a general local-lifetime ordering analysis: a view of an inner
-local stored into a longer-lived local can still dangle. That is the
-pre-existing local-view hazard. Forwarding the pointer through a callee
-that stores it is now covered by the interprocedural capture summary.
+A local target is intentionally allowed. For an operator method's borrowed
+`other` parameter this is safe because the local dies before the operator call
+returns. Storing a view of an inner local into a longer-lived local is still
+allowed and can still dangle; that is the pre-existing local-view hazard.
+Forwarding the pointer through a callee that stores it is also caught.
 
 ### 29.9.6 Limitations
 
 The check intentionally does not detect:
 
 - pointers hidden inside returned structs or tuples;
-- field-sensitive struct tracking;
+- pointer fields inside structs or other aggregates when the escape does not
+  go through a direct global or out-parameter store;
 - global dynamic-array lifecycle;
-- pointers that escape through aggregate stores not modeled as a direct
-  global/out-parameter sink;
-- loop fixed points (the body is analyzed once, so loop-carried state is
-  merged conservatively);
-- recursion and the 2048-node call-graph budget (silent conservative result).
+- every loop-carried lifetime fact: loops are checked conservatively, so a
+  pointer that becomes dangling only on a later iteration may be missed;
+- every escape through a recursive or very deep call chain.
 
 The store rule closes the direct global/out-parameter store. An operator
-method's `other` parameter starts with a frame origin, so storing it into
-caller-owned or global storage is rejected. Ordinary non-operator methods with
-`view<T>` parameters start as unknown, but a store of one of their arguments
-through a callee that forwards it is now caught by the interprocedural capture
-summary. Calls still conservatively forget global and address-taken pointer
-state, so later diagnostics do not assume a callee left pointer variables
-untouched.
+method's `other` parameter is treated as call-scoped borrowed storage, so
+storing it into caller-owned or global storage is rejected. Forwarding a
+borrowed or ordinary argument through a callee that stores it is also caught.
+Later checks do not assume that a call left a global pointer untouched.
 
 ## 29.10 Dynamic-Array Lifecycle Checking
 
 The compiler also tracks whether a function-local dynamic array has
-allocated element storage, which buffer generation it currently owns, and
-which element pointers/views alias that buffer. The check is
-**interprocedural through summaries**: a callee can require `INITED`, can
-initialize or free the caller's array, and can invalidate element aliases
-through `resize`/`uninit`. Each function or method still starts with a fresh
-local lifecycle state.
+allocated element storage, whether element pointers still refer to its current
+buffer, and what a called function does to the array. A callee can require an
+initialized array, initialize or free the caller's array, or return an element
+pointer into it. Each function or method still starts with a fresh local
+lifecycle state.
 
 ### 29.10.1 Array States
 
@@ -315,7 +291,7 @@ Each tracked dynamic array is in one of three states:
 |---|---|
 | `UNINITED` | no element storage; never initialized, or already `uninit`ed |
 | `INITED` | element storage is allocated |
-| `MAYBE_INITED` | initialized on some paths, or possibly changed by a call |
+| `MAYBE_INITED` | initialized on some paths, or a call may have changed it |
 
 A separate history flag distinguishes a never-initialized array from one
 that was already freed. That only changes diagnostic wording; it is not
@@ -339,16 +315,17 @@ each function unknown, can be certified by a local assignment such as
 `G = getptr(d)`, and are forgotten after any function call. Global dynamic
 array lifecycle is not tracked at all.
 
-Element pointers/views (`getptr`/`getmview`/`getview(d[i])`) are tracked as
-buffer aliases. Whole-array `view<[T]>`/`mview<[T]>` values point at the array
-descriptor and are not buffer aliases. Passing an owner `ptr<[T]>` to a
-function uses the callee summary: a callee that only reads/writes elements
-does not change the caller's lifecycle state, a callee that requires `INITED`
-reports a definite or possible misuse, a callee that calls `init` makes the
-caller array `INITED`, and a callee that calls `resize`/`uninit` advances the
-caller's buffer epoch. Passing an `mview<[T]>` or `view<[T]>` carries may-use
-information but no lifecycle post-state, because those permissions cannot
-allocate or free storage.
+Element pointers/views (`getptr`/`getmview`/`getview(d[i])`) refer to the
+element buffer. Whole-array `view<[T]>`/`mview<[T]>` values refer to the array
+object and are not invalidated when the buffer changes.
+
+A call is checked against what the callee does: a callee that only reads or
+writes elements does not change the caller's lifecycle state; a callee that
+requires an initialized array reports a definite or possible misuse; a callee
+that calls `init` makes the caller array `INITED`; and a callee that calls
+`resize`/`uninit` can invalidate element pointers. Passing an `mview<[T]>` or
+`view<[T]>` cannot initialize, resize, or free the array, so it does not change
+the caller's lifecycle state.
 
 ### 29.10.3 Operations
 
@@ -360,6 +337,9 @@ allocate or free storage.
 | `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |
 | `d.memcmp`, `d.memchr`, `d.memmem`, `d.read_*`, `d.read_bit`, `d.count_set_bits` | `INITED` | unchanged |
 | `d.length()` | any state | unchanged; safe after `uninit` |
+
+`d.memcpy`, `d.memcmp`, and `d.memmem` also check the first argument's array
+source when it is a tracked dynamic array.
 
 A use of a definitely `UNINITED` array is an error; a use of a
 `MAYBE_INITED` array is a warning.
@@ -386,8 +366,8 @@ each path:
 | `d.length() <= 0`, `< 1` | `UNINITED` | `INITED` |
 
 Nonzero constant comparisons also certify the nonzero side as `INITED`.
-The compiler uses the same infeasible-branch suppression as the
-null-state check:
+A branch that contradicts the known state cannot execute, so it produces no
+diagnostics:
 
 ```franko
 [int32] d;
@@ -408,11 +388,10 @@ if (d.length() > 0) {
 
 ### 29.10.5 Branches and Loops
 
-`if`/`else` is path-sensitive to the same bounded branch depth as the
-other checks. Loops merge zero-trip, back-edge, `break`, and `continue`
-states, and apply the condition-false refinement to each exit path. A
-loop with no feasible normal exit or `break` is treated as
-non-falling-through, so its tail is not analyzed. This means:
+`if`/`else` is followed branch by branch. Loops account for zero iterations,
+normal exits, `break`, and `continue`, and apply the condition-false
+refinement to each exit path. A loop with no possible normal exit or `break`
+is treated as non-falling-through, so its tail is not checked. This means:
 
 ```franko
 [int32] d;
@@ -424,27 +403,22 @@ d[0] = 1;           // valid: the loop exited with d initialized
 
 ### 29.10.6 Buffer Invalidation
 
-Each tracked dynamic array has a buffer generation (`epochMin`/`epochMax`).
-`init`/`init_zero`, `resize`, and `uninit` advance the generation. An element
-pointer/alias records the generation at which it was created. A use of the
-alias is:
-
-- an **error** when the alias generation is older than every possible current
-  generation (`aliasEpoch < epochMin`);
-- a **warning** when the alias generation may be stale
-  (`epochMin <= aliasEpoch < epochMax`);
-- valid otherwise.
+An element pointer/view is tied to the buffer that existed when it was
+created. `init`/`init_zero`, `resize`, and `uninit` replace or release that
+buffer. Using an element pointer whose buffer has definitely been replaced or
+freed is an **error**; using one whose buffer may have been replaced is a
+**warning**.
 
 The check applies at dereference, indexing, assignment through the alias, call
 argument, return, and creation intrinsics over the alias. An owner `ptr<[T]>`
-or a whole-array `view<[T]>`/`mview<[T]>` points at the stable
-`Franko_Dynamic_Array` descriptor and is **not** invalidated by
-`init`/`resize`/`uninit`; only element pointers/views into the element buffer
-are invalidated. A returned element alias keeps its buffer provenance at the
-caller, so resizing after the call is diagnosed. When a callee may invalidate
-array parameter `i` and may use element-pointer parameter `j`, and the caller
-passes an element alias of `i` as `j`, the compiler emits a possible
-cross-parameter invalidation warning.
+or a whole-array `view<[T]>`/`mview<[T]>` refers to the stable array object
+and is **not** invalidated by `init`/`resize`/`uninit`; only
+element pointers/views into the element buffer are invalidated. A returned
+element alias keeps its association with the caller's array, so resizing after
+the call is diagnosed. When a callee may invalidate array parameter `i` and
+may use element-pointer parameter `j`, and the caller passes an element alias
+of `i` as `j`, the compiler emits a possible cross-parameter invalidation
+warning.
 
 ### 29.10.7 Missing `uninit`
 
@@ -457,8 +431,8 @@ Intraprocedural: Dynamic array 'd' is still initialized at return from function 
 (missing explicit uninit)
 ```
 
-The warning is suppressed when the array escaped through a global,
-aggregate store, or owner-pointer call, because the compiler can no
+The warning is suppressed when the array escaped through a global, an
+aggregate store, or a call that may let it escape, because the compiler can no
 longer prove the state.
 
 ### 29.10.8 Limitations
@@ -468,7 +442,7 @@ The check does not detect:
 - lifecycle misuse of struct-field or nested-element arrays;
 - lifecycle tracking for global dynamic arrays;
 - allocation failure of `init`/`init_zero` (the successful path is modeled);
-- loop fixed points (each loop body is analyzed once);
-- recursion and the 2048-node call-graph budget (silent conservative result);
-- invalidation of aliases whose root array has gone out of scope (the
-  dangling checker owns that diagnostic).
+- every loop-carried lifecycle fact: loops are checked conservatively;
+- every effect of a recursive or very deep call chain;
+- use of an element pointer after its root array's scope ends; that is
+  reported as a dangling-pointer error instead.

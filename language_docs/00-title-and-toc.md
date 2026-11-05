@@ -1,12 +1,8 @@
 # Franko Language Reference
 
-This document describes the Franko language: its types, declarations,
-statements, expressions, pointer rules, arrays, structs, methods, and
-standard modules. It is written for Franko programmers.
-
-Compiler architecture, code generation, runtime representation, and
-checker internals are documented separately in
-[Compiler Internals](../compiler_docs.md).
+This document describes Franko language-visible behavior only: types,
+declarations, statements, expressions, pointer rules, arrays, structs,
+methods, and standard modules. It is written for Franko programmers.
 
 ---
 
