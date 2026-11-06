@@ -273,7 +273,7 @@ public final class SemanticASTSerializer {
         }
     }
 
-    private static void registerRelatedSymbols(SymbolRegistry registry) {
+    static void registerRelatedSymbols(SymbolRegistry registry) {
         boolean changed = true;
 
         while (changed) {
@@ -316,7 +316,7 @@ public final class SemanticASTSerializer {
         return true;
     }
 
-    private static JsonArray symbolsToJson(SymbolRegistry registry) {
+    static JsonArray symbolsToJson(SymbolRegistry registry) {
         JsonArray array = new JsonArray();
 
         for (Map.Entry<String, Object> entry : registry.entries()) {
@@ -326,7 +326,7 @@ public final class SemanticASTSerializer {
         return array;
     }
 
-    private static JsonObject symbolToJson(
+    static JsonObject symbolToJson(
             String id,
             Object symbol,
             SymbolRegistry registry
@@ -435,7 +435,7 @@ public final class SemanticASTSerializer {
         return obj;
     }
 
-    private static JsonArray parameterIds(
+    static JsonArray parameterIds(
             List<Symbol> parameters,
             SymbolRegistry registry
     ) {
@@ -448,11 +448,11 @@ public final class SemanticASTSerializer {
         return array;
     }
 
-    private static JsonValue stringOrNull(Object value) {
+    static JsonValue stringOrNull(Object value) {
         return value == null ? JsonNull.INSTANCE : new JsonString(value.toString());
     }
 
-    private static SymbolRegistry symbolsFromJson(JsonArray array, SourceTable sources) {
+    static SymbolRegistry symbolsFromJson(JsonArray array, SourceTable sources) {
         SymbolRegistry registry = new SymbolRegistry();
         List<String> inputOrder = new ArrayList<>();
         Map<String, JsonObject> structShells = new LinkedHashMap<>();
@@ -635,7 +635,7 @@ public final class SemanticASTSerializer {
         return registry;
     }
 
-    private static List<Symbol> parameterList(
+    static List<Symbol> parameterList(
             JsonArray array,
             SymbolRegistry registry
     ) {
@@ -655,7 +655,7 @@ public final class SemanticASTSerializer {
         return parameters;
     }
 
-    private static BigInteger bigIntegerOrNull(JsonValue value) {
+    static BigInteger bigIntegerOrNull(JsonValue value) {
         if (value == null || value instanceof JsonNull) {
             return null;
         }
@@ -667,7 +667,7 @@ public final class SemanticASTSerializer {
         return new BigInteger(string.value());
     }
 
-    private static List<BigInteger> bigIntegersOrNull(JsonValue value) {
+    static List<BigInteger> bigIntegersOrNull(JsonValue value) {
         if (value == null || value instanceof JsonNull) {
             return null;
         }
