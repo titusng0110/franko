@@ -250,6 +250,14 @@ public final class SemanticASTSerializer {
 
         if (expr instanceof SemanticCastExprNode cast) {
             registerFromExpr(cast.expr, registry);
+            return;
+        }
+
+        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
+            for (SemanticAggregateFieldInit field : aggregate.fields) {
+                registry.register(field.field);
+                registerFromExpr(field.value, registry);
+            }
         }
     }
 
@@ -910,6 +918,19 @@ public final class SemanticASTSerializer {
             obj.put("node", "cast");
             obj.put("checked", cast.checked);
             obj.put("expr", nodeToJson(cast.expr, registry));
+        } else if (expr instanceof SemanticAggregateLiteralNode aggregate) {
+            obj.put("node", "aggregateLiteral");
+
+            JsonArray fields = new JsonArray();
+
+            for (SemanticAggregateFieldInit init : aggregate.fields) {
+                JsonObject field = new JsonObject();
+                field.put("field", registry.idFor(init.field));
+                field.put("value", nodeToJson(init.value, registry));
+                fields.add(field);
+            }
+
+            obj.put("fields", fields);
         } else {
             throw new IllegalArgumentException(
                     "Unknown SAST expression type: " + expr.getClass().getName()
@@ -1086,7 +1107,8 @@ public final class SemanticASTSerializer {
         return switch (kind) {
             case "intLiteral", "nullLiteral", "varExpr", "unaryOp", "binOp",
                     "arrayAccess", "memberAccess", "functionCall",
-                    "arrayIntrinsicCall", "getPtr", "deref", "cast" -> true;
+                    "arrayIntrinsicCall", "getPtr", "deref", "cast",
+                    "aggregateLiteral" -> true;
             default -> false;
         };
     }
@@ -1211,6 +1233,28 @@ public final class SemanticASTSerializer {
                     ),
                     obj.requireBool("checked")
             );
+            case "aggregateLiteral" -> {
+                List<SemanticAggregateFieldInit> fields = new ArrayList<>();
+
+                for (JsonValue value : obj.requireArray("fields").values()) {
+                    JsonObject field = JsonAstSupport.requireObject(
+                            value,
+                            "aggregate field initializer"
+                    );
+                    fields.add(new SemanticAggregateFieldInit(
+                            (FieldSymbol) registry.require(
+                                    field.requireString("field")
+                            ),
+                            (SemanticExprNode) nodeFromJson(
+                                    field.requireObject("value"),
+                                    registry,
+                                    sources
+                            )
+                    ));
+                }
+
+                yield new SemanticAggregateLiteralNode(span, type, fields);
+            }
             default -> throw new IllegalArgumentException(
                     "Unknown SAST expression kind '" + kind + "'"
             );

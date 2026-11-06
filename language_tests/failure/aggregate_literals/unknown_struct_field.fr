@@ -1,0 +1,9 @@
+// Aggregate literals reject unknown struct field names.
+struct Literal {
+    int32 x
+}
+
+func main() -> int32 {
+    Literal lit = Literal { y = 1 }
+    return 0
+}

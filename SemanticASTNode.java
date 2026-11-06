@@ -646,6 +646,37 @@ class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
     }
 }
 
+final class SemanticAggregateFieldInit {
+    final FieldSymbol field;
+    final SemanticExprNode value;
+
+    SemanticAggregateFieldInit(
+            FieldSymbol field,
+            SemanticExprNode value
+    ) {
+        this.field = Objects.requireNonNull(field);
+        this.value = Objects.requireNonNull(value);
+    }
+}
+
+class SemanticAggregateLiteralNode extends SemanticExprNode {
+    public final List<SemanticAggregateFieldInit> fields;
+
+    public SemanticAggregateLiteralNode(
+            SourceSpan span,
+            SemanticType type,
+            List<SemanticAggregateFieldInit> fields
+    ) {
+        super(span, type, null);
+        this.fields = List.copyOf(fields);
+    }
+
+    @Override
+    public boolean isLValue() {
+        return false;
+    }
+}
+
 class SemanticIntLiteralNode extends SemanticExprNode {
     public final String rawValue;
 

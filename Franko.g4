@@ -477,13 +477,15 @@ simpleStmt
 // ---------- VARIABLE DECLARATION ----------
 //
 // Declaration initializer syntax accepts an ordinary expression
-// initializer, including an array literal (which is a view value,
-// so the declared type must accept one: a view<[...]> type).
+// initializer, including array and aggregate literals, or a braced
+// field-wise initializer immediately after the declared name.
 //
 // Examples:
 //   int32 x = 1 + 2;
 //   view<[int32, 3]> xs = [1, 2, 3];
 //   view<[int32, ?]> ys = [1, 2, 3];
+//   Point p = Point { x = 1, y = 2 };
+//   Point q { x = 1, y = 2 };
 //
 // Important:
 //   T x = <expr>;
@@ -493,13 +495,27 @@ simpleStmt
 //   T x;
 //   x = <expr>;
 //
+// The braced field-wise form is a separate construct:
+//
+//   T x { field = <expr>, ... };
+//
+// is declaration sugar for:
+//
+//   T x;
+//   x.field = <expr>;
+//   ...
+//
+// The brace must follow the identifier immediately (no newline) so a
+// declaration followed by an ordinary block is never consumed.
+//
 varDecl
     : type IDENTIFIER declSuffix?
       { if (_input.LA(1) == LPAREN) notifyErrorListeners(_input.LT(1), "unexpected '(' after variable declaration", null); }
     ;
 
 declSuffix
-    : ASSIGN expr # DeclAssignInit
+    : ASSIGN expr                                              # DeclAssignInit
+    | LBRACE separators* declInitList? separators* RBRACE      # DeclFieldInit
     ;
 
 // ---------- RETURN ----------
@@ -706,6 +722,7 @@ primary
     | arrayLiteral
     | nullLiteral
     | hashExpr
+    | aggregateLiteral
     | IDENTIFIER
     | SELF
     | qualifiedName
@@ -927,6 +944,66 @@ arrayLiteralElement
     | expr
     ;
 
+// ---------- AGGREGATE LITERALS ----------
+//
+// Aggregate literals construct struct and tuple values as ordinary
+// expressions, restricted to assignment values, declaration-initializer
+// values, return values, call arguments, and aggregate field values:
+//
+//   Literal { x = 0, def = 1 }
+//   (int x, int y) { x = 1, y = 2 }
+//   (int, int) { _0 = 1, _1 = 2 }
+//
+// Struct fields are always named. Tuple initializers may name every label
+// or, when the tuple type spelling is all-unnamed, use positional
+// expressions that fill the first N elements:
+//
+//   Literal { x = 0, def = 1 }
+//   (int32, int32) { 0, 1 }
+//   (int32, int32) { 0 }          // partial: fills _0 only
+//   (int32 x, int32 y) { x = 0, y = 1 }
+//
+// Field order is free, duplicate labels are rejected, commas are required
+// between entries, a trailing comma is allowed, and an empty list is legal.
+// Newlines inside the braces are list whitespace. The tuple literal spelling
+// must be all-named or all-unnamed; positional entries are rejected for
+// structs, named tuples, and mixed tuple spellings during semantic analysis.
+aggregateLiteral
+    : structTypeName LBRACE separators* fieldInitList? separators* RBRACE
+    | LPAREN tupleTypeElement (COMMA tupleTypeElement)+ RPAREN
+      LBRACE separators* tupleInitList? separators* RBRACE
+    ;
+
+structTypeName
+    : IDENTIFIER
+    | qualifiedName
+    ;
+
+fieldInitList
+    : initItem (separators* COMMA separators* initItem)* separators* COMMA?
+    ;
+
+tupleInitList
+    : initItem (separators* COMMA separators* initItem)* separators* COMMA?
+    ;
+
+declInitList
+    : initItem (separators* COMMA separators* initItem)* separators* COMMA?
+    ;
+
+// A tuple or declaration initializer is either a named field or, for
+// all-unnamed tuple types, a positional expression. Positional entries
+// fill the first N elements and are rejected for structs and named
+// tuples during semantic analysis.
+initItem
+    : fieldInit
+    | expr
+    ;
+
+fieldInit
+    : IDENTIFIER ASSIGN expr
+    ;
+
 getPtrExpr
     : GETPTR LPAREN lvalue RPAREN
     ;
@@ -1027,9 +1104,10 @@ hashArg
 //   (int32 val, int32 err)
 //   (int32 val, uint8)
 //
-// There is deliberately no tuple literal or destructuring expression
-// syntax; tuple values are produced by declarations, assignment, and
-// function calls.
+// Tuple literals spell the tuple type followed by a braced field list;
+// destructuring declarations and tuple-pattern parameters remain
+// unsupported. A bare parenthesized value list such as (1, 2) is not a
+// tuple expression.
 //
 // Examples:
 //   [int, 10]

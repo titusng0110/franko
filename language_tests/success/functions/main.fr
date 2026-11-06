@@ -44,9 +44,7 @@ func process_ref(ptr<int32> p) -> int32 {
 func main() -> int32 {
     int32 result = add(1, 2);
 
-    Point p;
-    p.x = 3;
-    p.y = 4;
+    Point p { x = 3, y = 4 };
     result = result + get_sum(p);
 
     result = result + factorial(3);

@@ -1,0 +1,27 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Aggregate Field Initializers on Pointer-Only Types
+// ============================================================
+// The field-wise declaration form does not create a temporary
+// value and therefore works for pointer-only aggregates.
+// ============================================================
+
+struct Buffer {
+    int32 cap
+    [byte] buf
+}
+
+func main() -> int32 {
+    Buffer b { cap = 20 }
+    print(b.cap)
+
+    Buffer empty {}
+    empty.cap = 3
+    print(empty.cap)
+
+    (int32, [int32, 3]) t { _0 = 1 }
+    print(t._0)
+
+    return 0
+}

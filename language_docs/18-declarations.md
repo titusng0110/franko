@@ -131,3 +131,44 @@ The complete struct reference — field rules, by-value cycles, assignability, m
 
 Tuple declarations and tuple initialization are covered in
 [Tuples](28-tuples.md).
+
+## 18.7 Aggregate Field Initializers
+
+A local struct or tuple declaration may initialize individual fields with a
+braced field list immediately after the declared name:
+
+```franko
+Literal lit { x = 0, def = 1 }
+Buffer b { cap = 20 }
+(int32 first, int32 second) tup { first = 1, second = 2 }
+(int32, int32) pair { 0, 1 }
+(int32, int32) partial { 0 }
+```
+
+This is declaration sugar for a declaration followed by one ordinary field
+assignment per named or positional entry:
+
+```franko
+Literal lit
+lit.x = 0
+lit.def = 1
+```
+
+Rules:
+
+- struct fields are always named, tuple entries are named or positional, and
+  order is free for named entries; duplicate or unknown names are rejected;
+- positional entries are available only for all-unnamed tuple declarations,
+  fill the first N elements, may be partial, and may not exceed the element
+  count; positional and named entries cannot be mixed;
+- omitted fields keep the declaration's default-constructed state;
+- no temporary aggregate value is created and no `OPERATOR_MOV` is invoked;
+- the form works for pointer-only aggregates because each field is assigned
+  directly under ordinary assignment rules;
+- an array field still cannot be assigned from another array or a literal;
+- the brace must follow the identifier immediately; a newline ends the
+  declaration;
+- the form is local-only and is invalid at global scope.
+
+The complete aggregate initialization reference is in
+[Aggregate Literals](29-aggregate-literals.md).

@@ -656,6 +656,13 @@ final class InactiveDeclarationPruner {
 
         if (expr instanceof SemanticCastExprNode cast) {
             collectExprCalls(cast.expr, out);
+            return;
+        }
+
+        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
+            for (SemanticAggregateFieldInit field : aggregate.fields) {
+                collectExprCalls(field.value, out);
+            }
         }
     }
 
@@ -778,6 +785,13 @@ final class InactiveDeclarationPruner {
 
         if (expr instanceof SemanticCastExprNode cast) {
             collectExprVariables(cast.expr, out);
+            return;
+        }
+
+        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
+            for (SemanticAggregateFieldInit field : aggregate.fields) {
+                collectExprVariables(field.value, out);
+            }
         }
     }
 
@@ -910,6 +924,15 @@ final class InactiveDeclarationPruner {
 
         if (expr instanceof SemanticCastExprNode cast) {
             collectExprTypeExprs(cast.expr);
+            return;
+        }
+
+        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
+            markType(aggregate.type);
+
+            for (SemanticAggregateFieldInit field : aggregate.fields) {
+                collectExprTypeExprs(field.value);
+            }
         }
     }
 }

@@ -1,0 +1,5 @@
+// Tuple literals reject unknown element labels.
+func main() -> int32 {
+    (int32, int32) t = (int32, int32) { _0 = 1, _2 = 2 }
+    return 0
+}

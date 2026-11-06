@@ -55,7 +55,7 @@ Both forms declare the same namespace, whose full path is `a::b`. A path header 
 
 The same namespace may be declared more than once, in the same file or across imported files, in either form; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
 
-By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](34-naming-conventions.md).
+By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](35-naming-conventions.md).
 
 ### Qualified References
 

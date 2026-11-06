@@ -1,0 +1,54 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Aggregate Literal Contexts
+// ============================================================
+// Covers every allowed aggregate literal expression context and
+// pins source-order evaluation of field initializers.
+// ============================================================
+
+struct Pair {
+    int32 a
+    int32 b
+}
+
+struct Inner {
+    int32 v
+}
+
+struct Outer {
+    Inner inner
+    int32 w
+}
+
+func mark(int32 value) -> int32 {
+    print(value)
+    return value
+}
+
+func make_pair() -> Pair {
+    return Pair { b = mark(4), a = mark(3) }
+}
+
+func take(Pair pair) -> int32 {
+    return pair.a + pair.b
+}
+
+func main() -> int32 {
+    Pair declared = Pair { b = mark(2), a = mark(1) }
+    print(declared.a + declared.b)
+
+    Pair assigned
+    assigned = Pair { a = mark(10), b = mark(20) }
+    print(assigned.a + assigned.b)
+
+    Pair returned = make_pair()
+    print(returned.a + returned.b)
+
+    print(take(Pair { a = mark(5), b = mark(6) }))
+
+    Outer nested = Outer { inner = Inner { v = mark(30) }, w = mark(40) }
+    print(nested.inner.v + nested.w)
+
+    return 0
+}

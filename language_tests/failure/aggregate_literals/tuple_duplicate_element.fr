@@ -1,0 +1,5 @@
+// Tuple literals reject duplicate element initializers.
+func main() -> int32 {
+    (int32, int32) t = (int32, int32) { _0 = 1, _0 = 2 }
+    return 0
+}

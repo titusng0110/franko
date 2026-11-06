@@ -258,6 +258,36 @@ public class FunctionChecker {
         }
 
         if (!types.isValidFunctionReturnType(returnType)) {
+            if (returnType instanceof SemanticStructType
+                    && !types.isValueAssignableType(returnType)) {
+                diagnostics.error("Function '"
+                        + fn.fullSignatureString()
+                        + "' cannot return pointer-only struct '"
+                        + returnType.describe()
+                        + "' by value: its fields are not all value-assignable. "
+                        + "Return ptr<"
+                        + returnType.describe()
+                        + ">, or write through a ptr<"
+                        + returnType.describe()
+                        + "> output parameter.");
+                return;
+            }
+
+            if (returnType instanceof SemanticTupleType
+                    && !types.isValueAssignableType(returnType)) {
+                diagnostics.error("Function '"
+                        + fn.fullSignatureString()
+                        + "' cannot return pointer-only tuple '"
+                        + returnType.describe()
+                        + "' by value: its elements are not all value-assignable. "
+                        + "Return ptr<"
+                        + returnType.describe()
+                        + ">, or write through a ptr<"
+                        + returnType.describe()
+                        + "> output parameter.");
+                return;
+            }
+
             diagnostics.error("Function '"
                     + fn.fullSignatureString()
                     + "' has invalid return type "

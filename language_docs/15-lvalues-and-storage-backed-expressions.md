@@ -14,6 +14,7 @@ Current storage-backed lvalues are:
 | integer literal | no |
 | arithmetic expression | no |
 | comparison expression | no |
+| aggregate literal | no |
 | function call result | no |
 | `getptr(...)` result | no |
 

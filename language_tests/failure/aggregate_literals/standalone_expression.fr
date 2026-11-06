@@ -1,0 +1,9 @@
+// An aggregate literal is not a standalone expression statement.
+struct Literal {
+    int32 x
+}
+
+func main() -> int32 {
+    Literal { x = 1 }
+    return 0
+}

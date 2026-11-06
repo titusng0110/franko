@@ -99,6 +99,20 @@ public final class ASTSerializer {
             obj.put("type", typeToJson(n.type, sources));
             obj.put("name", n.name);
             obj.put("init", nodeToJson(n.init, sources));
+        } else if (node instanceof VarDeclFieldsInitNode n) {
+            obj.put("node", "varDeclFieldsInit");
+            obj.put("type", typeToJson(n.type, sources));
+            obj.put("name", n.name);
+            obj.put("fields", fieldInitArray(n.fields, sources));
+        } else if (node instanceof FieldInitNode n) {
+            obj.put("node", "fieldInit");
+            obj.put("name", n.name);
+            obj.put("positional", n.positional);
+            obj.put("value", nodeToJson(n.value, sources));
+        } else if (node instanceof AggregateLiteralNode n) {
+            obj.put("node", "aggregateLiteral");
+            obj.put("type", typeToJson(n.type, sources));
+            obj.put("fields", fieldInitArray(n.fields, sources));
         } else if (node instanceof ExprStmtNode n) {
             obj.put("node", "exprStmt");
             obj.put("expr", nodeToJson(n.expr, sources));
@@ -296,6 +310,24 @@ public final class ASTSerializer {
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
                     nodeFromJson(obj.optObject("init"), sources)
+            );
+            case "varDeclFieldsInit" -> new VarDeclFieldsInitNode(
+                    span,
+                    typeFromJson(obj.requireObject("type"), sources),
+                    obj.requireString("name"),
+                    fieldInitsFromArray(obj.requireArray("fields"), sources)
+            );
+            case "fieldInit" -> new FieldInitNode(
+                    span,
+                    obj.optString("name"),
+                    nodeFromJson(obj.requireObject("value"), sources),
+                    obj.has("positional")
+                            && obj.requireBool("positional")
+            );
+            case "aggregateLiteral" -> new AggregateLiteralNode(
+                    span,
+                    typeFromJson(obj.requireObject("type"), sources),
+                    fieldInitsFromArray(obj.requireArray("fields"), sources)
             );
             case "exprStmt" -> new ExprStmtNode(
                     span,
@@ -612,6 +644,45 @@ public final class ASTSerializer {
         }
 
         return array;
+    }
+
+    private static JsonArray fieldInitArray(
+            List<FieldInitNode> nodes,
+            SourceTable sources
+    ) {
+        JsonArray array = new JsonArray();
+
+        if (nodes != null) {
+            for (FieldInitNode node : nodes) {
+                array.add(nodeToJson(node, sources));
+            }
+        }
+
+        return array;
+    }
+
+    private static List<FieldInitNode> fieldInitsFromArray(
+            JsonArray array,
+            SourceTable sources
+    ) {
+        List<FieldInitNode> nodes = new ArrayList<>();
+
+        for (JsonValue value : array.values()) {
+            ASTNode node = nodeFromJson(
+                    JsonAstSupport.requireObject(value, "field initializer"),
+                    sources
+            );
+
+            if (!(node instanceof FieldInitNode field)) {
+                throw new IllegalArgumentException(
+                        "Expected a field initializer AST node"
+                );
+            }
+
+            nodes.add(field);
+        }
+
+        return nodes;
     }
 
     private static JsonArray fieldArray(List<StructFieldDeclNode> nodes, SourceTable sources) {

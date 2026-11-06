@@ -1,1 +1,2 @@
-invalid return type (int32, [int32, 3])
+cannot return pointer-only tuple '(int32, [int32, 3])' by value
+its elements are not all value-assignable

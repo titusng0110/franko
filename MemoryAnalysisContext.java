@@ -746,6 +746,21 @@ final class MemoryAnalysisContext {
             return;
         }
 
+        if (expression instanceof SemanticAggregateLiteralNode aggregate) {
+            for (SemanticAggregateFieldInit field : aggregate.fields) {
+                collectExpression(
+                        field.value,
+                        functionId,
+                        builder,
+                        variableIds,
+                        variables,
+                        siteIds,
+                        siteCount
+                );
+            }
+            return;
+        }
+
         if (expression instanceof SemanticGetPtrNode getPtr) {
             collectExpression(
                     getPtr.target,

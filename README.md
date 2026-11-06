@@ -24,8 +24,8 @@ Its defining features are:
 - **Readable, regular syntax.** C-like but predictable, with explicit `$(x)`
   dereferencing and no semicolons. Declaration is always `TYPE IDENTIFIER`.
 - **Small type model.** Fixed-width integers, structs with methods and
-  operators, tuples, namespaces, arrays, and typed pointers. No inheritance
-  or implicit integer type casting.
+  operators, tuples, aggregate literals, namespaces, arrays, and typed
+  pointers. No inheritance or implicit integer type casting.
 - **Byte-level array intrinsics without pointer arithmetic.** `memcpy`,
   `memset`, `memmove`, `memcmp`, searches, endian access, and bit operations
   are built in. They work on arrays and views directly, so byte-level work

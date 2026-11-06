@@ -1,4 +1,4 @@
-# 30. Pool Allocation
+# 31. Pool Allocation
 
 Franko has no per-object heap allocator. The two storage classes a variable
 can have are automatic storage (a local, whose lifetime is its enclosing

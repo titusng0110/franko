@@ -930,10 +930,16 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitTupleType(FrankoParser.TupleTypeContext ctx) {
+        return tupleTypeNode(ctx.tupleTypeElement(), span(ctx));
+    }
+
+    private TupleTypeNode tupleTypeNode(
+            List<FrankoParser.TupleTypeElementContext> elementCtxs,
+            SourceSpan span
+    ) {
         List<TupleTypeElementNode> elements = new ArrayList<>();
 
-        for (FrankoParser.TupleTypeElementContext elementCtx
-                : ctx.tupleTypeElement()) {
+        for (FrankoParser.TupleTypeElementContext elementCtx : elementCtxs) {
             TypeNode elementType = (TypeNode) visit(elementCtx.type());
             String elementName = elementCtx.IDENTIFIER() == null
                     ? null
@@ -946,7 +952,99 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             ));
         }
 
-        return new TupleTypeNode(span(ctx), elements);
+        return new TupleTypeNode(span, elements);
+    }
+
+    @Override
+    public ASTNode visitAggregateLiteral(
+            FrankoParser.AggregateLiteralContext ctx
+    ) {
+        TypeNode type;
+        boolean structLiteral = ctx.structTypeName() != null;
+
+        if (structLiteral) {
+            FrankoParser.StructTypeNameContext nameCtx = ctx.structTypeName();
+
+            if (nameCtx.qualifiedName() != null) {
+                List<String> segments =
+                        qualifiedNameSegments(nameCtx.qualifiedName());
+                List<String> namespaceSegments =
+                        new ArrayList<>(segments.subList(0, segments.size() - 1));
+                type = new StructTypeNode(
+                        span(nameCtx),
+                        namespaceSegments,
+                        segments.get(segments.size() - 1)
+                );
+            } else {
+                type = new StructTypeNode(
+                        span(nameCtx),
+                        List.of(),
+                        nameCtx.IDENTIFIER().getText()
+                );
+            }
+        } else {
+            type = tupleTypeNode(
+                    ctx.tupleTypeElement(),
+                    span(ctx)
+            );
+        }
+
+        return new AggregateLiteralNode(
+                span(ctx),
+                type,
+                structLiteral
+                        ? fieldInits(ctx.fieldInitList())
+                        : tupleInits(ctx.tupleInitList())
+        );
+    }
+
+    private List<FieldInitNode> fieldInits(
+            FrankoParser.FieldInitListContext ctx
+    ) {
+        return initItems(ctx == null ? null : ctx.initItem());
+    }
+
+    private List<FieldInitNode> tupleInits(
+            FrankoParser.TupleInitListContext ctx
+    ) {
+        return initItems(ctx == null ? null : ctx.initItem());
+    }
+
+    private List<FieldInitNode> declInits(
+            FrankoParser.DeclInitListContext ctx
+    ) {
+        return initItems(ctx == null ? null : ctx.initItem());
+    }
+
+    private List<FieldInitNode> initItems(
+            List<FrankoParser.InitItemContext> items
+    ) {
+        List<FieldInitNode> fields = new ArrayList<>();
+
+        if (items == null) {
+            return fields;
+        }
+
+        for (FrankoParser.InitItemContext item : items) {
+            if (item.fieldInit() != null) {
+                FrankoParser.FieldInitContext fieldCtx = item.fieldInit();
+
+                fields.add(new FieldInitNode(
+                        span(fieldCtx),
+                        fieldCtx.IDENTIFIER().getText(),
+                        visit(fieldCtx.expr())
+                ));
+            } else {
+                fields.add(new FieldInitNode(
+                        span(item),
+                        null,
+                        visit(item.expr()),
+                        true
+                ));
+            }
+        }
+
+        return fields;
     }
 
     @Override
@@ -956,6 +1054,15 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.declSuffix() == null) {
             return new VarDeclNode(span(ctx), type, name);
+        }
+
+        if (ctx.declSuffix() instanceof FrankoParser.DeclFieldInitContext fieldCtx) {
+            return new VarDeclFieldsInitNode(
+                    span(ctx),
+                    type,
+                    name,
+                    declInits(fieldCtx.declInitList())
+            );
         }
 
         FrankoParser.DeclAssignInitContext initCtx =
@@ -1220,6 +1327,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.hashExpr() != null) {
             return visit(ctx.hashExpr());
+        }
+
+        if (ctx.aggregateLiteral() != null) {
+            return visit(ctx.aggregateLiteral());
         }
 
         if (ctx.IDENTIFIER() != null) {

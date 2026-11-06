@@ -1,0 +1,1 @@
+Aggregate literals are only valid as assignment values, return values, call arguments, or aggregate field values

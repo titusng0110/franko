@@ -1,0 +1,8 @@
+// A tuple literal type must be all-named or all-unnamed.
+func main() -> int32 {
+    (int32 first, int32 second) t = (int32, int32 second) {
+        _0 = 1,
+        second = 2
+    }
+    return 0
+}

@@ -36,13 +36,14 @@ The cleaned section ordering is:
 26. Structs
 27. Methods
 28. Tuples
-29. Memory Safety Checking
-30. Pool Allocation
-31. Foreign Function Interface
-32. Compile-Time Reflection
-33. Unsupported or Restricted Features
-34. Naming Conventions
-35. Examples
+29. Aggregate Literals
+30. Memory Safety Checking
+31. Pool Allocation
+32. Foreign Function Interface
+33. Compile-Time Reflection
+34. Unsupported or Restricted Features
+35. Naming Conventions
+36. Examples
 
 ## How to rebuild one combined document
 

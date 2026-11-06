@@ -1,4 +1,4 @@
-# 32. Compile-Time Reflection
+# 33. Compile-Time Reflection
 
 Franko provides compile-time reflection through `#` expressions and `#if`
 compile-time conditionals. These are built into the compiler: there is no
@@ -41,7 +41,7 @@ A useful way to read this chapter:
 
 ---
 
-## 32.1 Compile-Time Names
+## 33.1 Compile-Time Names
 
 A compile-time name starts with `#`:
 
@@ -79,7 +79,7 @@ initializers, or field defaults.
 
 ---
 
-## 32.2 `#if` / `#else`
+## 33.2 `#if` / `#else`
 
 `#if` selects code at compile time:
 
@@ -217,7 +217,7 @@ Consequences:
 
 ---
 
-## 32.3 Declaration-Level `#if`
+## 33.3 Declaration-Level `#if`
 
 `#if` may wrap declarations at global scope, inside a namespace, or inside
 a struct:
@@ -276,7 +276,7 @@ Rules:
 
 ---
 
-## 32.4 Type and Value Arguments
+## 33.4 Type and Value Arguments
 
 The type predicates and `#what_type` accept either a variable/global
 identifier or a type:
@@ -313,7 +313,7 @@ referents.
 
 ---
 
-## 32.5 Introspection Functions
+## 33.5 Introspection Functions
 
 All introspection calls use `#name(...)`.
 
@@ -342,7 +342,7 @@ field defaults.
 
 ---
 
-## 32.6 `#what_type` Spellings
+## 33.6 `#what_type` Spellings
 
 `#what_type` produces a compile-time string. When used as an ordinary
 expression, it materializes as a read-only `view<[byte, N]>` backed by
@@ -373,7 +373,7 @@ hashing key:
 
 ---
 
-## 32.7 Compile-Time Strings
+## 33.7 Compile-Time Strings
 
 `#strcmp`, `#panic`, and `#strcat` accept compile-time strings:
 
@@ -431,7 +431,7 @@ In a dead `#if` branch it is ignored.
 
 ---
 
-## 32.8 Choosing a Predicate
+## 33.8 Choosing a Predicate
 
 | Question | Predicate |
 |---|---|
@@ -490,6 +490,8 @@ element assignability.
 are all value-assignable, and tuples whose elements are all
 value-assignable. This is the same rule as built-in whole-value assignment
 and by-value parameters; it does not consider a custom `OPERATOR_MOV`.
+It is also the exact predicate aggregate literal construction uses: a
+struct or tuple literal is legal only when this predicate returns `1`.
 
 ```franko
 struct WithArray {
@@ -527,7 +529,7 @@ print(#is_comparable(p));     // 1
 
 ---
 
-## 32.9 FFI Target Selection
+## 33.9 FFI Target Selection
 
 The intended use of declaration-level `#if` is to select platform-specific
 declarations and calls. Only the selected branch is compiled, so the other
@@ -558,7 +560,7 @@ An unguarded off-target FFI call still fails when building for that target.
 
 ---
 
-## 32.10 Restrictions and Edge Cases
+## 33.10 Restrictions and Edge Cases
 
 - `#if` cannot appear in a `for` header.
 - The `#if` condition must be a compile-time constant integer. A local
@@ -576,7 +578,7 @@ An unguarded off-target FFI call still fails when building for that target.
   `#panic`.
 - Declaration-level `#if` cannot wrap imports.
 
-## 32.11 Common Mistakes
+## 33.11 Common Mistakes
 
 A local variable is not a compile-time constant:
 

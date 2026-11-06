@@ -1,0 +1,7 @@
+// Failure fixture: tuples/positional_tuple_literal
+// Tuple literals spell the tuple type and name every field. A bare
+// positional value list such as (1, 2) is not a tuple expression.
+func main() -> int32 {
+    (int32, int32) x = (1, 2)
+    return 0
+}

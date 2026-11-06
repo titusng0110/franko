@@ -1,0 +1,5 @@
+// Positional initializer values are constant-fitted to the element type.
+func main() -> int32 {
+    (uint8, int32) t = (uint8, int32) { 256, 2 }
+    return 0
+}

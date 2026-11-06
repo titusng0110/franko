@@ -77,4 +77,4 @@ Access is allowed inside the declaration's own scope:
 These are compiler warnings, not errors: the program still compiles and runs.
 The complete naming style for structs, functions, methods, variables, fields,
 namespaces, constants, and standard-library imports is in
-[Naming Conventions](34-naming-conventions.md).
+[Naming Conventions](35-naming-conventions.md).

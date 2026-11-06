@@ -1,0 +1,3 @@
+cannot return pointer-only struct 'Buffer' by value
+its fields are not all value-assignable
+Return ptr<Buffer>, or write through a ptr<Buffer> output parameter.

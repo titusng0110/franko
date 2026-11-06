@@ -4,8 +4,8 @@ import "franko/io"
 // LANGUAGE TEST: Namespaces and Print Statements
 // ============================================================
 // Covers: namespace declarations, qualified names (a::b),
-// unqualified references inside namespaces, and the dedicated
-// print statement.
+// unqualified references inside namespaces, the dedicated
+// print statement, and aggregate literals.
 // ============================================================
 
 // --- Namespace declaration ---
@@ -35,16 +35,12 @@ func main() -> int32 {
     print(math::scale);
     print(math::scale_up(5));
 
-    // --- Qualified struct references ---
-    math::Vec2 p;
-    p.x = 10;
-    p.y = 20;
+    // --- Qualified struct references and aggregate literals ---
+    math::Vec2 p = math::Vec2 { x = 10, y = 20 };
     print(p.x + p.y);
 
-    // --- Struct declaration initializer sugar ---
-    math::Vec2 origin;
-    origin.x = 1;
-    origin.y = 2;
+    // --- Field-wise declaration initialization ---
+    math::Vec2 origin { x = 1, y = 2 };
     print(origin.x + origin.y);
 
     // --- Global variables ---

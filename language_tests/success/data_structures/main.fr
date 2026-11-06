@@ -4,7 +4,8 @@ import "franko/io"
 // LANGUAGE TEST: Arrays, Structs, and Initializers
 // ============================================================
 // Covers: array declarations, static/dynamic arrays, array
-// initializer lists (nested), struct fields, and static arrays.
+// initializer lists (nested), struct fields, static arrays, and
+// field-wise struct declaration initialization.
 // ============================================================
 
 struct Config {
@@ -33,9 +34,7 @@ func main() -> int32 {
     matrix.memcpy([[1, 2], [3, 4]]);
 
     // --- Struct usage ---
-    Config cfg;
-    cfg.id = 1;
-    cfg.size = 10;
+    Config cfg { id = 1, size = 10 };
     cfg.data[0] = 11;
     cfg.data[1] = 12;
 

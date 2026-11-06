@@ -18,7 +18,7 @@ By convention function names use `lower_case_snake_case`. A function whose
 name starts with `__` is internal to its declaring namespace and produces a
 warning when referenced from outside that namespace. Direct FFI mappings keep
 the platform API spelling, such as `os::win32::ReadFile`; see
-[Naming Conventions](34-naming-conventions.md).
+[Naming Conventions](35-naming-conventions.md).
 
 ## 19.2 Function Declaration Placement
 
@@ -128,7 +128,18 @@ A `void`-returning function call is valid as an expression statement but invalid
 
 A `void` function may use bare `return` and must not use `return expr`.
 
-A non-`void` function must return an expression compatible with the declared return type.
+A non-`void` function must return an expression compatible with the declared return type. A struct or tuple value may be constructed directly in the return expression with an aggregate literal:
+
+```franko
+struct Literal {
+    int32 x
+    int32 def = 0
+}
+
+func make() -> Literal {
+    return Literal { x = 1, def = 2 }
+}
+```
 
 A non-`void` function must contain at least one `return` statement somewhere in its body (a bare `return;` still counts for this presence check, but is separately rejected for lacking an expression). Missing-return detection is presence-based: a `return` nested inside an
 `if` or `while` body counts as appearing in the function, and the compiler
@@ -146,6 +157,24 @@ A function return type must be either:
 
 Arrays cannot currently be returned directly. A tuple containing an array or another non-assignable element cannot be returned by value; use a pointer to the tuple instead.
 
+A struct containing an array is pointer-only and cannot be returned by value either. The compiler rejects such a declaration with guidance to return a pointer or write through an out-parameter:
+
+```franko
+struct Buffer {
+    int32 cap
+    [byte] buf
+}
+
+func foo() -> Buffer { ... }        // error at declaration
+
+func foo(ptr<Buffer> outbuf) -> int32 {
+    // write the result through outbuf
+    return 0
+}
+```
+
+The correct pattern for pointer-only output is the `ptr<Buffer>` out-parameter form. See [Aggregate Literals](29-aggregate-literals.md).
+
 ## 19.11 Forward References and Recursion
 
 Function signatures are known before function bodies are checked, allowing forward references, direct recursion, and mutual recursion.
@@ -158,4 +187,4 @@ The built-in `#name(...)` functions (`#is_primitive`, `#what_type`,
 `#strcmp`, `#strcat`, and the rest) are compile-time functions, not
 callable values. They are resolved at compile time; they cannot be stored
 in a variable, passed as a function argument, or referred to without a
-call. See [Compile-Time Reflection](32-compile-time-reflection.md).
+call. See [Compile-Time Reflection](33-compile-time-reflection.md).

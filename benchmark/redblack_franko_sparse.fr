@@ -147,11 +147,13 @@ func insertFixup(uint32 z) -> void {
 func rbInsert(int32 key) -> void {
     (uint32 idx, int32 err) allocated = pool.new_index()
     uint32 z = allocated.idx
-    nodes[z].key = key
-    nodes[z].red = 1
-    nodes[z].left = NIL
-    nodes[z].right = NIL
-    nodes[z].parent = NIL
+    nodes[z] = Node {
+        key = key,
+        red = 1,
+        left = NIL,
+        right = NIL,
+        parent = NIL
+    }
 
     uint32 y = NIL
     uint32 x = root

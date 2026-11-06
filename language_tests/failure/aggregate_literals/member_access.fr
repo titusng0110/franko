@@ -1,0 +1,9 @@
+// Aggregate literals are not member-access bases.
+struct Literal {
+    int32 x
+}
+
+func main() -> int32 {
+    Literal { x = 1 }.x
+    return 0
+}

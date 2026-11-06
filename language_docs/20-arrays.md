@@ -191,7 +191,7 @@ over the alias. A whole-array view is not an element alias and is never
 invalidated by `resize`/`uninit`. A call that may invalidate array parameter
 `i` while using an element-pointer parameter `j` that aliases `i` produces a
 possible cross-parameter invalidation warning. See
-[Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
+[Dynamic-Array Lifecycle Checking](30-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
 
 The check does not yet cover:
 

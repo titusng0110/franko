@@ -1,0 +1,9 @@
+// Positional initialization is only available for all-unnamed tuple
+// types; a named tuple still requires its declared names.
+func main() -> int32 {
+    (int32 first, int32 second) t = (int32 first, int32 second) {
+        20,
+        -1
+    }
+    return 0
+}
