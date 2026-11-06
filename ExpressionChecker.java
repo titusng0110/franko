@@ -226,10 +226,10 @@ public class ExpressionChecker {
 
             if (node.left.isConstant()
                     && !node.right.isConstant()
-                    && node.right.type instanceof SemanticPrimitiveType rightPrimitive
+                    && node.right.type.kind == SastTypeKind.PRIMITIVE
                     && !TypeChecker.fitsBigIntegerToPrimitive(
                             node.left.constantValue,
-                            rightPrimitive.kind
+                            node.right.type.primitive
                     )) {
                 diagnostics.error("Left constant operand of shift '" + op
                         + "' does not fit contextual type "
@@ -255,8 +255,8 @@ public class ExpressionChecker {
             SemanticBinOpNode node,
             String op
     ) {
-        boolean leftEnum = node.left.type instanceof SemanticEnumType;
-        boolean rightEnum = node.right.type instanceof SemanticEnumType;
+        boolean leftEnum = node.left.type.kind == SastTypeKind.ENUM;
+        boolean rightEnum = node.right.type.kind == SastTypeKind.ENUM;
 
         if (leftEnum || rightEnum) {
             if (leftEnum && rightEnum) {
@@ -271,8 +271,8 @@ public class ExpressionChecker {
                 return;
             }
 
-            SemanticType enumType = leftEnum ? node.left.type : node.right.type;
-            SemanticType otherType = leftEnum ? node.right.type : node.left.type;
+            SastType enumType = leftEnum ? node.left.type : node.right.type;
+            SastType otherType = leftEnum ? node.right.type : node.left.type;
             diagnostics.error("Cannot compare enum type '" + enumType.describe()
                     + "' with '" + otherType.describe()
                     + "' using '" + op
@@ -347,9 +347,9 @@ public class ExpressionChecker {
         }
 
         List<SemanticExprNode> args = node.args;
-        List<SemanticType> parameterTypes = node.function.parameterTypes();
+        List<SastType> parameterTypes = node.function.parameterTypes();
 
-        boolean isMethod = node.function instanceof MethodSymbol;
+        boolean isMethod = node.function.kind == SymbolKind.METHOD;
 
         if (isMethod) {
             int expectedUser = Math.max(0, parameterTypes.size() - 1);
@@ -376,7 +376,7 @@ public class ExpressionChecker {
 
         for (int i = 0; i < count; i++) {
             SemanticExprNode arg = args.get(i);
-            SemanticType parameterType = parameterTypes.get(i);
+            SastType parameterType = parameterTypes.get(i);
 
             if (isMethod && i == 0) {
                 checkExpr(arg);
@@ -417,9 +417,9 @@ public class ExpressionChecker {
 
     private void ensureArgumentCompatibleWithParameter(
             SemanticExprNode arg,
-            SemanticType parameterType,
+            SastType parameterType,
             int index,
-            FunctionSymbol function
+            Symbol function
     ) {
         if (arg == null) {
             diagnostics.error("Argument " + (index + 1)
@@ -466,7 +466,7 @@ public class ExpressionChecker {
         }
 
         if (types.isNullType(arg.type)) {
-            if (!(parameterType instanceof SemanticPtrType)) {
+            if (!(parameterType.kind == SastTypeKind.PTR)) {
                 diagnostics.error("Argument " + (index + 1)
                         + " of call to '"
                         + function.signatureString()
@@ -477,10 +477,10 @@ public class ExpressionChecker {
         }
 
         if (arg.isConstant()
-                && parameterType instanceof SemanticPrimitiveType primitive) {
+                && parameterType.kind == SastTypeKind.PRIMITIVE) {
             if (!TypeChecker.fitsBigIntegerToPrimitive(
                     arg.constantValue,
-                    primitive.kind
+                    parameterType.primitive
             )) {
                 diagnostics.error("Argument " + (index + 1)
                         + " of call to '"
@@ -528,7 +528,7 @@ public class ExpressionChecker {
     }
 
     private void ensureStaticArrayIndexInBounds(SemanticArrayAccessNode node) {
-        if (!(node.target.type instanceof SemanticStaticArrayType staticArray)) {
+        if (!(node.target.type.kind == SastTypeKind.STATIC_ARRAY)) {
             return;
         }
 
@@ -545,7 +545,7 @@ public class ExpressionChecker {
         BigInteger size;
 
         try {
-            size = types.parseIntegerLiteral(staticArray.sizeLiteral);
+            size = types.parseIntegerLiteral(node.target.type.sizeLiteral);
         } catch (IllegalArgumentException ignored) {
 
             return;
@@ -555,7 +555,7 @@ public class ExpressionChecker {
             diagnostics.error("Static array index "
                     + index
                     + " is out of bounds for "
-                    + staticArray.describe()
+                    + node.target.type.describe()
                     + " with size "
                     + size);
         }
@@ -575,7 +575,7 @@ public class ExpressionChecker {
         }
 
         if (node.temporary) {
-            if (!(node.type instanceof SemanticViewType)) {
+            if (!(node.type.kind == SastTypeKind.PTR && node.type.permission == PtrPermission.READ_ONLY)) {
                 diagnostics.error("Internal error: temporary operator borrow"
                         + " is not a read-only view");
             }
@@ -639,8 +639,8 @@ public class ExpressionChecker {
                 "Operand of '$' must be an pointer type"
         );
 
-        if (node.expr.type instanceof SemanticPtrType ptr
-                && types.isVoidType(ptr.referencedType)) {
+        if (node.expr.type.kind == SastTypeKind.PTR
+                && types.isVoidType(node.expr.type.referencedType)) {
             diagnostics.error("Cannot dereference ptr<void>");
         }
     }
@@ -654,31 +654,31 @@ public class ExpressionChecker {
             return;
         }
 
-        if (node.type instanceof SemanticPtrType targetPointer) {
-            visitPermissionCast(node, targetPointer);
+        if (node.type.kind == SastTypeKind.PTR) {
+            visitPermissionCast(node, node.type);
             return;
         }
 
-        if (node.type instanceof SemanticEnumType targetEnum) {
-            if (node.expr.type instanceof SemanticEnumType sourceEnum) {
-                if (sourceEnum.enumSymbol == targetEnum.enumSymbol) {
+        if (node.type.kind == SastTypeKind.ENUM) {
+            if (node.expr.type.kind == SastTypeKind.ENUM) {
+                if (node.expr.type.enumSymbol == node.type.enumSymbol) {
                     return;
                 }
 
                 diagnostics.error("'" + syntax + "' cannot convert enum '"
-                        + sourceEnum.enumSymbol.qualifiedName()
+                        + node.expr.type.enumSymbol.qualifiedName()
                         + "' to enum type '"
-                        + targetEnum.enumSymbol.qualifiedName()
+                        + node.type.enumSymbol.qualifiedName()
                         + "'");
                 return;
             }
 
-            if (node.expr.type instanceof SemanticPrimitiveType) {
+            if (node.expr.type.kind == SastTypeKind.PRIMITIVE) {
                 if (!node.checked) {
                     diagnostics.error("'cast' cannot convert an integer to enum type '"
-                            + targetEnum.enumSymbol.qualifiedName()
+                            + node.type.enumSymbol.qualifiedName()
                             + "'; write unsafe_cast<"
-                            + targetEnum.enumSymbol.qualifiedName()
+                            + node.type.enumSymbol.qualifiedName()
                             + ">(...)");
                     return;
                 }
@@ -687,32 +687,32 @@ public class ExpressionChecker {
             }
 
             diagnostics.error("'unsafe_cast' to enum type '"
-                    + targetEnum.enumSymbol.qualifiedName()
+                    + node.type.enumSymbol.qualifiedName()
                     + "' requires an integer operand, got "
                     + types.describeSafe(node.expr.type));
             return;
         }
 
-        if (node.expr.type instanceof SemanticEnumType sourceEnum) {
-            if (!(node.type instanceof SemanticPrimitiveType targetPrimitive)) {
+        if (node.expr.type.kind == SastTypeKind.ENUM) {
+            if (!(node.type.kind == SastTypeKind.PRIMITIVE)) {
                 diagnostics.error("Cast target must be a primitive integer type, a pointer type, or an enum type, got "
                         + types.describeSafe(node.type));
                 return;
             }
 
-            if (types.isValuePreservingEnumToIntegerCast(sourceEnum, targetPrimitive.kind)) {
+            if (types.isValuePreservingEnumToIntegerCast(node.expr.type, node.type.primitive)) {
                 return;
             }
 
             if (!node.checked) {
                 diagnostics.error("'cast' cannot lose data: enum '"
-                        + sourceEnum.enumSymbol.qualifiedName()
+                        + node.expr.type.enumSymbol.qualifiedName()
                         + "' is backed by "
-                        + sourceEnum.enumSymbol.backingKind.name().toLowerCase()
+                        + node.expr.type.enumSymbol.backingKind.name().toLowerCase()
                         + ", which does not widen value-preservingly to "
-                        + targetPrimitive.describe()
+                        + node.type.describe()
                         + "; write unsafe_cast<"
-                        + targetPrimitive.describe()
+                        + node.type.describe()
                         + ">(...)");
                 return;
             }
@@ -720,13 +720,13 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!(node.type instanceof SemanticPrimitiveType targetPrimitive)) {
+        if (!(node.type.kind == SastTypeKind.PRIMITIVE)) {
             diagnostics.error("Cast target must be a primitive integer type, a pointer type, or an enum type, got "
                     + types.describeSafe(node.type));
             return;
         }
 
-        if (!(node.expr.type instanceof SemanticPrimitiveType sourcePrimitive)) {
+        if (!(node.expr.type.kind == SastTypeKind.PRIMITIVE)) {
             diagnostics.error("Operand of '" + syntax
                     + "' must be an integer expression, got "
                     + types.describeSafe(node.expr.type));
@@ -735,14 +735,14 @@ public class ExpressionChecker {
 
         if (!node.checked
                 && !TypeChecker.isValuePreservingIntegerWidening(
-                        sourcePrimitive.kind,
-                        targetPrimitive.kind)) {
+                        node.expr.type.primitive,
+                        node.type.primitive)) {
             diagnostics.error("'cast' cannot lose data: conversion from "
-                    + sourcePrimitive.describe()
+                    + node.expr.type.describe()
                     + " to "
-                    + targetPrimitive.describe()
+                    + node.type.describe()
                     + " is not a value-preserving widening; write unsafe_cast<"
-                    + targetPrimitive.describe()
+                    + node.type.describe()
                     + ">(...) to make the checked narrowing explicit");
             return;
         }
@@ -750,15 +750,15 @@ public class ExpressionChecker {
         if (node.isConstant()) {
             types.requireConstantFitsPrimitive(
                     node.constantValue,
-                    targetPrimitive.kind,
-                    "Cast to " + targetPrimitive.kind.name().toLowerCase()
+                    node.type.primitive,
+                    "Cast to " + node.type.primitive.name().toLowerCase()
             );
         }
     }
 
     private void visitPermissionCast(
             SemanticCastExprNode node,
-            SemanticPtrType targetPointer
+            SastType targetPointer
     ) {
         if (node.checked) {
             diagnostics.error("'unsafe_cast' target must be a primitive "
@@ -771,7 +771,7 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!(node.expr.type instanceof SemanticPtrType sourcePointer)) {
+        if (!(node.expr.type.kind == SastTypeKind.PTR)) {
             diagnostics.error("'cast' to "
                     + types.describeSafe(node.type)
                     + " requires a pointer or null operand, got "
@@ -779,14 +779,13 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!sourcePointer.referencedType.equals(
-                targetPointer.referencedType)) {
-            if (sourcePointer.referencedType
-                            instanceof SemanticStaticArrayType sourceStatic
-                    && targetPointer.referencedType
-                            instanceof SemanticDynamicArrayType targetDynamic
-                    && sourceStatic.elementType.equals(targetDynamic.elementType)) {
-                if (targetPointer.permission == PtrPermission.OWNER) {
+        if (!node.expr.type.referencedType.equals(
+                node.type.referencedType)) {
+            if (node.expr.type.referencedType.kind == SastTypeKind.STATIC_ARRAY
+                    && node.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY
+                    && node.expr.type.referencedType.elementType.equals(
+                            node.type.referencedType.elementType)) {
+                if (node.type.permission == PtrPermission.OWNER) {
                     diagnostics.error("'cast' cannot decay ownership: "
                             + types.describeSafe(node.expr.type)
                             + " cannot be cast to "
@@ -798,7 +797,7 @@ public class ExpressionChecker {
                     return;
                 }
 
-                if (!sourcePointer.permission.allows(targetPointer.permission)) {
+                if (!node.expr.type.permission.allows(node.type.permission)) {
                     diagnostics.error("'cast' cannot raise pointer "
                             + "permissions: "
                             + types.describeSafe(node.expr.type)
@@ -821,7 +820,7 @@ public class ExpressionChecker {
             return;
         }
 
-        if (sourcePointer.permission == targetPointer.permission) {
+        if (node.expr.type.permission == node.type.permission) {
             return;
         }
 
@@ -942,8 +941,8 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!(expr.type instanceof SemanticPrimitiveType pt
-                && pt.kind == SemanticPrimitiveKind.UINT32)) {
+        if (!(expr.type.kind == SastTypeKind.PRIMITIVE
+                && expr.type.primitive == SemanticPrimitiveKind.UINT32)) {
             diagnostics.error(message + ": expected uint32, got "
                     + types.describeSafe(expr.type));
         }
@@ -974,8 +973,8 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!(expr.type instanceof SemanticPrimitiveType pt
-                && pt.kind == kind)) {
+        if (!(expr.type.kind == SastTypeKind.PRIMITIVE
+                && expr.type.primitive == kind)) {
             diagnostics.error(message + ": expected "
                     + kind.name().toLowerCase()
                     + ", got "
@@ -984,12 +983,12 @@ public class ExpressionChecker {
     }
 
     void ensureStaticArrayByteAccessInBounds(
-            SemanticType arrayType,
+            SastType arrayType,
             SemanticExprNode offsetExpr,
             int byteWidth,
             String message
     ) {
-        if (!(arrayType instanceof SemanticStaticArrayType staticArray)) {
+        if (!(arrayType.kind == SastTypeKind.STATIC_ARRAY)) {
             return;
         }
 
@@ -1005,6 +1004,7 @@ public class ExpressionChecker {
             return;
         }
 
+        SastType staticArray = arrayType;
         BigInteger size = staticArraySize(staticArray);
 
         if (size == null) {
@@ -1014,7 +1014,7 @@ public class ExpressionChecker {
         if (offset.add(BigInteger.valueOf(byteWidth)).compareTo(size) > 0) {
             diagnostics.error(message
                     + " is out of bounds for "
-                    + staticArray.describe()
+                    + arrayType.describe()
                     + " with size "
                     + size
                     + ": byte offset "
@@ -1025,11 +1025,11 @@ public class ExpressionChecker {
     }
 
     void ensureStaticArrayBitIndexInBounds(
-            SemanticType arrayType,
+            SastType arrayType,
             SemanticExprNode bitIndexExpr,
             String message
     ) {
-        if (!(arrayType instanceof SemanticStaticArrayType staticArray)) {
+        if (!(arrayType.kind == SastTypeKind.STATIC_ARRAY)) {
             return;
         }
 
@@ -1045,6 +1045,7 @@ public class ExpressionChecker {
             return;
         }
 
+        SastType staticArray = arrayType;
         BigInteger size = staticArraySize(staticArray);
 
         if (size == null) {
@@ -1056,7 +1057,7 @@ public class ExpressionChecker {
         if (bitIndex.compareTo(totalBits) >= 0) {
             diagnostics.error(message
                     + " is out of bounds for "
-                    + staticArray.describe()
+                    + arrayType.describe()
                     + " with "
                     + totalBits
                     + " bits: bit index "
@@ -1064,7 +1065,7 @@ public class ExpressionChecker {
         }
     }
 
-    private BigInteger staticArraySize(SemanticStaticArrayType staticArray) {
+    private BigInteger staticArraySize(SastType staticArray) {
         try {
             return types.parseIntegerLiteral(staticArray.sizeLiteral);
         } catch (IllegalArgumentException ignored) {
@@ -1073,12 +1074,12 @@ public class ExpressionChecker {
     }
 
     void ensureStaticArrayRangeInBounds(
-            SemanticType arrayType,
+            SastType arrayType,
             SemanticExprNode startExpr,
             SemanticExprNode countExpr,
             String message
     ) {
-        if (!(arrayType instanceof SemanticStaticArrayType staticArray)) {
+        if (!(arrayType.kind == SastTypeKind.STATIC_ARRAY)) {
             return;
         }
 
@@ -1102,7 +1103,7 @@ public class ExpressionChecker {
         BigInteger size;
 
         try {
-            size = types.parseIntegerLiteral(staticArray.sizeLiteral);
+            size = types.parseIntegerLiteral(arrayType.sizeLiteral);
         } catch (IllegalArgumentException ignored) {
             return;
         }
@@ -1112,7 +1113,7 @@ public class ExpressionChecker {
         if (start.compareTo(size) > 0 || end.compareTo(size) > 0) {
             diagnostics.error(message
                     + " is out of bounds for "
-                    + staticArray.describe()
+                    + arrayType.describe()
                     + " with size "
                     + size
                     + ": start "
@@ -1137,8 +1138,8 @@ public class ExpressionChecker {
             return;
         }
 
-        if (!(value.type instanceof SemanticPrimitiveType pt
-                && pt.kind == SemanticPrimitiveKind.UINT8)) {
+        if (!(value.type.kind == SastTypeKind.PRIMITIVE
+                && value.type.primitive == SemanticPrimitiveKind.UINT8)) {
             diagnostics.error("memset() fill value must be uint8/char, got "
                     + types.describeSafe(value.type));
         }

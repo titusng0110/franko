@@ -228,7 +228,7 @@ final class BranchPruner {
         if (determination == Determination.TRUE) {
             SemanticIntLiteralNode trueLiteral = new SemanticIntLiteralNode(
                     node.condition.span,
-                    new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8),
+                    SastType.primitive(SemanticPrimitiveKind.UINT8),
                     BigInteger.ONE,
                     "1"
             );

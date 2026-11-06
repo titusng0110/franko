@@ -10,7 +10,7 @@ public class Desugarer {
 
     private final DiagnosticBag diagnostics;
 
-    private final Map<String, GlobalVarDeclNode> hoistedStringGlobals =
+    private final Map<String, AstNode> hoistedStringGlobals =
         new LinkedHashMap<>();
 
     public Desugarer() {
@@ -30,23 +30,22 @@ public class Desugarer {
         }
     }
 
-    public ASTNode desugar(ASTNode root) {
+    public AstNode desugar(AstNode root) {
         if (root == null) return null;
 
-        if (root instanceof ProgramNode) {
-            ProgramNode p = (ProgramNode) root;
-            List<ASTNode> items =
-                desugarTopLevelItemList(p.topLevelItems);
+        if (root.kind == AstKind.PROGRAM) {
+            List<AstNode> items =
+                desugarTopLevelItemList(root.items);
 
             items.addAll(0, hoistedStringGlobals.values());
 
-            return new ProgramNode(root.span, items);
+            return AstNode.program(root.span, items);
         }
 
         return desugarStmt(root);
     }
 
-    private ASTNode hoistStringLiteral(StringLiteralNode literal) {
+    private AstNode hoistStringLiteral(AstNode literal) {
         List<BigInteger> bytes =
             StringLiteralDecoder.toUtf8Bytes(literal);
 
@@ -66,15 +65,15 @@ public class Desugarer {
 
         String key = contentKey.toString();
 
-        GlobalVarDeclNode decl = hoistedStringGlobals.get(key);
+        AstNode decl = hoistedStringGlobals.get(key);
 
         if (decl == null) {
-            decl = new GlobalVarDeclNode(
+            decl = AstNode.globalVarDecl(
                 literal.span,
-                new StaticArrayTypeNode(
+                AstNode.staticArrayType(
                     literal.span,
-                    new PrimitiveTypeNode(literal.span, PrimitiveKind.UINT8),
-                    new IntNode(literal.span, Integer.toString(bytes.size()))
+                    AstNode.primitiveType(literal.span, PrimitiveKind.UINT8),
+                    AstNode.intLiteral(literal.span, Integer.toString(bytes.size()))
                 ),
                 "STRLIT_" + Mangler.hashHex64(key),
                 null
@@ -84,66 +83,66 @@ public class Desugarer {
             hoistedStringGlobals.put(key, decl);
         }
 
-        return new GetPtrNode(
+        return AstNode.getPtr(
             literal.span,
             PtrPermission.READ_ONLY,
-            new VarNode(literal.span, decl.name)
+            AstNode.var(literal.span, decl.name)
         );
     }
 
-    private List<ASTNode> desugarTopLevelItemList(List<ASTNode> items) {
-        List<ASTNode> out = new ArrayList<>();
+    private List<AstNode> desugarTopLevelItemList(List<AstNode> items) {
+        List<AstNode> out = new ArrayList<>();
 
-        for (ASTNode item : items) {
+        for (AstNode item : items) {
             appendDesugaredTopLevelItem(item, out);
         }
 
         return out;
     }
 
-    private void appendDesugaredTopLevelItem(ASTNode item, List<ASTNode> out) {
+    private void appendDesugaredTopLevelItem(AstNode item, List<AstNode> out) {
         if (item == null) return;
 
         diagnostics.push(item.span);
         try {
 
-        if (item instanceof ImportNode) {
+        if (item.kind == AstKind.IMPORT) {
             out.add(item);
             return;
         }
 
-        if (item instanceof FunctionDeclNode) {
-            out.add(desugarFunctionDecl((FunctionDeclNode) item));
+        if (item.kind == AstKind.FUNCTION_DECL) {
+            out.add(desugarFunctionDecl(item));
             return;
         }
 
-        if (item instanceof StructDeclNode) {
-            out.add(desugarStructDecl((StructDeclNode) item));
+        if (item.kind == AstKind.STRUCT_DECL) {
+            out.add(desugarStructDecl(item));
             return;
         }
 
-        if (item instanceof EnumDeclNode) {
-            out.add(desugarEnumDecl((EnumDeclNode) item));
+        if (item.kind == AstKind.ENUM_DECL) {
+            out.add(desugarEnumDecl(item));
             return;
         }
 
-        if (item instanceof GlobalVarDeclNode) {
-            out.add(desugarGlobalVarDecl((GlobalVarDeclNode) item));
+        if (item.kind == AstKind.GLOBAL_VAR_DECL) {
+            out.add(desugarGlobalVarDecl(item));
             return;
         }
 
-        if (item instanceof NamespaceNode) {
-            out.add(desugarNamespaceDecl((NamespaceNode) item));
+        if (item.kind == AstKind.NAMESPACE) {
+            out.add(desugarNamespaceDecl(item));
             return;
         }
 
-        if (item instanceof DeclIfNode declIf) {
-            out.add(desugarDeclIfTopLevel(declIf));
+        if (item.kind == AstKind.DECL_IF) {
+            out.add(desugarDeclIfTopLevel(item));
             return;
         }
 
-        if (item instanceof CompileTimeCallNode
-                || item instanceof CompileTimeNameNode) {
+        if (item.kind == AstKind.COMPILE_TIME_CALL
+                || item.kind == AstKind.COMPILE_TIME_NAME) {
             out.add(desugarExpr(item));
             return;
         }
@@ -154,12 +153,12 @@ public class Desugarer {
         }
     }
 
-    private NamespaceNode desugarNamespaceDecl(NamespaceNode n) {
-        return new NamespaceNode(n.span, n.name, desugarTopLevelItemList(n.items));
+    private AstNode desugarNamespaceDecl(AstNode n) {
+        return AstNode.namespace(n.span, n.name, desugarTopLevelItemList(n.items));
     }
 
-    private DeclIfNode desugarDeclIfTopLevel(DeclIfNode n) {
-        return new DeclIfNode(
+    private AstNode desugarDeclIfTopLevel(AstNode n) {
+        return AstNode.declIf(
             n.span,
             desugarExpr(n.condition),
             desugarTopLevelItemList(n.thenItems),
@@ -167,8 +166,8 @@ public class Desugarer {
         );
     }
 
-    private DeclIfNode desugarDeclIfStruct(DeclIfNode n) {
-        return new DeclIfNode(
+    private AstNode desugarDeclIfStruct(AstNode n) {
+        return AstNode.declIf(
             n.span,
             desugarExpr(n.condition),
             desugarStructMemberList(n.thenItems),
@@ -176,82 +175,82 @@ public class Desugarer {
         );
     }
 
-    private List<ASTNode> desugarStructMemberList(List<ASTNode> items) {
-        List<ASTNode> out = new ArrayList<>();
+    private List<AstNode> desugarStructMemberList(List<AstNode> items) {
+        List<AstNode> out = new ArrayList<>();
 
-        for (ASTNode item : items) {
+        for (AstNode item : items) {
             out.add(desugarStructMember(item));
         }
 
         return out;
     }
 
-    private ASTNode desugarStructMember(ASTNode item) {
-        if (item instanceof StructFieldDeclNode field) {
-            return new StructFieldDeclNode(
-                field.span,
-                desugarType(field.type),
-                field.name,
-                evalConstExpr(field.constInitializer, "struct field initializer")
+    private AstNode desugarStructMember(AstNode item) {
+        if (item.kind == AstKind.STRUCT_FIELD_DECL) {
+            return AstNode.structFieldDecl(
+                item.span,
+                desugarType(item.type),
+                item.name,
+                evalConstExpr(item.value, "struct field initializer")
             );
         }
 
-        if (item instanceof FunctionDeclNode method) {
-            return desugarFunctionDecl(method);
+        if (item.kind == AstKind.FUNCTION_DECL) {
+            return desugarFunctionDecl(item);
         }
 
-        if (item instanceof DeclIfNode declIf) {
-            return desugarDeclIfStruct(declIf);
+        if (item.kind == AstKind.DECL_IF) {
+            return desugarDeclIfStruct(item);
         }
 
-        if (item instanceof CompileTimeCallNode
-                || item instanceof CompileTimeNameNode) {
+        if (item.kind == AstKind.COMPILE_TIME_CALL
+                || item.kind == AstKind.COMPILE_TIME_NAME) {
             return desugarExpr(item);
         }
 
         throw new RuntimeException(
             "Unsupported struct member in desugarer: "
-                + item.getClass().getSimpleName()
+                + item.kind.jsonName()
         );
     }
 
-    private StructDeclNode desugarStructDecl(StructDeclNode n) {
-        List<StructFieldDeclNode> fields = new ArrayList<>();
-        List<FunctionDeclNode> methods = new ArrayList<>();
-        List<ASTNode> members = new ArrayList<>();
+    private AstNode desugarStructDecl(AstNode n) {
+        List<AstNode> fields = new ArrayList<>();
+        List<AstNode> methods = new ArrayList<>();
+        List<AstNode> members = new ArrayList<>();
 
-        for (ASTNode member : n.memberItems) {
-            ASTNode desugared = desugarStructMember(member);
+        for (AstNode member : n.members) {
+            AstNode desugared = desugarStructMember(member);
             members.add(desugared);
 
-            if (desugared instanceof StructFieldDeclNode field) {
-                fields.add(field);
-            } else if (desugared instanceof FunctionDeclNode method) {
-                methods.add(method);
+            if (desugared.kind == AstKind.STRUCT_FIELD_DECL) {
+                fields.add(desugared);
+            } else if (desugared.kind == AstKind.FUNCTION_DECL) {
+                methods.add(desugared);
             }
         }
 
-        return new StructDeclNode(n.span, n.name, fields, methods, members);
+        return AstNode.structDecl(n.span, n.name, fields, methods, members);
     }
 
-    private EnumDeclNode desugarEnumDecl(EnumDeclNode n) {
-        TypeNode backing = desugarType(n.backingType);
-        List<EnumVariantNode> variants = new ArrayList<>();
+    private AstNode desugarEnumDecl(AstNode n) {
+        AstNode backing = desugarType(n.type);
+        List<AstNode> variants = new ArrayList<>();
 
-        for (EnumVariantNode variant : n.variants) {
-            ASTNode folded = null;
+        for (AstNode variant : n.variants) {
+            AstNode folded = null;
 
-            if (variant.constInitializer != null) {
-                folded = evalConstExpr(variant.constInitializer, "enum variant value");
+            if (variant.value != null) {
+                folded = evalConstExpr(variant.value, "enum variant value");
             }
 
-            variants.add(new EnumVariantNode(variant.span, variant.name, folded));
+            variants.add(AstNode.enumVariant(variant.span, variant.name, folded));
         }
 
-        return new EnumDeclNode(n.span, n.name, backing, variants);
+        return AstNode.enumDecl(n.span, n.name, backing, variants);
     }
 
-    private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {
+    private AstNode desugarGlobalVarDecl(AstNode n) {
         if (usesInferredSize(n.type)) {
             diagnostics.error("'?' array size is not allowed for global variable '"
                 + n.name
@@ -260,17 +259,17 @@ public class Desugarer {
             return globalVarDecl(
                 n,
                 desugarType(replaceInferredSizesWithFallback(n.type)),
-                evalConstExpr(n.constInitializer, "global variable initializer")
+                evalConstExpr(n.value, "global variable initializer")
             );
         }
 
-        TypeNode type = desugarType(n.type);
-        ASTNode init = n.constInitializer;
+        AstNode type = desugarType(n.type);
+        AstNode init = n.value;
 
-        if (init instanceof StringLiteralNode s) {
-            ASTNode hoisted = hoistStringLiteral(s);
+        if (init != null && init.kind == AstKind.STRING_LITERAL) {
+            AstNode hoisted = hoistStringLiteral(init);
 
-            if (!(type instanceof PtrTypeNode)) {
+            if (type.kind != AstKind.PTR_TYPE) {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': a string literal is a view<[byte, N]> value "
@@ -282,8 +281,8 @@ public class Desugarer {
             return globalVarDecl(n, type, hoisted);
         }
 
-        if (init instanceof ArrayLiteralNode) {
-            if (!(type instanceof PtrTypeNode)) {
+        if (init != null && init.kind == AstKind.ARRAY_LITERAL) {
+            if (type.kind != AstKind.PTR_TYPE) {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': only pointer-typed globals may be initialized with "
@@ -295,8 +294,8 @@ public class Desugarer {
             return globalVarDecl(n, type, desugarExpr(init));
         }
 
-        if (init instanceof GetPtrNode) {
-            if (!(type instanceof PtrTypeNode)) {
+        if (init != null && init.kind == AstKind.GET_PTR) {
+            if (type.kind != AstKind.PTR_TYPE) {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': only pointer-typed globals may be initialized with "
@@ -308,8 +307,8 @@ public class Desugarer {
             return globalVarDecl(n, type, desugarExpr(init));
         }
 
-        if (init instanceof NullNode) {
-            if (!(type instanceof PtrTypeNode)) {
+        if (init != null && init.kind == AstKind.NULL) {
+            if (type.kind != AstKind.PTR_TYPE) {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': null is only valid for pointer types");
@@ -327,12 +326,12 @@ public class Desugarer {
         );
     }
 
-    private GlobalVarDeclNode globalVarDecl(
-        GlobalVarDeclNode source,
-        TypeNode type,
-        ASTNode init
+    private AstNode globalVarDecl(
+        AstNode source,
+        AstNode type,
+        AstNode init
     ) {
-        GlobalVarDeclNode node = new GlobalVarDeclNode(
+        AstNode node = AstNode.globalVarDecl(
             source.span,
             type,
             source.name,
@@ -342,135 +341,126 @@ public class Desugarer {
         return node;
     }
 
-    private FunctionDeclNode desugarFunctionDecl(FunctionDeclNode fn) {
-        List<ParameterNode> parameters = new ArrayList<>();
+    private AstNode desugarFunctionDecl(AstNode fn) {
+        List<AstNode> parameters = new ArrayList<>();
 
-        for (ParameterNode param : fn.parameters) {
+        for (AstNode param : fn.parameters) {
             parameters.add(desugarParameter(param));
         }
 
-        BlockNode body = null;
+        AstNode body = null;
         if (fn.body != null) {
-            body = new BlockNode(fn.body.span, desugarStmtList(fn.body.statements));
+            body = AstNode.block(fn.body.span, desugarStmtList(fn.body.items));
         }
 
-        return new FunctionDeclNode(
+        return AstNode.functionDecl(
             fn.span,
             fn.name,
             parameters,
-            desugarType(fn.returnType),
+            desugarType(fn.type),
             body
         );
     }
 
-    private ParameterNode desugarParameter(ParameterNode param) {
-        return new ParameterNode(
+    private AstNode desugarParameter(AstNode param) {
+        return AstNode.parameter(
             param.span,
             desugarType(param.type),
             param.name
         );
     }
 
-    private List<ASTNode> desugarStmtList(List<ASTNode> stmts) {
-        List<ASTNode> out = new ArrayList<>();
+    private List<AstNode> desugarStmtList(List<AstNode> stmts) {
+        List<AstNode> out = new ArrayList<>();
 
-        for (ASTNode stmt : stmts) {
+        for (AstNode stmt : stmts) {
             appendDesugaredStmt(stmt, out);
         }
 
         return out;
     }
 
-    private void appendDesugaredStmt(ASTNode stmt, List<ASTNode> out) {
+    private void appendDesugaredStmt(AstNode stmt, List<AstNode> out) {
         if (stmt == null) return;
 
         diagnostics.push(stmt.span);
         try {
 
-        if (stmt instanceof VarDeclInitNode) {
-            appendDesugaredVarDeclInit((VarDeclInitNode) stmt, out);
+        if (stmt.kind == AstKind.VAR_DECL_INIT) {
+            appendDesugaredVarDeclInit(stmt, out);
             return;
         }
 
-        if (stmt instanceof VarDeclFieldsInitNode) {
-            appendDesugaredVarDeclFieldsInit((VarDeclFieldsInitNode) stmt, out);
+        if (stmt.kind == AstKind.VAR_DECL_FIELDS_INIT) {
+            appendDesugaredVarDeclFieldsInit(stmt, out);
             return;
         }
 
-        if (stmt instanceof AssignNode) {
-            appendDesugaredAssign((AssignNode) stmt, out);
+        if (stmt.kind == AstKind.ASSIGN) {
+            appendDesugaredAssign(stmt, out);
             return;
         }
 
-        if (stmt instanceof IncDecNode) {
-            out.add(lowerIncDec((IncDecNode) stmt));
+        if (stmt.kind == AstKind.INC_DEC) {
+            out.add(lowerIncDec(stmt));
             return;
         }
 
-        if (stmt instanceof BlockNode) {
-            BlockNode b = (BlockNode) stmt;
-            out.add(new BlockNode(b.span, desugarStmtList(b.statements)));
+        if (stmt.kind == AstKind.BLOCK) {
+            out.add(AstNode.block(stmt.span, desugarStmtList(stmt.items)));
             return;
         }
 
-        if (stmt instanceof CompileTimeIfNode) {
-            out.add(desugarCompileTimeIf((CompileTimeIfNode) stmt));
+        if (stmt.kind == AstKind.COMPILE_TIME_IF) {
+            out.add(desugarCompileTimeIf(stmt));
             return;
         }
 
-        if (stmt instanceof IfNode) {
-            IfNode n = (IfNode) stmt;
-
-            out.add(new IfNode(
-                n.span,
-                desugarExpr(n.condition),
-                desugarControlledStmt(n.thenBranch),
-                n.elseBranch != null
-                        ? desugarControlledStmt(n.elseBranch)
+        if (stmt.kind == AstKind.IF) {
+            out.add(AstNode.ifStmt(
+                stmt.span,
+                desugarExpr(stmt.condition),
+                desugarControlledStmt(stmt.thenBranch),
+                stmt.elseBranch != null
+                        ? desugarControlledStmt(stmt.elseBranch)
                         : null
             ));
 
             return;
         }
 
-        if (stmt instanceof WhileNode) {
-            WhileNode n = (WhileNode) stmt;
+        if (stmt.kind == AstKind.WHILE) {
+            List<AstNode> loweredUpdate = new ArrayList<>();
 
-            List<ASTNode> loweredUpdate = new ArrayList<>();
-
-            for (ASTNode updateStmt : n.update) {
+            for (AstNode updateStmt : stmt.updateItems) {
                 appendDesugaredStmt(updateStmt, loweredUpdate);
             }
 
-            out.add(new WhileNode(
-                n.span,
-                desugarExpr(n.condition),
-                desugarControlledStmt(n.body),
+            out.add(AstNode.whileStmt(
+                stmt.span,
+                desugarExpr(stmt.condition),
+                desugarControlledStmt(stmt.body),
                 loweredUpdate
             ));
 
             return;
         }
 
-        if (stmt instanceof ForNode) {
-            out.add(desugarForStmt((ForNode) stmt));
+        if (stmt.kind == AstKind.FOR) {
+            out.add(desugarForStmt(stmt));
             return;
         }
 
-        if (stmt instanceof BreakNode) {
-            BreakNode n = (BreakNode) stmt;
-
-            out.add(new BreakNode(n.span,
-                n.level != null ? desugarExpr(n.level) : null
+        if (stmt.kind == AstKind.BREAK) {
+            out.add(AstNode.breakStmt(stmt.span,
+                stmt.level != null ? desugarExpr(stmt.level) : null
             ));
             return;
         }
 
-        if (stmt instanceof ContinueNode) {
-            ContinueNode n = (ContinueNode) stmt;
-
-            out.add(new ContinueNode(n.span,
-                n.level != null ? desugarExpr(n.level) : null
+        if (stmt.kind == AstKind.CONTINUE) {
+            out.add(AstNode.continueStmt(stmt.span,
+                stmt.level != null ? desugarExpr(stmt.level) : null
             ));
             return;
         }
@@ -482,12 +472,12 @@ public class Desugarer {
     }
 
     private void appendDesugaredVarDeclInit(
-        VarDeclInitNode n,
-        List<ASTNode> out
+        AstNode n,
+        List<AstNode> out
     ) {
-        ASTNode rawInit = n.init;
+        AstNode rawInit = n.init;
 
-        TypeNode loweredType;
+        AstNode loweredType;
 
         if (usesInferredSize(n.type)) {
             loweredType = inferStaticSizes(n.type, rawInit, n.name);
@@ -495,7 +485,7 @@ public class Desugarer {
             loweredType = desugarType(n.type);
         }
 
-        out.add(new VarDeclNode(
+        out.add(AstNode.varDecl(
             n.span,
             loweredType,
             n.name
@@ -505,9 +495,9 @@ public class Desugarer {
             return;
         }
 
-        ASTNode target = new VarNode(n.span, n.name);
+        AstNode target = AstNode.var(n.span, n.name);
 
-        out.add(new AssignNode(
+        out.add(AstNode.assign(
             n.span,
             "=",
             target,
@@ -516,15 +506,15 @@ public class Desugarer {
     }
 
     private void appendDesugaredVarDeclFieldsInit(
-            VarDeclFieldsInitNode n,
-            List<ASTNode> out
+            AstNode n,
+            List<AstNode> out
     ) {
-        TypeNode type = desugarType(n.type);
+        AstNode type = desugarType(n.type);
 
-        out.add(new VarDeclNode(n.span, type, n.name));
+        out.add(AstNode.varDecl(n.span, type, n.name));
 
-        if (!(type instanceof StructTypeNode)
-                && !(type instanceof TupleTypeNode)) {
+        if (type.kind != AstKind.STRUCT_TYPE
+                && type.kind != AstKind.TUPLE_TYPE) {
             diagnostics.error(
                     "Field initializer requires a struct or tuple declaration"
             );
@@ -534,7 +524,7 @@ public class Desugarer {
         boolean anyPositional = false;
         boolean anyNamed = false;
 
-        for (FieldInitNode init : n.fields) {
+        for (AstNode init : n.fields) {
             if (init.positional) {
                 anyPositional = true;
             } else {
@@ -542,11 +532,8 @@ public class Desugarer {
             }
         }
 
-        TupleTypeNode tupleType = type instanceof TupleTypeNode tuple
-                ? tuple
-                : null;
-        boolean unnamedTuple = tupleType != null
-                && tupleType.elements.stream().allMatch(e -> e.name == null);
+        boolean unnamedTuple = type.kind == AstKind.TUPLE_TYPE
+                && allUnnamedTupleElements(type);
 
         if (anyPositional) {
             if (!unnamedTuple) {
@@ -561,13 +548,13 @@ public class Desugarer {
                 return;
             }
 
-            if (n.fields.size() > tupleType.elements.size()) {
+            if (n.fields.size() > type.elements.size()) {
                 diagnostics.error("Positional initializer for '"
                         + n.name
                         + "' has "
                         + n.fields.size()
                         + " entries but the tuple type has only "
-                        + tupleType.elements.size()
+                        + type.elements.size()
                         + " elements");
                 return;
             }
@@ -576,7 +563,7 @@ public class Desugarer {
         Set<String> seen = new HashSet<>();
         int position = 0;
 
-        for (FieldInitNode init : n.fields) {
+        for (AstNode init : n.fields) {
             String fieldName;
 
             if (init.positional) {
@@ -595,12 +582,12 @@ public class Desugarer {
                 continue;
             }
 
-            out.add(new AssignNode(
+            out.add(AstNode.assign(
                     init.span,
                     "=",
-                    new MemberAccessNode(
+                    AstNode.memberAccess(
                             init.span,
-                            new VarNode(n.span, n.name),
+                            AstNode.var(n.span, n.name),
                             fieldName
                     ),
                     desugarExpr(init.value)
@@ -608,51 +595,61 @@ public class Desugarer {
         }
     }
 
-    private boolean usesInferredSize(TypeNode type) {
+    private static boolean allUnnamedTupleElements(AstNode tupleType) {
+        for (AstNode element : tupleType.elements) {
+            if (element.name != null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean usesInferredSize(AstNode type) {
         if (type == null) {
             return false;
         }
 
-        if (type instanceof StaticArrayTypeNode s) {
-            return s.sizeExpr instanceof InferredSizeNode
-                || usesInferredSize(s.elementType);
+        if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
+            return type.sizeExpr.kind == AstKind.INFERRED_SIZE
+                || usesInferredSize(type.type);
         }
 
-        if (type instanceof DynamicArrayTypeNode d) {
-            return usesInferredSize(d.elementType);
+        if (type.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
+            return usesInferredSize(type.type);
         }
 
-        if (type instanceof PtrTypeNode a) {
-            return usesInferredSize(a.referencedType);
+        if (type.kind == AstKind.PTR_TYPE) {
+            return usesInferredSize(type.type);
         }
 
         return false;
     }
 
-    private boolean isFullyStaticArrayNest(TypeNode type) {
-        if (type instanceof StaticArrayTypeNode s) {
-            return isFullyStaticArrayNest(s.elementType);
+    private boolean isFullyStaticArrayNest(AstNode type) {
+        if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
+            return isFullyStaticArrayNest(type.type);
         }
 
-        if (type instanceof DynamicArrayTypeNode) {
+        if (type.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
             return false;
         }
 
-        if (type instanceof PtrTypeNode) {
+        if (type.kind == AstKind.PTR_TYPE) {
             return false;
         }
 
         return true;
     }
 
-    private boolean isStaticArrayLevel(TypeNode type) {
-        return type instanceof StaticArrayTypeNode;
+    private boolean isStaticArrayLevel(AstNode type) {
+        return type.kind == AstKind.STATIC_ARRAY_TYPE;
     }
 
-    private TypeNode inferStaticSizes(TypeNode declared, ASTNode init, String varName) {
-        if (!(declared instanceof PtrTypeNode p)
-                || p.kind != PtrPermission.READ_ONLY
-                || !(p.referencedType instanceof StaticArrayTypeNode)) {
+    private AstNode inferStaticSizes(AstNode declared, AstNode init, String varName) {
+        if (declared.kind != AstKind.PTR_TYPE
+                || declared.permission != PtrPermission.READ_ONLY
+                || declared.type.kind != AstKind.STATIC_ARRAY_TYPE) {
             diagnostics.error("'?' array size for '"
                 + varName
                 + "' requires a 'view<[...]>' declaration with an "
@@ -663,7 +660,7 @@ public class Desugarer {
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
 
-        TypeNode nest = p.referencedType;
+        AstNode nest = declared.type;
 
         if (!isFullyStaticArrayNest(nest)) {
             diagnostics.error("'?' size inference for '"
@@ -673,7 +670,7 @@ public class Desugarer {
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
 
-        if (init instanceof StringLiteralNode) {
+        if (init != null && init.kind == AstKind.STRING_LITERAL) {
             diagnostics.error("'?' array size for '"
                 + varName
                 + "' cannot be inferred from a string literal: a string "
@@ -685,7 +682,7 @@ public class Desugarer {
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
 
-        ArrayLiteralNode literal = normalizeInitializer(init);
+        AstNode literal = normalizeInitializer(init);
 
         if (literal == null) {
             diagnostics.error("'?' array size for '"
@@ -696,7 +693,7 @@ public class Desugarer {
         }
 
         try {
-            return new PtrTypeNode(
+            return AstNode.ptrType(
                 declared.span,
                 PtrPermission.READ_ONLY,
                 desugarType(inferLevel(nest, literal, varName))
@@ -708,16 +705,16 @@ public class Desugarer {
         }
     }
 
-    private ArrayLiteralNode normalizeInitializer(ASTNode init) {
-        if (init instanceof ArrayLiteralNode lit) {
-            return lit;
+    private AstNode normalizeInitializer(AstNode init) {
+        if (init != null && init.kind == AstKind.ARRAY_LITERAL) {
+            return init;
         }
 
         return null;
     }
 
-    private TypeNode inferLevel(TypeNode type, ArrayLiteralNode literal, String varName) {
-        if (!(type instanceof StaticArrayTypeNode s)) {
+    private AstNode inferLevel(AstNode type, AstNode literal, String varName) {
+        if (type.kind != AstKind.STATIC_ARRAY_TYPE) {
             throw new InferenceFailure("Internal inference error: expected a static array level for '"
                 + varName
                 + "'");
@@ -725,18 +722,18 @@ public class Desugarer {
 
         int count = literal.elements.size();
 
-        ASTNode sizeNode;
+        AstNode sizeNode;
 
-        if (s.sizeExpr instanceof InferredSizeNode) {
+        if (type.sizeExpr.kind == AstKind.INFERRED_SIZE) {
             if (count == 0) {
                 throw new InferenceFailure("'?' array size for '"
                     + varName
                     + "' cannot be inferred from an empty initializer list");
             }
 
-            sizeNode = new IntNode(s.sizeExpr.span, Integer.toString(count));
+            sizeNode = AstNode.intLiteral(type.sizeExpr.span, Integer.toString(count));
         } else {
-            BigInteger declared = ConstExpressionEvaluator.tryFold(s.sizeExpr);
+            BigInteger declared = ConstExpressionEvaluator.tryFold(type.sizeExpr);
 
             if (declared != null && !declared.equals(BigInteger.valueOf(count))) {
                 throw new InferenceFailure("Initializer for '"
@@ -748,16 +745,16 @@ public class Desugarer {
                     + " (partial initialization is not allowed when '?' is used)");
             }
 
-            sizeNode = s.sizeExpr;
+            sizeNode = type.sizeExpr;
         }
 
-        TypeNode inferredElem = s.elementType;
+        AstNode inferredElem = type.type;
 
-        if (isStaticArrayLevel(s.elementType)) {
-            List<ArrayLiteralNode> rows = new ArrayList<>();
+        if (isStaticArrayLevel(type.type)) {
+            List<AstNode> rows = new ArrayList<>();
 
-            for (ASTNode element : literal.elements) {
-                ArrayLiteralNode row = normalizeInitializer(element);
+            for (AstNode element : literal.elements) {
+                AstNode row = normalizeInitializer(element);
 
                 if (row == null) {
                     throw new InferenceFailure("'?' array size inference for '"
@@ -770,23 +767,23 @@ public class Desugarer {
 
             requireRectangular(rows, varName);
 
-            inferredElem = inferLevel(s.elementType, rows.get(0), varName);
+            inferredElem = inferLevel(type.type, rows.get(0), varName);
 
             for (int i = 1; i < rows.size(); i++) {
                 checkLevel(inferredElem, rows.get(i), varName);
             }
         }
 
-        return new StaticArrayTypeNode(type.span, inferredElem, sizeNode);
+        return AstNode.staticArrayType(type.span, inferredElem, sizeNode);
     }
 
-    private void checkLevel(TypeNode concrete, ArrayLiteralNode literal, String varName) {
-        if (!(concrete instanceof StaticArrayTypeNode s)) {
+    private void checkLevel(AstNode concrete, AstNode literal, String varName) {
+        if (concrete.kind != AstKind.STATIC_ARRAY_TYPE) {
             return;
         }
 
         int count = literal.elements.size();
-        BigInteger expected = ConstExpressionEvaluator.tryFold(s.sizeExpr);
+        BigInteger expected = ConstExpressionEvaluator.tryFold(concrete.sizeExpr);
 
         if (expected != null && !expected.equals(BigInteger.valueOf(count))) {
             throw new InferenceFailure("Initializer for '"
@@ -797,14 +794,14 @@ public class Desugarer {
                 + expected);
         }
 
-        if (!isStaticArrayLevel(s.elementType)) {
+        if (!isStaticArrayLevel(concrete.type)) {
             return;
         }
 
-        List<ArrayLiteralNode> rows = new ArrayList<>();
+        List<AstNode> rows = new ArrayList<>();
 
-        for (ASTNode element : literal.elements) {
-            ArrayLiteralNode row = normalizeInitializer(element);
+        for (AstNode element : literal.elements) {
+            AstNode row = normalizeInitializer(element);
 
             if (row == null) {
                 throw new InferenceFailure("'?' array size inference for '"
@@ -817,12 +814,12 @@ public class Desugarer {
 
         requireRectangular(rows, varName);
 
-        for (ArrayLiteralNode row : rows) {
-            checkLevel(s.elementType, row, varName);
+        for (AstNode row : rows) {
+            checkLevel(concrete.type, row, varName);
         }
     }
 
-    private void requireRectangular(List<ArrayLiteralNode> rows, String varName) {
+    private void requireRectangular(List<AstNode> rows, String varName) {
         if (rows.isEmpty()) {
             return;
         }
@@ -838,31 +835,31 @@ public class Desugarer {
         }
     }
 
-    private TypeNode replaceInferredSizesWithFallback(TypeNode type) {
-        if (type instanceof StaticArrayTypeNode s) {
-            ASTNode size = s.sizeExpr instanceof InferredSizeNode
-                    ? new IntNode(s.sizeExpr.span, "1")
-                    : s.sizeExpr;
+    private AstNode replaceInferredSizesWithFallback(AstNode type) {
+        if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
+            AstNode size = type.sizeExpr.kind == AstKind.INFERRED_SIZE
+                    ? AstNode.intLiteral(type.sizeExpr.span, "1")
+                    : type.sizeExpr;
 
-            return new StaticArrayTypeNode(
-                s.span,
-                replaceInferredSizesWithFallback(s.elementType),
+            return AstNode.staticArrayType(
+                type.span,
+                replaceInferredSizesWithFallback(type.type),
                 size
             );
         }
 
-        if (type instanceof DynamicArrayTypeNode d) {
-            return new DynamicArrayTypeNode(
-                d.span,
-                replaceInferredSizesWithFallback(d.elementType)
+        if (type.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
+            return AstNode.dynamicArrayType(
+                type.span,
+                replaceInferredSizesWithFallback(type.type)
             );
         }
 
-        if (type instanceof PtrTypeNode a) {
-            return new PtrTypeNode(
-                a.span,
-                a.kind,
-                replaceInferredSizesWithFallback(a.referencedType)
+        if (type.kind == AstKind.PTR_TYPE) {
+            return AstNode.ptrType(
+                type.span,
+                type.permission,
+                replaceInferredSizesWithFallback(type.type)
             );
         }
 
@@ -870,156 +867,139 @@ public class Desugarer {
     }
 
     private void appendDesugaredAssign(
-        AssignNode n,
-        List<ASTNode> out
+        AstNode n,
+        List<AstNode> out
     ) {
-        ASTNode target = desugarLValue(n.target);
+        AstNode target = desugarLValue(n.target);
 
-        out.add(new AssignNode(
+        out.add(AstNode.assign(
             n.span,
-            n.op,
+            n.text,
             target,
             desugarExpr(n.value)
         ));
     }
 
-    private ASTNode lowerIncDec(IncDecNode n) {
-        return new AssignNode(
+    private AstNode lowerIncDec(AstNode n) {
+        return AstNode.assign(
             n.span,
-            "++".equals(n.op) ? "+=" : "-=",
+            "++".equals(n.text) ? "+=" : "-=",
             desugarLValue(n.target),
-            new IntNode(n.span, "1")
+            AstNode.intLiteral(n.span, "1")
         );
     }
 
-    private ASTNode desugarStmt(ASTNode stmt) {
+    private AstNode desugarStmt(AstNode stmt) {
         if (stmt == null) return null;
 
-        if (stmt instanceof VarDeclInitNode) {
-            List<ASTNode> lowered = new ArrayList<>();
-            appendDesugaredVarDeclInit((VarDeclInitNode) stmt, lowered);
-            return new BlockNode(stmt.span, lowered);
+        if (stmt.kind == AstKind.VAR_DECL_INIT) {
+            List<AstNode> lowered = new ArrayList<>();
+            appendDesugaredVarDeclInit(stmt, lowered);
+            return AstNode.block(stmt.span, lowered);
         }
 
-        if (stmt instanceof VarDeclFieldsInitNode) {
-            List<ASTNode> lowered = new ArrayList<>();
-            appendDesugaredVarDeclFieldsInit((VarDeclFieldsInitNode) stmt, lowered);
-            return new BlockNode(stmt.span, lowered);
+        if (stmt.kind == AstKind.VAR_DECL_FIELDS_INIT) {
+            List<AstNode> lowered = new ArrayList<>();
+            appendDesugaredVarDeclFieldsInit(stmt, lowered);
+            return AstNode.block(stmt.span, lowered);
         }
 
-        if (stmt instanceof AssignNode) {
-            AssignNode n = (AssignNode) stmt;
-
-            return new AssignNode(
-                n.span,
-                n.op,
-                desugarLValue(n.target),
-                desugarExpr(n.value)
+        if (stmt.kind == AstKind.ASSIGN) {
+            return AstNode.assign(
+                stmt.span,
+                stmt.text,
+                desugarLValue(stmt.target),
+                desugarExpr(stmt.value)
             );
         }
 
-        if (stmt instanceof IncDecNode) {
-            return lowerIncDec((IncDecNode) stmt);
+        if (stmt.kind == AstKind.INC_DEC) {
+            return lowerIncDec(stmt);
         }
 
-        if (stmt instanceof ProgramNode) {
-            ProgramNode p = (ProgramNode) stmt;
-            return new ProgramNode(p.span, desugarTopLevelItemList(p.topLevelItems));
+        if (stmt.kind == AstKind.PROGRAM) {
+            return AstNode.program(stmt.span, desugarTopLevelItemList(stmt.items));
         }
 
-        if (stmt instanceof FunctionDeclNode) {
-            return desugarFunctionDecl((FunctionDeclNode) stmt);
+        if (stmt.kind == AstKind.FUNCTION_DECL) {
+            return desugarFunctionDecl(stmt);
         }
 
-        if (stmt instanceof BlockNode) {
-            BlockNode b = (BlockNode) stmt;
-            return new BlockNode(b.span, desugarStmtList(b.statements));
+        if (stmt.kind == AstKind.BLOCK) {
+            return AstNode.block(stmt.span, desugarStmtList(stmt.items));
         }
 
-        if (stmt instanceof IfNode) {
-            IfNode n = (IfNode) stmt;
-
-            return new IfNode(
-                n.span,
-                desugarExpr(n.condition),
-                desugarControlledStmt(n.thenBranch),
-                n.elseBranch != null
-                        ? desugarControlledStmt(n.elseBranch)
+        if (stmt.kind == AstKind.IF) {
+            return AstNode.ifStmt(
+                stmt.span,
+                desugarExpr(stmt.condition),
+                desugarControlledStmt(stmt.thenBranch),
+                stmt.elseBranch != null
+                        ? desugarControlledStmt(stmt.elseBranch)
                         : null
             );
         }
 
-        if (stmt instanceof CompileTimeIfNode) {
-            return desugarCompileTimeIf((CompileTimeIfNode) stmt);
+        if (stmt.kind == AstKind.COMPILE_TIME_IF) {
+            return desugarCompileTimeIf(stmt);
         }
 
-        if (stmt instanceof WhileNode) {
-            WhileNode n = (WhileNode) stmt;
+        if (stmt.kind == AstKind.WHILE) {
+            List<AstNode> loweredUpdate = new ArrayList<>();
 
-            List<ASTNode> loweredUpdate = new ArrayList<>();
-
-            for (ASTNode updateStmt : n.update) {
+            for (AstNode updateStmt : stmt.updateItems) {
                 appendDesugaredStmt(updateStmt, loweredUpdate);
             }
 
-            return new WhileNode(
-                n.span,
-                desugarExpr(n.condition),
-                desugarControlledStmt(n.body),
+            return AstNode.whileStmt(
+                stmt.span,
+                desugarExpr(stmt.condition),
+                desugarControlledStmt(stmt.body),
                 loweredUpdate
             );
         }
 
-        if (stmt instanceof ForNode) {
-            return desugarForStmt((ForNode) stmt);
+        if (stmt.kind == AstKind.FOR) {
+            return desugarForStmt(stmt);
         }
 
-        if (stmt instanceof BreakNode) {
-            BreakNode n = (BreakNode) stmt;
-
-            return new BreakNode(n.span,
-                n.level != null ? desugarExpr(n.level) : null
+        if (stmt.kind == AstKind.BREAK) {
+            return AstNode.breakStmt(stmt.span,
+                stmt.level != null ? desugarExpr(stmt.level) : null
             );
         }
 
-        if (stmt instanceof ContinueNode) {
-            ContinueNode n = (ContinueNode) stmt;
-
-            return new ContinueNode(n.span,
-                n.level != null ? desugarExpr(n.level) : null
+        if (stmt.kind == AstKind.CONTINUE) {
+            return AstNode.continueStmt(stmt.span,
+                stmt.level != null ? desugarExpr(stmt.level) : null
             );
         }
 
-        if (stmt instanceof ExprStmtNode) {
-            ExprStmtNode n = (ExprStmtNode) stmt;
-            return new ExprStmtNode(n.span, desugarExpr(n.expr));
+        if (stmt.kind == AstKind.EXPR_STMT) {
+            return AstNode.exprStmt(stmt.span, desugarExpr(stmt.expr));
         }
 
-        if (stmt instanceof ReturnNode) {
-            ReturnNode n = (ReturnNode) stmt;
-
-            return new ReturnNode(n.span,
-                n.value != null ? desugarExpr(n.value) : null
+        if (stmt.kind == AstKind.RETURN) {
+            return AstNode.returnStmt(stmt.span,
+                stmt.value != null ? desugarExpr(stmt.value) : null
             );
         }
 
-        if (stmt instanceof VarDeclNode) {
-            VarDeclNode n = (VarDeclNode) stmt;
-
-            return new VarDeclNode(
-                n.span,
-                desugarType(n.type),
-                n.name
+        if (stmt.kind == AstKind.VAR_DECL) {
+            return AstNode.varDecl(
+                stmt.span,
+                desugarType(stmt.type),
+                stmt.name
             );
         }
 
         throw new RuntimeException(
-            "Unsupported statement in desugarer: " + stmt.getClass().getSimpleName()
+            "Unsupported statement in desugarer: " + stmt.kind.jsonName()
         );
     }
 
-    private ASTNode desugarCompileTimeIf(CompileTimeIfNode n) {
-        return new CompileTimeIfNode(
+    private AstNode desugarCompileTimeIf(AstNode n) {
+        return AstNode.compileTimeIf(
             n.span,
             desugarExpr(n.condition),
             desugarControlledStmt(n.thenBranch),
@@ -1029,197 +1009,179 @@ public class Desugarer {
         );
     }
 
-    private ASTNode desugarControlledStmt(ASTNode stmt) {
-        ASTNode lowered = desugarStmt(stmt);
+    private AstNode desugarControlledStmt(AstNode stmt) {
+        AstNode lowered = desugarStmt(stmt);
 
-        if (lowered instanceof BlockNode) {
+        if (lowered != null && lowered.kind == AstKind.BLOCK) {
             return lowered;
         }
 
-        List<ASTNode> wrapped = new ArrayList<>();
+        List<AstNode> wrapped = new ArrayList<>();
         wrapped.add(lowered);
 
-        return new BlockNode(stmt.span, wrapped);
+        return AstNode.block(stmt.span, wrapped);
     }
 
-    private ASTNode desugarForStmt(ForNode n) {
-        List<ASTNode> outer = new ArrayList<>();
+    private AstNode desugarForStmt(AstNode n) {
+        List<AstNode> outer = new ArrayList<>();
 
         if (n.init != null) {
             appendDesugaredStmt(n.init, outer);
         }
 
-        ASTNode loweredBody = desugarControlledStmt(n.body);
+        AstNode loweredBody = desugarControlledStmt(n.body);
 
-        if (!(loweredBody instanceof BlockNode)) {
+        if (loweredBody.kind != AstKind.BLOCK) {
             throw new RuntimeException(
                 "Internal desugarer error: for-loop body did not lower to a block"
             );
         }
 
-        BlockNode bodyBlock = (BlockNode) loweredBody;
-
-        List<ASTNode> loweredUpdate = new ArrayList<>();
+        List<AstNode> loweredUpdate = new ArrayList<>();
 
         if (n.update != null) {
             appendDesugaredStmt(n.update, loweredUpdate);
         }
 
-        outer.add(new WhileNode(n.span,
+        outer.add(AstNode.whileStmt(n.span,
             desugarExpr(n.condition),
-            bodyBlock,
+            loweredBody,
             loweredUpdate
         ));
 
-        return new BlockNode(n.span, outer);
+        return AstNode.block(n.span, outer);
     }
 
-    private ASTNode desugarReflectionArgument(ASTNode arg) {
-        if (arg instanceof StringLiteralNode) {
+    private AstNode desugarReflectionArgument(AstNode arg) {
+        if (arg.kind == AstKind.STRING_LITERAL) {
             return arg;
         }
 
-        if (arg instanceof TypeNode type) {
-            return desugarType(type);
+        if (arg.isType()) {
+            return desugarType(arg);
         }
 
         return desugarExpr(arg);
     }
 
-    private ASTNode desugarExpr(ASTNode expr) {
+    private AstNode desugarExpr(AstNode expr) {
         if (expr == null) return null;
 
         diagnostics.push(expr.span);
         try {
 
-        if (expr instanceof IntNode) {
+        if (expr.kind == AstKind.INT) {
             return expr;
         }
 
-        if (expr instanceof StringLiteralNode) {
-            return hoistStringLiteral((StringLiteralNode) expr);
+        if (expr.kind == AstKind.STRING_LITERAL) {
+            return hoistStringLiteral(expr);
         }
 
-        if (expr instanceof VarNode) {
+        if (expr.kind == AstKind.VAR) {
             return expr;
         }
 
-        if (expr instanceof QualifiedNameNode) {
+        if (expr.kind == AstKind.QUALIFIED_NAME) {
             return expr;
         }
 
-        if (expr instanceof NullNode) {
+        if (expr.kind == AstKind.NULL) {
             return expr;
         }
 
-        if (expr instanceof UnaryOpNode) {
-            UnaryOpNode n = (UnaryOpNode) expr;
-
-            return new UnaryOpNode(expr.span,
-                n.op,
-                desugarExpr(n.expr)
+        if (expr.kind == AstKind.UNARY) {
+            return AstNode.unary(expr.span,
+                expr.text,
+                desugarExpr(expr.expr)
             );
         }
 
-        if (expr instanceof BinOpNode) {
-            BinOpNode n = (BinOpNode) expr;
-
-            return new BinOpNode(expr.span,
-                n.op,
-                desugarExpr(n.left),
-                desugarExpr(n.right)
+        if (expr.kind == AstKind.BINARY) {
+            return AstNode.binary(expr.span,
+                expr.text,
+                desugarExpr(expr.left),
+                desugarExpr(expr.right)
             );
         }
 
-        if (expr instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) expr;
-
-            return new ArrayAccessNode(expr.span,
-                desugarExpr(n.target),
-                desugarExpr(n.index)
+        if (expr.kind == AstKind.ARRAY_ACCESS) {
+            return AstNode.arrayAccess(expr.span,
+                desugarExpr(expr.target),
+                desugarExpr(expr.index)
             );
         }
 
-        if (expr instanceof MemberAccessNode) {
-            MemberAccessNode n = (MemberAccessNode) expr;
-
-            return new MemberAccessNode(expr.span,
-                desugarExpr(n.target),
-                n.memberName
+        if (expr.kind == AstKind.MEMBER_ACCESS) {
+            return AstNode.memberAccess(expr.span,
+                desugarExpr(expr.target),
+                expr.name
             );
         }
 
-        if (expr instanceof CompileTimeCallNode n) {
-            List<ASTNode> args = new ArrayList<>();
+        if (expr.kind == AstKind.COMPILE_TIME_CALL) {
+            List<AstNode> args = new ArrayList<>();
 
-            for (ASTNode arg : n.args) {
+            for (AstNode arg : expr.args) {
                 args.add(desugarReflectionArgument(arg));
             }
 
-            return new CompileTimeCallNode(expr.span, n.name, args);
+            return AstNode.compileTimeCall(expr.span, expr.name, args);
         }
 
-        if (expr instanceof CompileTimeNameNode) {
+        if (expr.kind == AstKind.COMPILE_TIME_NAME) {
             return expr;
         }
 
-        if (expr instanceof CallNode) {
-            CallNode n = (CallNode) expr;
+        if (expr.kind == AstKind.CALL) {
+            List<AstNode> args = new ArrayList<>();
 
-            List<ASTNode> args = new ArrayList<>();
-
-            for (ASTNode arg : n.args) {
+            for (AstNode arg : expr.args) {
                 args.add(desugarExpr(arg));
             }
 
-            return new CallNode(expr.span,
-                desugarExpr(n.callee),
+            return AstNode.call(expr.span,
+                desugarExpr(expr.callee),
                 args
             );
         }
 
-        if (expr instanceof GetPtrNode) {
-            GetPtrNode n = (GetPtrNode) expr;
-
-            return new GetPtrNode(expr.span,
-                n.kind,
-                desugarLValue(n.target)
+        if (expr.kind == AstKind.GET_PTR) {
+            return AstNode.getPtr(expr.span,
+                expr.permission,
+                desugarLValue(expr.target)
             );
         }
 
-        if (expr instanceof DerefNode) {
-            DerefNode n = (DerefNode) expr;
-
-            return new DerefNode(expr.span,
-                desugarExpr(n.expr)
+        if (expr.kind == AstKind.DEREF) {
+            return AstNode.deref(expr.span,
+                desugarExpr(expr.expr)
             );
         }
 
-        if (expr instanceof CastNode) {
-            CastNode n = (CastNode) expr;
-
-            return new CastNode(expr.span,
-                desugarType(n.target),
-                desugarExpr(n.expr),
-                n.unsafe
+        if (expr.kind == AstKind.CAST) {
+            return AstNode.cast(expr.span,
+                desugarType(expr.type),
+                desugarExpr(expr.expr),
+                expr.unsafe
             );
         }
 
-        if (expr instanceof ArrayLiteralNode n) {
-            List<ASTNode> elements = new ArrayList<>();
+        if (expr.kind == AstKind.ARRAY_LITERAL) {
+            List<AstNode> elements = new ArrayList<>();
 
-            for (ASTNode element : n.elements) {
+            for (AstNode element : expr.elements) {
                 elements.add(desugarExpr(element));
             }
 
-            return new ArrayLiteralNode(expr.span, elements);
+            return AstNode.arrayLiteral(expr.span, elements);
         }
 
-        if (expr instanceof AggregateLiteralNode n) {
-            List<FieldInitNode> fields = new ArrayList<>();
+        if (expr.kind == AstKind.AGGREGATE_LITERAL) {
+            List<AstNode> fields = new ArrayList<>();
 
-            for (FieldInitNode field : n.fields) {
-                fields.add(new FieldInitNode(
+            for (AstNode field : expr.fields) {
+                fields.add(AstNode.fieldInit(
                         field.span,
                         field.name,
                         desugarExpr(field.value),
@@ -1227,28 +1189,28 @@ public class Desugarer {
                 ));
             }
 
-            return new AggregateLiteralNode(
+            return AstNode.aggregateLiteral(
                     expr.span,
-                    desugarType(n.type),
+                    desugarType(expr.type),
                     fields
             );
         }
 
         throw new RuntimeException(
-            "Unsupported expression in desugarer: " + expr.getClass().getSimpleName()
+            "Unsupported expression in desugarer: " + expr.kind.jsonName()
         );
         } finally {
             diagnostics.pop();
         }
     }
 
-    private ASTNode evalConstExpr(ASTNode expr, String role) {
+    private AstNode evalConstExpr(AstNode expr, String role) {
         if (expr == null) return null;
 
         diagnostics.push(expr.span);
         try {
         try {
-            return new IntNode(
+            return AstNode.intLiteral(
                 expr.span,
                 ConstExpressionEvaluator.evaluatePure(expr).toString(10)
             );
@@ -1259,128 +1221,116 @@ public class Desugarer {
                 diagnostics.error("Invalid constant expression for " + role);
             }
 
-            return new IntNode(expr.span, "1");
+            return AstNode.intLiteral(expr.span, "1");
         }
         } finally {
             diagnostics.pop();
         }
     }
 
-    private ASTNode desugarLValue(ASTNode node) {
+    private AstNode desugarLValue(AstNode node) {
         if (node == null) return null;
 
-        if (node instanceof VarNode) {
+        if (node.kind == AstKind.VAR) {
             return node;
         }
 
-        if (node instanceof QualifiedNameNode) {
+        if (node.kind == AstKind.QUALIFIED_NAME) {
             return node;
         }
 
-        if (node instanceof DerefNode) {
-            DerefNode n = (DerefNode) node;
-
-            return new DerefNode(node.span,
-                desugarExpr(n.expr)
+        if (node.kind == AstKind.DEREF) {
+            return AstNode.deref(node.span,
+                desugarExpr(node.expr)
             );
         }
 
-        if (node instanceof ArrayAccessNode) {
-            ArrayAccessNode n = (ArrayAccessNode) node;
-
-            return new ArrayAccessNode(node.span,
-                desugarLValue(n.target),
-                desugarExpr(n.index)
+        if (node.kind == AstKind.ARRAY_ACCESS) {
+            return AstNode.arrayAccess(node.span,
+                desugarLValue(node.target),
+                desugarExpr(node.index)
             );
         }
 
-        if (node instanceof MemberAccessNode) {
-            MemberAccessNode n = (MemberAccessNode) node;
-
-            return new MemberAccessNode(node.span,
-                desugarLValue(n.target),
-                n.memberName
+        if (node.kind == AstKind.MEMBER_ACCESS) {
+            return AstNode.memberAccess(node.span,
+                desugarLValue(node.target),
+                node.name
             );
         }
 
         throw new RuntimeException(
-            "Unsupported lvalue in desugarer: " + node.getClass().getSimpleName()
+            "Unsupported lvalue in desugarer: " + node.kind.jsonName()
         );
     }
 
-    private TypeNode desugarType(TypeNode type) {
+    private AstNode desugarType(AstNode type) {
         if (type == null) return null;
 
         diagnostics.push(type.span);
         try {
 
-        if (type instanceof PrimitiveTypeNode) {
+        if (type.kind == AstKind.PRIMITIVE_TYPE) {
             return type;
         }
 
-        if (type instanceof VoidTypeNode) {
+        if (type.kind == AstKind.VOID_TYPE) {
             return type;
         }
 
-        if (type instanceof StructTypeNode) {
+        if (type.kind == AstKind.STRUCT_TYPE) {
             return type;
         }
 
-        if (type instanceof TupleTypeNode n) {
-            List<TupleTypeElementNode> elements = new ArrayList<>();
+        if (type.kind == AstKind.TUPLE_TYPE) {
+            List<AstNode> elements = new ArrayList<>();
 
-            for (TupleTypeElementNode element : n.elements) {
-                elements.add(new TupleTypeElementNode(
+            for (AstNode element : type.elements) {
+                elements.add(AstNode.tupleTypeElement(
                     element.span,
                     desugarType(element.type),
                     element.name
                 ));
             }
 
-            return new TupleTypeNode(n.span, elements);
+            return AstNode.tupleType(type.span, elements);
         }
 
-        if (type instanceof DynamicArrayTypeNode) {
-            DynamicArrayTypeNode n = (DynamicArrayTypeNode) type;
-
-            return new DynamicArrayTypeNode(
-                n.span,
-                desugarType(n.elementType)
+        if (type.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
+            return AstNode.dynamicArrayType(
+                type.span,
+                desugarType(type.type)
             );
         }
 
-        if (type instanceof StaticArrayTypeNode) {
-            StaticArrayTypeNode n = (StaticArrayTypeNode) type;
-
-            if (n.sizeExpr instanceof InferredSizeNode) {
+        if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
+            if (type.sizeExpr.kind == AstKind.INFERRED_SIZE) {
                 diagnostics.error("'?' array size is only allowed in a declaration with an array-literal initializer");
 
-                return new StaticArrayTypeNode(
-                    n.span,
-                    desugarType(n.elementType),
-                    new IntNode(n.sizeExpr.span, "1")
+                return AstNode.staticArrayType(
+                    type.span,
+                    desugarType(type.type),
+                    AstNode.intLiteral(type.sizeExpr.span, "1")
                 );
             }
 
-            return new StaticArrayTypeNode(
-                n.span,
-                desugarType(n.elementType),
-                evalConstExpr(n.sizeExpr, "static array size")
+            return AstNode.staticArrayType(
+                type.span,
+                desugarType(type.type),
+                evalConstExpr(type.sizeExpr, "static array size")
             );
         }
 
-        if (type instanceof PtrTypeNode) {
-            PtrTypeNode n = (PtrTypeNode) type;
-
-            return new PtrTypeNode(
-                n.span,
-                n.kind,
-                desugarType(n.referencedType)
+        if (type.kind == AstKind.PTR_TYPE) {
+            return AstNode.ptrType(
+                type.span,
+                type.permission,
+                desugarType(type.type)
             );
         }
 
         throw new RuntimeException(
-            "Unsupported type in desugarer: " + type.getClass().getSimpleName()
+            "Unsupported type in desugarer: " + type.kind.jsonName()
         );
         } finally {
             diagnostics.pop();

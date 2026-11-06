@@ -7,10 +7,10 @@ import java.util.Objects;
 public final class PointerPermissionChecker {
     private final DiagnosticBag diagnostics;
 
-    private final Map<VariableSymbol, PtrPermission> highWaterMark =
+    private final Map<Symbol, PtrPermission> highWaterMark =
             new IdentityHashMap<>();
 
-    private final List<VariableSymbol> trackedOrder = new ArrayList<>();
+    private final List<Symbol> trackedOrder = new ArrayList<>();
 
     public PointerPermissionChecker(DiagnosticBag diagnostics) {
         this.diagnostics = Objects.requireNonNull(diagnostics);
@@ -84,7 +84,7 @@ public final class PointerPermissionChecker {
         highWaterMark.clear();
         trackedOrder.clear();
 
-        for (VariableSymbol parameter : node.parameterVariables) {
+        for (Symbol parameter : node.parameterVariables) {
             trackIfPointer(parameter);
         }
 
@@ -95,14 +95,14 @@ public final class PointerPermissionChecker {
         reportUnusedPermissions();
     }
 
-    private void trackIfPointer(VariableSymbol symbol) {
+    private void trackIfPointer(Symbol symbol) {
         if (symbol == null
-                || symbol instanceof GlobalVariableSymbol
-                || !(symbol.type instanceof SemanticPtrType ptr)) {
+                || symbol.kind == SymbolKind.GLOBAL
+                || !(symbol.type.kind == SastTypeKind.PTR)) {
             return;
         }
 
-        if (ptr.permission == PtrPermission.READ_ONLY) {
+        if (symbol.type.permission == PtrPermission.READ_ONLY) {
             return;
         }
 
@@ -113,14 +113,14 @@ public final class PointerPermissionChecker {
     }
 
     private void reportUnusedPermissions() {
-        for (VariableSymbol symbol : trackedOrder) {
+        for (Symbol symbol : trackedOrder) {
             PtrPermission exercised = highWaterMark.get(symbol);
 
             if (exercised == null) {
                 continue;
             }
 
-            SemanticPtrType type = (SemanticPtrType) symbol.type;
+            SastType type = (SastType) symbol.type;
 
             if (exercised == PtrPermission.READ_ONLY) {
                 diagnostics.warning("Warning: '"
@@ -148,7 +148,7 @@ public final class PointerPermissionChecker {
         }
     }
 
-    private void credit(VariableSymbol symbol, PtrPermission level) {
+    private void credit(Symbol symbol, PtrPermission level) {
         if (symbol == null) {
             return;
         }
@@ -232,7 +232,7 @@ public final class PointerPermissionChecker {
         }
     }
 
-    private static PtrPermission requiredLevel(SemanticType type) {
+    private static PtrPermission requiredLevel(SastType type) {
         return PointerPermissions.pointerPermission(type);
     }
 
@@ -299,7 +299,7 @@ public final class PointerPermissionChecker {
             SemanticFunctionCallNode call,
             int index
     ) {
-        List<SemanticType> parameterTypes = call.function.parameterTypes();
+        List<SastType> parameterTypes = call.function.parameterTypes();
 
         if (index >= parameterTypes.size()) {
             return PtrPermission.READ_ONLY;
@@ -365,7 +365,7 @@ public final class PointerPermissionChecker {
 
     private void markRegion(SemanticDerefNode deref, PtrPermission level) {
         if (deref.expr instanceof SemanticVarExprNode n
-                && n.type instanceof SemanticPtrType) {
+                && n.type.kind == SastTypeKind.PTR) {
             credit(n.symbol, level);
             return;
         }

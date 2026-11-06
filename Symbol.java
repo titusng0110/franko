@@ -8,119 +8,203 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-abstract class Symbol {
-    final String name;
-    final SemanticType type;
+enum SymbolKind {
+    VARIABLE,
+    PARAMETER,
+    GLOBAL,
+    FUNCTION,
+    METHOD
+}
 
-    Symbol(String name, SemanticType type) {
+final class Symbol {
+    final SymbolKind kind;
+    final String name;
+    final String namespace;
+    final SastType type;
+
+    final List<Symbol> parameters;
+    final boolean isBuiltin;
+    final StructSymbol owner;
+    final int index;
+
+    BigInteger compileTimeConstantValue;
+    List<BigInteger> literalBytes;
+    List<BigInteger> literalValues;
+
+    private Symbol(
+            SymbolKind kind,
+            String name,
+            String namespace,
+            SastType type,
+            List<Symbol> parameters,
+            boolean isBuiltin,
+            StructSymbol owner,
+            int index
+    ) {
+        this.kind = kind;
         this.name = Objects.requireNonNull(name);
+        this.namespace = namespace;
         this.type = Objects.requireNonNull(type);
+        this.parameters = parameters == null ? List.of() : List.copyOf(parameters);
+        this.isBuiltin = isBuiltin;
+        this.owner = owner;
+        this.index = index;
     }
 
-    public SemanticType type() {
+    static Symbol variable(String namespace, String name, SastType type) {
+        return new Symbol(
+                SymbolKind.VARIABLE,
+                name,
+                namespace,
+                type,
+                List.of(),
+                false,
+                null,
+                -1
+        );
+    }
+
+    static Symbol parameter(String name, SastType type, int index) {
+        return new Symbol(
+                SymbolKind.PARAMETER,
+                name,
+                null,
+                type,
+                List.of(),
+                false,
+                null,
+                index
+        );
+    }
+
+    static Symbol global(String namespace, String name, SastType type) {
+        return new Symbol(
+                SymbolKind.GLOBAL,
+                name,
+                namespace,
+                type,
+                List.of(),
+                false,
+                null,
+                -1
+        );
+    }
+
+    static Symbol function(
+            String namespace,
+            String name,
+            List<Symbol> parameters,
+            SastType returnType,
+            boolean isBuiltin
+    ) {
+        List<SastType> parameterTypes = new ArrayList<>();
+
+        for (Symbol parameter : parameters) {
+            parameterTypes.add(parameter.type);
+        }
+
+        return new Symbol(
+                SymbolKind.FUNCTION,
+                name,
+                namespace,
+                SastType.functionType(parameterTypes, returnType),
+                parameters,
+                isBuiltin,
+                null,
+                -1
+        );
+    }
+
+    static Symbol method(
+            StructSymbol owner,
+            String name,
+            List<Symbol> parameters,
+            SastType returnType,
+            boolean isBuiltin
+    ) {
+        List<SastType> parameterTypes = new ArrayList<>();
+
+        for (Symbol parameter : parameters) {
+            parameterTypes.add(parameter.type);
+        }
+
+        return new Symbol(
+                SymbolKind.METHOD,
+                name,
+                owner == null ? null : owner.namespace,
+                SastType.functionType(parameterTypes, returnType),
+                parameters,
+                isBuiltin,
+                owner,
+                -1
+        );
+    }
+
+    boolean isVariable() {
+        return kind == SymbolKind.VARIABLE;
+    }
+
+    boolean isParameter() {
+        return kind == SymbolKind.PARAMETER;
+    }
+
+    boolean isGlobal() {
+        return kind == SymbolKind.GLOBAL;
+    }
+
+    boolean isFunction() {
+        return kind == SymbolKind.FUNCTION;
+    }
+
+    boolean isMethod() {
+        return kind == SymbolKind.METHOD;
+    }
+
+    boolean isCallable() {
+        return kind == SymbolKind.FUNCTION || kind == SymbolKind.METHOD;
+    }
+
+    SastType type() {
         return type;
     }
 
-    public String describe() {
+    String describe() {
         return name + ": " + type.describe();
     }
-}
 
-class VariableSymbol extends Symbol {
+    String qualifiedName() {
+        if (kind == SymbolKind.METHOD) {
+            return owner.qualifiedName() + "." + name;
+        }
 
-    final String namespace;
+        if (kind == SymbolKind.PARAMETER) {
+            return name;
+        }
 
-    VariableSymbol(String namespace, String name, SemanticType type) {
-        super(name, type);
-        this.namespace = namespace;
-    }
-
-    public String qualifiedName() {
         return namespace == null ? name : namespace + "::" + name;
     }
-}
 
-class ParameterSymbol extends VariableSymbol {
-    final int index;
-
-    ParameterSymbol(String name, SemanticType type, int index) {
-        super(null, name, type);
-        this.index = index;
-    }
-}
-
-class GlobalVariableSymbol extends VariableSymbol {
-
-    BigInteger compileTimeConstantValue = null;
-
-    List<BigInteger> literalBytes = null;
-
-    List<BigInteger> literalValues = null;
-
-    GlobalVariableSymbol(String namespace, String name, SemanticType type) {
-        super(namespace, name, type);
-    }
-}
-
-abstract class CallableSymbol extends Symbol {
-    CallableSymbol(String name, SemanticFunctionType type) {
-        super(name, type);
+    SastType functionType() {
+        return type;
     }
 
-    @Override
-    public SemanticFunctionType type() {
-        return (SemanticFunctionType) type;
-    }
-}
-
-class FunctionSymbol extends CallableSymbol {
-    final List<ParameterSymbol> parameters;
-    final boolean isBuiltin;
-
-    final String namespace;
-
-    FunctionSymbol(
-            String namespace,
-            String name,
-            List<ParameterSymbol> parameters,
-            SemanticType returnType,
-            boolean isBuiltin
-    ) {
-        super(
-                name,
-                new SemanticFunctionType(
-                        parameters.stream().map(p -> p.type).toList(),
-                        returnType
-                )
-        );
-
-        this.namespace = namespace;
-        this.parameters = List.copyOf(parameters);
-        this.isBuiltin = isBuiltin;
+    SastType returnType() {
+        return type.returnType;
     }
 
-    public SemanticFunctionType functionType() {
-        return (SemanticFunctionType) type;
+    List<SastType> parameterTypes() {
+        return type.parameterTypes;
     }
 
-    public SemanticType returnType() {
-        return functionType().returnType;
-    }
-
-    public List<SemanticType> parameterTypes() {
-        return functionType().parameterTypes;
-    }
-
-    public int arity() {
+    int arity() {
         return parameters.size();
     }
 
-    public String signatureString() {
+    String signatureString() {
         StringBuilder sb = new StringBuilder();
-
         sb.append(qualifiedName()).append("(");
 
-        List<SemanticType> parameterTypes = parameterTypes();
+        List<SastType> parameterTypes = parameterTypes();
 
         for (int i = 0; i < parameterTypes.size(); i++) {
             if (i > 0) {
@@ -131,82 +215,44 @@ class FunctionSymbol extends CallableSymbol {
         }
 
         sb.append(")");
-
         return sb.toString();
     }
 
-    public String fullSignatureString() {
+    String fullSignatureString() {
         return signatureString() + " -> " + returnType().describe();
     }
 
-    public String qualifiedName() {
-        return namespace == null ? name : namespace + "::" + name;
+    String mangledName() {
+        if (kind == SymbolKind.METHOD) {
+            return "METH_"
+                    + name
+                    + "_OFSTRUCT_"
+                    + owner.name
+                    + "_"
+                    + Mangler.hashHex(type.signatureKey());
+        }
+
+        return "FUNC_" + name + "_" + Mangler.hashHex(type.signatureKey());
     }
 
-    public String mangledName() {
-        return "FUNC_" + name + "_" + Mangler.hashHex(functionType().signatureKey());
-    }
-
-    public String emittedLocalName() {
-        return mangledName();
-    }
-}
-
-class MethodSymbol extends FunctionSymbol {
-    final StructSymbol owner;
-
-    MethodSymbol(
-            StructSymbol owner,
-            String name,
-            List<ParameterSymbol> parameters,
-            SemanticType returnType,
-            boolean isBuiltin
-    ) {
-        super(
-                owner == null ? null : owner.namespace,
-                name,
-                parameters,
-                returnType,
-                isBuiltin
-        );
-
-        this.owner = Objects.requireNonNull(owner);
-    }
-
-    @Override
-    public String qualifiedName() {
-        return owner.qualifiedName() + "." + name;
-    }
-
-    @Override
-    public String mangledName() {
-        return "METH_"
-                + name
-                + "_OFSTRUCT_"
-                + owner.name
-                + "_"
-                + Mangler.hashHex(functionType().signatureKey());
-    }
-
-    @Override
-    public String emittedLocalName() {
+    String emittedLocalName() {
         return mangledName();
     }
 }
 
 class FieldSymbol {
     final String name;
-    final SemanticType type;
+    final SastType type;
     final BigInteger foldedDefault;
     final int tupleIndex;
 
-    FieldSymbol(String name, SemanticType type, BigInteger foldedDefault) {
+    FieldSymbol(String name, SastType type, BigInteger foldedDefault) {
         this(name, type, foldedDefault, -1);
     }
 
     FieldSymbol(
             String name,
-            SemanticType type,
+            SastType type,
             BigInteger foldedDefault,
             int tupleIndex
     ) {
@@ -277,9 +323,9 @@ class StructSymbol {
 
     final boolean isTuple;
 
-    final Map<String, List<MethodSymbol>> methods = new LinkedHashMap<>();
+    final Map<String, List<Symbol>> methods = new LinkedHashMap<>();
 
-    final IdentityHashMap<FunctionDeclNode, MethodSymbol> methodDeclSymbols =
+    final IdentityHashMap<AstNode, Symbol> methodDeclSymbols =
             new IdentityHashMap<>();
 
     StructSymbol(String namespace, String name) {
@@ -325,12 +371,12 @@ class StructSymbol {
     }
 
     public boolean hasMethod(String methodName) {
-        List<MethodSymbol> overloads = methods.get(methodName);
+        List<Symbol> overloads = methods.get(methodName);
         return overloads != null && !overloads.isEmpty();
     }
 
-    public List<MethodSymbol> getMethods(String methodName) {
-        List<MethodSymbol> overloads = methods.get(methodName);
+    public List<Symbol> getMethods(String methodName) {
+        List<Symbol> overloads = methods.get(methodName);
         return overloads == null ? List.of() : List.copyOf(overloads);
     }
 }
@@ -345,12 +391,12 @@ class NamespaceSymbol {
 
     final Map<String, StructSymbol> structs = new LinkedHashMap<>();
     final Map<String, EnumSymbol> enums = new LinkedHashMap<>();
-    final Map<String, List<FunctionSymbol>> functions = new LinkedHashMap<>();
-    final Map<String, VariableSymbol> globalVariables = new LinkedHashMap<>();
+    final Map<String, List<Symbol>> functions = new LinkedHashMap<>();
+    final Map<String, Symbol> globalVariables = new LinkedHashMap<>();
 
     final Set<String> variableNames = new LinkedHashSet<>();
 
-    final IdentityHashMap<FunctionDeclNode, FunctionSymbol> functionDeclSymbols =
+    final IdentityHashMap<AstNode, Symbol> functionDeclSymbols =
             new IdentityHashMap<>();
 
     NamespaceSymbol(String name) {

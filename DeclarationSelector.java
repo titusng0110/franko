@@ -10,10 +10,10 @@ import java.util.Set;
 final class DeclarationSelector {
 
     static final class Selection {
-        final ProgramNode program;
+        final AstNode program;
         final List<Diagnostic> diagnostics;
 
-        Selection(ProgramNode program, List<Diagnostic> diagnostics) {
+        Selection(AstNode program, List<Diagnostic> diagnostics) {
             this.program = program;
             this.diagnostics = diagnostics;
         }
@@ -37,21 +37,21 @@ final class DeclarationSelector {
 
     private final Map<String, NamespaceSymbol> namespaces =
             new LinkedHashMap<>();
-    private final Map<StructDeclNode, StructSymbol> structSymbols =
+    private final Map<AstNode, StructSymbol> structSymbols =
             new IdentityHashMap<>();
-    private final Map<StructDeclNode, Scope> structScopes =
+    private final Map<AstNode, Scope> structScopes =
             new IdentityHashMap<>();
-    private final Map<EnumDeclNode, EnumSymbol> enumSymbols =
+    private final Map<AstNode, EnumSymbol> enumSymbols =
             new IdentityHashMap<>();
-    private final Map<EnumDeclNode, Scope> enumScopes =
+    private final Map<AstNode, Scope> enumScopes =
             new IdentityHashMap<>();
-    private final Set<ASTNode> registeredMembers =
+    private final Set<AstNode> registeredMembers =
             Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Set<GlobalVarDeclNode> registeredGlobals =
+    private final Set<AstNode> registeredGlobals =
             Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Set<StructDeclNode> processedStructs =
+    private final Set<AstNode> processedStructs =
             Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Map<StructDeclNode, StructDeclNode> selectedStructs =
+    private final Map<AstNode, AstNode> selectedStructs =
             new IdentityHashMap<>();
 
     DeclarationSelector(TargetInfo target) {
@@ -61,7 +61,7 @@ final class DeclarationSelector {
                 ctx,
                 constEval,
                 (arrayType, values, span) -> {
-                    GlobalVariableSymbol symbol = new GlobalVariableSymbol(
+                    Symbol symbol = Symbol.global(
                             null,
                             "_CT_ARRAY",
                             arrayType
@@ -70,13 +70,13 @@ final class DeclarationSelector {
                     return new SemanticVarExprNode(span, arrayType, symbol);
                 },
                 (bytes, span) -> {
-                    SemanticStaticArrayType arrayType =
-                            new SemanticStaticArrayType(
-                                    new SemanticPrimitiveType(
+                    SastType arrayType =
+                            SastType.staticArray(
+                                    SastType.primitive(
                                             SemanticPrimitiveKind.UINT8),
                                     Integer.toString(bytes.size())
                             );
-                    GlobalVariableSymbol symbol = new GlobalVariableSymbol(
+                    Symbol symbol = Symbol.global(
                             null,
                             "_CT_STR",
                             arrayType
@@ -91,54 +91,54 @@ final class DeclarationSelector {
         this.typeResolver = lowering.typeResolver;
     }
 
-    Selection select(ProgramNode program) {
+    Selection select(AstNode program) {
         ctx.pushScope();
 
         Scope global = new Scope(null, null);
-        preRegisterShells(program.topLevelItems, global);
-        preRegisterBodies(program.topLevelItems, global);
+        preRegisterShells(program.items, global);
+        preRegisterBodies(program.items, global);
 
-        for (StructDeclNode struct : new ArrayList<>(structSymbols.keySet())) {
+        for (AstNode struct : new ArrayList<>(structSymbols.keySet())) {
             processStruct(struct);
         }
 
-        List<ASTNode> selected = selectItems(program.topLevelItems, global);
+        List<AstNode> selected = selectItems(program.items, global);
 
         ctx.popScope();
 
         return new Selection(
-                new ProgramNode(program.span, selected),
+                AstNode.program(program.span, selected),
                 diagnostics.diagnostics()
         );
     }
 
-    private void preRegisterShells(List<ASTNode> items, Scope scope) {
-        for (ASTNode item : items) {
-            if (item instanceof NamespaceNode n) {
-                Scope child = namespaceFor(n, scope);
-                preRegisterShells(n.items, child);
-            } else if (item instanceof StructDeclNode s) {
-                registerStructShell(s, scope);
-            } else if (item instanceof EnumDeclNode e) {
-                registerEnumShell(e, scope);
+    private void preRegisterShells(List<AstNode> items, Scope scope) {
+        for (AstNode item : items) {
+            if (item.kind == AstKind.NAMESPACE) {
+                Scope child = namespaceFor(item, scope);
+                preRegisterShells(item.items, child);
+            } else if (item.kind == AstKind.STRUCT_DECL) {
+                registerStructShell(item, scope);
+            } else if (item.kind == AstKind.ENUM_DECL) {
+                registerEnumShell(item, scope);
             }
         }
     }
 
-    private void preRegisterBodies(List<ASTNode> items, Scope scope) {
-        for (ASTNode item : items) {
-            if (item instanceof NamespaceNode n) {
-                preRegisterBodies(n.items, namespaceFor(n, scope));
-            } else if (item instanceof StructDeclNode s) {
-                StructSymbol symbol = registerStructShell(s, scope);
-                registerUnconditionalMembers(s, symbol);
-            } else if (item instanceof GlobalVarDeclNode g) {
-                registerGlobal(g, scope);
+    private void preRegisterBodies(List<AstNode> items, Scope scope) {
+        for (AstNode item : items) {
+            if (item.kind == AstKind.NAMESPACE) {
+                preRegisterBodies(item.items, namespaceFor(item, scope));
+            } else if (item.kind == AstKind.STRUCT_DECL) {
+                StructSymbol symbol = registerStructShell(item, scope);
+                registerUnconditionalMembers(item, symbol);
+            } else if (item.kind == AstKind.GLOBAL_VAR_DECL) {
+                registerGlobal(item, scope);
             }
         }
     }
 
-    private Scope namespaceFor(NamespaceNode node, Scope parent) {
+    private Scope namespaceFor(AstNode node, Scope parent) {
         String fullPath;
 
         if (parent == null || parent.path == null) {
@@ -158,7 +158,7 @@ final class DeclarationSelector {
     }
 
     private StructSymbol registerStructShell(
-            StructDeclNode node,
+            AstNode node,
             Scope scope
     ) {
         ctx.setCurrentNamespace(scope.symbol);
@@ -184,7 +184,7 @@ final class DeclarationSelector {
     }
 
     private EnumSymbol registerEnumShell(
-            EnumDeclNode node,
+            AstNode node,
             Scope scope
     ) {
         ctx.setCurrentNamespace(scope.symbol);
@@ -213,12 +213,12 @@ final class DeclarationSelector {
         return symbol;
     }
 
-    private EnumSymbol buildEnumSymbolQuiet(EnumDeclNode node, String namespaceName) {
+    private EnumSymbol buildEnumSymbolQuiet(AstNode node, String namespaceName) {
         SemanticPrimitiveKind backingKind = SemanticPrimitiveKind.INT32;
 
-        if (node.backingType instanceof PrimitiveTypeNode p) {
+        if (node.type != null && node.type.kind == AstKind.PRIMITIVE_TYPE) {
             try {
-                backingKind = SemanticPrimitiveKind.valueOf(p.kind.name());
+                backingKind = SemanticPrimitiveKind.valueOf(node.type.primitive.name());
             } catch (IllegalArgumentException ignored) {
                 backingKind = SemanticPrimitiveKind.INT32;
             }
@@ -229,9 +229,9 @@ final class DeclarationSelector {
         }
 
         java.util.Set<String> seenNames = new java.util.HashSet<>();
-        List<EnumVariantNode> uniqueVariants = new ArrayList<>();
+        List<AstNode> uniqueVariants = new ArrayList<>();
 
-        for (EnumVariantNode variant : node.variants) {
+        for (AstNode variant : node.variants) {
             if (!seenNames.add(variant.name)) {
                 continue;
             }
@@ -241,8 +241,8 @@ final class DeclarationSelector {
 
         int explicitCount = 0;
 
-        for (EnumVariantNode variant : uniqueVariants) {
-            if (variant.constInitializer != null) {
+        for (AstNode variant : uniqueVariants) {
+            if (variant.value != null) {
                 explicitCount++;
             }
         }
@@ -251,17 +251,17 @@ final class DeclarationSelector {
         List<EnumVariant> computed = new ArrayList<>();
 
         if (allExplicit) {
-            for (EnumVariantNode variant : uniqueVariants) {
+            for (AstNode variant : uniqueVariants) {
                 BigInteger value = parseEnumVariantValueQuiet(variant);
                 computed.add(new EnumVariant(variant.name, value));
             }
         } else {
             BigInteger previous = null;
 
-            for (EnumVariantNode variant : uniqueVariants) {
+            for (AstNode variant : uniqueVariants) {
                 BigInteger value;
 
-                if (variant.constInitializer != null) {
+                if (variant.value != null) {
                     value = parseEnumVariantValueQuiet(variant);
                 } else if (previous == null) {
                     value = TypeChecker.wrapBigIntegerToPrimitive(BigInteger.ZERO, backingKind);
@@ -277,10 +277,10 @@ final class DeclarationSelector {
         return new EnumSymbol(node.name, namespaceName, backingKind, computed);
     }
 
-    private static BigInteger parseEnumVariantValueQuiet(EnumVariantNode variant) {
-        if (variant.constInitializer instanceof IntNode n) {
+    private static BigInteger parseEnumVariantValueQuiet(AstNode variant) {
+        if (variant.value != null && variant.value.kind == AstKind.INT) {
             try {
-                BigInteger parsed = ConstExpressionEvaluator.parseIntegerLiteralPure(n.value);
+                BigInteger parsed = ConstExpressionEvaluator.parseIntegerLiteralPure(variant.value.text);
 
                 if (parsed != null) {
                     return parsed;
@@ -289,8 +289,8 @@ final class DeclarationSelector {
             }
         }
 
-        if (variant.constInitializer != null) {
-            BigInteger folded = ConstExpressionEvaluator.tryFold(variant.constInitializer);
+        if (variant.value != null) {
+            BigInteger folded = ConstExpressionEvaluator.tryFold(variant.value);
 
             if (folded != null) {
                 return folded;
@@ -301,11 +301,11 @@ final class DeclarationSelector {
     }
 
     private void registerUnconditionalMembers(
-            StructDeclNode node,
+            AstNode node,
             StructSymbol symbol
     ) {
-        for (ASTNode member : node.memberItems) {
-            if (member instanceof DeclIfNode) {
+        for (AstNode member : node.members) {
+            if (member.kind == AstKind.DECL_IF) {
                 continue;
             }
 
@@ -313,71 +313,71 @@ final class DeclarationSelector {
         }
     }
 
-    private void registerMember(ASTNode member, StructSymbol symbol) {
+    private void registerMember(AstNode member, StructSymbol symbol) {
         if (!registeredMembers.add(member)) {
             return;
         }
 
-        if (member instanceof StructFieldDeclNode field) {
-            if (symbol.hasFieldName(field.name)) {
+        if (member.kind == AstKind.STRUCT_FIELD_DECL) {
+            if (symbol.hasFieldName(member.name)) {
                 return;
             }
 
-            SemanticType fieldType = typeResolver.analyzeNormalType(field.type);
+            SastType fieldType = typeResolver.analyzeNormalType(member.type);
             BigInteger defaultValue = null;
 
-            if (field.constInitializer != null) {
+            if (member.value != null) {
                 defaultValue = analyzer.preEvaluatedConstValue(
-                        field.constInitializer,
+                        member.value,
                         "struct field initializer"
                 );
             }
 
             symbol.fields.add(new FieldSymbol(
-                    field.name,
+                    member.name,
                     fieldType,
                     defaultValue
             ));
             return;
         }
 
-        if (member instanceof FunctionDeclNode methodNode) {
-            List<ParameterSymbol> params = new ArrayList<>();
+        if (member.kind == AstKind.FUNCTION_DECL) {
+            List<Symbol> params = new ArrayList<>();
 
-            for (int i = 0; i < methodNode.parameters.size(); i++) {
-                ParameterNode param = methodNode.parameters.get(i);
-                params.add(new ParameterSymbol(
+            for (int i = 0; i < member.parameters.size(); i++) {
+                AstNode param = member.parameters.get(i);
+                params.add(Symbol.parameter(
                         param.name,
                         typeResolver.analyzeNormalType(param.type),
                         i
                 ));
             }
 
-            MethodSymbol method = new MethodSymbol(
+            Symbol method = Symbol.method(
                     symbol,
-                    methodNode.name,
+                    member.name,
                     params,
-                    typeResolver.analyzeReturnType(methodNode.returnType),
+                    typeResolver.analyzeReturnType(member.type),
                     false
             );
 
-            ctx.declareMethod(symbol, methodNode, method);
+            ctx.declareMethod(symbol, member, method);
         }
     }
 
-    private void registerGlobal(GlobalVarDeclNode node, Scope scope) {
+    private void registerGlobal(AstNode node, Scope scope) {
         if (!registeredGlobals.add(node)) {
             return;
         }
 
         ctx.setCurrentNamespace(scope.symbol);
 
-        SemanticType type = typeResolver.analyzeNormalType(node.type);
+        SastType type = typeResolver.analyzeNormalType(node.type);
         String namespaceName = scope.symbol == null
                 ? null
                 : scope.symbol.name;
 
-        GlobalVariableSymbol symbol = new GlobalVariableSymbol(
+        Symbol symbol = Symbol.global(
                 namespaceName,
                 node.name,
                 type
@@ -386,7 +386,7 @@ final class DeclarationSelector {
         ctx.declareGlobalVariable(symbol);
     }
 
-    private void processStruct(StructDeclNode node) {
+    private void processStruct(AstNode node) {
         if (!processedStructs.add(node)) {
             return;
         }
@@ -399,14 +399,14 @@ final class DeclarationSelector {
             scope = structScopes.get(node);
         }
 
-        List<StructFieldDeclNode> fields = new ArrayList<>();
-        List<FunctionDeclNode> methods = new ArrayList<>();
-        List<ASTNode> members = new ArrayList<>();
+        List<AstNode> fields = new ArrayList<>();
+        List<AstNode> methods = new ArrayList<>();
+        List<AstNode> members = new ArrayList<>();
 
         ctx.setCurrentNamespace(scope.symbol);
 
         appendSelectedMembers(
-                node.memberItems,
+                node.members,
                 symbol,
                 scope,
                 fields,
@@ -414,7 +414,7 @@ final class DeclarationSelector {
                 members
         );
 
-        selectedStructs.put(node, new StructDeclNode(
+        selectedStructs.put(node, AstNode.structDecl(
                 node.span,
                 node.name,
                 fields,
@@ -424,19 +424,19 @@ final class DeclarationSelector {
     }
 
     private void appendSelectedMembers(
-            List<ASTNode> items,
+            List<AstNode> items,
             StructSymbol symbol,
             Scope scope,
-            List<StructFieldDeclNode> fields,
-            List<FunctionDeclNode> methods,
-            List<ASTNode> members
+            List<AstNode> fields,
+            List<AstNode> methods,
+            List<AstNode> members
     ) {
-        for (ASTNode item : items) {
-            if (item instanceof DeclIfNode declIf) {
-                boolean condition = evaluateCondition(declIf.condition, scope);
-                List<ASTNode> branch = condition
-                        ? declIf.thenItems
-                        : declIf.elseItems;
+        for (AstNode item : items) {
+            if (item.kind == AstKind.DECL_IF) {
+                boolean condition = evaluateCondition(item.condition, scope);
+                List<AstNode> branch = condition
+                        ? item.thenItems
+                        : item.elseItems;
 
                 appendSelectedMembers(
                         branch,
@@ -449,35 +449,35 @@ final class DeclarationSelector {
                 continue;
             }
 
-            if (item instanceof CompileTimeCallNode
-                    || item instanceof CompileTimeNameNode) {
+            if (item.kind == AstKind.COMPILE_TIME_CALL
+                    || item.kind == AstKind.COMPILE_TIME_NAME) {
                 evaluateDeclarationItem(item, scope);
                 continue;
             }
 
             registerMember(item, symbol);
 
-            if (item instanceof StructFieldDeclNode field) {
-                if (!fields.contains(field)) {
-                    fields.add(field);
-                    members.add(field);
+            if (item.kind == AstKind.STRUCT_FIELD_DECL) {
+                if (!fields.contains(item)) {
+                    fields.add(item);
+                    members.add(item);
                 }
-            } else if (item instanceof FunctionDeclNode method) {
-                if (!methods.contains(method)) {
-                    methods.add(method);
-                    members.add(method);
+            } else if (item.kind == AstKind.FUNCTION_DECL) {
+                if (!methods.contains(item)) {
+                    methods.add(item);
+                    members.add(item);
                 }
             }
         }
     }
 
-    private void evaluateDeclarationItem(ASTNode item, Scope scope) {
+    private void evaluateDeclarationItem(AstNode item, Scope scope) {
         ctx.setCurrentNamespace(scope == null ? null : scope.symbol);
         diagnostics.push(item.span);
 
         try {
-            if (item instanceof CompileTimeCallNode call
-                    && !"panic".equals(call.name)) {
+            if (item.kind == AstKind.COMPILE_TIME_CALL
+                    && !"panic".equals(item.name)) {
                 diagnostics.error("Only #panic is allowed as a "
                         + "declaration-level compile-time item");
                 return;
@@ -489,14 +489,14 @@ final class DeclarationSelector {
         }
     }
 
-    private boolean evaluateCondition(ASTNode condition, Scope scope) {
+    private boolean evaluateCondition(AstNode condition, Scope scope) {
         ctx.setCurrentNamespace(scope == null ? null : scope.symbol);
         diagnostics.push(condition.span);
 
         try {
             SemanticExprNode value = analyzer.analyzeExpr(condition);
 
-            if (!(value.type instanceof SemanticPrimitiveType)) {
+            if (!(value.type.kind == SastTypeKind.PRIMITIVE)) {
                 diagnostics.error("#if condition must be an integer, got "
                         + value.type.describe());
                 return false;
@@ -513,56 +513,56 @@ final class DeclarationSelector {
         }
     }
 
-    private List<ASTNode> selectItems(List<ASTNode> items, Scope scope) {
-        List<ASTNode> out = new ArrayList<>();
+    private List<AstNode> selectItems(List<AstNode> items, Scope scope) {
+        List<AstNode> out = new ArrayList<>();
 
-        for (ASTNode item : items) {
-            if (item instanceof DeclIfNode declIf) {
-                boolean condition = evaluateCondition(declIf.condition, scope);
-                List<ASTNode> branch = condition
-                        ? declIf.thenItems
-                        : declIf.elseItems;
+        for (AstNode item : items) {
+            if (item.kind == AstKind.DECL_IF) {
+                boolean condition = evaluateCondition(item.condition, scope);
+                List<AstNode> branch = condition
+                        ? item.thenItems
+                        : item.elseItems;
 
                 out.addAll(selectItems(branch, scope));
                 continue;
             }
 
-            if (item instanceof CompileTimeCallNode
-                    || item instanceof CompileTimeNameNode) {
+            if (item.kind == AstKind.COMPILE_TIME_CALL
+                    || item.kind == AstKind.COMPILE_TIME_NAME) {
                 evaluateDeclarationItem(item, scope);
                 continue;
             }
 
-            if (item instanceof NamespaceNode node) {
-                Scope child = namespaceFor(node, scope);
-                List<ASTNode> selected = selectItems(node.items, child);
+            if (item.kind == AstKind.NAMESPACE) {
+                Scope child = namespaceFor(item, scope);
+                List<AstNode> selected = selectItems(item.items, child);
 
-                out.add(new NamespaceNode(node.span, node.name, selected));
+                out.add(AstNode.namespace(item.span, item.name, selected));
                 continue;
             }
 
-            if (item instanceof StructDeclNode struct) {
-                registerStructShell(struct, scope);
-                StructSymbol symbol = structSymbols.get(struct);
+            if (item.kind == AstKind.STRUCT_DECL) {
+                registerStructShell(item, scope);
+                StructSymbol symbol = structSymbols.get(item);
 
                 if (symbol != null) {
-                    registerUnconditionalMembers(struct, symbol);
+                    registerUnconditionalMembers(item, symbol);
                 }
 
-                processStruct(struct);
-                out.add(selectedStructs.get(struct));
+                processStruct(item);
+                out.add(selectedStructs.get(item));
                 continue;
             }
 
-            if (item instanceof EnumDeclNode enumDecl) {
-                registerEnumShell(enumDecl, scope);
-                out.add(enumDecl);
+            if (item.kind == AstKind.ENUM_DECL) {
+                registerEnumShell(item, scope);
+                out.add(item);
                 continue;
             }
 
-            if (item instanceof GlobalVarDeclNode global) {
-                registerGlobal(global, scope);
-                out.add(global);
+            if (item.kind == AstKind.GLOBAL_VAR_DECL) {
+                registerGlobal(item, scope);
+                out.add(item);
                 continue;
             }
 

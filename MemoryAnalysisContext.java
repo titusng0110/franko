@@ -12,8 +12,8 @@ final class MemoryAnalysisContext {
     final MemoryTemplateRegistry templates;
     final MemoryTemplateSetPool templateSets;
 
-    final VariableSymbol[] variables;
-    final IdentityHashMap<VariableSymbol, Integer> variableIds;
+    final Symbol[] variables;
+    final IdentityHashMap<Symbol, Integer> variableIds;
     final int[] pointerVariableIds;
     final int pointerVariableCount;
     final int[] pointerIndexByVariable;
@@ -21,7 +21,7 @@ final class MemoryAnalysisContext {
     final int[] globalVariableIds;
     final int globalCount;
     final int[] globalIndexByVariable;
-    final IdentityHashMap<FunctionSymbol, Integer> functionIds;
+    final IdentityHashMap<Symbol, Integer> functionIds;
 
     final SemanticFunctionCallNode[] callSiteNodes;
     final int callSiteCount;
@@ -42,13 +42,13 @@ final class MemoryAnalysisContext {
             MemoryShapeIndex shapes,
             MemoryTemplateRegistry templates,
             MemoryTemplateSetPool templateSets,
-            VariableSymbol[] variables,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
+            Symbol[] variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
             int[] pointerVariableIds,
             int[] pointerIndexByVariable,
             int[] globalVariableIds,
             int[] globalIndexByVariable,
-            IdentityHashMap<FunctionSymbol, Integer> functionIds,
+            IdentityHashMap<Symbol, Integer> functionIds,
             SemanticFunctionCallNode[] callSiteNodes,
             int[] callSiteIdBySite,
             int[] snapshotDemand,
@@ -85,8 +85,8 @@ final class MemoryAnalysisContext {
 
     static MemoryAnalysisContext build(SemanticProgramNode root) {
         MemoryCallGraph.Builder builder = new MemoryCallGraph.Builder();
-        IdentityHashMap<VariableSymbol, Integer> variableIds = new IdentityHashMap<>();
-        List<VariableSymbol> variables = new ArrayList<>();
+        IdentityHashMap<Symbol, Integer> variableIds = new IdentityHashMap<>();
+        List<Symbol> variables = new ArrayList<>();
         List<Integer> globals = new ArrayList<>();
         IdentityHashMap<SemanticASTNode, Integer> siteIds = new IdentityHashMap<>();
         IdentityHashMap<SemanticBlockNode, int[]> blockLocals = new IdentityHashMap<>();
@@ -122,7 +122,7 @@ final class MemoryAnalysisContext {
         int variableCount = variables.size();
         int maxParameters = 1;
 
-        for (FunctionSymbol function : callGraph.functions) {
+        for (Symbol function : callGraph.functions) {
             maxParameters = Math.max(maxParameters, function.parameters.size());
         }
 
@@ -135,7 +135,7 @@ final class MemoryAnalysisContext {
             globalIndexByVariable[globalVariableIds[i]] = i;
         }
 
-        IdentityHashMap<FunctionSymbol, Integer> functionIds =
+        IdentityHashMap<Symbol, Integer> functionIds =
                 new IdentityHashMap<>();
 
         for (int i = 0; i < callGraph.functions.length; i++) {
@@ -147,9 +147,9 @@ final class MemoryAnalysisContext {
         List<Integer> pointerVariables = new ArrayList<>();
 
         for (int i = 0; i < variableCount; i++) {
-            VariableSymbol symbol = variables.get(i);
+            Symbol symbol = variables.get(i);
 
-            if (symbol.type instanceof SemanticPtrType) {
+            if (symbol.type.kind == SastTypeKind.PTR) {
                 pointerIndexByVariable[i] = pointerVariables.size();
                 pointerVariables.add(i);
             }
@@ -209,7 +209,7 @@ final class MemoryAnalysisContext {
                 new MemoryShapeIndex(),
                 templates,
                 new MemoryTemplateSetPool(templates),
-                variables.toArray(new VariableSymbol[0]),
+                variables.toArray(new Symbol[0]),
                 variableIds,
                 pointerVariableIds,
                 pointerIndexByVariable,
@@ -230,8 +230,8 @@ final class MemoryAnalysisContext {
     private static void collectDeclarations(
             SemanticASTNode node,
             MemoryCallGraph.Builder builder,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables,
             List<Integer> globals
     ) {
         if (node == null) {
@@ -268,7 +268,7 @@ final class MemoryAnalysisContext {
         }
 
         if (node instanceof SemanticVarDeclNode declaration
-                && declaration.symbol instanceof GlobalVariableSymbol) {
+                && declaration.symbol.kind == SymbolKind.GLOBAL) {
             int variableId = addVariable(
                     declaration.symbol,
                     variableIds,
@@ -282,8 +282,8 @@ final class MemoryAnalysisContext {
     private static void collectBodies(
             SemanticASTNode node,
             MemoryCallGraph.Builder builder,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables,
             IdentityHashMap<SemanticASTNode, Integer> siteIds,
             int[] siteCount,
             IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
@@ -361,8 +361,8 @@ final class MemoryAnalysisContext {
     private static void collectFunctionBody(
             SemanticFunctionDeclNode function,
             MemoryCallGraph.Builder builder,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables,
             IdentityHashMap<SemanticASTNode, Integer> siteIds,
             int[] siteCount,
             IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
@@ -371,7 +371,7 @@ final class MemoryAnalysisContext {
         int functionId = builder.functionId(function.symbol);
 
         for (int i = 0; i < function.parameterVariables.size(); i++) {
-            VariableSymbol parameter = function.parameterVariables.get(i);
+            Symbol parameter = function.parameterVariables.get(i);
             int variableId = addVariable(parameter, variableIds, variables);
             builder.setParameterVariableId(functionId, i, variableId);
         }
@@ -395,8 +395,8 @@ final class MemoryAnalysisContext {
             SemanticBlockNode block,
             int functionId,
             MemoryCallGraph.Builder builder,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables,
             IdentityHashMap<SemanticASTNode, Integer> siteIds,
             int[] siteCount,
             IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
@@ -416,7 +416,7 @@ final class MemoryAnalysisContext {
 
                 directLocals.add(variableId);
 
-                if (!(declaration.symbol instanceof GlobalVariableSymbol)) {
+                if (!(declaration.symbol.kind == SymbolKind.GLOBAL)) {
                     functionLocals.add(variableId);
                 }
             }
@@ -447,8 +447,8 @@ final class MemoryAnalysisContext {
             SemanticStmtNode statement,
             int functionId,
             MemoryCallGraph.Builder builder,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables,
             IdentityHashMap<SemanticASTNode, Integer> siteIds,
             int[] siteCount,
             IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
@@ -614,8 +614,8 @@ final class MemoryAnalysisContext {
             SemanticExprNode expression,
             int functionId,
             MemoryCallGraph.Builder builder,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables,
             IdentityHashMap<SemanticASTNode, Integer> siteIds,
             int[] siteCount
     ) {
@@ -802,9 +802,9 @@ final class MemoryAnalysisContext {
     }
 
     private static int addVariable(
-            VariableSymbol symbol,
-            IdentityHashMap<VariableSymbol, Integer> variableIds,
-            List<VariableSymbol> variables
+            Symbol symbol,
+            IdentityHashMap<Symbol, Integer> variableIds,
+            List<Symbol> variables
     ) {
         Integer existing = variableIds.get(symbol);
 
@@ -875,7 +875,7 @@ final class MemoryAnalysisContext {
         return 0;
     }
 
-    int variableId(VariableSymbol symbol) {
+    int variableId(Symbol symbol) {
         if (symbol == null) {
             return -1;
         }
@@ -884,7 +884,7 @@ final class MemoryAnalysisContext {
         return id == null ? -1 : id;
     }
 
-    VariableSymbol variable(int variableId) {
+    Symbol variable(int variableId) {
         if (variableId < 0 || variableId >= variables.length) {
             return null;
         }
@@ -892,7 +892,7 @@ final class MemoryAnalysisContext {
         return variables[variableId];
     }
 
-    int pointerIndex(VariableSymbol symbol) {
+    int pointerIndex(Symbol symbol) {
         int variableId = variableId(symbol);
 
         if (variableId < 0) {
@@ -902,7 +902,7 @@ final class MemoryAnalysisContext {
         return pointerIndexByVariable[variableId];
     }
 
-    int globalIndex(VariableSymbol symbol) {
+    int globalIndex(Symbol symbol) {
         return globalIndexByVariableId(variableId(symbol));
     }
 
@@ -946,7 +946,7 @@ final class MemoryAnalysisContext {
         return functionLocalIds[functionId];
     }
 
-    int functionId(FunctionSymbol symbol) {
+    int functionId(Symbol symbol) {
         if (symbol == null) {
             return -1;
         }

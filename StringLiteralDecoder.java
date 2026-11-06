@@ -6,9 +6,9 @@ import java.util.List;
 public final class StringLiteralDecoder {
     private StringLiteralDecoder() {}
 
-    public static List<BigInteger> toUtf8Bytes(StringLiteralNode node) {
+    public static List<BigInteger> toUtf8Bytes(AstNode node) {
         if (node == null) {
-            throw new RuntimeException("Cannot decode null StringLiteralNode");
+            throw new RuntimeException("Cannot decode null string literal node");
         }
 
         String decoded = decodeRawContent(node.rawContent);

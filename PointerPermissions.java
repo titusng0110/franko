@@ -17,50 +17,51 @@ final class PointerPermissions {
         return PtrPermission.OWNER;
     }
 
-    static PtrPermission pointerPermission(SemanticType type) {
-        return type instanceof SemanticPtrType ptr
-                ? ptr.permission
+    static PtrPermission pointerPermission(SastType type) {
+        return type.kind == SastTypeKind.PTR
+                ? type.permission
                 : PtrPermission.OWNER;
     }
 
     static boolean isPermissionDowngrade(
-            SemanticType sourceType,
-            SemanticType targetType
+            SastType sourceType,
+            SastType targetType
     ) {
-        return sourceType instanceof SemanticPtrType source
-                && targetType instanceof SemanticPtrType target
-                && source.referencedType.equals(target.referencedType)
-                && source.permission.allows(target.permission);
+        return sourceType.kind == SastTypeKind.PTR
+                && targetType.kind == SastTypeKind.PTR
+                && sourceType.referencedType.equals(targetType.referencedType)
+                && sourceType.permission.allows(targetType.permission);
     }
 
     static boolean isStaticArrayViewDecay(
-            SemanticType sourceType,
-            SemanticType targetType
+            SastType sourceType,
+            SastType targetType
     ) {
-        if (!(sourceType instanceof SemanticPtrType source)
-                || !(targetType instanceof SemanticPtrType target)) {
+        if (sourceType.kind != SastTypeKind.PTR
+                || targetType.kind != SastTypeKind.PTR) {
             return false;
         }
 
-        if (target.permission == PtrPermission.OWNER) {
+        if (targetType.permission == PtrPermission.OWNER) {
             return false;
         }
 
-        if (!source.permission.allows(target.permission)) {
+        if (!sourceType.permission.allows(targetType.permission)) {
             return false;
         }
 
-        if (!(source.referencedType instanceof SemanticStaticArrayType staticArray)
-                || !(target.referencedType instanceof SemanticDynamicArrayType dynamicArray)) {
+        if (sourceType.referencedType.kind != SastTypeKind.STATIC_ARRAY
+                || targetType.referencedType.kind != SastTypeKind.DYNAMIC_ARRAY) {
             return false;
         }
 
-        return staticArray.elementType.equals(dynamicArray.elementType);
+        return sourceType.referencedType.elementType.equals(
+                targetType.referencedType.elementType);
     }
 
     static boolean isPointerConversion(
-            SemanticType sourceType,
-            SemanticType targetType
+            SastType sourceType,
+            SastType targetType
     ) {
         return isPermissionDowngrade(sourceType, targetType)
                 || isStaticArrayViewDecay(sourceType, targetType);

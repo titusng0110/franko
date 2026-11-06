@@ -108,7 +108,7 @@ final class PointerNullAnalysisState {
         snapshotCount = 0;
     }
 
-    int pointerIndex(VariableSymbol symbol) {
+    int pointerIndex(Symbol symbol) {
         int variableId = context.variableId(symbol);
 
         if (variableId < 0) {
@@ -126,7 +126,7 @@ final class PointerNullAnalysisState {
         return pointerIndexByVariable[variableId];
     }
 
-    VariableSymbol pointerVariable(int pointerIndex) {
+    Symbol pointerVariable(int pointerIndex) {
         return context.variable(pointerVariableIds[pointerIndex]);
     }
 

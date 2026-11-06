@@ -8,11 +8,11 @@ import java.util.Set;
 
 final class SemanticTypeResolver {
 
-    static final SemanticType FALLBACK_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
+    static final SastType FALLBACK_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.INT32);
 
-    static final SemanticType VOID_TYPE =
-            new SemanticVoidType();
+    static final SastType VOID_TYPE =
+            SastType.voidType();
 
     private final SymbolTable symbolTable;
     private final ExpressionAnalyzer exprAnalyzer;
@@ -44,7 +44,7 @@ final class SemanticTypeResolver {
         return List.copyOf(pendingTupleDecls);
     }
 
-    SemanticType analyzeNormalType(TypeNode node) {
+    SastType analyzeNormalType(AstNode node) {
         symbolTable.diagnostics().push(node == null ? SourceSpan.NONE : node.span);
         try {
             return analyzeNormalTypeInner(node);
@@ -53,36 +53,37 @@ final class SemanticTypeResolver {
         }
     }
 
-    private SemanticType analyzeNormalTypeInner(TypeNode node) {
+    private SastType analyzeNormalTypeInner(AstNode node) {
         if (node == null) {
             symbolTable.error("Missing type");
             return FALLBACK_TYPE;
         }
 
-        if (node instanceof PrimitiveTypeNode p) {
-            return new SemanticPrimitiveType(
-                    SemanticPrimitiveKind.valueOf(p.kind.name())
+        if (node.kind == AstKind.PRIMITIVE_TYPE) {
+            return SastType.primitive(
+                    SemanticPrimitiveKind.valueOf(node.primitive.name())
             );
         }
 
-        if (node instanceof StructTypeNode s) {
+        if (node.kind == AstKind.STRUCT_TYPE) {
+            AstNode s = node;
             StructSymbol structSymbol = resolveStructTypeSymbolQuiet(s);
 
             if (structSymbol != null) {
-                return new SemanticStructType(structSymbol);
+                return SastType.structType(structSymbol);
             }
 
             EnumSymbol enumSymbol = resolveEnumTypeSymbolQuiet(s);
 
             if (enumSymbol != null) {
-                return new SemanticEnumType(enumSymbol);
+                return SastType.enumType(enumSymbol);
             }
 
-            if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+            if (s.names == null || s.names.isEmpty()) {
                 symbolTable.error("Unknown type '" + s.name + "'");
             } else {
                 symbolTable.error("Unknown type '"
-                        + String.join("::", s.namespaceSegments)
+                        + String.join("::", s.names)
                         + "::"
                         + s.name
                         + "'");
@@ -91,15 +92,16 @@ final class SemanticTypeResolver {
             return FALLBACK_TYPE;
         }
 
-        if (node instanceof TupleTypeNode tuple) {
+        if (node.kind == AstKind.TUPLE_TYPE) {
+            AstNode tuple = node;
             if (tuple.elements.size() < 2) {
                 symbolTable.error(
                         "Tuple types must have at least two elements");
             }
 
-            List<SemanticType> elementTypes = new ArrayList<>();
+            List<SastType> elementTypes = new ArrayList<>();
 
-            for (TupleTypeElementNode element : tuple.elements) {
+            for (AstNode element : tuple.elements) {
                 elementTypes.add(analyzeNormalType(element.type));
             }
 
@@ -108,7 +110,7 @@ final class SemanticTypeResolver {
             String tupleDescription = describeTupleElementTypes(elementTypes);
 
             for (int i = 0; i < tuple.elements.size(); i++) {
-                TupleTypeElementNode element = tuple.elements.get(i);
+                AstNode element = tuple.elements.get(i);
 
                 String effectiveName = element.name == null
                         ? "_" + i
@@ -140,18 +142,19 @@ final class SemanticTypeResolver {
                     tuple.span
             );
 
-            return new SemanticTupleType(fields, cppSymbol);
+            return SastType.tupleType(fields, cppSymbol);
         }
 
-        if (node instanceof DynamicArrayTypeNode d) {
-            return new SemanticDynamicArrayType(
-                    analyzeNormalType(d.elementType)
+        if (node.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
+            return SastType.dynamicArray(
+                    analyzeNormalType(node.type)
             );
         }
 
-        if (node instanceof StaticArrayTypeNode s) {
+        if (node.kind == AstKind.STATIC_ARRAY_TYPE) {
+            AstNode s = node;
 
-            if (s.sizeExpr instanceof InferredSizeNode) {
+            if (s.sizeExpr.kind == AstKind.INFERRED_SIZE) {
                 symbolTable.error("'?' array size is only allowed in a declaration with an array-literal initializer");
                 return FALLBACK_TYPE;
             }
@@ -162,35 +165,36 @@ final class SemanticTypeResolver {
                             "static array size"
                     );
 
-            return new SemanticStaticArrayType(
-                    analyzeNormalType(s.elementType),
+            return SastType.staticArray(
+                    analyzeNormalType(s.type),
                     canonicalSize.toString(10)
             );
         }
 
-        if (node instanceof PtrTypeNode a) {
-            SemanticType referencedType = analyzeNormalType(a.referencedType);
+        if (node.kind == AstKind.PTR_TYPE) {
+            AstNode a = node;
+            SastType referencedType = analyzeNormalType(a.type);
 
-            return switch (a.kind) {
-                case OWNER -> new SemanticPtrType(referencedType);
-                case MUTABLE -> new SemanticMViewType(referencedType);
-                case READ_ONLY -> new SemanticViewType(referencedType);
+            return switch (a.permission) {
+                case OWNER -> SastType.ptr(referencedType);
+                case MUTABLE -> SastType.mview(referencedType);
+                case READ_ONLY -> SastType.view(referencedType);
             };
         }
 
-        if (node instanceof VoidTypeNode) {
+        if (node.kind == AstKind.VOID_TYPE) {
             symbolTable.error("void is not a valid ordinary type");
             return FALLBACK_TYPE;
         }
 
         symbolTable.error("Unknown type node: "
-                + node.getClass().getSimpleName());
+                + node.kind.legacyClassName());
 
         return FALLBACK_TYPE;
     }
 
-    SemanticType analyzeReturnType(TypeNode node) {
-        if (node instanceof VoidTypeNode) {
+    SastType analyzeReturnType(AstNode node) {
+        if (node.kind == AstKind.VOID_TYPE) {
             return VOID_TYPE;
         }
 
@@ -202,7 +206,7 @@ final class SemanticTypeResolver {
         return analyzeNormalType(node);
     }
 
-    private static String describeTupleElementTypes(List<SemanticType> elementTypes) {
+    private static String describeTupleElementTypes(List<SastType> elementTypes) {
         StringBuilder sb = new StringBuilder();
         sb.append("(");
 
@@ -278,13 +282,13 @@ final class SemanticTypeResolver {
         return symbol;
     }
 
-    private StructSymbol resolveStructTypeSymbolQuiet(StructTypeNode s) {
-        if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+    private StructSymbol resolveStructTypeSymbolQuiet(AstNode s) {
+        if (s.names == null || s.names.isEmpty()) {
             return symbolTable.resolveStruct(s.name);
         }
 
         NamespaceSymbol namespace =
-                symbolTable.resolveNamespace(s.namespaceSegments);
+                symbolTable.resolveNamespace(s.names);
 
         if (namespace == null) {
             return null;
@@ -293,13 +297,13 @@ final class SemanticTypeResolver {
         return symbolTable.resolveStructIn(namespace, s.name);
     }
 
-    private EnumSymbol resolveEnumTypeSymbolQuiet(StructTypeNode s) {
-        if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+    private EnumSymbol resolveEnumTypeSymbolQuiet(AstNode s) {
+        if (s.names == null || s.names.isEmpty()) {
             return symbolTable.resolveEnum(s.name);
         }
 
         NamespaceSymbol namespace =
-                symbolTable.resolveNamespace(s.namespaceSegments);
+                symbolTable.resolveNamespace(s.names);
 
         if (namespace == null) {
             return null;
@@ -308,13 +312,13 @@ final class SemanticTypeResolver {
         return symbolTable.resolveEnumIn(namespace, s.name);
     }
 
-    EnumSymbol analyzeEnumDecl(EnumDeclNode node, String namespace) {
+    EnumSymbol analyzeEnumDecl(AstNode node, String namespace) {
         SemanticPrimitiveKind backingKind = SemanticPrimitiveKind.INT32;
 
-        if (node.backingType instanceof PrimitiveTypeNode p) {
-            backingKind = SemanticPrimitiveKind.valueOf(p.kind.name());
+        if (node.type.kind == AstKind.PRIMITIVE_TYPE) {
+            backingKind = SemanticPrimitiveKind.valueOf(node.type.primitive.name());
         } else {
-            String got = describeTypeNodeForEnumError(node.backingType);
+            String got = describeTypeNodeForEnumError(node.type);
             symbolTable.error("Enum backing type must be one of the eight primitive integer types, got " + got);
         }
 
@@ -326,9 +330,9 @@ final class SemanticTypeResolver {
         }
 
         Set<String> seenNames = new HashSet<>();
-        List<EnumVariantNode> uniqueVariants = new ArrayList<>();
+        List<AstNode> uniqueVariants = new ArrayList<>();
 
-        for (EnumVariantNode variant : node.variants) {
+        for (AstNode variant : node.variants) {
             if (!seenNames.add(variant.name)) {
                 symbolTable.diagnostics().push(variant.span);
                 try {
@@ -344,8 +348,8 @@ final class SemanticTypeResolver {
 
         int explicitCount = 0;
 
-        for (EnumVariantNode variant : uniqueVariants) {
-            if (variant.constInitializer != null) {
+        for (AstNode variant : uniqueVariants) {
+            if (variant.value != null) {
                 explicitCount++;
             }
         }
@@ -359,9 +363,9 @@ final class SemanticTypeResolver {
         Map<BigInteger, String> valueToVariant = new LinkedHashMap<>();
 
         if (allExplicit) {
-            for (EnumVariantNode variant : uniqueVariants) {
+            for (AstNode variant : uniqueVariants) {
                 BigInteger value = exprAnalyzer.preEvaluatedConstValue(
-                        variant.constInitializer,
+                        variant.value,
                         "enum variant value"
                 );
 
@@ -390,12 +394,12 @@ final class SemanticTypeResolver {
         } else {
             BigInteger previous = null;
 
-            for (EnumVariantNode variant : uniqueVariants) {
+            for (AstNode variant : uniqueVariants) {
                 BigInteger value;
 
-                if (variant.constInitializer != null) {
+                if (variant.value != null) {
                     value = exprAnalyzer.preEvaluatedConstValue(
-                            variant.constInitializer,
+                            variant.value,
                             "enum variant value"
                     );
 
@@ -433,46 +437,47 @@ final class SemanticTypeResolver {
         return new EnumSymbol(node.name, namespace, backingKind, computed);
     }
 
-    private static String describeTypeNodeForEnumError(TypeNode node) {
+    private static String describeTypeNodeForEnumError(AstNode node) {
         if (node == null) {
             return "<null>";
         }
 
-        if (node instanceof PrimitiveTypeNode p) {
-            return p.kind.name().toLowerCase();
+        if (node.kind == AstKind.PRIMITIVE_TYPE) {
+            return node.primitive.name().toLowerCase();
         }
 
-        if (node instanceof VoidTypeNode) {
+        if (node.kind == AstKind.VOID_TYPE) {
             return "void";
         }
 
-        if (node instanceof StructTypeNode s) {
-            if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
-                return s.name;
+        if (node.kind == AstKind.STRUCT_TYPE) {
+            if (node.names == null || node.names.isEmpty()) {
+                return node.name;
             }
 
-            return String.join("::", s.namespaceSegments) + "::" + s.name;
+            return String.join("::", node.names) + "::" + node.name;
         }
 
-        if (node instanceof DynamicArrayTypeNode d) {
-            return "[" + describeTypeNodeForEnumError(d.elementType) + "]";
+        if (node.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
+            return "[" + describeTypeNodeForEnumError(node.type) + "]";
         }
 
-        if (node instanceof StaticArrayTypeNode s) {
+        if (node.kind == AstKind.STATIC_ARRAY_TYPE) {
             String size = "?";
 
-            if (s.sizeExpr instanceof IntNode n) {
-                size = n.value;
+            if (node.sizeExpr.kind == AstKind.INT) {
+                size = node.sizeExpr.text;
             }
 
-            return "[" + describeTypeNodeForEnumError(s.elementType) + ", " + size + "]";
+            return "[" + describeTypeNodeForEnumError(node.type) + ", " + size + "]";
         }
 
-        if (node instanceof PtrTypeNode a) {
-            return a.kind.spelling() + "<" + describeTypeNodeForEnumError(a.referencedType) + ">";
+        if (node.kind == AstKind.PTR_TYPE) {
+            return node.permission.spelling() + "<" + describeTypeNodeForEnumError(node.type) + ">";
         }
 
-        if (node instanceof TupleTypeNode t) {
+        if (node.kind == AstKind.TUPLE_TYPE) {
+            AstNode t = node;
             StringBuilder sb = new StringBuilder();
             sb.append("(");
 
@@ -488,6 +493,6 @@ final class SemanticTypeResolver {
             return sb.toString();
         }
 
-        return node.getClass().getSimpleName();
+        return node.kind.legacyClassName();
     }
 }

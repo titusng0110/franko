@@ -110,7 +110,7 @@ final class DanglingPointerState {
         blockDepth = 0;
     }
 
-    int pointerIndex(VariableSymbol symbol) {
+    int pointerIndex(Symbol symbol) {
         int variableId = context.variableId(symbol);
 
         if (variableId < 0) {

@@ -10,7 +10,7 @@ public class TypeChecker {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
-    public static boolean sameType(SemanticType a, SemanticType b) {
+    public static boolean sameType(SastType a, SastType b) {
         if (a == null || b == null) {
             return false;
         }
@@ -18,27 +18,27 @@ public class TypeChecker {
         return a.equals(b);
     }
 
-    public String describeSafe(SemanticType type) {
+    public String describeSafe(SastType type) {
         return type == null ? "<null>" : type.describe();
     }
 
-    public boolean isVoidType(SemanticType t) {
-        return t instanceof SemanticVoidType;
+    public boolean isVoidType(SastType t) {
+        return t.kind == SastTypeKind.VOID;
     }
 
-    public boolean isIntegral(SemanticType t) {
-        return t instanceof SemanticPrimitiveType;
+    public boolean isIntegral(SastType t) {
+        return t.kind == SastTypeKind.PRIMITIVE;
     }
 
-    public boolean isEnumType(SemanticType t) {
-        return t instanceof SemanticEnumType;
+    public boolean isEnumType(SastType t) {
+        return t.kind == SastTypeKind.ENUM;
     }
 
-    public SemanticPrimitiveKind enumBackingKind(SemanticType t) {
-        return t instanceof SemanticEnumType e ? e.enumSymbol.backingKind : null;
+    public SemanticPrimitiveKind enumBackingKind(SastType t) {
+        return t.kind == SastTypeKind.ENUM ? t.enumSymbol.backingKind : null;
     }
 
-    public boolean isValuePreservingEnumToIntegerCast(SemanticEnumType enumType, SemanticPrimitiveKind targetKind) {
+    public boolean isValuePreservingEnumToIntegerCast(SastType enumType, SemanticPrimitiveKind targetKind) {
         if (enumType == null || targetKind == null) {
             return false;
         }
@@ -72,63 +72,63 @@ public class TypeChecker {
         return wrapped;
     }
 
-    public boolean isSignedIntegral(SemanticType t) {
+    public boolean isSignedIntegral(SastType t) {
         SemanticPrimitiveKind kind = primitiveKindOf(t);
         return kind != null && isSigned(kind);
     }
 
-    public boolean isUnsignedIntegral(SemanticType t) {
+    public boolean isUnsignedIntegral(SastType t) {
         SemanticPrimitiveKind kind = primitiveKindOf(t);
         return kind != null && !isSigned(kind);
     }
 
-    public boolean isArrayType(SemanticType t) {
-        return t instanceof SemanticDynamicArrayType
-                || t instanceof SemanticStaticArrayType;
+    public boolean isArrayType(SastType t) {
+        return t.kind == SastTypeKind.DYNAMIC_ARRAY
+                || t.kind == SastTypeKind.STATIC_ARRAY;
     }
 
-    public boolean isDynamicArrayType(SemanticType t) {
-        return t instanceof SemanticDynamicArrayType;
+    public boolean isDynamicArrayType(SastType t) {
+        return t.kind == SastTypeKind.DYNAMIC_ARRAY;
     }
 
-    public boolean isStaticArrayType(SemanticType t) {
-        return t instanceof SemanticStaticArrayType;
+    public boolean isStaticArrayType(SastType t) {
+        return t.kind == SastTypeKind.STATIC_ARRAY;
     }
 
-    public boolean isPointerType(SemanticType t) {
-        return t instanceof SemanticPtrType;
+    public boolean isPointerType(SastType t) {
+        return t.kind == SastTypeKind.PTR;
     }
 
-    public boolean isNullType(SemanticType t) {
-        return t instanceof SemanticNullType;
+    public boolean isNullType(SastType t) {
+        return t.kind == SastTypeKind.NULL;
     }
 
-    public boolean isValueAssignableType(SemanticType t) {
+    public boolean isValueAssignableType(SastType t) {
         return isValueAssignableType(t, new HashSet<>());
     }
 
     private boolean isValueAssignableType(
-            SemanticType t,
-            Set<SemanticType> visited
+            SastType t,
+            Set<SastType> visited
     ) {
         if (t == null) {
             return false;
         }
 
-        if (t instanceof SemanticPrimitiveType
-                || t instanceof SemanticPtrType
-                || t instanceof SemanticEnumType) {
+        if (t.kind == SastTypeKind.PRIMITIVE
+                || t.kind == SastTypeKind.PTR
+                || t.kind == SastTypeKind.ENUM) {
             return true;
         }
 
-        if (t instanceof SemanticStructType struct) {
+        if (t.kind == SastTypeKind.STRUCT) {
             if (!visited.add(t)) {
                 return false;
             }
 
             boolean assignable = true;
 
-            for (FieldSymbol field : struct.structSymbol.fields) {
+            for (FieldSymbol field : t.structSymbol.fields) {
                 if (!isValueAssignableType(field.type, visited)) {
                     assignable = false;
                     break;
@@ -140,14 +140,14 @@ public class TypeChecker {
             return assignable;
         }
 
-        if (t instanceof SemanticTupleType tuple) {
+        if (t.kind == SastTypeKind.TUPLE) {
             if (!visited.add(t)) {
                 return false;
             }
 
             boolean assignable = true;
 
-            for (FieldSymbol field : tuple.fields) {
+            for (FieldSymbol field : t.fields) {
                 if (!isValueAssignableType(field.type, visited)) {
                     assignable = false;
                     break;
@@ -162,28 +162,28 @@ public class TypeChecker {
         return false;
     }
 
-    public boolean isValidFunctionReturnType(SemanticType t) {
+    public boolean isValidFunctionReturnType(SastType t) {
         return isVoidType(t) || isValueAssignableType(t);
     }
 
-    public SemanticPrimitiveKind primitiveKindOf(SemanticType type) {
-        return type instanceof SemanticPrimitiveType pt ? pt.kind : null;
+    public SemanticPrimitiveKind primitiveKindOf(SastType type) {
+        return type.kind == SastTypeKind.PRIMITIVE ? type.primitive : null;
     }
 
-    public SemanticType elementTypeOfArray(SemanticType type) {
-        if (type instanceof SemanticDynamicArrayType d) {
-            return d.elementType;
+    public SastType elementTypeOfArray(SastType type) {
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            return type.elementType;
         }
 
-        if (type instanceof SemanticStaticArrayType s) {
-            return s.elementType;
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            return type.elementType;
         }
 
         return null;
     }
 
-    public SemanticType referencedTypeOfPointer(SemanticType type) {
-        return type instanceof SemanticPtrType a ? a.referencedType : null;
+    public SastType referencedTypeOfPointer(SastType type) {
+        return type.kind == SastTypeKind.PTR ? type.referencedType : null;
     }
 
     public boolean ensureValueExpression(
@@ -204,76 +204,76 @@ public class TypeChecker {
     }
 
     public static boolean isSelfTypeForOwner(
-            SemanticType type,
+            SastType type,
             StructSymbol owner
     ) {
-        if (!(type instanceof SemanticPtrType ptr)) {
+        if (!(type.kind == SastTypeKind.PTR)) {
             return false;
         }
 
-        if (!(ptr.referencedType instanceof SemanticStructType structType)) {
+        if (!(type.referencedType.kind == SastTypeKind.STRUCT)) {
             return false;
         }
 
-        if (structType.structSymbol == null) {
+        if (type.referencedType.structSymbol == null) {
             return false;
         }
 
-        return structType.structSymbol.qualifiedName().equals(
+        return type.referencedType.structSymbol.qualifiedName().equals(
                 owner.qualifiedName());
     }
 
-    public void ensureNotVoid(SemanticType t, String message) {
+    public void ensureNotVoid(SastType t, String message) {
         if (isVoidType(t)) {
             diagnostics.error(message + ", got void");
         }
     }
 
-    public void ensureIntegral(SemanticType t, String message) {
+    public void ensureIntegral(SastType t, String message) {
         if (!isIntegral(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureSignedIntegral(SemanticType t, String message) {
+    public void ensureSignedIntegral(SastType t, String message) {
         if (!isSignedIntegral(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureUnsignedIntegral(SemanticType t, String message) {
+    public void ensureUnsignedIntegral(SastType t, String message) {
         if (!isUnsignedIntegral(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureArrayType(SemanticType t, String message) {
+    public void ensureArrayType(SastType t, String message) {
         if (!isArrayType(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureDynamicArrayType(SemanticType t, String message) {
+    public void ensureDynamicArrayType(SastType t, String message) {
         if (!isDynamicArrayType(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensureStaticArrayType(SemanticType t, String message) {
+    public void ensureStaticArrayType(SastType t, String message) {
         if (!isStaticArrayType(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
-    public void ensurePointerType(SemanticType t, String message) {
+    public void ensurePointerType(SastType t, String message) {
         if (!isPointerType(t)) {
             diagnostics.error(message + ", got " + describeSafe(t));
         }
     }
 
     public void ensureSameType(
-            SemanticType expected,
-            SemanticType actual,
+            SastType expected,
+            SastType actual,
             String message
     ) {
         if (!sameType(expected, actual)) {
@@ -285,7 +285,7 @@ public class TypeChecker {
     }
 
     public void ensureValidFunctionReturnType(
-            SemanticType type,
+            SastType type,
             String message
     ) {
         if (type == null) {
@@ -309,7 +309,7 @@ public class TypeChecker {
     }
 
     public void ensureAssignable(
-            SemanticType targetType,
+            SastType targetType,
             SemanticExprNode expr,
             String message
     ) {
@@ -328,8 +328,8 @@ public class TypeChecker {
             return;
         }
 
-        if (expr.type instanceof SemanticNullType) {
-            if (!(targetType instanceof SemanticPtrType)) {
+        if (expr.type.kind == SastTypeKind.NULL) {
+            if (!(targetType.kind == SastTypeKind.PTR)) {
                 diagnostics.error(message
                         + ": null is only valid for pointer types, got target "
                         + targetType.describe());
@@ -339,8 +339,8 @@ public class TypeChecker {
 
         if (isArrayType(targetType) || isArrayType(expr.type)) {
             if (isArrayType(targetType)
-                    && expr.type instanceof SemanticPtrType sourcePtr
-                    && isArrayType(sourcePtr.referencedType)) {
+                    && expr.type.kind == SastTypeKind.PTR
+                    && isArrayType(expr.type.referencedType)) {
                 if (isStringLiteralView(expr)) {
                     diagnostics.error(message + ": a string literal is a "
                             + expr.type.describe()
@@ -364,7 +364,7 @@ public class TypeChecker {
             return;
         }
 
-        if (targetType instanceof SemanticStructType
+        if (targetType.kind == SastTypeKind.STRUCT
                 && !isValueAssignableType(targetType)) {
             diagnostics.error(message + ": struct type "
                     + targetType.describe()
@@ -373,7 +373,7 @@ public class TypeChecker {
             return;
         }
 
-        if (targetType instanceof SemanticTupleType
+        if (targetType.kind == SastTypeKind.TUPLE
                 && !isValueAssignableType(targetType)) {
             diagnostics.error(message + ": tuple type "
                     + targetType.describe()
@@ -382,9 +382,9 @@ public class TypeChecker {
             return;
         }
 
-        if (targetType instanceof SemanticEnumType targetEnum) {
-            if (expr.type instanceof SemanticEnumType sourceEnum) {
-                if (sourceEnum.enumSymbol != targetEnum.enumSymbol) {
+        if (targetType.kind == SastTypeKind.ENUM) {
+            if (expr.type.kind == SastTypeKind.ENUM) {
+                if (expr.type.enumSymbol != targetType.enumSymbol) {
                     diagnostics.error(message + ": expected "
                             + targetType.describe()
                             + ", got "
@@ -400,7 +400,7 @@ public class TypeChecker {
             return;
         }
 
-        if (expr.type instanceof SemanticEnumType) {
+        if (expr.type.kind == SastTypeKind.ENUM) {
             diagnostics.error(message + ": expected "
                     + targetType.describe()
                     + ", got "
@@ -408,11 +408,11 @@ public class TypeChecker {
             return;
         }
 
-        if (targetType instanceof SemanticPrimitiveType targetPrimitive) {
+        if (targetType.kind == SastTypeKind.PRIMITIVE) {
             if (expr.isConstant()) {
                 requireAssignableConstant(
                         expr.constantValue,
-                        targetPrimitive.kind,
+                        targetType.primitive,
                         targetType,
                         message
                 );
@@ -445,21 +445,21 @@ public class TypeChecker {
     private static boolean isStringLiteralView(SemanticExprNode expr) {
         return expr instanceof SemanticGetPtrNode get
                 && get.target instanceof SemanticVarExprNode var
-                && var.symbol instanceof GlobalVariableSymbol global
-                && global.literalBytes != null;
+                && var.symbol.kind == SymbolKind.GLOBAL
+                && var.symbol.literalBytes != null;
     }
 
     private static boolean isArrayLiteralView(SemanticExprNode expr) {
         return expr instanceof SemanticGetPtrNode get
                 && get.target instanceof SemanticVarExprNode var
-                && var.symbol instanceof GlobalVariableSymbol global
-                && global.literalValues != null;
+                && var.symbol.kind == SymbolKind.GLOBAL
+                && var.symbol.literalValues != null;
     }
 
     private void requireAssignableConstant(
             BigInteger value,
             SemanticPrimitiveKind kind,
-            SemanticType targetType,
+            SastType targetType,
             String message
     ) {
         if (!fitsBigIntegerToPrimitive(value, kind)) {
@@ -629,16 +629,16 @@ public class TypeChecker {
 
     public void requireConstantFitsType(
             BigInteger value,
-            SemanticType contextType,
+            SastType contextType,
             String message
     ) {
-        if (!(contextType instanceof SemanticPrimitiveType pt)) {
+        if (!(contextType.kind == SastTypeKind.PRIMITIVE)) {
             diagnostics.error(message + ": expected primitive integer context, got "
                     + describeSafe(contextType));
             return;
         }
 
-        requireConstantFitsPrimitive(value, pt.kind, message);
+        requireConstantFitsPrimitive(value, contextType.primitive, message);
     }
 
     public void requireConstantFitsPrimitive(
@@ -726,28 +726,28 @@ public class TypeChecker {
         return !isSigned(kind);
     }
 
-    public boolean isMemsetSafe(SemanticType t) {
+    public boolean isMemsetSafe(SastType t) {
         return isMemsetSafe(t, new HashSet<>());
     }
 
-    private boolean isMemsetSafe(SemanticType t, Set<SemanticType> visited) {
+    private boolean isMemsetSafe(SastType t, Set<SastType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
 
-        if (t instanceof SemanticEnumType) {
+        if (t.kind == SastTypeKind.ENUM) {
             return false;
         }
 
-        if (t instanceof SemanticPrimitiveType) {
+        if (t.kind == SastTypeKind.PRIMITIVE) {
             return true;
         }
 
-        if (t instanceof SemanticStaticArrayType s) {
-            return isMemsetSafe(s.elementType, visited);
+        if (t.kind == SastTypeKind.STATIC_ARRAY) {
+            return isMemsetSafe(t.elementType, visited);
         }
 
-        if (t instanceof SemanticStructType struct) {
+        if (t.kind == SastTypeKind.STRUCT) {
 
             if (!visited.add(t)) {
                 return false;
@@ -755,7 +755,7 @@ public class TypeChecker {
 
             boolean memsetSafe = true;
 
-            for (FieldSymbol field : struct.structSymbol.fields) {
+            for (FieldSymbol field : t.structSymbol.fields) {
                 if (!isMemsetSafe(field.type, visited)) {
                     memsetSafe = false;
                     break;
@@ -767,14 +767,14 @@ public class TypeChecker {
             return memsetSafe;
         }
 
-        if (t instanceof SemanticTupleType tuple) {
+        if (t.kind == SastTypeKind.TUPLE) {
             if (!visited.add(t)) {
                 return false;
             }
 
             boolean memsetSafe = true;
 
-            for (FieldSymbol field : tuple.fields) {
+            for (FieldSymbol field : t.fields) {
                 if (!isMemsetSafe(field.type, visited)) {
                     memsetSafe = false;
                     break;
@@ -789,43 +789,43 @@ public class TypeChecker {
         return false;
     }
 
-    public boolean hasDefaultValue(SemanticType t) {
+    public boolean hasDefaultValue(SastType t) {
         return hasDefaultValue(t, new HashSet<>());
     }
 
     private boolean hasDefaultValue(
-            SemanticType t,
-            Set<SemanticType> visited
+            SastType t,
+            Set<SastType> visited
     ) {
         if (t == null || isVoidType(t)) {
             return false;
         }
 
-        if (t instanceof SemanticEnumType) {
+        if (t.kind == SastTypeKind.ENUM) {
             return true;
         }
 
-        if (t instanceof SemanticPrimitiveType) {
+        if (t.kind == SastTypeKind.PRIMITIVE) {
             return false;
         }
 
-        if (t instanceof SemanticPtrType
-                || t instanceof SemanticDynamicArrayType) {
+        if (t.kind == SastTypeKind.PTR
+                || t.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return true;
         }
 
-        if (t instanceof SemanticStaticArrayType s) {
-            return hasDefaultValue(s.elementType, visited);
+        if (t.kind == SastTypeKind.STATIC_ARRAY) {
+            return hasDefaultValue(t.elementType, visited);
         }
 
-        if (t instanceof SemanticStructType struct) {
+        if (t.kind == SastTypeKind.STRUCT) {
             if (!visited.add(t)) {
                 return false;
             }
 
             boolean hasDefault = false;
 
-            for (FieldSymbol field : struct.structSymbol.fields) {
+            for (FieldSymbol field : t.structSymbol.fields) {
                 if (field.foldedDefault != null
                         || hasDefaultValue(field.type, visited)) {
                     hasDefault = true;
@@ -838,14 +838,14 @@ public class TypeChecker {
             return hasDefault;
         }
 
-        if (t instanceof SemanticTupleType tuple) {
+        if (t.kind == SastTypeKind.TUPLE) {
             if (!visited.add(t)) {
                 return false;
             }
 
             boolean hasDefault = false;
 
-            for (FieldSymbol field : tuple.fields) {
+            for (FieldSymbol field : t.fields) {
                 if (hasDefaultValue(field.type, visited)) {
                     hasDefault = true;
                     break;
@@ -860,26 +860,26 @@ public class TypeChecker {
         return false;
     }
 
-    public boolean isMemcpySafe(SemanticType t) {
+    public boolean isMemcpySafe(SastType t) {
         return isMemcpySafe(t, new HashSet<>());
     }
 
-    private boolean isMemcpySafe(SemanticType t, Set<SemanticType> visited) {
+    private boolean isMemcpySafe(SastType t, Set<SastType> visited) {
         if (t == null || isVoidType(t)) {
             return false;
         }
 
-        if (t instanceof SemanticPrimitiveType
-                || t instanceof SemanticPtrType
-                || t instanceof SemanticEnumType) {
+        if (t.kind == SastTypeKind.PRIMITIVE
+                || t.kind == SastTypeKind.PTR
+                || t.kind == SastTypeKind.ENUM) {
             return true;
         }
 
-        if (t instanceof SemanticStaticArrayType s) {
-            return isMemcpySafe(s.elementType, visited);
+        if (t.kind == SastTypeKind.STATIC_ARRAY) {
+            return isMemcpySafe(t.elementType, visited);
         }
 
-        if (t instanceof SemanticStructType struct) {
+        if (t.kind == SastTypeKind.STRUCT) {
 
             if (!visited.add(t)) {
                 return false;
@@ -887,7 +887,7 @@ public class TypeChecker {
 
             boolean memcpySafe = true;
 
-            for (FieldSymbol field : struct.structSymbol.fields) {
+            for (FieldSymbol field : t.structSymbol.fields) {
                 if (!isMemcpySafe(field.type, visited)) {
                     memcpySafe = false;
                     break;
@@ -899,14 +899,14 @@ public class TypeChecker {
             return memcpySafe;
         }
 
-        if (t instanceof SemanticTupleType tuple) {
+        if (t.kind == SastTypeKind.TUPLE) {
             if (!visited.add(t)) {
                 return false;
             }
 
             boolean memcpySafe = true;
 
-            for (FieldSymbol field : tuple.fields) {
+            for (FieldSymbol field : t.fields) {
                 if (!isMemcpySafe(field.type, visited)) {
                     memcpySafe = false;
                     break;
@@ -921,9 +921,9 @@ public class TypeChecker {
         return false;
     }
 
-    public static boolean isByteType(SemanticType t) {
-        return t instanceof SemanticPrimitiveType pt
-                && pt.kind == SemanticPrimitiveKind.UINT8;
+    public static boolean isByteType(SastType t) {
+        return t.kind == SastTypeKind.PRIMITIVE
+                && t.primitive == SemanticPrimitiveKind.UINT8;
     }
 
     public BigInteger parseIntegerLiteral(String val) {

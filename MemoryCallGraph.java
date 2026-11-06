@@ -4,7 +4,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 
 final class MemoryCallGraph {
-    final FunctionSymbol[] functions;
+    final Symbol[] functions;
     final SemanticFunctionDeclNode[] decls;
     final int[][] parameterVariableIds;
     final boolean[] hasBody;
@@ -18,7 +18,7 @@ final class MemoryCallGraph {
     final int[] sccId;
 
     MemoryCallGraph(
-            FunctionSymbol[] functions,
+            Symbol[] functions,
             SemanticFunctionDeclNode[] decls,
             int[][] parameterVariableIds,
             boolean[] hasBody,
@@ -164,9 +164,9 @@ final class MemoryCallGraph {
     }
 
     static final class Builder {
-        private final IdentityHashMap<FunctionSymbol, Integer> functionIds =
+        private final IdentityHashMap<Symbol, Integer> functionIds =
                 new IdentityHashMap<>();
-        private final List<FunctionSymbol> functions = new ArrayList<>();
+        private final List<Symbol> functions = new ArrayList<>();
         private final List<SemanticFunctionDeclNode> decls = new ArrayList<>();
         private final List<int[]> parameterIds = new ArrayList<>();
         private final List<Boolean> hasBody = new ArrayList<>();
@@ -175,7 +175,7 @@ final class MemoryCallGraph {
         private final List<Integer> callSiteCallees = new ArrayList<>();
         private final List<List<Integer>> callerEdges = new ArrayList<>();
 
-        int functionId(FunctionSymbol symbol) {
+        int functionId(Symbol symbol) {
             if (symbol == null) {
                 return -1;
             }
@@ -189,7 +189,7 @@ final class MemoryCallGraph {
             return addFunction(symbol, null);
         }
 
-        int addFunction(FunctionSymbol symbol, SemanticFunctionDeclNode decl) {
+        int addFunction(Symbol symbol, SemanticFunctionDeclNode decl) {
             Integer existing = functionIds.get(symbol);
 
             if (existing != null) {
@@ -207,7 +207,7 @@ final class MemoryCallGraph {
             decls.add(decl);
             hasBody.add(decl != null);
 
-            List<ParameterSymbol> parameters = symbol.parameters;
+            List<Symbol> parameters = symbol.parameters;
             int[] ids = new int[parameters.size()];
 
             for (int i = 0; i < parameters.size(); i++) {
@@ -281,7 +281,7 @@ final class MemoryCallGraph {
             }
 
             return new MemoryCallGraph(
-                    functions.toArray(new FunctionSymbol[0]),
+                    functions.toArray(new Symbol[0]),
                     decls.toArray(new SemanticFunctionDeclNode[0]),
                     parameterIds.toArray(new int[0][]),
                     toBooleanArray(hasBody),

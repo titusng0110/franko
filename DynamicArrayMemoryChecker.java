@@ -314,9 +314,9 @@ public final class DynamicArrayMemoryChecker {
 
         private void seedSummaryParameters(SemanticFunctionDeclNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
-                VariableSymbol parameter = decl.parameterVariables.get(i);
+                Symbol parameter = decl.parameterVariables.get(i);
 
-                if (!(parameter.type instanceof SemanticPtrType)) {
+                if (!(parameter.type.kind == SastTypeKind.PTR)) {
                     continue;
                 }
 
@@ -368,15 +368,15 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private boolean isOwnerArrayParameter(VariableSymbol parameter) {
-            return parameter.type instanceof SemanticPtrType pointer
-                    && pointer.permission == PtrPermission.OWNER
-                    && pointer.referencedType instanceof SemanticDynamicArrayType;
+        private boolean isOwnerArrayParameter(Symbol parameter) {
+            return parameter.type.kind == SastTypeKind.PTR
+                    && parameter.type.permission == PtrPermission.OWNER
+                    && parameter.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY;
         }
 
         private void seedCheckParameters(SemanticFunctionDeclNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
-                VariableSymbol parameter = decl.parameterVariables.get(i);
+                Symbol parameter = decl.parameterVariables.get(i);
                 int ownerIndex = state.ownerIndexOf(parameter);
                 int pointerIndex = state.pointerIndexOf(parameter);
 
@@ -676,7 +676,7 @@ public final class DynamicArrayMemoryChecker {
 
         private boolean isEscapeSink(SemanticExprNode target) {
             if (target instanceof SemanticVarExprNode variable) {
-                return variable.symbol instanceof GlobalVariableSymbol;
+                return variable.symbol.kind == SymbolKind.GLOBAL;
             }
 
             if (target instanceof SemanticMemberAccessNode) {
@@ -742,7 +742,7 @@ public final class DynamicArrayMemoryChecker {
                     }
                 }
 
-                if (variable.symbol instanceof GlobalVariableSymbol
+                if (variable.symbol.kind == SymbolKind.GLOBAL
                         && value.arrayIndex >= 0) {
                     state.escaped[value.arrayIndex] = true;
                 }
@@ -2990,13 +2990,13 @@ public final class DynamicArrayMemoryChecker {
 
         private String arrayName(int arrayIndex) {
             int variableId = state.arrayVariableIds[arrayIndex];
-            VariableSymbol symbol = context.variable(variableId);
+            Symbol symbol = context.variable(variableId);
             return symbol == null ? "<array>" : symbol.qualifiedName();
         }
 
         private String pointerName(int pointerIndex) {
             int variableId = state.pointerVariableIds[pointerIndex];
-            VariableSymbol symbol = context.variable(variableId);
+            Symbol symbol = context.variable(variableId);
             return symbol == null ? "<pointer>" : symbol.qualifiedName();
         }
 
@@ -3008,7 +3008,7 @@ public final class DynamicArrayMemoryChecker {
             return "<expression>";
         }
 
-        private String functionName(FunctionSymbol function) {
+        private String functionName(Symbol function) {
             return function == null ? "<unknown>" : function.qualifiedName();
         }
     }

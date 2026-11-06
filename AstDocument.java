@@ -2,9 +2,9 @@ public final class AstDocument {
 
     public final AstPhase phase;
     public final SourceTable sources;
-    public final ProgramNode root;
+    public final AstNode root;
 
-    public AstDocument(AstPhase phase, SourceTable sources, ProgramNode root) {
+    public AstDocument(AstPhase phase, SourceTable sources, AstNode root) {
         this.phase = phase;
         this.sources = sources == null ? new SourceTable() : sources;
         this.root = root;

@@ -7,32 +7,32 @@ import java.util.function.Function;
 final class CompileTimeIntrinsics {
 
     interface StringHoister {
-        GlobalVariableSymbol hoistStaticString(
+        Symbol hoistStaticString(
                 List<BigInteger> bytes,
                 SourceSpan span
         );
     }
 
-    private static final SemanticType BOOL_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8);
+    private static final SastType BOOL_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.UINT8);
 
-    private static final SemanticType INT32_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
+    private static final SastType INT32_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.INT32);
 
-    private static final SemanticType VOID_TYPE =
+    private static final SastType VOID_TYPE =
             SemanticTypeResolver.VOID_TYPE;
 
     private final SymbolTable ctx;
     private final TypeChecker typeChecker;
     private final StringHoister stringHoister;
     private final TargetInfo target;
-    private final Function<TypeNode, SemanticType> typeResolver;
+    private final Function<AstNode, SastType> typeResolver;
 
     CompileTimeIntrinsics(
             SymbolTable ctx,
             TargetInfo target,
             StringHoister stringHoister,
-            Function<TypeNode, SemanticType> typeResolver
+            Function<AstNode, SastType> typeResolver
     ) {
         this.ctx = ctx;
         this.target = target;
@@ -41,24 +41,24 @@ final class CompileTimeIntrinsics {
         this.typeResolver = typeResolver;
     }
 
-    SemanticExprNode analyzeCall(CompileTimeCallNode call) {
+    SemanticExprNode analyzeCall(AstNode call) {
         return materialize(evaluateCall(call.name, call.args, call.span), call.span);
     }
 
-    SemanticExprNode analyzeName(CompileTimeNameNode name) {
+    SemanticExprNode analyzeName(AstNode name) {
         return materialize(evaluateName(name.name, name.span), name.span);
     }
 
     private StaticValue evaluateCall(
             String name,
-            List<ASTNode> args,
+            List<AstNode> args,
             SourceSpan span
     ) {
         return switch (name) {
             case "is_primitive" -> evaluateTypePredicate(
-                    name, args, type -> type instanceof SemanticPrimitiveType);
+                    name, args, type -> type.kind == SastTypeKind.PRIMITIVE);
             case "is_enum" -> evaluateTypePredicate(
-                    name, args, type -> type instanceof SemanticEnumType);
+                    name, args, type -> type.kind == SastTypeKind.ENUM);
             case "is_memcpy_safe" -> evaluateTypePredicate(
                     name, args, typeChecker::isMemcpySafe);
             case "has_default_value" -> evaluateTypePredicate(
@@ -114,19 +114,19 @@ final class CompileTimeIntrinsics {
     }
 
     private interface TypePredicate {
-        boolean test(SemanticType type);
+        boolean test(SastType type);
     }
 
     private StaticValue evaluateTypePredicate(
             String name,
-            List<ASTNode> args,
+            List<AstNode> args,
             TypePredicate predicate
     ) {
         if (!requireArity(name, args, 1)) {
             return null;
         }
 
-        SemanticType type = resolveTypeOrValueArgument(args.get(0), name);
+        SastType type = resolveTypeOrValueArgument(args.get(0), name);
 
         if (type == null) {
             return null;
@@ -139,13 +139,13 @@ final class CompileTimeIntrinsics {
         return new StaticIntValue(folded, BOOL_TYPE);
     }
 
-    private StaticValue evaluateSameType(String name, List<ASTNode> args) {
+    private StaticValue evaluateSameType(String name, List<AstNode> args) {
         if (!requireArity(name, args, 2)) {
             return null;
         }
 
-        SemanticType left = resolveTypeOrValueArgument(args.get(0), name);
-        SemanticType right = resolveTypeOrValueArgument(args.get(1), name);
+        SastType left = resolveTypeOrValueArgument(args.get(0), name);
+        SastType right = resolveTypeOrValueArgument(args.get(1), name);
 
         if (left == null || right == null) {
             return null;
@@ -158,12 +158,12 @@ final class CompileTimeIntrinsics {
         return new StaticIntValue(folded, BOOL_TYPE);
     }
 
-    private StaticValue evaluateWhatType(String name, List<ASTNode> args) {
+    private StaticValue evaluateWhatType(String name, List<AstNode> args) {
         if (!requireArity(name, args, 1)) {
             return null;
         }
 
-        SemanticType type = resolveTypeOrValueArgument(args.get(0), name);
+        SastType type = resolveTypeOrValueArgument(args.get(0), name);
 
         if (type == null) {
             return null;
@@ -172,7 +172,7 @@ final class CompileTimeIntrinsics {
         return new StaticStringValue(utf8Bytes(type.mangleKey()));
     }
 
-    private StaticValue evaluateStrcat(String name, List<ASTNode> args) {
+    private StaticValue evaluateStrcat(String name, List<AstNode> args) {
         if (args.isEmpty()) {
             ctx.error("#strcat expects at least one compile-time string "
                     + "argument");
@@ -198,7 +198,7 @@ final class CompileTimeIntrinsics {
         return new StaticStringValue(combined);
     }
 
-    private StaticValue evaluateStrcmp(String name, List<ASTNode> args) {
+    private StaticValue evaluateStrcmp(String name, List<AstNode> args) {
         if (!requireArity(name, args, 2)) {
             return null;
         }
@@ -226,7 +226,7 @@ final class CompileTimeIntrinsics {
         );
     }
 
-    private StaticValue evaluatePanic(String name, List<ASTNode> args) {
+    private StaticValue evaluatePanic(String name, List<AstNode> args) {
         if (!requireArity(name, args, 1)) {
             return null;
         }
@@ -247,15 +247,16 @@ final class CompileTimeIntrinsics {
     }
 
     private List<BigInteger> evaluateStaticStringArgument(
-            ASTNode arg,
+            AstNode arg,
             String consumerName,
             int position
     ) {
         List<BigInteger> bytes;
 
-        if (arg instanceof StringLiteralNode literal) {
-            bytes = decodeStringBytes(literal);
-        } else if (arg instanceof CompileTimeCallNode call) {
+        if (arg.kind == AstKind.STRING_LITERAL) {
+            bytes = decodeStringBytes(arg);
+        } else if (arg.kind == AstKind.COMPILE_TIME_CALL) {
+            AstNode call = arg;
             StaticValue value = evaluateCall(call.name, call.args, call.span);
 
             if (value == null || value instanceof StaticVoidValue) {
@@ -339,13 +340,13 @@ final class CompileTimeIntrinsics {
             List<BigInteger> bytes,
             SourceSpan span
     ) {
-        GlobalVariableSymbol global = stringHoister.hoistStaticString(
+        Symbol global = stringHoister.hoistStaticString(
                 bytes,
                 span
         );
 
-        SemanticStaticArrayType arrayType = new SemanticStaticArrayType(
-                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8),
+        SastType arrayType = SastType.staticArray(
+                SastType.primitive(SemanticPrimitiveKind.UINT8),
                 Integer.toString(bytes.size())
         );
 
@@ -357,14 +358,14 @@ final class CompileTimeIntrinsics {
 
         return new SemanticGetPtrNode(
                 span,
-                new SemanticViewType(arrayType),
+                SastType.view(arrayType),
                 target
         );
     }
 
     private boolean requireArity(
             String name,
-            List<ASTNode> args,
+            List<AstNode> args,
             int expected
     ) {
         if (args.size() == expected) {
@@ -383,15 +384,15 @@ final class CompileTimeIntrinsics {
         return false;
     }
 
-    private SemanticType resolveTypeOrValueArgument(ASTNode arg, String name) {
-        if (arg instanceof VarNode var) {
-            VariableSymbol symbol = ctx.resolve(var.name);
+    private SastType resolveTypeOrValueArgument(AstNode arg, String name) {
+        if (arg.kind == AstKind.VAR) {
+            Symbol symbol = ctx.resolve(arg.name);
 
             if (symbol == null) {
                 ctx.error("#"
                         + name
                         + " argument '"
-                        + var.name
+                        + arg.name
                         + "' is not a declared variable or type");
                 return null;
             }
@@ -399,16 +400,16 @@ final class CompileTimeIntrinsics {
             return symbol.type;
         }
 
-        if (arg instanceof QualifiedNameNode qualified) {
-            return resolveQualifiedValue(qualified, name);
+        if (arg.kind == AstKind.QUALIFIED_NAME) {
+            return resolveQualifiedValue(arg, name);
         }
 
-        if (arg instanceof StructTypeNode struct) {
-            return resolveStructOrValue(struct, name);
+        if (arg.kind == AstKind.STRUCT_TYPE) {
+            return resolveStructOrValue(arg, name);
         }
 
-        if (arg instanceof TypeNode type) {
-            return typeResolver.apply(type);
+        if (arg.isType()) {
+            return typeResolver.apply(arg);
         }
 
         ctx.error("#"
@@ -419,13 +420,13 @@ final class CompileTimeIntrinsics {
         return null;
     }
 
-    private SemanticType resolveStructOrValue(
-            StructTypeNode struct,
+    private SastType resolveStructOrValue(
+            AstNode struct,
             String name
     ) {
-        if (struct.namespaceSegments == null
-                || struct.namespaceSegments.isEmpty()) {
-            VariableSymbol variable = ctx.resolve(struct.name);
+        if (struct.names == null
+                || struct.names.isEmpty()) {
+            Symbol variable = ctx.resolve(struct.name);
 
             if (variable != null) {
                 return variable.type;
@@ -434,13 +435,13 @@ final class CompileTimeIntrinsics {
             StructSymbol symbol = ctx.resolveStruct(struct.name);
 
             if (symbol != null) {
-                return new SemanticStructType(symbol);
+                return SastType.structType(symbol);
             }
 
             EnumSymbol enumSymbol = ctx.resolveEnum(struct.name);
 
             if (enumSymbol != null) {
-                return new SemanticEnumType(enumSymbol);
+                return SastType.enumType(enumSymbol);
             }
 
             ctx.error("#"
@@ -451,25 +452,25 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        List<String> fullPath = new ArrayList<>(struct.namespaceSegments);
+        List<String> fullPath = new ArrayList<>(struct.names);
         fullPath.add(struct.name);
-        SemanticType variantType = tryResolveEnumVariantType(fullPath);
+        SastType variantType = tryResolveEnumVariantType(fullPath);
 
         if (variantType != null) {
             return variantType;
         }
 
         NamespaceSymbol namespace =
-                ctx.resolveNamespace(struct.namespaceSegments);
+                ctx.resolveNamespace(struct.names);
 
         if (namespace == null) {
             ctx.error("Unknown namespace '"
-                    + String.join("::", struct.namespaceSegments)
+                    + String.join("::", struct.names)
                     + "'");
             return null;
         }
 
-        VariableSymbol variable = ctx.resolveGlobalVarIn(namespace, struct.name);
+        Symbol variable = ctx.resolveGlobalVarIn(namespace, struct.name);
 
         if (variable != null) {
             return variable.type;
@@ -478,41 +479,41 @@ final class CompileTimeIntrinsics {
         StructSymbol symbol = ctx.resolveStructIn(namespace, struct.name);
 
         if (symbol != null) {
-            return new SemanticStructType(symbol);
+            return SastType.structType(symbol);
         }
 
         EnumSymbol enumSymbol = ctx.resolveEnumIn(namespace, struct.name);
 
         if (enumSymbol != null) {
-            return new SemanticEnumType(enumSymbol);
+            return SastType.enumType(enumSymbol);
         }
 
         ctx.error("#"
                 + name
                 + " argument '"
-                + String.join("::", struct.namespaceSegments)
+                + String.join("::", struct.names)
                 + "::"
                 + struct.name
                 + "' is not a declared variable or type");
         return null;
     }
 
-    private SemanticType resolveQualifiedValue(
-            QualifiedNameNode qualified,
+    private SastType resolveQualifiedValue(
+            AstNode qualified,
             String name
     ) {
-        SemanticType variantType = tryResolveEnumVariantType(qualified.segments);
+        SastType variantType = tryResolveEnumVariantType(qualified.names);
 
         if (variantType != null) {
             return variantType;
         }
 
-        List<String> namespaceSegments = qualified.segments.subList(
+        List<String> namespaceSegments = qualified.names.subList(
                 0,
-                qualified.segments.size() - 1
+                qualified.names.size() - 1
         );
         String variableName =
-                qualified.segments.get(qualified.segments.size() - 1);
+                qualified.names.get(qualified.names.size() - 1);
 
         NamespaceSymbol namespace = ctx.resolveNamespace(namespaceSegments);
 
@@ -523,7 +524,7 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        VariableSymbol variable = ctx.resolveGlobalVarIn(namespace, variableName);
+        Symbol variable = ctx.resolveGlobalVarIn(namespace, variableName);
 
         if (variable != null) {
             return variable.type;
@@ -532,29 +533,29 @@ final class CompileTimeIntrinsics {
         StructSymbol symbol = ctx.resolveStructIn(namespace, variableName);
 
         if (symbol != null) {
-            return new SemanticStructType(symbol);
+            return SastType.structType(symbol);
         }
 
         EnumSymbol enumSymbol = ctx.resolveEnumReference(
-                new ArrayList<>(qualified.segments.subList(0, qualified.segments.size() - 1)));
+                new ArrayList<>(qualified.names.subList(0, qualified.names.size() - 1)));
 
         if (enumSymbol != null) {
             EnumVariant variant = enumSymbol.resolveVariant(variableName);
 
             if (variant != null) {
-                return new SemanticEnumType(enumSymbol);
+                return SastType.enumType(enumSymbol);
             }
         }
 
         ctx.error("#"
                 + name
                 + " argument '"
-                + String.join("::", qualified.segments)
+                + String.join("::", qualified.names)
                 + "' is not a declared variable or type");
         return null;
     }
 
-    private SemanticType tryResolveEnumVariantType(List<String> segments) {
+    private SastType tryResolveEnumVariantType(List<String> segments) {
         if (segments.size() < 2) {
             return null;
         }
@@ -571,10 +572,10 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        return new SemanticEnumType(enumSymbol);
+        return SastType.enumType(enumSymbol);
     }
 
-    private List<BigInteger> decodeStringBytes(StringLiteralNode literal) {
+    private List<BigInteger> decodeStringBytes(AstNode literal) {
         try {
             return StringLiteralDecoder.toUtf8Bytes(literal);
         } catch (RuntimeException e) {
@@ -599,47 +600,47 @@ final class CompileTimeIntrinsics {
         return "a compile-time value";
     }
 
-    private boolean isMatchable(SemanticType type) {
-        if (type instanceof SemanticPrimitiveType
-                || type instanceof SemanticPtrType
-                || type instanceof SemanticEnumType) {
+    private boolean isMatchable(SastType type) {
+        if (type.kind == SastTypeKind.PRIMITIVE
+                || type.kind == SastTypeKind.PTR
+                || type.kind == SastTypeKind.ENUM) {
             return true;
         }
 
-        if (type instanceof SemanticStructType struct) {
-            return hasComparisonMethod(struct.structSymbol, "OPERATOR_EQ");
+        if (type.kind == SastTypeKind.STRUCT) {
+            return hasComparisonMethod(type.structSymbol, "OPERATOR_EQ");
         }
 
         return false;
     }
 
-    private boolean isComparable(SemanticType type) {
-        if (type instanceof SemanticPrimitiveType
-                || type instanceof SemanticEnumType) {
+    private boolean isComparable(SastType type) {
+        if (type.kind == SastTypeKind.PRIMITIVE
+                || type.kind == SastTypeKind.ENUM) {
             return true;
         }
 
-        if (type instanceof SemanticStructType struct) {
-            return hasComparisonMethod(struct.structSymbol, "OPERATOR_LT");
+        if (type.kind == SastTypeKind.STRUCT) {
+            return hasComparisonMethod(type.structSymbol, "OPERATOR_LT");
         }
 
         return false;
     }
 
-    private boolean isAssignable(SemanticType type) {
-        if (type instanceof SemanticPrimitiveType
-                || type instanceof SemanticPtrType
-                || type instanceof SemanticEnumType) {
+    private boolean isAssignable(SastType type) {
+        if (type.kind == SastTypeKind.PRIMITIVE
+                || type.kind == SastTypeKind.PTR
+                || type.kind == SastTypeKind.ENUM) {
             return true;
         }
 
-        if (type instanceof SemanticTupleType) {
+        if (type.kind == SastTypeKind.TUPLE) {
             return typeChecker.isValueAssignableType(type);
         }
 
-        if (type instanceof SemanticStructType struct) {
+        if (type.kind == SastTypeKind.STRUCT) {
             return typeChecker.isValueAssignableType(type)
-                    || hasSameTypeMoveMethod(struct.structSymbol);
+                    || hasSameTypeMoveMethod(type.structSymbol);
         }
 
         return false;
@@ -649,9 +650,9 @@ final class CompileTimeIntrinsics {
             StructSymbol owner,
             String methodName
     ) {
-        SemanticType structType = new SemanticStructType(owner);
+        SastType structType = SastType.structType(owner);
 
-        for (MethodSymbol method : owner.getMethods(methodName)) {
+        for (Symbol method : owner.getMethods(methodName)) {
             if (method.parameters.size() != 2) {
                 continue;
             }
@@ -672,9 +673,9 @@ final class CompileTimeIntrinsics {
     }
 
     private static boolean hasSameTypeMoveMethod(StructSymbol owner) {
-        SemanticType structType = new SemanticStructType(owner);
+        SastType structType = SastType.structType(owner);
 
-        for (MethodSymbol method : owner.getMethods("OPERATOR_MOV")) {
+        for (Symbol method : owner.getMethods("OPERATOR_MOV")) {
             if (method.parameters.size() != 2) {
                 continue;
             }
@@ -686,7 +687,7 @@ final class CompileTimeIntrinsics {
                 continue;
             }
 
-            if (method.returnType() instanceof SemanticVoidType) {
+            if (method.returnType().kind == SastTypeKind.VOID) {
                 return true;
             }
         }
@@ -695,26 +696,26 @@ final class CompileTimeIntrinsics {
     }
 
     private static boolean isReadOnlyViewOf(
-            SemanticType type,
-            SemanticType referencedType
+            SastType type,
+            SastType referencedType
     ) {
-        return type instanceof SemanticPtrType pointer
-                && pointer.permission == PtrPermission.READ_ONLY
-                && pointer.referencedType.equals(referencedType);
+        return type.kind == SastTypeKind.PTR
+                && type.permission == PtrPermission.READ_ONLY
+                && type.referencedType.equals(referencedType);
     }
 
     private static boolean isOwnerPointerTo(
-            SemanticType type,
-            SemanticType referencedType
+            SastType type,
+            SastType referencedType
     ) {
-        return type instanceof SemanticPtrType pointer
-                && pointer.permission == PtrPermission.OWNER
-                && pointer.referencedType.equals(referencedType);
+        return type.kind == SastTypeKind.PTR
+                && type.permission == PtrPermission.OWNER
+                && type.referencedType.equals(referencedType);
     }
 
-    private static boolean isUint8(SemanticType type) {
-        return type instanceof SemanticPrimitiveType primitive
-                && primitive.kind == SemanticPrimitiveKind.UINT8;
+    private static boolean isUint8(SastType type) {
+        return type.kind == SastTypeKind.PRIMITIVE
+                && type.primitive == SemanticPrimitiveKind.UINT8;
     }
 
     private static int compareBytes(
@@ -754,40 +755,40 @@ final class CompileTimeIntrinsics {
         return new String(raw, StandardCharsets.UTF_8);
     }
 
-    private static String describeArgumentKind(ASTNode arg) {
-        if (arg instanceof StringLiteralNode) {
+    private static String describeArgumentKind(AstNode arg) {
+        if (arg.kind == AstKind.STRING_LITERAL) {
             return "a string literal";
         }
 
-        if (arg instanceof IntNode) {
+        if (arg.kind == AstKind.INT) {
             return "an integer literal";
         }
 
-        if (arg instanceof ArrayLiteralNode) {
+        if (arg.kind == AstKind.ARRAY_LITERAL) {
             return "an array literal";
         }
 
-        if (arg instanceof MemberAccessNode) {
+        if (arg.kind == AstKind.MEMBER_ACCESS) {
             return "a field access";
         }
 
-        if (arg instanceof ArrayAccessNode) {
+        if (arg.kind == AstKind.ARRAY_ACCESS) {
             return "an array element";
         }
 
-        if (arg instanceof CallNode) {
+        if (arg.kind == AstKind.CALL) {
             return "a function call";
         }
 
-        if (arg instanceof CompileTimeCallNode) {
+        if (arg.kind == AstKind.COMPILE_TIME_CALL) {
             return "a compile-time call";
         }
 
-        if (arg instanceof UnaryOpNode || arg instanceof BinOpNode) {
+        if (arg.kind == AstKind.UNARY || arg.kind == AstKind.BINARY) {
             return "an arithmetic expression";
         }
 
-        if (arg instanceof NullNode) {
+        if (arg.kind == AstKind.NULL) {
             return "null";
         }
 
@@ -800,7 +801,7 @@ final class CompileTimeIntrinsics {
 
     private record StaticIntValue(
             BigInteger value,
-            SemanticType type
+            SastType type
     ) implements StaticValue {
     }
 

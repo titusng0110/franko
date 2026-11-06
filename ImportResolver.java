@@ -26,7 +26,7 @@ public class ImportResolver {
 
     private final List<Diagnostic> diagnostics = new ArrayList<>();
 
-    private final Map<String, GlobalVarDeclNode> hoistedStringGlobals =
+    private final Map<String, AstNode> hoistedStringGlobals =
             new LinkedHashMap<>();
 
     public ImportResolver(
@@ -47,13 +47,13 @@ public class ImportResolver {
         SourceTable sources = new SourceTable();
         sources.addAll(root.sources);
 
-        List<ASTNode> items = new ArrayList<>();
-        spliceItems(root.root.topLevelItems, rootPath, items, sources);
+        List<AstNode> items = new ArrayList<>();
+        spliceItems(root.root.items, rootPath, items, sources);
 
         AstDocument merged = new AstDocument(
                 AstPhase.IMPORT_RESOLVED,
                 sources,
-                new ProgramNode(root.root.span, items)
+                AstNode.program(root.root.span, items)
         );
 
         return new ImportResult(
@@ -68,14 +68,14 @@ public class ImportResolver {
     }
 
     private void spliceItems(
-            List<ASTNode> items,
+            List<AstNode> items,
             Path importingFile,
-            List<ASTNode> out,
+            List<AstNode> out,
             SourceTable sources
     ) {
-        for (ASTNode item : items) {
-            if (item instanceof ImportNode importNode) {
-                processImport(importNode, importingFile, out, sources);
+        for (AstNode item : items) {
+            if (item.kind == AstKind.IMPORT) {
+                processImport(item, importingFile, out, sources);
                 continue;
             }
 
@@ -83,30 +83,30 @@ public class ImportResolver {
         }
     }
 
-    private void addItem(ASTNode item, List<ASTNode> out) {
-        if (item instanceof GlobalVarDeclNode global
-                && global.literalBytes != null
-                && global.name.startsWith("STRLIT_")) {
-            String key = global.name
+    private void addItem(AstNode item, List<AstNode> out) {
+        if (item.kind == AstKind.GLOBAL_VAR_DECL
+                && item.literalBytes != null
+                && item.name.startsWith("STRLIT_")) {
+            String key = item.name
                     + "|"
-                    + typeKey(global.type)
+                    + typeKey(item.type)
                     + "|"
-                    + literalBytesKey(global.literalBytes);
+                    + literalBytesKey(item.literalBytes);
 
             if (hoistedStringGlobals.containsKey(key)) {
                 return;
             }
 
-            hoistedStringGlobals.put(key, global);
+            hoistedStringGlobals.put(key, item);
         }
 
         out.add(item);
     }
 
     private void processImport(
-            ImportNode importNode,
+            AstNode importNode,
             Path importingFile,
-            List<ASTNode> out,
+            List<AstNode> out,
             SourceTable sources
     ) {
         String pathText = computePathText(importNode, importingFile);
@@ -142,11 +142,11 @@ public class ImportResolver {
         }
 
         sources.addAll(result.value.sources);
-        spliceItems(result.value.root.topLevelItems, target, out, sources);
+        spliceItems(result.value.root.items, target, out, sources);
     }
 
-    private String computePathText(ImportNode importNode, Path importingFile) {
-        String raw = importNode.rawPathText;
+    private String computePathText(AstNode importNode, Path importingFile) {
+        String raw = importNode.text;
         String pathText = raw;
 
         String fileName = pathText.substring(pathText.lastIndexOf('/') + 1);
@@ -263,39 +263,39 @@ public class ImportResolver {
         return Path.of(root + relative).normalize();
     }
 
-    private static String typeKey(TypeNode type) {
+    private static String typeKey(AstNode type) {
         if (type == null) {
             return "<null>";
         }
 
-        if (type instanceof PrimitiveTypeNode primitive) {
-            return primitive.kind.name();
+        if (type.kind == AstKind.PRIMITIVE_TYPE) {
+            return type.primitive.name();
         }
 
-        if (type instanceof VoidTypeNode) {
+        if (type.kind == AstKind.VOID_TYPE) {
             return "void";
         }
 
-        if (type instanceof DynamicArrayTypeNode dynamic) {
-            return "[" + typeKey(dynamic.elementType) + "]";
+        if (type.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
+            return "[" + typeKey(type.type) + "]";
         }
 
-        if (type instanceof StaticArrayTypeNode staticArray) {
-            String size = staticArray.sizeExpr instanceof IntNode intNode
-                    ? intNode.value
+        if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
+            String size = type.sizeExpr != null && type.sizeExpr.kind == AstKind.INT
+                    ? type.sizeExpr.text
                     : "?";
-            return "[" + typeKey(staticArray.elementType) + ";" + size + "]";
+            return "[" + typeKey(type.type) + ";" + size + "]";
         }
 
-        if (type instanceof PtrTypeNode ptr) {
-            return ptr.kind.name() + "<" + typeKey(ptr.referencedType) + ">";
+        if (type.kind == AstKind.PTR_TYPE) {
+            return type.permission.name() + "<" + typeKey(type.type) + ">";
         }
 
-        if (type instanceof StructTypeNode struct) {
-            return String.join("::", struct.namespaceSegments) + "::" + struct.name;
+        if (type.kind == AstKind.STRUCT_TYPE) {
+            return String.join("::", type.names) + "::" + type.name;
         }
 
-        return type.getClass().getSimpleName();
+        return type.kind.jsonName();
     }
 
     private static String literalBytesKey(List<BigInteger> values) {

@@ -108,23 +108,23 @@ final class DynamicArrayAnalysisState {
         int pointerTotal = 0;
 
         for (int i = 0; i < context.variables.length; i++) {
-            VariableSymbol symbol = context.variables[i];
+            Symbol symbol = context.variables[i];
 
-            if (symbol instanceof GlobalVariableSymbol) {
+            if (symbol.kind == SymbolKind.GLOBAL) {
                 continue;
             }
 
-            if (symbol.type instanceof SemanticDynamicArrayType) {
+            if (symbol.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 arrayTotal++;
             }
 
-            if (symbol.type instanceof SemanticPtrType pointer
-                    && pointer.permission == PtrPermission.OWNER
-                    && pointer.referencedType instanceof SemanticDynamicArrayType) {
+            if (symbol.type.kind == SastTypeKind.PTR
+                    && symbol.type.permission == PtrPermission.OWNER
+                    && symbol.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 ownerTotal++;
             }
 
-            if (symbol.type instanceof SemanticPtrType) {
+            if (symbol.type.kind == SastTypeKind.PTR) {
                 pointerTotal++;
             }
         }
@@ -147,25 +147,25 @@ final class DynamicArrayAnalysisState {
         int pointerIndex = 0;
 
         for (int i = 0; i < context.variables.length; i++) {
-            VariableSymbol symbol = context.variables[i];
+            Symbol symbol = context.variables[i];
 
-            if (symbol instanceof GlobalVariableSymbol) {
+            if (symbol.kind == SymbolKind.GLOBAL) {
                 continue;
             }
 
-            if (symbol.type instanceof SemanticDynamicArrayType) {
+            if (symbol.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 arrayVariableIds[arrayIndex] = i;
                 arrayIndexByVariable[i] = arrayIndex++;
             }
 
-            if (symbol.type instanceof SemanticPtrType pointer
-                    && pointer.permission == PtrPermission.OWNER
-                    && pointer.referencedType instanceof SemanticDynamicArrayType) {
+            if (symbol.type.kind == SastTypeKind.PTR
+                    && symbol.type.permission == PtrPermission.OWNER
+                    && symbol.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 ownerVariableIds[ownerIndex] = i;
                 ownerIndexByVariable[i] = ownerIndex++;
             }
 
-            if (symbol.type instanceof SemanticPtrType) {
+            if (symbol.type.kind == SastTypeKind.PTR) {
                 pointerVariableIds[pointerIndex] = i;
                 pointerIndexByVariable[i] = pointerIndex++;
             }
@@ -227,7 +227,7 @@ final class DynamicArrayAnalysisState {
         snapshotCount = 0;
     }
 
-    int arrayIndexOf(VariableSymbol symbol) {
+    int arrayIndexOf(Symbol symbol) {
         int variableId = context.variableId(symbol);
 
         if (variableId < 0) {
@@ -237,7 +237,7 @@ final class DynamicArrayAnalysisState {
         return arrayIndexByVariable[variableId];
     }
 
-    int ownerIndexOf(VariableSymbol symbol) {
+    int ownerIndexOf(Symbol symbol) {
         int variableId = context.variableId(symbol);
 
         if (variableId < 0) {
@@ -247,7 +247,7 @@ final class DynamicArrayAnalysisState {
         return ownerIndexByVariable[variableId];
     }
 
-    int pointerIndexOf(VariableSymbol symbol) {
+    int pointerIndexOf(Symbol symbol) {
         int variableId = context.variableId(symbol);
 
         if (variableId < 0) {

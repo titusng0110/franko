@@ -46,8 +46,8 @@ final class FfiHandler {
         this.registry = registry;
     }
 
-    FfiMatch matchFunction(FunctionSymbol function) {
-        if (function == null || function instanceof MethodSymbol) {
+    FfiMatch matchFunction(Symbol function) {
+        if (function == null || function.kind == SymbolKind.METHOD) {
             return null;
         }
 

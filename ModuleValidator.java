@@ -10,7 +10,7 @@ final class ModuleValidator {
     private ModuleValidator() {
     }
 
-    static List<Diagnostic> validate(ProgramNode root, ModuleDescriptor module) {
+    static List<Diagnostic> validate(AstNode root, ModuleDescriptor module) {
         List<Diagnostic> diagnostics = new ArrayList<>();
 
         if (root == null || module == null) {
@@ -19,7 +19,7 @@ final class ModuleValidator {
 
         Map<String, SourceSpan> functions = new LinkedHashMap<>();
 
-        collectItems(root.topLevelItems, null, functions);
+        collectItems(root.items, null, functions);
 
         Set<String> seenFunctions = new LinkedHashSet<>();
 
@@ -33,27 +33,27 @@ final class ModuleValidator {
     }
 
     private static void collectItems(
-            List<ASTNode> items,
+            List<AstNode> items,
             String parentNamespace,
             Map<String, SourceSpan> functions
     ) {
-        for (ASTNode item : items) {
-            if (item instanceof NamespaceNode namespace) {
+        for (AstNode item : items) {
+            if (item.kind == AstKind.NAMESPACE) {
                 String fullName = parentNamespace == null
-                        ? namespace.name
-                        : parentNamespace + "::" + namespace.name;
-                collectItems(namespace.items, fullName, functions);
+                        ? item.name
+                        : parentNamespace + "::" + item.name;
+                collectItems(item.items, fullName, functions);
                 continue;
             }
 
-            if (item instanceof DeclIfNode declIf) {
-                collectItems(declIf.thenItems, parentNamespace, functions);
-                collectItems(declIf.elseItems, parentNamespace, functions);
+            if (item.kind == AstKind.DECL_IF) {
+                collectItems(item.thenItems, parentNamespace, functions);
+                collectItems(item.elseItems, parentNamespace, functions);
                 continue;
             }
 
-            if (item instanceof FunctionDeclNode function) {
-                functions.put(qualified(parentNamespace, function.name), function.span);
+            if (item.kind == AstKind.FUNCTION_DECL) {
+                functions.put(qualified(parentNamespace, item.name), item.span);
             }
         }
     }

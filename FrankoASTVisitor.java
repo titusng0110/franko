@@ -5,7 +5,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
+public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
 
     private final String sourcePath;
 
@@ -66,20 +66,20 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         );
     }
 
-    private ASTNode foldSimpleBinaryRule(ParserRuleContext ctx) {
-        ASTNode current = visit(ctx.getChild(0));
+    private AstNode foldSimpleBinaryRule(ParserRuleContext ctx) {
+        AstNode current = visit(ctx.getChild(0));
 
         for (int i = 1; i < ctx.getChildCount(); i += 2) {
             String op = ctx.getChild(i).getText();
-            ASTNode rhs = visit(ctx.getChild(i + 1));
-            current = new BinOpNode(span(ctx), op, current, rhs);
+            AstNode rhs = visit(ctx.getChild(i + 1));
+            current = AstNode.binary(span(ctx), op, current, rhs);
         }
 
         return current;
     }
 
-    private ASTNode foldShiftExpr(FrankoParser.ShiftExprContext ctx) {
-        ASTNode current = visit(ctx.additiveExpr(0));
+    private AstNode foldShiftExpr(FrankoParser.ShiftExprContext ctx) {
+        AstNode current = visit(ctx.additiveExpr(0));
 
         int exprIndex = 1;
         int childIndex = 1;
@@ -100,8 +100,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                 );
             }
 
-            ASTNode rhs = visit(ctx.additiveExpr(exprIndex));
-            current = new BinOpNode(span(ctx), op, current, rhs);
+            AstNode rhs = visit(ctx.additiveExpr(exprIndex));
+            current = AstNode.binary(span(ctx), op, current, rhs);
 
             exprIndex++;
             childIndex += 3;
@@ -110,8 +110,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    private ASTNode foldConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
-        ASTNode current = visit(ctx.constAdditiveExpr(0));
+    private AstNode foldConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
+        AstNode current = visit(ctx.constAdditiveExpr(0));
 
         int exprIndex = 1;
         int childIndex = 1;
@@ -132,8 +132,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                 );
             }
 
-            ASTNode rhs = visit(ctx.constAdditiveExpr(exprIndex));
-            current = new BinOpNode(span(ctx), op, current, rhs);
+            AstNode rhs = visit(ctx.constAdditiveExpr(exprIndex));
+            current = AstNode.binary(span(ctx), op, current, rhs);
 
             exprIndex++;
             childIndex += 3;
@@ -142,22 +142,22 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    private ASTNode applyPostfixSuffixes(
-        ASTNode base,
+    private AstNode applyPostfixSuffixes(
+        AstNode base,
         List<FrankoParser.PostfixSuffixContext> suffixes
     ) {
-        ASTNode current = base;
+        AstNode current = base;
 
         for (FrankoParser.PostfixSuffixContext suffix : suffixes) {
             if (suffix.indexSuffix() != null) {
-                ASTNode index = visit(suffix.indexSuffix().expr());
-                current = new ArrayAccessNode(
+                AstNode index = visit(suffix.indexSuffix().expr());
+                current = AstNode.arrayAccess(
                         merge(current.span, span(suffix)),
                         current,
                         index
                 );
             } else if (suffix.callSuffix() != null) {
-                List<ASTNode> args = new ArrayList<>();
+                List<AstNode> args = new ArrayList<>();
 
                 if (suffix.callSuffix().argumentList() != null) {
                     for (FrankoParser.ExprContext argCtx : suffix.callSuffix().argumentList().expr()) {
@@ -165,10 +165,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                     }
                 }
 
-                current = new CallNode(merge(current.span, span(suffix)), current, args);
+                current = AstNode.call(merge(current.span, span(suffix)), current, args);
             } else if (suffix.memberSuffix() != null) {
                 String memberName = suffix.memberSuffix().memberName().getText();
-                current = new MemberAccessNode(
+                current = AstNode.memberAccess(
                         merge(current.span, span(suffix)),
                         current,
                         memberName
@@ -183,23 +183,23 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return current;
     }
 
-    private ASTNode applyLvalueSuffixes(
-        ASTNode base,
+    private AstNode applyLvalueSuffixes(
+        AstNode base,
         List<FrankoParser.LvalueSuffixContext> suffixes
     ) {
-        ASTNode current = base;
+        AstNode current = base;
 
         for (FrankoParser.LvalueSuffixContext suffix : suffixes) {
             if (suffix.indexSuffix() != null) {
-                ASTNode index = visit(suffix.indexSuffix().expr());
-                current = new ArrayAccessNode(
+                AstNode index = visit(suffix.indexSuffix().expr());
+                current = AstNode.arrayAccess(
                         merge(current.span, span(suffix)),
                         current,
                         index
                 );
             } else if (suffix.memberSuffix() != null) {
                 String memberName = suffix.memberSuffix().memberName().getText();
-                current = new MemberAccessNode(
+                current = AstNode.memberAccess(
                         merge(current.span, span(suffix)),
                         current,
                         memberName
@@ -215,21 +215,21 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitProgram(FrankoParser.ProgramContext ctx) {
-        List<ASTNode> topLevelItems = new ArrayList<>();
+    public AstNode visitProgram(FrankoParser.ProgramContext ctx) {
+        List<AstNode> topLevelItems = new ArrayList<>();
 
         for (FrankoParser.TopLevelItemContext itemCtx : ctx.topLevelItem()) {
-            ASTNode node = visit(itemCtx);
+            AstNode node = visit(itemCtx);
             if (node != null) {
                 topLevelItems.add(node);
             }
         }
 
-        return new ProgramNode(span(ctx), topLevelItems);
+        return AstNode.program(span(ctx), topLevelItems);
     }
 
     @Override
-    public ASTNode visitTopLevelItem(FrankoParser.TopLevelItemContext ctx) {
+    public AstNode visitTopLevelItem(FrankoParser.TopLevelItemContext ctx) {
         if (ctx.functionDecl() != null) {
             return visit(ctx.functionDecl());
         }
@@ -266,7 +266,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitNamespaceDecl(FrankoParser.NamespaceDeclContext ctx) {
+    public AstNode visitNamespaceDecl(FrankoParser.NamespaceDeclContext ctx) {
 
         List<String> segments = new ArrayList<>();
 
@@ -276,20 +276,20 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         String name = String.join("::", segments);
 
-        List<ASTNode> items = new ArrayList<>();
+        List<AstNode> items = new ArrayList<>();
 
         for (FrankoParser.NamespaceItemContext itemCtx : ctx.namespaceItem()) {
-            ASTNode node = visit(itemCtx);
+            AstNode node = visit(itemCtx);
             if (node != null) {
                 items.add(node);
             }
         }
 
-        return new NamespaceNode(span(ctx), name, items);
+        return AstNode.namespace(span(ctx), name, items);
     }
 
     @Override
-    public ASTNode visitNamespaceItem(FrankoParser.NamespaceItemContext ctx) {
+    public AstNode visitNamespaceItem(FrankoParser.NamespaceItemContext ctx) {
         if (ctx.functionDecl() != null) {
             return visit(ctx.functionDecl());
         }
@@ -332,7 +332,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitQualifiedStructType(FrankoParser.QualifiedStructTypeContext ctx) {
+    public AstNode visitQualifiedStructType(FrankoParser.QualifiedStructTypeContext ctx) {
         List<String> segments = qualifiedNameSegments(ctx.qualifiedName());
 
         List<String> namespaceSegments =
@@ -340,36 +340,36 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         String name = segments.get(segments.size() - 1);
 
-        return new StructTypeNode(span(ctx), namespaceSegments, name);
+        return AstNode.structType(span(ctx), namespaceSegments, name);
     }
 
     @Override
-    public ASTNode visitImportDecl(FrankoParser.ImportDeclContext ctx) {
+    public AstNode visitImportDecl(FrankoParser.ImportDeclContext ctx) {
         String rawText = ctx.STRING_LITERAL().getText();
 
         String rawContent = rawText.substring(1, rawText.length() - 1);
         String decoded = StringLiteralDecoder.decodeRawContent(rawContent);
 
-        return new ImportNode(span(ctx), decoded);
+        return AstNode.importPath(span(ctx), decoded);
     }
 
     @Override
-    public ASTNode visitStructDecl(FrankoParser.StructDeclContext ctx) {
+    public AstNode visitStructDecl(FrankoParser.StructDeclContext ctx) {
         String name = ctx.IDENTIFIER().getText();
 
-        List<StructFieldDeclNode> fields = new ArrayList<>();
-        List<FunctionDeclNode> methods = new ArrayList<>();
-        List<ASTNode> nodes = new ArrayList<>();
+        List<AstNode> fields = new ArrayList<>();
+        List<AstNode> methods = new ArrayList<>();
+        List<AstNode> nodes = new ArrayList<>();
 
         for (FrankoParser.StructMemberContext memberCtx : ctx.structMember()) {
             if (memberCtx.structFieldDecl() != null) {
-                StructFieldDeclNode field =
-                        (StructFieldDeclNode) visit(memberCtx.structFieldDecl());
+                AstNode field =
+                        (AstNode) visit(memberCtx.structFieldDecl());
                 fields.add(field);
                 nodes.add(field);
             } else if (memberCtx.functionDecl() != null) {
-                FunctionDeclNode method =
-                        (FunctionDeclNode) visit(memberCtx.functionDecl());
+                AstNode method =
+                        (AstNode) visit(memberCtx.functionDecl());
                 methods.add(method);
                 nodes.add(method);
             } else if (memberCtx.structMemberIf() != null) {
@@ -381,68 +381,68 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new StructDeclNode(span(ctx), name, fields, methods, nodes);
+        return AstNode.structDecl(span(ctx), name, fields, methods, nodes);
     }
 
     @Override
-    public ASTNode visitStructFieldDecl(FrankoParser.StructFieldDeclContext ctx) {
-        TypeNode type = (TypeNode) visit(ctx.type());
+    public AstNode visitStructFieldDecl(FrankoParser.StructFieldDeclContext ctx) {
+        AstNode type = (AstNode) visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();
 
-        ASTNode constInitializer = null;
+        AstNode constInitializer = null;
 
         if (ctx.constDeclSuffix() != null) {
             constInitializer = visit(ctx.constDeclSuffix().constDeclInitializer());
         }
 
-        return new StructFieldDeclNode(span(ctx), type, name, constInitializer);
+        return AstNode.structFieldDecl(span(ctx), type, name, constInitializer);
     }
 
     @Override
-    public ASTNode visitEnumDecl(FrankoParser.EnumDeclContext ctx) {
-        TypeNode backingType = (TypeNode) visit(ctx.type());
+    public AstNode visitEnumDecl(FrankoParser.EnumDeclContext ctx) {
+        AstNode backingType = (AstNode) visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();
 
-        List<EnumVariantNode> variants = new ArrayList<>();
+        List<AstNode> variants = new ArrayList<>();
 
         if (ctx.enumVariantList() != null) {
             for (FrankoParser.EnumVariantContext variantCtx : ctx.enumVariantList().enumVariant()) {
-                variants.add((EnumVariantNode) visit(variantCtx));
+                variants.add((AstNode) visit(variantCtx));
             }
         }
 
-        return new EnumDeclNode(span(ctx), name, backingType, variants);
+        return AstNode.enumDecl(span(ctx), name, backingType, variants);
     }
 
     @Override
-    public ASTNode visitEnumVariant(FrankoParser.EnumVariantContext ctx) {
+    public AstNode visitEnumVariant(FrankoParser.EnumVariantContext ctx) {
         String name = ctx.IDENTIFIER().getText();
-        ASTNode constInitializer = null;
+        AstNode constInitializer = null;
 
         if (ctx.constExpr() != null) {
             constInitializer = visit(ctx.constExpr());
         }
 
-        return new EnumVariantNode(span(ctx), name, constInitializer);
+        return AstNode.enumVariant(span(ctx), name, constInitializer);
     }
 
     @Override
-    public ASTNode visitGlobalVarDecl(FrankoParser.GlobalVarDeclContext ctx) {
-        TypeNode type = (TypeNode) visit(ctx.type());
+    public AstNode visitGlobalVarDecl(FrankoParser.GlobalVarDeclContext ctx) {
+        AstNode type = (AstNode) visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();
 
-        ASTNode constInitializer = null;
+        AstNode constInitializer = null;
 
         if (ctx.globalVarInitializer() != null) {
             constInitializer =
                     visit(ctx.globalVarInitializer().globalVarInitValue());
         }
 
-        return new GlobalVarDeclNode(span(ctx), type, name, constInitializer);
+        return AstNode.globalVarDecl(span(ctx), type, name, constInitializer);
     }
 
     @Override
-    public ASTNode visitGlobalVarInitValue(
+    public AstNode visitGlobalVarInitValue(
             FrankoParser.GlobalVarInitValueContext ctx
     ) {
         if (ctx.constExpr() != null) {
@@ -473,26 +473,26 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitFunctionDecl(FrankoParser.FunctionDeclContext ctx) {
+    public AstNode visitFunctionDecl(FrankoParser.FunctionDeclContext ctx) {
         String name = ctx.IDENTIFIER().getText();
 
-        List<ParameterNode> parameters = new ArrayList<>();
+        List<AstNode> parameters = new ArrayList<>();
 
         if (ctx.parameterList() != null) {
             for (FrankoParser.ParameterContext paramCtx : ctx.parameterList().parameter()) {
-                parameters.add((ParameterNode) visit(paramCtx));
+                parameters.add((AstNode) visit(paramCtx));
             }
         }
 
-        TypeNode returnType = (TypeNode) visit(ctx.returnType());
-        BlockNode body = (BlockNode) visit(ctx.block());
+        AstNode returnType = (AstNode) visit(ctx.returnType());
+        AstNode body = (AstNode) visit(ctx.block());
 
-        return new FunctionDeclNode(span(ctx), name, parameters, returnType, body);
+        return AstNode.functionDecl(span(ctx), name, parameters, returnType, body);
     }
 
     @Override
-    public ASTNode visitParameter(FrankoParser.ParameterContext ctx) {
-        TypeNode type = (TypeNode) visit(ctx.type());
+    public AstNode visitParameter(FrankoParser.ParameterContext ctx) {
+        AstNode type = (AstNode) visit(ctx.type());
         String name;
 
         if (ctx.SELF() != null) {
@@ -501,54 +501,54 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             name = ctx.IDENTIFIER().getText();
         }
 
-        return new ParameterNode(span(ctx), type, name);
+        return AstNode.parameter(span(ctx), type, name);
     }
 
     @Override
-    public ASTNode visitReturnType(FrankoParser.ReturnTypeContext ctx) {
+    public AstNode visitReturnType(FrankoParser.ReturnTypeContext ctx) {
         if (ctx.type() != null) {
             return visit(ctx.type());
         }
 
         if (ctx.VOID() != null) {
-            return new VoidTypeNode(span(ctx));
+            return AstNode.voidType(span(ctx));
         }
 
         throw new RuntimeException("Unknown returnType: " + ctx.getText());
     }
 
     @Override
-    public ASTNode visitSimpleStatement(FrankoParser.SimpleStatementContext ctx) {
+    public AstNode visitSimpleStatement(FrankoParser.SimpleStatementContext ctx) {
         return visit(ctx.simpleStmt());
     }
 
     @Override
-    public ASTNode visitIfStatement(FrankoParser.IfStatementContext ctx) {
+    public AstNode visitIfStatement(FrankoParser.IfStatementContext ctx) {
         return visit(ctx.ifStmt());
     }
 
     @Override
-    public ASTNode visitCompileTimeIfStatement(
+    public AstNode visitCompileTimeIfStatement(
             FrankoParser.CompileTimeIfStatementContext ctx
     ) {
         return visit(ctx.compileTimeIfStmt());
     }
 
     @Override
-    public ASTNode visitCompileTimeIfStmt(FrankoParser.CompileTimeIfStmtContext ctx) {
-        ASTNode condition = visit(ctx.expr());
-        ASTNode thenBranch = visit(ctx.statement());
-        ASTNode elseBranch = null;
+    public AstNode visitCompileTimeIfStmt(FrankoParser.CompileTimeIfStmtContext ctx) {
+        AstNode condition = visit(ctx.expr());
+        AstNode thenBranch = visit(ctx.statement());
+        AstNode elseBranch = null;
 
         if (ctx.compileTimeElseClause() != null) {
             elseBranch = visit(ctx.compileTimeElseClause().compileTimeElseBody());
         }
 
-        return new CompileTimeIfNode(span(ctx), condition, thenBranch, elseBranch);
+        return AstNode.compileTimeIf(span(ctx), condition, thenBranch, elseBranch);
     }
 
     @Override
-    public ASTNode visitCompileTimeElseBody(
+    public AstNode visitCompileTimeElseBody(
             FrankoParser.CompileTimeElseBodyContext ctx
     ) {
         if (ctx.compileTimeIfStmt() != null) {
@@ -559,12 +559,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitCompileTimeDeclIf(
+    public AstNode visitCompileTimeDeclIf(
             FrankoParser.CompileTimeDeclIfContext ctx
     ) {
-        ASTNode condition = visit(ctx.expr());
-        List<ASTNode> thenItems = declarationItems(ctx.declIfBody());
-        List<ASTNode> elseItems = List.of();
+        AstNode condition = visit(ctx.expr());
+        List<AstNode> thenItems = declarationItems(ctx.declIfBody());
+        List<AstNode> elseItems = List.of();
 
         if (ctx.declIfElse() != null) {
             FrankoParser.DeclIfElseContext elseCtx = ctx.declIfElse();
@@ -576,11 +576,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new DeclIfNode(span(ctx), condition, thenItems, elseItems);
+        return AstNode.declIf(span(ctx), condition, thenItems, elseItems);
     }
 
-    private List<ASTNode> declarationItems(FrankoParser.DeclIfBodyContext ctx) {
-        List<ASTNode> items = new ArrayList<>();
+    private List<AstNode> declarationItems(FrankoParser.DeclIfBodyContext ctx) {
+        List<AstNode> items = new ArrayList<>();
 
         if (ctx.declarationItem() != null) {
             for (FrankoParser.DeclarationItemContext itemCtx : ctx.declarationItem()) {
@@ -591,8 +591,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         return items;
     }
 
-    private List<ASTNode> structMemberItems(FrankoParser.StructMemberBodyContext ctx) {
-        List<ASTNode> items = new ArrayList<>();
+    private List<AstNode> structMemberItems(FrankoParser.StructMemberBodyContext ctx) {
+        List<AstNode> items = new ArrayList<>();
 
         if (ctx.structMember() != null) {
             for (FrankoParser.StructMemberContext itemCtx : ctx.structMember()) {
@@ -604,10 +604,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitStructMemberIf(FrankoParser.StructMemberIfContext ctx) {
-        ASTNode condition = visit(ctx.expr());
-        List<ASTNode> thenItems = structMemberItems(ctx.structMemberBody());
-        List<ASTNode> elseItems = List.of();
+    public AstNode visitStructMemberIf(FrankoParser.StructMemberIfContext ctx) {
+        AstNode condition = visit(ctx.expr());
+        List<AstNode> thenItems = structMemberItems(ctx.structMemberBody());
+        List<AstNode> elseItems = List.of();
 
         if (ctx.structMemberElse() != null) {
             FrankoParser.StructMemberElseContext elseCtx = ctx.structMemberElse();
@@ -619,11 +619,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new DeclIfNode(span(ctx), condition, thenItems, elseItems);
+        return AstNode.declIf(span(ctx), condition, thenItems, elseItems);
     }
 
     @Override
-    public ASTNode visitStructMember(FrankoParser.StructMemberContext ctx) {
+    public AstNode visitStructMember(FrankoParser.StructMemberContext ctx) {
         if (ctx.structFieldDecl() != null) {
             return visit(ctx.structFieldDecl());
         }
@@ -644,7 +644,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitDeclarationItem(FrankoParser.DeclarationItemContext ctx) {
+    public AstNode visitDeclarationItem(FrankoParser.DeclarationItemContext ctx) {
         if (ctx.structDecl() != null) {
             return visit(ctx.structDecl());
         }
@@ -677,11 +677,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitCompileTimeDeclItem(
+    public AstNode visitCompileTimeDeclItem(
             FrankoParser.CompileTimeDeclItemContext ctx
     ) {
         String name = ctx.IDENTIFIER().getText();
-        List<ASTNode> args = new ArrayList<>();
+        List<AstNode> args = new ArrayList<>();
 
         if (ctx.hashArgList() != null) {
             for (FrankoParser.HashArgContext argCtx : ctx.hashArgList().hashArg()) {
@@ -689,13 +689,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new CompileTimeCallNode(span(ctx), name, args);
+        return AstNode.compileTimeCall(span(ctx), name, args);
     }
 
     @Override
-    public ASTNode visitCompileTimeCall(FrankoParser.CompileTimeCallContext ctx) {
+    public AstNode visitCompileTimeCall(FrankoParser.CompileTimeCallContext ctx) {
         String name = ctx.IDENTIFIER().getText();
-        List<ASTNode> args = new ArrayList<>();
+        List<AstNode> args = new ArrayList<>();
 
         if (ctx.hashArgList() != null) {
             for (FrankoParser.HashArgContext argCtx : ctx.hashArgList().hashArg()) {
@@ -703,16 +703,16 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new CompileTimeCallNode(span(ctx), name, args);
+        return AstNode.compileTimeCall(span(ctx), name, args);
     }
 
     @Override
-    public ASTNode visitCompileTimeName(FrankoParser.CompileTimeNameContext ctx) {
-        return new CompileTimeNameNode(span(ctx), ctx.IDENTIFIER().getText());
+    public AstNode visitCompileTimeName(FrankoParser.CompileTimeNameContext ctx) {
+        return AstNode.compileTimeName(span(ctx), ctx.IDENTIFIER().getText());
     }
 
     @Override
-    public ASTNode visitHashArg(FrankoParser.HashArgContext ctx) {
+    public AstNode visitHashArg(FrankoParser.HashArgContext ctx) {
         if (ctx.type() != null) {
             return visit(ctx.type());
         }
@@ -721,27 +721,27 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitWhileStatement(FrankoParser.WhileStatementContext ctx) {
+    public AstNode visitWhileStatement(FrankoParser.WhileStatementContext ctx) {
         return visit(ctx.whileStmt());
     }
 
     @Override
-    public ASTNode visitBlockStatement(FrankoParser.BlockStatementContext ctx) {
+    public AstNode visitBlockStatement(FrankoParser.BlockStatementContext ctx) {
         return visit(ctx.block());
     }
 
     @Override
-    public ASTNode visitBreakStatement(FrankoParser.BreakStatementContext ctx) {
+    public AstNode visitBreakStatement(FrankoParser.BreakStatementContext ctx) {
         return visit(ctx.breakStmt());
     }
 
     @Override
-    public ASTNode visitContinueStatement(FrankoParser.ContinueStatementContext ctx) {
+    public AstNode visitContinueStatement(FrankoParser.ContinueStatementContext ctx) {
         return visit(ctx.continueStmt());
     }
 
     @Override
-    public ASTNode visitSimpleStmt(FrankoParser.SimpleStmtContext ctx) {
+    public AstNode visitSimpleStmt(FrankoParser.SimpleStmtContext ctx) {
         if (ctx.varDecl() != null) return visit(ctx.varDecl());
         if (ctx.returnStmt() != null) return visit(ctx.returnStmt());
         if (ctx.assignStmt() != null) return visit(ctx.assignStmt());
@@ -753,115 +753,115 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitBlock(FrankoParser.BlockContext ctx) {
-        List<ASTNode> statements = new ArrayList<>();
+    public AstNode visitBlock(FrankoParser.BlockContext ctx) {
+        List<AstNode> statements = new ArrayList<>();
 
         for (FrankoParser.StatementContext stmt : ctx.statement()) {
-            ASTNode node = visit(stmt);
+            AstNode node = visit(stmt);
             if (node != null) {
                 statements.add(node);
             }
         }
 
-        return new BlockNode(span(ctx), statements);
+        return AstNode.block(span(ctx), statements);
     }
 
     @Override
-    public ASTNode visitIfStmt(FrankoParser.IfStmtContext ctx) {
-        ASTNode condition = visit(ctx.expr());
-        ASTNode thenBranch = visit(ctx.statement(0));
-        ASTNode elseBranch = null;
+    public AstNode visitIfStmt(FrankoParser.IfStmtContext ctx) {
+        AstNode condition = visit(ctx.expr());
+        AstNode thenBranch = visit(ctx.statement(0));
+        AstNode elseBranch = null;
 
         if (ctx.statement().size() > 1) {
             elseBranch = visit(ctx.statement(1));
         }
 
-        return new IfNode(span(ctx), condition, thenBranch, elseBranch);
+        return AstNode.ifStmt(span(ctx), condition, thenBranch, elseBranch);
     }
 
     @Override
-    public ASTNode visitWhileStmt(FrankoParser.WhileStmtContext ctx) {
-        ASTNode condition = visit(ctx.expr());
-        ASTNode body = visit(ctx.statement());
+    public AstNode visitWhileStmt(FrankoParser.WhileStmtContext ctx) {
+        AstNode condition = visit(ctx.expr());
+        AstNode body = visit(ctx.statement());
 
-        return new WhileNode(span(ctx), condition, body, List.of());
+        return AstNode.whileStmt(span(ctx), condition, body, List.of());
     }
 
     @Override
-    public ASTNode visitForStatement(FrankoParser.ForStatementContext ctx) {
+    public AstNode visitForStatement(FrankoParser.ForStatementContext ctx) {
         return visit(ctx.forStmt());
     }
 
     @Override
-    public ASTNode visitForStmt(FrankoParser.ForStmtContext ctx) {
-        ASTNode init = null;
+    public AstNode visitForStmt(FrankoParser.ForStmtContext ctx) {
+        AstNode init = null;
 
         if (ctx.forInit() != null) {
             init = visit(ctx.forInit().forHeaderStmt());
         }
 
-        ASTNode condition = visit(ctx.expr());
+        AstNode condition = visit(ctx.expr());
 
-        ASTNode update = null;
+        AstNode update = null;
 
         if (ctx.forUpdate() != null) {
             update = visit(ctx.forUpdate().forHeaderStmt());
         }
 
-        ASTNode body = visit(ctx.statement());
+        AstNode body = visit(ctx.statement());
 
-        return new ForNode(span(ctx), init, condition, update, body);
+        return AstNode.forStmt(span(ctx), init, condition, update, body);
     }
 
     @Override
-    public ASTNode visitReturnStmt(FrankoParser.ReturnStmtContext ctx) {
-        ASTNode value = null;
+    public AstNode visitReturnStmt(FrankoParser.ReturnStmtContext ctx) {
+        AstNode value = null;
 
         if (ctx.expr() != null) {
             value = visit(ctx.expr());
         }
 
-        return new ReturnNode(span(ctx), value);
+        return AstNode.returnStmt(span(ctx), value);
     }
 
     @Override
-    public ASTNode visitBreakStmt(FrankoParser.BreakStmtContext ctx) {
-        ASTNode level = null;
+    public AstNode visitBreakStmt(FrankoParser.BreakStmtContext ctx) {
+        AstNode level = null;
 
         if (ctx.constExpr() != null) {
             level = visit(ctx.constExpr());
         }
 
-        return new BreakNode(span(ctx), level);
+        return AstNode.breakStmt(span(ctx), level);
     }
 
     @Override
-    public ASTNode visitContinueStmt(FrankoParser.ContinueStmtContext ctx) {
-        ASTNode level = null;
+    public AstNode visitContinueStmt(FrankoParser.ContinueStmtContext ctx) {
+        AstNode level = null;
 
         if (ctx.constExpr() != null) {
             level = visit(ctx.constExpr());
         }
 
-        return new ContinueNode(span(ctx), level);
+        return AstNode.continueStmt(span(ctx), level);
     }
 
     @Override
-    public ASTNode visitAssignStmt(FrankoParser.AssignStmtContext ctx) {
-        ASTNode target = visit(ctx.lvalue());
-        ASTNode value = visit(ctx.expr());
+    public AstNode visitAssignStmt(FrankoParser.AssignStmtContext ctx) {
+        AstNode target = visit(ctx.lvalue());
+        AstNode value = visit(ctx.expr());
 
-        return new AssignNode(span(ctx), "=", target, value);
+        return AstNode.assign(span(ctx), "=", target, value);
     }
 
     @Override
-    public ASTNode visitCompoundAssignStmt(
+    public AstNode visitCompoundAssignStmt(
             FrankoParser.CompoundAssignStmtContext ctx
     ) {
-        ASTNode target = visit(ctx.lvalue());
-        ASTNode value = visit(ctx.expr());
+        AstNode target = visit(ctx.lvalue());
+        AstNode value = visit(ctx.expr());
 
-        return new AssignNode(
+        return AstNode.assign(
             span(ctx),
             ctx.compoundAssignOp().getText(),
             target,
@@ -870,136 +870,136 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitIncDecStmt(FrankoParser.IncDecStmtContext ctx) {
-        ASTNode target = visit(ctx.lvalue());
+    public AstNode visitIncDecStmt(FrankoParser.IncDecStmtContext ctx) {
+        AstNode target = visit(ctx.lvalue());
 
-        return new IncDecNode(span(ctx), ctx.PLUSPLUS() != null ? "++" : "--", target);
+        return AstNode.incDec(span(ctx), ctx.PLUSPLUS() != null ? "++" : "--", target);
     }
 
     @Override
-    public ASTNode visitExprStmt(FrankoParser.ExprStmtContext ctx) {
-        return new ExprStmtNode(span(ctx), visit(ctx.expr()));
+    public AstNode visitExprStmt(FrankoParser.ExprStmtContext ctx) {
+        return AstNode.exprStmt(span(ctx), visit(ctx.expr()));
     }
 
     @Override
-    public ASTNode visitInt8Type(FrankoParser.Int8TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT8);
+    public AstNode visitInt8Type(FrankoParser.Int8TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.INT8);
     }
 
     @Override
-    public ASTNode visitInt16Type(FrankoParser.Int16TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT16);
+    public AstNode visitInt16Type(FrankoParser.Int16TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.INT16);
     }
 
     @Override
-    public ASTNode visitInt32Type(FrankoParser.Int32TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT32);
+    public AstNode visitInt32Type(FrankoParser.Int32TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.INT32);
     }
 
     @Override
-    public ASTNode visitInt64Type(FrankoParser.Int64TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.INT64);
+    public AstNode visitInt64Type(FrankoParser.Int64TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.INT64);
     }
 
     @Override
-    public ASTNode visitUint8Type(FrankoParser.Uint8TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT8);
+    public AstNode visitUint8Type(FrankoParser.Uint8TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.UINT8);
     }
 
     @Override
-    public ASTNode visitUint16Type(FrankoParser.Uint16TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT16);
+    public AstNode visitUint16Type(FrankoParser.Uint16TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.UINT16);
     }
 
     @Override
-    public ASTNode visitUint32Type(FrankoParser.Uint32TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT32);
+    public AstNode visitUint32Type(FrankoParser.Uint32TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.UINT32);
     }
 
     @Override
-    public ASTNode visitUint64Type(FrankoParser.Uint64TypeContext ctx) {
-        return new PrimitiveTypeNode(span(ctx), PrimitiveKind.UINT64);
+    public AstNode visitUint64Type(FrankoParser.Uint64TypeContext ctx) {
+        return AstNode.primitiveType(span(ctx), PrimitiveKind.UINT64);
     }
 
     @Override
-    public ASTNode visitDynamicArrayType(FrankoParser.DynamicArrayTypeContext ctx) {
-        TypeNode elementType = (TypeNode) visit(ctx.type());
-        return new DynamicArrayTypeNode(span(ctx), elementType);
+    public AstNode visitDynamicArrayType(FrankoParser.DynamicArrayTypeContext ctx) {
+        AstNode elementType = (AstNode) visit(ctx.type());
+        return AstNode.dynamicArrayType(span(ctx), elementType);
     }
 
     @Override
-    public ASTNode visitExplicitArraySize(FrankoParser.ExplicitArraySizeContext ctx) {
+    public AstNode visitExplicitArraySize(FrankoParser.ExplicitArraySizeContext ctx) {
         return visit(ctx.constExpr());
     }
 
     @Override
-    public ASTNode visitInferredArraySize(FrankoParser.InferredArraySizeContext ctx) {
-        return new InferredSizeNode(span(ctx));
+    public AstNode visitInferredArraySize(FrankoParser.InferredArraySizeContext ctx) {
+        return AstNode.inferredSize(span(ctx));
     }
 
     @Override
-    public ASTNode visitStaticArrayType(FrankoParser.StaticArrayTypeContext ctx) {
-        TypeNode elementType = (TypeNode) visit(ctx.type());
-        ASTNode sizeExpr = visit(ctx.arraySize());
+    public AstNode visitStaticArrayType(FrankoParser.StaticArrayTypeContext ctx) {
+        AstNode elementType = (AstNode) visit(ctx.type());
+        AstNode sizeExpr = visit(ctx.arraySize());
 
-        return new StaticArrayTypeNode(span(ctx), elementType, sizeExpr);
+        return AstNode.staticArrayType(span(ctx), elementType, sizeExpr);
     }
 
     @Override
-    public ASTNode visitPtrType(FrankoParser.PtrTypeContext ctx) {
-        TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(span(ctx), PtrPermission.OWNER, referencedType);
+    public AstNode visitPtrType(FrankoParser.PtrTypeContext ctx) {
+        AstNode referencedType = (AstNode) visit(ctx.type());
+        return AstNode.ptrType(span(ctx), PtrPermission.OWNER, referencedType);
     }
 
     @Override
-    public ASTNode visitMViewType(FrankoParser.MViewTypeContext ctx) {
-        TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(span(ctx), PtrPermission.MUTABLE, referencedType);
+    public AstNode visitMViewType(FrankoParser.MViewTypeContext ctx) {
+        AstNode referencedType = (AstNode) visit(ctx.type());
+        return AstNode.ptrType(span(ctx), PtrPermission.MUTABLE, referencedType);
     }
 
     @Override
-    public ASTNode visitViewType(FrankoParser.ViewTypeContext ctx) {
-        TypeNode referencedType = (TypeNode) visit(ctx.type());
-        return new PtrTypeNode(span(ctx), PtrPermission.READ_ONLY, referencedType);
+    public AstNode visitViewType(FrankoParser.ViewTypeContext ctx) {
+        AstNode referencedType = (AstNode) visit(ctx.type());
+        return AstNode.ptrType(span(ctx), PtrPermission.READ_ONLY, referencedType);
     }
 
     @Override
-    public ASTNode visitStructType(FrankoParser.StructTypeContext ctx) {
-        return new StructTypeNode(span(ctx), List.of(), ctx.IDENTIFIER().getText());
+    public AstNode visitStructType(FrankoParser.StructTypeContext ctx) {
+        return AstNode.structType(span(ctx), List.of(), ctx.IDENTIFIER().getText());
     }
 
     @Override
-    public ASTNode visitTupleType(FrankoParser.TupleTypeContext ctx) {
+    public AstNode visitTupleType(FrankoParser.TupleTypeContext ctx) {
         return tupleTypeNode(ctx.tupleTypeElement(), span(ctx));
     }
 
-    private TupleTypeNode tupleTypeNode(
+    private AstNode tupleTypeNode(
             List<FrankoParser.TupleTypeElementContext> elementCtxs,
             SourceSpan span
     ) {
-        List<TupleTypeElementNode> elements = new ArrayList<>();
+        List<AstNode> elements = new ArrayList<>();
 
         for (FrankoParser.TupleTypeElementContext elementCtx : elementCtxs) {
-            TypeNode elementType = (TypeNode) visit(elementCtx.type());
+            AstNode elementType = (AstNode) visit(elementCtx.type());
             String elementName = elementCtx.IDENTIFIER() == null
                     ? null
                     : elementCtx.IDENTIFIER().getText();
 
-            elements.add(new TupleTypeElementNode(
+            elements.add(AstNode.tupleTypeElement(
                     span(elementCtx),
                     elementType,
                     elementName
             ));
         }
 
-        return new TupleTypeNode(span, elements);
+        return AstNode.tupleType(span, elements);
     }
 
     @Override
-    public ASTNode visitAggregateLiteral(
+    public AstNode visitAggregateLiteral(
             FrankoParser.AggregateLiteralContext ctx
     ) {
-        TypeNode type;
+        AstNode type;
         boolean structLiteral = ctx.structTypeName() != null;
 
         if (structLiteral) {
@@ -1010,13 +1010,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
                         qualifiedNameSegments(nameCtx.qualifiedName());
                 List<String> namespaceSegments =
                         new ArrayList<>(segments.subList(0, segments.size() - 1));
-                type = new StructTypeNode(
+                type = AstNode.structType(
                         span(nameCtx),
                         namespaceSegments,
                         segments.get(segments.size() - 1)
                 );
             } else {
-                type = new StructTypeNode(
+                type = AstNode.structType(
                         span(nameCtx),
                         List.of(),
                         nameCtx.IDENTIFIER().getText()
@@ -1029,7 +1029,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             );
         }
 
-        return new AggregateLiteralNode(
+        return AstNode.aggregateLiteral(
                 span(ctx),
                 type,
                 structLiteral
@@ -1038,28 +1038,28 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         );
     }
 
-    private List<FieldInitNode> fieldInits(
+    private List<AstNode> fieldInits(
             FrankoParser.FieldInitListContext ctx
     ) {
         return initItems(ctx == null ? null : ctx.initItem());
     }
 
-    private List<FieldInitNode> tupleInits(
+    private List<AstNode> tupleInits(
             FrankoParser.TupleInitListContext ctx
     ) {
         return initItems(ctx == null ? null : ctx.initItem());
     }
 
-    private List<FieldInitNode> declInits(
+    private List<AstNode> declInits(
             FrankoParser.DeclInitListContext ctx
     ) {
         return initItems(ctx == null ? null : ctx.initItem());
     }
 
-    private List<FieldInitNode> initItems(
+    private List<AstNode> initItems(
             List<FrankoParser.InitItemContext> items
     ) {
-        List<FieldInitNode> fields = new ArrayList<>();
+        List<AstNode> fields = new ArrayList<>();
 
         if (items == null) {
             return fields;
@@ -1069,13 +1069,14 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             if (item.fieldInit() != null) {
                 FrankoParser.FieldInitContext fieldCtx = item.fieldInit();
 
-                fields.add(new FieldInitNode(
+                fields.add(AstNode.fieldInit(
                         span(fieldCtx),
                         fieldCtx.IDENTIFIER().getText(),
-                        visit(fieldCtx.expr())
+                        visit(fieldCtx.expr()),
+                        false
                 ));
             } else {
-                fields.add(new FieldInitNode(
+                fields.add(AstNode.fieldInit(
                         span(item),
                         null,
                         visit(item.expr()),
@@ -1088,16 +1089,16 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitVarDecl(FrankoParser.VarDeclContext ctx) {
-        TypeNode type = (TypeNode) visit(ctx.type());
+    public AstNode visitVarDecl(FrankoParser.VarDeclContext ctx) {
+        AstNode type = (AstNode) visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();
 
         if (ctx.declSuffix() == null) {
-            return new VarDeclNode(span(ctx), type, name);
+            return AstNode.varDecl(span(ctx), type, name);
         }
 
         if (ctx.declSuffix() instanceof FrankoParser.DeclFieldInitContext fieldCtx) {
-            return new VarDeclFieldsInitNode(
+            return AstNode.varDeclFieldsInit(
                     span(ctx),
                     type,
                     name,
@@ -1108,32 +1109,32 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         FrankoParser.DeclAssignInitContext initCtx =
             (FrankoParser.DeclAssignInitContext) ctx.declSuffix();
 
-        ASTNode init = visit(initCtx.expr());
+        AstNode init = visit(initCtx.expr());
 
-        return new VarDeclInitNode(span(ctx), type, name, init);
+        return AstNode.varDeclInit(span(ctx), type, name, init);
     }
 
     @Override
-    public ASTNode visitLvalue(FrankoParser.LvalueContext ctx) {
-        ASTNode base = visit(ctx.lvalueAtom());
+    public AstNode visitLvalue(FrankoParser.LvalueContext ctx) {
+        AstNode base = visit(ctx.lvalueAtom());
         return applyLvalueSuffixes(base, ctx.lvalueSuffix());
     }
 
     @Override
-    public ASTNode visitLvalueAtom(FrankoParser.LvalueAtomContext ctx) {
+    public AstNode visitLvalueAtom(FrankoParser.LvalueAtomContext ctx) {
         if (ctx.IDENTIFIER() != null) {
-            return new VarNode(
+            return AstNode.var(
                     span(ctx.IDENTIFIER().getSymbol()),
                     ctx.IDENTIFIER().getText()
             );
         }
 
         if (ctx.SELF() != null) {
-            return new VarNode(span(ctx.SELF().getSymbol()), "self");
+            return AstNode.var(span(ctx.SELF().getSymbol()), "self");
         }
 
         if (ctx.qualifiedName() != null) {
-            return new QualifiedNameNode(
+            return AstNode.qualifiedName(
                     span(ctx),
                     qualifiedNameSegments(ctx.qualifiedName())
             );
@@ -1151,147 +1152,147 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitExpr(FrankoParser.ExprContext ctx) {
+    public AstNode visitExpr(FrankoParser.ExprContext ctx) {
         return visit(ctx.logicalOrExpr());
     }
 
     @Override
-    public ASTNode visitLogicalOrExpr(FrankoParser.LogicalOrExprContext ctx) {
+    public AstNode visitLogicalOrExpr(FrankoParser.LogicalOrExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitLogicalAndExpr(FrankoParser.LogicalAndExprContext ctx) {
+    public AstNode visitLogicalAndExpr(FrankoParser.LogicalAndExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitBitwiseOrExpr(FrankoParser.BitwiseOrExprContext ctx) {
+    public AstNode visitBitwiseOrExpr(FrankoParser.BitwiseOrExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitBitwiseXorExpr(FrankoParser.BitwiseXorExprContext ctx) {
+    public AstNode visitBitwiseXorExpr(FrankoParser.BitwiseXorExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitBitwiseAndExpr(FrankoParser.BitwiseAndExprContext ctx) {
+    public AstNode visitBitwiseAndExpr(FrankoParser.BitwiseAndExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitEqualityExpr(FrankoParser.EqualityExprContext ctx) {
+    public AstNode visitEqualityExpr(FrankoParser.EqualityExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitRelationalExpr(FrankoParser.RelationalExprContext ctx) {
+    public AstNode visitRelationalExpr(FrankoParser.RelationalExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitShiftExpr(FrankoParser.ShiftExprContext ctx) {
+    public AstNode visitShiftExpr(FrankoParser.ShiftExprContext ctx) {
         return foldShiftExpr(ctx);
     }
 
     @Override
-    public ASTNode visitAdditiveExpr(FrankoParser.AdditiveExprContext ctx) {
+    public AstNode visitAdditiveExpr(FrankoParser.AdditiveExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitMultiplicativeExpr(FrankoParser.MultiplicativeExprContext ctx) {
+    public AstNode visitMultiplicativeExpr(FrankoParser.MultiplicativeExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitUnaryMinus(FrankoParser.UnaryMinusContext ctx) {
-        return new UnaryOpNode(span(ctx), "-", visit(ctx.unaryExpr()));
+    public AstNode visitUnaryMinus(FrankoParser.UnaryMinusContext ctx) {
+        return AstNode.unary(span(ctx), "-", visit(ctx.unaryExpr()));
     }
 
     @Override
-    public ASTNode visitLogicalNot(FrankoParser.LogicalNotContext ctx) {
-        return new UnaryOpNode(span(ctx), "!", visit(ctx.unaryExpr()));
+    public AstNode visitLogicalNot(FrankoParser.LogicalNotContext ctx) {
+        return AstNode.unary(span(ctx), "!", visit(ctx.unaryExpr()));
     }
 
     @Override
-    public ASTNode visitBitwiseNot(FrankoParser.BitwiseNotContext ctx) {
-        return new UnaryOpNode(span(ctx), "~", visit(ctx.unaryExpr()));
+    public AstNode visitBitwiseNot(FrankoParser.BitwiseNotContext ctx) {
+        return AstNode.unary(span(ctx), "~", visit(ctx.unaryExpr()));
     }
 
     @Override
-    public ASTNode visitPostfixExprOnly(FrankoParser.PostfixExprOnlyContext ctx) {
+    public AstNode visitPostfixExprOnly(FrankoParser.PostfixExprOnlyContext ctx) {
         return visit(ctx.postfixExpr());
     }
 
     @Override
-    public ASTNode visitConstExpr(FrankoParser.ConstExprContext ctx) {
+    public AstNode visitConstExpr(FrankoParser.ConstExprContext ctx) {
         return visit(ctx.constLogicalOrExpr());
     }
 
     @Override
-    public ASTNode visitConstLogicalOrExpr(FrankoParser.ConstLogicalOrExprContext ctx) {
+    public AstNode visitConstLogicalOrExpr(FrankoParser.ConstLogicalOrExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstLogicalAndExpr(FrankoParser.ConstLogicalAndExprContext ctx) {
+    public AstNode visitConstLogicalAndExpr(FrankoParser.ConstLogicalAndExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstBitwiseOrExpr(FrankoParser.ConstBitwiseOrExprContext ctx) {
+    public AstNode visitConstBitwiseOrExpr(FrankoParser.ConstBitwiseOrExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstBitwiseXorExpr(FrankoParser.ConstBitwiseXorExprContext ctx) {
+    public AstNode visitConstBitwiseXorExpr(FrankoParser.ConstBitwiseXorExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstBitwiseAndExpr(FrankoParser.ConstBitwiseAndExprContext ctx) {
+    public AstNode visitConstBitwiseAndExpr(FrankoParser.ConstBitwiseAndExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstEqualityExpr(FrankoParser.ConstEqualityExprContext ctx) {
+    public AstNode visitConstEqualityExpr(FrankoParser.ConstEqualityExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstRelationalExpr(FrankoParser.ConstRelationalExprContext ctx) {
+    public AstNode visitConstRelationalExpr(FrankoParser.ConstRelationalExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
+    public AstNode visitConstShiftExpr(FrankoParser.ConstShiftExprContext ctx) {
         return foldConstShiftExpr(ctx);
     }
 
     @Override
-    public ASTNode visitConstAdditiveExpr(FrankoParser.ConstAdditiveExprContext ctx) {
+    public AstNode visitConstAdditiveExpr(FrankoParser.ConstAdditiveExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstMultiplicativeExpr(FrankoParser.ConstMultiplicativeExprContext ctx) {
+    public AstNode visitConstMultiplicativeExpr(FrankoParser.ConstMultiplicativeExprContext ctx) {
         return foldSimpleBinaryRule(ctx);
     }
 
     @Override
-    public ASTNode visitConstUnaryExpr(FrankoParser.ConstUnaryExprContext ctx) {
+    public AstNode visitConstUnaryExpr(FrankoParser.ConstUnaryExprContext ctx) {
         if (ctx.MINUS() != null) {
-            return new UnaryOpNode(span(ctx), "-", visit(ctx.constUnaryExpr()));
+            return AstNode.unary(span(ctx), "-", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.BANG() != null) {
-            return new UnaryOpNode(span(ctx), "!", visit(ctx.constUnaryExpr()));
+            return AstNode.unary(span(ctx), "!", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.TILDE() != null) {
-            return new UnaryOpNode(span(ctx), "~", visit(ctx.constUnaryExpr()));
+            return AstNode.unary(span(ctx), "~", visit(ctx.constUnaryExpr()));
         }
 
         if (ctx.constPrimary() != null) {
@@ -1302,7 +1303,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitConstPrimary(FrankoParser.ConstPrimaryContext ctx) {
+    public AstNode visitConstPrimary(FrankoParser.ConstPrimaryContext ctx) {
         if (ctx.integerLiteral() != null) {
             return visit(ctx.integerLiteral());
         }
@@ -1315,8 +1316,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitArrayLiteral(FrankoParser.ArrayLiteralContext ctx) {
-        List<ASTNode> elements = new ArrayList<>();
+    public AstNode visitArrayLiteral(FrankoParser.ArrayLiteralContext ctx) {
+        List<AstNode> elements = new ArrayList<>();
 
         if (ctx.arrayLiteralElements() != null) {
             for (FrankoParser.ArrayLiteralElementContext elementCtx
@@ -1325,11 +1326,11 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             }
         }
 
-        return new ArrayLiteralNode(span(ctx), elements);
+        return AstNode.arrayLiteral(span(ctx), elements);
     }
 
     @Override
-    public ASTNode visitArrayLiteralElement(FrankoParser.ArrayLiteralElementContext ctx) {
+    public AstNode visitArrayLiteralElement(FrankoParser.ArrayLiteralElementContext ctx) {
         if (ctx.arrayLiteral() != null) {
             return visit(ctx.arrayLiteral());
         }
@@ -1342,13 +1343,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitPostfixExpr(FrankoParser.PostfixExprContext ctx) {
-        ASTNode base = visit(ctx.primary());
+    public AstNode visitPostfixExpr(FrankoParser.PostfixExprContext ctx) {
+        AstNode base = visit(ctx.primary());
         return applyPostfixSuffixes(base, ctx.postfixSuffix());
     }
 
     @Override
-    public ASTNode visitPrimary(FrankoParser.PrimaryContext ctx) {
+    public AstNode visitPrimary(FrankoParser.PrimaryContext ctx) {
         if (ctx.integerLiteral() != null) {
             return visit(ctx.integerLiteral());
         }
@@ -1374,18 +1375,18 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         if (ctx.IDENTIFIER() != null) {
-            return new VarNode(
+            return AstNode.var(
                     span(ctx.IDENTIFIER().getSymbol()),
                     ctx.IDENTIFIER().getText()
             );
         }
 
         if (ctx.SELF() != null) {
-            return new VarNode(span(ctx.SELF().getSymbol()), "self");
+            return AstNode.var(span(ctx.SELF().getSymbol()), "self");
         }
 
         if (ctx.qualifiedName() != null) {
-            return new QualifiedNameNode(
+            return AstNode.qualifiedName(
                     span(ctx),
                     qualifiedNameSegments(ctx.qualifiedName())
             );
@@ -1423,55 +1424,55 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitNullLiteral(FrankoParser.NullLiteralContext ctx) {
-        return new NullNode(span(ctx));
+    public AstNode visitNullLiteral(FrankoParser.NullLiteralContext ctx) {
+        return AstNode.nullLiteral(span(ctx));
     }
 
     @Override
-    public ASTNode visitGetPtrExpr(FrankoParser.GetPtrExprContext ctx) {
-        ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(span(ctx), PtrPermission.OWNER, target);
+    public AstNode visitGetPtrExpr(FrankoParser.GetPtrExprContext ctx) {
+        AstNode target = visit(ctx.lvalue());
+        return AstNode.getPtr(span(ctx), PtrPermission.OWNER, target);
     }
 
     @Override
-    public ASTNode visitGetViewExpr(FrankoParser.GetViewExprContext ctx) {
-        ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(span(ctx), PtrPermission.READ_ONLY, target);
+    public AstNode visitGetViewExpr(FrankoParser.GetViewExprContext ctx) {
+        AstNode target = visit(ctx.lvalue());
+        return AstNode.getPtr(span(ctx), PtrPermission.READ_ONLY, target);
     }
 
     @Override
-    public ASTNode visitGetMViewExpr(FrankoParser.GetMViewExprContext ctx) {
-        ASTNode target = visit(ctx.lvalue());
-        return new GetPtrNode(span(ctx), PtrPermission.MUTABLE, target);
+    public AstNode visitGetMViewExpr(FrankoParser.GetMViewExprContext ctx) {
+        AstNode target = visit(ctx.lvalue());
+        return AstNode.getPtr(span(ctx), PtrPermission.MUTABLE, target);
     }
 
     @Override
-    public ASTNode visitDerefExpr(FrankoParser.DerefExprContext ctx) {
-        ASTNode expr = visit(ctx.expr());
-        return new DerefNode(span(ctx), expr);
+    public AstNode visitDerefExpr(FrankoParser.DerefExprContext ctx) {
+        AstNode expr = visit(ctx.expr());
+        return AstNode.deref(span(ctx), expr);
     }
 
     @Override
-    public ASTNode visitCastExpr(FrankoParser.CastExprContext ctx) {
-        TypeNode target = (TypeNode) visit(ctx.type());
-        return new CastNode(span(ctx), target, visit(ctx.expr()), false);
+    public AstNode visitCastExpr(FrankoParser.CastExprContext ctx) {
+        AstNode target = (AstNode) visit(ctx.type());
+        return AstNode.cast(span(ctx), target, visit(ctx.expr()), false);
     }
 
     @Override
-    public ASTNode visitUnsafeCastExpr(FrankoParser.UnsafeCastExprContext ctx) {
-        TypeNode target = (TypeNode) visit(ctx.type());
+    public AstNode visitUnsafeCastExpr(FrankoParser.UnsafeCastExprContext ctx) {
+        AstNode target = (AstNode) visit(ctx.type());
 
-        return new CastNode(span(ctx), target, visit(ctx.expr()), true);
+        return AstNode.cast(span(ctx), target, visit(ctx.expr()), true);
     }
 
     @Override
-    public ASTNode visitIntegerLiteral(FrankoParser.IntegerLiteralContext ctx) {
-        return new IntNode(span(ctx.getStart()), ctx.getText());
+    public AstNode visitIntegerLiteral(FrankoParser.IntegerLiteralContext ctx) {
+        return AstNode.intLiteral(span(ctx.getStart()), ctx.getText());
     }
 
     @Override
-    public ASTNode visitStringLiteral(FrankoParser.StringLiteralContext ctx) {
-        return new StringLiteralNode(
+    public AstNode visitStringLiteral(FrankoParser.StringLiteralContext ctx) {
+        return AstNode.stringLiteral(
                 span(ctx.STRING_LITERAL().getSymbol()),
                 ctx.STRING_LITERAL().getText()
         );
