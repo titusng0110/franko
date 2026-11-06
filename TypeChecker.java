@@ -30,6 +30,48 @@ public class TypeChecker {
         return t instanceof SemanticPrimitiveType;
     }
 
+    public boolean isEnumType(SemanticType t) {
+        return t instanceof SemanticEnumType;
+    }
+
+    public SemanticPrimitiveKind enumBackingKind(SemanticType t) {
+        return t instanceof SemanticEnumType e ? e.enumSymbol.backingKind : null;
+    }
+
+    public boolean isValuePreservingEnumToIntegerCast(SemanticEnumType enumType, SemanticPrimitiveKind targetKind) {
+        if (enumType == null || targetKind == null) {
+            return false;
+        }
+
+        SemanticPrimitiveKind backingKind = enumType.enumSymbol.backingKind;
+
+        if (backingKind == targetKind) {
+            return true;
+        }
+
+        return isValuePreservingIntegerWidening(backingKind, targetKind);
+    }
+
+    public static BigInteger wrapBigIntegerToPrimitive(BigInteger value, SemanticPrimitiveKind kind) {
+        if (value == null || kind == null) {
+            return BigInteger.ZERO;
+        }
+
+        int bits = bitWidth(kind);
+        BigInteger modulus = BigInteger.valueOf(2).pow(bits);
+        BigInteger wrapped = value.mod(modulus);
+
+        if (isSigned(kind)) {
+            BigInteger half = BigInteger.valueOf(2).pow(bits - 1);
+
+            if (wrapped.compareTo(half) >= 0) {
+                wrapped = wrapped.subtract(modulus);
+            }
+        }
+
+        return wrapped;
+    }
+
     public boolean isSignedIntegral(SemanticType t) {
         SemanticPrimitiveKind kind = primitiveKindOf(t);
         return kind != null && isSigned(kind);
@@ -74,7 +116,8 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticPrimitiveType
-                || t instanceof SemanticPtrType) {
+                || t instanceof SemanticPtrType
+                || t instanceof SemanticEnumType) {
             return true;
         }
 
@@ -336,6 +379,32 @@ public class TypeChecker {
                     + targetType.describe()
                     + " contains non-assignable elements and cannot be"
                     + " assigned as a whole value");
+            return;
+        }
+
+        if (targetType instanceof SemanticEnumType targetEnum) {
+            if (expr.type instanceof SemanticEnumType sourceEnum) {
+                if (sourceEnum.enumSymbol != targetEnum.enumSymbol) {
+                    diagnostics.error(message + ": expected "
+                            + targetType.describe()
+                            + ", got "
+                            + expr.type.describe());
+                }
+                return;
+            }
+
+            diagnostics.error(message + ": expected "
+                    + targetType.describe()
+                    + ", got "
+                    + expr.type.describe());
+            return;
+        }
+
+        if (expr.type instanceof SemanticEnumType) {
+            diagnostics.error(message + ": expected "
+                    + targetType.describe()
+                    + ", got "
+                    + expr.type.describe());
             return;
         }
 
@@ -666,6 +735,10 @@ public class TypeChecker {
             return false;
         }
 
+        if (t instanceof SemanticEnumType) {
+            return false;
+        }
+
         if (t instanceof SemanticPrimitiveType) {
             return true;
         }
@@ -726,6 +799,10 @@ public class TypeChecker {
     ) {
         if (t == null || isVoidType(t)) {
             return false;
+        }
+
+        if (t instanceof SemanticEnumType) {
+            return true;
         }
 
         if (t instanceof SemanticPrimitiveType) {
@@ -793,7 +870,8 @@ public class TypeChecker {
         }
 
         if (t instanceof SemanticPrimitiveType
-                || t instanceof SemanticPtrType) {
+                || t instanceof SemanticPtrType
+                || t instanceof SemanticEnumType) {
             return true;
         }
 

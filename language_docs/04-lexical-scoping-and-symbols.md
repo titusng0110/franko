@@ -61,7 +61,7 @@ Franko uses leading underscores to mark non-public declarations:
 
 - a struct field or method whose name starts with one or more underscores
   (`_name`, `__name`, ...) is **private to its struct**;
-- a free function or struct whose name starts with two or more underscores
+- a free function, struct, or enum whose name starts with two or more underscores
   (`__name`, `___name`, ...) is **internal to its namespace**.
 
 Access is allowed inside the declaration's own scope:
@@ -69,7 +69,7 @@ Access is allowed inside the declaration's own scope:
 - a private field or method may be used by methods declared in the same
   struct; access from any free function or from a method of another struct
   warns;
-- a namespace-internal function or struct may be referenced from its declaring
+- a namespace-internal function, struct, or enum may be referenced from its declaring
   namespace or from a namespace nested under it; access from any other
   namespace warns. Global-namespace internal names are accessible only from
   global-scope code.
@@ -77,4 +77,4 @@ Access is allowed inside the declaration's own scope:
 These are compiler warnings, not errors: the program still compiles and runs.
 The complete naming style for structs, functions, methods, variables, fields,
 namespaces, constants, and standard-library imports is in
-[Naming Conventions](35-naming-conventions.md).
+[Naming Conventions](36-naming-conventions.md).

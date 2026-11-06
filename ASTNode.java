@@ -271,6 +271,30 @@ class StructFieldDeclNode extends ASTNode {
     }
 }
 
+class EnumDeclNode extends ASTNode {
+    String name;
+    TypeNode backingType;
+    List<EnumVariantNode> variants;
+
+    EnumDeclNode(SourceSpan span, String name, TypeNode backingType, List<EnumVariantNode> variants) {
+        super(span);
+        this.name = name;
+        this.backingType = backingType;
+        this.variants = variants;
+    }
+}
+
+class EnumVariantNode extends ASTNode {
+    String name;
+    ASTNode constInitializer;
+
+    EnumVariantNode(SourceSpan span, String name, ASTNode constInitializer) {
+        super(span);
+        this.name = name;
+        this.constInitializer = constInitializer;
+    }
+}
+
 class GlobalVarDeclNode extends ASTNode {
     TypeNode type;
     String name;

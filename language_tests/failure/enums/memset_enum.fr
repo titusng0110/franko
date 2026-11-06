@@ -1,0 +1,10 @@
+enum<uint8> Status {
+    a = 10,
+    b = 20
+}
+
+func main() -> int32 {
+    [Status, 10] states;
+    states.memset(0);
+    return 0;
+}

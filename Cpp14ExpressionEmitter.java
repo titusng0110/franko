@@ -63,6 +63,10 @@ final class Cpp14ExpressionEmitter {
             return emitCast(cast);
         }
 
+        if (node instanceof SemanticEnumVariantNode enumVariant) {
+            return owner.emitEnumVariant(enumVariant);
+        }
+
         if (node instanceof SemanticMemberAccessNode member) {
             return emitExpr(owner, member.target) + "." + member.field.emittedName();
         }
@@ -428,6 +432,28 @@ final class Cpp14ExpressionEmitter {
 
     private String emitCast(SemanticCastExprNode node) {
 
+        if (node.type instanceof SemanticEnumType targetEnum) {
+            String raw = emitExpr(owner, node.expr);
+
+            if (node.expr.type instanceof SemanticEnumType sourceEnum
+                    && sourceEnum.enumSymbol == targetEnum.enumSymbol) {
+                return raw;
+            }
+
+            return owner.emitType(targetEnum) + "::from_integer_checked(" + raw + ")";
+        }
+
+        if (node.expr.type instanceof SemanticEnumType) {
+            String raw = emitExpr(owner, node.expr);
+            String valueAccess = "(" + raw + ").value";
+
+            if (!node.checked) {
+                return "static_cast<" + owner.emitType(node.type) + ">(" + valueAccess + ")";
+            }
+
+            return "franko_integer_unsafe_cast<" + owner.emitType(node.type) + ">(" + valueAccess + ")";
+        }
+
         if (node.isConstant() && node.constantValue != null) {
             return emitBigIntegerLiteral(owner, node.constantValue);
         }
@@ -439,7 +465,7 @@ final class Cpp14ExpressionEmitter {
             return "static_cast<" + owner.emitType(node.type) + ">(" + raw + ")";
         }
 
-        return "franko_unsafe_cast<" + owner.emitType(node.type) + ">(" + raw + ")";
+        return "franko_integer_unsafe_cast<" + owner.emitType(node.type) + ">(" + raw + ")";
     }
 
     String emitLValue(Cpp14Codegen owner, SemanticExprNode node) {

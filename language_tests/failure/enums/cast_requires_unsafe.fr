@@ -1,0 +1,12 @@
+import "franko/io"
+
+enum<int32> E {
+    a,
+    b
+}
+
+func main() -> int32 {
+    E s = cast<E>(1);
+    print(s == E::a);
+    return 0;
+}

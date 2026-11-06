@@ -1,8 +1,8 @@
-# 34. Unsupported or Restricted Features
+# 35. Unsupported or Restricted Features
 
 The current Franko implementation intentionally leaves several areas restricted or incomplete.
 
-## 34.1 Function Restrictions
+## 35.1 Function Restrictions
 
 - function declarations are valid only in global scope;
 - nested functions are not supported;
@@ -16,7 +16,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - `void` calls cannot be used in value-producing contexts;
 - a full all-paths-return proof is not currently performed.
 
-## 34.2 No General Member Calls
+## 35.2 No General Member Calls
 
 Struct methods and the built-in array intrinsics use member-call syntax (see [Methods](27-methods.md) and [Array Intrinsics](22-array-intrinsics.md)). All other member calls are rejected, including:
 
@@ -25,7 +25,7 @@ x.print();          // unsupported member call: no such struct method
 x.something(1);     // unsupported member call: unknown method
 ```
 
-## 34.3 Struct Restrictions
+## 35.3 Struct Restrictions
 
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
@@ -37,27 +37,27 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](26-structs.md).
 
-## 34.4 No Floating-Point Types
+## 35.4 No Floating-Point Types
 
 Only integer primitives are supported.
 
-## 34.5 No Separate Boolean Type
+## 35.5 No Separate Boolean Type
 
 Boolean results use `uint8`.
 
-## 34.6 No Implicit Numeric Conversions for Nonconstants
+## 35.6 No Implicit Numeric Conversions for Nonconstants
 
 Nonconstant numeric expressions require exact type equality wherever a
 typed value is expected. Moving between integer widths is always
 explicit through the `cast<T>(expr)` intrinsic (value-preserving widening) or `unsafe_cast<T>(expr)` (checked conversions that can lose data) (see [Casts](12-casts.md)).
 
-## 34.7 Arrays Are Not Assignable as Values
+## 35.7 Arrays Are Not Assignable as Values
 
 Arrays cannot be assigned directly as ordinary values, including from
 array literals: copy literal elements with `memcpy` (see
 [Array Literals](21-array-literals.md)).
 
-## 34.8 Array Literals Need an Inference Context
+## 35.8 Array Literals Need an Inference Context
 
 An array literal's element type is inferred from an assignment,
 return, or call-argument context. Without one, the literal is
@@ -72,7 +72,7 @@ return [1, 2, 3];          // invalid unless the return type is a view<[...]>
 Array literal elements must be compile-time constant expressions
 (runtime values cannot appear in one).
 
-## 34.9 Dynamic Array Lifetime Checking Is Partial
+## 35.9 Dynamic Array Lifetime Checking Is Partial
 
 The compiler tracks the init/uninit lifecycle of function-local dynamic
 array variables and owner `ptr<[T]>` aliases, including what called functions
@@ -86,9 +86,9 @@ at the stable array object and remain valid. The check
 does not track dynamic arrays in struct fields or nested elements below the
 outermost tracked array, global dynamic-array lifecycle, allocation failure
 status, or all runtime bounds properties. See
-[Dynamic-Array Lifecycle Checking](30-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
+[Dynamic-Array Lifecycle Checking](31-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
 
-## 34.10 Pointer Lifetime Is Not Fully Tracked
+## 35.10 Pointer Lifetime Is Not Fully Tracked
 
 The compiler does not fully track dangling pointers or ownership. It detects
 returning a pointer to the current function's own frame storage, storing a
@@ -100,13 +100,13 @@ untracked. Decayed static-array views refer to their original array, so they
 are safe to return when that storage is a parameter or global; a decayed view
 of local array storage is still caught as a normal frame-storage escape.
 Escapes through very deep or recursive call chains may be missed. See
-[Dangling-Pointer Checking](30-memory-safety-checking.md#299-dangling-pointer-checking).
+[Dangling-Pointer Checking](31-memory-safety-checking.md#299-dangling-pointer-checking).
 
-## 34.11 Output Is a Library Function
+## 35.11 Output Is a Library Function
 
 Output is provided by `franko/io`, not by the compiler. The overloaded `print(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](17-statements.md) and [franko/io](../library_docs/io.md).
 
-## 34.12 Unsupported Operators
+## 35.12 Unsupported Operators
 
 The unary plus operator does not exist in the language:
 
@@ -118,7 +118,7 @@ Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plai
 
 Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. See [Operators](13-operators.md#1310-struct-operator-overloading).
 
-## 34.13 String Literals Cannot Initialize Arrays
+## 35.13 String Literals Cannot Initialize Arrays
 
 A string literal is a `view<[byte, N]>` value, not byte-array
 sugar (see [String Literals](23-string-literals.md)). Arrays are not
@@ -140,17 +140,17 @@ Valid:
 s.memcpy("hello");
 ```
 
-## 34.14 No `switch` or `do`/`do-while`
+## 35.14 No `switch` or `do`/`do-while`
 
 Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. There is no `switch`, no `do`/`do-while`, and no user-visible `goto`; see [Statements](17-statements.md).
 
-## 34.15 Global Scope Is Declaration-Only
+## 35.15 Global Scope Is Declaration-Only
 
 Only struct declarations, global variable declarations, function declarations, namespace declarations, imports, and `#if` declaration conditionals are valid at global scope.
 
 Executable statements are invalid at global scope. Aggregate literals and field-wise declaration initializers are local-only; global aggregate initializers are rejected. See [Aggregate Literals](29-aggregate-literals.md).
 
-## 34.16 No C-Style Casts, Ternary, or Multiple Declarators
+## 35.16 No C-Style Casts, Ternary, or Multiple Declarators
 
 The following forms do not exist in the grammar:
 
@@ -158,7 +158,7 @@ The following forms do not exist in the grammar:
 - the ternary conditional operator (`?:`);
 - multiple declarators in one declaration (`int a, b;` is invalid; declare each variable separately).
 
-## 34.17 Operator Overload Lifetime Limitation
+## 35.17 Operator Overload Lifetime Limitation
 
 Operator operands may be rvalues: the compiler borrows them through a
 temporary whose lifetime is the full expression. This is the C++ `const&`
@@ -173,10 +173,24 @@ call returns. Forwarding the borrowed view to a callee that stores it is
 also rejected. Ordinary non-operator methods with `view<T>` parameters are
 checked the same way when their arguments are forwarded to a function that
 stores them. See
-[Memory Safety Checking](30-memory-safety-checking.md#299-dangling-pointer-checking)
+[Memory Safety Checking](31-memory-safety-checking.md#299-dangling-pointer-checking)
 and [Operators](13-operators.md#1310-struct-operator-overloading).
 
-## 34.18 Tuple Restrictions
+## 35.18 Tuple Restrictions
 
 Tuple restrictions are documented in
 [Tuples](28-tuples.md#2810-restrictions).
+
+## 35.19 Enum Restrictions
+
+- Enums are declared only at global or namespace scope; no local, nested, or struct-member enum declarations.
+- An enum must provide explicit values for every variant or for none; mixing is rejected.
+- Every variant name and every variant value must be unique; implicit wrapping that collides is rejected.
+- Explicit values must fit the backing type; only the eight primitive integer types are valid backings.
+- No arithmetic, bitwise, shift, logical, or compound-assignment operators on enums: only `==`, `!=`, `<`, `>`, `<=`, `>=`, and `=` are supported.
+- No implicit conversions between enums and integers; cross-width moves use `cast` (safe) or `unsafe_cast` (checked, runtime-aborted on invalid variants or out-of-range values).
+- Integer-to-enum casts (even constant ones like `unsafe_cast<BigState>(999)`) compile and abort at runtime instead of failing at compile time.
+- Enum array elements are not memset-safe.
+- Enums have no methods, no `OPERATOR_*` overloading, and no tuple-style destructuring.
+
+The complete enum reference is in [Enums](30-enums.md).

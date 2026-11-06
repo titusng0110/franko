@@ -271,6 +271,7 @@ public final class SemanticAnalyzer {
             symbolTable.diagnostics().push(item.span);
             try {
             if (item instanceof StructDeclNode
+                    || item instanceof EnumDeclNode
                     || item instanceof GlobalVarDeclNode
                     || item instanceof FunctionDeclNode
                     || item instanceof NamespaceNode) {
@@ -310,6 +311,17 @@ public final class SemanticAnalyzer {
                 new IdentityHashMap<>();
 
         Map<ASTNode, SemanticASTNode> loweredByNode = new IdentityHashMap<>();
+
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
+
+            for (ASTNode item : space.items) {
+                if (item instanceof EnumDeclNode n) {
+                    EnumSymbol enumSymbol = typeResolver.analyzeEnumDecl(n, currentNamespaceName());
+                    symbolTable.declareEnum(enumSymbol);
+                }
+            }
+        }
 
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
@@ -452,6 +464,19 @@ public final class SemanticAnalyzer {
             symbolTable.setCurrentNamespace(space.space);
 
             for (ASTNode item : space.items) {
+                if (item instanceof EnumDeclNode n) {
+                    EnumSymbol enumSymbol = symbolTable.resolveEnum(n.name);
+
+                    if (enumSymbol != null) {
+                        loweredByNode.put(
+                                item,
+                                new SemanticEnumDeclNode(item.span, enumSymbol)
+                        );
+                    }
+
+                    continue;
+                }
+
                 if (item instanceof StructDeclNode n) {
                     StructSymbol structSymbol = symbolTable.resolveStruct(n.name);
 
@@ -1271,6 +1296,13 @@ public final class SemanticAnalyzer {
             symbolTable.error("Function declaration '"
                     + fn.name
                     + "' is only valid in the global top-level scope");
+            return null;
+        }
+
+        if (node instanceof EnumDeclNode en) {
+            symbolTable.error("Enum declaration '"
+                    + en.name
+                    + "' is only valid at global or namespace scope");
             return null;
         }
 

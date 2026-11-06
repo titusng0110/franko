@@ -420,6 +420,38 @@ final class SemanticTupleType extends SemanticType {
     }
 }
 
+final class SemanticEnumType extends SemanticType {
+    final EnumSymbol enumSymbol;
+
+    SemanticEnumType(EnumSymbol enumSymbol) {
+        this.enumSymbol = Objects.requireNonNull(enumSymbol);
+    }
+
+    @Override
+    public String describe() {
+        return enumSymbol.qualifiedName();
+    }
+
+    @Override
+    public String mangleKey() {
+        return enumSymbol.qualifiedName();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof SemanticEnumType other)) {
+            return false;
+        }
+
+        return enumSymbol == other.enumSymbol;
+    }
+
+    @Override
+    public int hashCode() {
+        return System.identityHashCode(enumSymbol);
+    }
+}
+
 final class SemanticFunctionType extends SemanticType {
     final List<SemanticType> parameterTypes;
     final SemanticType returnType;

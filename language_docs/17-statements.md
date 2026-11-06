@@ -178,7 +178,7 @@ A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(
 
 Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](19-functions.md).
 
-Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](34-unsupported-or-restricted-features.md).
+Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](35-unsupported-or-restricted-features.md).
 
 ## 17.8 Expression Statements
 
@@ -213,4 +213,4 @@ A standalone `#else` is a syntax error.
 namespace, and inside a struct. Selected declarations and statements are
 spliced directly into the enclosing scope, so compile-time branch braces
 do not create a scope. See
-[Compile-Time Reflection](33-compile-time-reflection.md).
+[Compile-Time Reflection](34-compile-time-reflection.md).

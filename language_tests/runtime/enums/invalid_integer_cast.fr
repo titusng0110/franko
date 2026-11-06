@@ -1,0 +1,12 @@
+import "franko/io"
+
+enum<uint32> BigState {
+    a = 0,
+    b = 300
+}
+
+func main() -> int32 {
+    BigState s2 = unsafe_cast<BigState>(999);
+    print(1);
+    return 0;
+}

@@ -83,6 +83,15 @@ public final class ASTSerializer {
             obj.put("type", typeToJson(n.type, sources));
             obj.put("name", n.name);
             obj.put("constInitializer", nodeToJson(n.constInitializer, sources));
+        } else if (node instanceof EnumDeclNode n) {
+            obj.put("node", "enumDecl");
+            obj.put("name", n.name);
+            obj.put("backingType", typeToJson(n.backingType, sources));
+            obj.put("variants", enumVariantArray(n.variants, sources));
+        } else if (node instanceof EnumVariantNode n) {
+            obj.put("node", "enumVariant");
+            obj.put("name", n.name);
+            obj.put("constInitializer", nodeToJson(n.constInitializer, sources));
         } else if (node instanceof GlobalVarDeclNode n) {
             obj.put("node", "globalVarDecl");
             obj.put("type", typeToJson(n.type, sources));
@@ -285,6 +294,17 @@ public final class ASTSerializer {
             case "structFieldDecl" -> new StructFieldDeclNode(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
+                    obj.requireString("name"),
+                    nodeFromJson(obj.optObject("constInitializer"), sources)
+            );
+            case "enumDecl" -> new EnumDeclNode(
+                    span,
+                    obj.requireString("name"),
+                    typeFromJson(obj.requireObject("backingType"), sources),
+                    enumVariantsFromArray(obj.requireArray("variants"), sources)
+            );
+            case "enumVariant" -> new EnumVariantNode(
+                    span,
                     obj.requireString("name"),
                     nodeFromJson(obj.optObject("constInitializer"), sources)
             );
@@ -703,6 +723,38 @@ public final class ASTSerializer {
         }
 
         return array;
+    }
+
+    private static JsonArray enumVariantArray(List<EnumVariantNode> nodes, SourceTable sources) {
+        JsonArray array = new JsonArray();
+
+        for (EnumVariantNode node : nodes) {
+            array.add(nodeToJson(node, sources));
+        }
+
+        return array;
+    }
+
+    private static List<EnumVariantNode> enumVariantsFromArray(
+            JsonArray array,
+            SourceTable sources
+    ) {
+        List<EnumVariantNode> nodes = new ArrayList<>();
+
+        for (JsonValue value : array.values()) {
+            ASTNode node = nodeFromJson(
+                    JsonAstSupport.requireObject(value, "enum variant"),
+                    sources
+            );
+
+            if (!(node instanceof EnumVariantNode variant)) {
+                throw new IllegalArgumentException("Expected an enum variant AST node");
+            }
+
+            nodes.add(variant);
+        }
+
+        return nodes;
     }
 
     private static List<ASTNode> nodesFromArray(JsonArray array, SourceTable sources) {

@@ -84,3 +84,21 @@ X == X
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](26-structs.md) for the complete struct reference.
 
 Tuple equality is covered in [Tuples](28-tuples.md#283-type-identity).
+
+## 10.7 Enum Equality
+
+Enum types are nominal: two enum declarations are distinct types even
+when their backing types and variants are identical.
+
+```text
+enum<int32> X { a, b }
+enum<int32> Y { a, b }
+
+X != Y
+X == X
+```
+
+Duplicate enum names are rejected, so each enum name denotes exactly
+one declared type. An enum name shares one type-name namespace with
+struct names: an enum and a struct may not use the same name in the
+same scope. See [Enums](30-enums.md) for the complete enum reference.

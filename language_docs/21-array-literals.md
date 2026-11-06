@@ -21,9 +21,9 @@ elements written and `T` is the **inferred element type**.
 
 ## 21.1 Element Type Inference
 
-The element type `T` is always an integer primitive type. It is
-**inferred from the surrounding code** — a literal carries no element
-type of its own:
+The element type `T` is always an integer primitive type or an enum
+type. It is **inferred from the surrounding code** — a literal carries
+no element type of its own:
 
 - **assignment**: the target's element type (a `view<[T, ...]>`
   variable, or an array target whose element type guides the inference
@@ -42,7 +42,9 @@ take([1, 2, 3]);        // valid when take's parameter is
 ```
 
 Constants in a literal are fluid like everywhere else: each element is
-checked against the inferred `T`'s range.
+checked against the inferred `T`'s range. Enum literals take enum
+variant references instead of integer constants: each element must be
+a variant of the inferred enum type (see [Enums](30-enums.md)).
 
 ```franko
 view<[uint8, 3]> b = [0, 127, 256];   // invalid: 256 does not fit
@@ -69,6 +71,17 @@ Runtime values cannot appear in a literal:
 ```franko
 int32 v = 5;
 view<[int32, 3]> t = [v, v + 1, 2];   // invalid: v is not constant
+```
+
+The same holds for enums: only variant references are allowed, so a
+runtime enum variable or any non-variant enum expression is rejected:
+
+```franko
+enum<uint8> Status { spawning, alive }
+
+Status s = Status::spawning;
+view<[Status, 2]> bad = [s, Status::alive];   // invalid: s is not a variant
+view<[Status, 2]> good = [Status::spawning, Status::alive];   // valid
 ```
 
 Compute runtime values into a declared array with ordinary element
@@ -218,7 +231,7 @@ Array literals in Franko are:
 
 - ordinary expressions of type `view<[T, N]>`;
 - element type `T` inferred from assignment, return, or call-argument
-  contexts (integer primitives only);
+  contexts (integer primitives or enums);
 - compile-time constant expressions only, backed by shared constant
   storage with static lifetime (recursion-safe, like string literals);
 - exactly as long as written (`N >= 1`);

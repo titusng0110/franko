@@ -1,0 +1,4 @@
+enum<uint8> Shared {
+    first,
+    second
+}

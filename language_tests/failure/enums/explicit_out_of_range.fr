@@ -1,0 +1,7 @@
+enum<uint8> E {
+    a = 300
+}
+
+func main() -> int32 {
+    return 0;
+}

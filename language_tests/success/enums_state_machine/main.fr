@@ -1,0 +1,46 @@
+import "franko/io"
+
+// Auto-increments: sleeping=0, hunting=1, attacking=2, dead=3
+enum<uint8> AiState {
+    sleeping,
+    hunting,
+    attacking,
+    dead
+}
+
+struct Enemy {
+    int32 id
+    int32 health = 100
+    AiState state
+}
+
+func update_enemies(mview<[Enemy]> enemies) -> void {
+    for (uint32 i = 0; i < $(enemies).length(); i++) {
+        if ($(enemies)[i].state == AiState::sleeping) {
+            $(enemies)[i].state = AiState::hunting;
+        }
+        else if ($(enemies)[i].state == AiState::hunting) {
+            if ($(enemies)[i].health < 50) {
+                $(enemies)[i].state = AiState::attacking;
+            }
+        }
+        else if ($(enemies)[i].state >= AiState::attacking) {
+            if ($(enemies)[i].health <= 0) {
+                $(enemies)[i].state = AiState::dead;
+            }
+        }
+    }
+    return;
+}
+
+func main() -> int32 {
+    [Enemy] mob_pool;
+    mob_pool.init_zero(10);
+
+    update_enemies(getmview(mob_pool));
+
+    print(mob_pool[0].state == AiState::hunting);
+
+    mob_pool.uninit();
+    return 0;
+}

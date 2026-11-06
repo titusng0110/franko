@@ -48,6 +48,7 @@ SUCCESS_CASES = (
     "byte_endian_access",
     "byte_memchr_memmem",
     "byte_static_views",
+    "enums_defaults",
 )
 
 # Compiled (not run) to pin the bare static-index emission.

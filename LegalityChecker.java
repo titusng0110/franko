@@ -106,6 +106,10 @@ public class LegalityChecker {
             return;
         }
 
+        if (node instanceof SemanticEnumDeclNode) {
+            return;
+        }
+
         if (node instanceof SemanticStmtNode stmt) {
             statementChecker.checkStmt(stmt);
             return;
@@ -141,6 +145,10 @@ public class LegalityChecker {
                     functionChecker.checkFunction(method);
                 }
 
+                continue;
+            }
+
+            if (item instanceof SemanticEnumDeclNode) {
                 continue;
             }
 

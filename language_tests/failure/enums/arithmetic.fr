@@ -1,0 +1,10 @@
+enum<int32> E {
+    a,
+    b
+}
+
+func main() -> int32 {
+    E s = E::a;
+    s = s + 1;
+    return 0;
+}

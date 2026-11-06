@@ -6,6 +6,7 @@ Franko has the following semantic type categories:
 primitive integers
 structs
 tuples
+enums
 dynamic arrays
 static arrays
 typed pointers (ptr / mview / view)
@@ -25,6 +26,7 @@ Each category has its own detailed chapter:
 | Pointers (`ptr`, `mview`, `view`) | [Pointers](25-pointers.md) |
 | Structs | [Structs](26-structs.md) |
 | Tuples | [Tuples](28-tuples.md) |
+| Enums | [Enums](30-enums.md) |
 | `void` | [Functions](19-functions.md) |
 
 Structs are nominal types: two distinct struct declarations are distinct
@@ -35,6 +37,11 @@ types even when their field layouts are identical. See
 Tuples are structural aggregate types: their identity depends on the ordered
 element types, not on the element names written at a declaration. See
 [Tuples](28-tuples.md) and [Type Equality](10-type-equality.md).
+
+Enums are nominal types backed by one of the eight primitive integer
+types: two distinct enum declarations are distinct types even when their
+backing types and variants match. See [Enums](30-enums.md) and
+[Type Equality](10-type-equality.md).
 
 `void` is not an ordinary value type. It is valid only where the language
 explicitly permits it, currently as a function return type.

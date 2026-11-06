@@ -1,0 +1,32 @@
+import "franko/io"
+
+enum<uint8> State {
+    a,
+    b
+}
+
+enum<uint32> BigState {
+    x = 0,
+    y = 300
+}
+
+func main() -> int32 {
+    uint8 exact = cast<uint8>(State::b);
+    print(exact);
+
+    int32 wider = cast<int32>(State::b);
+    print(wider);
+
+    BigState s1 = unsafe_cast<BigState>(0);
+    print(s1 == BigState::x);
+
+    BigState s2 = unsafe_cast<BigState>(300);
+    print(s2 == BigState::y);
+
+    uint8 narrow = unsafe_cast<uint8>(BigState::x);
+    print(narrow);
+
+    uint8 from_state = unsafe_cast<uint8>(State::b);
+    print(from_state);
+    return 0;
+}

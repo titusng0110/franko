@@ -86,6 +86,12 @@ Comparison operators produce `uint8`.
 
 Integer comparisons may use mixed integer types subject to constant fitting rules.
 
+Enum comparisons require both operands to have the exact same enum
+type; all six operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are allowed
+and compare backing integer values. Comparing an enum to an integer,
+to `null`, to a pointer, to a struct, or to a different enum type is an
+error. See [Enums](30-enums.md).
+
 Pointer comparison is supported only between identical pointer types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
 The `null` literal may be compared with a pointer using `==` and `!=` only. `null` cannot be compared with non-pointer values, and `0` is not `null`.
@@ -194,6 +200,11 @@ width. The selected constant is materialized as a temporary of the
 parameter's referenced primitive type before being borrowed.
 
 Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
+
+Enum values have no operator methods either: their `==`, `!=`, `<`,
+`>`, `<=`, `>=`, and `=` are built in and require the exact same enum
+type on both sides. Arithmetic, bitwise, shift, logical, and
+compound-assignment operators reject enum operands. See [Enums](30-enums.md).
 
 See [Assignment](16-assignment.md) and [Methods](27-methods.md) for the
 full lowering, fallback, and lifetime rules.

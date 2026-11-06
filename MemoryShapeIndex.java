@@ -55,6 +55,7 @@ final class MemoryShapeIndex {
 
     private Shape compute(SemanticType type) {
         if (type instanceof SemanticPrimitiveType
+                || type instanceof SemanticEnumType
                 || type instanceof SemanticVoidType
                 || type instanceof SemanticNullType
                 || type instanceof SemanticFunctionType) {

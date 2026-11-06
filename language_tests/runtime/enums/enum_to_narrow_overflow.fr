@@ -1,0 +1,12 @@
+import "franko/io"
+
+enum<uint32> BigState {
+    a = 0,
+    b = 300
+}
+
+func main() -> int32 {
+    uint8 crash = unsafe_cast<uint8>(BigState::b);
+    print(crash);
+    return 0;
+}

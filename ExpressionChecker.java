@@ -103,6 +103,10 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node instanceof SemanticEnumVariantNode) {
+            return;
+        }
+
         diagnostics.error("Unknown semantic expression node: "
                 + node.getClass().getSimpleName());
     }
@@ -251,6 +255,31 @@ public class ExpressionChecker {
             SemanticBinOpNode node,
             String op
     ) {
+        boolean leftEnum = node.left.type instanceof SemanticEnumType;
+        boolean rightEnum = node.right.type instanceof SemanticEnumType;
+
+        if (leftEnum || rightEnum) {
+            if (leftEnum && rightEnum) {
+                if (TypeChecker.sameType(node.left.type, node.right.type)) {
+                    return;
+                }
+
+                diagnostics.error("Cannot compare '" + node.left.type.describe()
+                        + "' with '" + node.right.type.describe()
+                        + "' using '" + op
+                        + "': both operands must have the same enum type");
+                return;
+            }
+
+            SemanticType enumType = leftEnum ? node.left.type : node.right.type;
+            SemanticType otherType = leftEnum ? node.right.type : node.left.type;
+            diagnostics.error("Cannot compare enum type '" + enumType.describe()
+                    + "' with '" + otherType.describe()
+                    + "' using '" + op
+                    + "': both operands must have the same enum type");
+            return;
+        }
+
         boolean leftPtr = types.isPointerType(node.left.type);
         boolean rightPtr = types.isPointerType(node.right.type);
         boolean leftNull = types.isNullType(node.left.type);
@@ -630,9 +659,69 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node.type instanceof SemanticEnumType targetEnum) {
+            if (node.expr.type instanceof SemanticEnumType sourceEnum) {
+                if (sourceEnum.enumSymbol == targetEnum.enumSymbol) {
+                    return;
+                }
+
+                diagnostics.error("'" + syntax + "' cannot convert enum '"
+                        + sourceEnum.enumSymbol.qualifiedName()
+                        + "' to enum type '"
+                        + targetEnum.enumSymbol.qualifiedName()
+                        + "'");
+                return;
+            }
+
+            if (node.expr.type instanceof SemanticPrimitiveType) {
+                if (!node.checked) {
+                    diagnostics.error("'cast' cannot convert an integer to enum type '"
+                            + targetEnum.enumSymbol.qualifiedName()
+                            + "'; write unsafe_cast<"
+                            + targetEnum.enumSymbol.qualifiedName()
+                            + ">(...)");
+                    return;
+                }
+
+                return;
+            }
+
+            diagnostics.error("'unsafe_cast' to enum type '"
+                    + targetEnum.enumSymbol.qualifiedName()
+                    + "' requires an integer operand, got "
+                    + types.describeSafe(node.expr.type));
+            return;
+        }
+
+        if (node.expr.type instanceof SemanticEnumType sourceEnum) {
+            if (!(node.type instanceof SemanticPrimitiveType targetPrimitive)) {
+                diagnostics.error("Cast target must be a primitive integer type, a pointer type, or an enum type, got "
+                        + types.describeSafe(node.type));
+                return;
+            }
+
+            if (types.isValuePreservingEnumToIntegerCast(sourceEnum, targetPrimitive.kind)) {
+                return;
+            }
+
+            if (!node.checked) {
+                diagnostics.error("'cast' cannot lose data: enum '"
+                        + sourceEnum.enumSymbol.qualifiedName()
+                        + "' is backed by "
+                        + sourceEnum.enumSymbol.backingKind.name().toLowerCase()
+                        + ", which does not widen value-preservingly to "
+                        + targetPrimitive.describe()
+                        + "; write unsafe_cast<"
+                        + targetPrimitive.describe()
+                        + ">(...)");
+                return;
+            }
+
+            return;
+        }
+
         if (!(node.type instanceof SemanticPrimitiveType targetPrimitive)) {
-            diagnostics.error("Cast target must be a primitive integer type "
-                    + "or a pointer type, got "
+            diagnostics.error("Cast target must be a primitive integer type, a pointer type, or an enum type, got "
                     + types.describeSafe(node.type));
             return;
         }
@@ -673,7 +762,7 @@ public class ExpressionChecker {
     ) {
         if (node.checked) {
             diagnostics.error("'unsafe_cast' target must be a primitive "
-                    + "integer type, got "
+                    + "integer type or an enum type, got "
                     + types.describeSafe(node.type));
             return;
         }

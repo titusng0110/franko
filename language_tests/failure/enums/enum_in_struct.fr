@@ -1,0 +1,10 @@
+struct S {
+    int32 x
+    enum<uint8> E {
+        a
+    }
+}
+
+func main() -> int32 {
+    return 0;
+}

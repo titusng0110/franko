@@ -11,6 +11,7 @@ final class InactiveDeclarationPruner {
     private final Set<FunctionSymbol> keptFunctions = newSet();
     private final Set<VariableSymbol> keptVariables = newSet();
     private final Set<StructSymbol> keptStructs = newSet();
+    private final Set<EnumSymbol> keptEnums = newSet();
 
     private final IdentityHashMap<FunctionSymbol, SemanticFunctionDeclNode> declBySymbol =
             new IdentityHashMap<>();
@@ -305,6 +306,12 @@ final class InactiveDeclarationPruner {
 
     private void markType(SemanticType type) {
 
+        if (type instanceof SemanticEnumType enumType) {
+            keptEnums.add(enumType.enumSymbol);
+
+            return;
+        }
+
         if (type instanceof SemanticStructType struct) {
             markStruct(struct.structSymbol);
 
@@ -438,6 +445,10 @@ final class InactiveDeclarationPruner {
                             struct.symbol,
                             methods
                     );
+        }
+
+        if (node instanceof SemanticEnumDeclNode enumDecl) {
+            return keptEnums.contains(enumDecl.symbol) ? enumDecl : null;
         }
 
         return node;

@@ -627,7 +627,8 @@ final class MemoryAnalysisContext {
 
         if (expression instanceof SemanticIntLiteralNode
                 || expression instanceof SemanticNullLiteralNode
-                || expression instanceof SemanticVarExprNode) {
+                || expression instanceof SemanticVarExprNode
+                || expression instanceof SemanticEnumVariantNode) {
             return;
         }
 

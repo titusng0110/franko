@@ -12,6 +12,7 @@ program
 
 topLevelItem
     : structDecl
+    | enumDecl
     | functionDecl
     | globalVarDecl
     | importDecl
@@ -83,6 +84,7 @@ namespaceDecl
 
 namespaceItem
     : structDecl
+    | enumDecl
     | functionDecl
     | globalVarDecl
     | namespaceDecl
@@ -110,6 +112,7 @@ declIfElse
 
 declarationItem
     : structDecl
+    | enumDecl
     | functionDecl
     | globalVarDecl
     | namespaceDecl
@@ -240,6 +243,50 @@ structMemberElse
 
 structFieldDecl
     : type IDENTIFIER constDeclSuffix?
+    ;
+
+// ---------- ENUMS ----------
+//
+// Enum syntax:
+//
+//   enum<int32> Types {
+//       type1 = 1,
+//       type2 = 10,
+//       type3 = 20
+//   }
+//
+//   enum<int32> States {
+//       state1,
+//       state2,
+//       state3
+//   }
+//
+// The backing type is a full type so invalid backings such as
+// enum<[int32]>, enum<ptr<int32>>, or enum<SomeStruct> reach semantic
+// analysis with a diagnostic instead of a parser error. Only the eight
+// primitive integer types are valid backings. An enum is either
+// all-explicit (every variant has = constExpr) or all-implicit (no
+// variant has one); mixing is a semantic error. With no explicit
+// values the first variant is 0 and each subsequent variant increments
+// the previous value by 1 with two's-complement wrapping. Enums are
+// valid at global or namespace scope; they are not valid inside
+// structs.
+enumDecl
+    : ENUM LT type GT IDENTIFIER separators* LBRACE separators*
+      enumVariantList? separators* RBRACE
+    ;
+
+enumVariantList
+    : enumVariant (enumVariantSep enumVariant)* enumVariantSep?
+    ;
+
+enumVariantSep
+    : separators* COMMA separators*
+    | separators+
+    ;
+
+enumVariant
+    : IDENTIFIER (ASSIGN constExpr)?
     ;
 
 // ---------- GLOBAL VARIABLES ----------
@@ -776,6 +823,7 @@ memberName
     | RETURN
     | VOID
     | STRUCT
+    | ENUM
     | IF
     | ELSE
     | WHILE
@@ -1032,29 +1080,22 @@ derefExpr
 //       with unsafe_cast instead
 //     - pointer target (ptr/mview/view): explicit permission downgrade
 //       only; casting upwards is invalid
+//     - enum source: exact backing integer or strictly wider compatible
+//       integer
 //
 //   unsafe_cast<T>(expr)
-//     - arbitrary integer conversion; range-checked at runtime through
-//       franko_unsafe_cast (and range-checked at compile time when the
-//       operand is a constant). The target is restricted to the eight
-//       primitive integer types at parse time.
+//     - integer conversion or integer to enum conversion; range-checked
+//       at runtime through franko_integer_unsafe_cast (and range-checked
+//       at compile time when the operand is a constant, except enum
+//       conversions which are always runtime-checked). The target is a
+//       full type; non-integer/non-enum targets are rejected by the
+//       semantic checker.
 castExpr
     : CAST LT type GT LPAREN expr RPAREN
     ;
 
 unsafeCastExpr
-    : UNSAFE_CAST LT primitiveType GT LPAREN expr RPAREN
-    ;
-
-primitiveType
-    : INT8
-    | INT16
-    | INT32
-    | INT64
-    | UINT8
-    | UINT16
-    | UINT32
-    | UINT64
+    : UNSAFE_CAST LT type GT LPAREN expr RPAREN
     ;
 
 // ---------- LITERALS ----------
@@ -1170,6 +1211,7 @@ FUNC   : 'func' ;
 RETURN : 'return' ;
 VOID   : 'void' ;
 STRUCT : 'struct' ;
+ENUM   : 'enum' ;
 
 // Keywords
 // NOTE: `print` is intentionally not a keyword. It is an ordinary

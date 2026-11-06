@@ -1,0 +1,8 @@
+enum<int32> E {
+    a = 1,
+    b = 1
+}
+
+func main() -> int32 {
+    return 0;
+}

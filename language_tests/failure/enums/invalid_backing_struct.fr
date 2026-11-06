@@ -1,0 +1,11 @@
+struct S {
+    int32 x
+}
+
+enum<S> E {
+    a
+}
+
+func main() -> int32 {
+    return 0;
+}

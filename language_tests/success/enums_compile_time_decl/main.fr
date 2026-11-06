@@ -1,0 +1,33 @@
+import "franko/io"
+
+#if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
+    enum<uint8> Platform {
+        one,
+        two
+    }
+} #else {
+    enum<uint8> Platform {
+        other
+    }
+}
+
+namespace ns {
+    #if (1) {
+        enum<uint8> Inner {
+            a,
+            b
+        }
+    } #else {
+        enum<uint8> Inner {
+            c
+        }
+    }
+}
+
+func main() -> int32 {
+    Platform p = Platform::one;
+    print(p == Platform::one);
+    ns::Inner i = ns::Inner::b;
+    print(i == ns::Inner::b);
+    return 0;
+}

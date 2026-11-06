@@ -96,6 +96,11 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node instanceof SemanticEnumDeclNode enumDecl) {
+            emitEnumDecl(enumDecl);
+            return;
+        }
+
         if (node instanceof SemanticStmtNode stmt) {
             emitStmt(stmt);
             return;
@@ -115,10 +120,12 @@ public class Cpp14Codegen {
     private void emitProgram(SemanticProgramNode node) {
 
         List<SemanticStructDeclNode> globalStructs = new ArrayList<>();
+        List<SemanticEnumDeclNode> globalEnums = new ArrayList<>();
         List<SemanticVarDeclNode> globalGlobals = new ArrayList<>();
         List<SemanticFunctionDeclNode> globalFunctions = new ArrayList<>();
 
         Map<String, List<SemanticStructDeclNode>> nsStructs = new LinkedHashMap<>();
+        Map<String, List<SemanticEnumDeclNode>> nsEnums = new LinkedHashMap<>();
         Map<String, List<SemanticVarDeclNode>> nsGlobals = new LinkedHashMap<>();
         Map<String, List<SemanticFunctionDeclNode>> nsFunctions = new LinkedHashMap<>();
 
@@ -127,13 +134,40 @@ public class Cpp14Codegen {
                 partitionNamespaceItems(
                         namespace,
                         nsStructs,
+                        nsEnums,
                         nsGlobals,
                         nsFunctions
                 );
                 continue;
             }
 
-            partitionItem(item, globalStructs, globalGlobals, globalFunctions);
+            partitionItem(item, globalStructs, globalEnums, globalGlobals, globalFunctions);
+        }
+
+        for (SemanticEnumDeclNode enumDecl : globalEnums) {
+            emitEnumDecl(enumDecl);
+        }
+
+        if (!globalEnums.isEmpty()) {
+            emitLine("");
+        }
+
+        for (Map.Entry<String, List<SemanticEnumDeclNode>> entry : nsEnums.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+
+            openNamespace(entry.getKey());
+
+            for (SemanticEnumDeclNode enumDecl : entry.getValue()) {
+                emitEnumDeclBody(enumDecl);
+            }
+
+            closeNamespace(entry.getKey());
+        }
+
+        if (anyNonEmpty(nsEnums)) {
+            emitLine("");
         }
 
         for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
@@ -433,10 +467,16 @@ public class Cpp14Codegen {
     private void partitionNamespaceItems(
             SemanticNamespaceNode namespace,
             Map<String, List<SemanticStructDeclNode>> nsStructs,
+            Map<String, List<SemanticEnumDeclNode>> nsEnums,
             Map<String, List<SemanticVarDeclNode>> nsGlobals,
             Map<String, List<SemanticFunctionDeclNode>> nsFunctions
     ) {
         List<SemanticStructDeclNode> structs = nsStructs.computeIfAbsent(
+                namespace.name,
+                ignored -> new ArrayList<>()
+        );
+
+        List<SemanticEnumDeclNode> enums = nsEnums.computeIfAbsent(
                 namespace.name,
                 ignored -> new ArrayList<>()
         );
@@ -452,18 +492,24 @@ public class Cpp14Codegen {
         );
 
         for (SemanticASTNode item : namespace.items) {
-            partitionItem(item, structs, globals, functions);
+            partitionItem(item, structs, enums, globals, functions);
         }
     }
 
     private void partitionItem(
             SemanticASTNode item,
             List<SemanticStructDeclNode> structs,
+            List<SemanticEnumDeclNode> enums,
             List<SemanticVarDeclNode> globals,
             List<SemanticFunctionDeclNode> functions
     ) {
         if (item instanceof SemanticStructDeclNode struct) {
             structs.add(struct);
+            return;
+        }
+
+        if (item instanceof SemanticEnumDeclNode enumDecl) {
+            enums.add(enumDecl);
             return;
         }
 
@@ -855,6 +901,24 @@ public class Cpp14Codegen {
                     ? values.get(cursor[0]++)
                     : BigInteger.ZERO;
 
+            if (type.elementType instanceof SemanticEnumType enumType) {
+                EnumVariant variant = enumType.enumSymbol.variantWithValue(value);
+
+                if (variant == null && !enumType.enumSymbol.variants.isEmpty()) {
+                    variant = enumType.enumSymbol.variants.get(0);
+                }
+
+                if (variant != null) {
+                    sb.append(qualify(
+                            enumType.enumSymbol.namespace,
+                            emittedEnumTypeName(enumType.enumSymbol) + "::VARIANT_" + variant.name + "()"));
+                } else {
+                    sb.append(expressionEmitter.emitBigIntegerLiteral(this, value));
+                }
+
+                continue;
+            }
+
             sb.append(expressionEmitter.emitBigIntegerLiteral(this, value));
         }
 
@@ -1196,6 +1260,13 @@ public class Cpp14Codegen {
             );
         }
 
+        if (type instanceof SemanticEnumType enumType) {
+            return qualify(
+                    enumType.enumSymbol.namespace,
+                    emittedEnumTypeName(enumType.enumSymbol)
+            );
+        }
+
         if (type instanceof SemanticNullType) {
 
             throw new IllegalStateException(
@@ -1281,6 +1352,109 @@ public class Cpp14Codegen {
 
     private static String emittedStructTypeName(StructSymbol symbol) {
         return symbol.isTuple ? symbol.name : "STRUCT_" + symbol.name;
+    }
+
+    static String emittedEnumTypeName(EnumSymbol symbol) {
+        return "ENUM_" + symbol.name;
+    }
+
+    String emitBackingLiteral(BigInteger value, SemanticPrimitiveKind backingKind) {
+        if (backingKind == SemanticPrimitiveKind.INT64
+                && value.equals(BigInteger.valueOf(Long.MIN_VALUE))) {
+            return "(-9223372036854775807LL - 1)";
+        }
+
+        return expressionEmitter.emitBigIntegerLiteral(this, value);
+    }
+
+    private void emitEnumDecl(SemanticEnumDeclNode node) {
+        openNamespace(node.symbol.namespace);
+        emitEnumDeclBody(node);
+        closeNamespace(node.symbol.namespace);
+    }
+
+    private void emitEnumDeclBody(SemanticEnumDeclNode node) {
+        EnumSymbol symbol = node.symbol;
+        String backingCpp = emitPrimitiveType(symbol.backingKind);
+        String enumCpp = emittedEnumTypeName(symbol);
+
+        String firstValue = symbol.variants.isEmpty()
+                ? "0"
+                : emitBackingLiteral(symbol.variants.get(0).value, symbol.backingKind);
+
+        emitLine("struct " + enumCpp);
+        emitLine("{");
+        indentLevel++;
+        emitLine(backingCpp + " value;");
+        emitLine("");
+        emitLine("constexpr " + enumCpp + "() : value(static_cast<" + backingCpp + ">(" + firstValue + ")) {}");
+        emitLine("constexpr explicit " + enumCpp + "(" + backingCpp + " v) : value(v) {}");
+        emitLine("");
+
+        for (EnumVariant variant : symbol.variants) {
+            String literal = emitBackingLiteral(variant.value, symbol.backingKind);
+            emitLine("static constexpr " + enumCpp + " VARIANT_" + variant.name + "()");
+            emitLine("{");
+            indentLevel++;
+            emitLine("return " + enumCpp + "(static_cast<" + backingCpp + ">(" + literal + "));");
+            indentLevel--;
+            emitLine("}");
+            emitLine("");
+        }
+
+        emitLine("template <typename InputT>");
+        emitLine("static " + enumCpp + " from_integer_checked(InputT v)");
+        emitLine("{");
+        indentLevel++;
+        emitLine(backingCpp + " backing = franko_integer_unsafe_cast<" + backingCpp + ">(v);");
+        emitLine("");
+        emitLine("switch (backing)");
+        emitLine("{");
+        indentLevel++;
+
+        for (EnumVariant variant : symbol.variants) {
+            String literal = emitBackingLiteral(variant.value, symbol.backingKind);
+            emitLine("case static_cast<" + backingCpp + ">(" + literal + "): return VARIANT_" + variant.name + "();");
+        }
+
+        indentLevel--;
+        emitLine("default:");
+        indentLevel++;
+        StringBuilder validList = new StringBuilder();
+
+        for (int i = 0; i < symbol.variants.size(); i++) {
+            if (i > 0) {
+                validList.append(", ");
+            }
+
+            validList.append(symbol.variants.get(i).name).append("=").append(symbol.variants.get(i).value.toString(10));
+        }
+
+        emitLine("franko_panic((\"Invalid value for enum " + symbol.qualifiedName() + ": \"");
+        indentLevel++;
+        emitLine("+ std::to_string(v)");
+        emitLine("+ \" is not a declared variant (valid variants: " + validList + ")\").c_str());");
+        indentLevel--;
+        indentLevel--;
+        emitLine("}");
+        indentLevel--;
+        emitLine("}");
+        emitLine("");
+        emitLine("constexpr bool operator==(" + enumCpp + " other) const { return value == other.value; }");
+        emitLine("constexpr bool operator!=(" + enumCpp + " other) const { return value != other.value; }");
+        emitLine("constexpr bool operator< (" + enumCpp + " other) const { return value <  other.value; }");
+        emitLine("constexpr bool operator> (" + enumCpp + " other) const { return value >  other.value; }");
+        emitLine("constexpr bool operator<=(" + enumCpp + " other) const { return value <= other.value; }");
+        emitLine("constexpr bool operator>=(" + enumCpp + " other) const { return value >= other.value; }");
+        indentLevel--;
+        emitLine("};");
+    }
+
+    String emitEnumVariant(SemanticEnumVariantNode node) {
+        return qualify(
+                node.enumSymbol.namespace,
+                emittedEnumTypeName(node.enumSymbol) + "::VARIANT_" + node.variant.name + "()"
+        );
     }
 
     private String qualify(String symbolNamespace, String localName) {
