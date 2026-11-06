@@ -44,8 +44,8 @@ public class Cpp14Codegen {
 
     private String currentEmitNamespace = null;
 
-    static final SemanticType UINT32_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32);
+    static final SastType UINT32_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.UINT32);
 
     public String generate(SemanticASTNode root) {
         if (root == null) {
@@ -445,13 +445,13 @@ public class Cpp14Codegen {
         }
     }
 
-    private static String fullyQualifiedEmittedName(FunctionSymbol symbol) {
+    private static String fullyQualifiedEmittedName(Symbol symbol) {
         String local;
         String namespace;
 
-        if (symbol instanceof MethodSymbol method) {
-            local = method.emittedLocalName();
-            namespace = method.owner.namespace;
+        if (symbol.kind == SymbolKind.METHOD) {
+            local = symbol.emittedLocalName();
+            namespace = symbol.owner.namespace;
         } else {
             local = symbol.emittedLocalName();
             namespace = symbol.namespace;
@@ -575,7 +575,7 @@ public class Cpp14Codegen {
         if (field.foldedDefault != null) {
             sb.append(" = ");
             sb.append(expressionEmitter.emitBigIntegerLiteral(this, field.foldedDefault));
-        } else if (field.type instanceof SemanticPtrType) {
+        } else if (field.type.kind == SastTypeKind.PTR) {
 
             sb.append(" = nullptr");
         }
@@ -655,21 +655,21 @@ public class Cpp14Codegen {
         ordered.add(node);
     }
 
-    private List<String> byValueStructDependencies(SemanticType type) {
+    private List<String> byValueStructDependencies(SastType type) {
         List<String> names = new ArrayList<>();
 
-        if (type instanceof SemanticStructType struct) {
-            names.add(struct.structSymbol.qualifiedName());
+        if (type.kind == SastTypeKind.STRUCT) {
+            names.add(type.structSymbol.qualifiedName());
             return names;
         }
 
-        if (type instanceof SemanticTupleType tuple) {
-            names.add(tuple.cppSymbol.qualifiedName());
+        if (type.kind == SastTypeKind.TUPLE) {
+            names.add(type.cppSymbol.qualifiedName());
             return names;
         }
 
-        if (type instanceof SemanticStaticArrayType staticArray) {
-            names.addAll(byValueStructDependencies(staticArray.elementType));
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            names.addAll(byValueStructDependencies(type.elementType));
         }
 
         return names;
@@ -708,14 +708,14 @@ public class Cpp14Codegen {
         sb.append(emitFunctionName(node.symbol));
         sb.append("(");
 
-        List<ParameterSymbol> params = node.symbol.parameters;
+        List<Symbol> params = node.symbol.parameters;
 
         for (int i = 0; i < params.size(); i++) {
             if (i > 0) {
                 sb.append(", ");
             }
 
-            ParameterSymbol param = params.get(i);
+            Symbol param = params.get(i);
             sb.append(emitDecl(param.type, emitSymbolName(param)));
         }
 
@@ -796,13 +796,13 @@ public class Cpp14Codegen {
     }
 
     private void emitGlobalForwardDeclaration(SemanticVarDeclNode node) {
-        VariableSymbol sym = node.symbol;
+        Symbol sym = node.symbol;
 
         String qualifier = "";
 
-        if (sym instanceof GlobalVariableSymbol global
-                && (global.literalBytes != null
-                    || global.literalValues != null)) {
+        if (sym.kind == SymbolKind.GLOBAL
+                && (sym.literalBytes != null
+                    || sym.literalValues != null)) {
             qualifier = "const ";
         }
 
@@ -811,22 +811,22 @@ public class Cpp14Codegen {
     }
 
     private void emitVarDecl(SemanticVarDeclNode node) {
-        VariableSymbol sym = node.symbol;
+        Symbol sym = node.symbol;
 
         String declaration = emitDecl(sym.type, emitSymbolName(sym));
 
-        if (sym instanceof GlobalVariableSymbol global
-                && (global.literalBytes != null
-                    || global.literalValues != null)) {
+        if (sym.kind == SymbolKind.GLOBAL
+                && (sym.literalBytes != null
+                    || sym.literalValues != null)) {
             String initializer;
 
-            if (global.literalBytes != null) {
+            if (sym.literalBytes != null) {
                 initializer =
-                        emitByteArrayInitializer(global.literalBytes);
-            } else if (sym.type instanceof SemanticStaticArrayType staticArray) {
+                        emitByteArrayInitializer(sym.literalBytes);
+            } else if (sym.type.kind == SastTypeKind.STATIC_ARRAY) {
                 initializer = emitStaticArrayLiteralInitializer(
-                        staticArray,
-                        global.literalValues);
+                        sym.type,
+                        sym.literalValues);
             } else {
                 throw new IllegalStateException(
                         "Internal compiler error: array literal global '"
@@ -854,7 +854,7 @@ public class Cpp14Codegen {
         }
 
         if (initializer.isEmpty()
-                && sym.type instanceof SemanticPtrType) {
+                && sym.type.kind == SastTypeKind.PTR) {
             initializer = " = nullptr";
         }
 
@@ -862,7 +862,7 @@ public class Cpp14Codegen {
     }
 
     private String emitStaticArrayLiteralInitializer(
-            SemanticStaticArrayType type,
+            SastType type,
             List<BigInteger> values
     ) {
         List<BigInteger> safeValues =
@@ -874,7 +874,7 @@ public class Cpp14Codegen {
     }
 
     private String emitStaticArrayLiteralValue(
-            SemanticStaticArrayType type,
+            SastType type,
             List<BigInteger> values,
             int[] cursor
     ) {
@@ -889,9 +889,9 @@ public class Cpp14Codegen {
                 sb.append(", ");
             }
 
-            if (type.elementType instanceof SemanticStaticArrayType rowType) {
+            if (type.elementType.kind == SastTypeKind.STATIC_ARRAY) {
                 sb.append(emitStaticArrayLiteralValue(
-                        rowType,
+                        type.elementType,
                         values,
                         cursor));
                 continue;
@@ -901,17 +901,17 @@ public class Cpp14Codegen {
                     ? values.get(cursor[0]++)
                     : BigInteger.ZERO;
 
-            if (type.elementType instanceof SemanticEnumType enumType) {
-                EnumVariant variant = enumType.enumSymbol.variantWithValue(value);
+            if (type.elementType.kind == SastTypeKind.ENUM) {
+                EnumVariant variant = type.elementType.enumSymbol.variantWithValue(value);
 
-                if (variant == null && !enumType.enumSymbol.variants.isEmpty()) {
-                    variant = enumType.enumSymbol.variants.get(0);
+                if (variant == null && !type.elementType.enumSymbol.variants.isEmpty()) {
+                    variant = type.elementType.enumSymbol.variants.get(0);
                 }
 
                 if (variant != null) {
                     sb.append(qualify(
-                            enumType.enumSymbol.namespace,
-                            emittedEnumTypeName(enumType.enumSymbol) + "::VARIANT_" + variant.name + "()"));
+                            type.elementType.enumSymbol.namespace,
+                            emittedEnumTypeName(type.elementType.enumSymbol) + "::VARIANT_" + variant.name + "()"));
                 } else {
                     sb.append(expressionEmitter.emitBigIntegerLiteral(this, value));
                 }
@@ -1196,7 +1196,7 @@ public class Cpp14Codegen {
             return;
         }
 
-        SemanticType targetType = node.function != null
+        SastType targetType = node.function != null
                 ? node.function.returnType()
                 : node.value.type;
 
@@ -1205,69 +1205,69 @@ public class Cpp14Codegen {
         emitLine("return " + value + ";");
     }
 
-    String emitType(SemanticType type) {
-        if (type instanceof SemanticVoidType) {
+    String emitType(SastType type) {
+        if (type.kind == SastTypeKind.VOID) {
             return "void";
         }
 
-        if (type instanceof SemanticPrimitiveType primitive) {
-            return emitPrimitiveType(primitive.kind);
+        if (type.kind == SastTypeKind.PRIMITIVE) {
+            return emitPrimitiveType(type.primitive);
         }
 
-        if (type instanceof SemanticDynamicArrayType dynamicArray) {
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return "Franko_Dynamic_Array<"
-                    + emitType(dynamicArray.elementType)
+                    + emitType(type.elementType)
                     + ">";
         }
 
-        if (type instanceof SemanticStaticArrayType staticArray) {
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
             StringBuilder dimensions = new StringBuilder();
-            SemanticType elementType = staticArray;
+            SastType elementType = type;
 
-            while (elementType instanceof SemanticStaticArrayType row) {
-                dimensions.append("[").append(row.sizeLiteral).append("]");
-                elementType = row.elementType;
+            while (elementType.kind == SastTypeKind.STATIC_ARRAY) {
+                dimensions.append("[").append(elementType.sizeLiteral).append("]");
+                elementType = elementType.elementType;
             }
 
             return emitType(elementType) + dimensions;
         }
 
-        if (type instanceof SemanticPtrType ptr) {
-            if (ptr.referencedType instanceof SemanticStaticArrayType
-                    || ptr.referencedType instanceof SemanticDynamicArrayType) {
+        if (type.kind == SastTypeKind.PTR) {
+            if (type.referencedType.kind == SastTypeKind.STATIC_ARRAY
+                    || type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 return "Franko_Fat_Pointer<"
-                        + emitType(pointerElementType(ptr.referencedType))
+                        + emitType(pointerElementType(type.referencedType))
                         + ">";
             }
 
             return "Franko_Thin_Pointer<"
-                    + emitType(ptr.referencedType)
+                    + emitType(type.referencedType)
                     + ">";
         }
 
-        if (type instanceof SemanticStructType struct) {
+        if (type.kind == SastTypeKind.STRUCT) {
 
             return qualify(
-                    struct.structSymbol.namespace,
-                    emittedStructTypeName(struct.structSymbol)
+                    type.structSymbol.namespace,
+                    emittedStructTypeName(type.structSymbol)
             );
         }
 
-        if (type instanceof SemanticTupleType tuple) {
+        if (type.kind == SastTypeKind.TUPLE) {
             return qualify(
-                    tuple.cppSymbol.namespace,
-                    emittedStructTypeName(tuple.cppSymbol)
+                    type.cppSymbol.namespace,
+                    emittedStructTypeName(type.cppSymbol)
             );
         }
 
-        if (type instanceof SemanticEnumType enumType) {
+        if (type.kind == SastTypeKind.ENUM) {
             return qualify(
-                    enumType.enumSymbol.namespace,
-                    emittedEnumTypeName(enumType.enumSymbol)
+                    type.enumSymbol.namespace,
+                    emittedEnumTypeName(type.enumSymbol)
             );
         }
 
-        if (type instanceof SemanticNullType) {
+        if (type.kind == SastTypeKind.NULL) {
 
             throw new IllegalStateException(
                     "Internal compiler error: the null type has no C++ representation"
@@ -1280,14 +1280,14 @@ public class Cpp14Codegen {
         );
     }
 
-    private String emitDecl(SemanticType type, String name) {
-        if (type instanceof SemanticStaticArrayType staticArray) {
+    private String emitDecl(SastType type, String name) {
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
             StringBuilder dimensions = new StringBuilder();
-            SemanticType elementType = staticArray;
+            SastType elementType = type;
 
-            while (elementType instanceof SemanticStaticArrayType row) {
-                dimensions.append("[").append(row.sizeLiteral).append("]");
-                elementType = row.elementType;
+            while (elementType.kind == SastTypeKind.STATIC_ARRAY) {
+                dimensions.append("[").append(elementType.sizeLiteral).append("]");
+                elementType = elementType.elementType;
             }
 
             return emitType(elementType) + " " + name + dimensions;
@@ -1296,13 +1296,13 @@ public class Cpp14Codegen {
         return emitType(type) + " " + name;
     }
 
-    private static SemanticType pointerElementType(SemanticType referencedType) {
-        if (referencedType instanceof SemanticStaticArrayType staticArray) {
-            return staticArray.elementType;
+    private static SastType pointerElementType(SastType referencedType) {
+        if (referencedType.kind == SastTypeKind.STATIC_ARRAY) {
+            return referencedType.elementType;
         }
 
-        if (referencedType instanceof SemanticDynamicArrayType dynamicArray) {
-            return dynamicArray.elementType;
+        if (referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            return referencedType.elementType;
         }
 
         return referencedType;
@@ -1322,7 +1322,7 @@ public class Cpp14Codegen {
         };
     }
 
-    String emitSymbolName(VariableSymbol symbol) {
+    String emitSymbolName(Symbol symbol) {
 
         if (symbol == null) {
             throw new IllegalStateException(
@@ -1330,21 +1330,21 @@ public class Cpp14Codegen {
             );
         }
 
-        if (symbol instanceof GlobalVariableSymbol global) {
-            if (global.literalBytes != null || global.literalValues != null) {
-                return qualify(global.namespace, symbol.name);
+        if (symbol.kind == SymbolKind.GLOBAL) {
+            if (symbol.literalBytes != null || symbol.literalValues != null) {
+                return qualify(symbol.namespace, symbol.name);
             }
 
-            return qualify(global.namespace, "VAR_" + symbol.name);
+            return qualify(symbol.namespace, "VAR_" + symbol.name);
         }
 
         return "VAR_" + symbol.name;
     }
 
-    String emitFunctionName(FunctionSymbol symbol) {
+    String emitFunctionName(Symbol symbol) {
 
-        if (symbol instanceof MethodSymbol method) {
-            return qualify(method.owner.namespace, method.emittedLocalName());
+        if (symbol.kind == SymbolKind.METHOD) {
+            return qualify(symbol.owner.namespace, symbol.emittedLocalName());
         }
 
         return qualify(symbol.namespace, symbol.emittedLocalName());

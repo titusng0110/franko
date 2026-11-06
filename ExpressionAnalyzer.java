@@ -13,16 +13,16 @@ public final class ExpressionAnalyzer {
 
     private ArrayLowerer arrayLowerer = null;
 
-    private Function<TypeNode, SemanticType> typeResolver = null;
+    private Function<AstNode, SastType> typeResolver = null;
 
-    private static final SemanticType FALLBACK_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
+    private static final SastType FALLBACK_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.INT32);
 
-    private static final SemanticType BOOL_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.UINT8);
+    private static final SastType BOOL_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.UINT8);
 
-    private static final SemanticType NULL_TYPE =
-            new SemanticNullType();
+    private static final SastType NULL_TYPE =
+            SastType.nullType();
 
     private static final Set<String> BOOL_RESULT_OPS = Set.of(
             "==", "!=", "<", ">", "<=", ">=", "&&", "||"
@@ -48,7 +48,7 @@ public final class ExpressionAnalyzer {
 
     void wire(
             ArrayLowerer arrayLowerer,
-            Function<TypeNode, SemanticType> typeResolver,
+            Function<AstNode, SastType> typeResolver,
             ArrayLiteralLowerer arrayLiteralLowerer,
             CompileTimeIntrinsics staticIntrinsics
     ) {
@@ -59,26 +59,26 @@ public final class ExpressionAnalyzer {
     }
 
     public SemanticExprNode analyzeExprWithExpectedType(
-            ASTNode node,
-            SemanticType expectedType
+            AstNode node,
+            SastType expectedType
     ) {
-        if (node instanceof ArrayLiteralNode lit) {
-            return lowerArrayLiteral(lit, expectedType);
+        if (node.kind == AstKind.ARRAY_LITERAL) {
+            return lowerArrayLiteral(node, expectedType);
         }
 
         return analyzeValueExpr(node);
     }
 
-    public SemanticExprNode analyzeValueExpr(ASTNode node) {
+    public SemanticExprNode analyzeValueExpr(AstNode node) {
         return analyzeExpr(node, true);
     }
 
-    public SemanticExprNode analyzeExpr(ASTNode node) {
+    public SemanticExprNode analyzeExpr(AstNode node) {
         return analyzeExpr(node, false);
     }
 
     private SemanticExprNode analyzeExpr(
-            ASTNode node,
+            AstNode node,
             boolean allowAggregateLiteral
     ) {
         ctx.diagnostics().push(node.span);
@@ -90,10 +90,11 @@ public final class ExpressionAnalyzer {
     }
 
     private SemanticExprNode analyzeExprInner(
-            ASTNode node,
+            AstNode node,
             boolean allowAggregateLiteral
     ) {
-        if (node instanceof AggregateLiteralNode lit) {
+        if (node.kind == AstKind.AGGREGATE_LITERAL) {
+            AstNode lit = node;
             if (!allowAggregateLiteral) {
                 ctx.error("Aggregate literals are only valid as assignment "
                         + "values, return values, call arguments, or aggregate "
@@ -103,21 +104,23 @@ public final class ExpressionAnalyzer {
             return lowerAggregateLiteral(lit);
         }
 
-        if (node instanceof ArrayLiteralNode lit) {
-            return lowerArrayLiteral(lit, null);
+        if (node.kind == AstKind.ARRAY_LITERAL) {
+            return lowerArrayLiteral(node, null);
         }
 
-        if (node instanceof IntNode n) {
-            BigInteger val = constEval.parseIntegerLiteralSafe(n.value);
-            return new SemanticIntLiteralNode(n.span, FALLBACK_TYPE, val, n.value);
+        if (node.kind == AstKind.INT) {
+            AstNode n = node;
+            BigInteger val = constEval.parseIntegerLiteralSafe(n.text);
+            return new SemanticIntLiteralNode(n.span, FALLBACK_TYPE, val, n.text);
         }
 
-        if (node instanceof NullNode) {
+        if (node.kind == AstKind.NULL) {
             return new SemanticNullLiteralNode(node.span, NULL_TYPE);
         }
 
-        if (node instanceof VarNode n) {
-            VariableSymbol sym = ctx.resolve(n.name);
+        if (node.kind == AstKind.VAR) {
+            AstNode n = node;
+            Symbol sym = ctx.resolve(n.name);
 
             if (sym == null) {
                 if ("self".equals(n.name)) {
@@ -128,17 +131,18 @@ public final class ExpressionAnalyzer {
                     ctx.error("Undeclared variable '" + n.name + "'");
                 }
 
-                sym = new VariableSymbol(null, n.name, FALLBACK_TYPE);
+                sym = Symbol.variable(null, n.name, FALLBACK_TYPE);
             }
 
             return new SemanticVarExprNode(node.span, sym.type, sym);
         }
 
-        if (node instanceof QualifiedNameNode n) {
-            return analyzeQualifiedNameExpr(n);
+        if (node.kind == AstKind.QUALIFIED_NAME) {
+            return analyzeQualifiedNameExpr(node);
         }
 
-        if (node instanceof CompileTimeCallNode n) {
+        if (node.kind == AstKind.COMPILE_TIME_CALL) {
+            AstNode n = node;
             if (staticIntrinsics == null) {
                 ctx.error("Internal compiler error: no compile-time "
                         + "intrinsics wired into ExpressionAnalyzer");
@@ -153,28 +157,29 @@ public final class ExpressionAnalyzer {
             return staticIntrinsics.analyzeCall(n);
         }
 
-        if (node instanceof CompileTimeNameNode n) {
+        if (node.kind == AstKind.COMPILE_TIME_NAME) {
             if (staticIntrinsics == null) {
                 ctx.error("Internal compiler error: no compile-time "
                         + "intrinsics wired into ExpressionAnalyzer");
                 return new SemanticIntLiteralNode(
-                        n.span,
+                        node.span,
                         FALLBACK_TYPE,
                         BigInteger.ZERO,
                         "0"
                 );
             }
 
-            return staticIntrinsics.analyzeName(n);
+            return staticIntrinsics.analyzeName(node);
         }
 
-        if (node instanceof UnaryOpNode n) {
+        if (node.kind == AstKind.UNARY) {
+            AstNode n = node;
             SemanticExprNode expr = analyzeExpr(n.expr);
 
-            SemanticType type = n.op.equals("!") ? BOOL_TYPE : expr.type;
+            SastType type = n.text.equals("!") ? BOOL_TYPE : expr.type;
 
             BigInteger folded = constEval.foldUnary(
-                    n.op,
+                    n.text,
                     expr.constantValue
             );
 
@@ -182,29 +187,30 @@ public final class ExpressionAnalyzer {
                     node.span,
                     type,
                     folded,
-                    n.op,
+                    n.text,
                     expr
             );
         }
 
-        if (node instanceof BinOpNode n) {
+        if (node.kind == AstKind.BINARY) {
+            AstNode n = node;
             SemanticExprNode left = analyzeExpr(n.left);
             SemanticExprNode right = analyzeExpr(n.right);
 
-            if (OperatorMethods.isComparisonOperator(n.op)
-                    && (left.type instanceof SemanticStructType
-                        || right.type instanceof SemanticStructType)) {
-                return lowerStructComparison(n.op, left, right, node.span);
+            if (OperatorMethods.isComparisonOperator(n.text)
+                    && (left.type.kind == SastTypeKind.STRUCT
+                        || right.type.kind == SastTypeKind.STRUCT)) {
+                return lowerStructComparison(n.text, left, right, node.span);
             }
 
-            SemanticType type = inferBinaryResultType(
-                    n.op,
+            SastType type = inferBinaryResultType(
+                    n.text,
                     left,
                     right
             );
 
             BigInteger folded = constEval.foldBinary(
-                    n.op,
+                    n.text,
                     left.constantValue,
                     right.constantValue
             );
@@ -213,17 +219,18 @@ public final class ExpressionAnalyzer {
                     node.span,
                     type,
                     folded,
-                    n.op,
+                    n.text,
                     left,
                     right
             );
         }
 
-        if (node instanceof ArrayAccessNode n) {
+        if (node.kind == AstKind.ARRAY_ACCESS) {
+            AstNode n = node;
             SemanticExprNode target = analyzeExpr(n.target);
             SemanticExprNode index = analyzeExpr(n.index);
 
-            SemanticType elemType = extractElementType(target.type);
+            SastType elemType = extractElementType(target.type);
 
             return new SemanticArrayAccessNode(
                     node.span,
@@ -233,21 +240,22 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (node instanceof CallNode n) {
-            return analyzeCallExpr(n);
+        if (node.kind == AstKind.CALL) {
+            return analyzeCallExpr(node);
         }
 
-        if (node instanceof MemberAccessNode n) {
+        if (node.kind == AstKind.MEMBER_ACCESS) {
+            AstNode n = node;
             SemanticExprNode target = analyzeExpr(n.target);
 
-            if (target.type instanceof SemanticTupleType tupleType) {
-                FieldSymbol field = tupleType.resolveField(n.memberName);
+            if (target.type.kind == SastTypeKind.TUPLE) {
+                FieldSymbol field = target.type.resolveField(n.name);
 
                 if (field == null) {
                     ctx.error("Tuple type '"
-                            + tupleType.describe()
+                            + target.type.describe()
                             + "' has no element named '"
-                            + n.memberName
+                            + n.name
                             + "'");
 
                     return new SemanticIntLiteralNode(
@@ -266,9 +274,9 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            if (!(target.type instanceof SemanticStructType structType)) {
+            if (!(target.type.kind == SastTypeKind.STRUCT)) {
                 ctx.error("Member access '"
-                        + n.memberName
+                        + n.name
                         + "' is only valid on struct or tuple values, got type "
                         + target.type.describe());
 
@@ -280,15 +288,15 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            FieldSymbol field = structType.structSymbol.resolveField(
-                    n.memberName
+            FieldSymbol field = target.type.structSymbol.resolveField(
+                    n.name
             );
 
             if (field == null) {
                 ctx.error("Struct '"
-                        + structType.structSymbol.qualifiedName()
+                        + target.type.structSymbol.qualifiedName()
                         + "' has no field named '"
-                        + n.memberName
+                        + n.name
                         + "'");
 
                 return new SemanticIntLiteralNode(
@@ -307,8 +315,9 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (node instanceof GetPtrNode n) {
-            String intrinsicName = switch (n.kind) {
+        if (node.kind == AstKind.GET_PTR) {
+            AstNode n = node;
+            String intrinsicName = switch (n.permission) {
                 case OWNER -> "getptr";
                 case MUTABLE -> "getmview";
                 case READ_ONLY -> "getview";
@@ -321,19 +330,20 @@ public final class ExpressionAnalyzer {
 
             return new SemanticGetPtrNode(
                     node.span,
-                    pointerTypeFor(n.kind, target.type),
+                    pointerTypeFor(n.permission, target.type),
                     target
             );
         }
 
-        if (node instanceof DerefNode n) {
+        if (node.kind == AstKind.DEREF) {
+            AstNode n = node;
             SemanticExprNode expr = analyzeExpr(n.expr);
 
-            SemanticType refType = FALLBACK_TYPE;
+            SastType refType = FALLBACK_TYPE;
 
-            if (expr.type instanceof SemanticPtrType ptrT) {
-                refType = ptrT.referencedType;
-            } else if (expr.type instanceof SemanticNullType) {
+            if (expr.type.kind == SastTypeKind.PTR) {
+                refType = expr.type.referencedType;
+            } else if (expr.type.kind == SastTypeKind.NULL) {
                 ctx.error("Cannot dereference null");
             } else {
                 ctx.error("Cannot dereference non-pointer type");
@@ -342,13 +352,14 @@ public final class ExpressionAnalyzer {
             return new SemanticDerefNode(node.span, refType, expr);
         }
 
-        if (node instanceof CastNode n) {
-            SemanticType targetType = resolveTypeNode(n.target);
+        if (node.kind == AstKind.CAST) {
+            AstNode n = node;
+            SastType targetType = resolveAstNode(n.type);
             SemanticExprNode expr = analyzeExpr(n.expr);
 
             String syntax = n.unsafe ? "unsafe_cast" : "cast";
 
-            if (expr.type instanceof SemanticVoidType) {
+            if (expr.type.kind == SastTypeKind.VOID) {
                 ctx.error("Operand of '" + syntax + "' cannot have void type");
 
                 return new SemanticCastExprNode(
@@ -360,8 +371,8 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            boolean targetIsEnum = targetType instanceof SemanticEnumType;
-            boolean sourceIsEnum = expr.type instanceof SemanticEnumType;
+            boolean targetIsEnum = targetType.kind == SastTypeKind.ENUM;
+            boolean sourceIsEnum = expr.type.kind == SastTypeKind.ENUM;
 
             if (targetIsEnum || sourceIsEnum) {
                 return new SemanticCastExprNode(
@@ -374,8 +385,8 @@ public final class ExpressionAnalyzer {
             }
 
             if (n.unsafe
-                    && (targetType instanceof SemanticPrimitiveType)
-                    && !(expr.type instanceof SemanticPrimitiveType)) {
+                    && (targetType.kind == SastTypeKind.PRIMITIVE)
+                    && !(expr.type.kind == SastTypeKind.PRIMITIVE)) {
                 ctx.error("Operand of 'unsafe_cast' must be an integer "
                         + "expression, got " + expr.type.describe());
 
@@ -388,9 +399,9 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            if (targetType instanceof SemanticPrimitiveType targetPrimitive
-                    && expr.type instanceof SemanticPrimitiveType sourcePrimitive) {
-                if (sourcePrimitive.kind == targetPrimitive.kind) {
+            if (targetType.kind == SastTypeKind.PRIMITIVE
+                    && expr.type.kind == SastTypeKind.PRIMITIVE) {
+                if (expr.type.primitive == targetType.primitive) {
                     return expr;
                 }
 
@@ -412,7 +423,7 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (node instanceof StringLiteralNode) {
+        if (node.kind == AstKind.STRING_LITERAL) {
             ctx.error("String literal is not a valid expression here; a "
                     + "string literal is a view<[byte, N]> value");
 
@@ -425,7 +436,7 @@ public final class ExpressionAnalyzer {
         }
 
         ctx.error("Unrecognized expression node: "
-                + node.getClass().getSimpleName());
+                + node.kind.legacyClassName());
 
         return new SemanticIntLiteralNode(
                 node.span,
@@ -436,8 +447,8 @@ public final class ExpressionAnalyzer {
     }
 
     private SemanticExprNode lowerArrayLiteral(
-            ArrayLiteralNode lit,
-            SemanticType expectedType
+            AstNode lit,
+            SastType expectedType
     ) {
         if (arrayLiteralLowerer == null) {
             ctx.error("Internal compiler error: no array literal lowerer "
@@ -454,16 +465,16 @@ public final class ExpressionAnalyzer {
         return arrayLiteralLowerer.lower(lit, expectedType);
     }
 
-    private SemanticExprNode lowerAggregateLiteral(AggregateLiteralNode lit) {
-        SemanticType literalType = resolveTypeNode(lit.type);
+    private SemanticExprNode lowerAggregateLiteral(AstNode lit) {
+        SastType literalType = resolveAstNode(lit.type);
 
-        if (literalType instanceof SemanticStructType structType) {
-            StructSymbol owner = structType.structSymbol;
+        if (literalType.kind == SastTypeKind.STRUCT) {
+            StructSymbol owner = literalType.structSymbol;
             List<SemanticAggregateFieldInit> fields = new ArrayList<>();
             Set<String> seen = new HashSet<>();
             boolean reportedPositional = false;
 
-            for (FieldInitNode init : lit.fields) {
+            for (AstNode init : lit.fields) {
                 if (init.positional) {
                     if (!reportedPositional) {
                         reportedPositional = true;
@@ -511,13 +522,13 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (literalType instanceof SemanticTupleType tupleType) {
+        if (literalType.kind == SastTypeKind.TUPLE) {
             requireUniformTupleLiteralNames(lit);
 
             boolean anyPositional = false;
             boolean anyNamed = false;
 
-            for (FieldInitNode init : lit.fields) {
+            for (AstNode init : lit.fields) {
                 if (init.positional) {
                     anyPositional = true;
                 } else {
@@ -538,7 +549,7 @@ public final class ExpressionAnalyzer {
             List<SemanticAggregateFieldInit> fields = new ArrayList<>();
             Set<String> seen = new HashSet<>();
 
-            for (FieldInitNode init : lit.fields) {
+            for (AstNode init : lit.fields) {
                 FieldSymbol field;
 
                 if (init.positional) {
@@ -558,11 +569,11 @@ public final class ExpressionAnalyzer {
                         continue;
                     }
 
-                    if (position >= tupleType.fields.size()) {
+                    if (position >= literalType.fields.size()) {
                         if (!reportedTooMany) {
                             reportedTooMany = true;
                             ctx.error("Positional initializer for tuple type '"
-                                    + tupleType.describe()
+                                    + literalType.describe()
                                     + "' has more entries than the tuple has "
                                     + "elements");
                         }
@@ -575,14 +586,14 @@ public final class ExpressionAnalyzer {
                         continue;
                     }
 
-                    field = tupleType.fields.get(position);
+                    field = literalType.fields.get(position);
                     position++;
                 } else {
-                    field = tupleType.resolveField(init.name);
+                    field = literalType.resolveField(init.name);
 
                     if (field == null) {
                         ctx.error("Tuple type '"
-                                + tupleType.describe()
+                                + literalType.describe()
                                 + "' has no element named '"
                                 + init.name
                                 + "'");
@@ -598,7 +609,7 @@ public final class ExpressionAnalyzer {
                     ctx.error("Duplicate initializer for tuple element '"
                             + field.name
                             + "' of tuple type '"
-                            + tupleType.describe()
+                            + literalType.describe()
                             + "'");
                     analyzeExprWithExpectedType(init.value, field.type);
                     continue;
@@ -619,21 +630,22 @@ public final class ExpressionAnalyzer {
 
         ctx.error("Aggregate literal requires a struct or tuple type");
 
-        for (FieldInitNode init : lit.fields) {
+        for (AstNode init : lit.fields) {
             analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
         }
 
         return operatorFallbackLiteral(lit.span);
     }
 
-    private void requireUniformTupleLiteralNames(AggregateLiteralNode lit) {
-        if (!(lit.type instanceof TupleTypeNode tuple)) {
+    private void requireUniformTupleLiteralNames(AstNode lit) {
+        if (lit.type == null || lit.type.kind != AstKind.TUPLE_TYPE) {
             return;
         }
 
+        AstNode tuple = lit.type;
         int named = 0;
 
-        for (TupleTypeElementNode element : tuple.elements) {
+        for (AstNode element : tuple.elements) {
             if (element.name != null) {
                 named++;
             }
@@ -645,12 +657,14 @@ public final class ExpressionAnalyzer {
         }
     }
 
-    private boolean isAllUnnamedTupleLiteral(AggregateLiteralNode lit) {
-        if (!(lit.type instanceof TupleTypeNode tuple)) {
+    private boolean isAllUnnamedTupleLiteral(AstNode lit) {
+        if (lit.type == null || lit.type.kind != AstKind.TUPLE_TYPE) {
             return false;
         }
 
-        for (TupleTypeElementNode element : tuple.elements) {
+        AstNode tuple = lit.type;
+
+        for (AstNode element : tuple.elements) {
             if (element.name != null) {
                 return false;
             }
@@ -659,7 +673,7 @@ public final class ExpressionAnalyzer {
         return true;
     }
 
-    private SemanticType resolveTypeNode(TypeNode node) {
+    private SastType resolveAstNode(AstNode node) {
         if (typeResolver == null) {
             ctx.error("Internal compiler error: no type resolver wired into "
                     + "ExpressionAnalyzer");
@@ -669,24 +683,24 @@ public final class ExpressionAnalyzer {
         return typeResolver.apply(node);
     }
 
-    private static SemanticType pointerTypeFor(
+    private static SastType pointerTypeFor(
             PtrPermission kind,
-            SemanticType referencedType
+            SastType referencedType
     ) {
         return switch (kind) {
-            case OWNER -> new SemanticPtrType(referencedType);
-            case MUTABLE -> new SemanticMViewType(referencedType);
-            case READ_ONLY -> new SemanticViewType(referencedType);
+            case OWNER -> SastType.ptr(referencedType);
+            case MUTABLE -> SastType.mview(referencedType);
+            case READ_ONLY -> SastType.view(referencedType);
         };
     }
 
     public BigInteger preEvaluatedConstValue(
-            ASTNode expr,
+            AstNode expr,
             String roleDescription
     ) {
-        if (expr instanceof IntNode n) {
+        if (expr != null && expr.kind == AstKind.INT) {
             BigInteger parsed =
-                    ConstExpressionEvaluator.parseIntegerLiteralPure(n.value);
+                    ConstExpressionEvaluator.parseIntegerLiteralPure(expr.text);
 
             if (parsed != null) {
                 return parsed;
@@ -698,7 +712,7 @@ public final class ExpressionAnalyzer {
     }
 
     public SemanticExprNode analyzeRequiredLValueExpr(
-            ASTNode node,
+            AstNode node,
             String roleDescription
     ) {
         SemanticExprNode expr = analyzeExpr(node);
@@ -735,13 +749,13 @@ public final class ExpressionAnalyzer {
         }
     }
 
-    public boolean isArrayType(SemanticType type) {
-        return type instanceof SemanticDynamicArrayType
-                || type instanceof SemanticStaticArrayType;
+    public boolean isArrayType(SastType type) {
+        return type.kind == SastTypeKind.DYNAMIC_ARRAY
+                || type.kind == SastTypeKind.STATIC_ARRAY;
     }
 
-    public boolean isDynamicArrayType(SemanticType type) {
-        return type instanceof SemanticDynamicArrayType;
+    public boolean isDynamicArrayType(SastType type) {
+        return type.kind == SastTypeKind.DYNAMIC_ARRAY;
     }
 
     private boolean isValidStorageBackedLValue(SemanticExprNode expr) {
@@ -770,9 +784,9 @@ public final class ExpressionAnalyzer {
             SemanticExprNode right,
             SourceSpan span
     ) {
-        if (!(left.type instanceof SemanticStructType leftStruct)
-                || !(right.type instanceof SemanticStructType rightStruct)
-                || leftStruct.structSymbol != rightStruct.structSymbol) {
+        if (left.type.kind != SastTypeKind.STRUCT
+                || right.type.kind != SastTypeKind.STRUCT
+                || left.type.structSymbol != right.type.structSymbol) {
             ctx.error("Cannot compare values of type '"
                     + left.type.describe()
                     + "' and type '"
@@ -783,13 +797,13 @@ public final class ExpressionAnalyzer {
             return operatorFallbackLiteral(span);
         }
 
-        StructSymbol owner = leftStruct.structSymbol;
+        StructSymbol owner = left.type.structSymbol;
         String methodName = OperatorMethods.comparisonMethodName(op);
 
         SemanticExprNode leftView = makeOperatorView(left, span);
         SemanticExprNode rightView = makeOperatorView(right, span);
 
-        MethodSymbol method = ctx.resolveMethodWithLiterals(
+        Symbol method = ctx.resolveMethodWithLiterals(
                 owner,
                 methodName,
                 List.of(CallArg.lowered(rightView))
@@ -823,7 +837,7 @@ public final class ExpressionAnalyzer {
             SemanticExprNode value,
             SourceSpan span
     ) {
-        SemanticType viewType = new SemanticViewType(value.type);
+        SastType viewType = SastType.view(value.type);
         boolean temporary = !isValidStorageBackedLValue(value);
 
         return new SemanticGetPtrNode(span, viewType, value, temporary);
@@ -868,10 +882,10 @@ public final class ExpressionAnalyzer {
     public OperatorAssignmentLowering tryLowerOperatorAssignment(
             SemanticExprNode target,
             String op,
-            ASTNode rawValue,
+            AstNode rawValue,
             SourceSpan span
     ) {
-        if (!(target.type instanceof SemanticStructType structType)) {
+        if (!(target.type.kind == SastTypeKind.STRUCT)) {
             return null;
         }
 
@@ -881,7 +895,7 @@ public final class ExpressionAnalyzer {
             return null;
         }
 
-        StructSymbol owner = structType.structSymbol;
+        StructSymbol owner = target.type.structSymbol;
 
         if (!owner.hasMethod(methodName)) {
             if ("=".equals(op)) {
@@ -904,12 +918,12 @@ public final class ExpressionAnalyzer {
         SemanticExprNode loweredValue = null;
         CallArg arg;
 
-        if (rawValue instanceof ArrayLiteralNode literal) {
-            arg = CallArg.operatorLiteral(literal);
+        if (rawValue != null && rawValue.kind == AstKind.ARRAY_LITERAL) {
+            arg = CallArg.operatorLiteral(rawValue);
         } else {
             loweredValue = analyzeValueExpr(rawValue);
 
-            if (loweredValue.type instanceof SemanticVoidType) {
+            if (loweredValue.type.kind == SastTypeKind.VOID) {
                 ctx.error("Right-hand side of operator '"
                         + op
                         + "' cannot have void type");
@@ -919,7 +933,7 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            if (loweredValue.type instanceof SemanticNullType) {
+            if (loweredValue.type.kind == SastTypeKind.NULL) {
                 if ("=".equals(op)) {
                     return OperatorAssignmentLowering.fallback(
                             loweredValue
@@ -940,7 +954,7 @@ public final class ExpressionAnalyzer {
             arg = CallArg.operatorLowered(loweredValue);
         }
 
-        MethodSymbol method = ctx.resolveOperatorMethodWithLiterals(
+        Symbol method = ctx.resolveOperatorMethodWithLiterals(
                 owner,
                 methodName,
                 arg
@@ -970,15 +984,15 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        SemanticType parameterType = method.parameters.get(1).type;
+        SastType parameterType = method.parameters.get(1).type;
         SemanticExprNode userArg;
 
         if (arg.isLiteral()) {
-            SemanticType inner =
-                    ((SemanticPtrType) parameterType).referencedType;
+            SastType inner =
+                    ((SastType) parameterType).referencedType;
 
             SemanticExprNode literalValue = lowerArrayLiteral(
-                    (ArrayLiteralNode) rawValue,
+                    (AstNode) rawValue,
                     inner
             );
 
@@ -999,11 +1013,11 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        SemanticType selfType = new SemanticPtrType(target.type);
+        SastType selfType = SastType.ptr(target.type);
 
         if (!method.parameters.isEmpty()
-                && method.parameters.get(0).type instanceof SemanticPtrType declaredSelf) {
-            selfType = declaredSelf;
+                && method.parameters.get(0).type.kind == SastTypeKind.PTR) {
+            selfType = method.parameters.get(0).type;
         }
 
         SemanticGetPtrNode selfArg = new SemanticGetPtrNode(
@@ -1031,7 +1045,7 @@ public final class ExpressionAnalyzer {
         );
     }
 
-    private SemanticExprNode analyzeQualifiedNameExpr(QualifiedNameNode q) {
+    private SemanticExprNode analyzeQualifiedNameExpr(AstNode q) {
         SemanticExprNode enumVariant = tryAnalyzeEnumVariant(q);
 
         if (enumVariant != null) {
@@ -1039,9 +1053,9 @@ public final class ExpressionAnalyzer {
         }
 
         List<String> namespaceSegments =
-                q.segments.subList(0, q.segments.size() - 1);
-        String name = q.segments.get(q.segments.size() - 1);
-        String qualified = String.join("::", q.segments);
+                q.names.subList(0, q.names.size() - 1);
+        String name = q.names.get(q.names.size() - 1);
+        String qualified = String.join("::", q.names);
         String namespacePath = String.join("::", namespaceSegments);
 
         NamespaceSymbol namespace = ctx.resolveNamespace(namespaceSegments);
@@ -1057,7 +1071,7 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        VariableSymbol sym = ctx.resolveGlobalVarIn(namespace, name);
+        Symbol sym = ctx.resolveGlobalVarIn(namespace, name);
 
         if (sym == null) {
             if (ctx.hasAnyFunctionNamedIn(namespace, name)) {
@@ -1070,29 +1084,29 @@ public final class ExpressionAnalyzer {
                         + "'");
             }
 
-            sym = new GlobalVariableSymbol(namespace.name, name, FALLBACK_TYPE);
+            sym = Symbol.global(namespace.name, name, FALLBACK_TYPE);
         }
 
-        if (sym instanceof GlobalVariableSymbol global
-                && global.compileTimeConstantValue != null) {
+        if (sym.kind == SymbolKind.GLOBAL
+                && sym.compileTimeConstantValue != null) {
             return new SemanticIntLiteralNode(
                     q.span,
                     sym.type,
-                    global.compileTimeConstantValue,
-                    global.compileTimeConstantValue.toString(10)
+                    sym.compileTimeConstantValue,
+                    sym.compileTimeConstantValue.toString(10)
             );
         }
 
         return new SemanticVarExprNode(q.span, sym.type, sym);
     }
 
-    private SemanticExprNode tryAnalyzeEnumVariant(QualifiedNameNode q) {
-        if (q.segments.size() < 2) {
+    private SemanticExprNode tryAnalyzeEnumVariant(AstNode q) {
+        if (q.names.size() < 2) {
             return null;
         }
 
-        List<String> enumPath = q.segments.subList(0, q.segments.size() - 1);
-        String variantName = q.segments.get(q.segments.size() - 1);
+        List<String> enumPath = q.names.subList(0, q.names.size() - 1);
+        String variantName = q.names.get(q.names.size() - 1);
         EnumSymbol enumSymbol = ctx.resolveEnumReference(enumPath);
 
         if (enumSymbol == null) {
@@ -1119,12 +1133,12 @@ public final class ExpressionAnalyzer {
         return new SemanticEnumVariantNode(q.span, enumSymbol, variant);
     }
 
-    private List<CallArg> lowerCallArgs(List<ASTNode> rawArgs) {
+    private List<CallArg> lowerCallArgs(List<AstNode> rawArgs) {
         List<CallArg> out = new ArrayList<>();
 
-        for (ASTNode arg : rawArgs) {
-            if (arg instanceof ArrayLiteralNode lit) {
-                out.add(CallArg.literal(lit));
+        for (AstNode arg : rawArgs) {
+            if (arg.kind == AstKind.ARRAY_LITERAL) {
+                out.add(CallArg.literal(arg));
             } else {
                 out.add(CallArg.lowered(analyzeValueExpr(arg)));
             }
@@ -1135,7 +1149,7 @@ public final class ExpressionAnalyzer {
 
     private List<SemanticExprNode> finalizeCallArgs(
             List<CallArg> callArgs,
-            List<SemanticType> parameterTypes
+            List<SastType> parameterTypes
     ) {
         List<SemanticExprNode> out = new ArrayList<>();
 
@@ -1147,7 +1161,7 @@ public final class ExpressionAnalyzer {
                 continue;
             }
 
-            SemanticType context = parameterTypes != null
+            SastType context = parameterTypes != null
                     && i < parameterTypes.size()
                     ? parameterTypes.get(i)
                     : null;
@@ -1158,8 +1172,8 @@ public final class ExpressionAnalyzer {
         return out;
     }
 
-    private static List<SemanticType> callArgTypes(List<SemanticExprNode> args) {
-        List<SemanticType> out = new ArrayList<>();
+    private static List<SastType> callArgTypes(List<SemanticExprNode> args) {
+        List<SastType> out = new ArrayList<>();
 
         for (SemanticExprNode arg : args) {
             out.add(arg == null ? null : arg.type);
@@ -1168,7 +1182,7 @@ public final class ExpressionAnalyzer {
         return out;
     }
 
-    private SemanticExprNode analyzeCallExpr(CallNode call) {
+    private SemanticExprNode analyzeCallExpr(AstNode call) {
         if (arrayLowerer != null) {
             SemanticArrayIntrinsicCallNode intrinsic =
                     arrayLowerer.tryLowerIntrinsicCall(call);
@@ -1187,22 +1201,23 @@ public final class ExpressionAnalyzer {
             }
         }
 
-        if (call.callee instanceof VarNode calleeVar) {
+        if (call.callee.kind == AstKind.VAR) {
+            AstNode calleeVar = call.callee;
             List<CallArg> callArgs = lowerCallArgs(call.args);
 
-            FunctionSymbol fn = ctx.resolveFunctionWithLiterals(
+            Symbol fn = ctx.resolveFunctionWithLiterals(
                     calleeVar.name,
                     callArgs
             );
 
-            List<SemanticType> parameterTypes =
+            List<SastType> parameterTypes =
                     fn == null ? null : fn.parameterTypes();
 
             List<SemanticExprNode> args =
                     finalizeCallArgs(callArgs, parameterTypes);
 
             if (fn == null) {
-                FunctionSymbol legacy = ctx.resolveFunction(
+                Symbol legacy = ctx.resolveFunction(
                         calleeVar.name,
                         args
                 );
@@ -1220,7 +1235,7 @@ public final class ExpressionAnalyzer {
                     }
                 }
 
-                FunctionSymbol fallbackFn = new FunctionSymbol(
+                Symbol fallbackFn = Symbol.function(
                         null,
                         calleeVar.name,
                         List.of(),
@@ -1244,14 +1259,15 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (call.callee instanceof QualifiedNameNode calleeQ) {
+        if (call.callee.kind == AstKind.QUALIFIED_NAME) {
+            AstNode calleeQ = call.callee;
             List<CallArg> callArgs = lowerCallArgs(call.args);
 
-            List<String> namespaceSegments = calleeQ.segments.subList(
-                    0, calleeQ.segments.size() - 1);
+            List<String> namespaceSegments = calleeQ.names.subList(
+                    0, calleeQ.names.size() - 1);
             String calleeName =
-                    calleeQ.segments.get(calleeQ.segments.size() - 1);
-            String qualifiedCallee = String.join("::", calleeQ.segments);
+                    calleeQ.names.get(calleeQ.names.size() - 1);
+            String qualifiedCallee = String.join("::", calleeQ.names);
 
             NamespaceSymbol namespace =
                     ctx.resolveNamespace(namespaceSegments);
@@ -1269,20 +1285,20 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            FunctionSymbol fn = ctx.resolveFunctionInWithLiterals(
+            Symbol fn = ctx.resolveFunctionInWithLiterals(
                     namespace,
                     calleeName,
                     callArgs
             );
 
-            List<SemanticType> parameterTypes =
+            List<SastType> parameterTypes =
                     fn == null ? null : fn.parameterTypes();
 
             List<SemanticExprNode> args =
                     finalizeCallArgs(callArgs, parameterTypes);
 
             if (fn == null) {
-                FunctionSymbol legacy = ctx.resolveFunctionIn(
+                Symbol legacy = ctx.resolveFunctionIn(
                         namespace,
                         calleeName,
                         args
@@ -1296,7 +1312,7 @@ public final class ExpressionAnalyzer {
                             + "'");
                 }
 
-                FunctionSymbol fallbackFn = new FunctionSymbol(
+                Symbol fallbackFn = Symbol.function(
                         namespace.name,
                         calleeName,
                         List.of(),
@@ -1320,8 +1336,8 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (call.callee instanceof MemberAccessNode mac) {
-            return analyzeMethodCallExpr(call, mac);
+        if (call.callee.kind == AstKind.MEMBER_ACCESS) {
+            return analyzeMethodCallExpr(call, call.callee);
         }
 
         ctx.error("Unsupported call expression");
@@ -1335,14 +1351,14 @@ public final class ExpressionAnalyzer {
     }
 
     private SemanticExprNode analyzeMethodCallExpr(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         SemanticExprNode target = analyzeExpr(mac.target);
 
-        if (target.type instanceof SemanticTupleType) {
+        if (target.type.kind == SastTypeKind.TUPLE) {
             ctx.error("Method call '"
-                    + mac.memberName
+                    + mac.name
                     + "' is only valid on struct values; tuple values have"
                     + " no methods");
 
@@ -1354,19 +1370,19 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        if (!(target.type instanceof SemanticStructType structType)
-                || structType.structSymbol == null) {
-            if (target.type instanceof SemanticPtrType) {
+        if (!(target.type.kind == SastTypeKind.STRUCT)
+                || target.type.structSymbol == null) {
+            if (target.type.kind == SastTypeKind.PTR) {
                 ctx.error("Method call '"
-                        + mac.memberName
+                        + mac.name
                         + "' is only valid on struct values, got type "
                         + target.type.describe()
                         + "; use $(p)."
-                        + mac.memberName
+                        + mac.name
                         + "(...) for pointer receivers");
             } else {
                 ctx.error("Method call '"
-                        + mac.memberName
+                        + mac.name
                         + "' is only valid on struct values, got type "
                         + target.type.describe());
             }
@@ -1379,7 +1395,7 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        StructSymbol owner = structType.structSymbol;
+        StructSymbol owner = target.type.structSymbol;
 
         if (!isValidStorageBackedLValue(target)) {
             ctx.error("Method call receiver must be a storage-backed lvalue: "
@@ -1395,9 +1411,9 @@ public final class ExpressionAnalyzer {
 
         List<CallArg> callArgs = lowerCallArgs(call.args);
 
-        MethodSymbol method = ctx.resolveMethodWithLiterals(owner, mac.memberName, callArgs);
+        Symbol method = ctx.resolveMethodWithLiterals(owner, mac.name, callArgs);
 
-        List<SemanticType> userParameterTypes = null;
+        List<SastType> userParameterTypes = null;
 
         if (method != null) {
             userParameterTypes = new ArrayList<>();
@@ -1411,11 +1427,11 @@ public final class ExpressionAnalyzer {
                 finalizeCallArgs(callArgs, userParameterTypes);
 
         if (method == null) {
-            List<SemanticType> userArgTypes = callArgTypes(userArgs);
+            List<SastType> userArgTypes = callArgTypes(userArgs);
 
-            MethodSymbol legacy = ctx.resolveMethod(
+            Symbol legacy = ctx.resolveMethod(
                     owner,
-                    mac.memberName,
+                    mac.name,
                     userArgs
             );
 
@@ -1423,17 +1439,17 @@ public final class ExpressionAnalyzer {
                 ctx.error("No matching overload for method call '"
                         + owner.qualifiedName()
                         + "."
-                        + formatCallSignature(mac.memberName, userArgTypes)
+                        + formatCallSignature(mac.name, userArgTypes)
                         + "'");
             }
         }
 
-        SemanticType selfType = new SemanticPtrType(target.type);
+        SastType selfType = SastType.ptr(target.type);
 
         if (method != null
                 && !method.parameters.isEmpty()
-                && method.parameters.get(0).type instanceof SemanticPtrType declaredSelf) {
-            selfType = declaredSelf;
+                && method.parameters.get(0).type.kind == SastTypeKind.PTR) {
+            selfType = method.parameters.get(0).type;
         }
 
         SemanticGetPtrNode selfArg = new SemanticGetPtrNode(target.span, selfType, target);
@@ -1443,9 +1459,9 @@ public final class ExpressionAnalyzer {
         fullArgs.addAll(userArgs);
 
         if (method == null) {
-            MethodSymbol fallbackFn = new MethodSymbol(
+            Symbol fallbackFn = Symbol.method(
                     owner,
-                    mac.memberName,
+                    mac.name,
                     List.of(),
                     FALLBACK_TYPE,
                     false
@@ -1467,7 +1483,7 @@ public final class ExpressionAnalyzer {
         );
     }
 
-    private SemanticType inferBinaryResultType(
+    private SastType inferBinaryResultType(
             String op,
             SemanticExprNode left,
             SemanticExprNode right
@@ -1489,13 +1505,13 @@ public final class ExpressionAnalyzer {
         return left.type;
     }
 
-    private SemanticType extractElementType(SemanticType type) {
-        if (type instanceof SemanticDynamicArrayType d) {
-            return d.elementType;
+    private SastType extractElementType(SastType type) {
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            return type.elementType;
         }
 
-        if (type instanceof SemanticStaticArrayType s) {
-            return s.elementType;
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            return type.elementType;
         }
 
         ctx.error("Indexed expression is not an array");
@@ -1504,7 +1520,7 @@ public final class ExpressionAnalyzer {
 
     private String formatCallSignature(
             String name,
-            List<SemanticType> argTypes
+            List<SastType> argTypes
     ) {
         StringBuilder sb = new StringBuilder();
 
@@ -1513,7 +1529,7 @@ public final class ExpressionAnalyzer {
         for (int i = 0; i < argTypes.size(); i++) {
             if (i > 0) sb.append(", ");
 
-            SemanticType type = argTypes.get(i);
+            SastType type = argTypes.get(i);
             sb.append(type == null ? "<null>" : type.describe());
         }
 

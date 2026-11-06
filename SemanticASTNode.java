@@ -17,12 +17,12 @@ abstract class SemanticStmtNode extends SemanticASTNode {
 }
 
 abstract class SemanticExprNode extends SemanticASTNode {
-    public final SemanticType type;
+    public final SastType type;
     public final BigInteger constantValue;
 
     protected SemanticExprNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             BigInteger constantValue
     ) {
         super(span);
@@ -80,14 +80,14 @@ class SemanticExprStmtNode extends SemanticStmtNode {
 }
 
 class SemanticFunctionDeclNode extends SemanticASTNode {
-    public final FunctionSymbol symbol;
-    public final List<VariableSymbol> parameterVariables;
+    public final Symbol symbol;
+    public final List<Symbol> parameterVariables;
     public final SemanticBlockNode body;
 
     public SemanticFunctionDeclNode(
             SourceSpan span,
-            FunctionSymbol symbol,
-            List<VariableSymbol> parameterVariables,
+            Symbol symbol,
+            List<Symbol> parameterVariables,
             SemanticBlockNode body
     ) {
         super(span);
@@ -126,18 +126,18 @@ class SemanticEnumDeclNode extends SemanticASTNode {
 }
 
 class SemanticVarDeclNode extends SemanticStmtNode {
-    public final VariableSymbol symbol;
+    public final Symbol symbol;
     public final BigInteger foldedConstInitializer;
 
     public final SemanticExprNode staticInitializer;
 
-    public SemanticVarDeclNode(SourceSpan span, VariableSymbol symbol) {
+    public SemanticVarDeclNode(SourceSpan span, Symbol symbol) {
         this(span, symbol, null, null);
     }
 
     public SemanticVarDeclNode(
             SourceSpan span,
-            VariableSymbol symbol,
+            Symbol symbol,
             BigInteger foldedConstInitializer
     ) {
         this(span, symbol, foldedConstInitializer, null);
@@ -145,7 +145,7 @@ class SemanticVarDeclNode extends SemanticStmtNode {
 
     public SemanticVarDeclNode(
             SourceSpan span,
-            VariableSymbol symbol,
+            Symbol symbol,
             BigInteger foldedConstInitializer,
             SemanticExprNode staticInitializer
     ) {
@@ -258,12 +258,12 @@ class SemanticContinueNode extends SemanticStmtNode {
 }
 
 class SemanticReturnNode extends SemanticStmtNode {
-    public final FunctionSymbol function;
+    public final Symbol function;
     public final SemanticExprNode value;
 
     public SemanticReturnNode(
             SourceSpan span,
-            FunctionSymbol function,
+            Symbol function,
             SemanticExprNode value
     ) {
         super(span);
@@ -292,14 +292,14 @@ enum SemanticIntrinsicArgKind {
         return primitiveKind == null;
     }
 
-    public SemanticType primitiveType() {
+    public SastType primitiveType() {
         if (primitiveKind == null) {
             throw new IllegalStateException(
                     "pointer intrinsic argument has no primitive type"
             );
         }
 
-        return new SemanticPrimitiveType(primitiveKind);
+        return SastType.primitive(primitiveKind);
     }
 }
 
@@ -544,12 +544,12 @@ enum SemanticArrayIntrinsicKind {
         return null;
     }
 
-    public SemanticType returnType() {
+    public SastType returnType() {
         if (returnKind == null) {
-            return new SemanticVoidType();
+            return SastType.voidType();
         }
 
-        return new SemanticPrimitiveType(returnKind);
+        return SastType.primitive(returnKind);
     }
 
     public boolean returnsVoid() {
@@ -635,7 +635,7 @@ class SemanticArrayIntrinsicCallNode extends SemanticExprNode {
     }
 
     public boolean returnsVoid() {
-        return type instanceof SemanticVoidType;
+        return type.kind == SastTypeKind.VOID;
     }
 
     public boolean returnsStatus() {
@@ -673,7 +673,7 @@ class SemanticAggregateLiteralNode extends SemanticExprNode {
 
     public SemanticAggregateLiteralNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             List<SemanticAggregateFieldInit> fields
     ) {
         super(span, type, null);
@@ -691,7 +691,7 @@ class SemanticIntLiteralNode extends SemanticExprNode {
 
     public SemanticIntLiteralNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             BigInteger constantValue,
             String rawValue
     ) {
@@ -706,7 +706,7 @@ class SemanticIntLiteralNode extends SemanticExprNode {
 }
 
 class SemanticNullLiteralNode extends SemanticExprNode {
-    public SemanticNullLiteralNode(SourceSpan span, SemanticType type) {
+    public SemanticNullLiteralNode(SourceSpan span, SastType type) {
         super(span, type, null);
     }
 
@@ -718,12 +718,12 @@ class SemanticNullLiteralNode extends SemanticExprNode {
 
 
 class SemanticVarExprNode extends SemanticExprNode {
-    public final VariableSymbol symbol;
+    public final Symbol symbol;
 
     public SemanticVarExprNode(
             SourceSpan span,
-            SemanticType type,
-            VariableSymbol symbol
+            SastType type,
+            Symbol symbol
     ) {
         super(span, type, null);
         this.symbol = Objects.requireNonNull(symbol);
@@ -744,7 +744,7 @@ class SemanticEnumVariantNode extends SemanticExprNode {
             EnumSymbol enumSymbol,
             EnumVariant variant
     ) {
-        super(span, new SemanticEnumType(enumSymbol), null);
+        super(span, SastType.enumType(enumSymbol), null);
         this.enumSymbol = Objects.requireNonNull(enumSymbol);
         this.variant = Objects.requireNonNull(variant);
     }
@@ -761,7 +761,7 @@ class SemanticUnaryOpNode extends SemanticExprNode {
 
     public SemanticUnaryOpNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             BigInteger constantValue,
             String op,
             SemanticExprNode expr
@@ -784,7 +784,7 @@ class SemanticBinOpNode extends SemanticExprNode {
 
     public SemanticBinOpNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             BigInteger constantValue,
             String op,
             SemanticExprNode left,
@@ -808,7 +808,7 @@ class SemanticArrayAccessNode extends SemanticExprNode {
 
     public SemanticArrayAccessNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             SemanticExprNode target,
             SemanticExprNode index
     ) {
@@ -829,7 +829,7 @@ class SemanticMemberAccessNode extends SemanticExprNode {
 
     public SemanticMemberAccessNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             SemanticExprNode target,
             FieldSymbol field
     ) {
@@ -845,13 +845,13 @@ class SemanticMemberAccessNode extends SemanticExprNode {
 }
 
 class SemanticFunctionCallNode extends SemanticExprNode {
-    public final FunctionSymbol function;
+    public final Symbol function;
     public final List<SemanticExprNode> args;
 
     public SemanticFunctionCallNode(
             SourceSpan span,
-            SemanticType type,
-            FunctionSymbol function,
+            SastType type,
+            Symbol function,
             List<SemanticExprNode> args
     ) {
         super(span, type, null);
@@ -871,7 +871,7 @@ class SemanticGetPtrNode extends SemanticExprNode {
 
     public SemanticGetPtrNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             SemanticExprNode target
     ) {
         this(span, type, target, false);
@@ -879,7 +879,7 @@ class SemanticGetPtrNode extends SemanticExprNode {
 
     public SemanticGetPtrNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             SemanticExprNode target,
             boolean temporary
     ) {
@@ -899,7 +899,7 @@ class SemanticDerefNode extends SemanticExprNode {
 
     public SemanticDerefNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             SemanticExprNode expr
     ) {
         super(span, type, null);
@@ -918,7 +918,7 @@ class SemanticCastExprNode extends SemanticExprNode {
 
     public SemanticCastExprNode(
             SourceSpan span,
-            SemanticType type,
+            SastType type,
             BigInteger constantValue,
             SemanticExprNode expr,
             boolean checked

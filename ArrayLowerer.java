@@ -15,7 +15,7 @@ public final class ArrayLowerer {
         this.exprAnalyzer = Objects.requireNonNull(exprAnalyzer);
     }
 
-    public SemanticArrayIntrinsicCallNode tryLowerIntrinsicCall(ASTNode expr) {
+    public SemanticArrayIntrinsicCallNode tryLowerIntrinsicCall(AstNode expr) {
         ctx.diagnostics().push(expr.span);
         try {
             return tryLowerIntrinsicCallInner(expr);
@@ -24,51 +24,51 @@ public final class ArrayLowerer {
         }
     }
 
-    private SemanticArrayIntrinsicCallNode tryLowerIntrinsicCallInner(ASTNode expr) {
-        if (!(expr instanceof CallNode call)
-                || !(call.callee instanceof MemberAccessNode mac)) {
+    private SemanticArrayIntrinsicCallNode tryLowerIntrinsicCallInner(AstNode expr) {
+        if (expr == null || expr.kind != AstKind.CALL
+                || expr.callee == null || expr.callee.kind != AstKind.MEMBER_ACCESS) {
             return null;
         }
 
-        return tryLowerMemberIntrinsic(call, mac);
+        return tryLowerMemberIntrinsic(expr, expr.callee);
     }
 
     public boolean isArrayIntrinsicMemberName(String name) {
         return SemanticArrayIntrinsicKind.fromRuntimeName(name) != null;
     }
 
-    private boolean isAggregateReceiver(MemberAccessNode mac) {
+    private boolean isAggregateReceiver(AstNode mac) {
         SemanticExprNode target = exprAnalyzer.analyzeExpr(mac.target);
 
-        if (target.type instanceof SemanticStructType structType) {
-            return structType.structSymbol != null;
+        if (target.type.kind == SastTypeKind.STRUCT) {
+            return target.type.structSymbol != null;
         }
 
-        return target.type instanceof SemanticTupleType;
+        return target.type.kind == SastTypeKind.TUPLE;
     }
 
-    public boolean shouldSuppressCallDiagnostic(CallNode call) {
-        if (!(call.callee instanceof MemberAccessNode mac)) {
+    public boolean shouldSuppressCallDiagnostic(AstNode call) {
+        if (call.callee == null || call.callee.kind != AstKind.MEMBER_ACCESS) {
             return false;
         }
 
-        if (!isArrayIntrinsicMemberName(mac.memberName)) {
+        if (!isArrayIntrinsicMemberName(call.callee.name)) {
             return false;
         }
 
-        return !isAggregateReceiver(mac);
+        return !isAggregateReceiver(call.callee);
     }
 
     private SemanticArrayIntrinsicCallNode tryLowerMemberIntrinsic(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
 
         if (isAggregateReceiver(mac)) {
             return null;
         }
 
-        return switch (mac.memberName) {
+        return switch (mac.name) {
             case "init" ->
                     lowerDynamicArrayAlloc(
                             call,
@@ -110,11 +110,11 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode lowerSignatureIntrinsic(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         SemanticArrayIntrinsicKind kind =
-                SemanticArrayIntrinsicKind.fromRuntimeName(mac.memberName);
+                SemanticArrayIntrinsicKind.fromRuntimeName(mac.name);
 
         if (kind == null) {
             return null;
@@ -170,8 +170,8 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode lowerDynamicArrayAlloc(
-            CallNode call,
-            MemberAccessNode mac,
+            AstNode call,
+            AstNode mac,
             SemanticArrayIntrinsicKind kind
     ) {
         if (call.args.size() != 1) {
@@ -204,8 +204,8 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode lowerUninit(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         if (!call.args.isEmpty()) {
             ctx.error("Array intrinsic 'uninit' expects exactly 0 arguments");
@@ -232,8 +232,8 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode lowerMemset(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         if (call.args.size() != 1 && call.args.size() != 3) {
             ctx.error("Array intrinsic 'memset' expects either 1 or 3 arguments");
@@ -278,8 +278,8 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode lowerMemcpy(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         if (call.args.size() != 1 && call.args.size() != 4) {
             ctx.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments");
@@ -329,27 +329,27 @@ public final class ArrayLowerer {
         );
     }
 
-    private static SemanticType memcpySourceContext(SemanticType receiverType) {
-        SemanticType elementType = null;
+    private static SastType memcpySourceContext(SastType receiverType) {
+        SastType elementType = null;
 
-        if (receiverType instanceof SemanticDynamicArrayType dynamicArray) {
-            elementType = dynamicArray.elementType;
-        } else if (receiverType instanceof SemanticStaticArrayType staticArray) {
-            elementType = staticArray.elementType;
+        if (receiverType.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            elementType = receiverType.elementType;
+        } else if (receiverType.kind == SastTypeKind.STATIC_ARRAY) {
+            elementType = receiverType.elementType;
         }
 
         if (elementType == null) {
             return null;
         }
 
-        return new SemanticViewType(
-                new SemanticDynamicArrayType(elementType)
+        return SastType.view(
+                SastType.dynamicArray(elementType)
         );
     }
 
     private SemanticArrayIntrinsicCallNode lowerMemmove(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         if (call.args.size() != 3) {
             ctx.error("Array intrinsic 'memmove' expects exactly 3 arguments");
@@ -389,8 +389,8 @@ public final class ArrayLowerer {
     }
 
     private SemanticArrayIntrinsicCallNode lowerLength(
-            CallNode call,
-            MemberAccessNode mac
+            AstNode call,
+            AstNode mac
     ) {
         if (!call.args.isEmpty()) {
             ctx.error("Array intrinsic 'length' expects exactly 0 arguments");

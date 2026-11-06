@@ -155,7 +155,7 @@ final class Cpp14ExpressionEmitter {
             return "(" + emitExpr(owner, deref.expr) + "[" + index + "])";
         }
 
-        if (node.target.type instanceof SemanticStaticArrayType
+        if (node.target.type.kind == SastTypeKind.STATIC_ARRAY
                 && !owner.uncheckedStaticArrayAccess) {
             return "(franko_static_array_at("
                     + emitExpr(owner, node.target) + ", " + index + "))";
@@ -165,7 +165,7 @@ final class Cpp14ExpressionEmitter {
     }
 
     private String emitFunctionCall(SemanticFunctionCallNode node) {
-        FunctionSymbol fn = node.function;
+        Symbol fn = node.function;
 
         if (fn == null) {
             throw new IllegalStateException(
@@ -186,7 +186,7 @@ final class Cpp14ExpressionEmitter {
         sb.append(owner.emitFunctionName(fn));
         sb.append("(");
 
-        List<SemanticType> parameterTypes = fn.parameterTypes();
+        List<SastType> parameterTypes = fn.parameterTypes();
 
         if (parameterTypes.size() != node.args.size()) {
             throw new IllegalStateException(
@@ -205,7 +205,7 @@ final class Cpp14ExpressionEmitter {
             }
 
             SemanticExprNode arg = node.args.get(i);
-            SemanticType paramType = parameterTypes.get(i);
+            SastType paramType = parameterTypes.get(i);
 
             sb.append(emitAsType(owner, arg, paramType));
         }
@@ -257,15 +257,15 @@ final class Cpp14ExpressionEmitter {
             return emitExpr(owner, deref.expr);
         }
 
-        if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
+        if (node.receiver.type.kind == SastTypeKind.STATIC_ARRAY) {
             return "franko_make_fat_pointer("
                     + emitLValue(owner, node.receiver)
                     + ", "
-                    + staticArray.sizeLiteral
+                    + node.receiver.type.sizeLiteral
                     + ", 2)";
         }
 
-        if (node.receiver.type instanceof SemanticDynamicArrayType) {
+        if (node.receiver.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return "franko_make_dynamic_fat_pointer(&"
                     + emitLValue(owner, node.receiver)
                     + ")";
@@ -287,11 +287,11 @@ final class Cpp14ExpressionEmitter {
             return emitExpr(owner, deref.expr) + ".length()";
         }
 
-        if (node.receiver.type instanceof SemanticStaticArrayType staticArray) {
-            return "static_cast<uint32_t>(" + staticArray.sizeLiteral + ")";
+        if (node.receiver.type.kind == SastTypeKind.STATIC_ARRAY) {
+            return "static_cast<uint32_t>(" + node.receiver.type.sizeLiteral + ")";
         }
 
-        if (node.receiver.type instanceof SemanticDynamicArrayType) {
+        if (node.receiver.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return emitExpr(owner, node.receiver) + ".length()";
         }
 
@@ -353,12 +353,12 @@ final class Cpp14ExpressionEmitter {
             String value = emitExpr(owner, node.target);
 
             if (node.target.isConstant()
-                    && node.type instanceof SemanticPtrType ptr
-                    && ptr.referencedType instanceof SemanticPrimitiveType target
-                    && node.target.type instanceof SemanticPrimitiveType source
-                    && !target.equals(source)) {
+                    && node.type.kind == SastTypeKind.PTR
+                    && node.type.referencedType.kind == SastTypeKind.PRIMITIVE
+                    && node.target.type.kind == SastTypeKind.PRIMITIVE
+                    && !node.type.referencedType.equals(node.target.type)) {
                 value = "static_cast<"
-                        + owner.emitType(target)
+                        + owner.emitType(node.type.referencedType)
                         + ">("
                         + value
                         + ")";
@@ -366,9 +366,9 @@ final class Cpp14ExpressionEmitter {
 
             String borrowed = "franko_borrow(" + value + ")";
 
-            if (node.type instanceof SemanticPtrType ptr
-                    && !(ptr.referencedType instanceof SemanticStaticArrayType)
-                    && !(ptr.referencedType instanceof SemanticDynamicArrayType)) {
+            if (node.type.kind == SastTypeKind.PTR
+                    && !(node.type.referencedType.kind == SastTypeKind.STATIC_ARRAY)
+                    && !(node.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY)) {
                 return "franko_make_thin_pointer(" + borrowed + ")";
             }
 
@@ -379,15 +379,15 @@ final class Cpp14ExpressionEmitter {
             return emitExpr(owner, deref.expr);
         }
 
-        if (node.target.type instanceof SemanticStaticArrayType staticArray) {
+        if (node.target.type.kind == SastTypeKind.STATIC_ARRAY) {
             return "franko_make_fat_pointer("
                     + emitLValue(owner, node.target)
                     + ", "
-                    + staticArray.sizeLiteral
+                    + node.target.type.sizeLiteral
                     + ", 2)";
         }
 
-        if (node.target.type instanceof SemanticDynamicArrayType) {
+        if (node.target.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return "franko_make_dynamic_fat_pointer(&"
                     + emitLValue(owner, node.target)
                     + ")";
@@ -397,7 +397,7 @@ final class Cpp14ExpressionEmitter {
     }
 
     private String emitDeref(SemanticDerefNode node) {
-        if (!(node.expr.type instanceof SemanticPtrType pointerType)) {
+        if (!(node.expr.type.kind == SastTypeKind.PTR)) {
             throw new IllegalStateException(
                     "Internal compiler error: dereference operand is not a pointer type"
             );
@@ -405,13 +405,13 @@ final class Cpp14ExpressionEmitter {
 
         String pointer = emitExpr(owner, node.expr);
 
-        if (pointerType.referencedType instanceof SemanticStaticArrayType staticArray) {
-            String elementType = owner.emitType(staticArray.elementType);
+        if (node.expr.type.referencedType.kind == SastTypeKind.STATIC_ARRAY) {
+            String elementType = owner.emitType(node.expr.type.referencedType.elementType);
 
             return "franko_static_array_ref<"
                     + elementType
                     + ", "
-                    + staticArray.sizeLiteral
+                    + node.expr.type.referencedType.sizeLiteral
                     + ">(static_cast<"
                     + elementType
                     + "*>("
@@ -419,9 +419,9 @@ final class Cpp14ExpressionEmitter {
                     + ".data))";
         }
 
-        if (pointerType.referencedType instanceof SemanticDynamicArrayType dynamicArray) {
+        if (node.expr.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return "(*static_cast<Franko_Dynamic_Array<"
-                    + owner.emitType(dynamicArray.elementType)
+                    + owner.emitType(node.expr.type.referencedType.elementType)
                     + ">*>("
                     + pointer
                     + ".data))";
@@ -432,18 +432,18 @@ final class Cpp14ExpressionEmitter {
 
     private String emitCast(SemanticCastExprNode node) {
 
-        if (node.type instanceof SemanticEnumType targetEnum) {
+        if (node.type.kind == SastTypeKind.ENUM) {
             String raw = emitExpr(owner, node.expr);
 
-            if (node.expr.type instanceof SemanticEnumType sourceEnum
-                    && sourceEnum.enumSymbol == targetEnum.enumSymbol) {
+            if (node.expr.type.kind == SastTypeKind.ENUM
+                    && node.expr.type.enumSymbol == node.type.enumSymbol) {
                 return raw;
             }
 
-            return owner.emitType(targetEnum) + "::from_integer_checked(" + raw + ")";
+            return owner.emitType(node.type) + "::from_integer_checked(" + raw + ")";
         }
 
-        if (node.expr.type instanceof SemanticEnumType) {
+        if (node.expr.type.kind == SastTypeKind.ENUM) {
             String raw = emitExpr(owner, node.expr);
             String valueAccess = "(" + raw + ").value";
 
@@ -496,12 +496,12 @@ final class Cpp14ExpressionEmitter {
     String emitAsType(
             Cpp14Codegen owner,
             SemanticExprNode expr,
-            SemanticType targetType
+            SastType targetType
     ) {
         this.owner = owner;
         String raw = emitExpr(owner, expr);
 
-        if (targetType instanceof SemanticPrimitiveType) {
+        if (targetType.kind == SastTypeKind.PRIMITIVE) {
 
             if (expr.isConstant()) {
                 return "static_cast<" + owner.emitType(targetType) + ">(" + raw + ")";
@@ -524,7 +524,7 @@ final class Cpp14ExpressionEmitter {
     ) {
         this.owner = owner;
 
-        if (node.type instanceof SemanticPrimitiveType) {
+        if (node.type.kind == SastTypeKind.PRIMITIVE) {
             return "static_cast<" + owner.emitType(node.type) + ">(" + raw + ")";
         }
 

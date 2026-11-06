@@ -183,7 +183,7 @@ public final class SemanticASTSerializer {
     ) {
         registry.register(function.symbol);
 
-        for (VariableSymbol parameter : function.parameterVariables) {
+        for (Symbol parameter : function.parameterVariables) {
             registry.register(parameter);
         }
 
@@ -285,19 +285,21 @@ public final class SemanticASTSerializer {
                         changed |= registerNew(registry, field);
                     }
 
-                    for (List<MethodSymbol> overloads : struct.methods.values()) {
-                        for (MethodSymbol method : overloads) {
+                    for (List<Symbol> overloads : struct.methods.values()) {
+                        for (Symbol method : overloads) {
                             changed |= registerNew(registry, method);
                         }
                     }
-                } else if (symbol instanceof MethodSymbol method) {
-                    changed |= registerNew(registry, method.owner);
+                } else if (symbol instanceof Symbol sym
+                        && sym.kind == SymbolKind.METHOD) {
+                    changed |= registerNew(registry, sym.owner);
 
-                    for (ParameterSymbol parameter : method.parameters) {
+                    for (Symbol parameter : sym.parameters) {
                         changed |= registerNew(registry, parameter);
                     }
-                } else if (symbol instanceof FunctionSymbol function) {
-                    for (ParameterSymbol parameter : function.parameters) {
+                } else if (symbol instanceof Symbol sym
+                        && sym.kind == SymbolKind.FUNCTION) {
+                    for (Symbol parameter : sym.parameters) {
                         changed |= registerNew(registry, parameter);
                     }
                 }
@@ -347,10 +349,10 @@ public final class SemanticASTSerializer {
 
             JsonObject methods = new JsonObject();
 
-            for (Map.Entry<String, List<MethodSymbol>> entry : struct.methods.entrySet()) {
+            for (Map.Entry<String, List<Symbol>> entry : struct.methods.entrySet()) {
                 JsonArray overloads = new JsonArray();
 
-                for (MethodSymbol method : entry.getValue()) {
+                for (Symbol method : entry.getValue()) {
                     overloads.add(registry.idFor(method));
                 }
 
@@ -387,39 +389,43 @@ public final class SemanticASTSerializer {
             if (field.tupleIndex >= 0) {
                 obj.put("tupleIndex", field.tupleIndex);
             }
-        } else if (symbol instanceof MethodSymbol method) {
+        } else if (symbol instanceof Symbol sym
+                && sym.kind == SymbolKind.METHOD) {
             obj.put("kind", "method");
-            obj.put("name", method.name);
-            obj.put("namespace", method.namespace);
-            obj.put("owner", registry.idFor(method.owner));
-            obj.put("parameters", parameterIds(method.parameters, registry));
-            obj.put("returnType", typeToJson(method.returnType(), registry));
-            obj.put("isBuiltin", method.isBuiltin);
-        } else if (symbol instanceof FunctionSymbol function) {
+            obj.put("name", sym.name);
+            obj.put("namespace", sym.namespace);
+            obj.put("owner", registry.idFor(sym.owner));
+            obj.put("parameters", parameterIds(sym.parameters, registry));
+            obj.put("returnType", typeToJson(sym.returnType(), registry));
+            obj.put("isBuiltin", sym.isBuiltin);
+        } else if (symbol instanceof Symbol sym
+                && sym.kind == SymbolKind.FUNCTION) {
             obj.put("kind", "function");
-            obj.put("name", function.name);
-            obj.put("namespace", function.namespace);
-            obj.put("parameters", parameterIds(function.parameters, registry));
-            obj.put("returnType", typeToJson(function.returnType(), registry));
-            obj.put("isBuiltin", function.isBuiltin);
-        } else if (symbol instanceof ParameterSymbol parameter) {
+            obj.put("name", sym.name);
+            obj.put("namespace", sym.namespace);
+            obj.put("parameters", parameterIds(sym.parameters, registry));
+            obj.put("returnType", typeToJson(sym.returnType(), registry));
+            obj.put("isBuiltin", sym.isBuiltin);
+        } else if (symbol instanceof Symbol sym
+                && sym.kind == SymbolKind.PARAMETER) {
             obj.put("kind", "parameter");
-            obj.put("name", parameter.name);
-            obj.put("index", parameter.index);
-            obj.put("type", typeToJson(parameter.type, registry));
-        } else if (symbol instanceof GlobalVariableSymbol global) {
+            obj.put("name", sym.name);
+            obj.put("index", sym.index);
+            obj.put("type", typeToJson(sym.type, registry));
+        } else if (symbol instanceof Symbol sym
+                && sym.kind == SymbolKind.GLOBAL) {
             obj.put("kind", "global");
-            obj.put("name", global.name);
-            obj.put("namespace", global.namespace);
-            obj.put("type", typeToJson(global.type, registry));
-            obj.put("compileTimeConstantValue", stringOrNull(global.compileTimeConstantValue));
-            obj.put("literalBytes", JsonAstSupport.bigIntegerArray(global.literalBytes));
-            obj.put("literalValues", JsonAstSupport.bigIntegerArray(global.literalValues));
-        } else if (symbol instanceof VariableSymbol variable) {
+            obj.put("name", sym.name);
+            obj.put("namespace", sym.namespace);
+            obj.put("type", typeToJson(sym.type, registry));
+            obj.put("compileTimeConstantValue", stringOrNull(sym.compileTimeConstantValue));
+            obj.put("literalBytes", JsonAstSupport.bigIntegerArray(sym.literalBytes));
+            obj.put("literalValues", JsonAstSupport.bigIntegerArray(sym.literalValues));
+        } else if (symbol instanceof Symbol sym) {
             obj.put("kind", "variable");
-            obj.put("name", variable.name);
-            obj.put("namespace", variable.namespace);
-            obj.put("type", typeToJson(variable.type, registry));
+            obj.put("name", sym.name);
+            obj.put("namespace", sym.namespace);
+            obj.put("type", typeToJson(sym.type, registry));
         } else {
             throw new IllegalArgumentException(
                     "Unknown symbol type: " + symbol.getClass().getName()
@@ -430,12 +436,12 @@ public final class SemanticASTSerializer {
     }
 
     private static JsonArray parameterIds(
-            List<ParameterSymbol> parameters,
+            List<Symbol> parameters,
             SymbolRegistry registry
     ) {
         JsonArray array = new JsonArray();
 
-        for (ParameterSymbol parameter : parameters) {
+        for (Symbol parameter : parameters) {
             array.add(registry.idFor(parameter));
         }
 
@@ -516,7 +522,7 @@ public final class SemanticASTSerializer {
 
         for (Map.Entry<String, JsonObject> entry : pendingParameters.entrySet()) {
             JsonObject obj = entry.getValue();
-            ParameterSymbol parameter = new ParameterSymbol(
+            Symbol parameter = Symbol.parameter(
                     obj.requireString("name"),
                     typeFromJson(obj.requireObject("type"), registry),
                     obj.requireInt("index")
@@ -529,14 +535,10 @@ public final class SemanticASTSerializer {
             String kind = obj.requireString("kind");
             String name = obj.requireString("name");
             String namespace = obj.optString("namespace");
-            SemanticType type = typeFromJson(obj.requireObject("type"), registry);
+            SastType type = typeFromJson(obj.requireObject("type"), registry);
 
             if ("global".equals(kind)) {
-                GlobalVariableSymbol global = new GlobalVariableSymbol(
-                        namespace,
-                        name,
-                        type
-                );
+                Symbol global = Symbol.global(namespace, name, type);
                 global.compileTimeConstantValue = bigIntegerOrNull(
                         obj.get("compileTimeConstantValue")
                 );
@@ -546,7 +548,7 @@ public final class SemanticASTSerializer {
             } else {
                 registry.registerWithId(
                         entry.getKey(),
-                        new VariableSymbol(namespace, name, type)
+                        Symbol.variable(namespace, name, type)
                 );
             }
         }
@@ -555,11 +557,11 @@ public final class SemanticASTSerializer {
             JsonObject obj = entry.getValue();
             String kind = obj.requireString("kind");
             String name = obj.requireString("name");
-            List<ParameterSymbol> parameters = parameterList(
+            List<Symbol> parameters = parameterList(
                     obj.requireArray("parameters"),
                     registry
             );
-            SemanticType returnType = typeFromJson(
+            SastType returnType = typeFromJson(
                     obj.requireObject("returnType"),
                     registry
             );
@@ -571,12 +573,12 @@ public final class SemanticASTSerializer {
                 );
                 registry.registerWithId(
                         entry.getKey(),
-                        new MethodSymbol(owner, name, parameters, returnType, isBuiltin)
+                        Symbol.method(owner, name, parameters, returnType, isBuiltin)
                 );
             } else {
                 registry.registerWithId(
                         entry.getKey(),
-                        new FunctionSymbol(
+                        Symbol.function(
                                 obj.optString("namespace"),
                                 name,
                                 parameters,
@@ -609,13 +611,14 @@ public final class SemanticASTSerializer {
 
             for (Map.Entry<String, JsonValue> methodEntry : methods.entries()) {
                 JsonArray overloads = requireArray(methodEntry.getValue(), "method overloads");
-                List<MethodSymbol> symbols = new ArrayList<>();
+                List<Symbol> symbols = new ArrayList<>();
 
                 for (JsonValue methodValue : overloads.values()) {
                     String methodId = requireId(methodValue);
                     Object method = registry.require(methodId);
 
-                    if (!(method instanceof MethodSymbol methodSymbol)) {
+                    if (!(method instanceof Symbol methodSymbol)
+                            || methodSymbol.kind != SymbolKind.METHOD) {
                         throw new IllegalArgumentException(
                                 "Method reference '" + methodId + "' is not a method"
                         );
@@ -632,16 +635,17 @@ public final class SemanticASTSerializer {
         return registry;
     }
 
-    private static List<ParameterSymbol> parameterList(
+    private static List<Symbol> parameterList(
             JsonArray array,
             SymbolRegistry registry
     ) {
-        List<ParameterSymbol> parameters = new ArrayList<>();
+        List<Symbol> parameters = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
             Object symbol = registry.require(requireId(value));
 
-            if (!(symbol instanceof ParameterSymbol parameter)) {
+            if (!(symbol instanceof Symbol parameter)
+                    || parameter.kind != SymbolKind.PARAMETER) {
                 throw new IllegalArgumentException("Expected a parameter symbol");
             }
 
@@ -681,87 +685,93 @@ public final class SemanticASTSerializer {
         return values;
     }
 
-    static JsonObject typeToJson(SemanticType type, SymbolRegistry registry) {
+    static JsonObject typeToJson(SastType type, SymbolRegistry registry) {
         if (type == null) {
             throw new IllegalArgumentException("Cannot serialize a null semantic type");
         }
 
         JsonObject obj = new JsonObject();
 
-        if (type instanceof SemanticPrimitiveType primitive) {
-            obj.put("type", "primitive");
-            obj.put("kind", primitive.kind.name());
-        } else if (type instanceof SemanticVoidType) {
-            obj.put("type", "void");
-        } else if (type instanceof SemanticDynamicArrayType dynamic) {
-            obj.put("type", "dynamicArray");
-            obj.put("elementType", typeToJson(dynamic.elementType, registry));
-        } else if (type instanceof SemanticStaticArrayType staticArray) {
-            obj.put("type", "staticArray");
-            obj.put("elementType", typeToJson(staticArray.elementType, registry));
-            obj.put("size", staticArray.sizeLiteral);
-        } else if (type instanceof SemanticPtrType ptr) {
-            obj.put("type", "ptr");
-            obj.put("permission", ptr.permission.name());
-            obj.put("referencedType", typeToJson(ptr.referencedType, registry));
-        } else if (type instanceof SemanticNullType) {
-            obj.put("type", "null");
-        } else if (type instanceof SemanticStructType struct) {
-            obj.put("type", "struct");
-            obj.put("symbol", registry.idFor(struct.structSymbol));
-        } else if (type instanceof SemanticEnumType enumType) {
-            obj.put("type", "enum");
-            obj.put("symbol", registry.idFor(enumType.enumSymbol));
-        } else if (type instanceof SemanticTupleType tuple) {
-            obj.put("type", "tuple");
-            obj.put("symbol", registry.idFor(tuple.cppSymbol));
-
-            JsonArray elements = new JsonArray();
-
-            for (FieldSymbol field : tuple.fields) {
-                JsonObject element = new JsonObject();
-                element.put("name", field.name);
-                element.put("type", typeToJson(field.type, registry));
-                elements.add(element);
+        switch (type.kind) {
+            case PRIMITIVE -> {
+                obj.put("type", "primitive");
+                obj.put("kind", type.primitive.name());
             }
-
-            obj.put("elements", elements);
-        } else if (type instanceof SemanticFunctionType function) {
-            obj.put("type", "function");
-            JsonArray parameters = new JsonArray();
-
-            for (SemanticType parameter : function.parameterTypes) {
-                parameters.add(typeToJson(parameter, registry));
+            case VOID -> obj.put("type", "void");
+            case DYNAMIC_ARRAY -> {
+                obj.put("type", "dynamicArray");
+                obj.put("elementType", typeToJson(type.elementType, registry));
             }
+            case STATIC_ARRAY -> {
+                obj.put("type", "staticArray");
+                obj.put("elementType", typeToJson(type.elementType, registry));
+                obj.put("size", type.sizeLiteral);
+            }
+            case PTR -> {
+                obj.put("type", "ptr");
+                obj.put("permission", type.permission.name());
+                obj.put("referencedType", typeToJson(type.referencedType, registry));
+            }
+            case NULL -> obj.put("type", "null");
+            case STRUCT -> {
+                obj.put("type", "struct");
+                obj.put("symbol", registry.idFor(type.structSymbol));
+            }
+            case ENUM -> {
+                obj.put("type", "enum");
+                obj.put("symbol", registry.idFor(type.enumSymbol));
+            }
+            case TUPLE -> {
+                obj.put("type", "tuple");
+                obj.put("symbol", registry.idFor(type.cppSymbol));
 
-            obj.put("parameters", parameters);
-            obj.put("returnType", typeToJson(function.returnType, registry));
-        } else {
-            throw new IllegalArgumentException(
-                    "Unknown semantic type: " + type.getClass().getName()
+                JsonArray elements = new JsonArray();
+
+                for (FieldSymbol field : type.fields) {
+                    JsonObject element = new JsonObject();
+                    element.put("name", field.name);
+                    element.put("type", typeToJson(field.type, registry));
+                    elements.add(element);
+                }
+
+                obj.put("elements", elements);
+            }
+            case FUNCTION -> {
+                obj.put("type", "function");
+                JsonArray parameters = new JsonArray();
+
+                for (SastType parameter : type.parameterTypes) {
+                    parameters.add(typeToJson(parameter, registry));
+                }
+
+                obj.put("parameters", parameters);
+                obj.put("returnType", typeToJson(type.returnType, registry));
+            }
+            default -> throw new IllegalArgumentException(
+                    "Unknown semantic type: " + type.kind
             );
         }
 
         return obj;
     }
 
-    static SemanticType typeFromJson(JsonObject obj, SymbolRegistry registry) {
+    static SastType typeFromJson(JsonObject obj, SymbolRegistry registry) {
         String kind = obj.requireString("type");
 
         return switch (kind) {
-            case "primitive" -> new SemanticPrimitiveType(
+            case "primitive" -> SastType.primitive(
                     SemanticPrimitiveKind.valueOf(obj.requireString("kind"))
             );
-            case "void" -> new SemanticVoidType();
-            case "dynamicArray" -> new SemanticDynamicArrayType(
+            case "void" -> SastType.voidType();
+            case "dynamicArray" -> SastType.dynamicArray(
                     typeFromJson(obj.requireObject("elementType"), registry)
             );
-            case "staticArray" -> new SemanticStaticArrayType(
+            case "staticArray" -> SastType.staticArray(
                     typeFromJson(obj.requireObject("elementType"), registry),
                     obj.requireString("size")
             );
             case "ptr" -> {
-                SemanticType referenced = typeFromJson(
+                SastType referenced = typeFromJson(
                         obj.requireObject("referencedType"),
                         registry
                 );
@@ -769,16 +779,16 @@ public final class SemanticASTSerializer {
                         obj.requireString("permission")
                 );
                 yield switch (permission) {
-                    case OWNER -> new SemanticPtrType(referenced);
-                    case MUTABLE -> new SemanticMViewType(referenced);
-                    case READ_ONLY -> new SemanticViewType(referenced);
+                    case OWNER -> SastType.ptr(referenced);
+                    case MUTABLE -> SastType.mview(referenced);
+                    case READ_ONLY -> SastType.view(referenced);
                 };
             }
-            case "null" -> new SemanticNullType();
-            case "struct" -> new SemanticStructType(
+            case "null" -> SastType.nullType();
+            case "struct" -> SastType.structType(
                     (StructSymbol) registry.require(obj.requireString("symbol"))
             );
-            case "enum" -> new SemanticEnumType(
+            case "enum" -> SastType.enumType(
                     (EnumSymbol) registry.require(obj.requireString("symbol"))
             );
             case "tuple" -> {
@@ -811,10 +821,10 @@ public final class SemanticASTSerializer {
                     index++;
                 }
 
-                yield new SemanticTupleType(fields, cppSymbol);
+                yield SastType.tupleType(fields, cppSymbol);
             }
             case "function" -> {
-                List<SemanticType> parameters = new ArrayList<>();
+                List<SastType> parameters = new ArrayList<>();
 
                 for (JsonValue value : obj.requireArray("parameters").values()) {
                     parameters.add(typeFromJson(
@@ -823,7 +833,7 @@ public final class SemanticASTSerializer {
                     ));
                 }
 
-                yield new SemanticFunctionType(
+                yield SastType.functionType(
                         parameters,
                         typeFromJson(obj.requireObject("returnType"), registry)
                 );
@@ -1017,12 +1027,12 @@ public final class SemanticASTSerializer {
     }
 
     private static JsonArray parameterVariableIds(
-            List<VariableSymbol> parameters,
+            List<Symbol> parameters,
             SymbolRegistry registry
     ) {
         JsonArray array = new JsonArray();
 
-        for (VariableSymbol parameter : parameters) {
+        for (Symbol parameter : parameters) {
             array.add(registry.idFor(parameter));
         }
 
@@ -1061,7 +1071,7 @@ public final class SemanticASTSerializer {
             );
             case "functionDecl" -> new SemanticFunctionDeclNode(
                     span,
-                    (FunctionSymbol) registry.require(obj.requireString("symbol")),
+                    (Symbol) registry.require(obj.requireString("symbol")),
                     variablesFromArray(
                             obj.requireArray("parameterVariables"),
                             registry
@@ -1091,7 +1101,7 @@ public final class SemanticASTSerializer {
             );
             case "varDecl" -> new SemanticVarDeclNode(
                     span,
-                    (VariableSymbol) registry.require(obj.requireString("symbol")),
+                    (Symbol) registry.require(obj.requireString("symbol")),
                     bigIntegerOrNull(obj.get("foldedConstInitializer")),
                     (SemanticExprNode) nodeFromJson(
                             obj.optObject("staticInitializer"),
@@ -1149,7 +1159,7 @@ public final class SemanticASTSerializer {
             case "continue" -> new SemanticContinueNode(span);
             case "return" -> new SemanticReturnNode(
                     span,
-                    (FunctionSymbol) registry.require(obj.requireString("function")),
+                    (Symbol) registry.require(obj.requireString("function")),
                     (SemanticExprNode) nodeFromJson(
                             obj.optObject("value"),
                             registry,
@@ -1187,7 +1197,7 @@ public final class SemanticASTSerializer {
             SourceTable sources,
             SourceSpan span
     ) {
-        SemanticType type = typeFromJson(obj.requireObject("type"), registry);
+        SastType type = typeFromJson(obj.requireObject("type"), registry);
         BigInteger constantValue = bigIntegerOrNull(obj.get("constantValue"));
 
         return switch (kind) {
@@ -1201,7 +1211,7 @@ public final class SemanticASTSerializer {
             case "varExpr" -> new SemanticVarExprNode(
                     span,
                     type,
-                    (VariableSymbol) registry.require(obj.requireString("symbol"))
+                    (Symbol) registry.require(obj.requireString("symbol"))
             );
             case "unaryOp" -> new SemanticUnaryOpNode(
                     span,
@@ -1257,7 +1267,7 @@ public final class SemanticASTSerializer {
             case "functionCall" -> new SemanticFunctionCallNode(
                     span,
                     type,
-                    (FunctionSymbol) registry.require(obj.requireString("function")),
+                    (Symbol) registry.require(obj.requireString("function")),
                     exprListFromArray(obj.requireArray("args"), registry, sources)
             );
             case "arrayIntrinsicCall" -> new SemanticArrayIntrinsicCallNode(
@@ -1417,16 +1427,19 @@ public final class SemanticASTSerializer {
         return nodes;
     }
 
-    private static List<VariableSymbol> variablesFromArray(
+    private static List<Symbol> variablesFromArray(
             JsonArray array,
             SymbolRegistry registry
     ) {
-        List<VariableSymbol> variables = new ArrayList<>();
+        List<Symbol> variables = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
             Object symbol = registry.require(requireId(value));
 
-            if (!(symbol instanceof VariableSymbol variable)) {
+            if (!(symbol instanceof Symbol variable)
+                    || (variable.kind != SymbolKind.VARIABLE
+                        && variable.kind != SymbolKind.PARAMETER
+                        && variable.kind != SymbolKind.GLOBAL)) {
                 throw new IllegalArgumentException("Expected a variable symbol");
             }
 

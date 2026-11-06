@@ -46,11 +46,11 @@ public class FunctionChecker {
         validateReturnType(node.symbol);
         validateParameters(node);
 
-        if (node.symbol instanceof MethodSymbol method) {
-            if (OperatorMethods.isOperatorMethodName(method.name)) {
-                validateOperatorMethod(method);
+        if (node.symbol.kind == SymbolKind.METHOD) {
+            if (OperatorMethods.isOperatorMethodName(node.symbol.name)) {
+                validateOperatorMethod(node.symbol);
             } else {
-                validateMethodSelf(method);
+                validateMethodSelf(node.symbol);
             }
         } else if (OperatorMethods.isOperatorMethodName(node.symbol.name)) {
             diagnostics.error("'"
@@ -77,7 +77,7 @@ public class FunctionChecker {
     private void validateParameters(SemanticFunctionDeclNode node) {
         Set<String> names = new HashSet<>();
 
-        for (VariableSymbol param : node.parameterVariables) {
+        for (Symbol param : node.parameterVariables) {
             if (param == null) {
                 diagnostics.error("Function '"
                         + node.symbol.qualifiedName()
@@ -107,7 +107,7 @@ public class FunctionChecker {
         }
     }
 
-    private void validateMethodSelf(MethodSymbol method) {
+    private void validateMethodSelf(Symbol method) {
         String display = method.qualifiedName();
         String ownerName = method.owner.qualifiedName();
 
@@ -125,7 +125,7 @@ public class FunctionChecker {
             return;
         }
 
-        ParameterSymbol first = method.parameters.get(0);
+        Symbol first = method.parameters.get(0);
 
         if (!"self".equals(first.name)) {
             diagnostics.error("Method '"
@@ -160,7 +160,7 @@ public class FunctionChecker {
         }
     }
 
-    private void validateOperatorMethod(MethodSymbol method) {
+    private void validateOperatorMethod(Symbol method) {
         if (OperatorMethods.isComparisonMethodName(method.name)) {
             validateComparisonOperatorMethod(method);
         } else {
@@ -168,7 +168,7 @@ public class FunctionChecker {
         }
     }
 
-    private void validateComparisonOperatorMethod(MethodSymbol method) {
+    private void validateComparisonOperatorMethod(Symbol method) {
         boolean valid = method.parameters.size() == 2
                 && "self".equals(method.parameters.get(0).name)
                 && isViewOfOwner(
@@ -197,14 +197,15 @@ public class FunctionChecker {
                 + "> other) -> uint8'");
     }
 
-    private void validateAssignmentOperatorMethod(MethodSymbol method) {
+    private void validateAssignmentOperatorMethod(Symbol method) {
         boolean valid = method.parameters.size() == 2
                 && "self".equals(method.parameters.get(0).name)
                 && isOwnerPtrOfOwner(
                         method.parameters.get(0).type,
                         method.owner)
-                && method.parameters.get(1).type instanceof SemanticViewType other
-                && !(other.referencedType instanceof SemanticVoidType)
+                && method.parameters.get(1).type.kind == SastTypeKind.PTR
+                && method.parameters.get(1).type.permission == PtrPermission.READ_ONLY
+                && method.parameters.get(1).type.referencedType.kind != SastTypeKind.VOID
                 && !"self".equals(method.parameters.get(1).name)
                 && types.isVoidType(method.returnType());
 
@@ -223,25 +224,26 @@ public class FunctionChecker {
                 + "> self, view<T> other) -> void'");
     }
 
-    private boolean isViewOfOwner(SemanticType type, StructSymbol owner) {
-        return type instanceof SemanticViewType view
-                && view.referencedType instanceof SemanticStructType struct
-                && struct.structSymbol != null
-                && struct.structSymbol.qualifiedName().equals(
+    private boolean isViewOfOwner(SastType type, StructSymbol owner) {
+        return type.kind == SastTypeKind.PTR
+                && type.permission == PtrPermission.READ_ONLY
+                && type.referencedType.kind == SastTypeKind.STRUCT
+                && type.referencedType.structSymbol != null
+                && type.referencedType.structSymbol.qualifiedName().equals(
                         owner.qualifiedName());
     }
 
-    private boolean isOwnerPtrOfOwner(SemanticType type, StructSymbol owner) {
-        return type instanceof SemanticPtrType ptr
-                && ptr.permission == PtrPermission.OWNER
-                && ptr.referencedType instanceof SemanticStructType struct
-                && struct.structSymbol != null
-                && struct.structSymbol.qualifiedName().equals(
+    private boolean isOwnerPtrOfOwner(SastType type, StructSymbol owner) {
+        return type.kind == SastTypeKind.PTR
+                && type.permission == PtrPermission.OWNER
+                && type.referencedType.kind == SastTypeKind.STRUCT
+                && type.referencedType.structSymbol != null
+                && type.referencedType.structSymbol.qualifiedName().equals(
                         owner.qualifiedName());
     }
 
-    private void validateReturnType(FunctionSymbol fn) {
-        SemanticType returnType = fn.returnType();
+    private void validateReturnType(Symbol fn) {
+        SastType returnType = fn.returnType();
 
         if (returnType == null) {
             diagnostics.error("Function '"
@@ -258,7 +260,7 @@ public class FunctionChecker {
         }
 
         if (!types.isValidFunctionReturnType(returnType)) {
-            if (returnType instanceof SemanticStructType
+            if (returnType.kind == SastTypeKind.STRUCT
                     && !types.isValueAssignableType(returnType)) {
                 diagnostics.error("Function '"
                         + fn.fullSignatureString()
@@ -273,7 +275,7 @@ public class FunctionChecker {
                 return;
             }
 
-            if (returnType instanceof SemanticTupleType
+            if (returnType.kind == SastTypeKind.TUPLE
                     && !types.isValueAssignableType(returnType)) {
                 diagnostics.error("Function '"
                         + fn.fullSignatureString()
@@ -310,7 +312,7 @@ public class FunctionChecker {
 
     private boolean checkStmtInsideFunction(
             SemanticStmtNode stmt,
-            FunctionSymbol function
+            Symbol function
     ) {
         if (stmt == null) {
             return false;
@@ -339,7 +341,7 @@ public class FunctionChecker {
 
     private boolean visitBlock(
             SemanticBlockNode node,
-            FunctionSymbol function
+            Symbol function
     ) {
         boolean sawReturn = false;
 
@@ -354,7 +356,7 @@ public class FunctionChecker {
 
     private boolean visitIf(
             SemanticIfNode node,
-            FunctionSymbol function
+            Symbol function
     ) {
         expressions.checkExpr(node.condition);
 
@@ -387,7 +389,7 @@ public class FunctionChecker {
 
     private boolean visitWhile(
             SemanticWhileNode node,
-            FunctionSymbol function
+            Symbol function
     ) {
         expressions.checkExpr(node.condition);
 
@@ -414,7 +416,7 @@ public class FunctionChecker {
 
     private void visitReturn(
             SemanticReturnNode node,
-            FunctionSymbol enclosingFunction
+            Symbol enclosingFunction
     ) {
         if (node.function == null) {
             diagnostics.error("Return statement has null owning function");
@@ -429,7 +431,7 @@ public class FunctionChecker {
                     + "'");
         }
 
-        SemanticType declaredReturnType = enclosingFunction.returnType();
+        SastType declaredReturnType = enclosingFunction.returnType();
 
         if (types.isVoidType(declaredReturnType)) {
             visitVoidFunctionReturn(node, enclosingFunction);
@@ -441,7 +443,7 @@ public class FunctionChecker {
 
     private void visitVoidFunctionReturn(
             SemanticReturnNode node,
-            FunctionSymbol function
+            Symbol function
     ) {
         if (node.value == null) {
 
@@ -457,7 +459,7 @@ public class FunctionChecker {
 
     private void visitNonVoidFunctionReturn(
             SemanticReturnNode node,
-            FunctionSymbol function
+            Symbol function
     ) {
         if (node.value == null) {
             diagnostics.error("Non-void function '"

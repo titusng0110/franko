@@ -105,7 +105,7 @@ public final class ConstExpressionEvaluator {
         }
     }
 
-    public static BigInteger tryFold(ASTNode expr) {
+    public static BigInteger tryFold(AstNode expr) {
         try {
             return evaluatePure(expr);
         } catch (UnevaluableConstant e) {
@@ -113,9 +113,9 @@ public final class ConstExpressionEvaluator {
         }
     }
 
-    public static BigInteger evaluatePure(ASTNode expr) throws UnevaluableConstant {
-        if (expr instanceof IntNode n) {
-            BigInteger parsed = parseIntegerLiteralPure(n.value);
+    public static BigInteger evaluatePure(AstNode expr) throws UnevaluableConstant {
+        if (expr != null && expr.kind == AstKind.INT) {
+            BigInteger parsed = parseIntegerLiteralPure(expr.text);
 
             if (parsed == null) {
                 throw new UnevaluableConstant(null);
@@ -124,8 +124,8 @@ public final class ConstExpressionEvaluator {
             return parsed;
         }
 
-        if (expr instanceof UnaryOpNode u) {
-            BigInteger folded = tryFoldUnary(u.op, evaluatePure(u.expr));
+        if (expr != null && expr.kind == AstKind.UNARY) {
+            BigInteger folded = tryFoldUnary(expr.text, evaluatePure(expr.expr));
 
             if (folded == null) {
                 throw new UnevaluableConstant(null);
@@ -134,16 +134,16 @@ public final class ConstExpressionEvaluator {
             return folded;
         }
 
-        if (expr instanceof BinOpNode b) {
-            BigInteger left = evaluatePure(b.left);
-            BigInteger right = evaluatePure(b.right);
+        if (expr != null && expr.kind == AstKind.BINARY) {
+            BigInteger left = evaluatePure(expr.left);
+            BigInteger right = evaluatePure(expr.right);
 
-            if (("/".equals(b.op) || "%".equals(b.op)) && right.signum() == 0) {
+            if (("/".equals(expr.text) || "%".equals(expr.text)) && right.signum() == 0) {
                 throw new UnevaluableConstant("Division by zero in constant expression");
             }
 
             try {
-                BigInteger folded = tryFoldBinary(b.op, left, right);
+                BigInteger folded = tryFoldBinary(expr.text, left, right);
 
                 if (folded == null) {
                     throw new UnevaluableConstant(null);

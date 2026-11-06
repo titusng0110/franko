@@ -67,7 +67,7 @@ public final class Frontend {
             return new Result<>(null, diagnostics);
         }
 
-        ASTNode root;
+        AstNode root;
 
         try {
             FrankoASTVisitor visitor = new FrankoASTVisitor(sourcePath);
@@ -79,7 +79,7 @@ public final class Frontend {
             return new Result<>(null, diagnostics);
         }
 
-        if (!(root instanceof ProgramNode program)) {
+        if (root == null || root.kind != AstKind.PROGRAM) {
             diagnostics.add(Diagnostic.error(
                     "Internal AST error in '" + sourcePath
                             + "': program did not parse into a program node"
@@ -90,7 +90,7 @@ public final class Frontend {
         AstDocument raw = new AstDocument(
                 AstPhase.RAW,
                 new SourceTable(),
-                program
+                root
         );
 
         ModuleDescriptor module;
@@ -106,7 +106,7 @@ public final class Frontend {
         }
 
         if (module != null) {
-            diagnostics.addAll(ModuleValidator.validate(program, module));
+            diagnostics.addAll(ModuleValidator.validate(root, module));
         }
 
         return new Result<>(raw, diagnostics);
@@ -119,15 +119,15 @@ public final class Frontend {
 
         DiagnosticBag diagnostics = new DiagnosticBag();
         Desugarer desugarer = new Desugarer(diagnostics);
-        ASTNode root = desugarer.desugar(raw.root);
+        AstNode root = desugarer.desugar(raw.root);
 
-        if (!(root instanceof ProgramNode program)) {
+        if (root == null || root.kind != AstKind.PROGRAM) {
             diagnostics.error("Internal desugarer error: program did not desugar into a program node");
             return new Result<>(null, diagnostics.diagnostics());
         }
 
         return new Result<>(
-                new AstDocument(AstPhase.DESUGARED, raw.sources, program),
+                new AstDocument(AstPhase.DESUGARED, raw.sources, root),
                 diagnostics.diagnostics()
         );
     }

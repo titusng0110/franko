@@ -237,9 +237,9 @@ public final class DanglingPointerChecker {
 
         private void seedSummaryParameters(SemanticFunctionDeclNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
-                VariableSymbol parameter = decl.parameterVariables.get(i);
+                Symbol parameter = decl.parameterVariables.get(i);
 
-                if (!(parameter.type instanceof SemanticPtrType)) {
+                if (!(parameter.type.kind == SastTypeKind.PTR)) {
                     continue;
                 }
 
@@ -290,14 +290,14 @@ public final class DanglingPointerChecker {
                 SemanticFunctionDeclNode decl,
                 int parameterIndex
         ) {
-            return decl.symbol instanceof MethodSymbol method
-                    && OperatorMethods.isOperatorMethodName(method.name)
+            return decl.symbol.kind == SymbolKind.METHOD
+                    && OperatorMethods.isOperatorMethodName(decl.symbol.name)
                     && parameterIndex == 1;
         }
 
         private void seedCheckParameters(SemanticFunctionDeclNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
-                VariableSymbol parameter = decl.parameterVariables.get(i);
+                Symbol parameter = decl.parameterVariables.get(i);
                 int pointerIndex = state.pointerIndex(parameter);
 
                 if (pointerIndex < 0) {
@@ -512,7 +512,7 @@ public final class DanglingPointerChecker {
                 checkExpr(node.target);
                 checkExpr(node.value);
 
-                if (!(node.target.type instanceof SemanticPtrType)
+                if (!(node.target.type.kind == SastTypeKind.PTR)
                         || node.isCompound()) {
                     return;
                 }
@@ -763,7 +763,7 @@ public final class DanglingPointerChecker {
                 SemanticExprNode expression,
                 SemanticASTNode site
         ) {
-            if (!(expression.type instanceof SemanticPtrType)) {
+            if (!(expression.type.kind == SastTypeKind.PTR)) {
                 return;
             }
 
@@ -835,7 +835,7 @@ public final class DanglingPointerChecker {
                 return;
             }
 
-            if (!(node.value.type instanceof SemanticPtrType)) {
+            if (!(node.value.type.kind == SastTypeKind.PTR)) {
                 return;
             }
 
@@ -1204,7 +1204,7 @@ public final class DanglingPointerChecker {
                 int global = summary.captureSinkGlobals[capture];
 
                 if (global >= 0 && global < context.globalVariableIds.length) {
-                    VariableSymbol symbol = context.variable(
+                    Symbol symbol = context.variable(
                             context.globalVariableIds[global]
                     );
                     String path = summary.captureFieldPaths[capture];
@@ -1572,7 +1572,7 @@ public final class DanglingPointerChecker {
             if (expression instanceof SemanticVarExprNode variable) {
                 int variableId = context.variableId(variable.symbol);
 
-                if (variable.symbol instanceof GlobalVariableSymbol) {
+                if (variable.symbol.kind == SymbolKind.GLOBAL) {
                     return originGlobal(variableId);
                 }
 
@@ -1817,7 +1817,7 @@ public final class DanglingPointerChecker {
             if (expression instanceof SemanticVarExprNode variable) {
                 int variableId = context.variableId(variable.symbol);
 
-                if (variable.symbol instanceof GlobalVariableSymbol) {
+                if (variable.symbol.kind == SymbolKind.GLOBAL) {
                     int globalIndex = globalIndexOfVariable(variableId);
 
                     if (globalIndex >= 0) {
@@ -1915,7 +1915,7 @@ public final class DanglingPointerChecker {
 
         private CaptureSink captureSink(SemanticExprNode target) {
             if (target instanceof SemanticVarExprNode variable
-                    && variable.symbol instanceof GlobalVariableSymbol) {
+                    && variable.symbol.kind == SymbolKind.GLOBAL) {
                 int globalIndex = globalIndexOfVariable(
                         context.variableId(variable.symbol)
                 );
@@ -2240,10 +2240,10 @@ public final class DanglingPointerChecker {
             while (bits != 0L) {
                 int bit = Long.numberOfTrailingZeros(bits);
                 int variableId = (word << 6) + bit;
-                VariableSymbol symbol = context.variable(variableId);
+                Symbol symbol = context.variable(variableId);
 
                 if (symbol != null) {
-                    if (symbol instanceof ParameterSymbol) {
+                    if (symbol.kind == SymbolKind.PARAMETER) {
                         parameters.add(symbol.name);
                     } else {
                         locals.add(symbol.qualifiedName());
@@ -2270,10 +2270,10 @@ public final class DanglingPointerChecker {
             while (bits != 0L) {
                 int bit = Long.numberOfTrailingZeros(bits);
                 int variableId = (word << 6) + bit;
-                VariableSymbol symbol = context.variable(variableId);
+                Symbol symbol = context.variable(variableId);
 
                 if (symbol != null) {
-                    if (symbol instanceof ParameterSymbol) {
+                    if (symbol.kind == SymbolKind.PARAMETER) {
                         parameters.add(symbol.name);
                     } else {
                         locals.add(symbol.qualifiedName());
@@ -2326,7 +2326,7 @@ public final class DanglingPointerChecker {
         return builder.toString();
     }
 
-    private String functionName(FunctionSymbol function) {
+    private String functionName(Symbol function) {
         return function == null ? "<unknown>" : function.qualifiedName();
     }
 

@@ -8,12 +8,12 @@ import java.util.Set;
 
 final class InactiveDeclarationPruner {
 
-    private final Set<FunctionSymbol> keptFunctions = newSet();
-    private final Set<VariableSymbol> keptVariables = newSet();
+    private final Set<Symbol> keptFunctions = newSet();
+    private final Set<Symbol> keptVariables = newSet();
     private final Set<StructSymbol> keptStructs = newSet();
     private final Set<EnumSymbol> keptEnums = newSet();
 
-    private final IdentityHashMap<FunctionSymbol, SemanticFunctionDeclNode> declBySymbol =
+    private final IdentityHashMap<Symbol, SemanticFunctionDeclNode> declBySymbol =
             new IdentityHashMap<>();
 
     private final Deque<StructSymbol> structWorklist = new ArrayDeque<>();
@@ -89,7 +89,7 @@ final class InactiveDeclarationPruner {
     private void indexFunction(SemanticFunctionDeclNode fn) {
         declBySymbol.put(fn.symbol, fn);
 
-        if (fn.symbol instanceof MethodSymbol) {
+        if (fn.symbol.kind == SymbolKind.METHOD) {
             return;
         }
 
@@ -104,7 +104,7 @@ final class InactiveDeclarationPruner {
 
         for (SemanticFunctionDeclNode fn : declBySymbol.values()) {
 
-            if (!(fn.symbol instanceof MethodSymbol)
+            if (!(fn.symbol.kind == SymbolKind.METHOD)
                     && fn.symbol.name.equals("main")
                     && fn.symbol.namespace == null) {
                 main = fn;
@@ -116,23 +116,23 @@ final class InactiveDeclarationPruner {
             return;
         }
 
-        Deque<FunctionSymbol> worklist = new ArrayDeque<>();
+        Deque<Symbol> worklist = new ArrayDeque<>();
 
         keptFunctions.add(main.symbol);
         worklist.add(main.symbol);
 
         while (!worklist.isEmpty()) {
-            FunctionSymbol fn = worklist.poll();
+            Symbol fn = worklist.poll();
             SemanticFunctionDeclNode node = declBySymbol.get(fn);
 
             if (node == null) {
                 continue;
             }
 
-            Set<FunctionSymbol> calls = newSet();
+            Set<Symbol> calls = newSet();
             collectCalls(node.body, calls);
 
-            for (FunctionSymbol callee : calls) {
+            for (Symbol callee : calls) {
 
                 if (keptFunctions.add(callee)) {
                     worklist.add(callee);
@@ -143,14 +143,14 @@ final class InactiveDeclarationPruner {
 
     private void computeKeptVariables() {
 
-        for (FunctionSymbol fn : keptFunctions) {
+        for (Symbol fn : keptFunctions) {
             SemanticFunctionDeclNode node = declBySymbol.get(fn);
 
             if (node == null) {
                 continue;
             }
 
-            Set<VariableSymbol> refs = newSet();
+            Set<Symbol> refs = newSet();
             collectVariables(node.body, refs);
 
             keptVariables.addAll(refs);
@@ -166,13 +166,13 @@ final class InactiveDeclarationPruner {
                     continue;
                 }
 
-                Set<VariableSymbol> refs = newSet();
+                Set<Symbol> refs = newSet();
 
                 if (global.staticInitializer != null) {
                     collectExprVariables(global.staticInitializer, refs);
                 }
 
-                for (VariableSymbol ref : refs) {
+                for (Symbol ref : refs) {
                     if (keptVariables.add(ref)) {
                         changed = true;
                     }
@@ -183,17 +183,17 @@ final class InactiveDeclarationPruner {
 
     private void computeKeptStructs(SemanticASTNode root) {
 
-        for (FunctionSymbol fn : keptFunctions) {
+        for (Symbol fn : keptFunctions) {
             markType(fn.type());
 
-            if (fn instanceof MethodSymbol method) {
-                markStruct(method.owner);
+            if (fn.kind == SymbolKind.METHOD) {
+                markStruct(fn.owner);
             }
         }
 
         collectKeptVarDeclTypes(root);
 
-        for (FunctionSymbol fn : keptFunctions) {
+        for (Symbol fn : keptFunctions) {
             SemanticFunctionDeclNode node = declBySymbol.get(fn);
 
             if (node != null) {
@@ -208,12 +208,12 @@ final class InactiveDeclarationPruner {
                 markType(field.type);
             }
 
-            List<MethodSymbol> kept = struct.methods.values().stream()
+            List<Symbol> kept = struct.methods.values().stream()
                     .flatMap(List::stream)
                     .filter(keptFunctions::contains)
                     .toList();
 
-            for (MethodSymbol method : kept) {
+            for (Symbol method : kept) {
                 markType(method.type());
             }
         }
@@ -256,7 +256,7 @@ final class InactiveDeclarationPruner {
                 return;
             }
 
-            for (VariableSymbol param : fn.parameterVariables) {
+            for (Symbol param : fn.parameterVariables) {
                 markType(param.type());
             }
 
@@ -304,50 +304,50 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private void markType(SemanticType type) {
+    private void markType(SastType type) {
 
-        if (type instanceof SemanticEnumType enumType) {
-            keptEnums.add(enumType.enumSymbol);
-
-            return;
-        }
-
-        if (type instanceof SemanticStructType struct) {
-            markStruct(struct.structSymbol);
+        if (type.kind == SastTypeKind.ENUM) {
+            keptEnums.add(type.enumSymbol);
 
             return;
         }
 
-        if (type instanceof SemanticTupleType tuple) {
-            markStruct(tuple.cppSymbol);
+        if (type.kind == SastTypeKind.STRUCT) {
+            markStruct(type.structSymbol);
 
             return;
         }
 
-        if (type instanceof SemanticPtrType ptr) {
-            markType(ptr.referencedType);
+        if (type.kind == SastTypeKind.TUPLE) {
+            markStruct(type.cppSymbol);
 
             return;
         }
 
-        if (type instanceof SemanticDynamicArrayType dynamic) {
-            markType(dynamic.elementType);
+        if (type.kind == SastTypeKind.PTR) {
+            markType(type.referencedType);
 
             return;
         }
 
-        if (type instanceof SemanticStaticArrayType staticArray) {
-            markType(staticArray.elementType);
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            markType(type.elementType);
 
             return;
         }
 
-        if (type instanceof SemanticFunctionType functionType) {
-            for (SemanticType param : functionType.parameterTypes) {
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            markType(type.elementType);
+
+            return;
+        }
+
+        if (type.kind == SastTypeKind.FUNCTION) {
+            for (SastType param : type.parameterTypes) {
                 markType(param);
             }
 
-            markType(functionType.returnType);
+            markType(type.returnType);
         }
     }
 
@@ -548,7 +548,7 @@ final class InactiveDeclarationPruner {
         return stmt;
     }
 
-    private static void collectCalls(SemanticStmtNode stmt, Set<FunctionSymbol> out) {
+    private static void collectCalls(SemanticStmtNode stmt, Set<Symbol> out) {
 
         if (stmt instanceof SemanticBlockNode block) {
             for (SemanticStmtNode inner : block.statements) {
@@ -605,7 +605,7 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private static void collectExprCalls(SemanticExprNode expr, Set<FunctionSymbol> out) {
+    private static void collectExprCalls(SemanticExprNode expr, Set<Symbol> out) {
 
         if (expr instanceof SemanticFunctionCallNode call) {
             out.add(call.function);
@@ -677,7 +677,7 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private static void collectVariables(SemanticStmtNode stmt, Set<VariableSymbol> out) {
+    private static void collectVariables(SemanticStmtNode stmt, Set<Symbol> out) {
 
         if (stmt instanceof SemanticBlockNode block) {
             for (SemanticStmtNode inner : block.statements) {
@@ -730,7 +730,7 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private static void collectExprVariables(SemanticExprNode expr, Set<VariableSymbol> out) {
+    private static void collectExprVariables(SemanticExprNode expr, Set<Symbol> out) {
 
         if (expr instanceof SemanticVarExprNode varExpr) {
             out.add(varExpr.symbol);

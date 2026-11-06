@@ -6,7 +6,7 @@ final class OverloadResolution {
 
     static int constantFitCost(
             CallArg arg,
-            SemanticType parameterType
+            SastType parameterType
     ) {
         if (arg == null || arg.isLiteral()) {
             return 0;
@@ -16,7 +16,7 @@ final class OverloadResolution {
             return 0;
         }
 
-        if (!(parameterType instanceof SemanticPrimitiveType primitive)) {
+        if (!(parameterType.kind == SastTypeKind.PRIMITIVE)) {
             return 0;
         }
 
@@ -24,23 +24,23 @@ final class OverloadResolution {
             return 0;
         }
 
-        int bits = TypeChecker.bitWidth(primitive.kind);
-        int unsignedPenalty = TypeChecker.isSigned(primitive.kind) ? 0 : 1;
+        int bits = TypeChecker.bitWidth(parameterType.primitive);
+        int unsignedPenalty = TypeChecker.isSigned(parameterType.primitive) ? 0 : 1;
 
         return 1 + 2 * bits + unsignedPenalty;
     }
 
     static boolean sameParameterSignature(
-            List<ParameterSymbol> a,
-            List<ParameterSymbol> b
+            List<Symbol> a,
+            List<Symbol> b
     ) {
         if (a.size() != b.size()) {
             return false;
         }
 
         for (int i = 0; i < a.size(); i++) {
-            ParameterSymbol left = a.get(i);
-            ParameterSymbol right = b.get(i);
+            Symbol left = a.get(i);
+            Symbol right = b.get(i);
 
             if (!TypeChecker.sameType(left.type, right.type)) {
                 return false;
@@ -51,16 +51,16 @@ final class OverloadResolution {
     }
 
     static boolean sameMethodUserParameterSignature(
-            List<ParameterSymbol> a,
-            List<ParameterSymbol> b
+            List<Symbol> a,
+            List<Symbol> b
     ) {
         if (a.size() != b.size()) {
             return false;
         }
 
         for (int i = 1; i < a.size(); i++) {
-            ParameterSymbol left = a.get(i);
-            ParameterSymbol right = b.get(i);
+            Symbol left = a.get(i);
+            Symbol right = b.get(i);
 
             if (!TypeChecker.sameType(left.type, right.type)) {
                 return false;
@@ -71,17 +71,17 @@ final class OverloadResolution {
     }
 
     static boolean isApplicableFunction(
-            FunctionSymbol fn,
+            Symbol fn,
             List<CallArg> args
     ) {
         if (fn.arity() != args.size()) {
             return false;
         }
 
-        List<SemanticType> parameterTypes = fn.parameterTypes();
+        List<SastType> parameterTypes = fn.parameterTypes();
 
         for (int i = 0; i < args.size(); i++) {
-            SemanticType parameterType = parameterTypes.get(i);
+            SastType parameterType = parameterTypes.get(i);
             CallArg arg = args.get(i);
 
             if (!isArgumentApplicableToParameter(arg, parameterType)) {
@@ -93,7 +93,7 @@ final class OverloadResolution {
     }
 
     static boolean isApplicableMethod(
-            MethodSymbol method,
+            Symbol method,
             List<CallArg> userArgs
     ) {
         if (method.parameters.size() != userArgs.size() + 1) {
@@ -101,7 +101,7 @@ final class OverloadResolution {
         }
 
         for (int i = 0; i < userArgs.size(); i++) {
-            SemanticType parameterType =
+            SastType parameterType =
                     method.parameters.get(i + 1).type;
             CallArg arg = userArgs.get(i);
 
@@ -115,7 +115,7 @@ final class OverloadResolution {
 
     static int countPermissionDowngrades(
             List<CallArg> args,
-            List<SemanticType> parameterTypes
+            List<SastType> parameterTypes
     ) {
         int count = 0;
 
@@ -126,7 +126,7 @@ final class OverloadResolution {
                 continue;
             }
 
-            SemanticType parameterType = parameterTypes.get(i);
+            SastType parameterType = parameterTypes.get(i);
 
             if (arg.isLiteral()) {
                 count += arrayLiteralDowngradeCost(arg.literal, parameterType);
@@ -138,7 +138,7 @@ final class OverloadResolution {
             }
 
             if (!TypeChecker.sameType(arg.lowered.type, parameterType)
-                    && arg.lowered.type instanceof SemanticPtrType) {
+                    && arg.lowered.type.kind == SastTypeKind.PTR) {
                 count += PointerPermissions.isStaticArrayViewDecay(
                         arg.lowered.type,
                         parameterType)
@@ -151,7 +151,7 @@ final class OverloadResolution {
     }
 
     static int countMethodPermissionDowngrades(
-            MethodSymbol method,
+            Symbol method,
             List<CallArg> userArgs
     ) {
         int count = 0;
@@ -163,7 +163,7 @@ final class OverloadResolution {
                 continue;
             }
 
-            SemanticType parameterType = method.parameters.get(i + 1).type;
+            SastType parameterType = method.parameters.get(i + 1).type;
 
             if (arg.isLiteral()) {
                 count += arrayLiteralDowngradeCost(arg.literal, parameterType);
@@ -175,7 +175,7 @@ final class OverloadResolution {
             }
 
             if (!TypeChecker.sameType(arg.lowered.type, parameterType)
-                    && arg.lowered.type instanceof SemanticPtrType) {
+                    && arg.lowered.type.kind == SastTypeKind.PTR) {
                 count += PointerPermissions.isStaticArrayViewDecay(
                         arg.lowered.type,
                         parameterType)
@@ -188,21 +188,21 @@ final class OverloadResolution {
     }
 
     static boolean isOperatorArgumentApplicable(
-            MethodSymbol method,
+            Symbol method,
             CallArg arg
     ) {
         if (method.parameters.size() != 2) {
             return false;
         }
 
-        SemanticType parameterType = method.parameters.get(1).type;
+        SastType parameterType = method.parameters.get(1).type;
 
-        if (!(parameterType instanceof SemanticPtrType pointer)
-                || pointer.permission != PtrPermission.READ_ONLY) {
+        if (!(parameterType.kind == SastTypeKind.PTR)
+                || parameterType.permission != PtrPermission.READ_ONLY) {
             return false;
         }
 
-        SemanticType referenced = pointer.referencedType;
+        SastType referenced = parameterType.referencedType;
 
         if (arg.isLiteral()) {
             return isArrayLiteralShapeApplicable(arg.literal, referenced);
@@ -214,15 +214,15 @@ final class OverloadResolution {
 
         SemanticExprNode lowered = arg.lowered;
 
-        if (lowered.type instanceof SemanticNullType) {
+        if (lowered.type.kind == SastTypeKind.NULL) {
             return false;
         }
 
         if (lowered.isConstant()
-                && referenced instanceof SemanticPrimitiveType primitive) {
+                && referenced.kind == SastTypeKind.PRIMITIVE) {
             return TypeChecker.fitsBigIntegerToPrimitive(
                     lowered.constantValue,
-                    primitive.kind
+                    referenced.primitive
             );
         }
 
@@ -230,15 +230,15 @@ final class OverloadResolution {
             return true;
         }
 
-        return lowered.type instanceof SemanticPtrType
-                && referenced instanceof SemanticPtrType
+        return lowered.type.kind == SastTypeKind.PTR
+                && referenced.kind == SastTypeKind.PTR
                 && PointerPermissions.isPointerConversion(
                         lowered.type,
                         referenced);
     }
 
-    static List<MethodSymbol> preferOperatorConstantFitMatches(
-            List<MethodSymbol> matches,
+    static List<Symbol> preferOperatorConstantFitMatches(
+            List<Symbol> matches,
             CallArg arg
     ) {
         if (matches.size() <= 1) {
@@ -247,7 +247,7 @@ final class OverloadResolution {
 
         int best = Integer.MAX_VALUE;
 
-        for (MethodSymbol method : matches) {
+        for (Symbol method : matches) {
             best = Math.min(
                     best,
                     operatorConstantFitCost(
@@ -256,9 +256,9 @@ final class OverloadResolution {
             );
         }
 
-        List<MethodSymbol> preferred = new ArrayList<>();
+        List<Symbol> preferred = new ArrayList<>();
 
-        for (MethodSymbol method : matches) {
+        for (Symbol method : matches) {
             if (operatorConstantFitCost(
                     arg,
                     method.parameters.get(1).type) == best) {
@@ -271,37 +271,38 @@ final class OverloadResolution {
 
     static int operatorConstantFitCost(
             CallArg arg,
-            SemanticType parameterType
+            SastType parameterType
     ) {
         if (arg.isLiteral() || arg.lowered == null
                 || !arg.lowered.isConstant()) {
             return 0;
         }
 
-        if (!(parameterType instanceof SemanticPtrType pointer)
-                || !(pointer.referencedType instanceof SemanticPrimitiveType primitive)) {
+        if (parameterType.kind != SastTypeKind.PTR
+                || parameterType.referencedType.kind != SastTypeKind.PRIMITIVE) {
             return 0;
         }
 
-        if (TypeChecker.sameType(arg.lowered.type, pointer.referencedType)) {
+
+        if (TypeChecker.sameType(arg.lowered.type, parameterType.referencedType)) {
             return 0;
         }
 
-        int bits = TypeChecker.bitWidth(primitive.kind);
-        int unsignedPenalty = TypeChecker.isSigned(primitive.kind) ? 0 : 1;
+        int bits = TypeChecker.bitWidth(parameterType.referencedType.primitive);
+        int unsignedPenalty = TypeChecker.isSigned(parameterType.referencedType.primitive) ? 0 : 1;
 
         return 1 + 2 * bits + unsignedPenalty;
     }
 
     static int operatorArgumentDowngradeCost(
             CallArg arg,
-            SemanticType parameterType
+            SastType parameterType
     ) {
-        if (!(parameterType instanceof SemanticPtrType pointer)) {
+        if (!(parameterType.kind == SastTypeKind.PTR)) {
             return 0;
         }
 
-        SemanticType referenced = pointer.referencedType;
+        SastType referenced = parameterType.referencedType;
 
         if (arg.isLiteral()) {
             return arrayLiteralDowngradeCost(arg.literal, referenced);
@@ -315,8 +316,8 @@ final class OverloadResolution {
             return 0;
         }
 
-        if (arg.lowered.type instanceof SemanticPtrType
-                && referenced instanceof SemanticPtrType) {
+        if (arg.lowered.type.kind == SastTypeKind.PTR
+                && referenced.kind == SastTypeKind.PTR) {
             return PointerPermissions.isStaticArrayViewDecay(
                     arg.lowered.type,
                     referenced)
@@ -329,7 +330,7 @@ final class OverloadResolution {
 
     static boolean isArgumentApplicableToParameter(
             CallArg arg,
-            SemanticType parameterType
+            SastType parameterType
     ) {
         if (arg == null || parameterType == null) {
             return false;
@@ -345,15 +346,15 @@ final class OverloadResolution {
 
         SemanticExprNode lowered = arg.lowered;
 
-        if (lowered.type instanceof SemanticNullType) {
-            return parameterType instanceof SemanticPtrType;
+        if (lowered.type.kind == SastTypeKind.NULL) {
+            return parameterType.kind == SastTypeKind.PTR;
         }
 
         if (lowered.isConstant()
-                && parameterType instanceof SemanticPrimitiveType primitive) {
+                && parameterType.kind == SastTypeKind.PRIMITIVE) {
             return TypeChecker.fitsBigIntegerToPrimitive(
                     lowered.constantValue,
-                    primitive.kind
+                    parameterType.primitive
             );
         }
 
@@ -365,18 +366,18 @@ final class OverloadResolution {
     }
 
     static boolean isArrayLiteralShapeApplicable(
-            ArrayLiteralNode literal,
-            SemanticType parameterType
+            AstNode literal,
+            SastType parameterType
     ) {
-        if (!(parameterType instanceof SemanticPtrType ptr)
-                || ptr.permission != PtrPermission.READ_ONLY) {
+        if (!(parameterType.kind == SastTypeKind.PTR)
+                || parameterType.permission != PtrPermission.READ_ONLY) {
             return false;
         }
 
-        SemanticType referenced = ptr.referencedType;
+        SastType referenced = parameterType.referencedType;
 
-        if (!(referenced instanceof SemanticStaticArrayType)
-                && !(referenced instanceof SemanticDynamicArrayType)) {
+        if (!(referenced.kind == SastTypeKind.STATIC_ARRAY)
+                && !(referenced.kind == SastTypeKind.DYNAMIC_ARRAY)) {
             return false;
         }
 
@@ -384,51 +385,51 @@ final class OverloadResolution {
     }
 
     static int arrayLiteralDowngradeCost(
-            ArrayLiteralNode literal,
-            SemanticType parameterType
+            AstNode literal,
+            SastType parameterType
     ) {
-        if (!(parameterType instanceof SemanticPtrType ptr)
-                || ptr.permission != PtrPermission.READ_ONLY) {
+        if (!(parameterType.kind == SastTypeKind.PTR)
+                || parameterType.permission != PtrPermission.READ_ONLY) {
             return 0;
         }
 
-        if (!(ptr.referencedType instanceof SemanticStaticArrayType)
-                && !(ptr.referencedType instanceof SemanticDynamicArrayType)) {
+        if (!(parameterType.referencedType.kind == SastTypeKind.STATIC_ARRAY)
+                && !(parameterType.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY)) {
             return 0;
         }
 
-        if (!arrayLiteralRowsMatch(literal, ptr.referencedType, true)) {
+        if (!arrayLiteralRowsMatch(literal, parameterType.referencedType, true)) {
             return 0;
         }
 
-        return ptr.referencedType instanceof SemanticDynamicArrayType ? 2 : 0;
+        return parameterType.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY ? 2 : 0;
     }
 
     static boolean arrayLiteralRowsMatch(
-            ArrayLiteralNode literal,
-            SemanticType arrayType,
+            AstNode literal,
+            SastType arrayType,
             boolean outermost
     ) {
         if (literal == null || literal.elements.isEmpty()) {
             return false;
         }
 
-        SemanticType elementShape;
+        SastType elementShape;
 
-        if (arrayType instanceof SemanticStaticArrayType staticArray) {
-            SemanticStaticArrayType probe = new SemanticStaticArrayType(
-                    staticArray.elementType,
+        if (arrayType.kind == SastTypeKind.STATIC_ARRAY) {
+            SastType probe = SastType.staticArray(
+                    arrayType.elementType,
                     Integer.toString(literal.elements.size())
             );
 
-            if (!probe.equals(staticArray)) {
+            if (!probe.equals(arrayType)) {
                 return false;
             }
 
-            elementShape = staticArray.elementType;
-        } else if (arrayType instanceof SemanticDynamicArrayType dynamicArray
+            elementShape = arrayType.elementType;
+        } else if (arrayType.kind == SastTypeKind.DYNAMIC_ARRAY
                 && outermost) {
-            elementShape = dynamicArray.elementType;
+            elementShape = arrayType.elementType;
         } else {
             return false;
         }
@@ -436,8 +437,8 @@ final class OverloadResolution {
         boolean anyNested = false;
         boolean anyScalar = false;
 
-        for (ASTNode element : literal.elements) {
-            if (element instanceof ArrayLiteralNode) {
+        for (AstNode element : literal.elements) {
+            if (element.kind == AstKind.ARRAY_LITERAL) {
                 anyNested = true;
             } else {
                 anyScalar = true;
@@ -449,14 +450,14 @@ final class OverloadResolution {
         }
 
         if (anyNested) {
-            if (!(elementShape instanceof SemanticStaticArrayType)
-                    && !(elementShape instanceof SemanticDynamicArrayType)) {
+            if (!(elementShape.kind == SastTypeKind.STATIC_ARRAY)
+                    && !(elementShape.kind == SastTypeKind.DYNAMIC_ARRAY)) {
                 return false;
             }
 
-            for (ASTNode element : literal.elements) {
+            for (AstNode element : literal.elements) {
                 if (!arrayLiteralRowsMatch(
-                        (ArrayLiteralNode) element,
+                        element,
                         elementShape,
                         false)) {
                     return false;
@@ -466,8 +467,8 @@ final class OverloadResolution {
             return true;
         }
 
-        return elementShape instanceof SemanticPrimitiveType
-                || elementShape instanceof SemanticEnumType;
+        return elementShape.kind == SastTypeKind.PRIMITIVE
+                || elementShape.kind == SastTypeKind.ENUM;
     }
 
     static <T> List<T> preferExactPermissionMatches(
@@ -495,8 +496,8 @@ final class OverloadResolution {
         return preferred;
     }
 
-    static List<FunctionSymbol> preferConstantFitFunctions(
-            List<FunctionSymbol> matches,
+    static List<Symbol> preferConstantFitFunctions(
+            List<Symbol> matches,
             List<CallArg> args
     ) {
         if (matches.size() <= 1) {
@@ -505,15 +506,15 @@ final class OverloadResolution {
 
         int best = Integer.MAX_VALUE;
 
-        for (FunctionSymbol fn : matches) {
+        for (Symbol fn : matches) {
             best = Math.min(
                     best,
                     totalConstantFitCost(args, fn.parameterTypes()));
         }
 
-        List<FunctionSymbol> preferred = new ArrayList<>();
+        List<Symbol> preferred = new ArrayList<>();
 
-        for (FunctionSymbol fn : matches) {
+        for (Symbol fn : matches) {
             if (totalConstantFitCost(args, fn.parameterTypes()) == best) {
                 preferred.add(fn);
             }
@@ -522,8 +523,8 @@ final class OverloadResolution {
         return preferred;
     }
 
-    static List<MethodSymbol> preferConstantFitMethods(
-            List<MethodSymbol> matches,
+    static List<Symbol> preferConstantFitMethods(
+            List<Symbol> matches,
             List<CallArg> userArgs
     ) {
         if (matches.size() <= 1) {
@@ -532,13 +533,13 @@ final class OverloadResolution {
 
         int best = Integer.MAX_VALUE;
 
-        for (MethodSymbol m : matches) {
+        for (Symbol m : matches) {
             best = Math.min(best, totalMethodConstantFitCost(m, userArgs));
         }
 
-        List<MethodSymbol> preferred = new ArrayList<>();
+        List<Symbol> preferred = new ArrayList<>();
 
-        for (MethodSymbol m : matches) {
+        for (Symbol m : matches) {
             if (totalMethodConstantFitCost(m, userArgs) == best) {
                 preferred.add(m);
             }
@@ -549,7 +550,7 @@ final class OverloadResolution {
 
     private static int totalConstantFitCost(
             List<CallArg> args,
-            List<SemanticType> parameterTypes
+            List<SastType> parameterTypes
     ) {
         int total = 0;
 
@@ -561,13 +562,13 @@ final class OverloadResolution {
     }
 
     private static int totalMethodConstantFitCost(
-            MethodSymbol method,
+            Symbol method,
             List<CallArg> userArgs
     ) {
         int total = 0;
 
         for (int i = 0; i < userArgs.size(); i++) {
-            SemanticType parameterType =
+            SastType parameterType =
                     method.parameters.get(i + 1).type;
             total += constantFitCost(userArgs.get(i), parameterType);
         }

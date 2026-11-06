@@ -7,14 +7,14 @@ public final class ArrayLiteralLowerer {
 
     public interface Hoister {
         SemanticVarExprNode hoistArrayLiteral(
-                SemanticStaticArrayType arrayType,
+                SastType arrayType,
                 List<BigInteger> values,
                 SourceSpan span
         );
     }
 
-    private static final SemanticType FALLBACK_TYPE =
-            new SemanticPrimitiveType(SemanticPrimitiveKind.INT32);
+    private static final SastType FALLBACK_TYPE =
+            SastType.primitive(SemanticPrimitiveKind.INT32);
 
     private final SymbolTable ctx;
     private final ExpressionAnalyzer exprAnalyzer;
@@ -31,14 +31,14 @@ public final class ArrayLiteralLowerer {
         this.hoister = Objects.requireNonNull(hoister);
     }
 
-    public SemanticExprNode lower(ArrayLiteralNode lit, SemanticType expectedType) {
+    public SemanticExprNode lower(AstNode lit, SastType expectedType) {
         if (lit.elements.isEmpty()) {
             ctx.error("Empty array literals are not supported: an array "
                     + "literal is a view<[T, N]> value with N >= 1");
             return hoistFallback(lit);
         }
 
-        SemanticType shape = literalShape(expectedType);
+        SastType shape = literalShape(expectedType);
 
         if (shape == null) {
             ctx.error("Cannot infer the element type of an array literal here: "
@@ -57,44 +57,48 @@ public final class ArrayLiteralLowerer {
         return hoist(lowered.arrayType, lowered.values, lit.span);
     }
 
-    private static SemanticType literalShape(SemanticType expectedType) {
-        if (expectedType instanceof SemanticPtrType ptr) {
-            SemanticType referenced = ptr.referencedType;
+    private static SastType literalShape(SastType expectedType) {
+        if (expectedType == null) {
+            return null;
+        }
 
-            if (referenced instanceof SemanticStaticArrayType
-                    || referenced instanceof SemanticDynamicArrayType) {
+        if (expectedType.kind == SastTypeKind.PTR) {
+            SastType referenced = expectedType.referencedType;
+
+            if (referenced.kind == SastTypeKind.STATIC_ARRAY
+                    || referenced.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 return referenced;
             }
 
             return null;
         }
 
-        if (expectedType instanceof SemanticStaticArrayType
-                || expectedType instanceof SemanticDynamicArrayType) {
+        if (expectedType.kind == SastTypeKind.STATIC_ARRAY
+                || expectedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return expectedType;
         }
 
         return null;
     }
 
-    private static SemanticType elementTypeOf(SemanticType shape) {
-        if (shape instanceof SemanticStaticArrayType staticArray) {
-            return staticArray.elementType;
+    private static SastType elementTypeOf(SastType shape) {
+        if (shape.kind == SastTypeKind.STATIC_ARRAY) {
+            return shape.elementType;
         }
 
-        if (shape instanceof SemanticDynamicArrayType dynamicArray) {
-            return dynamicArray.elementType;
+        if (shape.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            return shape.elementType;
         }
 
         return null;
     }
 
     private static final class LiteralValues {
-        final SemanticStaticArrayType arrayType;
+        final SastType arrayType;
         final List<BigInteger> values;
 
         LiteralValues(
-                SemanticStaticArrayType arrayType,
+                SastType arrayType,
                 List<BigInteger> values
         ) {
             this.arrayType = arrayType;
@@ -103,8 +107,8 @@ public final class ArrayLiteralLowerer {
     }
 
     private LiteralValues lowerLevel(
-            ArrayLiteralNode lit,
-            SemanticType elementShape
+            AstNode lit,
+            SastType elementShape
     ) {
         if (lit.elements.isEmpty()) {
             ctx.error("Empty array literals are not supported: an array "
@@ -112,16 +116,16 @@ public final class ArrayLiteralLowerer {
             return null;
         }
 
-        if (elementShape instanceof SemanticPrimitiveType primitive) {
-            return lowerScalarLevel(lit, primitive);
+        if (elementShape.kind == SastTypeKind.PRIMITIVE) {
+            return lowerScalarLevel(lit, elementShape);
         }
 
-        if (elementShape instanceof SemanticEnumType enumType) {
-            return lowerEnumLevel(lit, enumType);
+        if (elementShape.kind == SastTypeKind.ENUM) {
+            return lowerEnumLevel(lit, elementShape);
         }
 
-        if (elementShape instanceof SemanticStaticArrayType
-                || elementShape instanceof SemanticDynamicArrayType) {
+        if (elementShape.kind == SastTypeKind.STATIC_ARRAY
+                || elementShape.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return lowerNestedLevel(lit, elementShape);
         }
 
@@ -132,14 +136,14 @@ public final class ArrayLiteralLowerer {
     }
 
     private LiteralValues lowerScalarLevel(
-            ArrayLiteralNode lit,
-            SemanticPrimitiveType primitive
+            AstNode lit,
+            SastType primitive
     ) {
         List<BigInteger> values = new ArrayList<>();
         boolean reportedNonConstant = false;
 
-        for (ASTNode element : lit.elements) {
-            if (element instanceof ArrayLiteralNode) {
+        for (AstNode element : lit.elements) {
+            if (element.kind == AstKind.ARRAY_LITERAL) {
                 ctx.error("Array literal elements must be all nested array "
                         + "literals or all integer expressions here");
                 return null;
@@ -147,7 +151,7 @@ public final class ArrayLiteralLowerer {
 
             SemanticExprNode lowered = exprAnalyzer.analyzeExpr(element);
 
-            if (!(lowered.type instanceof SemanticPrimitiveType)) {
+            if (!(lowered.type.kind == SastTypeKind.PRIMITIVE)) {
                 ctx.error("Array literal elements must be integer expressions, got "
                         + lowered.type.describe());
                 return null;
@@ -167,7 +171,7 @@ public final class ArrayLiteralLowerer {
 
             if (!TypeChecker.fitsBigIntegerToPrimitive(
                     lowered.constantValue,
-                    primitive.kind)) {
+                    primitive.primitive)) {
                 ctx.error("Array literal element "
                         + lowered.constantValue
                         + " does not fit in "
@@ -178,7 +182,7 @@ public final class ArrayLiteralLowerer {
         }
 
         return new LiteralValues(
-                new SemanticStaticArrayType(
+                SastType.staticArray(
                         primitive,
                         Integer.toString(lit.elements.size())
                 ),
@@ -187,13 +191,13 @@ public final class ArrayLiteralLowerer {
     }
 
     private LiteralValues lowerEnumLevel(
-            ArrayLiteralNode lit,
-            SemanticEnumType enumType
+            AstNode lit,
+            SastType enumType
     ) {
         List<BigInteger> values = new ArrayList<>();
 
-        for (ASTNode element : lit.elements) {
-            if (element instanceof ArrayLiteralNode) {
+        for (AstNode element : lit.elements) {
+            if (element.kind == AstKind.ARRAY_LITERAL) {
                 ctx.error("Array literal elements must be all nested array "
                         + "literals or all enum variant expressions here");
                 return null;
@@ -224,7 +228,7 @@ public final class ArrayLiteralLowerer {
         }
 
         return new LiteralValues(
-                new SemanticStaticArrayType(
+                SastType.staticArray(
                         enumType,
                         Integer.toString(lit.elements.size())
                 ),
@@ -233,16 +237,16 @@ public final class ArrayLiteralLowerer {
     }
 
     private LiteralValues lowerNestedLevel(
-            ArrayLiteralNode lit,
-            SemanticType elementShape
+            AstNode lit,
+            SastType elementShape
     ) {
-        SemanticType rowElementShape = elementTypeOf(elementShape);
+        SastType rowElementShape = elementTypeOf(elementShape);
 
         List<BigInteger> values = new ArrayList<>();
-        SemanticStaticArrayType rowType = null;
+        SastType rowType = null;
 
-        for (ASTNode element : lit.elements) {
-            if (!(element instanceof ArrayLiteralNode row)) {
+        for (AstNode element : lit.elements) {
+            if (element.kind != AstKind.ARRAY_LITERAL) {
                 ctx.error("Expected a nested array literal here: the context "
                         + "element type is "
                         + (elementShape == null
@@ -251,7 +255,7 @@ public final class ArrayLiteralLowerer {
                 return null;
             }
 
-            LiteralValues loweredRow = lowerLevel(row, rowElementShape);
+            LiteralValues loweredRow = lowerLevel(element, rowElementShape);
 
             if (loweredRow == null) {
                 return null;
@@ -269,7 +273,7 @@ public final class ArrayLiteralLowerer {
         }
 
         return new LiteralValues(
-                new SemanticStaticArrayType(
+                SastType.staticArray(
                         rowType,
                         Integer.toString(lit.elements.size())
                 ),
@@ -278,7 +282,7 @@ public final class ArrayLiteralLowerer {
     }
 
     private SemanticExprNode hoist(
-            SemanticStaticArrayType arrayType,
+            SastType arrayType,
             List<BigInteger> values,
             SourceSpan span
     ) {
@@ -298,43 +302,43 @@ public final class ArrayLiteralLowerer {
 
         return new SemanticGetPtrNode(
                 span,
-                new SemanticViewType(arrayType),
+                SastType.view(arrayType),
                 global
         );
     }
 
-    private SemanticExprNode hoistFallback(ArrayLiteralNode lit) {
-        SemanticStaticArrayType shape = fallbackShapeType(lit.elements);
+    private SemanticExprNode hoistFallback(AstNode lit) {
+        SastType shape = fallbackShapeType(lit.elements);
         List<BigInteger> values = new ArrayList<>();
         appendZeroValues(values, shape);
 
         return hoist(shape, values, lit.span);
     }
 
-    private static SemanticStaticArrayType fallbackShapeType(
-            List<ASTNode> elements
+    private static SastType fallbackShapeType(
+            List<AstNode> elements
     ) {
         int size = Math.max(1, elements.size());
 
         boolean nested = !elements.isEmpty();
 
-        for (ASTNode element : elements) {
-            if (!(element instanceof ArrayLiteralNode)) {
+        for (AstNode element : elements) {
+            if (element.kind != AstKind.ARRAY_LITERAL) {
                 nested = false;
                 break;
             }
         }
 
         if (nested) {
-            ArrayLiteralNode firstRow = (ArrayLiteralNode) elements.get(0);
+            AstNode firstRow = elements.get(0);
 
-            return new SemanticStaticArrayType(
+            return SastType.staticArray(
                     fallbackShapeType(firstRow.elements),
                     Integer.toString(size)
             );
         }
 
-        return new SemanticStaticArrayType(
+        return SastType.staticArray(
                 FALLBACK_TYPE,
                 Integer.toString(size)
         );
@@ -342,11 +346,11 @@ public final class ArrayLiteralLowerer {
 
     private static void appendZeroValues(
             List<BigInteger> values,
-            SemanticType shape
+            SastType shape
     ) {
-        if (shape instanceof SemanticStaticArrayType staticArray) {
-            for (int i = 0; i < parseSize(staticArray.sizeLiteral); i++) {
-                appendZeroValues(values, staticArray.elementType);
+        if (shape.kind == SastTypeKind.STATIC_ARRAY) {
+            for (int i = 0; i < parseSize(shape.sizeLiteral); i++) {
+                appendZeroValues(values, shape.elementType);
             }
 
             return;

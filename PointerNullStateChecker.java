@@ -220,9 +220,9 @@ public final class PointerNullStateChecker {
 
         private void seedSummaryParameters(SemanticFunctionDeclNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
-                VariableSymbol parameter = decl.parameterVariables.get(i);
+                Symbol parameter = decl.parameterVariables.get(i);
 
-                if (!(parameter.type instanceof SemanticPtrType)) {
+                if (!(parameter.type.kind == SastTypeKind.PTR)) {
                     continue;
                 }
 
@@ -277,7 +277,7 @@ public final class PointerNullStateChecker {
 
         private void seedCheckParameters(SemanticFunctionDeclNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
-                VariableSymbol parameter = decl.parameterVariables.get(i);
+                Symbol parameter = decl.parameterVariables.get(i);
                 int pointerIndex = state.pointerIndex(parameter);
 
                 if (pointerIndex < 0) {
@@ -296,18 +296,18 @@ public final class PointerNullStateChecker {
 
         private boolean isSelfParameter(
                 SemanticFunctionDeclNode decl,
-                VariableSymbol parameter
+                Symbol parameter
         ) {
-            return decl.symbol instanceof MethodSymbol
+            return decl.symbol.kind == SymbolKind.METHOD
                     && !decl.parameterVariables.isEmpty()
                     && decl.parameterVariables.get(0) == parameter;
         }
 
         private boolean isMainArgs(
                 SemanticFunctionDeclNode decl,
-                VariableSymbol parameter
+                Symbol parameter
         ) {
-            return !(decl.symbol instanceof MethodSymbol)
+            return !(decl.symbol.kind == SymbolKind.METHOD)
                     && "main".equals(decl.symbol.name)
                     && decl.symbol.namespace == null
                     && decl.parameterVariables.size() == 1
@@ -583,7 +583,7 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private VariableSymbol pointerIndexSymbol(SemanticExprNode expression) {
+        private Symbol pointerIndexSymbol(SemanticExprNode expression) {
             return expression instanceof SemanticVarExprNode variable
                     ? variable.symbol
                     : null;
@@ -1888,7 +1888,7 @@ public final class PointerNullStateChecker {
             }
 
             if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target.type instanceof SemanticPtrType) {
+                if (getPtr.target.type.kind == SastTypeKind.PTR) {
                     return concreteValueOf(getPtr.target);
                 }
 
@@ -2070,7 +2070,7 @@ public final class PointerNullStateChecker {
             }
 
             if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target.type instanceof SemanticPtrType) {
+                if (getPtr.target.type.kind == SastTypeKind.PTR) {
                     return symbolicValueOf(getPtr.target);
                 }
 

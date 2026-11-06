@@ -22,10 +22,10 @@ final class MemoryShapeIndex {
 
     private static final Shape NONE = new Shape(false, false, false);
 
-    private final Map<SemanticType, Shape> cache = new HashMap<>();
+    private final Map<SastType, Shape> cache = new HashMap<>();
     private final Set<StructSymbol> visiting = new HashSet<>();
 
-    Shape shapeOf(SemanticType type) {
+    Shape shapeOf(SastType type) {
         if (type == null) {
             return NONE;
         }
@@ -41,53 +41,53 @@ final class MemoryShapeIndex {
         return shape;
     }
 
-    boolean containsPointer(SemanticType type) {
+    boolean containsPointer(SastType type) {
         return shapeOf(type).containsPointer;
     }
 
-    boolean containsDynamicArray(SemanticType type) {
+    boolean containsDynamicArray(SastType type) {
         return shapeOf(type).containsDynamicArray;
     }
 
-    boolean containsOwnerArrayPointer(SemanticType type) {
+    boolean containsOwnerArrayPointer(SastType type) {
         return shapeOf(type).containsOwnerArrayPointer;
     }
 
-    private Shape compute(SemanticType type) {
-        if (type instanceof SemanticPrimitiveType
-                || type instanceof SemanticEnumType
-                || type instanceof SemanticVoidType
-                || type instanceof SemanticNullType
-                || type instanceof SemanticFunctionType) {
+    private Shape compute(SastType type) {
+        if (type.kind == SastTypeKind.PRIMITIVE
+                || type.kind == SastTypeKind.ENUM
+                || type.kind == SastTypeKind.VOID
+                || type.kind == SastTypeKind.NULL
+                || type.kind == SastTypeKind.FUNCTION) {
             return NONE;
         }
 
-        if (type instanceof SemanticPtrType pointer) {
-            boolean ownerArray = pointer.permission == PtrPermission.OWNER
-                    && (pointer.referencedType instanceof SemanticDynamicArrayType
-                        || pointer.referencedType instanceof SemanticStaticArrayType);
+        if (type.kind == SastTypeKind.PTR) {
+            boolean ownerArray = type.permission == PtrPermission.OWNER
+                    && (type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || type.referencedType.kind == SastTypeKind.STATIC_ARRAY);
 
             return new Shape(true, false, ownerArray);
         }
 
-        if (type instanceof SemanticDynamicArrayType) {
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
             return new Shape(false, true, false);
         }
 
-        if (type instanceof SemanticStaticArrayType array) {
-            return shapeOf(array.elementType);
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            return shapeOf(type.elementType);
         }
 
-        if (type instanceof SemanticStructType struct) {
-            return structShape(struct.structSymbol);
+        if (type.kind == SastTypeKind.STRUCT) {
+            return structShape(type.structSymbol);
         }
 
-        if (type instanceof SemanticTupleType tuple) {
+        if (type.kind == SastTypeKind.TUPLE) {
             boolean pointer = false;
             boolean dynamic = false;
             boolean ownerArray = false;
 
-            for (FieldSymbol field : tuple.fields) {
+            for (FieldSymbol field : type.fields) {
                 Shape fieldShape = shapeOf(field.type);
                 pointer |= fieldShape.containsPointer;
                 dynamic |= fieldShape.containsDynamicArray;

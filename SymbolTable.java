@@ -12,19 +12,19 @@ import java.util.Set;
 
 public final class SymbolTable {
 
-    private final Deque<Map<String, VariableSymbol>> scopes =
+    private final Deque<Map<String, Symbol>> scopes =
             new ArrayDeque<>();
 
-    private final Map<String, VariableSymbol> globalVariables =
+    private final Map<String, Symbol> globalVariables =
             new LinkedHashMap<>();
 
-    private final IdentityHashMap<VarDeclNode, VariableSymbol> varDeclSymbols =
+    private final IdentityHashMap<AstNode, Symbol> varDeclSymbols =
             new IdentityHashMap<>();
 
-    private final Map<String, List<FunctionSymbol>> functions =
+    private final Map<String, List<Symbol>> functions =
             new LinkedHashMap<>();
 
-    private final IdentityHashMap<FunctionDeclNode, FunctionSymbol> functionDeclSymbols =
+    private final IdentityHashMap<AstNode, Symbol> functionDeclSymbols =
             new IdentityHashMap<>();
 
     private final Map<String, StructSymbol> structs =
@@ -292,8 +292,8 @@ public final class SymbolTable {
         scopes.pop();
     }
 
-    public boolean declare(VariableSymbol sym) {
-        Map<String, VariableSymbol> current = scopes.peek();
+    public boolean declare(Symbol sym) {
+        Map<String, Symbol> current = scopes.peek();
 
         if (current == null) {
             throw new IllegalStateException("Internal error: no active scope.");
@@ -309,8 +309,8 @@ public final class SymbolTable {
         return true;
     }
 
-    public boolean declareGlobalVariable(VariableSymbol sym) {
-        Map<String, VariableSymbol> target = targetGlobalVariables();
+    public boolean declareGlobalVariable(Symbol sym) {
+        Map<String, Symbol> target = targetGlobalVariables();
 
         if (target.containsKey(sym.name)) {
             error("Duplicate declaration of variable '" + sym.qualifiedName() + "'");
@@ -328,7 +328,7 @@ public final class SymbolTable {
         return true;
     }
 
-    public boolean declareGlobalNamespaceVariable(VariableSymbol sym) {
+    public boolean declareGlobalNamespaceVariable(Symbol sym) {
         if (globalVariables.containsKey(sym.name)) {
             return false;
         }
@@ -338,9 +338,9 @@ public final class SymbolTable {
         return true;
     }
 
-    public VariableSymbol resolve(String name) {
-        for (Map<String, VariableSymbol> scope : scopes) {
-            VariableSymbol sym = scope.get(name);
+    public Symbol resolve(String name) {
+        for (Map<String, Symbol> scope : scopes) {
+            Symbol sym = scope.get(name);
 
             if (sym != null) {
                 return sym;
@@ -348,7 +348,7 @@ public final class SymbolTable {
         }
 
         if (currentNamespace != null) {
-            VariableSymbol sym = currentNamespace.globalVariables.get(name);
+            Symbol sym = currentNamespace.globalVariables.get(name);
 
             if (sym != null) {
                 return sym;
@@ -358,7 +358,7 @@ public final class SymbolTable {
         return globalVariables.get(name);
     }
 
-    public VariableSymbol resolveGlobalVarIn(NamespaceSymbol namespace, String name) {
+    public Symbol resolveGlobalVarIn(NamespaceSymbol namespace, String name) {
         if (namespace == null) {
             return globalVariables.get(name);
         }
@@ -366,36 +366,36 @@ public final class SymbolTable {
         return namespace.globalVariables.get(name);
     }
 
-    private Map<String, VariableSymbol> targetGlobalVariables() {
+    private Map<String, Symbol> targetGlobalVariables() {
         return currentNamespace == null
                 ? globalVariables
                 : currentNamespace.globalVariables;
     }
 
     public void registerVarDeclSymbol(
-            VarDeclNode decl,
-            VariableSymbol sym
+            AstNode decl,
+            Symbol sym
     ) {
         varDeclSymbols.put(decl, sym);
     }
 
-    public VariableSymbol findRegisteredVarDeclSymbol(VarDeclNode decl) {
+    public Symbol findRegisteredVarDeclSymbol(AstNode decl) {
         return varDeclSymbols.get(decl);
     }
 
-    public void declareFunction(FunctionDeclNode decl, FunctionSymbol fn) {
-        Map<String, List<FunctionSymbol>> targetFunctions =
+    public void declareFunction(AstNode decl, Symbol fn) {
+        Map<String, List<Symbol>> targetFunctions =
                 currentNamespace == null ? functions : currentNamespace.functions;
 
-        IdentityHashMap<FunctionDeclNode, FunctionSymbol> targetDeclSymbols =
+        IdentityHashMap<AstNode, Symbol> targetDeclSymbols =
                 currentNamespace == null
                         ? functionDeclSymbols
                         : currentNamespace.functionDeclSymbols;
 
-        List<FunctionSymbol> overloads =
+        List<Symbol> overloads =
                 targetFunctions.computeIfAbsent(fn.name, ignored -> new ArrayList<>());
 
-        for (FunctionSymbol existing : overloads) {
+        for (Symbol existing : overloads) {
             if (OverloadResolution.sameParameterSignature(existing.parameters, fn.parameters)) {
                 error("Duplicate declaration of function '"
                         + fn.signatureString()
@@ -408,9 +408,9 @@ public final class SymbolTable {
         targetDeclSymbols.put(decl, fn);
     }
 
-    public FunctionSymbol findRegisteredFunction(FunctionDeclNode decl) {
+    public Symbol findRegisteredFunction(AstNode decl) {
         if (currentNamespace != null) {
-            FunctionSymbol sym = currentNamespace.functionDeclSymbols.get(decl);
+            Symbol sym = currentNamespace.functionDeclSymbols.get(decl);
 
             if (sym != null) {
                 return sym;
@@ -422,8 +422,8 @@ public final class SymbolTable {
 
     public void declareMethod(
             StructSymbol owner,
-            FunctionDeclNode decl,
-            MethodSymbol method
+            AstNode decl,
+            Symbol method
     ) {
         if (owner.hasFieldName(method.name)) {
             error("Method '"
@@ -436,12 +436,12 @@ public final class SymbolTable {
             return;
         }
 
-        List<MethodSymbol> overloads = owner.methods.computeIfAbsent(
+        List<Symbol> overloads = owner.methods.computeIfAbsent(
                 method.name,
                 ignored -> new ArrayList<>()
         );
 
-        for (MethodSymbol existing : overloads) {
+        for (Symbol existing : overloads) {
             if (OverloadResolution.sameMethodUserParameterSignature(
                     existing.parameters,
                     method.parameters)) {
@@ -462,14 +462,14 @@ public final class SymbolTable {
         owner.methodDeclSymbols.put(decl, method);
     }
 
-    public MethodSymbol findRegisteredMethod(
+    public Symbol findRegisteredMethod(
             StructSymbol owner,
-            FunctionDeclNode decl
+            AstNode decl
     ) {
         return owner.methodDeclSymbols.get(decl);
     }
 
-    public MethodSymbol resolveMethod(
+    public Symbol resolveMethod(
             StructSymbol owner,
             String name,
             List<SemanticExprNode> args
@@ -477,30 +477,30 @@ public final class SymbolTable {
         return resolveMethodWithLiterals(owner, name, CallArg.listOf(args));
     }
 
-    public MethodSymbol resolveMethodWithLiterals(
+    public Symbol resolveMethodWithLiterals(
             StructSymbol owner,
             String name,
             List<CallArg> userArgs
     ) {
-        List<MethodSymbol> overloads = owner.methods.get(name);
+        List<Symbol> overloads = owner.methods.get(name);
 
         return resolveMethodFromOverloads(owner, name, overloads, userArgs);
     }
 
-    public MethodSymbol resolveOperatorMethodWithLiterals(
+    public Symbol resolveOperatorMethodWithLiterals(
             StructSymbol owner,
             String name,
             CallArg arg
     ) {
-        List<MethodSymbol> overloads = owner.methods.get(name);
+        List<Symbol> overloads = owner.methods.get(name);
 
         if (overloads == null || overloads.isEmpty()) {
             return null;
         }
 
-        List<MethodSymbol> matches = new ArrayList<>();
+        List<Symbol> matches = new ArrayList<>();
 
-        for (MethodSymbol method : overloads) {
+        for (Symbol method : overloads) {
             if (OverloadResolution.isOperatorArgumentApplicable(method, arg)) {
                 matches.add(method);
             }
@@ -537,19 +537,19 @@ public final class SymbolTable {
         return null;
     }
 
-    private MethodSymbol resolveMethodFromOverloads(
+    private Symbol resolveMethodFromOverloads(
             StructSymbol owner,
             String name,
-            List<MethodSymbol> overloads,
+            List<Symbol> overloads,
             List<CallArg> userArgs
     ) {
         if (overloads == null || overloads.isEmpty()) {
             return null;
         }
 
-        List<MethodSymbol> matches = new ArrayList<>();
+        List<Symbol> matches = new ArrayList<>();
 
-        for (MethodSymbol m : overloads) {
+        for (Symbol m : overloads) {
             if (OverloadResolution.isApplicableMethod(m, userArgs)) {
                 matches.add(m);
             }
@@ -585,18 +585,18 @@ public final class SymbolTable {
         return null;
     }
 
-    public FunctionSymbol resolveFunction(
+    public Symbol resolveFunction(
             String name,
             List<SemanticExprNode> args
     ) {
         return resolveFunctionWithLiterals(name, CallArg.listOf(args));
     }
 
-    public FunctionSymbol resolveFunctionWithLiterals(
+    public Symbol resolveFunctionWithLiterals(
             String name,
             List<CallArg> args
     ) {
-        List<FunctionSymbol> overloads;
+        List<Symbol> overloads;
 
         if (currentNamespace != null
                 && currentNamespace.functions.containsKey(name)) {
@@ -608,7 +608,7 @@ public final class SymbolTable {
         return resolveFromOverloads(name, overloads, args);
     }
 
-    public FunctionSymbol resolveFunctionIn(
+    public Symbol resolveFunctionIn(
             NamespaceSymbol namespace,
             String name,
             List<SemanticExprNode> args
@@ -616,30 +616,30 @@ public final class SymbolTable {
         return resolveFunctionInWithLiterals(namespace, name, CallArg.listOf(args));
     }
 
-    public FunctionSymbol resolveFunctionInWithLiterals(
+    public Symbol resolveFunctionInWithLiterals(
             NamespaceSymbol namespace,
             String name,
             List<CallArg> args
     ) {
-        List<FunctionSymbol> overloads = namespace == null
+        List<Symbol> overloads = namespace == null
                 ? functions.get(name)
                 : namespace.functions.get(name);
 
         return resolveFromOverloads(name, overloads, args);
     }
 
-    private FunctionSymbol resolveFromOverloads(
+    private Symbol resolveFromOverloads(
             String name,
-            List<FunctionSymbol> overloads,
+            List<Symbol> overloads,
             List<CallArg> args
     ) {
         if (overloads == null || overloads.isEmpty()) {
             return null;
         }
 
-        List<FunctionSymbol> matches = new ArrayList<>();
+        List<Symbol> matches = new ArrayList<>();
 
-        for (FunctionSymbol fn : overloads) {
+        for (Symbol fn : overloads) {
             if (OverloadResolution.isApplicableFunction(fn, args)) {
                 matches.add(fn);
             }
@@ -679,26 +679,26 @@ public final class SymbolTable {
             return true;
         }
 
-        List<FunctionSymbol> overloads = functions.get(name);
+        List<Symbol> overloads = functions.get(name);
         return overloads != null && !overloads.isEmpty();
     }
 
     public boolean hasAnyFunctionNamedIn(NamespaceSymbol namespace, String name) {
-        List<FunctionSymbol> overloads = namespace == null
+        List<Symbol> overloads = namespace == null
                 ? functions.get(name)
                 : namespace.functions.get(name);
 
         return overloads != null && !overloads.isEmpty();
     }
 
-    public List<FunctionSymbol> getFunctionsByName(String name) {
+    public List<Symbol> getFunctionsByName(String name) {
         return List.copyOf(functions.getOrDefault(name, List.of()));
     }
 
-    public Collection<FunctionSymbol> allFunctions() {
-        List<FunctionSymbol> out = new ArrayList<>();
+    public Collection<Symbol> allFunctions() {
+        List<Symbol> out = new ArrayList<>();
 
-        for (List<FunctionSymbol> overloads : functions.values()) {
+        for (List<Symbol> overloads : functions.values()) {
             out.addAll(overloads);
         }
 
@@ -725,10 +725,10 @@ public final class SymbolTable {
 
     private static void addFunctionSymbols(
             List<Object> out,
-            Collection<List<FunctionSymbol>> groups
+            Collection<List<Symbol>> groups
     ) {
-        for (List<FunctionSymbol> overloads : groups) {
-            for (FunctionSymbol function : overloads) {
+        for (List<Symbol> overloads : groups) {
+            for (Symbol function : overloads) {
                 out.add(function);
                 out.addAll(function.parameters);
             }
@@ -743,8 +743,8 @@ public final class SymbolTable {
             out.add(struct);
             out.addAll(struct.fields);
 
-            for (List<MethodSymbol> overloads : struct.methods.values()) {
-                for (MethodSymbol method : overloads) {
+            for (List<Symbol> overloads : struct.methods.values()) {
+                for (Symbol method : overloads) {
                     out.add(method);
                     out.addAll(method.parameters);
                 }
@@ -785,7 +785,7 @@ public final class SymbolTable {
 
     private void warnNamespaceNameClash(NamespaceSymbol namespace) {
         Map<String, StructSymbol> scopeStructs;
-        Map<String, List<FunctionSymbol>> scopeFunctions;
+        Map<String, List<Symbol>> scopeFunctions;
         Set<String> scopeVariableNames;
 
         if (namespace.parent == null) {
@@ -830,7 +830,7 @@ public final class SymbolTable {
     private void warnStructNameClashesInSpace(
             Map<String, StructSymbol> spaceStructs,
             Map<String, EnumSymbol> spaceEnums,
-            Map<String, List<FunctionSymbol>> spaceFunctions,
+            Map<String, List<Symbol>> spaceFunctions,
             Set<String> spaceVariableNames
     ) {
         for (StructSymbol structSymbol : spaceStructs.values()) {
@@ -849,7 +849,7 @@ public final class SymbolTable {
             }
 
             if (spaceFunctions.containsKey(structSymbol.name)) {
-                List<FunctionSymbol> clashFunctions =
+                List<Symbol> clashFunctions =
                         spaceFunctions.get(structSymbol.name);
 
                 StringBuilder emitted = new StringBuilder();
@@ -890,7 +890,7 @@ public final class SymbolTable {
             }
 
             if (spaceFunctions.containsKey(enumSymbol.name)) {
-                List<FunctionSymbol> clashFunctions =
+                List<Symbol> clashFunctions =
                         spaceFunctions.get(enumSymbol.name);
 
                 StringBuilder emitted = new StringBuilder();

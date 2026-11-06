@@ -4,7 +4,7 @@ public final class PrivateIdentifierLinter {
     private final DiagnosticBag diagnostics;
 
     private StructSymbol currentStruct;
-    private FunctionSymbol currentFunction;
+    private Symbol currentFunction;
     private String currentNamespace;
 
     public PrivateIdentifierLinter(DiagnosticBag diagnostics) {
@@ -124,14 +124,14 @@ public final class PrivateIdentifierLinter {
             StructSymbol owner
     ) {
         StructSymbol previousStruct = currentStruct;
-        FunctionSymbol previousFunction = currentFunction;
+        Symbol previousFunction = currentFunction;
         String previousNamespace = currentNamespace;
 
         currentStruct = owner;
         currentFunction = node.symbol;
         currentNamespace = node.symbol.namespace;
 
-        for (VariableSymbol parameter : node.parameterVariables) {
+        for (Symbol parameter : node.parameterVariables) {
             checkType(parameter.type);
         }
 
@@ -284,9 +284,9 @@ public final class PrivateIdentifierLinter {
 
         if (node instanceof SemanticAggregateLiteralNode n) {
             for (SemanticAggregateFieldInit init : n.fields) {
-                if (n.type instanceof SemanticStructType structType) {
+                if (n.type.kind == SastTypeKind.STRUCT) {
                     checkFieldAccess(
-                            structType.structSymbol,
+                            n.type.structSymbol,
                             init.field,
                             init.value.span
                     );
@@ -298,12 +298,12 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkFieldAccess(SemanticMemberAccessNode node) {
-        if (!(node.target.type instanceof SemanticStructType structType)) {
+        if (!(node.target.type.kind == SastTypeKind.STRUCT)) {
             return;
         }
 
         checkFieldAccess(
-                structType.structSymbol,
+                node.target.type.structSymbol,
                 node.field,
                 node.span
         );
@@ -343,16 +343,16 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkCall(SemanticFunctionCallNode node) {
-        FunctionSymbol function = node.function;
+        Symbol function = node.function;
 
-        if (function instanceof MethodSymbol method) {
-            if (method.name.startsWith("_") && method.owner != currentStruct) {
+        if (function.kind == SymbolKind.METHOD) {
+            if (function.name.startsWith("_") && function.owner != currentStruct) {
                 diagnostics.warning("'"
-                        + method.owner.qualifiedName()
+                        + function.owner.qualifiedName()
                         + "."
-                        + method.name
+                        + function.name
                         + "' is a private method of struct '"
-                        + method.owner.qualifiedName()
+                        + function.owner.qualifiedName()
                         + "'. Are you sure you want to call it from "
                         + accessContextDescription()
                         + "? Fields and methods starting with '_' are private to the struct they are in.");
@@ -378,41 +378,41 @@ public final class PrivateIdentifierLinter {
                 + "? Functions starting with '__' are internal to the namespace they are in.");
     }
 
-    private void checkType(SemanticType type) {
+    private void checkType(SastType type) {
         if (type == null) {
             return;
         }
 
-        if (type instanceof SemanticStructType structType) {
-            checkStructAccess(structType.structSymbol);
+        if (type.kind == SastTypeKind.STRUCT) {
+            checkStructAccess(type.structSymbol);
             return;
         }
 
-        if (type instanceof SemanticEnumType enumType) {
-            checkEnumAccess(enumType.enumSymbol);
+        if (type.kind == SastTypeKind.ENUM) {
+            checkEnumAccess(type.enumSymbol);
             return;
         }
 
-        if (type instanceof SemanticTupleType tupleType) {
-            for (FieldSymbol field : tupleType.fields) {
+        if (type.kind == SastTypeKind.TUPLE) {
+            for (FieldSymbol field : type.fields) {
                 checkType(field.type);
             }
 
             return;
         }
 
-        if (type instanceof SemanticDynamicArrayType arrayType) {
-            checkType(arrayType.elementType);
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            checkType(type.elementType);
             return;
         }
 
-        if (type instanceof SemanticStaticArrayType arrayType) {
-            checkType(arrayType.elementType);
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            checkType(type.elementType);
             return;
         }
 
-        if (type instanceof SemanticPtrType ptrType) {
-            checkType(ptrType.referencedType);
+        if (type.kind == SastTypeKind.PTR) {
+            checkType(type.referencedType);
         }
     }
 
@@ -466,7 +466,7 @@ public final class PrivateIdentifierLinter {
     }
 
     private String accessContextDescription() {
-        if (currentFunction instanceof MethodSymbol) {
+        if (currentFunction.kind == SymbolKind.METHOD) {
             return "method '" + currentFunction.qualifiedName() + "'";
         }
 

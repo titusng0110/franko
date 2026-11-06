@@ -104,29 +104,29 @@ final class ArrayIntrinsicChecker {
         SemanticExprNode sourcePtr = node.args.get(0);
         owner.checkExpr(sourcePtr);
 
-        SemanticType sourceArrayType = null;
+        SastType sourceArrayType = null;
 
         if (types.ensureValueExpression(
                 sourcePtr,
                 "memcmp() source pointer"
         )) {
-            if (!(sourcePtr.type instanceof SemanticPtrType ptr)) {
+            if (!(sourcePtr.type.kind == SastTypeKind.PTR)) {
                 diagnostics.error("memcmp() source must be an pointer to an array, got "
                         + types.describeSafe(sourcePtr.type));
-            } else if (!types.isArrayType(ptr.referencedType)) {
+            } else if (!types.isArrayType(sourcePtr.type.referencedType)) {
                 diagnostics.error("memcmp() source must be an pointer to an array, got ptr<"
-                        + types.describeSafe(ptr.referencedType)
+                        + types.describeSafe(sourcePtr.type.referencedType)
                         + ">");
             } else {
-                sourceArrayType = ptr.referencedType;
+                sourceArrayType = sourcePtr.type.referencedType;
             }
         }
 
-        SemanticType targetArrayType = node.receiver.type;
+        SastType targetArrayType = node.receiver.type;
 
         if (sourceArrayType != null) {
-            SemanticType targetElem = types.elementTypeOfArray(targetArrayType);
-            SemanticType sourceElem = types.elementTypeOfArray(sourceArrayType);
+            SastType targetElem = types.elementTypeOfArray(targetArrayType);
+            SastType sourceElem = types.elementTypeOfArray(sourceArrayType);
 
             if (targetElem != null && sourceElem != null
                     && !TypeChecker.sameType(targetElem, sourceElem)) {
@@ -212,16 +212,16 @@ final class ArrayIntrinsicChecker {
         owner.checkExpr(needle);
 
         if (types.ensureValueExpression(needle, "memmem() needle pointer")) {
-            if (!(needle.type instanceof SemanticPtrType ptr)) {
+            if (!(needle.type.kind == SastTypeKind.PTR)) {
                 diagnostics.error("memmem() needle must be an pointer to an array, got "
                         + types.describeSafe(needle.type));
-            } else if (!types.isArrayType(ptr.referencedType)) {
+            } else if (!types.isArrayType(needle.type.referencedType)) {
                 diagnostics.error("memmem() needle must be an pointer to an array, got ptr<"
-                        + types.describeSafe(ptr.referencedType)
+                        + types.describeSafe(needle.type.referencedType)
                         + ">");
             } else {
-                SemanticType needleElem =
-                        types.elementTypeOfArray(ptr.referencedType);
+                SastType needleElem =
+                        types.elementTypeOfArray(needle.type.referencedType);
 
                 if (needleElem != null && !TypeChecker.isByteType(needleElem)) {
                     diagnostics.error("memmem() needle array element type must be byte, got "
@@ -308,7 +308,7 @@ final class ArrayIntrinsicChecker {
                 node.kind.runtimeName + "() value"
         );
 
-        ensureArrayIntrinsicReturnType(node, new SemanticVoidType());
+        ensureArrayIntrinsicReturnType(node, SastType.voidType());
     }
 
     private void visitArrayBitIntrinsic(SemanticArrayIntrinsicCallNode node) {
@@ -361,7 +361,7 @@ final class ArrayIntrinsicChecker {
             return;
         }
 
-        SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
+        SastType elementType = types.elementTypeOfArray(node.receiver.type);
 
         if (elementType == null) {
             return;
@@ -423,7 +423,7 @@ final class ArrayIntrinsicChecker {
 
         ensureArrayIntrinsicReturnType(
                 node,
-                new SemanticPrimitiveType(SemanticPrimitiveKind.INT32)
+                SastType.primitive(SemanticPrimitiveKind.INT32)
         );
     }
 
@@ -445,7 +445,7 @@ final class ArrayIntrinsicChecker {
 
         ensureArrayIntrinsicReturnType(
                 node,
-                new SemanticVoidType()
+                SastType.voidType()
         );
     }
 
@@ -465,7 +465,7 @@ final class ArrayIntrinsicChecker {
                 "memset() receiver must be an array"
         );
 
-        SemanticType elementType = types.elementTypeOfArray(node.receiver.type);
+        SastType elementType = types.elementTypeOfArray(node.receiver.type);
 
         if (elementType != null && !types.isMemsetSafe(elementType)) {
             diagnostics.error("memset() receiver element type is not memset-safe: "
@@ -506,7 +506,7 @@ final class ArrayIntrinsicChecker {
 
         ensureArrayIntrinsicReturnType(
                 node,
-                new SemanticVoidType()
+                SastType.voidType()
         );
     }
 
@@ -529,29 +529,29 @@ final class ArrayIntrinsicChecker {
         SemanticExprNode sourcePtr = node.args.get(0);
         owner.checkExpr(sourcePtr);
 
-        SemanticType sourceArrayType = null;
+        SastType sourceArrayType = null;
 
         if (types.ensureValueExpression(
                 sourcePtr,
                 "memcpy() source pointer"
         )) {
-            if (!(sourcePtr.type instanceof SemanticPtrType ptr)) {
+            if (!(sourcePtr.type.kind == SastTypeKind.PTR)) {
                 diagnostics.error("memcpy() source must be an pointer to an array, got "
                         + types.describeSafe(sourcePtr.type));
-            } else if (!types.isArrayType(ptr.referencedType)) {
+            } else if (!types.isArrayType(sourcePtr.type.referencedType)) {
                 diagnostics.error("memcpy() source must be an pointer to an array, got ptr<"
-                        + types.describeSafe(ptr.referencedType)
+                        + types.describeSafe(sourcePtr.type.referencedType)
                         + ">");
             } else {
-                sourceArrayType = ptr.referencedType;
+                sourceArrayType = sourcePtr.type.referencedType;
             }
         }
 
-        SemanticType targetArrayType = node.receiver.type;
+        SastType targetArrayType = node.receiver.type;
 
         if (targetArrayType != null && sourceArrayType != null) {
-            SemanticType targetElem = types.elementTypeOfArray(targetArrayType);
-            SemanticType sourceElem = types.elementTypeOfArray(sourceArrayType);
+            SastType targetElem = types.elementTypeOfArray(targetArrayType);
+            SastType sourceElem = types.elementTypeOfArray(sourceArrayType);
 
             if (targetElem != null && sourceElem != null
                     && !TypeChecker.sameType(targetElem, sourceElem)) {
@@ -612,7 +612,7 @@ final class ArrayIntrinsicChecker {
 
         ensureArrayIntrinsicReturnType(
                 node,
-                new SemanticVoidType()
+                SastType.voidType()
         );
     }
 
@@ -632,7 +632,7 @@ final class ArrayIntrinsicChecker {
                 "memmove() receiver must be an array"
         );
 
-        SemanticType receiverElem =
+        SastType receiverElem =
                 types.elementTypeOfArray(node.receiver.type);
 
         if (receiverElem != null && !types.isMemcpySafe(receiverElem)) {
@@ -678,7 +678,7 @@ final class ArrayIntrinsicChecker {
 
         ensureArrayIntrinsicReturnType(
                 node,
-                new SemanticVoidType()
+                SastType.voidType()
         );
     }
 
@@ -696,13 +696,13 @@ final class ArrayIntrinsicChecker {
 
         ensureArrayIntrinsicReturnType(
                 node,
-                new SemanticPrimitiveType(SemanticPrimitiveKind.UINT32)
+                SastType.primitive(SemanticPrimitiveKind.UINT32)
         );
     }
 
     private void ensureArrayIntrinsicReturnType(
             SemanticArrayIntrinsicCallNode node,
-            SemanticType expected
+            SastType expected
     ) {
         if (!TypeChecker.sameType(node.type, expected)) {
             diagnostics.error("Array intrinsic '"

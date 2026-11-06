@@ -46,9 +46,9 @@ public class DeclarationChecker {
     }
 
     private void validateGlobalStaticInitializer(SemanticVarDeclNode node) {
-        SemanticType type = node.symbol.type;
+        SastType type = node.symbol.type;
 
-        if (!(type instanceof SemanticPtrType)) {
+        if (!(type.kind == SastTypeKind.PTR)) {
             diagnostics.error("Variable '"
                 + node.symbol.qualifiedName()
                 + "' has a static address initializer, but only pointer "
@@ -86,7 +86,7 @@ public class DeclarationChecker {
         }
 
         checkDeclaredType(
-            new SemanticStructType(node.symbol),
+            SastType.structType(node.symbol),
             "Struct '" + node.symbol.qualifiedName() + "'"
         );
 
@@ -95,7 +95,7 @@ public class DeclarationChecker {
                 continue;
             }
 
-            if (!(methodNode.symbol instanceof MethodSymbol method)) {
+            if (!(methodNode.symbol.kind == SymbolKind.METHOD)) {
                 diagnostics.error("Struct '"
                         + node.symbol.qualifiedName()
                         + "' has a non-method function '"
@@ -104,11 +104,11 @@ public class DeclarationChecker {
                 continue;
             }
 
-            if (node.symbol.resolveField(method.name) != null) {
+            if (node.symbol.resolveField(methodNode.symbol.name) != null) {
                 diagnostics.error("Method '"
-                        + method.qualifiedName()
+                        + methodNode.symbol.qualifiedName()
                         + "' conflicts with field '"
-                        + method.name
+                        + methodNode.symbol.name
                         + "' of struct '"
                         + node.symbol.qualifiedName()
                         + "'");
@@ -117,14 +117,14 @@ public class DeclarationChecker {
     }
 
     public void checkDeclaredType(
-        SemanticType type,
+        SastType type,
         String where
     ) {
         checkDeclaredType(type, where, new HashMap<>(), new HashSet<>());
     }
 
     private void checkDeclaredType(
-        SemanticType type,
+        SastType type,
         String where,
         Map<String, StructWalkState> structWalkStates,
         Set<String> byValuePath
@@ -134,18 +134,18 @@ public class DeclarationChecker {
             return;
         }
 
-        if (type instanceof SemanticPrimitiveType) {
+        if (type.kind == SastTypeKind.PRIMITIVE) {
             return;
         }
 
-        if (type instanceof SemanticEnumType) {
+        if (type.kind == SastTypeKind.ENUM) {
             return;
         }
 
-        if (type instanceof SemanticDynamicArrayType dynamicArray) {
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
 
             checkDeclaredType(
-                dynamicArray.elementType,
+                type.elementType,
                 where + " dynamic array element",
                 structWalkStates,
                 new HashSet<>()
@@ -153,11 +153,11 @@ public class DeclarationChecker {
             return;
         }
 
-        if (type instanceof SemanticStaticArrayType staticArray) {
-            validateStaticArraySize(staticArray, where);
+        if (type.kind == SastTypeKind.STATIC_ARRAY) {
+            validateStaticArraySize(type, where);
 
             checkDeclaredType(
-                staticArray.elementType,
+                type.elementType,
                 where + " static array element",
                 structWalkStates,
                 byValuePath
@@ -165,9 +165,9 @@ public class DeclarationChecker {
             return;
         }
 
-        if (type instanceof SemanticStructType struct) {
+        if (type.kind == SastTypeKind.STRUCT) {
             validateStructType(
-                struct,
+                type,
                 where,
                 structWalkStates,
                 byValuePath
@@ -175,9 +175,9 @@ public class DeclarationChecker {
             return;
         }
 
-        if (type instanceof SemanticTupleType tuple) {
-            for (int i = 0; i < tuple.fields.size(); i++) {
-                FieldSymbol field = tuple.fields.get(i);
+        if (type.kind == SastTypeKind.TUPLE) {
+            for (int i = 0; i < type.fields.size(); i++) {
+                FieldSymbol field = type.fields.get(i);
 
                 if (field == null) {
                     diagnostics.error(where
@@ -206,10 +206,10 @@ public class DeclarationChecker {
             return;
         }
 
-        if (type instanceof SemanticPtrType pointer) {
+        if (type.kind == SastTypeKind.PTR) {
 
             checkDeclaredType(
-                pointer.referencedType,
+                type.referencedType,
                 where + " pointer referenced type",
                 structWalkStates,
                 new HashSet<>()
@@ -228,7 +228,7 @@ public class DeclarationChecker {
     }
 
     private void validateStructType(
-        SemanticStructType struct,
+        SastType struct,
         String where,
         Map<String, StructWalkState> structWalkStates,
         Set<String> byValuePath
@@ -311,10 +311,10 @@ public class DeclarationChecker {
         FieldSymbol field,
         String where
     ) {
-        if (field.type instanceof SemanticPrimitiveType primitive) {
+        if (field.type.kind == SastTypeKind.PRIMITIVE) {
             if (!TypeChecker.fitsBigIntegerToPrimitive(
                     field.foldedDefault,
-                    primitive.kind
+                    field.type.primitive
             )) {
                 diagnostics.error(where + " default value "
                     + field.foldedDefault
@@ -330,10 +330,10 @@ public class DeclarationChecker {
     }
 
     private void validateGlobalConstInitializer(SemanticVarDeclNode node) {
-        if (node.symbol.type instanceof SemanticPrimitiveType primitive) {
+        if (node.symbol.type.kind == SastTypeKind.PRIMITIVE) {
             if (!TypeChecker.fitsBigIntegerToPrimitive(
                     node.foldedConstInitializer,
-                    primitive.kind
+                    node.symbol.type.primitive
             )) {
                 diagnostics.error("Variable '"
                     + node.symbol.qualifiedName()
@@ -355,7 +355,7 @@ public class DeclarationChecker {
     }
 
     private void validateStaticArraySize(
-        SemanticStaticArrayType staticArray,
+        SastType staticArray,
         String where
     ) {
 

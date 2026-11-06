@@ -5,12 +5,12 @@ import java.util.Objects;
 final class CallArg {
 
     final SemanticExprNode lowered;
-    final ArrayLiteralNode literal;
+    final AstNode literal;
     private final boolean operator;
 
     private CallArg(
             SemanticExprNode lowered,
-            ArrayLiteralNode literal,
+            AstNode literal,
             boolean operator
     ) {
         this.lowered = lowered;
@@ -22,7 +22,7 @@ final class CallArg {
         return new CallArg(Objects.requireNonNull(expr), null, false);
     }
 
-    static CallArg literal(ArrayLiteralNode literal) {
+    static CallArg literal(AstNode literal) {
         return new CallArg(null, Objects.requireNonNull(literal), false);
     }
 
@@ -30,7 +30,7 @@ final class CallArg {
         return new CallArg(Objects.requireNonNull(expr), null, true);
     }
 
-    static CallArg operatorLiteral(ArrayLiteralNode literal) {
+    static CallArg operatorLiteral(AstNode literal) {
         return new CallArg(null, Objects.requireNonNull(literal), true);
     }
 
@@ -48,7 +48,7 @@ final class CallArg {
         return literal != null;
     }
 
-    SemanticType type() {
+    SastType type() {
         return isLiteral() ? null : lowered.type;
     }
 
