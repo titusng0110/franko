@@ -60,30 +60,8 @@ final class DeclarationSelector {
         ExpressionLowering lowering = new ExpressionLowering(
                 ctx,
                 constEval,
-                (arrayType, values, span) -> {
-                    Symbol symbol = Symbol.global(
-                            null,
-                            "_CT_ARRAY",
-                            arrayType
-                    );
-                    symbol.literalValues = List.copyOf(values);
-                    return SastNode.varExpr(span, arrayType, symbol);
-                },
-                (bytes, span) -> {
-                    SastType arrayType =
-                            SastType.staticArray(
-                                    SastType.primitive(
-                                            SemanticPrimitiveKind.UINT8),
-                                    Integer.toString(bytes.size())
-                            );
-                    Symbol symbol = Symbol.global(
-                            null,
-                            "_CT_STR",
-                            arrayType
-                    );
-                    symbol.literalBytes = List.copyOf(bytes);
-                    return symbol;
-                },
+                new ArrayLiteralHoister(),
+                new StaticStringHoister(),
                 target
         );
 
@@ -256,21 +234,21 @@ final class DeclarationSelector {
                 computed.add(new EnumVariant(variant.name, value));
             }
         } else {
-            BigInteger previous = null;
+            BigInteger lastValue = null;
 
             for (AstNode variant : uniqueVariants) {
                 BigInteger value;
 
                 if (variant.value != null) {
                     value = parseEnumVariantValueQuiet(variant);
-                } else if (previous == null) {
+                } else if (lastValue == null) {
                     value = TypeChecker.wrapBigIntegerToPrimitive(BigInteger.ZERO, backingKind);
                 } else {
-                    value = TypeChecker.wrapBigIntegerToPrimitive(previous.add(BigInteger.ONE), backingKind);
+                    value = TypeChecker.wrapBigIntegerToPrimitive(lastValue.add(BigInteger.ONE), backingKind);
                 }
 
                 computed.add(new EnumVariant(variant.name, value));
-                previous = value;
+                lastValue = value;
             }
         }
 

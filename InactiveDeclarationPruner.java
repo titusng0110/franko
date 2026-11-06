@@ -208,10 +208,15 @@ final class InactiveDeclarationPruner {
                 markType(field.type);
             }
 
-            List<Symbol> kept = struct.methods.values().stream()
-                    .flatMap(List::stream)
-                    .filter(keptFunctions::contains)
-                    .toList();
+            List<Symbol> kept = new ArrayList<>();
+
+            for (List<Symbol> overloads : struct.methods.values()) {
+                for (Symbol method : overloads) {
+                    if (keptFunctions.contains(method)) {
+                        kept.add(method);
+                    }
+                }
+            }
 
             for (Symbol method : kept) {
                 markType(method.type());

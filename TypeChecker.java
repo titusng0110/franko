@@ -610,21 +610,23 @@ public class TypeChecker {
     }
 
     public SemanticPrimitiveKind unsignedVariantOf(SemanticPrimitiveKind kind) {
-        return switch (kind) {
-            case INT8, UINT8 -> SemanticPrimitiveKind.UINT8;
-            case INT16, UINT16 -> SemanticPrimitiveKind.UINT16;
-            case INT32, UINT32 -> SemanticPrimitiveKind.UINT32;
-            case INT64, UINT64 -> SemanticPrimitiveKind.UINT64;
-        };
+        switch (kind) {
+            case INT8, UINT8: return SemanticPrimitiveKind.UINT8;
+            case INT16, UINT16: return SemanticPrimitiveKind.UINT16;
+            case INT32, UINT32: return SemanticPrimitiveKind.UINT32;
+            case INT64, UINT64: return SemanticPrimitiveKind.UINT64;
+            default: throw new IllegalStateException("Unknown primitive kind: " + kind);
+        }
     }
 
     public SemanticPrimitiveKind signedVariantOf(SemanticPrimitiveKind kind) {
-        return switch (kind) {
-            case INT8, UINT8 -> SemanticPrimitiveKind.INT8;
-            case INT16, UINT16 -> SemanticPrimitiveKind.INT16;
-            case INT32, UINT32 -> SemanticPrimitiveKind.INT32;
-            case INT64, UINT64 -> SemanticPrimitiveKind.INT64;
-        };
+        switch (kind) {
+            case INT8, UINT8: return SemanticPrimitiveKind.INT8;
+            case INT16, UINT16: return SemanticPrimitiveKind.INT16;
+            case INT32, UINT32: return SemanticPrimitiveKind.INT32;
+            case INT64, UINT64: return SemanticPrimitiveKind.INT64;
+            default: throw new IllegalStateException("Unknown primitive kind: " + kind);
+        }
     }
 
     public void requireConstantFitsType(
@@ -688,19 +690,21 @@ public class TypeChecker {
     }
 
     public static int bitWidth(SemanticPrimitiveKind kind) {
-        return switch (kind) {
-            case INT8, UINT8 -> 8;
-            case INT16, UINT16 -> 16;
-            case INT32, UINT32 -> 32;
-            case INT64, UINT64 -> 64;
-        };
+        switch (kind) {
+            case INT8, UINT8: return 8;
+            case INT16, UINT16: return 16;
+            case INT32, UINT32: return 32;
+            case INT64, UINT64: return 64;
+            default: throw new IllegalStateException("Unknown primitive kind: " + kind);
+        }
     }
 
     public static boolean isSigned(SemanticPrimitiveKind kind) {
-        return switch (kind) {
-            case INT8, INT16, INT32, INT64 -> true;
-            case UINT8, UINT16, UINT32, UINT64 -> false;
-        };
+        switch (kind) {
+            case INT8, INT16, INT32, INT64: return true;
+            case UINT8, UINT16, UINT32, UINT64: return false;
+            default: throw new IllegalStateException("Unknown primitive kind: " + kind);
+        }
     }
 
     public static boolean isValuePreservingIntegerWidening(

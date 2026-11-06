@@ -1,6 +1,6 @@
 import java.util.Objects;
 
-public record Diagnostic(Severity severity, String message, SourceSpan span) {
+public final class Diagnostic {
 
     public enum Severity {
         ERROR("error"),
@@ -17,10 +17,26 @@ public record Diagnostic(Severity severity, String message, SourceSpan span) {
         }
     }
 
-    public Diagnostic {
-        severity = Objects.requireNonNull(severity);
-        message = message == null ? "<null diagnostic>" : message;
-        span = span == null ? SourceSpan.NONE : span;
+    public final Severity severity;
+    public final String message;
+    public final SourceSpan span;
+
+    public Diagnostic(Severity severity, String message, SourceSpan span) {
+        this.severity = Objects.requireNonNull(severity);
+        this.message = message == null ? "<null diagnostic>" : message;
+        this.span = span == null ? SourceSpan.NONE : span;
+    }
+
+    public Severity severity() {
+        return severity;
+    }
+
+    public String message() {
+        return message;
+    }
+
+    public SourceSpan span() {
+        return span;
     }
 
     public static Diagnostic error(String message) {

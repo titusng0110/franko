@@ -2,7 +2,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.function.Supplier;
 
 public class Main {
 
@@ -185,7 +184,7 @@ public class Main {
                 null,
                 "==== Warnings ====",
                 "Semantic analysis failed:",
-                () -> new SemanticAnalyzer(target).analyze(importResult.document)
+                PassCall.semantic(target, importResult.document)
         );
 
         PassResult legalityResult = runPass(
@@ -196,7 +195,7 @@ public class Main {
                 "==== Legality Checking ====",
                 null,
                 "Legality checking failed:",
-                () -> new LegalityChecker().check(semaResult.document)
+                PassCall.legality(semaResult.document)
         );
 
         SastDocument branchPruned = new BranchPruner().prune(legalityResult.document);
@@ -217,8 +216,7 @@ public class Main {
                 "==== Pointer Null-State Checking ====",
                 "==== Pointer Null-State Warnings ====",
                 "Pointer null-state checking failed:",
-                () -> new PointerNullStateChecker(new DiagnosticBag(), memoryContext)
-                        .check(inactivePruned)
+                PassCall.nullState(inactivePruned, memoryContext)
         );
 
         PassResult danglingResult = runPass(
@@ -229,8 +227,7 @@ public class Main {
                 "==== Dangling Pointer Checking ====",
                 "==== Dangling Pointer Warnings ====",
                 "Dangling pointer checking failed:",
-                () -> new DanglingPointerChecker(new DiagnosticBag(), memoryContext)
-                        .check(pointerStateResult.document)
+                PassCall.dangling(pointerStateResult.document, memoryContext)
         );
 
         PassResult dynamicArrayResult = runPass(
@@ -241,8 +238,7 @@ public class Main {
                 "==== Dynamic Array Memory Checking ====",
                 "==== Dynamic Array Memory Warnings ====",
                 "Dynamic array memory checking failed:",
-                () -> new DynamicArrayMemoryChecker(new DiagnosticBag(), memoryContext)
-                        .check(danglingResult.document)
+                PassCall.dynamicArray(danglingResult.document, memoryContext)
         );
 
         PassResult permissionResult = runPass(
@@ -253,8 +249,7 @@ public class Main {
                 "==== Pointer Permission Linting ====",
                 "==== Pointer Permission Warnings ====",
                 "Pointer permission linting failed:",
-                () -> new PointerPermissionChecker(new DiagnosticBag())
-                        .check(dynamicArrayResult.document)
+                PassCall.permissions(dynamicArrayResult.document)
         );
 
         PassResult privateIdentifierResult = runPass(
@@ -265,8 +260,7 @@ public class Main {
                 "==== Private Identifier Linting ====",
                 "==== Private Identifier Warnings ====",
                 "Private identifier linting failed:",
-                () -> new PrivateIdentifierLinter(new DiagnosticBag())
-                        .check(permissionResult.document)
+                PassCall.privateIdentifiers(permissionResult.document)
         );
 
         FfiHandler ffiHandler = new FfiHandler(modules);
@@ -295,13 +289,17 @@ public class Main {
         Cpp14Codegen codegen = new Cpp14Codegen(activeFfiHandler, maxOptimize);
         String generatedBody = codegen.generate(checkedDocument.root);
 
-        String templateFile = switch (checkedDocument.entryKind) {
-            case ARGS -> "ProgramTemplateWithRawCArgs.cpp";
-            case NO_ARGS -> "ProgramTemplate.cpp";
-            case NONE -> throw new RuntimeException(
-                "Internal compiler error: no entry-point function 'main' after successful analysis"
+        String templateFile;
+
+        if (checkedDocument.entryKind == EntryKind.ARGS) {
+            templateFile = "ProgramTemplateWithRawCArgs.cpp";
+        } else if (checkedDocument.entryKind == EntryKind.NO_ARGS) {
+            templateFile = "ProgramTemplate.cpp";
+        } else {
+            throw new RuntimeException(
+                    "Internal compiler error: no entry-point function 'main' after successful analysis"
             );
-        };
+        }
 
         String template = Files.readString(Path.of(templateFile), StandardCharsets.UTF_8);
 
@@ -314,13 +312,17 @@ public class Main {
             throw new RuntimeException("Template does not contain __FRANKO_RUNTIME_HEADER__ placeholder.");
         }
 
-        String expectedEntryCall = switch (checkedDocument.entryKind) {
-            case ARGS -> "FUNC_main_b3b049d8";
-            case NO_ARGS -> "FUNC_main_72623263";
-            case NONE -> throw new RuntimeException(
-                "Internal compiler error: no entry-point function 'main' after successful analysis"
+        String expectedEntryCall;
+
+        if (checkedDocument.entryKind == EntryKind.ARGS) {
+            expectedEntryCall = "FUNC_main_b3b049d8";
+        } else if (checkedDocument.entryKind == EntryKind.NO_ARGS) {
+            expectedEntryCall = "FUNC_main_72623263";
+        } else {
+            throw new RuntimeException(
+                    "Internal compiler error: no entry-point function 'main' after successful analysis"
             );
-        };
+        }
 
         if (!template.contains(expectedEntryCall)) {
             throw new RuntimeException(
@@ -345,6 +347,111 @@ public class Main {
         System.out.println("Successfully compiled to C++14: " + outPath);
     }
 
+    private enum PassKind {
+        SEMANTIC,
+        LEGALITY,
+        NULL_STATE,
+        DANGLING,
+        DYNAMIC_ARRAY,
+        PERMISSIONS,
+        PRIVATE_ID
+    }
+
+    private static final class PassCall {
+        final PassKind kind;
+        final TargetInfo target;
+        final AstDocument astDocument;
+        final SastDocument document;
+        final MemoryAnalysisContext memoryContext;
+
+        private PassCall(
+                PassKind kind,
+                TargetInfo target,
+                AstDocument astDocument,
+                SastDocument document,
+                MemoryAnalysisContext memoryContext
+        ) {
+            this.kind = kind;
+            this.target = target;
+            this.astDocument = astDocument;
+            this.document = document;
+            this.memoryContext = memoryContext;
+        }
+
+        static PassCall semantic(TargetInfo target, AstDocument document) {
+            return new PassCall(PassKind.SEMANTIC, target, document, null, null);
+        }
+
+        static PassCall legality(SastDocument document) {
+            return new PassCall(PassKind.LEGALITY, null, null, document, null);
+        }
+
+        static PassCall nullState(
+                SastDocument document,
+                MemoryAnalysisContext memoryContext
+        ) {
+            return new PassCall(
+                    PassKind.NULL_STATE, null, null, document, memoryContext);
+        }
+
+        static PassCall dangling(
+                SastDocument document,
+                MemoryAnalysisContext memoryContext
+        ) {
+            return new PassCall(
+                    PassKind.DANGLING, null, null, document, memoryContext);
+        }
+
+        static PassCall dynamicArray(
+                SastDocument document,
+                MemoryAnalysisContext memoryContext
+        ) {
+            return new PassCall(
+                    PassKind.DYNAMIC_ARRAY, null, null, document, memoryContext);
+        }
+
+        static PassCall permissions(SastDocument document) {
+            return new PassCall(PassKind.PERMISSIONS, null, null, document, null);
+        }
+
+        static PassCall privateIdentifiers(SastDocument document) {
+            return new PassCall(PassKind.PRIVATE_ID, null, null, document, null);
+        }
+
+        PassResult run() {
+            if (kind == PassKind.SEMANTIC) {
+                return new SemanticAnalyzer(target).analyze(astDocument);
+            }
+
+            if (kind == PassKind.LEGALITY) {
+                return new LegalityChecker().check(document);
+            }
+
+            if (kind == PassKind.NULL_STATE) {
+                return new PointerNullStateChecker(
+                        new DiagnosticBag(), memoryContext).check(document);
+            }
+
+            if (kind == PassKind.DANGLING) {
+                return new DanglingPointerChecker(
+                        new DiagnosticBag(), memoryContext).check(document);
+            }
+
+            if (kind == PassKind.DYNAMIC_ARRAY) {
+                return new DynamicArrayMemoryChecker(
+                        new DiagnosticBag(), memoryContext).check(document);
+            }
+
+            if (kind == PassKind.PERMISSIONS) {
+                return new PointerPermissionChecker(
+                        new DiagnosticBag()).check(document);
+            }
+
+            return new PrivateIdentifierLinter(
+                    new DiagnosticBag()).check(document);
+        }
+    }
+
     private static PassResult runPass(
             DiagnosticLog log,
             JsonArtifacts artifacts,
@@ -353,13 +460,13 @@ public class Main {
             String heading,
             String warningHeading,
             String failureHeader,
-            Supplier<PassResult> pass
+            PassCall pass
     ) {
         if (heading != null) {
             System.out.println(heading);
         }
 
-        PassResult result = pass.get();
+        PassResult result = pass.run();
         log.add(logName, result.diagnostics);
         artifacts.writeSast(phase, result.document);
 

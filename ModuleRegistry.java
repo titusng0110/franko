@@ -81,12 +81,13 @@ final class ModuleRegistry {
     ) {
         JsonValue value = Json.parse(text);
 
-        if (!(value instanceof JsonObject root)) {
+        if (!value.isObject()) {
             throw new IllegalArgumentException(
                     "Module manifest '" + manifest + "' must contain a JSON object"
             );
         }
 
+        JsonValue root = value;
         String format = root.requireString("format");
 
         if (!"franko-module".equals(format)) {
@@ -130,7 +131,7 @@ final class ModuleRegistry {
     }
 
     private static void parseFunctions(
-            JsonArray array,
+            JsonValue array,
             ModuleDescriptor descriptor,
             Path manifest
     ) {
@@ -139,7 +140,7 @@ final class ModuleRegistry {
         }
 
         for (JsonValue value : array.values()) {
-            JsonObject obj = requireObject(value, "module function", manifest);
+            JsonValue obj = requireObject(value, "module function", manifest);
             String name = obj.requireString("name");
             Path bridgePath = entityBridgePath(obj, descriptor, manifest);
 
@@ -152,7 +153,7 @@ final class ModuleRegistry {
     }
 
     private static Path entityBridgePath(
-            JsonObject obj,
+            JsonValue obj,
             ModuleDescriptor descriptor,
             Path manifest
     ) {
@@ -194,17 +195,19 @@ final class ModuleRegistry {
         return base.resolve(text).normalize().toAbsolutePath();
     }
 
-    private static JsonObject requireObject(
+    private static JsonValue requireObject(
             JsonValue value,
             String description,
             Path manifest
     ) {
-        if (!(value instanceof JsonObject object)) {
+        if (!value.isObject()) {
             throw new IllegalArgumentException(
                     "Module manifest '" + manifest + "': expected "
                             + description + " object"
             );
         }
+
+        JsonValue object = value;
 
         return object;
     }

@@ -72,10 +72,10 @@ public final class PrivateIdentifierLinter {
         }
 
         if (node.kind == SastKind.VAR_DECL) {
-            String previousNamespace = currentNamespace;
+            String savedNamespace = currentNamespace;
             currentNamespace = node.symbol.namespace;
             checkType(node.symbol.type);
-            currentNamespace = previousNamespace;
+            currentNamespace = savedNamespace;
         }
     }
 
@@ -89,8 +89,8 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkStructInner(SastNode node) {
-        StructSymbol previousStruct = currentStruct;
-        String previousNamespace = currentNamespace;
+        StructSymbol savedStruct = currentStruct;
+        String savedNamespace = currentNamespace;
 
         currentStruct = node.structSymbol;
         currentNamespace = node.structSymbol.namespace;
@@ -103,8 +103,8 @@ public final class PrivateIdentifierLinter {
             checkFunction(method, node.structSymbol);
         }
 
-        currentStruct = previousStruct;
-        currentNamespace = previousNamespace;
+        currentStruct = savedStruct;
+        currentNamespace = savedNamespace;
     }
 
     private void checkFunction(
@@ -123,9 +123,9 @@ public final class PrivateIdentifierLinter {
             SastNode node,
             StructSymbol owner
     ) {
-        StructSymbol previousStruct = currentStruct;
-        Symbol previousFunction = currentFunction;
-        String previousNamespace = currentNamespace;
+        StructSymbol savedStruct = currentStruct;
+        Symbol savedFunction = currentFunction;
+        String savedNamespace = currentNamespace;
 
         currentStruct = owner;
         currentFunction = node.symbol;
@@ -138,9 +138,9 @@ public final class PrivateIdentifierLinter {
         checkType(node.symbol.returnType());
         checkStmt(node.body);
 
-        currentStruct = previousStruct;
-        currentFunction = previousFunction;
-        currentNamespace = previousNamespace;
+        currentStruct = savedStruct;
+        currentFunction = savedFunction;
+        currentNamespace = savedNamespace;
     }
 
     private void checkStmt(SastNode node) {

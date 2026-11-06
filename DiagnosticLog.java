@@ -3,7 +3,22 @@ import java.util.List;
 
 public final class DiagnosticLog {
 
-    public record Entry(String phase, Diagnostic diagnostic) {
+    public static final class Entry {
+        public final String phase;
+        public final Diagnostic diagnostic;
+
+        Entry(String phase, Diagnostic diagnostic) {
+            this.phase = phase;
+            this.diagnostic = diagnostic;
+        }
+
+        public String phase() {
+            return phase;
+        }
+
+        public Diagnostic diagnostic() {
+            return diagnostic;
+        }
     }
 
     private final List<Entry> entries = new ArrayList<>();
@@ -27,19 +42,47 @@ public final class DiagnosticLog {
     }
 
     public List<Diagnostic> diagnostics() {
-        return entries.stream().map(Entry::diagnostic).toList();
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            out.add(entry.diagnostic());
+        }
+
+        return out;
     }
 
     public List<Diagnostic> errors() {
-        return diagnostics().stream().filter(Diagnostic::isError).toList();
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            if (entry.diagnostic().isError()) {
+                out.add(entry.diagnostic());
+            }
+        }
+
+        return out;
     }
 
     public List<Diagnostic> warnings() {
-        return diagnostics().stream().filter(d -> !d.isError()).toList();
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            if (!entry.diagnostic().isError()) {
+                out.add(entry.diagnostic());
+            }
+        }
+
+        return out;
     }
 
     public boolean hasErrors() {
-        return entries.stream().anyMatch(e -> e.diagnostic().isError());
+        for (Entry entry : entries) {
+            if (entry.diagnostic().isError()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public void clear() {

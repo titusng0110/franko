@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 
 public final class ExpressionAnalyzer {
 
@@ -13,7 +12,7 @@ public final class ExpressionAnalyzer {
 
     private ArrayLowerer arrayLowerer = null;
 
-    private Function<AstNode, SastType> typeResolver = null;
+    private SemanticTypeResolver typeResolver = null;
 
     private static final SastType FALLBACK_TYPE =
             SastType.primitive(SemanticPrimitiveKind.INT32);
@@ -48,7 +47,7 @@ public final class ExpressionAnalyzer {
 
     void wire(
             ArrayLowerer arrayLowerer,
-            Function<AstNode, SastType> typeResolver,
+            SemanticTypeResolver typeResolver,
             ArrayLiteralLowerer arrayLiteralLowerer,
             CompileTimeIntrinsics staticIntrinsics
     ) {
@@ -317,11 +316,15 @@ public final class ExpressionAnalyzer {
 
         if (node.kind == AstKind.GET_PTR) {
             AstNode n = node;
-            String intrinsicName = switch (n.permission) {
-                case OWNER -> "getptr";
-                case MUTABLE -> "getmview";
-                case READ_ONLY -> "getview";
-            };
+            String intrinsicName;
+
+            if (n.permission == PtrPermission.OWNER) {
+                intrinsicName = "getptr";
+            } else if (n.permission == PtrPermission.MUTABLE) {
+                intrinsicName = "getmview";
+            } else {
+                intrinsicName = "getview";
+            }
 
             SastNode target = analyzeRequiredLValueExpr(
                     n.target,
@@ -436,7 +439,7 @@ public final class ExpressionAnalyzer {
         }
 
         ctx.error("Unrecognized expression node: "
-                + node.kind.legacyClassName());
+                + node.kind.jsonName());
 
         return SastNode.intLiteral(
                 node.span,
@@ -680,18 +683,19 @@ public final class ExpressionAnalyzer {
             return FALLBACK_TYPE;
         }
 
-        return typeResolver.apply(node);
+        return typeResolver.analyzeNormalType(node);
     }
 
     private static SastType pointerTypeFor(
             PtrPermission kind,
             SastType referencedType
     ) {
-        return switch (kind) {
-            case OWNER -> SastType.ptr(referencedType);
-            case MUTABLE -> SastType.mview(referencedType);
-            case READ_ONLY -> SastType.view(referencedType);
-        };
+        switch (kind) {
+            case OWNER: return SastType.ptr(referencedType);
+            case MUTABLE: return SastType.mview(referencedType);
+            case READ_ONLY: return SastType.view(referencedType);
+            default: throw new IllegalStateException("Unknown permission: " + kind);
+        }
     }
 
     public BigInteger preEvaluatedConstValue(
@@ -1217,12 +1221,12 @@ public final class ExpressionAnalyzer {
                     finalizeCallArgs(callArgs, parameterTypes);
 
             if (fn == null) {
-                Symbol legacy = ctx.resolveFunction(
+                Symbol resolved = ctx.resolveFunction(
                         calleeVar.name,
                         args
                 );
 
-                if (legacy == null) {
+                if (resolved == null) {
                     if (ctx.resolve(calleeVar.name) != null
                             && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
                         ctx.error("'" + calleeVar.name + "' is not a function");
@@ -1298,13 +1302,13 @@ public final class ExpressionAnalyzer {
                     finalizeCallArgs(callArgs, parameterTypes);
 
             if (fn == null) {
-                Symbol legacy = ctx.resolveFunctionIn(
+                Symbol resolved = ctx.resolveFunctionIn(
                         namespace,
                         calleeName,
                         args
                 );
 
-                if (legacy == null) {
+                if (resolved == null) {
                     ctx.error("No matching overload for function call '"
                             + formatCallSignature(
                                     qualifiedCallee,
@@ -1429,13 +1433,13 @@ public final class ExpressionAnalyzer {
         if (method == null) {
             List<SastType> userArgTypes = callArgTypes(userArgs);
 
-            Symbol legacy = ctx.resolveMethod(
+            Symbol resolved = ctx.resolveMethod(
                     owner,
                     mac.name,
                     userArgs
             );
 
-            if (legacy == null) {
+            if (resolved == null) {
                 ctx.error("No matching overload for method call '"
                         + owner.qualifiedName()
                         + "."

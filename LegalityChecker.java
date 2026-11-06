@@ -126,6 +126,11 @@ public class LegalityChecker {
 
     private void checkProgram(SastNode program) {
         for (SastNode item : program.topLevelItems) {
+            if (item == null) {
+                diagnostics.error("Program contains null top-level item");
+                continue;
+            }
+
             if (item.kind == SastKind.NAMESPACE) {
                 for (SastNode namespaceItem : item.items) {
                     checkNode(namespaceItem);
@@ -163,12 +168,8 @@ public class LegalityChecker {
                 continue;
             }
 
-            if (item == null) {
-                diagnostics.error("Program contains null top-level item");
-            } else {
-                diagnostics.error("Invalid top-level item in program: "
-                        + item.getClass().getSimpleName());
-            }
+            diagnostics.error("Invalid top-level item in program: "
+                    + item.kind.jsonName());
         }
     }
 }

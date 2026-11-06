@@ -18,6 +18,12 @@ public final class ImportResult {
     }
 
     public boolean hasErrors() {
-        return diagnostics.stream().anyMatch(Diagnostic::isError);
+        for (Diagnostic diagnostic : diagnostics) {
+            if (diagnostic.isError()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

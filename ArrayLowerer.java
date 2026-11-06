@@ -68,45 +68,51 @@ public final class ArrayLowerer {
             return null;
         }
 
-        return switch (mac.name) {
-            case "init" ->
-                    lowerDynamicArrayAlloc(
-                            call,
-                            mac,
-                            SemanticArrayIntrinsicKind.INIT
-                    );
+        if ("init".equals(mac.name)) {
+            return lowerDynamicArrayAlloc(
+                    call,
+                    mac,
+                    SemanticArrayIntrinsicKind.INIT
+            );
+        }
 
-            case "init_zero" ->
-                    lowerDynamicArrayAlloc(
-                            call,
-                            mac,
-                            SemanticArrayIntrinsicKind.INIT_ZERO
-                    );
+        if ("init_zero".equals(mac.name)) {
+            return lowerDynamicArrayAlloc(
+                    call,
+                    mac,
+                    SemanticArrayIntrinsicKind.INIT_ZERO
+            );
+        }
 
-            case "resize" ->
-                    lowerDynamicArrayAlloc(
-                            call,
-                            mac,
-                            SemanticArrayIntrinsicKind.RESIZE
-                    );
+        if ("resize".equals(mac.name)) {
+            return lowerDynamicArrayAlloc(
+                    call,
+                    mac,
+                    SemanticArrayIntrinsicKind.RESIZE
+            );
+        }
 
-            case "uninit" ->
-                    lowerUninit(call, mac);
+        if ("uninit".equals(mac.name)) {
+            return lowerUninit(call, mac);
+        }
 
-            case "memset" ->
-                    lowerMemset(call, mac);
+        if ("memset".equals(mac.name)) {
+            return lowerMemset(call, mac);
+        }
 
-            case "memcpy" ->
-                    lowerMemcpy(call, mac);
+        if ("memcpy".equals(mac.name)) {
+            return lowerMemcpy(call, mac);
+        }
 
-            case "memmove" ->
-                    lowerMemmove(call, mac);
+        if ("memmove".equals(mac.name)) {
+            return lowerMemmove(call, mac);
+        }
 
-            case "length" ->
-                    lowerLength(call, mac);
+        if ("length".equals(mac.name)) {
+            return lowerLength(call, mac);
+        }
 
-            default -> lowerSignatureIntrinsic(call, mac);
-        };
+        return lowerSignatureIntrinsic(call, mac);
     }
 
     private SastNode lowerSignatureIntrinsic(

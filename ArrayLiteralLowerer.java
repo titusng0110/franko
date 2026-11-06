@@ -5,26 +5,18 @@ import java.util.Objects;
 
 public final class ArrayLiteralLowerer {
 
-    public interface Hoister {
-        SastNode hoistArrayLiteral(
-                SastType arrayType,
-                List<BigInteger> values,
-                SourceSpan span
-        );
-    }
-
     private static final SastType FALLBACK_TYPE =
             SastType.primitive(SemanticPrimitiveKind.INT32);
 
     private final SymbolTable ctx;
     private final ExpressionAnalyzer exprAnalyzer;
 
-    private final Hoister hoister;
+    private final ArrayLiteralHoister hoister;
 
     public ArrayLiteralLowerer(
             SymbolTable ctx,
             ExpressionAnalyzer exprAnalyzer,
-            Hoister hoister
+            ArrayLiteralHoister hoister
     ) {
         this.ctx = Objects.requireNonNull(ctx);
         this.exprAnalyzer = Objects.requireNonNull(exprAnalyzer);

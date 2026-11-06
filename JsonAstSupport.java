@@ -3,7 +3,7 @@ import java.util.List;
 
 final class JsonAstSupport {
 
-    static JsonObject requireDocument(
+    static JsonValue requireDocument(
             String json,
             String kind,
             String format,
@@ -11,11 +11,13 @@ final class JsonAstSupport {
     ) {
         JsonValue value = Json.parse(json);
 
-        if (!(value instanceof JsonObject document)) {
+        if (!value.isObject()) {
             throw new IllegalArgumentException(
                     kind + " document must be a JSON object"
             );
         }
+
+        JsonValue document = value;
 
         String actualFormat = document.requireString("format");
 
@@ -40,8 +42,8 @@ final class JsonAstSupport {
         return document;
     }
 
-    static JsonArray sourceArray(SourceTable sources) {
-        JsonArray array = new JsonArray();
+    static JsonValue sourceArray(SourceTable sources) {
+        JsonValue array = JsonValue.array();
 
         for (String source : sources.names()) {
             array.add(source);
@@ -50,17 +52,17 @@ final class JsonAstSupport {
         return array;
     }
 
-    static SourceTable sourceTable(JsonArray array, String kind) {
+    static SourceTable sourceTable(JsonValue array, String kind) {
         SourceTable table = new SourceTable();
 
         for (JsonValue value : array.values()) {
-            if (!(value instanceof JsonString string)) {
+            if (!value.isString()) {
                 throw new IllegalArgumentException(
                         kind + " source entry must be a string"
                 );
             }
 
-            table.intern(string.value());
+            table.intern(value.value());
         }
 
         return table;
@@ -68,10 +70,10 @@ final class JsonAstSupport {
 
     static JsonValue bigIntegerArray(List<BigInteger> values) {
         if (values == null) {
-            return JsonNull.INSTANCE;
+            return JsonValue.nullValue();
         }
 
-        JsonArray array = new JsonArray();
+        JsonValue array = JsonValue.array();
 
         for (BigInteger value : values) {
             array.add(value.toString(10));
@@ -80,14 +82,14 @@ final class JsonAstSupport {
         return array;
     }
 
-    static JsonObject requireObject(JsonValue value, String description) {
-        if (!(value instanceof JsonObject object)) {
+    static JsonValue requireObject(JsonValue value, String description) {
+        if (!value.isObject()) {
             throw new IllegalArgumentException(
                     "Expected " + description + " to be an object"
             );
         }
 
-        return object;
+        return value;
     }
 
     static <T extends Enum<T>> T requireEnumName(String name, Class<T> type) {

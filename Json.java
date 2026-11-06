@@ -41,11 +41,11 @@ public final class Json {
     }
 
     private static JsonValue sortKeys(JsonValue value) {
-        if (value instanceof JsonObject object) {
-            JsonObject sorted = new JsonObject();
+        if (value.isObject()) {
+            JsonValue sorted = JsonValue.object();
             Map<String, JsonValue> keys = new TreeMap<>();
 
-            for (Map.Entry<String, JsonValue> entry : object.entries()) {
+            for (Map.Entry<String, JsonValue> entry : value.entries()) {
                 keys.put(entry.getKey(), sortKeys(entry.getValue()));
             }
 
@@ -56,10 +56,10 @@ public final class Json {
             return sorted;
         }
 
-        if (value instanceof JsonArray array) {
-            JsonArray sorted = new JsonArray();
+        if (value.isArray()) {
+            JsonValue sorted = JsonValue.array();
 
-            for (JsonValue element : array.values()) {
+            for (JsonValue element : value.values()) {
                 sorted.add(sortKeys(element));
             }
 
@@ -102,15 +102,31 @@ public final class Json {
 
             char c = text.charAt(index);
 
-            return switch (c) {
-                case '{' -> parseObject();
-                case '[' -> parseArray();
-                case '"' -> new JsonString(parseString());
-                case 't' -> parseKeyword("true", JsonBool.TRUE);
-                case 'f' -> parseKeyword("false", JsonBool.FALSE);
-                case 'n' -> parseKeyword("null", JsonNull.INSTANCE);
-                default -> parseNumber();
-            };
+            if (c == '{') {
+                return parseObject();
+            }
+
+            if (c == '[') {
+                return parseArray();
+            }
+
+            if (c == '"') {
+                return JsonValue.string(parseString());
+            }
+
+            if (c == 't') {
+                return parseKeyword("true", JsonValue.bool(true));
+            }
+
+            if (c == 'f') {
+                return parseKeyword("false", JsonValue.bool(false));
+            }
+
+            if (c == 'n') {
+                return parseKeyword("null", JsonValue.nullValue());
+            }
+
+            return parseNumber();
         }
 
         private JsonValue parseKeyword(String keyword, JsonValue value) {
@@ -122,9 +138,9 @@ public final class Json {
             return value;
         }
 
-        private JsonObject parseObject() {
+        private JsonValue parseObject() {
             expect('{');
-            JsonObject object = new JsonObject();
+            JsonValue object = JsonValue.object();
             skipWhitespace();
 
             if (peek('}')) {
@@ -161,9 +177,9 @@ public final class Json {
             }
         }
 
-        private JsonArray parseArray() {
+        private JsonValue parseArray() {
             expect('[');
-            JsonArray array = new JsonArray();
+            JsonValue array = JsonValue.array();
             skipWhitespace();
 
             if (peek(']')) {
@@ -250,7 +266,7 @@ public final class Json {
             return (char) value;
         }
 
-        private JsonNumber parseNumber() {
+        private JsonValue parseNumber() {
             int start = index;
 
             if (peek('-')) {
@@ -299,7 +315,7 @@ public final class Json {
                 }
             }
 
-            return new JsonNumber(text.substring(start, index));
+            return JsonValue.number(text.substring(start, index));
         }
 
         private static boolean isDigit(char c) {
@@ -342,48 +358,134 @@ public final class Json {
     }
 }
 
-abstract class JsonValue {
-    abstract void write(StringBuilder sb, boolean pretty, int indent);
-
-    String toJson() {
-        return Json.write(this);
-    }
+enum JsonKind {
+    OBJECT,
+    ARRAY,
+    STRING,
+    NUMBER,
+    BOOL,
+    NULL
 }
 
-final class JsonObject extends JsonValue {
-    private final LinkedHashMap<String, JsonValue> values = new LinkedHashMap<>();
+final class JsonValue {
+    final JsonKind kind;
 
-    JsonObject put(String key, JsonValue value) {
-        values.put(key, value == null ? JsonNull.INSTANCE : value);
+    private final LinkedHashMap<String, JsonValue> objectValues;
+    private final List<JsonValue> arrayValues;
+    private final String text;
+    private final boolean boolValue;
+
+    private JsonValue(
+            JsonKind kind,
+            LinkedHashMap<String, JsonValue> objectValues,
+            List<JsonValue> arrayValues,
+            String text,
+            boolean boolValue
+    ) {
+        this.kind = kind;
+        this.objectValues = objectValues;
+        this.arrayValues = arrayValues;
+        this.text = text;
+        this.boolValue = boolValue;
+    }
+
+    static JsonValue object() {
+        return new JsonValue(
+                JsonKind.OBJECT,
+                new LinkedHashMap<>(),
+                null,
+                null,
+                false
+        );
+    }
+
+    static JsonValue array() {
+        return new JsonValue(
+                JsonKind.ARRAY,
+                null,
+                new ArrayList<>(),
+                null,
+                false
+        );
+    }
+
+    static JsonValue string(String value) {
+        return new JsonValue(
+                JsonKind.STRING,
+                null,
+                null,
+                value == null ? "" : value,
+                false
+        );
+    }
+
+    static JsonValue number(String value) {
+        return new JsonValue(JsonKind.NUMBER, null, null, value, false);
+    }
+
+    static JsonValue bool(boolean value) {
+        return new JsonValue(JsonKind.BOOL, null, null, null, value);
+    }
+
+    static JsonValue nullValue() {
+        return new JsonValue(JsonKind.NULL, null, null, null, false);
+    }
+
+    boolean isObject() {
+        return kind == JsonKind.OBJECT;
+    }
+
+    boolean isArray() {
+        return kind == JsonKind.ARRAY;
+    }
+
+    boolean isString() {
+        return kind == JsonKind.STRING;
+    }
+
+    boolean isNumber() {
+        return kind == JsonKind.NUMBER;
+    }
+
+    boolean isBool() {
+        return kind == JsonKind.BOOL;
+    }
+
+    boolean isNull() {
+        return kind == JsonKind.NULL;
+    }
+
+    JsonValue put(String key, JsonValue value) {
+        objectValues.put(key, value == null ? nullValue() : value);
         return this;
     }
 
-    JsonObject put(String key, String value) {
-        return put(key, value == null ? JsonNull.INSTANCE : new JsonString(value));
+    JsonValue put(String key, String value) {
+        return put(key, value == null ? nullValue() : string(value));
     }
 
-    JsonObject put(String key, long value) {
-        return put(key, new JsonNumber(Long.toString(value)));
+    JsonValue put(String key, long value) {
+        return put(key, number(Long.toString(value)));
     }
 
-    JsonObject put(String key, boolean value) {
-        return put(key, value ? JsonBool.TRUE : JsonBool.FALSE);
+    JsonValue put(String key, boolean value) {
+        return put(key, bool(value));
     }
 
-    JsonObject putNull(String key) {
-        return put(key, JsonNull.INSTANCE);
+    JsonValue putNull(String key) {
+        return put(key, nullValue());
     }
 
     JsonValue get(String key) {
-        return values.get(key);
+        return objectValues.get(key);
     }
 
     boolean has(String key) {
-        return values.containsKey(key);
+        return objectValues.containsKey(key);
     }
 
     JsonValue require(String key) {
-        JsonValue value = values.get(key);
+        JsonValue value = objectValues.get(key);
 
         if (value == null) {
             throw new IllegalArgumentException("Missing required JSON field '" + key + "'");
@@ -392,45 +494,45 @@ final class JsonObject extends JsonValue {
         return value;
     }
 
-    JsonObject requireObject(String key) {
+    JsonValue requireObject(String key) {
         JsonValue value = require(key);
 
-        if (!(value instanceof JsonObject object)) {
+        if (!value.isObject()) {
             throw new IllegalArgumentException("JSON field '" + key + "' must be an object");
         }
 
-        return object;
+        return value;
     }
 
-    JsonArray requireArray(String key) {
+    JsonValue requireArray(String key) {
         JsonValue value = require(key);
 
-        if (!(value instanceof JsonArray array)) {
+        if (!value.isArray()) {
             throw new IllegalArgumentException("JSON field '" + key + "' must be an array");
         }
 
-        return array;
+        return value;
     }
 
     String requireString(String key) {
         JsonValue value = require(key);
 
-        if (!(value instanceof JsonString string)) {
+        if (!value.isString()) {
             throw new IllegalArgumentException("JSON field '" + key + "' must be a string");
         }
 
-        return string.value();
+        return value.value();
     }
 
     int requireInt(String key) {
         JsonValue value = require(key);
 
-        if (!(value instanceof JsonNumber number)) {
+        if (!value.isNumber()) {
             throw new IllegalArgumentException("JSON field '" + key + "' must be a number");
         }
 
         try {
-            return new BigDecimal(number.value()).intValueExact();
+            return new BigDecimal(value.value()).intValueExact();
         } catch (ArithmeticException e) {
             throw new IllegalArgumentException("JSON field '" + key + "' must be an integer");
         }
@@ -439,48 +541,109 @@ final class JsonObject extends JsonValue {
     boolean requireBool(String key) {
         JsonValue value = require(key);
 
-        if (!(value instanceof JsonBool bool)) {
+        if (!value.isBool()) {
             throw new IllegalArgumentException("JSON field '" + key + "' must be a boolean");
         }
 
-        return bool.value();
+        return value.boolValue;
     }
 
     String optString(String key) {
-        JsonValue value = values.get(key);
-        return value instanceof JsonString string ? string.value() : null;
+        JsonValue value = objectValues.get(key);
+        return value != null && value.isString() ? value.value() : null;
     }
 
-    JsonObject optObject(String key) {
-        JsonValue value = values.get(key);
-        return value instanceof JsonObject object ? object : null;
+    JsonValue optObject(String key) {
+        JsonValue value = objectValues.get(key);
+        return value != null && value.isObject() ? value : null;
     }
 
-    JsonArray optArray(String key) {
-        JsonValue value = values.get(key);
-        return value instanceof JsonArray array ? array : null;
+    JsonValue optArray(String key) {
+        JsonValue value = objectValues.get(key);
+        return value != null && value.isArray() ? value : null;
     }
 
     Iterable<Map.Entry<String, JsonValue>> entries() {
-        return values.entrySet();
+        return objectValues.entrySet();
     }
 
     int size() {
-        return values.size();
+        if (kind == JsonKind.OBJECT) {
+            return objectValues.size();
+        }
+
+        return arrayValues.size();
     }
 
-    @Override
+    JsonValue add(JsonValue value) {
+        arrayValues.add(value == null ? nullValue() : value);
+        return this;
+    }
+
+    JsonValue add(String value) {
+        return add(string(value));
+    }
+
+    JsonValue get(int index) {
+        return arrayValues.get(index);
+    }
+
+    List<JsonValue> values() {
+        return List.copyOf(arrayValues);
+    }
+
+    String value() {
+        return text;
+    }
+
+    boolean boolValue() {
+        return boolValue;
+    }
+
+    String toJson() {
+        return Json.write(this);
+    }
+
     void write(StringBuilder sb, boolean pretty, int indent) {
+        if (kind == JsonKind.OBJECT) {
+            writeObject(sb, pretty, indent);
+            return;
+        }
+
+        if (kind == JsonKind.ARRAY) {
+            writeArray(sb, pretty, indent);
+            return;
+        }
+
+        if (kind == JsonKind.STRING) {
+            JsonWriter.writeString(sb, text);
+            return;
+        }
+
+        if (kind == JsonKind.NUMBER) {
+            sb.append(text);
+            return;
+        }
+
+        if (kind == JsonKind.BOOL) {
+            sb.append(boolValue ? "true" : "false");
+            return;
+        }
+
+        sb.append("null");
+    }
+
+    private void writeObject(StringBuilder sb, boolean pretty, int indent) {
         sb.append('{');
 
-        if (!values.isEmpty()) {
+        if (!objectValues.isEmpty()) {
             if (pretty) {
                 sb.append('\n');
             }
 
             int i = 0;
 
-            for (Map.Entry<String, JsonValue> entry : values.entrySet()) {
+            for (Map.Entry<String, JsonValue> entry : objectValues.entrySet()) {
                 if (pretty) {
                     JsonWriter.indent(sb, indent + 1);
                 }
@@ -490,7 +653,7 @@ final class JsonObject extends JsonValue {
                 entry.getValue().write(sb, pretty, indent + 1);
                 i++;
 
-                if (i < values.size()) {
+                if (i < objectValues.size()) {
                     sb.append(',');
                 }
 
@@ -506,49 +669,23 @@ final class JsonObject extends JsonValue {
 
         sb.append('}');
     }
-}
 
-final class JsonArray extends JsonValue {
-    private final List<JsonValue> values = new ArrayList<>();
-
-    JsonArray add(JsonValue value) {
-        values.add(value == null ? JsonNull.INSTANCE : value);
-        return this;
-    }
-
-    JsonArray add(String value) {
-        return add(new JsonString(value));
-    }
-
-    JsonValue get(int index) {
-        return values.get(index);
-    }
-
-    List<JsonValue> values() {
-        return List.copyOf(values);
-    }
-
-    int size() {
-        return values.size();
-    }
-
-    @Override
-    void write(StringBuilder sb, boolean pretty, int indent) {
+    private void writeArray(StringBuilder sb, boolean pretty, int indent) {
         sb.append('[');
 
-        if (!values.isEmpty()) {
+        if (!arrayValues.isEmpty()) {
             if (pretty) {
                 sb.append('\n');
             }
 
-            for (int i = 0; i < values.size(); i++) {
+            for (int i = 0; i < arrayValues.size(); i++) {
                 if (pretty) {
                     JsonWriter.indent(sb, indent + 1);
                 }
 
-                values.get(i).write(sb, pretty, indent + 1);
+                arrayValues.get(i).write(sb, pretty, indent + 1);
 
-                if (i + 1 < values.size()) {
+                if (i + 1 < arrayValues.size()) {
                     sb.append(',');
                 }
 
@@ -563,72 +700,6 @@ final class JsonArray extends JsonValue {
         }
 
         sb.append(']');
-    }
-}
-
-final class JsonString extends JsonValue {
-    private final String value;
-
-    JsonString(String value) {
-        this.value = value == null ? "" : value;
-    }
-
-    String value() {
-        return value;
-    }
-
-    @Override
-    void write(StringBuilder sb, boolean pretty, int indent) {
-        JsonWriter.writeString(sb, value);
-    }
-}
-
-final class JsonNumber extends JsonValue {
-    private final String value;
-
-    JsonNumber(String value) {
-        this.value = value;
-    }
-
-    String value() {
-        return value;
-    }
-
-    @Override
-    void write(StringBuilder sb, boolean pretty, int indent) {
-        sb.append(value);
-    }
-}
-
-final class JsonBool extends JsonValue {
-    static final JsonBool TRUE = new JsonBool(true);
-    static final JsonBool FALSE = new JsonBool(false);
-
-    private final boolean value;
-
-    private JsonBool(boolean value) {
-        this.value = value;
-    }
-
-    boolean value() {
-        return value;
-    }
-
-    @Override
-    void write(StringBuilder sb, boolean pretty, int indent) {
-        sb.append(value ? "true" : "false");
-    }
-}
-
-final class JsonNull extends JsonValue {
-    static final JsonNull INSTANCE = new JsonNull();
-
-    private JsonNull() {
-    }
-
-    @Override
-    void write(StringBuilder sb, boolean pretty, int indent) {
-        sb.append("null");
     }
 }
 

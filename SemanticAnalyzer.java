@@ -44,16 +44,8 @@ public final class SemanticAnalyzer {
         ExpressionLowering lowering = new ExpressionLowering(
                 symbolTable,
                 constEval,
-                new ArrayLiteralLowerer.Hoister() {
-                    @Override
-                    public SastNode hoistArrayLiteral(
-                            SastType arrayType,
-                            List<BigInteger> values,
-                            SourceSpan span) {
-                        return hoistArrayLiteralGlobal(arrayType, values, span);
-                    }
-                },
-                this::hoistStaticStringGlobal,
+                new ArrayLiteralHoister(this),
+                new StaticStringHoister(this),
                 target
         );
 
@@ -104,13 +96,13 @@ public final class SemanticAnalyzer {
         SastNode root = analyze(ast.root);
         SastNode program;
 
-        if (root.kind == SastKind.PROGRAM) {
-            program = root;
-        } else if (root == null) {
+        if (root == null) {
             program = SastNode.program(
                     ast.root == null ? SourceSpan.NONE : ast.root.span,
                     List.of()
             );
+        } else if (root.kind == SastKind.PROGRAM) {
+            program = root;
         } else {
             program = SastNode.program(root.span, List.of(root));
         }
@@ -279,7 +271,7 @@ public final class SemanticAnalyzer {
             }
 
             symbolTable.error("Invalid top-level item '"
-                    + item.kind.legacyClassName()
+                    + item.kind.jsonName()
                     + "': only struct declarations, global variable declarations, function declarations, and namespace declarations are allowed at global scope");
             } finally {
                 symbolTable.diagnostics().pop();
@@ -640,15 +632,13 @@ public final class SemanticAnalyzer {
 
         NamespaceSymbol space = symbolTable.declareNamespace(fullPath);
 
-        NamespaceProgramItems spaceItems = spacesByName.computeIfAbsent(
-                fullPath,
-                ignored -> {
-                    NamespaceProgramItems created =
-                            new NamespaceProgramItems(space, node.span);
-                    spaces.add(created);
-                    return created;
-                }
-        );
+        NamespaceProgramItems spaceItems = spacesByName.get(fullPath);
+
+        if (spaceItems == null) {
+            spaceItems = new NamespaceProgramItems(space, node.span);
+            spacesByName.put(fullPath, spaceItems);
+            spaces.add(spaceItems);
+        }
 
         for (AstNode item : node.items) {
             if (item.kind == AstKind.NAMESPACE) {
@@ -918,7 +908,7 @@ public final class SemanticAnalyzer {
             );
         }
 
-        Symbol previousFunction = currentFunction;
+        Symbol savedFunction = currentFunction;
         currentFunction = symbol;
 
         symbolTable.pushScope();
@@ -942,7 +932,7 @@ public final class SemanticAnalyzer {
 
         symbolTable.popScope();
 
-        currentFunction = previousFunction;
+        currentFunction = savedFunction;
 
         return SastNode.functionDecl(
                 fn.span,
@@ -989,7 +979,7 @@ public final class SemanticAnalyzer {
             );
         }
 
-        Symbol previousFunction = currentFunction;
+        Symbol savedFunction = currentFunction;
         currentFunction = symbol;
 
         symbolTable.pushScope();
@@ -1017,7 +1007,7 @@ public final class SemanticAnalyzer {
 
         symbolTable.popScope();
 
-        currentFunction = previousFunction;
+        currentFunction = savedFunction;
 
         return SastNode.functionDecl(
                 methodNode.span,
@@ -1307,7 +1297,7 @@ public final class SemanticAnalyzer {
         }
 
         symbolTable.error("Unrecognized statement node: "
-                + node.kind.legacyClassName());
+                + node.kind.jsonName());
 
         return null;
         } finally {

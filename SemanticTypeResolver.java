@@ -175,11 +175,11 @@ final class SemanticTypeResolver {
             AstNode a = node;
             SastType referencedType = analyzeNormalType(a.type);
 
-            return switch (a.permission) {
-                case OWNER -> SastType.ptr(referencedType);
-                case MUTABLE -> SastType.mview(referencedType);
-                case READ_ONLY -> SastType.view(referencedType);
-            };
+            switch (a.permission) {
+                case OWNER: return SastType.ptr(referencedType);
+                case MUTABLE: return SastType.mview(referencedType);
+                case READ_ONLY: return SastType.view(referencedType);
+            }
         }
 
         if (node.kind == AstKind.VOID_TYPE) {
@@ -188,19 +188,19 @@ final class SemanticTypeResolver {
         }
 
         symbolTable.error("Unknown type node: "
-                + node.kind.legacyClassName());
+                + node.kind.jsonName());
 
         return FALLBACK_TYPE;
     }
 
     SastType analyzeReturnType(AstNode node) {
-        if (node.kind == AstKind.VOID_TYPE) {
-            return VOID_TYPE;
-        }
-
         if (node == null) {
             symbolTable.error("Function declaration is missing a return type");
             return FALLBACK_TYPE;
+        }
+
+        if (node.kind == AstKind.VOID_TYPE) {
+            return VOID_TYPE;
         }
 
         return analyzeNormalType(node);
@@ -250,14 +250,14 @@ final class SemanticTypeResolver {
         }
 
         String emittedName = "TUPLE_" + Mangler.hashHex(structuralKey);
-        String previousKey = tupleNameKeys.get(emittedName);
+        String existingKey = tupleNameKeys.get(emittedName);
 
-        if (previousKey != null && !previousKey.equals(structuralKey)) {
+        if (existingKey != null && !existingKey.equals(structuralKey)) {
             throw new IllegalStateException(
                     "Internal compiler error: emitted C++ name collision for '"
                             + emittedName
                             + "' between tuple types '"
-                            + previousKey
+                            + existingKey
                             + "' and '"
                             + structuralKey
                             + "' (distinct tuple signatures hash to the same suffix)"
@@ -392,7 +392,7 @@ final class SemanticTypeResolver {
                 computed.add(new EnumVariant(variant.name, value));
             }
         } else {
-            BigInteger previous = null;
+            BigInteger lastValue = null;
 
             for (AstNode variant : uniqueVariants) {
                 BigInteger value;
@@ -411,11 +411,11 @@ final class SemanticTypeResolver {
                             symbolTable.diagnostics().pop();
                         }
                     }
-                } else if (previous == null) {
+                } else if (lastValue == null) {
                     value = BigInteger.ZERO;
                     value = TypeChecker.wrapBigIntegerToPrimitive(value, backingKind);
                 } else {
-                    value = TypeChecker.wrapBigIntegerToPrimitive(previous.add(BigInteger.ONE), backingKind);
+                    value = TypeChecker.wrapBigIntegerToPrimitive(lastValue.add(BigInteger.ONE), backingKind);
                 }
 
                 if (valueToVariant.containsKey(value)) {
@@ -430,7 +430,7 @@ final class SemanticTypeResolver {
                 }
 
                 computed.add(new EnumVariant(variant.name, value));
-                previous = value;
+                lastValue = value;
             }
         }
 
@@ -493,6 +493,6 @@ final class SemanticTypeResolver {
             return sb.toString();
         }
 
-        return node.kind.legacyClassName();
+        return node.kind.jsonName();
     }
 }

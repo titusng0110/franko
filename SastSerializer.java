@@ -18,11 +18,11 @@ public final class SastSerializer {
         registerFromNode(doc.root, doc.symbols);
         SastSymbolSupport.registerRelatedSymbols(doc.symbols);
 
-        JsonObject root = nodeToJson(doc.root, doc.symbols, doc.sources);
+        JsonValue root = nodeToJson(doc.root, doc.symbols, doc.sources);
         SastSymbolSupport.registerRelatedSymbols(doc.symbols);
-        JsonArray symbols = SastSymbolSupport.symbolsToJson(doc.symbols);
+        JsonValue symbols = SastSymbolSupport.symbolsToJson(doc.symbols);
 
-        JsonObject document = new JsonObject();
+        JsonValue document = JsonValue.object();
         document.put("format", FORMAT);
         document.put("version", VERSION);
         document.put("phase", doc.phase.jsonName());
@@ -35,7 +35,7 @@ public final class SastSerializer {
     }
 
     public static SastDocument fromJson(String json) {
-        JsonObject document = JsonAstSupport.requireDocument(json, "SAST", FORMAT, VERSION);
+        JsonValue document = JsonAstSupport.requireDocument(json, "SAST", FORMAT, VERSION);
         SastPhase phase = JsonAstSupport.requireEnumName(
                 document.requireString("phase"),
                 SastPhase.class
@@ -45,7 +45,7 @@ public final class SastSerializer {
                 EntryKind.class
         );
         SourceTable sources = JsonAstSupport.sourceTable(document.requireArray("sources"), "SAST");
-        JsonArray symbolArray = document.requireArray("symbols");
+        JsonValue symbolArray = document.requireArray("symbols");
         SymbolRegistry registry = SastSymbolSupport.symbolsFromJson(symbolArray, sources);
         SastNode root = nodeFromJson(
                 document.requireObject("root"),
@@ -193,7 +193,7 @@ public final class SastSerializer {
         }
     }
 
-    private static JsonObject nodeToJson(
+    private static JsonValue nodeToJson(
             SastNode node,
             SymbolRegistry registry,
             SourceTable sources
@@ -202,7 +202,7 @@ public final class SastSerializer {
             return null;
         }
 
-        JsonObject obj = new JsonObject();
+        JsonValue obj = JsonValue.object();
         obj.put("span", ASTSerializer.spanToJson(node.span, sources));
 
         if (node.isExpr()) {
@@ -291,7 +291,7 @@ public final class SastSerializer {
     }
 
     private static void exprToJson(
-            JsonObject obj,
+            JsonValue obj,
             SastNode expr,
             SymbolRegistry registry,
             SourceTable sources
@@ -365,10 +365,10 @@ public final class SastSerializer {
             }
             case AGGREGATE_LITERAL -> {
                 obj.put("node", "aggregateLiteral");
-                JsonArray fields = new JsonArray();
+                JsonValue fields = JsonValue.array();
 
                 for (SastNode init : expr.fields) {
-                    JsonObject field = new JsonObject();
+                    JsonValue field = JsonValue.object();
                     field.put("field", registry.idFor(init.field));
                     field.put("value", nodeToJson(init.value, registry, sources));
                     fields.add(field);
@@ -382,12 +382,12 @@ public final class SastSerializer {
         }
     }
 
-    private static JsonArray nodeArray(
+    private static JsonValue nodeArray(
             List<SastNode> nodes,
             SymbolRegistry registry,
             SourceTable sources
     ) {
-        JsonArray array = new JsonArray();
+        JsonValue array = JsonValue.array();
 
         if (nodes != null) {
             for (SastNode node : nodes) {
@@ -398,11 +398,11 @@ public final class SastSerializer {
         return array;
     }
 
-    private static JsonArray parameterVariableIds(
+    private static JsonValue parameterVariableIds(
             List<Symbol> parameters,
             SymbolRegistry registry
     ) {
-        JsonArray array = new JsonArray();
+        JsonValue array = JsonValue.array();
 
         for (Symbol parameter : parameters) {
             array.add(registry.idFor(parameter));
@@ -412,7 +412,7 @@ public final class SastSerializer {
     }
 
     private static SastNode nodeFromJson(
-            JsonObject obj,
+            JsonValue obj,
             SymbolRegistry registry,
             SourceTable sources
     ) {
@@ -431,17 +431,17 @@ public final class SastSerializer {
             return exprFromJson(obj, kind, registry, sources, span);
         }
 
-        return switch (kind) {
-            case "program" -> SastNode.program(
+        switch (kind) {
+            case "program": return SastNode.program(
                     span,
                     itemsFromArray(obj.requireArray("items"), registry, sources)
             );
-            case "namespace" -> SastNode.namespace(
+            case "namespace": return SastNode.namespace(
                     span,
                     obj.requireString("name"),
                     itemsFromArray(obj.requireArray("items"), registry, sources)
             );
-            case "functionDecl" -> SastNode.functionDecl(
+            case "functionDecl": return SastNode.functionDecl(
                     span,
                     (Symbol) registry.require(obj.requireString("symbol")),
                     variablesFromArray(
@@ -450,75 +450,76 @@ public final class SastSerializer {
                     ),
                     nodeFromJson(obj.requireObject("body"), registry, sources)
             );
-            case "structDecl" -> SastNode.structDecl(
+            case "structDecl": return SastNode.structDecl(
                     span,
                     (StructSymbol) registry.require(obj.requireString("symbol")),
                     methodNodesFromArray(
                             obj.requireArray("methods"), registry, sources)
             );
-            case "enumDecl" -> SastNode.enumDecl(
+            case "enumDecl": return SastNode.enumDecl(
                     span,
                     (EnumSymbol) registry.require(obj.requireString("symbol"))
             );
-            case "block" -> SastNode.block(
+            case "block": return SastNode.block(
                     span,
                     stmtNodesFromArray(
                             obj.requireArray("statements"), registry, sources)
             );
-            case "varDecl" -> SastNode.varDecl(
+            case "varDecl": return SastNode.varDecl(
                     span,
                     (Symbol) registry.require(obj.requireString("symbol")),
                     SastSymbolSupport.bigIntegerOrNull(
                             obj.get("foldedConstInitializer")),
                     nodeFromJson(obj.optObject("staticInitializer"), registry, sources)
             );
-            case "assign" -> SastNode.assign(
+            case "assign": return SastNode.assign(
                     span,
                     obj.requireString("op"),
                     nodeFromJson(obj.requireObject("target"), registry, sources),
                     nodeFromJson(obj.requireObject("value"), registry, sources)
             );
-            case "if" -> SastNode.ifStmt(
+            case "if": return SastNode.ifStmt(
                     span,
                     nodeFromJson(obj.requireObject("condition"), registry, sources),
                     nodeFromJson(obj.requireObject("thenBranch"), registry, sources),
                     nodeFromJson(obj.optObject("elseBranch"), registry, sources)
             );
-            case "while" -> SastNode.whileStmt(
+            case "while": return SastNode.whileStmt(
                     span,
                     nodeFromJson(obj.requireObject("condition"), registry, sources),
                     nodeFromJson(obj.requireObject("body"), registry, sources),
                     stmtNodesFromArray(obj.requireArray("update"), registry, sources)
             );
-            case "break" -> SastNode.breakStmt(span, obj.requireInt("levels"));
-            case "continue" -> SastNode.continueStmt(span);
-            case "return" -> SastNode.returnStmt(
+            case "break": return SastNode.breakStmt(span, obj.requireInt("levels"));
+            case "continue": return SastNode.continueStmt(span);
+            case "return": return SastNode.returnStmt(
                     span,
                     (Symbol) registry.require(obj.requireString("function")),
                     nodeFromJson(obj.optObject("value"), registry, sources)
             );
-            case "exprStmt" -> SastNode.exprStmt(
+            case "exprStmt": return SastNode.exprStmt(
                     span,
                     nodeFromJson(obj.requireObject("expr"), registry, sources)
             );
-            default -> throw new IllegalArgumentException(
+            default: throw new IllegalArgumentException(
                     "Unknown SAST node kind '" + kind + "'"
             );
-        };
+        }
     }
 
     private static boolean isExprKind(String kind) {
-        return switch (kind) {
+        switch (kind) {
             case "intLiteral", "nullLiteral", "varExpr", "unaryOp", "binOp",
                     "arrayAccess", "memberAccess", "functionCall",
                     "arrayIntrinsicCall", "getPtr", "deref", "cast",
-                    "aggregateLiteral", "enumVariant" -> true;
-            default -> false;
-        };
+                    "aggregateLiteral", "enumVariant":
+                return true;
+            default: return false;
+        }
     }
 
     private static SastNode exprFromJson(
-            JsonObject obj,
+            JsonValue obj,
             String kind,
             SymbolRegistry registry,
             SourceTable sources,
@@ -529,27 +530,27 @@ public final class SastSerializer {
         BigInteger constantValue = SastSymbolSupport.bigIntegerOrNull(
                 obj.get("constantValue"));
 
-        return switch (kind) {
-            case "intLiteral" -> SastNode.intLiteral(
+        switch (kind) {
+            case "intLiteral": return SastNode.intLiteral(
                     span,
                     type,
                     constantValue,
                     obj.requireString("rawValue")
             );
-            case "nullLiteral" -> SastNode.nullLiteral(span, type);
-            case "varExpr" -> SastNode.varExpr(
+            case "nullLiteral": return SastNode.nullLiteral(span, type);
+            case "varExpr": return SastNode.varExpr(
                     span,
                     type,
                     (Symbol) registry.require(obj.requireString("symbol"))
             );
-            case "unaryOp" -> SastNode.unaryOp(
+            case "unaryOp": return SastNode.unaryOp(
                     span,
                     type,
                     constantValue,
                     obj.requireString("op"),
                     nodeFromJson(obj.requireObject("expr"), registry, sources)
             );
-            case "binOp" -> SastNode.binOp(
+            case "binOp": return SastNode.binOp(
                     span,
                     type,
                     constantValue,
@@ -557,49 +558,49 @@ public final class SastSerializer {
                     nodeFromJson(obj.requireObject("left"), registry, sources),
                     nodeFromJson(obj.requireObject("right"), registry, sources)
             );
-            case "arrayAccess" -> SastNode.arrayAccess(
+            case "arrayAccess": return SastNode.arrayAccess(
                     span,
                     type,
                     nodeFromJson(obj.requireObject("target"), registry, sources),
                     nodeFromJson(obj.requireObject("index"), registry, sources)
             );
-            case "memberAccess" -> SastNode.memberAccess(
+            case "memberAccess": return SastNode.memberAccess(
                     span,
                     type,
                     nodeFromJson(obj.requireObject("target"), registry, sources),
                     (FieldSymbol) registry.require(obj.requireString("field"))
             );
-            case "functionCall" -> SastNode.functionCall(
+            case "functionCall": return SastNode.functionCall(
                     span,
                     type,
                     (Symbol) registry.require(obj.requireString("function")),
                     exprListFromArray(obj.requireArray("args"), registry, sources)
             );
-            case "arrayIntrinsicCall" -> SastNode.arrayIntrinsicCall(
+            case "arrayIntrinsicCall": return SastNode.arrayIntrinsicCall(
                     span,
                     SemanticArrayIntrinsicKind.valueOf(obj.requireString("kind")),
                     nodeFromJson(obj.requireObject("receiver"), registry, sources),
                     exprListFromArray(obj.requireArray("args"), registry, sources)
             );
-            case "getPtr" -> SastNode.getPtr(
+            case "getPtr": return SastNode.getPtr(
                     span,
                     type,
                     nodeFromJson(obj.requireObject("target"), registry, sources),
                     obj.has("temporary") && obj.requireBool("temporary")
             );
-            case "deref" -> SastNode.deref(
+            case "deref": return SastNode.deref(
                     span,
                     type,
                     nodeFromJson(obj.requireObject("expr"), registry, sources)
             );
-            case "cast" -> SastNode.cast(
+            case "cast": return SastNode.cast(
                     span,
                     type,
                     constantValue,
                     nodeFromJson(obj.requireObject("expr"), registry, sources),
                     obj.requireBool("checked")
             );
-            case "enumVariant" -> {
+            case "enumVariant": {
                 EnumSymbol enumSymbol = (EnumSymbol) registry.require(
                         obj.requireString("enum"));
                 String variantName = obj.requireString("variant");
@@ -616,13 +617,13 @@ public final class SastSerializer {
                     );
                 }
 
-                yield SastNode.enumVariant(span, enumSymbol, variant);
+                return SastNode.enumVariant(span, enumSymbol, variant);
             }
-            case "aggregateLiteral" -> {
+            case "aggregateLiteral": {
                 List<SastNode> fields = new ArrayList<>();
 
                 for (JsonValue value : obj.requireArray("fields").values()) {
-                    JsonObject field = JsonAstSupport.requireObject(
+                    JsonValue field = JsonAstSupport.requireObject(
                             value,
                             "aggregate field initializer"
                     );
@@ -638,16 +639,16 @@ public final class SastSerializer {
                     ));
                 }
 
-                yield SastNode.aggregateLiteral(span, type, fields);
+                return SastNode.aggregateLiteral(span, type, fields);
             }
-            default -> throw new IllegalArgumentException(
+            default: throw new IllegalArgumentException(
                     "Unknown SAST expression kind '" + kind + "'"
             );
-        };
+        }
     }
 
     private static List<SastNode> itemsFromArray(
-            JsonArray array,
+            JsonValue array,
             SymbolRegistry registry,
             SourceTable sources
     ) {
@@ -665,7 +666,7 @@ public final class SastSerializer {
     }
 
     private static List<SastNode> stmtNodesFromArray(
-            JsonArray array,
+            JsonValue array,
             SymbolRegistry registry,
             SourceTable sources
     ) {
@@ -683,7 +684,7 @@ public final class SastSerializer {
     }
 
     private static List<SastNode> methodNodesFromArray(
-            JsonArray array,
+            JsonValue array,
             SymbolRegistry registry,
             SourceTable sources
     ) {
@@ -701,7 +702,7 @@ public final class SastSerializer {
     }
 
     private static List<SastNode> exprListFromArray(
-            JsonArray array,
+            JsonValue array,
             SymbolRegistry registry,
             SourceTable sources
     ) {
@@ -719,7 +720,7 @@ public final class SastSerializer {
     }
 
     private static List<Symbol> variablesFromArray(
-            JsonArray array,
+            JsonValue array,
             SymbolRegistry registry
     ) {
         List<Symbol> variables = new ArrayList<>();
@@ -727,10 +728,15 @@ public final class SastSerializer {
         for (JsonValue value : array.values()) {
             Object symbol = registry.require(requireId(value));
 
-            if (!(symbol instanceof Symbol variable)
-                    || (variable.kind != SymbolKind.VARIABLE
-                        && variable.kind != SymbolKind.PARAMETER
-                        && variable.kind != SymbolKind.GLOBAL)) {
+            if (!(symbol instanceof Symbol)) {
+                throw new IllegalArgumentException("Expected a variable symbol");
+            }
+
+            Symbol variable = (Symbol) symbol;
+
+            if (variable.kind != SymbolKind.VARIABLE
+                    && variable.kind != SymbolKind.PARAMETER
+                    && variable.kind != SymbolKind.GLOBAL) {
                 throw new IllegalArgumentException("Expected a variable symbol");
             }
 
@@ -741,10 +747,10 @@ public final class SastSerializer {
     }
 
     private static String requireId(JsonValue value) {
-        if (!(value instanceof JsonString string)) {
+        if (!value.isString()) {
             throw new IllegalArgumentException("Expected a symbol ID string");
         }
 
-        return string.value();
+        return value.value();
     }
 }

@@ -384,29 +384,46 @@ final class SastNode {
     }
 
     boolean isLValue() {
-        return switch (kind) {
-            case VAR_EXPR, ARRAY_ACCESS, DEREF -> true;
-            case MEMBER_ACCESS -> target != null && target.isLValue();
-            default -> false;
-        };
+        if (kind == SastKind.VAR_EXPR
+                || kind == SastKind.ARRAY_ACCESS
+                || kind == SastKind.DEREF) {
+            return true;
+        }
+
+        if (kind == SastKind.MEMBER_ACCESS) {
+            return target != null && target.isLValue();
+        }
+
+        return false;
     }
 
     boolean isStmt() {
-        return switch (kind) {
-            case BLOCK, VAR_DECL, ASSIGN, IF, WHILE, BREAK, CONTINUE, RETURN,
-                    EXPR_STMT -> true;
-            default -> false;
-        };
+        return kind == SastKind.BLOCK
+                || kind == SastKind.VAR_DECL
+                || kind == SastKind.ASSIGN
+                || kind == SastKind.IF
+                || kind == SastKind.WHILE
+                || kind == SastKind.BREAK
+                || kind == SastKind.CONTINUE
+                || kind == SastKind.RETURN
+                || kind == SastKind.EXPR_STMT;
     }
 
     boolean isExpr() {
-        return switch (kind) {
-            case INT_LITERAL, NULL_LITERAL, VAR_EXPR, UNARY_OP, BIN_OP,
-                    ARRAY_ACCESS, MEMBER_ACCESS, FUNCTION_CALL,
-                    ARRAY_INTRINSIC_CALL, GET_PTR, DEREF, CAST,
-                    AGGREGATE_LITERAL, ENUM_VARIANT -> true;
-            default -> false;
-        };
+        return kind == SastKind.INT_LITERAL
+                || kind == SastKind.NULL_LITERAL
+                || kind == SastKind.VAR_EXPR
+                || kind == SastKind.UNARY_OP
+                || kind == SastKind.BIN_OP
+                || kind == SastKind.ARRAY_ACCESS
+                || kind == SastKind.MEMBER_ACCESS
+                || kind == SastKind.FUNCTION_CALL
+                || kind == SastKind.ARRAY_INTRINSIC_CALL
+                || kind == SastKind.GET_PTR
+                || kind == SastKind.DEREF
+                || kind == SastKind.CAST
+                || kind == SastKind.AGGREGATE_LITERAL
+                || kind == SastKind.ENUM_VARIANT;
     }
 
     boolean isCompound() {
