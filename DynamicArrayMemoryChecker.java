@@ -245,21 +245,20 @@ public final class DynamicArrayMemoryChecker {
     private void runSummaryPass() {
         summaryMode = true;
         summaries = new DynamicSummary[context.callGraph.functionCount()];
-        driver = new MemoryDataflowDriver(context, diagnostics, new DynamicDomain());
+        driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new DynamicDomain()));
         driver.run(context.root);
         summaryMode = false;
     }
 
     private void runCheckPass() {
         summaryMode = false;
-        driver = new MemoryDataflowDriver(context, diagnostics, new DynamicDomain());
+        driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new DynamicDomain()));
         driver.run(context.root);
     }
 
-    private final class DynamicDomain implements MemoryDataflowDriver.Domain {
+    final class DynamicDomain {
         private boolean suppressed;
 
-        @Override
         public void beginFunction(int functionId) {
             currentFunctionId = functionId;
             state.reset();
@@ -391,7 +390,6 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        @Override
         public void endFunction(int exitCount, boolean fallthrough) {
             if (summaryMode) {
                 summaries[currentFunctionId] = buildSummary(exitCount);
@@ -505,18 +503,22 @@ public final class DynamicArrayMemoryChecker {
 
             for (int exit = 0; exit < exitCount; exit++) {
                 int slot = driver.exitSlot(exit);
-                long[] mustBits = switch (category) {
-                    case 0 -> state.invalidateMustSnapshots(slot);
-                    case 1 -> state.freeMustSnapshots(slot);
-                    case 2 -> state.escapeMustSnapshots(slot);
-                    default -> state.useMustSnapshots(slot);
-                };
-                long[] mayBits = switch (category) {
-                    case 0 -> state.invalidateMaySnapshots(slot);
-                    case 1 -> state.freeMaySnapshots(slot);
-                    case 2 -> state.escapeMaySnapshots(slot);
-                    default -> state.useMaySnapshots(slot);
-                };
+                long[] mustBits;
+                long[] mayBits;
+
+                if (category == 0) {
+                    mustBits = state.invalidateMustSnapshots(slot);
+                    mayBits = state.invalidateMaySnapshots(slot);
+                } else if (category == 1) {
+                    mustBits = state.freeMustSnapshots(slot);
+                    mayBits = state.freeMaySnapshots(slot);
+                } else if (category == 2) {
+                    mustBits = state.escapeMustSnapshots(slot);
+                    mayBits = state.escapeMaySnapshots(slot);
+                } else {
+                    mustBits = state.useMustSnapshots(slot);
+                    mayBits = state.useMaySnapshots(slot);
+                }
 
                 must &= bitAt(mustBits, slot * state.paramWords, param);
                 may |= bitAt(mayBits, slot * state.paramWords, param);
@@ -550,12 +552,10 @@ public final class DynamicArrayMemoryChecker {
             return result;
         }
 
-        @Override
         public void enterBlock(SastNode node, int depth) {
             state.enterBlock(node, depth);
         }
 
-        @Override
         public void leaveBlock(
                 SastNode node,
                 int depth,
@@ -576,15 +576,12 @@ public final class DynamicArrayMemoryChecker {
             state.leaveBlock(node, depth, terminated);
         }
 
-        @Override
         public void markLocalsDeadForJump(int targetBlockDepth, int snapshotSlot) {
         }
 
-        @Override
         public void markLoopBodyLocalsDead(SastNode body) {
         }
 
-        @Override
         public void checkVarDecl(SastNode node) {
             diagnostics.push(node.span);
 
@@ -630,7 +627,6 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        @Override
         public void checkAssign(SastNode node) {
             diagnostics.push(node.span);
 
@@ -780,7 +776,6 @@ public final class DynamicArrayMemoryChecker {
             return -1;
         }
 
-        @Override
         public void checkExpr(SastNode expression) {
             if (expression == null) {
                 return;
@@ -1139,12 +1134,12 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private byte postForIntrinsic(SemanticArrayIntrinsicKind kind) {
-            return switch (kind) {
-                case INIT, INIT_ZERO, RESIZE ->
-                        DynamicArrayAnalysisState.POST_INITED;
-                case UNINIT -> DynamicArrayAnalysisState.POST_UNINITED;
-                default -> DynamicArrayAnalysisState.POST_UNCHANGED;
-            };
+            switch (kind) {
+                case INIT, INIT_ZERO, RESIZE:
+                    return DynamicArrayAnalysisState.POST_INITED;
+                case UNINIT: return DynamicArrayAnalysisState.POST_UNINITED;
+                default: return DynamicArrayAnalysisState.POST_UNCHANGED;
+            }
         }
 
         private void markSummaryRequire(SastNode expression) {
@@ -1596,7 +1591,6 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        @Override
         public void onReturn(SastNode node) {
             if (summaryMode) {
                 exitReturnSets.add(
@@ -1623,7 +1617,6 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        @Override
         public void onFallthrough() {
             if (summaryMode) {
                 long[] set = context.templates.newSet();
@@ -1632,7 +1625,6 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        @Override
         public boolean guardPathFeasible(
                 SastNode condition,
                 boolean guardHolds
@@ -1655,13 +1647,13 @@ public final class DynamicArrayMemoryChecker {
                 if (param >= 0) {
                     byte post = state.paramPost[param];
 
-                    return switch (assertion) {
-                        case NONE -> true;
-                        case ZERO -> post
+                    switch (assertion) {
+                        case NONE: return true;
+                        case ZERO: return post
                                 != DynamicArrayAnalysisState.POST_INITED;
-                        case NONZERO -> post
+                        case NONZERO: return post
                                 != DynamicArrayAnalysisState.POST_UNINITED;
-                    };
+                    }
                 }
 
                 int arrayIndex = summaryLocalArray(guard.receiver);
@@ -1686,16 +1678,16 @@ public final class DynamicArrayMemoryChecker {
                 int arrayIndex,
                 LengthAssertion assertion
         ) {
-            return switch (assertion) {
-                case NONE -> true;
-                case ZERO -> state.lifecycle[arrayIndex]
+            switch (assertion) {
+                case NONE: return true;
+                case ZERO: return state.lifecycle[arrayIndex]
                         != DynamicArrayAnalysisState.INITED;
-                case NONZERO -> state.lifecycle[arrayIndex]
+                case NONZERO: return state.lifecycle[arrayIndex]
                         != DynamicArrayAnalysisState.UNINITED;
-            };
+                default: throw new IllegalStateException("Unknown assertion: " + assertion);
+            }
         }
 
-        @Override
         public void refineFromGuard(
                 SastNode condition,
                 boolean guardHolds
@@ -1761,17 +1753,14 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        @Override
         public int snapshot() {
             return state.snapshot();
         }
 
-        @Override
         public void restore(int slot) {
             state.restore(slot);
         }
 
-        @Override
         public void mergeAfterIf(
                 int before,
                 int thenState,
@@ -1792,22 +1781,18 @@ public final class DynamicArrayMemoryChecker {
             );
         }
 
-        @Override
         public void mergeLoopExitStates(int[] slots, int count) {
             state.mergeLoopExitStates(slots, count);
         }
 
-        @Override
         public void mergeStateIntoCurrent(int slot) {
             state.mergeStateIntoCurrent(slot);
         }
 
-        @Override
         public boolean isSuppressed() {
             return suppressed;
         }
 
-        @Override
         public void setSuppressed(boolean value) {
             suppressed = value;
         }
@@ -1879,7 +1864,7 @@ public final class DynamicArrayMemoryChecker {
                     callSiteId,
                     calleeId,
                     rootBinding,
-                    node -> processNode(node)
+                    new MemorySummaryBfs.NodeProcessor(this)
             );
 
             currentBfsResult = result;
@@ -2154,7 +2139,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void processNode(int node) {
+        void processNode(int node) {
             int functionId = bfs.functionId(node);
             DynamicSummary summary = summaries[functionId];
 
@@ -2929,25 +2914,25 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private String negate(String op) {
-            return switch (op) {
-                case "==" -> "!=";
-                case "!=" -> "==";
-                case "<" -> ">=";
-                case "<=" -> ">";
-                case ">" -> "<=";
-                case ">=" -> "<";
-                default -> op;
-            };
+            switch (op) {
+                case "==": return "!=";
+                case "!=": return "==";
+                case "<": return ">=";
+                case "<=": return ">";
+                case ">": return "<=";
+                case ">=": return "<";
+                default: return op;
+            }
         }
 
         private String reverse(String op) {
-            return switch (op) {
-                case "<" -> ">";
-                case "<=" -> ">=";
-                case ">" -> "<";
-                case ">=" -> "<=";
-                default -> op;
-            };
+            switch (op) {
+                case "<": return ">";
+                case "<=": return ">=";
+                case ">": return "<";
+                case ">=": return "<=";
+                default: return op;
+            }
         }
 
         private int firstTemplate(long[] sets, int offset, int words) {
@@ -3035,41 +3020,41 @@ public final class DynamicArrayMemoryChecker {
             String effective = holds ? op : negate(op);
             int sign = constant.signum();
 
-            return switch (effective) {
-                case "==" -> sign == 0
+            switch (effective) {
+                case "==": return sign == 0
                         ? LengthAssertion.ZERO
                         : sign > 0
                                 ? LengthAssertion.NONZERO
                                 : LengthAssertion.NONE;
-                case "!=" -> sign == 0
+                case "!=": return sign == 0
                         ? LengthAssertion.NONZERO
                         : LengthAssertion.NONE;
-                case "<" -> constant.equals(BigInteger.ONE)
+                case "<": return constant.equals(BigInteger.ONE)
                         ? LengthAssertion.ZERO
                         : LengthAssertion.NONE;
-                case "<=" -> sign == 0
+                case "<=": return sign == 0
                         ? LengthAssertion.ZERO
                         : LengthAssertion.NONE;
-                case ">" -> sign >= 0
+                case ">": return sign >= 0
                         ? LengthAssertion.NONZERO
                         : LengthAssertion.NONE;
-                case ">=" -> constant.compareTo(BigInteger.ONE) >= 0
+                case ">=": return constant.compareTo(BigInteger.ONE) >= 0
                         ? LengthAssertion.NONZERO
                         : LengthAssertion.NONE;
-                default -> LengthAssertion.NONE;
-            };
+                default: return LengthAssertion.NONE;
+            }
         }
 
         private static String negate(String op) {
-            return switch (op) {
-                case "==" -> "!=";
-                case "!=" -> "==";
-                case "<" -> ">=";
-                case "<=" -> ">";
-                case ">" -> "<=";
-                case ">=" -> "<";
-                default -> op;
-            };
+            switch (op) {
+                case "==": return "!=";
+                case "!=": return "==";
+                case "<": return ">=";
+                case "<=": return ">";
+                case ">": return "<=";
+                case ">=": return "<";
+                default: return op;
+            }
         }
     }
 

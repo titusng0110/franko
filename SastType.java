@@ -147,43 +147,66 @@ final class SastType {
     }
 
     String describe() {
-        return switch (kind) {
-            case PRIMITIVE -> primitive.name().toLowerCase();
-            case VOID -> "void";
-            case DYNAMIC_ARRAY -> "[" + elementType.describe() + "]";
-            case STATIC_ARRAY -> "[" + elementType.describe() + ", " + sizeLiteral + "]";
-            case PTR -> permission.spelling() + "<" + referencedType.describe() + ">";
-            case NULL -> "null";
-            case STRUCT -> structSymbol.qualifiedName();
-            case TUPLE -> describeTuple();
-            case ENUM -> enumSymbol.qualifiedName();
-            case FUNCTION -> describeFunction();
-        };
+        switch (kind) {
+            case PRIMITIVE:
+                return primitive.name().toLowerCase();
+            case VOID:
+                return "void";
+            case DYNAMIC_ARRAY:
+                return "[" + elementType.describe() + "]";
+            case STATIC_ARRAY:
+                return "[" + elementType.describe() + ", " + sizeLiteral + "]";
+            case PTR:
+                return permission.spelling() + "<" + referencedType.describe() + ">";
+            case NULL:
+                return "null";
+            case STRUCT:
+                return structSymbol.qualifiedName();
+            case TUPLE:
+                return describeTuple();
+            case ENUM:
+                return enumSymbol.qualifiedName();
+            case FUNCTION:
+                return describeFunction();
+            default:
+                throw new IllegalStateException("Unknown type kind: " + kind);
+        }
     }
 
     String mangleKey() {
-        return switch (kind) {
-            case PRIMITIVE -> primitive.name().toLowerCase();
-            case VOID -> "void";
-            case DYNAMIC_ARRAY -> "[" + elementType.mangleKey() + "]";
-            case STATIC_ARRAY -> {
+        switch (kind) {
+            case PRIMITIVE:
+                return primitive.name().toLowerCase();
+            case VOID:
+                return "void";
+            case DYNAMIC_ARRAY:
+                return "[" + elementType.mangleKey() + "]";
+            case STATIC_ARRAY: {
                 BigInteger canonical = unfoldedSize(sizeLiteral);
                 String sizeKey = canonical != null
                         ? canonical.toString(10)
                         : sizeLiteral.trim();
-                yield "[" + elementType.mangleKey() + "," + sizeKey + "]";
+                return "[" + elementType.mangleKey() + "," + sizeKey + "]";
             }
-            case PTR -> permission.spelling() + "<" + referencedType.mangleKey() + ">";
-            case NULL -> throw new IllegalStateException(
-                    "Internal compiler error: 'null' type has no mangled spelling"
-            );
-            case STRUCT -> structSymbol.qualifiedName();
-            case TUPLE -> mangleTuple();
-            case ENUM -> enumSymbol.qualifiedName();
-            case FUNCTION -> throw new IllegalStateException(
-                    "Internal compiler error: function types cannot appear in a mangled signature"
-            );
-        };
+            case PTR:
+                return permission.spelling() + "<" + referencedType.mangleKey() + ">";
+            case NULL:
+                throw new IllegalStateException(
+                        "Internal compiler error: 'null' type has no mangled spelling"
+                );
+            case STRUCT:
+                return structSymbol.qualifiedName();
+            case TUPLE:
+                return mangleTuple();
+            case ENUM:
+                return enumSymbol.qualifiedName();
+            case FUNCTION:
+                throw new IllegalStateException(
+                        "Internal compiler error: function types cannot appear in a mangled signature"
+                );
+            default:
+                throw new IllegalStateException("Unknown type kind: " + kind);
+        }
     }
 
     String signatureKey() {
@@ -292,23 +315,42 @@ final class SastType {
             return true;
         }
 
-        if (!(obj instanceof SastType other) || kind != other.kind) {
+        if (!(obj instanceof SastType)) {
             return false;
         }
 
-        return switch (kind) {
-            case PRIMITIVE -> primitive == other.primitive;
-            case VOID, NULL -> true;
-            case DYNAMIC_ARRAY -> elementType.equals(other.elementType);
-            case STATIC_ARRAY -> staticArrayEquals(other);
-            case PTR -> permission == other.permission
-                    && referencedType.equals(other.referencedType);
-            case STRUCT -> structSymbol == other.structSymbol;
-            case TUPLE -> tupleEquals(other);
-            case ENUM -> enumSymbol == other.enumSymbol;
-            case FUNCTION -> parameterTypes.equals(other.parameterTypes)
-                    && returnType.equals(other.returnType);
-        };
+        SastType other = (SastType) obj;
+
+        if (kind != other.kind) {
+            return false;
+        }
+
+        switch (kind) {
+            case PRIMITIVE:
+                return primitive == other.primitive;
+            case VOID:
+                return true;
+            case NULL:
+                return true;
+            case DYNAMIC_ARRAY:
+                return elementType.equals(other.elementType);
+            case STATIC_ARRAY:
+                return staticArrayEquals(other);
+            case PTR:
+                return permission == other.permission
+                        && referencedType.equals(other.referencedType);
+            case STRUCT:
+                return structSymbol == other.structSymbol;
+            case TUPLE:
+                return tupleEquals(other);
+            case ENUM:
+                return enumSymbol == other.enumSymbol;
+            case FUNCTION:
+                return parameterTypes.equals(other.parameterTypes)
+                        && returnType.equals(other.returnType);
+            default:
+                return false;
+        }
     }
 
     private boolean staticArrayEquals(SastType other) {
@@ -342,27 +384,37 @@ final class SastType {
 
     @Override
     public int hashCode() {
-        return switch (kind) {
-            case PRIMITIVE -> Objects.hash(kind, primitive);
-            case VOID -> kind.hashCode();
-            case DYNAMIC_ARRAY -> Objects.hash(kind, elementType);
-            case STATIC_ARRAY -> {
+        switch (kind) {
+            case PRIMITIVE:
+                return Objects.hash(kind, primitive);
+            case VOID:
+                return kind.hashCode();
+            case DYNAMIC_ARRAY:
+                return Objects.hash(kind, elementType);
+            case STATIC_ARRAY: {
                 BigInteger size = unfoldedSize(sizeLiteral);
                 Object sizeKey = size != null ? size : sizeLiteral;
-                yield Objects.hash(kind, elementType, sizeKey);
+                return Objects.hash(kind, elementType, sizeKey);
             }
-            case PTR -> Objects.hash(kind, permission, referencedType);
-            case NULL -> kind.hashCode();
-            case STRUCT -> System.identityHashCode(structSymbol);
-            case TUPLE -> {
+            case PTR:
+                return Objects.hash(kind, permission, referencedType);
+            case NULL:
+                return kind.hashCode();
+            case STRUCT:
+                return System.identityHashCode(structSymbol);
+            case TUPLE: {
                 List<SastType> elementTypes = new java.util.ArrayList<>();
                 for (FieldSymbol field : fields) {
                     elementTypes.add(field.type);
                 }
-                yield Objects.hash(kind, elementTypes);
+                return Objects.hash(kind, elementTypes);
             }
-            case ENUM -> System.identityHashCode(enumSymbol);
-            case FUNCTION -> Objects.hash(kind, parameterTypes, returnType);
-        };
+            case ENUM:
+                return System.identityHashCode(enumSymbol);
+            case FUNCTION:
+                return Objects.hash(kind, parameterTypes, returnType);
+            default:
+                return kind.hashCode();
+        }
     }
 }

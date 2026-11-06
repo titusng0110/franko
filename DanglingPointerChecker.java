@@ -183,21 +183,20 @@ public final class DanglingPointerChecker {
     private void runSummaryPass() {
         summaryMode = true;
         summaries = new DanglingSummary[context.callGraph.functionCount()];
-        driver = new MemoryDataflowDriver(context, diagnostics, new DanglingDomain());
+        driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new DanglingDomain()));
         driver.run(context.root);
         summaryMode = false;
     }
 
     private void runCheckPass() {
         summaryMode = false;
-        driver = new MemoryDataflowDriver(context, diagnostics, new DanglingDomain());
+        driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new DanglingDomain()));
         driver.run(context.root);
     }
 
-    private final class DanglingDomain implements MemoryDataflowDriver.Domain {
+    final class DanglingDomain {
         private boolean suppressed;
 
-        @Override
         public void beginFunction(int functionId) {
             currentFunctionId = functionId;
             state.reset();
@@ -340,7 +339,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public void endFunction(int exitCount, boolean fallthrough) {
             if (summaryMode) {
                 summaries[currentFunctionId] = buildSummary(exitCount);
@@ -444,12 +442,10 @@ public final class DanglingPointerChecker {
             );
         }
 
-        @Override
         public void enterBlock(SastNode node, int depth) {
             state.enterBlock(node, depth);
         }
 
-        @Override
         public void leaveBlock(
                 SastNode node,
                 int depth,
@@ -458,12 +454,10 @@ public final class DanglingPointerChecker {
             state.leaveBlock(node, depth, terminated);
         }
 
-        @Override
         public void markLocalsDeadForJump(int targetBlockDepth, int snapshotSlot) {
             state.markLocalsDeadForJump(targetBlockDepth, snapshotSlot);
         }
 
-        @Override
         public void markLoopBodyLocalsDead(SastNode body) {
             if (!(body.kind == SastKind.BLOCK)) {
                 return;
@@ -476,7 +470,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public void checkVarDecl(SastNode node) {
             diagnostics.push(node.span);
 
@@ -504,7 +497,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public void checkAssign(SastNode node) {
             diagnostics.push(node.span);
 
@@ -632,7 +624,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public void checkExpr(SastNode expression) {
             if (expression == null) {
                 return;
@@ -820,7 +811,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public void onReturn(SastNode node) {
             if (summaryMode) {
                 exitReturnSets.add(
@@ -892,7 +882,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public void onFallthrough() {
             if (summaryMode) {
                 long[] set = templates().newSet();
@@ -901,7 +890,6 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public boolean guardPathFeasible(
                 SastNode condition,
                 boolean guardHolds
@@ -935,7 +923,6 @@ public final class DanglingPointerChecker {
                     : !current.definitelyNull();
         }
 
-        @Override
         public void refineFromGuard(
                 SastNode condition,
                 boolean guardHolds
@@ -984,17 +971,14 @@ public final class DanglingPointerChecker {
             }
         }
 
-        @Override
         public int snapshot() {
             return state.snapshot();
         }
 
-        @Override
         public void restore(int slot) {
             state.restore(slot);
         }
 
-        @Override
         public void mergeAfterIf(
                 int before,
                 int thenState,
@@ -1015,22 +999,18 @@ public final class DanglingPointerChecker {
             );
         }
 
-        @Override
         public void mergeLoopExitStates(int[] slots, int count) {
             state.mergeLoopExitStates(slots, count);
         }
 
-        @Override
         public void mergeStateIntoCurrent(int slot) {
             state.mergeStateIntoCurrent(slot);
         }
 
-        @Override
         public boolean isSuppressed() {
             return suppressed;
         }
 
-        @Override
         public void setSuppressed(boolean value) {
             suppressed = value;
         }
@@ -1099,7 +1079,7 @@ public final class DanglingPointerChecker {
                     callSiteId,
                     calleeId,
                     rootBinding,
-                    node -> processNode(node)
+                    new MemorySummaryBfs.NodeProcessor(this)
             );
 
             currentBfsResult = result;
@@ -1241,7 +1221,7 @@ public final class DanglingPointerChecker {
             return "a global or caller-owned location";
         }
 
-        private void processNode(int node) {
+        void processNode(int node) {
             int functionId = bfs.functionId(node);
             DanglingSummary summary = summaries[functionId];
 
@@ -2312,7 +2292,7 @@ public final class DanglingPointerChecker {
 
     private String quoteList(List<String> values) {
         List<String> sorted = new ArrayList<>(values);
-        sorted.sort(String::compareTo);
+        sorted.sort(null);
         StringBuilder builder = new StringBuilder();
 
         for (int i = 0; i < sorted.size(); i++) {

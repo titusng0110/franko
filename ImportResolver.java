@@ -42,7 +42,7 @@ public class ImportResolver {
         String rootKey = SourcePaths.canonicalKey(rootPath);
 
         processedFiles.add(rootKey);
-        importGraph.computeIfAbsent(rootKey, key -> new ArrayList<>());
+        importEdges(rootKey);
 
         SourceTable sources = new SourceTable();
         sources.addAll(root.sources);
@@ -114,9 +114,7 @@ public class ImportResolver {
         Path target = resolveTarget(pathText, importingFile);
         String targetKey = SourcePaths.canonicalKey(target);
 
-        importGraph
-                .computeIfAbsent(SourcePaths.canonicalKey(importingFile), key -> new ArrayList<>())
-                .add(targetKey);
+        importEdges(SourcePaths.canonicalKey(importingFile)).add(targetKey);
 
         if (processedFiles.contains(targetKey)) {
             return;
@@ -132,7 +130,7 @@ public class ImportResolver {
         }
 
         processedFiles.add(targetKey);
-        importGraph.computeIfAbsent(targetKey, key -> new ArrayList<>());
+        importEdges(targetKey);
 
         Result<AstDocument> result = frontend.loadDesugared(target);
         diagnostics.addAll(result.diagnostics);
@@ -296,6 +294,17 @@ public class ImportResolver {
         }
 
         return type.kind.jsonName();
+    }
+
+    private List<String> importEdges(String key) {
+        List<String> edges = importGraph.get(key);
+
+        if (edges == null) {
+            edges = new ArrayList<>();
+            importGraph.put(key, edges);
+        }
+
+        return edges;
     }
 
     private static String literalBytesKey(List<BigInteger> values) {

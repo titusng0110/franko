@@ -2,15 +2,25 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 final class CompileTimeIntrinsics {
 
-    interface StringHoister {
-        Symbol hoistStaticString(
-                List<BigInteger> bytes,
-                SourceSpan span
-        );
+    private enum PredicateKind {
+        IS_PRIMITIVE,
+        IS_ENUM,
+        IS_MEMCPY_SAFE,
+        HAS_DEFAULT_VALUE,
+        IS_MEMSET_SAFE,
+        IS_MATCHABLE,
+        IS_COMPARABLE,
+        IS_ASSIGNABLE,
+        IS_VALUE_ASSIGNABLE
+    }
+
+    private enum StaticValueKind {
+        INT,
+        STRING,
+        VOID
     }
 
     private static final SastType BOOL_TYPE =
@@ -24,15 +34,15 @@ final class CompileTimeIntrinsics {
 
     private final SymbolTable ctx;
     private final TypeChecker typeChecker;
-    private final StringHoister stringHoister;
+    private final StaticStringHoister stringHoister;
     private final TargetInfo target;
-    private final Function<AstNode, SastType> typeResolver;
+    private final SemanticTypeResolver typeResolver;
 
     CompileTimeIntrinsics(
             SymbolTable ctx,
             TargetInfo target,
-            StringHoister stringHoister,
-            Function<AstNode, SastType> typeResolver
+            StaticStringHoister stringHoister,
+            SemanticTypeResolver typeResolver
     ) {
         this.ctx = ctx;
         this.target = target;
@@ -54,48 +64,82 @@ final class CompileTimeIntrinsics {
             List<AstNode> args,
             SourceSpan span
     ) {
-        return switch (name) {
-            case "is_primitive" -> evaluateTypePredicate(
-                    name, args, type -> type.kind == SastTypeKind.PRIMITIVE);
-            case "is_enum" -> evaluateTypePredicate(
-                    name, args, type -> type.kind == SastTypeKind.ENUM);
-            case "is_memcpy_safe" -> evaluateTypePredicate(
-                    name, args, typeChecker::isMemcpySafe);
-            case "has_default_value" -> evaluateTypePredicate(
-                    name, args, typeChecker::hasDefaultValue);
-            case "is_memset_safe" -> evaluateTypePredicate(
-                    name, args, typeChecker::isMemsetSafe);
-            case "is_same_type" -> evaluateSameType(name, args);
-            case "what_type" -> evaluateWhatType(name, args);
-            case "strcat" -> evaluateStrcat(name, args);
-            case "strcmp" -> evaluateStrcmp(name, args);
-            case "panic" -> evaluatePanic(name, args);
-            case "is_matchable" -> evaluateTypePredicate(
-                    name, args, this::isMatchable);
-            case "is_comparable" -> evaluateTypePredicate(
-                    name, args, this::isComparable);
-            case "is_assignable" -> evaluateTypePredicate(
-                    name, args, this::isAssignable);
-            case "is_value_assignable" -> evaluateTypePredicate(
-                    name, args, typeChecker::isValueAssignableType);
-            default -> {
-                ctx.error("Unknown compile-time reflection function '#"
-                        + name
-                        + "'");
-                yield null;
-            }
-        };
+        if ("is_primitive".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_PRIMITIVE);
+        }
+
+        if ("is_enum".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_ENUM);
+        }
+
+        if ("is_memcpy_safe".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_MEMCPY_SAFE);
+        }
+
+        if ("has_default_value".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.HAS_DEFAULT_VALUE);
+        }
+
+        if ("is_memset_safe".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_MEMSET_SAFE);
+        }
+
+        if ("is_same_type".equals(name)) {
+            return evaluateSameType(name, args);
+        }
+
+        if ("what_type".equals(name)) {
+            return evaluateWhatType(name, args);
+        }
+
+        if ("strcat".equals(name)) {
+            return evaluateStrcat(name, args);
+        }
+
+        if ("strcmp".equals(name)) {
+            return evaluateStrcmp(name, args);
+        }
+
+        if ("panic".equals(name)) {
+            return evaluatePanic(name, args);
+        }
+
+        if ("is_matchable".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_MATCHABLE);
+        }
+
+        if ("is_comparable".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_COMPARABLE);
+        }
+
+        if ("is_assignable".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_ASSIGNABLE);
+        }
+
+        if ("is_value_assignable".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_VALUE_ASSIGNABLE);
+        }
+
+        ctx.error("Unknown compile-time reflection function '#"
+                + name
+                + "'");
+        return null;
     }
 
     private StaticValue evaluateName(String name, SourceSpan span) {
-        Boolean enabled = switch (name) {
-            case "IS_LINUX" -> target.isLinux();
-            case "IS_WINDOWS" -> target.isWindows();
-            case "IS_MACOS" -> target.isMacos();
-            case "IS_X86_64" -> target.isX86_64();
-            case "IS_ARM64" -> target.isArm64();
-            default -> null;
-        };
+        Boolean enabled = null;
+
+        if ("IS_LINUX".equals(name)) {
+            enabled = target.isLinux();
+        } else if ("IS_WINDOWS".equals(name)) {
+            enabled = target.isWindows();
+        } else if ("IS_MACOS".equals(name)) {
+            enabled = target.isMacos();
+        } else if ("IS_X86_64".equals(name)) {
+            enabled = target.isX86_64();
+        } else if ("IS_ARM64".equals(name)) {
+            enabled = target.isArm64();
+        }
 
         if (enabled == null) {
             ctx.diagnostics().push(span);
@@ -109,18 +153,52 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        return new StaticIntValue(enabled ? BigInteger.ONE : BigInteger.ZERO,
-                BOOL_TYPE);
+        return StaticValue.integer(
+                enabled ? BigInteger.ONE : BigInteger.ZERO,
+                BOOL_TYPE
+        );
     }
 
-    private interface TypePredicate {
-        boolean test(SastType type);
+    private boolean testPredicate(PredicateKind kind, SastType type) {
+        if (kind == PredicateKind.IS_PRIMITIVE) {
+            return type.kind == SastTypeKind.PRIMITIVE;
+        }
+
+        if (kind == PredicateKind.IS_ENUM) {
+            return type.kind == SastTypeKind.ENUM;
+        }
+
+        if (kind == PredicateKind.IS_MEMCPY_SAFE) {
+            return typeChecker.isMemcpySafe(type);
+        }
+
+        if (kind == PredicateKind.HAS_DEFAULT_VALUE) {
+            return typeChecker.hasDefaultValue(type);
+        }
+
+        if (kind == PredicateKind.IS_MEMSET_SAFE) {
+            return typeChecker.isMemsetSafe(type);
+        }
+
+        if (kind == PredicateKind.IS_MATCHABLE) {
+            return isMatchable(type);
+        }
+
+        if (kind == PredicateKind.IS_COMPARABLE) {
+            return isComparable(type);
+        }
+
+        if (kind == PredicateKind.IS_ASSIGNABLE) {
+            return isAssignable(type);
+        }
+
+        return typeChecker.isValueAssignableType(type);
     }
 
     private StaticValue evaluateTypePredicate(
             String name,
             List<AstNode> args,
-            TypePredicate predicate
+            PredicateKind predicate
     ) {
         if (!requireArity(name, args, 1)) {
             return null;
@@ -132,11 +210,11 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        BigInteger folded = predicate.test(type)
+        BigInteger folded = testPredicate(predicate, type)
                 ? BigInteger.ONE
                 : BigInteger.ZERO;
 
-        return new StaticIntValue(folded, BOOL_TYPE);
+        return StaticValue.integer(folded, BOOL_TYPE);
     }
 
     private StaticValue evaluateSameType(String name, List<AstNode> args) {
@@ -155,7 +233,7 @@ final class CompileTimeIntrinsics {
                 ? BigInteger.ONE
                 : BigInteger.ZERO;
 
-        return new StaticIntValue(folded, BOOL_TYPE);
+        return StaticValue.integer(folded, BOOL_TYPE);
     }
 
     private StaticValue evaluateWhatType(String name, List<AstNode> args) {
@@ -169,7 +247,7 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        return new StaticStringValue(utf8Bytes(type.mangleKey()));
+        return StaticValue.string(utf8Bytes(type.mangleKey()));
     }
 
     private StaticValue evaluateStrcat(String name, List<AstNode> args) {
@@ -195,7 +273,7 @@ final class CompileTimeIntrinsics {
             combined.addAll(part);
         }
 
-        return new StaticStringValue(combined);
+        return StaticValue.string(combined);
     }
 
     private StaticValue evaluateStrcmp(String name, List<AstNode> args) {
@@ -220,7 +298,7 @@ final class CompileTimeIntrinsics {
 
         int comparison = compareBytes(left, right);
 
-        return new StaticIntValue(
+        return StaticValue.integer(
                 BigInteger.valueOf(comparison),
                 INT32_TYPE
         );
@@ -243,7 +321,7 @@ final class CompileTimeIntrinsics {
 
         ctx.error(decodeText(message));
 
-        return new StaticVoidValue();
+        return StaticValue.voidValue();
     }
 
     private List<BigInteger> evaluateStaticStringArgument(
@@ -259,11 +337,11 @@ final class CompileTimeIntrinsics {
             AstNode call = arg;
             StaticValue value = evaluateCall(call.name, call.args, call.span);
 
-            if (value == null || value instanceof StaticVoidValue) {
+            if (value == null || value.kind == StaticValueKind.VOID) {
                 return null;
             }
 
-            if (!(value instanceof StaticStringValue string)) {
+            if (value.kind != StaticValueKind.STRING) {
                 ctx.error("#"
                         + consumerName
                         + " argument "
@@ -273,7 +351,7 @@ final class CompileTimeIntrinsics {
                 return null;
             }
 
-            bytes = string.bytes();
+            bytes = value.bytes;
         } else {
             ctx.error("#"
                     + consumerName
@@ -302,20 +380,24 @@ final class CompileTimeIntrinsics {
             StaticValue value,
             SourceSpan span
     ) {
-        if (value instanceof StaticIntValue integer) {
+        if (value == null) {
+            return fallback(span);
+        }
+
+        if (value.kind == StaticValueKind.INT) {
             return SastNode.intLiteral(
                     span,
-                    integer.type(),
-                    integer.value(),
-                    integer.value().toString(10)
+                    value.type,
+                    value.value,
+                    value.value.toString(10)
             );
         }
 
-        if (value instanceof StaticStringValue string) {
-            return materializeStaticString(string.bytes(), span);
+        if (value.kind == StaticValueKind.STRING) {
+            return materializeStaticString(value.bytes, span);
         }
 
-        if (value instanceof StaticVoidValue) {
+        if (value.kind == StaticValueKind.VOID) {
             return SastNode.intLiteral(
                     span,
                     VOID_TYPE,
@@ -409,7 +491,7 @@ final class CompileTimeIntrinsics {
         }
 
         if (arg.isType()) {
-            return typeResolver.apply(arg);
+            return typeResolver.analyzeNormalType(arg);
         }
 
         ctx.error("#"
@@ -585,15 +667,15 @@ final class CompileTimeIntrinsics {
     }
 
     private static String describeStaticValue(StaticValue value) {
-        if (value instanceof StaticIntValue) {
+        if (value.kind == StaticValueKind.INT) {
             return "a compile-time integer result";
         }
 
-        if (value instanceof StaticStringValue) {
+        if (value.kind == StaticValueKind.STRING) {
             return "a compile-time string result";
         }
 
-        if (value instanceof StaticVoidValue) {
+        if (value.kind == StaticValueKind.VOID) {
             return "a compile-time void result";
         }
 
@@ -795,21 +877,34 @@ final class CompileTimeIntrinsics {
         return "an expression";
     }
 
-    private sealed interface StaticValue
-            permits StaticIntValue, StaticStringValue, StaticVoidValue {
-    }
+    private static final class StaticValue {
+        final StaticValueKind kind;
+        final BigInteger value;
+        final SastType type;
+        final List<BigInteger> bytes;
 
-    private record StaticIntValue(
-            BigInteger value,
-            SastType type
-    ) implements StaticValue {
-    }
+        private StaticValue(
+                StaticValueKind kind,
+                BigInteger value,
+                SastType type,
+                List<BigInteger> bytes
+        ) {
+            this.kind = kind;
+            this.value = value;
+            this.type = type;
+            this.bytes = bytes;
+        }
 
-    private record StaticStringValue(
-            List<BigInteger> bytes
-    ) implements StaticValue {
-    }
+        static StaticValue integer(BigInteger value, SastType type) {
+            return new StaticValue(StaticValueKind.INT, value, type, List.of());
+        }
 
-    private record StaticVoidValue() implements StaticValue {
+        static StaticValue string(List<BigInteger> bytes) {
+            return new StaticValue(StaticValueKind.STRING, null, null, bytes);
+        }
+
+        static StaticValue voidValue() {
+            return new StaticValue(StaticValueKind.VOID, null, null, List.of());
+        }
     }
 }

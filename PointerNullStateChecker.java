@@ -170,21 +170,20 @@ public final class PointerNullStateChecker {
     private void runSummaryPass() {
         summaryMode = true;
         summaries = new NullSummary[context.callGraph.functionCount()];
-        driver = new MemoryDataflowDriver(context, diagnostics, new NullDomain());
+        driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new NullDomain()));
         driver.run(context.root);
         summaryMode = false;
     }
 
     private void runCheckPass() {
         summaryMode = false;
-        driver = new MemoryDataflowDriver(context, diagnostics, new NullDomain());
+        driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new NullDomain()));
         driver.run(context.root);
     }
 
-    private final class NullDomain implements MemoryDataflowDriver.Domain {
+    final class NullDomain {
         private boolean suppressed;
 
-        @Override
         public void beginFunction(int functionId) {
             currentFunctionId = functionId;
             state.reset();
@@ -356,7 +355,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        @Override
         public void endFunction(int exitCount, boolean fallthrough) {
             if (summaryMode) {
                 summaries[currentFunctionId] = buildSummary(exitCount);
@@ -496,11 +494,9 @@ public final class PointerNullStateChecker {
             );
         }
 
-        @Override
         public void enterBlock(SastNode node, int depth) {
         }
 
-        @Override
         public void leaveBlock(
                 SastNode node,
                 int depth,
@@ -508,7 +504,6 @@ public final class PointerNullStateChecker {
         ) {
         }
 
-        @Override
         public void checkVarDecl(SastNode node) {
             diagnostics.push(node.span);
 
@@ -547,7 +542,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        @Override
         public void checkAssign(SastNode node) {
             diagnostics.push(node.span);
 
@@ -728,7 +722,6 @@ public final class PointerNullStateChecker {
             copyConcreteCellTargets(value, pointerIndex);
         }
 
-        @Override
         public void checkExpr(SastNode expression) {
             if (expression == null) {
                 return;
@@ -910,7 +903,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        @Override
         public void onReturn(SastNode node) {
             if (summaryMode) {
                 long[] set = node.value == null
@@ -920,7 +912,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        @Override
         public void onFallthrough() {
             if (summaryMode) {
                 long[] set = context.templates.newSet();
@@ -929,7 +920,6 @@ public final class PointerNullStateChecker {
             }
         }
 
-        @Override
         public boolean guardPathFeasible(
                 SastNode condition,
                 boolean guardHolds
@@ -980,7 +970,6 @@ public final class PointerNullStateChecker {
             return current != PointerNullAnalysisState.NULL;
         }
 
-        @Override
         public void refineFromGuard(
                 SastNode condition,
                 boolean guardHolds
@@ -1106,17 +1095,14 @@ public final class PointerNullStateChecker {
             );
         }
 
-        @Override
         public int snapshot() {
             return state.snapshot();
         }
 
-        @Override
         public void restore(int slot) {
             state.restore(slot);
         }
 
-        @Override
         public void mergeAfterIf(
                 int before,
                 int thenState,
@@ -1137,30 +1123,24 @@ public final class PointerNullStateChecker {
             );
         }
 
-        @Override
         public void mergeLoopExitStates(int[] slots, int count) {
             state.mergeLoopExitStates(slots, count);
         }
 
-        @Override
         public void mergeStateIntoCurrent(int slot) {
             state.mergeStateIntoCurrent(slot);
         }
 
-        @Override
         public void markLocalsDeadForJump(int targetBlockDepth, int snapshotSlot) {
         }
 
-        @Override
         public void markLoopBodyLocalsDead(SastNode body) {
         }
 
-        @Override
         public boolean isSuppressed() {
             return suppressed;
         }
 
-        @Override
         public void setSuppressed(boolean value) {
             suppressed = value;
         }
@@ -1232,7 +1212,7 @@ public final class PointerNullStateChecker {
                     callSiteId,
                     calleeId,
                     rootBinding,
-                    node -> processNode(node)
+                    new MemorySummaryBfs.NodeProcessor(this)
             );
 
             currentBfsResult = result;
@@ -1380,7 +1360,7 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private void processNode(int node) {
+        void processNode(int node) {
             int functionId = bfs.functionId(node);
             NullSummary summary = summaries[functionId];
 

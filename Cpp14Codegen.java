@@ -383,10 +383,7 @@ public class Cpp14Codegen {
         Map<String, List<SastNode>> out = new LinkedHashMap<>();
 
         for (Map.Entry<String, List<SastNode>> entry : nsStructs.entrySet()) {
-            List<SastNode> methods = out.computeIfAbsent(
-                    entry.getKey(),
-                    ignored -> new ArrayList<>()
-            );
+            List<SastNode> methods = namespaceList(out, entry.getKey());
 
             for (SastNode struct : entry.getValue()) {
                 methods.addAll(struct.methods);
@@ -464,6 +461,20 @@ public class Cpp14Codegen {
         return cppNamespacePrefix(namespace) + "::" + local;
     }
 
+    private static List<SastNode> namespaceList(
+            Map<String, List<SastNode>> map,
+            String name
+    ) {
+        List<SastNode> list = map.get(name);
+
+        if (list == null) {
+            list = new ArrayList<>();
+            map.put(name, list);
+        }
+
+        return list;
+    }
+
     private void partitionNamespaceItems(
             SastNode namespace,
             Map<String, List<SastNode>> nsStructs,
@@ -471,25 +482,10 @@ public class Cpp14Codegen {
             Map<String, List<SastNode>> nsGlobals,
             Map<String, List<SastNode>> nsFunctions
     ) {
-        List<SastNode> structs = nsStructs.computeIfAbsent(
-                namespace.name,
-                ignored -> new ArrayList<>()
-        );
-
-        List<SastNode> enums = nsEnums.computeIfAbsent(
-                namespace.name,
-                ignored -> new ArrayList<>()
-        );
-
-        List<SastNode> globals = nsGlobals.computeIfAbsent(
-                namespace.name,
-                ignored -> new ArrayList<>()
-        );
-
-        List<SastNode> functions = nsFunctions.computeIfAbsent(
-                namespace.name,
-                ignored -> new ArrayList<>()
-        );
+        List<SastNode> structs = namespaceList(nsStructs, namespace.name);
+        List<SastNode> enums = namespaceList(nsEnums, namespace.name);
+        List<SastNode> globals = namespaceList(nsGlobals, namespace.name);
+        List<SastNode> functions = namespaceList(nsFunctions, namespace.name);
 
         for (SastNode item : namespace.items) {
             partitionItem(item, structs, enums, globals, functions);
@@ -503,6 +499,12 @@ public class Cpp14Codegen {
             List<SastNode> globals,
             List<SastNode> functions
     ) {
+        if (item == null) {
+            throw new IllegalStateException(
+                    "Internal compiler error: null top-level item in SastNode"
+            );
+        }
+
         if (item.kind == SastKind.STRUCT_DECL) {
             structs.add(item);
             return;
@@ -521,12 +523,6 @@ public class Cpp14Codegen {
         if (item.kind == SastKind.FUNCTION_DECL) {
             functions.add(item);
             return;
-        }
-
-        if (item == null) {
-            throw new IllegalStateException(
-                    "Internal compiler error: null top-level item in SastNode"
-            );
         }
 
         throw new IllegalStateException(
@@ -1309,17 +1305,18 @@ public class Cpp14Codegen {
     }
 
     private String emitPrimitiveType(SemanticPrimitiveKind kind) {
-        return switch (kind) {
-            case INT8 -> "int8_t";
-            case INT16 -> "int16_t";
-            case INT32 -> "int32_t";
-            case INT64 -> "int64_t";
+        switch (kind) {
+            case INT8: return "int8_t";
+            case INT16: return "int16_t";
+            case INT32: return "int32_t";
+            case INT64: return "int64_t";
 
-            case UINT8 -> "uint8_t";
-            case UINT16 -> "uint16_t";
-            case UINT32 -> "uint32_t";
-            case UINT64 -> "uint64_t";
-        };
+            case UINT8: return "uint8_t";
+            case UINT16: return "uint16_t";
+            case UINT32: return "uint32_t";
+            case UINT64: return "uint64_t";
+            default: throw new IllegalStateException("Unknown primitive kind: " + kind);
+        }
     }
 
     String emitSymbolName(Symbol symbol) {

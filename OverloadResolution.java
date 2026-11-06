@@ -1,6 +1,5 @@
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.ToIntFunction;
 
 final class OverloadResolution {
 
@@ -471,9 +470,9 @@ final class OverloadResolution {
                 || elementShape.kind == SastTypeKind.ENUM;
     }
 
-    static <T> List<T> preferExactPermissionMatches(
-            List<T> matches,
-            ToIntFunction<T> downgradeCount
+    static List<Symbol> preferExactPermissionFunctionMatches(
+            List<Symbol> matches,
+            List<CallArg> args
     ) {
         if (matches.size() <= 1) {
             return matches;
@@ -481,15 +480,75 @@ final class OverloadResolution {
 
         int best = Integer.MAX_VALUE;
 
-        for (T match : matches) {
-            best = Math.min(best, downgradeCount.applyAsInt(match));
+        for (Symbol fn : matches) {
+            best = Math.min(
+                    best,
+                    countPermissionDowngrades(args, fn.parameterTypes()));
         }
 
-        List<T> preferred = new ArrayList<>();
+        List<Symbol> preferred = new ArrayList<>();
 
-        for (T match : matches) {
-            if (downgradeCount.applyAsInt(match) == best) {
-                preferred.add(match);
+        for (Symbol fn : matches) {
+            if (countPermissionDowngrades(args, fn.parameterTypes()) == best) {
+                preferred.add(fn);
+            }
+        }
+
+        return preferred;
+    }
+
+    static List<Symbol> preferExactPermissionMethodMatches(
+            List<Symbol> matches,
+            List<CallArg> userArgs
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (Symbol method : matches) {
+            best = Math.min(
+                    best,
+                    countMethodPermissionDowngrades(method, userArgs));
+        }
+
+        List<Symbol> preferred = new ArrayList<>();
+
+        for (Symbol method : matches) {
+            if (countMethodPermissionDowngrades(method, userArgs) == best) {
+                preferred.add(method);
+            }
+        }
+
+        return preferred;
+    }
+
+    static List<Symbol> preferExactPermissionOperatorMatches(
+            List<Symbol> matches,
+            CallArg arg
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (Symbol method : matches) {
+            best = Math.min(
+                    best,
+                    operatorArgumentDowngradeCost(
+                            arg,
+                            method.parameters.get(1).type));
+        }
+
+        List<Symbol> preferred = new ArrayList<>();
+
+        for (Symbol method : matches) {
+            if (operatorArgumentDowngradeCost(
+                    arg,
+                    method.parameters.get(1).type) == best) {
+                preferred.add(method);
             }
         }
 

@@ -15,8 +15,8 @@ public final class ASTSerializer {
             throw new IllegalArgumentException("Cannot serialize a null AST document");
         }
 
-        JsonObject root = nodeToJson(doc.root, doc.sources);
-        JsonObject document = new JsonObject();
+        JsonValue root = nodeToJson(doc.root, doc.sources);
+        JsonValue document = JsonValue.object();
         document.put("format", FORMAT);
         document.put("version", VERSION);
         document.put("phase", doc.phase.jsonName());
@@ -27,7 +27,7 @@ public final class ASTSerializer {
     }
 
     public static AstDocument fromJson(String json) {
-        JsonObject document = JsonAstSupport.requireDocument(json, "AST", FORMAT, VERSION);
+        JsonValue document = JsonAstSupport.requireDocument(json, "AST", FORMAT, VERSION);
         AstPhase phase = JsonAstSupport.requireEnumName(
                 document.requireString("phase"),
                 AstPhase.class
@@ -42,7 +42,7 @@ public final class ASTSerializer {
         return new AstDocument(phase, sources, root);
     }
 
-    static JsonObject nodeToJson(AstNode node, SourceTable sources) {
+    static JsonValue nodeToJson(AstNode node, SourceTable sources) {
         if (node == null) {
             return null;
         }
@@ -51,7 +51,7 @@ public final class ASTSerializer {
             return typeToJson(node, sources);
         }
 
-        JsonObject obj = new JsonObject();
+        JsonValue obj = JsonValue.object();
         obj.put("span", spanToJson(node.span, sources));
 
         switch (node.kind) {
@@ -282,7 +282,7 @@ public final class ASTSerializer {
         return obj;
     }
 
-    static AstNode nodeFromJson(JsonObject obj, SourceTable sources) {
+    static AstNode nodeFromJson(JsonValue obj, SourceTable sources) {
         if (obj == null) {
             return null;
         }
@@ -304,58 +304,58 @@ public final class ASTSerializer {
 
         SourceSpan span = spanFromJson(obj, sources);
 
-        return switch (kind) {
-            case PROGRAM -> AstNode.program(
+        switch (kind) {
+            case PROGRAM: return AstNode.program(
                     span,
                     nodesFromArray(obj.requireArray("items"), sources)
             );
-            case NAMESPACE -> AstNode.namespace(
+            case NAMESPACE: return AstNode.namespace(
                     span,
                     obj.requireString("name"),
                     nodesFromArray(obj.requireArray("items"), sources)
             );
-            case IMPORT -> AstNode.importPath(span, obj.requireString("path"));
-            case BLOCK -> AstNode.block(
+            case IMPORT: return AstNode.importPath(span, obj.requireString("path"));
+            case BLOCK: return AstNode.block(
                     span,
                     nodesFromArray(obj.requireArray("statements"), sources)
             );
-            case FUNCTION_DECL -> AstNode.functionDecl(
+            case FUNCTION_DECL: return AstNode.functionDecl(
                     span,
                     obj.requireString("name"),
                     nodesFromArray(obj.requireArray("parameters"), sources),
                     typeFromJson(obj.requireObject("returnType"), sources),
                     nodeFromJson(obj.optObject("body"), sources)
             );
-            case PARAMETER -> AstNode.parameter(
+            case PARAMETER: return AstNode.parameter(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name")
             );
-            case STRUCT_DECL -> AstNode.structDecl(
+            case STRUCT_DECL: return AstNode.structDecl(
                     span,
                     obj.requireString("name"),
                     nodesFromArray(obj.requireArray("fields"), sources),
                     nodesFromArray(obj.requireArray("methods"), sources),
                     nodesFromArray(obj.requireArray("members"), sources)
             );
-            case STRUCT_FIELD_DECL -> AstNode.structFieldDecl(
+            case STRUCT_FIELD_DECL: return AstNode.structFieldDecl(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
                     nodeFromJson(obj.optObject("constInitializer"), sources)
             );
-            case ENUM_DECL -> AstNode.enumDecl(
+            case ENUM_DECL: return AstNode.enumDecl(
                     span,
                     obj.requireString("name"),
                     typeFromJson(obj.requireObject("backingType"), sources),
                     nodesFromArray(obj.requireArray("variants"), sources)
             );
-            case ENUM_VARIANT -> AstNode.enumVariant(
+            case ENUM_VARIANT: return AstNode.enumVariant(
                     span,
                     obj.requireString("name"),
                     nodeFromJson(obj.optObject("constInitializer"), sources)
             );
-            case GLOBAL_VAR_DECL -> {
+            case GLOBAL_VAR_DECL: {
                 AstNode node = AstNode.globalVarDecl(
                         span,
                         typeFromJson(obj.requireObject("type"), sources),
@@ -365,176 +365,176 @@ public final class ASTSerializer {
                 node.literalBytes = bigIntegersFromArray(obj.optArray("literalBytes"));
                 node.compileTimeConstant = obj.has("compileTimeConstant")
                         && obj.requireBool("compileTimeConstant");
-                yield node;
+                return node;
             }
-            case VAR_DECL -> AstNode.varDecl(
+            case VAR_DECL: return AstNode.varDecl(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name")
             );
-            case VAR_DECL_INIT -> AstNode.varDeclInit(
+            case VAR_DECL_INIT: return AstNode.varDeclInit(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
                     nodeFromJson(obj.optObject("init"), sources)
             );
-            case VAR_DECL_FIELDS_INIT -> AstNode.varDeclFieldsInit(
+            case VAR_DECL_FIELDS_INIT: return AstNode.varDeclFieldsInit(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
                     nodesFromArray(obj.requireArray("fields"), sources)
             );
-            case FIELD_INIT -> AstNode.fieldInit(
+            case FIELD_INIT: return AstNode.fieldInit(
                     span,
                     obj.optString("name"),
                     nodeFromJson(obj.requireObject("value"), sources),
                     obj.has("positional") && obj.requireBool("positional")
             );
-            case AGGREGATE_LITERAL -> AstNode.aggregateLiteral(
+            case AGGREGATE_LITERAL: return AstNode.aggregateLiteral(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     nodesFromArray(obj.requireArray("fields"), sources)
             );
-            case EXPR_STMT -> AstNode.exprStmt(
+            case EXPR_STMT: return AstNode.exprStmt(
                     span,
                     nodeFromJson(obj.requireObject("expr"), sources)
             );
-            case ASSIGN -> AstNode.assign(
+            case ASSIGN: return AstNode.assign(
                     span,
                     obj.requireString("op"),
                     nodeFromJson(obj.requireObject("target"), sources),
                     nodeFromJson(obj.requireObject("value"), sources)
             );
-            case INC_DEC -> AstNode.incDec(
+            case INC_DEC: return AstNode.incDec(
                     span,
                     obj.requireString("op"),
                     nodeFromJson(obj.requireObject("target"), sources)
             );
-            case IF -> AstNode.ifStmt(
+            case IF: return AstNode.ifStmt(
                     span,
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodeFromJson(obj.requireObject("thenBranch"), sources),
                     nodeFromJson(obj.optObject("elseBranch"), sources)
             );
-            case COMPILE_TIME_IF -> AstNode.compileTimeIf(
+            case COMPILE_TIME_IF: return AstNode.compileTimeIf(
                     span,
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodeFromJson(obj.requireObject("thenBranch"), sources),
                     nodeFromJson(obj.optObject("elseBranch"), sources)
             );
-            case COMPILE_TIME_CALL -> AstNode.compileTimeCall(
+            case COMPILE_TIME_CALL: return AstNode.compileTimeCall(
                     span,
                     obj.requireString("name"),
                     nodesFromArray(obj.requireArray("args"), sources)
             );
-            case COMPILE_TIME_NAME -> AstNode.compileTimeName(
+            case COMPILE_TIME_NAME: return AstNode.compileTimeName(
                     span,
                     obj.requireString("name")
             );
-            case DECL_IF -> AstNode.declIf(
+            case DECL_IF: return AstNode.declIf(
                     span,
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodesFromArray(obj.requireArray("thenItems"), sources),
                     nodesFromArray(obj.requireArray("elseItems"), sources)
             );
-            case WHILE -> AstNode.whileStmt(
+            case WHILE: return AstNode.whileStmt(
                     span,
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodeFromJson(obj.requireObject("body"), sources),
                     nodesFromArray(obj.requireArray("update"), sources)
             );
-            case BREAK -> AstNode.breakStmt(
+            case BREAK: return AstNode.breakStmt(
                     span,
                     nodeFromJson(obj.optObject("level"), sources)
             );
-            case CONTINUE -> AstNode.continueStmt(
+            case CONTINUE: return AstNode.continueStmt(
                     span,
                     nodeFromJson(obj.optObject("level"), sources)
             );
-            case FOR -> AstNode.forStmt(
+            case FOR: return AstNode.forStmt(
                     span,
                     nodeFromJson(obj.optObject("init"), sources),
                     nodeFromJson(obj.requireObject("condition"), sources),
                     nodeFromJson(obj.optObject("update"), sources),
                     nodeFromJson(obj.requireObject("body"), sources)
             );
-            case RETURN -> AstNode.returnStmt(
+            case RETURN: return AstNode.returnStmt(
                     span,
                     nodeFromJson(obj.optObject("value"), sources)
             );
-            case VAR -> AstNode.var(span, obj.requireString("name"));
-            case INT -> AstNode.intLiteral(span, obj.requireString("value"));
-            case INFERRED_SIZE -> AstNode.inferredSize(span);
-            case ARRAY_LITERAL -> AstNode.arrayLiteral(
+            case VAR: return AstNode.var(span, obj.requireString("name"));
+            case INT: return AstNode.intLiteral(span, obj.requireString("value"));
+            case INFERRED_SIZE: return AstNode.inferredSize(span);
+            case ARRAY_LITERAL: return AstNode.arrayLiteral(
                     span,
                     nodesFromArray(obj.requireArray("elements"), sources)
             );
-            case STRING_LITERAL -> AstNode.stringLiteral(
+            case STRING_LITERAL: return AstNode.stringLiteral(
                     span,
                     obj.requireString("rawText")
             );
-            case UNARY -> AstNode.unary(
+            case UNARY: return AstNode.unary(
                     span,
                     obj.requireString("op"),
                     nodeFromJson(obj.requireObject("expr"), sources)
             );
-            case BINARY -> AstNode.binary(
+            case BINARY: return AstNode.binary(
                     span,
                     obj.requireString("op"),
                     nodeFromJson(obj.requireObject("left"), sources),
                     nodeFromJson(obj.requireObject("right"), sources)
             );
-            case ARRAY_ACCESS -> AstNode.arrayAccess(
+            case ARRAY_ACCESS: return AstNode.arrayAccess(
                     span,
                     nodeFromJson(obj.requireObject("target"), sources),
                     nodeFromJson(obj.requireObject("index"), sources)
             );
-            case MEMBER_ACCESS -> AstNode.memberAccess(
+            case MEMBER_ACCESS: return AstNode.memberAccess(
                     span,
                     nodeFromJson(obj.requireObject("target"), sources),
                     obj.requireString("member")
             );
-            case CALL -> AstNode.call(
+            case CALL: return AstNode.call(
                     span,
                     nodeFromJson(obj.requireObject("callee"), sources),
                     nodesFromArray(obj.requireArray("args"), sources)
             );
-            case GET_PTR -> AstNode.getPtr(
+            case GET_PTR: return AstNode.getPtr(
                     span,
                     PtrPermission.valueOf(obj.requireString("permission")),
                     nodeFromJson(obj.requireObject("target"), sources)
             );
-            case DEREF -> AstNode.deref(
+            case DEREF: return AstNode.deref(
                     span,
                     nodeFromJson(obj.requireObject("expr"), sources)
             );
-            case CAST -> AstNode.cast(
+            case CAST: return AstNode.cast(
                     span,
                     typeFromJson(obj.requireObject("target"), sources),
                     nodeFromJson(obj.requireObject("expr"), sources),
                     obj.requireBool("unsafe")
             );
-            case NULL -> AstNode.nullLiteral(span);
-            case QUALIFIED_NAME -> AstNode.qualifiedName(
+            case NULL: return AstNode.nullLiteral(span);
+            case QUALIFIED_NAME: return AstNode.qualifiedName(
                     span,
                     stringsFromArray(obj.requireArray("segments"))
             );
-            default -> throw new IllegalArgumentException(
+            default: throw new IllegalArgumentException(
                     "Unknown AST node kind '" + kindName + "'"
             );
-        };
+        }
     }
 
-    private static boolean isTypeObject(JsonObject obj) {
+    private static boolean isTypeObject(JsonValue obj) {
         return obj.has("type") && !obj.has("node");
     }
 
-    static JsonObject typeToJson(AstNode type, SourceTable sources) {
+    static JsonValue typeToJson(AstNode type, SourceTable sources) {
         if (type == null) {
             return null;
         }
 
-        JsonObject obj = new JsonObject();
+        JsonValue obj = JsonValue.object();
         obj.put("span", spanToJson(type.span, sources));
 
         switch (type.kind) {
@@ -569,10 +569,10 @@ public final class ASTSerializer {
             }
             case TUPLE_TYPE -> {
                 obj.put("type", type.kind.jsonName());
-                JsonArray elements = new JsonArray();
+                JsonValue elements = JsonValue.array();
 
                 for (AstNode element : type.elements) {
-                    JsonObject elementObj = new JsonObject();
+                    JsonValue elementObj = JsonValue.object();
                     elementObj.put("span", spanToJson(element.span, sources));
                     elementObj.put("name", element.name);
                     elementObj.put("type", typeToJson(element.type, sources));
@@ -589,7 +589,7 @@ public final class ASTSerializer {
         return obj;
     }
 
-    static AstNode typeFromJson(JsonObject obj, SourceTable sources) {
+    static AstNode typeFromJson(JsonValue obj, SourceTable sources) {
         String kindName = obj.requireString("type");
         AstKind kind = AstKind.fromJsonName(kindName);
 
@@ -603,38 +603,38 @@ public final class ASTSerializer {
 
         SourceSpan span = spanFromJson(obj, sources);
 
-        return switch (kind) {
-            case PRIMITIVE_TYPE -> AstNode.primitiveType(
+        switch (kind) {
+            case PRIMITIVE_TYPE: return AstNode.primitiveType(
                     span,
                     PrimitiveKind.valueOf(obj.requireString("kind"))
             );
-            case VOID_TYPE -> AstNode.voidType(span);
-            case DYNAMIC_ARRAY_TYPE -> AstNode.dynamicArrayType(
+            case VOID_TYPE: return AstNode.voidType(span);
+            case DYNAMIC_ARRAY_TYPE: return AstNode.dynamicArrayType(
                     span,
                     typeFromJson(obj.requireObject("elementType"), sources)
             );
-            case STATIC_ARRAY_TYPE -> AstNode.staticArrayType(
+            case STATIC_ARRAY_TYPE: return AstNode.staticArrayType(
                     span,
                     typeFromJson(obj.requireObject("elementType"), sources),
                     nodeFromJson(obj.requireObject("sizeExpr"), sources)
             );
-            case PTR_TYPE -> AstNode.ptrType(
+            case PTR_TYPE: return AstNode.ptrType(
                     span,
                     PtrPermission.valueOf(obj.requireString("permission")),
                     typeFromJson(obj.requireObject("referencedType"), sources)
             );
-            case STRUCT_TYPE -> {
+            case STRUCT_TYPE: {
                 String namespace = obj.optString("namespace");
                 List<String> segments = namespace == null || namespace.isEmpty()
                         ? List.of()
                         : List.of(namespace.split("::"));
-                yield AstNode.structType(span, segments, obj.requireString("name"));
+                return AstNode.structType(span, segments, obj.requireString("name"));
             }
-            case TUPLE_TYPE -> {
+            case TUPLE_TYPE: {
                 List<AstNode> elements = new ArrayList<>();
 
                 for (JsonValue elementValue : obj.requireArray("elements").values()) {
-                    JsonObject element = JsonAstSupport.requireObject(
+                    JsonValue element = JsonAstSupport.requireObject(
                             elementValue,
                             "tuple element"
                     );
@@ -645,20 +645,20 @@ public final class ASTSerializer {
                     ));
                 }
 
-                yield AstNode.tupleType(span, elements);
+                return AstNode.tupleType(span, elements);
             }
-            default -> throw new IllegalArgumentException(
+            default: throw new IllegalArgumentException(
                     "Unknown AST type kind '" + kindName + "'"
             );
-        };
+        }
     }
 
     static JsonValue spanToJson(SourceSpan span, SourceTable sources) {
         if (span == null || !span.isPresent()) {
-            return JsonNull.INSTANCE;
+            return JsonValue.nullValue();
         }
 
-        JsonObject obj = new JsonObject();
+        JsonValue obj = JsonValue.object();
         obj.put("src", sources.intern(span.source()));
         obj.put("line", span.startLine());
         obj.put("column", span.startColumn());
@@ -667,17 +667,18 @@ public final class ASTSerializer {
         return obj;
     }
 
-    static SourceSpan spanFromJson(JsonObject obj, SourceTable sources) {
+    static SourceSpan spanFromJson(JsonValue obj, SourceTable sources) {
         JsonValue value = obj.get("span");
 
-        if (value == null || value instanceof JsonNull) {
+        if (value == null || value.isNull()) {
             return SourceSpan.NONE;
         }
 
-        if (!(value instanceof JsonObject span)) {
+        if (!value.isObject()) {
             throw new IllegalArgumentException("JSON field 'span' must be an object or null");
         }
 
+        JsonValue span = value;
         int sourceIndex = span.requireInt("src");
         return new SourceSpan(
                 sources.name(sourceIndex),
@@ -688,8 +689,8 @@ public final class ASTSerializer {
         );
     }
 
-    private static JsonArray nodeArray(List<AstNode> nodes, SourceTable sources) {
-        JsonArray array = new JsonArray();
+    private static JsonValue nodeArray(List<AstNode> nodes, SourceTable sources) {
+        JsonValue array = JsonValue.array();
 
         if (nodes != null) {
             for (AstNode node : nodes) {
@@ -700,7 +701,7 @@ public final class ASTSerializer {
         return array;
     }
 
-    private static List<AstNode> nodesFromArray(JsonArray array, SourceTable sources) {
+    private static List<AstNode> nodesFromArray(JsonValue array, SourceTable sources) {
         List<AstNode> nodes = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
@@ -710,8 +711,8 @@ public final class ASTSerializer {
         return nodes;
     }
 
-    private static JsonArray stringArray(List<String> values) {
-        JsonArray array = new JsonArray();
+    private static JsonValue stringArray(List<String> values) {
+        JsonValue array = JsonValue.array();
 
         if (values != null) {
             for (String value : values) {
@@ -722,21 +723,21 @@ public final class ASTSerializer {
         return array;
     }
 
-    private static List<String> stringsFromArray(JsonArray array) {
+    private static List<String> stringsFromArray(JsonValue array) {
         List<String> values = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
-            if (!(value instanceof JsonString string)) {
+            if (!value.isString()) {
                 throw new IllegalArgumentException("Expected a JSON string");
             }
 
-            values.add(string.value());
+            values.add(value.value());
         }
 
         return values;
     }
 
-    private static List<BigInteger> bigIntegersFromArray(JsonArray array) {
+    private static List<BigInteger> bigIntegersFromArray(JsonValue array) {
         if (array == null) {
             return null;
         }
@@ -744,11 +745,11 @@ public final class ASTSerializer {
         List<BigInteger> values = new ArrayList<>();
 
         for (JsonValue value : array.values()) {
-            if (!(value instanceof JsonString string)) {
+            if (!value.isString()) {
                 throw new IllegalArgumentException("Expected a decimal string");
             }
 
-            values.add(new BigInteger(string.value()));
+            values.add(new BigInteger(value.value()));
         }
 
         return values;

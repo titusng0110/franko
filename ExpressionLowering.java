@@ -6,8 +6,8 @@ final class ExpressionLowering {
     ExpressionLowering(
             SymbolTable symbolTable,
             ConstExpressionEvaluator constEval,
-            ArrayLiteralLowerer.Hoister hoister,
-            CompileTimeIntrinsics.StringHoister staticStringHoister,
+            ArrayLiteralHoister hoister,
+            StaticStringHoister staticStringHoister,
             TargetInfo target
     ) {
         this.analyzer = new ExpressionAnalyzer(symbolTable, constEval);
@@ -22,12 +22,12 @@ final class ExpressionLowering {
                 symbolTable,
                 target,
                 staticStringHoister,
-                typeResolver::analyzeNormalType
+                typeResolver
         );
 
         analyzer.wire(
                 arrayLowerer,
-                typeResolver::analyzeNormalType,
+                typeResolver,
                 arrayLiteralLowerer,
                 staticIntrinsics
         );

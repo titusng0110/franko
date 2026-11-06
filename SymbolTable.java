@@ -392,8 +392,7 @@ public final class SymbolTable {
                         ? functionDeclSymbols
                         : currentNamespace.functionDeclSymbols;
 
-        List<Symbol> overloads =
-                targetFunctions.computeIfAbsent(fn.name, ignored -> new ArrayList<>());
+        List<Symbol> overloads = overloadList(targetFunctions, fn.name);
 
         for (Symbol existing : overloads) {
             if (OverloadResolution.sameParameterSignature(existing.parameters, fn.parameters)) {
@@ -436,10 +435,7 @@ public final class SymbolTable {
             return;
         }
 
-        List<Symbol> overloads = owner.methods.computeIfAbsent(
-                method.name,
-                ignored -> new ArrayList<>()
-        );
+        List<Symbol> overloads = overloadList(owner.methods, method.name);
 
         for (Symbol existing : overloads) {
             if (OverloadResolution.sameMethodUserParameterSignature(
@@ -508,12 +504,9 @@ public final class SymbolTable {
 
         matches = OverloadResolution.preferOperatorConstantFitMatches(matches, arg);
 
-        matches = OverloadResolution.preferExactPermissionMatches(
+        matches = OverloadResolution.preferExactPermissionOperatorMatches(
                 matches,
-                method -> OverloadResolution.operatorArgumentDowngradeCost(
-                        arg,
-                        method.parameters.get(1).type
-                )
+                arg
         );
 
         if (matches.size() == 1) {
@@ -555,9 +548,9 @@ public final class SymbolTable {
             }
         }
 
-        matches = OverloadResolution.preferExactPermissionMatches(
+        matches = OverloadResolution.preferExactPermissionMethodMatches(
                 matches,
-                m -> OverloadResolution.countMethodPermissionDowngrades(m, userArgs)
+                userArgs
         );
 
         matches = OverloadResolution.preferConstantFitMethods(matches, userArgs);
@@ -566,9 +559,11 @@ public final class SymbolTable {
             return matches.get(0);
         }
 
-        List<String> argTypes = userArgs.stream()
-                .map(arg -> arg == null ? "<null>" : arg.describeForSignature())
-                .toList();
+        List<String> argTypes = new ArrayList<>();
+
+        for (CallArg arg : userArgs) {
+            argTypes.add(arg == null ? "<null>" : arg.describeForSignature());
+        }
 
         if (matches.size() > 1) {
             error("Ambiguous call to overloaded method '"
@@ -645,9 +640,9 @@ public final class SymbolTable {
             }
         }
 
-        matches = OverloadResolution.preferExactPermissionMatches(
+        matches = OverloadResolution.preferExactPermissionFunctionMatches(
                 matches,
-                fn -> OverloadResolution.countPermissionDowngrades(args, fn.parameterTypes())
+                args
         );
 
         matches = OverloadResolution.preferConstantFitFunctions(matches, args);
@@ -656,9 +651,11 @@ public final class SymbolTable {
             return matches.get(0);
         }
 
-        List<String> argTypes = args.stream()
-                .map(arg -> arg == null ? "<null>" : arg.describeForSignature())
-                .toList();
+        List<String> argTypes = new ArrayList<>();
+
+        for (CallArg arg : args) {
+            argTypes.add(arg == null ? "<null>" : arg.describeForSignature());
+        }
 
         if (matches.size() > 1) {
             error("Ambiguous call to overloaded function '"
@@ -914,6 +911,20 @@ public final class SymbolTable {
                         + " for the enum type");
             }
         }
+    }
+
+    private static List<Symbol> overloadList(
+            Map<String, List<Symbol>> map,
+            String name
+    ) {
+        List<Symbol> list = map.get(name);
+
+        if (list == null) {
+            list = new ArrayList<>();
+            map.put(name, list);
+        }
+
+        return list;
     }
 
     public void error(String msg) {

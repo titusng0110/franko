@@ -208,12 +208,12 @@ final class MemoryTemplateRegistry {
             return -1;
         }
 
-        return switch (offset % PARAM_STRIDE) {
-            case VALUE_ANY -> MemoryTemplate.CONSTRAINT_ANY;
-            case VALUE_NONNULL -> MemoryTemplate.CONSTRAINT_NONNULL;
-            case VALUE_NULL -> MemoryTemplate.CONSTRAINT_NULL;
-            default -> -1;
-        };
+        switch (offset % PARAM_STRIDE) {
+            case VALUE_ANY: return MemoryTemplate.CONSTRAINT_ANY;
+            case VALUE_NONNULL: return MemoryTemplate.CONSTRAINT_NONNULL;
+            case VALUE_NULL: return MemoryTemplate.CONSTRAINT_NULL;
+            default: return -1;
+        }
     }
 
     int constraintOfPointee(int template) {
@@ -223,12 +223,12 @@ final class MemoryTemplateRegistry {
             return -1;
         }
 
-        return switch (offset % PARAM_STRIDE) {
-            case POINTEE_ANY -> MemoryTemplate.CONSTRAINT_ANY;
-            case POINTEE_NONNULL -> MemoryTemplate.CONSTRAINT_NONNULL;
-            case POINTEE_NULL -> MemoryTemplate.CONSTRAINT_NULL;
-            default -> -1;
-        };
+        switch (offset % PARAM_STRIDE) {
+            case POINTEE_ANY: return MemoryTemplate.CONSTRAINT_ANY;
+            case POINTEE_NONNULL: return MemoryTemplate.CONSTRAINT_NONNULL;
+            case POINTEE_NULL: return MemoryTemplate.CONSTRAINT_NULL;
+            default: return -1;
+        }
     }
 
     int globalIndexOf(int template) {

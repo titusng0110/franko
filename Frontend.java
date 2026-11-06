@@ -200,9 +200,12 @@ public final class Frontend {
                 return;
             }
 
-            int length = offendingSymbol instanceof Token token
-                    ? Math.max(1, token.getText().length())
-                    : 1;
+            int length = 1;
+
+            if (offendingSymbol instanceof Token) {
+                Token token = (Token) offendingSymbol;
+                length = Math.max(1, token.getText().length());
+            }
 
             diagnostics.add(Diagnostic.error(
                     span(line, charPositionInLine, length),

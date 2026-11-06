@@ -494,11 +494,12 @@ final class AstNode {
     }
 
     boolean isType() {
-        return switch (kind) {
+        switch (kind) {
             case PRIMITIVE_TYPE, VOID_TYPE, DYNAMIC_ARRAY_TYPE, STATIC_ARRAY_TYPE,
-                    PTR_TYPE, STRUCT_TYPE, TUPLE_TYPE -> true;
-            default -> false;
-        };
+                    PTR_TYPE, STRUCT_TYPE, TUPLE_TYPE:
+                return true;
+            default: return false;
+        }
     }
 
     static String kindName(AstNode node) {

@@ -50,12 +50,16 @@ public final class ConstExpressionEvaluator {
             return null;
         }
 
-        return switch (op) {
-            case "-" -> val.negate();
-            case "!" -> val.signum() == 0 ? BigInteger.ONE : BigInteger.ZERO;
-            case "~" -> val.not();
-            default -> null;
-        };
+        switch (op) {
+            case "-":
+                return val.negate();
+            case "!":
+                return val.signum() == 0 ? BigInteger.ONE : BigInteger.ZERO;
+            case "~":
+                return val.not();
+            default:
+                return null;
+        }
     }
 
     public static BigInteger tryFoldBinary(
@@ -67,28 +71,48 @@ public final class ConstExpressionEvaluator {
             return null;
         }
 
-        return switch (op) {
-            case "+" -> left.add(right);
-            case "-" -> left.subtract(right);
-            case "*" -> left.multiply(right);
-            case "/" -> right.signum() == 0 ? null : left.divide(right);
-
-            case "%" -> right.signum() == 0 ? null : left.remainder(right);
-            case "&" -> left.and(right);
-            case "|" -> left.or(right);
-            case "^" -> left.xor(right);
-            case "<<" -> right.signum() < 0 ? null : left.shiftLeft(right.intValueExact());
-            case ">>" -> right.signum() < 0 ? null : left.shiftRight(right.intValueExact());
-            case "==" -> left.equals(right) ? BigInteger.ONE : BigInteger.ZERO;
-            case "!=" -> !left.equals(right) ? BigInteger.ONE : BigInteger.ZERO;
-            case "<" -> left.compareTo(right) < 0 ? BigInteger.ONE : BigInteger.ZERO;
-            case ">" -> left.compareTo(right) > 0 ? BigInteger.ONE : BigInteger.ZERO;
-            case "<=" -> left.compareTo(right) <= 0 ? BigInteger.ONE : BigInteger.ZERO;
-            case ">=" -> left.compareTo(right) >= 0 ? BigInteger.ONE : BigInteger.ZERO;
-            case "&&" -> left.signum() != 0 && right.signum() != 0 ? BigInteger.ONE : BigInteger.ZERO;
-            case "||" -> left.signum() != 0 || right.signum() != 0 ? BigInteger.ONE : BigInteger.ZERO;
-            default -> null;
-        };
+        switch (op) {
+            case "+":
+                return left.add(right);
+            case "-":
+                return left.subtract(right);
+            case "*":
+                return left.multiply(right);
+            case "/":
+                return right.signum() == 0 ? null : left.divide(right);
+            case "%":
+                return right.signum() == 0 ? null : left.remainder(right);
+            case "&":
+                return left.and(right);
+            case "|":
+                return left.or(right);
+            case "^":
+                return left.xor(right);
+            case "<<":
+                return right.signum() < 0 ? null : left.shiftLeft(right.intValueExact());
+            case ">>":
+                return right.signum() < 0 ? null : left.shiftRight(right.intValueExact());
+            case "==":
+                return left.equals(right) ? BigInteger.ONE : BigInteger.ZERO;
+            case "!=":
+                return !left.equals(right) ? BigInteger.ONE : BigInteger.ZERO;
+            case "<":
+                return left.compareTo(right) < 0 ? BigInteger.ONE : BigInteger.ZERO;
+            case ">":
+                return left.compareTo(right) > 0 ? BigInteger.ONE : BigInteger.ZERO;
+            case "<=":
+                return left.compareTo(right) <= 0 ? BigInteger.ONE : BigInteger.ZERO;
+            case ">=":
+                return left.compareTo(right) >= 0 ? BigInteger.ONE : BigInteger.ZERO;
+            case "&&":
+                return left.signum() != 0 && right.signum() != 0
+                        ? BigInteger.ONE : BigInteger.ZERO;
+            case "||":
+                return left.signum() != 0 || right.signum() != 0
+                        ? BigInteger.ONE : BigInteger.ZERO;
+            default:
+                return null;
+        }
     }
 
     public static final class UnevaluableConstant extends Exception {

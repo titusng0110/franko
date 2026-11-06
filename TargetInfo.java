@@ -69,12 +69,12 @@ final class TargetInfo {
             return null;
         }
 
-        return switch (raw.toLowerCase()) {
-            case "linux" -> OS_LINUX;
-            case "windows" -> OS_WINDOWS;
-            case "macos", "darwin" -> OS_MACOS;
-            default -> null;
-        };
+        switch (raw.toLowerCase()) {
+            case "linux": return OS_LINUX;
+            case "windows": return OS_WINDOWS;
+            case "macos", "darwin": return OS_MACOS;
+            default: return null;
+        }
     }
 
     private static String normalizeArch(String raw) {
@@ -82,11 +82,11 @@ final class TargetInfo {
             return null;
         }
 
-        return switch (raw.toLowerCase()) {
-            case "x86_64", "x64", "amd64" -> ARCH_X86_64;
-            case "arm64", "aarch64" -> ARCH_ARM64;
-            default -> null;
-        };
+        switch (raw.toLowerCase()) {
+            case "x86_64", "x64", "amd64": return ARCH_X86_64;
+            case "arm64", "aarch64": return ARCH_ARM64;
+            default: return null;
+        }
     }
 
     @Override

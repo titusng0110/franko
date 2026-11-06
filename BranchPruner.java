@@ -14,17 +14,58 @@ final class BranchPruner {
         UNPRUNABLE
     }
 
-    private interface Node {}
+    private enum BoolKind {
+        LITERAL,
+        VARIABLE,
+        NOT,
+        AND,
+        OR
+    }
 
-    private record Lit(boolean value) implements Node {}
+    private static final class BoolNode {
+        final BoolKind kind;
+        final boolean value;
+        final int index;
+        final BoolNode inner;
+        final BoolNode left;
+        final BoolNode right;
 
-    private record Var(int index) implements Node {}
+        private BoolNode(
+                BoolKind kind,
+                boolean value,
+                int index,
+                BoolNode inner,
+                BoolNode left,
+                BoolNode right
+        ) {
+            this.kind = kind;
+            this.value = value;
+            this.index = index;
+            this.inner = inner;
+            this.left = left;
+            this.right = right;
+        }
 
-    private record Not(Node inner) implements Node {}
+        static BoolNode literal(boolean value) {
+            return new BoolNode(BoolKind.LITERAL, value, -1, null, null, null);
+        }
 
-    private record And(Node left, Node right) implements Node {}
+        static BoolNode variable(int index) {
+            return new BoolNode(BoolKind.VARIABLE, false, index, null, null, null);
+        }
 
-    private record Or(Node left, Node right) implements Node {}
+        static BoolNode not(BoolNode inner) {
+            return new BoolNode(BoolKind.NOT, false, -1, inner, null, null);
+        }
+
+        static BoolNode and(BoolNode left, BoolNode right) {
+            return new BoolNode(BoolKind.AND, false, -1, null, left, right);
+        }
+
+        static BoolNode or(BoolNode left, BoolNode right) {
+            return new BoolNode(BoolKind.OR, false, -1, null, left, right);
+        }
+    }
 
     SastNode prune(SastNode root) {
         return pruneItem(root);
@@ -260,7 +301,7 @@ final class BranchPruner {
         }
 
         List<SastNode> atoms = new ArrayList<>();
-        Node formula = classify(condition, atoms);
+        BoolNode formula = classify(condition, atoms);
 
         if (formula == null || atoms.size() > MAX_ATOMS) {
             return Determination.UNPRUNABLE;
@@ -286,39 +327,39 @@ final class BranchPruner {
         return sawTrue ? Determination.TRUE : Determination.FALSE;
     }
 
-    private static Node classify(SastNode expr, List<SastNode> atoms) {
+    private static BoolNode classify(SastNode expr, List<SastNode> atoms) {
 
         if (expr.isConstant()) {
-            return new Lit(expr.constantValue.signum() != 0);
+            return BoolNode.literal(expr.constantValue.signum() != 0);
         }
 
         if (expr.kind == SastKind.BIN_OP) {
 
             if (expr.op.equals("&&")) {
-                Node left = classify(expr.left, atoms);
-                Node right = classify(expr.right, atoms);
+                BoolNode left = classify(expr.left, atoms);
+                BoolNode right = classify(expr.right, atoms);
 
-                return left == null || right == null ? null : new And(left, right);
+                return left == null || right == null ? null : BoolNode.and(left, right);
             }
 
             if (expr.op.equals("||")) {
-                Node left = classify(expr.left, atoms);
-                Node right = classify(expr.right, atoms);
+                BoolNode left = classify(expr.left, atoms);
+                BoolNode right = classify(expr.right, atoms);
 
-                return left == null || right == null ? null : new Or(left, right);
+                return left == null || right == null ? null : BoolNode.or(left, right);
             }
         }
 
         if (expr.kind == SastKind.UNARY_OP && expr.op.equals("!")) {
-            Node inner = classify(expr.expr, atoms);
+            BoolNode inner = classify(expr.expr, atoms);
 
-            return inner == null ? null : new Not(inner);
+            return inner == null ? null : BoolNode.not(inner);
         }
 
         return atomFor(expr, atoms);
     }
 
-    private static Node atomFor(SastNode expr, List<SastNode> atoms) {
+    private static BoolNode atomFor(SastNode expr, List<SastNode> atoms) {
 
         if (!TypeChecker.isByteType(expr.type) || !isEffectFree(expr)) {
             return null;
@@ -332,29 +373,29 @@ final class BranchPruner {
             for (int i = 0; i < atoms.size(); i++) {
 
                 if (sameComparisonOperands(atoms.get(i), expr)) {
-                    Node base = new Var(i);
+                    BoolNode base = BoolNode.variable(i);
 
-                    return complement ? new Not(base) : base;
+                    return complement ? BoolNode.not(base) : base;
                 }
             }
 
             atoms.add(expr);
 
-            Node base = new Var(atoms.size() - 1);
+            BoolNode base = BoolNode.variable(atoms.size() - 1);
 
-            return complement ? new Not(base) : base;
+            return complement ? BoolNode.not(base) : base;
         }
 
         for (int i = 0; i < atoms.size(); i++) {
 
             if (sameAtom(atoms.get(i), expr)) {
-                return new Var(i);
+                return BoolNode.variable(i);
             }
         }
 
         atoms.add(expr);
 
-        return new Var(atoms.size() - 1);
+        return BoolNode.variable(atoms.size() - 1);
     }
 
     private static boolean sameComparisonOperands(
@@ -367,29 +408,29 @@ final class BranchPruner {
                 && sameAtom(existing.right, bin.right);
     }
 
-    private static boolean eval(Node node, int mask) {
+    private static boolean eval(BoolNode node, int mask) {
 
-        if (node instanceof Lit lit) {
-            return lit.value();
+        if (node.kind == BoolKind.LITERAL) {
+            return node.value;
         }
 
-        if (node instanceof Var var) {
-            return (mask & (1 << var.index())) != 0;
+        if (node.kind == BoolKind.VARIABLE) {
+            return (mask & (1 << node.index)) != 0;
         }
 
-        if (node instanceof Not not) {
-            return !eval(not.inner(), mask);
+        if (node.kind == BoolKind.NOT) {
+            return !eval(node.inner, mask);
         }
 
-        if (node instanceof And and) {
-            return eval(and.left(), mask) && eval(and.right(), mask);
+        if (node.kind == BoolKind.AND) {
+            return eval(node.left, mask) && eval(node.right, mask);
         }
 
-        if (node instanceof Or or) {
-            return eval(or.left(), mask) || eval(or.right(), mask);
+        if (node.kind == BoolKind.OR) {
+            return eval(node.left, mask) || eval(node.right, mask);
         }
 
-        throw new IllegalStateException("Unknown formula node: " + node);
+        throw new IllegalStateException("Unknown formula node kind: " + node.kind);
     }
 
     private static boolean containsCall(SastNode expr) {

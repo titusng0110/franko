@@ -17,10 +17,12 @@ public final class CompilerJsonSelfTest {
         String original = Files.readString(path, StandardCharsets.UTF_8);
         JsonValue parsed = Json.parse(original);
 
-        if (!(parsed instanceof JsonObject object)) {
+        if (!parsed.isObject()) {
             fail(path, "artifact root is not a JSON object");
             return;
         }
+
+        JsonValue object = parsed;
 
         String format = object.requireString("format");
         String roundTripped;

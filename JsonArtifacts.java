@@ -1,9 +1,9 @@
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public final class JsonArtifacts {
@@ -91,11 +91,11 @@ public final class JsonArtifacts {
             }
         }
 
-        JsonArray diagnostics = new JsonArray();
+        JsonValue diagnostics = JsonValue.array();
 
         for (DiagnosticLog.Entry entry : selected) {
             Diagnostic diagnostic = entry.diagnostic();
-            JsonObject obj = new JsonObject();
+            JsonValue obj = JsonValue.object();
             obj.put("phase", entry.phase());
             obj.put("severity", diagnostic.severity().label());
             obj.put("message", diagnostic.message());
@@ -103,7 +103,7 @@ public final class JsonArtifacts {
             diagnostics.add(obj);
         }
 
-        JsonObject document = new JsonObject();
+        JsonValue document = JsonValue.object();
         document.put("format", "franko-diagnostics");
         document.put("version", 1);
         document.put("sources", JsonAstSupport.sourceArray(sources));
@@ -164,10 +164,16 @@ public final class JsonArtifacts {
             return;
         }
 
-        try (var paths = Files.walk(root)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
+        try {
+            if (Files.isDirectory(root)) {
+                try (DirectoryStream<Path> entries = Files.newDirectoryStream(root)) {
+                    for (Path entry : entries) {
+                        deleteTree(entry);
+                    }
+                }
             }
+
+            Files.deleteIfExists(root);
         } catch (IOException e) {
             throw new RuntimeException(
                     "Failed to delete stale artifact directory '" + root + "': "

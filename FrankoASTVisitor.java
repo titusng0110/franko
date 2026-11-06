@@ -1097,7 +1097,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
             return AstNode.varDecl(span(ctx), type, name);
         }
 
-        if (ctx.declSuffix() instanceof FrankoParser.DeclFieldInitContext fieldCtx) {
+        if (ctx.declSuffix() instanceof FrankoParser.DeclFieldInitContext) {
+            FrankoParser.DeclFieldInitContext fieldCtx =
+                    (FrankoParser.DeclFieldInitContext) ctx.declSuffix();
             return AstNode.varDeclFieldsInit(
                     span(ctx),
                     type,
