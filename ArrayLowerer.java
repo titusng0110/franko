@@ -15,7 +15,7 @@ public final class ArrayLowerer {
         this.exprAnalyzer = Objects.requireNonNull(exprAnalyzer);
     }
 
-    public SemanticArrayIntrinsicCallNode tryLowerIntrinsicCall(AstNode expr) {
+    public SastNode tryLowerIntrinsicCall(AstNode expr) {
         ctx.diagnostics().push(expr.span);
         try {
             return tryLowerIntrinsicCallInner(expr);
@@ -24,7 +24,7 @@ public final class ArrayLowerer {
         }
     }
 
-    private SemanticArrayIntrinsicCallNode tryLowerIntrinsicCallInner(AstNode expr) {
+    private SastNode tryLowerIntrinsicCallInner(AstNode expr) {
         if (expr == null || expr.kind != AstKind.CALL
                 || expr.callee == null || expr.callee.kind != AstKind.MEMBER_ACCESS) {
             return null;
@@ -38,7 +38,7 @@ public final class ArrayLowerer {
     }
 
     private boolean isAggregateReceiver(AstNode mac) {
-        SemanticExprNode target = exprAnalyzer.analyzeExpr(mac.target);
+        SastNode target = exprAnalyzer.analyzeExpr(mac.target);
 
         if (target.type.kind == SastTypeKind.STRUCT) {
             return target.type.structSymbol != null;
@@ -59,7 +59,7 @@ public final class ArrayLowerer {
         return !isAggregateReceiver(call.callee);
     }
 
-    private SemanticArrayIntrinsicCallNode tryLowerMemberIntrinsic(
+    private SastNode tryLowerMemberIntrinsic(
             AstNode call,
             AstNode mac
     ) {
@@ -109,7 +109,7 @@ public final class ArrayLowerer {
         };
     }
 
-    private SemanticArrayIntrinsicCallNode lowerSignatureIntrinsic(
+    private SastNode lowerSignatureIntrinsic(
             AstNode call,
             AstNode mac
     ) {
@@ -130,7 +130,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver = kind.requiresStorageLValue()
+        SastNode receiver = kind.requiresStorageLValue()
                 ? exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
                         kind.runtimeName + " receiver"
@@ -142,12 +142,12 @@ public final class ArrayLowerer {
                 kind.runtimeName + "() receiver"
         );
 
-        List<SemanticExprNode> args = new ArrayList<>();
+        List<SastNode> args = new ArrayList<>();
 
         for (int i = 0; i < call.args.size(); i++) {
             SemanticIntrinsicArgKind argKind = kind.argKind(i);
 
-            SemanticExprNode arg;
+            SastNode arg;
 
             if (argKind.isPointer()) {
                 arg = exprAnalyzer.analyzeExprWithExpectedType(
@@ -161,7 +161,7 @@ public final class ArrayLowerer {
             args.add(arg);
         }
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 kind,
                 receiver,
@@ -169,7 +169,7 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode lowerDynamicArrayAlloc(
+    private SastNode lowerDynamicArrayAlloc(
             AstNode call,
             AstNode mac,
             SemanticArrayIntrinsicKind kind
@@ -181,7 +181,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver =
+        SastNode receiver =
                 exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
                         kind.runtimeName + " receiver"
@@ -192,10 +192,10 @@ public final class ArrayLowerer {
                 kind.runtimeName + " receiver"
         );
 
-        SemanticExprNode size =
+        SastNode size =
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 kind,
                 receiver,
@@ -203,7 +203,7 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode lowerUninit(
+    private SastNode lowerUninit(
             AstNode call,
             AstNode mac
     ) {
@@ -212,7 +212,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver =
+        SastNode receiver =
                 exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
                         "uninit receiver"
@@ -223,7 +223,7 @@ public final class ArrayLowerer {
                 "uninit receiver"
         );
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 SemanticArrayIntrinsicKind.UNINIT,
                 receiver,
@@ -231,7 +231,7 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode lowerMemset(
+    private SastNode lowerMemset(
             AstNode call,
             AstNode mac
     ) {
@@ -240,7 +240,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver =
+        SastNode receiver =
                 exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
                         "memset receiver"
@@ -251,25 +251,25 @@ public final class ArrayLowerer {
                 "memset receiver"
         );
 
-        List<SemanticExprNode> args = new ArrayList<>();
+        List<SastNode> args = new ArrayList<>();
 
-        SemanticExprNode value =
+        SastNode value =
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
         args.add(value);
 
         if (call.args.size() == 3) {
-            SemanticExprNode start =
+            SastNode start =
                     exprAnalyzer.analyzeExpr(call.args.get(1));
 
-            SemanticExprNode count =
+            SastNode count =
                     exprAnalyzer.analyzeExpr(call.args.get(2));
 
             args.add(start);
             args.add(count);
         }
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 SemanticArrayIntrinsicKind.MEMSET,
                 receiver,
@@ -277,7 +277,7 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode lowerMemcpy(
+    private SastNode lowerMemcpy(
             AstNode call,
             AstNode mac
     ) {
@@ -286,7 +286,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver =
+        SastNode receiver =
                 exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
                         "memcpy target"
@@ -297,23 +297,23 @@ public final class ArrayLowerer {
                 "memcpy target"
         );
 
-        SemanticExprNode sourcePtr =
+        SastNode sourcePtr =
                 exprAnalyzer.analyzeExprWithExpectedType(
                         call.args.get(0),
                         memcpySourceContext(receiver.type));
 
-        List<SemanticExprNode> args = new ArrayList<>();
+        List<SastNode> args = new ArrayList<>();
 
         args.add(sourcePtr);
 
         if (call.args.size() == 4) {
-            SemanticExprNode dstStart =
+            SastNode dstStart =
                     exprAnalyzer.analyzeExpr(call.args.get(1));
 
-            SemanticExprNode srcStart =
+            SastNode srcStart =
                     exprAnalyzer.analyzeExpr(call.args.get(2));
 
-            SemanticExprNode count =
+            SastNode count =
                     exprAnalyzer.analyzeExpr(call.args.get(3));
 
             args.add(dstStart);
@@ -321,7 +321,7 @@ public final class ArrayLowerer {
             args.add(count);
         }
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 SemanticArrayIntrinsicKind.MEMCPY,
                 receiver,
@@ -347,7 +347,7 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode lowerMemmove(
+    private SastNode lowerMemmove(
             AstNode call,
             AstNode mac
     ) {
@@ -356,7 +356,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver =
+        SastNode receiver =
                 exprAnalyzer.analyzeRequiredLValueExpr(
                         mac.target,
                         "memmove receiver"
@@ -367,16 +367,16 @@ public final class ArrayLowerer {
                 "memmove receiver"
         );
 
-        SemanticExprNode dstStart =
+        SastNode dstStart =
                 exprAnalyzer.analyzeExpr(call.args.get(0));
 
-        SemanticExprNode srcStart =
+        SastNode srcStart =
                 exprAnalyzer.analyzeExpr(call.args.get(1));
 
-        SemanticExprNode count =
+        SastNode count =
                 exprAnalyzer.analyzeExpr(call.args.get(2));
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 SemanticArrayIntrinsicKind.MEMMOVE,
                 receiver,
@@ -388,7 +388,7 @@ public final class ArrayLowerer {
         );
     }
 
-    private SemanticArrayIntrinsicCallNode lowerLength(
+    private SastNode lowerLength(
             AstNode call,
             AstNode mac
     ) {
@@ -397,7 +397,7 @@ public final class ArrayLowerer {
             return null;
         }
 
-        SemanticExprNode receiver =
+        SastNode receiver =
                 exprAnalyzer.analyzeExpr(mac.target);
 
         exprAnalyzer.requireArrayType(
@@ -405,7 +405,7 @@ public final class ArrayLowerer {
                 "length() receiver"
         );
 
-        return new SemanticArrayIntrinsicCallNode(
+        return SastNode.arrayIntrinsicCall(
                 call.span,
                 SemanticArrayIntrinsicKind.LENGTH,
                 receiver,

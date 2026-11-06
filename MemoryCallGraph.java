@@ -5,13 +5,13 @@ import java.util.List;
 
 final class MemoryCallGraph {
     final Symbol[] functions;
-    final SemanticFunctionDeclNode[] decls;
+    final SastNode[] decls;
     final int[][] parameterVariableIds;
     final boolean[] hasBody;
     final int[] edgeStart;
     final int[] edgeCount;
     final int[] edgeCallSiteIds;
-    final SemanticFunctionCallNode[] callSiteNodes;
+    final SastNode[] callSiteNodes;
     final int[] callSiteCaller;
     final int[] callSiteCallee;
     final int[] callSiteLocalIndex;
@@ -19,13 +19,13 @@ final class MemoryCallGraph {
 
     MemoryCallGraph(
             Symbol[] functions,
-            SemanticFunctionDeclNode[] decls,
+            SastNode[] decls,
             int[][] parameterVariableIds,
             boolean[] hasBody,
             int[] edgeStart,
             int[] edgeCount,
             int[] edgeCallSiteIds,
-            SemanticFunctionCallNode[] callSiteNodes,
+            SastNode[] callSiteNodes,
             int[] callSiteCaller,
             int[] callSiteCallee,
             int[] callSiteLocalIndex
@@ -167,10 +167,10 @@ final class MemoryCallGraph {
         private final IdentityHashMap<Symbol, Integer> functionIds =
                 new IdentityHashMap<>();
         private final List<Symbol> functions = new ArrayList<>();
-        private final List<SemanticFunctionDeclNode> decls = new ArrayList<>();
+        private final List<SastNode> decls = new ArrayList<>();
         private final List<int[]> parameterIds = new ArrayList<>();
         private final List<Boolean> hasBody = new ArrayList<>();
-        private final List<SemanticFunctionCallNode> callSites = new ArrayList<>();
+        private final List<SastNode> callSites = new ArrayList<>();
         private final List<Integer> callSiteCallers = new ArrayList<>();
         private final List<Integer> callSiteCallees = new ArrayList<>();
         private final List<List<Integer>> callerEdges = new ArrayList<>();
@@ -189,7 +189,7 @@ final class MemoryCallGraph {
             return addFunction(symbol, null);
         }
 
-        int addFunction(Symbol symbol, SemanticFunctionDeclNode decl) {
+        int addFunction(Symbol symbol, SastNode decl) {
             Integer existing = functionIds.get(symbol);
 
             if (existing != null) {
@@ -224,7 +224,7 @@ final class MemoryCallGraph {
         }
 
         int addCallSite(
-                SemanticFunctionCallNode node,
+                SastNode node,
                 int callerFunctionId,
                 int calleeFunctionId
         ) {
@@ -282,13 +282,13 @@ final class MemoryCallGraph {
 
             return new MemoryCallGraph(
                     functions.toArray(new Symbol[0]),
-                    decls.toArray(new SemanticFunctionDeclNode[0]),
+                    decls.toArray(new SastNode[0]),
                     parameterIds.toArray(new int[0][]),
                     toBooleanArray(hasBody),
                     edgeStart,
                     edgeCount,
                     edgeCallSiteIds,
-                    callSites.toArray(new SemanticFunctionCallNode[0]),
+                    callSites.toArray(new SastNode[0]),
                     callSiteCaller,
                     callSiteCallee,
                     callSiteLocalIndex

@@ -67,7 +67,7 @@ final class DeclarationSelector {
                             arrayType
                     );
                     symbol.literalValues = List.copyOf(values);
-                    return new SemanticVarExprNode(span, arrayType, symbol);
+                    return SastNode.varExpr(span, arrayType, symbol);
                 },
                 (bytes, span) -> {
                     SastType arrayType =
@@ -494,7 +494,7 @@ final class DeclarationSelector {
         diagnostics.push(condition.span);
 
         try {
-            SemanticExprNode value = analyzer.analyzeExpr(condition);
+            SastNode value = analyzer.analyzeExpr(condition);
 
             if (!(value.type.kind == SastTypeKind.PRIMITIVE)) {
                 diagnostics.error("#if condition must be an integer, got "

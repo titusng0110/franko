@@ -1,17 +1,17 @@
 final class PointerPermissions {
     private PointerPermissions() {}
 
-    static PtrPermission regionPermission(SemanticExprNode expr) {
-        if (expr instanceof SemanticDerefNode deref) {
-            return pointerPermission(deref.expr.type);
+    static PtrPermission regionPermission(SastNode expr) {
+        if (expr.kind == SastKind.DEREF) {
+            return pointerPermission(expr.expr.type);
         }
 
-        if (expr instanceof SemanticArrayAccessNode access) {
-            return regionPermission(access.target);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            return regionPermission(expr.target);
         }
 
-        if (expr instanceof SemanticMemberAccessNode member) {
-            return regionPermission(member.target);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            return regionPermission(expr.target);
         }
 
         return PtrPermission.OWNER;

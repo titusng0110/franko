@@ -248,7 +248,7 @@ final class DanglingPointerState {
         mayDead[variableId >>> 6] |= 1L << (variableId & 63);
     }
 
-    void enterBlock(SemanticBlockNode node, int depth) {
+    void enterBlock(SastNode node, int depth) {
         if (depth >= blockLocals.length) {
             blockLocals = Arrays.copyOf(blockLocals, blockLocals.length * 2);
         }
@@ -257,7 +257,7 @@ final class DanglingPointerState {
         blockDepth = depth;
     }
 
-    void leaveBlock(SemanticBlockNode node, int depth, boolean terminated) {
+    void leaveBlock(SastNode node, int depth, boolean terminated) {
         int[] locals = blockLocals[depth];
 
         if (!terminated && locals != null) {

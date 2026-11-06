@@ -26,7 +26,7 @@ final class BranchPruner {
 
     private record Or(Node left, Node right) implements Node {}
 
-    SemanticASTNode prune(SemanticASTNode root) {
+    SastNode prune(SastNode root) {
         return pruneItem(root);
     }
 
@@ -36,55 +36,55 @@ final class BranchPruner {
                 document.entryKind,
                 document.sources,
                 document.symbols,
-                (SemanticProgramNode) pruneItem(document.root)
+                (SastNode) pruneItem(document.root)
         );
     }
 
-    private SemanticASTNode pruneItem(SemanticASTNode node) {
+    private SastNode pruneItem(SastNode node) {
 
-        if (node instanceof SemanticProgramNode program) {
-            List<SemanticASTNode> items = pruneItemList(program.topLevelItems);
+        if (node.kind == SastKind.PROGRAM) {
+            List<SastNode> items = pruneItemList(node.topLevelItems);
 
-            return items == program.topLevelItems
-                    ? program
-                    : new SemanticProgramNode(program.span, items);
+            return items == node.topLevelItems
+                    ? node
+                    : SastNode.program(node.span, items);
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            List<SemanticASTNode> items = pruneItemList(namespace.items);
+        if (node.kind == SastKind.NAMESPACE) {
+            List<SastNode> items = pruneItemList(node.items);
 
-            return items == namespace.items
-                    ? namespace
-                    : new SemanticNamespaceNode(
-                            namespace.span,
-                            namespace.name,
+            return items == node.items
+                    ? node
+                    : SastNode.namespace(
+                            node.span,
+                            node.name,
                             items
                     );
         }
 
-        if (node instanceof SemanticFunctionDeclNode fn) {
-            SemanticBlockNode body = pruneBlock(fn.body);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            SastNode body = pruneBlock(node.body);
 
-            return body == fn.body
-                    ? fn
-                    : new SemanticFunctionDeclNode(
-                            fn.span,
-                            fn.symbol,
-                            fn.parameterVariables,
+            return body == node.body
+                    ? node
+                    : SastNode.functionDecl(
+                            node.span,
+                            node.symbol,
+                            node.parameterVariables,
                             body
                     );
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            List<SemanticFunctionDeclNode> methods = null;
+        if (node.kind == SastKind.STRUCT_DECL) {
+            List<SastNode> methods = null;
 
-            for (int i = 0; i < struct.methods.size(); i++) {
-                SemanticFunctionDeclNode method = struct.methods.get(i);
-                SemanticFunctionDeclNode pruned =
-                        (SemanticFunctionDeclNode) pruneItem(method);
+            for (int i = 0; i < node.methods.size(); i++) {
+                SastNode method = node.methods.get(i);
+                SastNode pruned =
+                        (SastNode) pruneItem(method);
 
                 if (methods == null && pruned != method) {
-                    methods = new ArrayList<>(struct.methods.subList(0, i));
+                    methods = new ArrayList<>(node.methods.subList(0, i));
                 }
 
                 if (methods != null) {
@@ -93,10 +93,10 @@ final class BranchPruner {
             }
 
             return methods == null
-                    ? struct
-                    : new SemanticStructDeclNode(
-                            struct.span,
-                            struct.symbol,
+                    ? node
+                    : SastNode.structDecl(
+                            node.span,
+                            node.structSymbol,
                             methods
                     );
         }
@@ -104,12 +104,12 @@ final class BranchPruner {
         return node;
     }
 
-    private List<SemanticASTNode> pruneItemList(List<SemanticASTNode> items) {
-        List<SemanticASTNode> out = null;
+    private List<SastNode> pruneItemList(List<SastNode> items) {
+        List<SastNode> out = null;
 
         for (int i = 0; i < items.size(); i++) {
-            SemanticASTNode item = items.get(i);
-            SemanticASTNode pruned = pruneItem(item);
+            SastNode item = items.get(i);
+            SastNode pruned = pruneItem(item);
 
             if (out == null && pruned != item) {
                 out = new ArrayList<>(items.subList(0, i));
@@ -123,29 +123,29 @@ final class BranchPruner {
         return out == null ? items : out;
     }
 
-    private SemanticStmtNode pruneStmt(SemanticStmtNode stmt) {
+    private SastNode pruneStmt(SastNode stmt) {
 
-        if (stmt instanceof SemanticBlockNode block) {
-            return pruneBlock(block);
+        if (stmt.kind == SastKind.BLOCK) {
+            return pruneBlock(stmt);
         }
 
-        if (stmt instanceof SemanticIfNode ifNode) {
-            return pruneIf(ifNode);
+        if (stmt.kind == SastKind.IF) {
+            return pruneIf(stmt);
         }
 
-        if (stmt instanceof SemanticWhileNode whileNode) {
-            return pruneWhile(whileNode);
+        if (stmt.kind == SastKind.WHILE) {
+            return pruneWhile(stmt);
         }
 
         return stmt;
     }
 
-    private SemanticBlockNode pruneBlock(SemanticBlockNode block) {
-        List<SemanticStmtNode> out = null;
+    private SastNode pruneBlock(SastNode block) {
+        List<SastNode> out = null;
 
         for (int i = 0; i < block.statements.size(); i++) {
-            SemanticStmtNode stmt = block.statements.get(i);
-            SemanticStmtNode pruned = pruneStmt(stmt);
+            SastNode stmt = block.statements.get(i);
+            SastNode pruned = pruneStmt(stmt);
 
             if (out == null && pruned != stmt) {
                 out = new ArrayList<>(block.statements.subList(0, i));
@@ -156,15 +156,15 @@ final class BranchPruner {
             }
         }
 
-        return out == null ? block : new SemanticBlockNode(block.span, out);
+        return out == null ? block : SastNode.block(block.span, out);
     }
 
-    private List<SemanticStmtNode> pruneStmtList(List<SemanticStmtNode> stmts) {
-        List<SemanticStmtNode> out = null;
+    private List<SastNode> pruneStmtList(List<SastNode> stmts) {
+        List<SastNode> out = null;
 
         for (int i = 0; i < stmts.size(); i++) {
-            SemanticStmtNode stmt = stmts.get(i);
-            SemanticStmtNode pruned = pruneStmt(stmt);
+            SastNode stmt = stmts.get(i);
+            SastNode pruned = pruneStmt(stmt);
 
             if (out == null && pruned != stmt) {
                 out = new ArrayList<>(stmts.subList(0, i));
@@ -178,7 +178,7 @@ final class BranchPruner {
         return out == null ? stmts : out;
     }
 
-    private SemanticStmtNode pruneIf(SemanticIfNode node) {
+    private SastNode pruneIf(SastNode node) {
 
         switch (determine(node.condition)) {
 
@@ -191,15 +191,15 @@ final class BranchPruner {
             }
 
             default -> {
-                SemanticStmtNode thenBranch = pruneStmt(node.thenBranch);
-                SemanticStmtNode elseBranch =
+                SastNode thenBranch = pruneStmt(node.thenBranch);
+                SastNode elseBranch =
                         node.elseBranch == null ? null : pruneStmt(node.elseBranch);
 
                 if (thenBranch == node.thenBranch && elseBranch == node.elseBranch) {
                     return node;
                 }
 
-                return new SemanticIfNode(
+                return SastNode.ifStmt(
                         node.span,
                         node.condition,
                         thenBranch == null ? emptyBlock(node.span) : thenBranch,
@@ -209,7 +209,7 @@ final class BranchPruner {
         }
     }
 
-    private SemanticStmtNode pruneWhile(SemanticWhileNode node) {
+    private SastNode pruneWhile(SastNode node) {
 
         Determination determination = determine(node.condition);
 
@@ -217,37 +217,37 @@ final class BranchPruner {
             return null;
         }
 
-        SemanticStmtNode body = pruneStmt(node.body);
+        SastNode body = pruneStmt(node.body);
 
         if (body == null) {
             body = emptyBlock(node.span);
         }
 
-        List<SemanticStmtNode> update = pruneStmtList(node.update);
+        List<SastNode> update = pruneStmtList(node.update);
 
         if (determination == Determination.TRUE) {
-            SemanticIntLiteralNode trueLiteral = new SemanticIntLiteralNode(
+            SastNode trueLiteral = SastNode.intLiteral(
                     node.condition.span,
                     SastType.primitive(SemanticPrimitiveKind.UINT8),
                     BigInteger.ONE,
                     "1"
             );
 
-            return new SemanticWhileNode(node.span, trueLiteral, body, update);
+            return SastNode.whileStmt(node.span, trueLiteral, body, update);
         }
 
         if (body == node.body && update == node.update) {
             return node;
         }
 
-        return new SemanticWhileNode(node.span, node.condition, body, update);
+        return SastNode.whileStmt(node.span, node.condition, body, update);
     }
 
-    private static SemanticBlockNode emptyBlock(SourceSpan span) {
-        return new SemanticBlockNode(span, List.of());
+    private static SastNode emptyBlock(SourceSpan span) {
+        return SastNode.block(span, List.of());
     }
 
-    private static Determination determine(SemanticExprNode condition) {
+    private static Determination determine(SastNode condition) {
 
         if (condition.isConstant()) {
             return condition.constantValue.signum() == 0
@@ -259,7 +259,7 @@ final class BranchPruner {
             return Determination.UNPRUNABLE;
         }
 
-        List<SemanticExprNode> atoms = new ArrayList<>();
+        List<SastNode> atoms = new ArrayList<>();
         Node formula = classify(condition, atoms);
 
         if (formula == null || atoms.size() > MAX_ATOMS) {
@@ -286,31 +286,31 @@ final class BranchPruner {
         return sawTrue ? Determination.TRUE : Determination.FALSE;
     }
 
-    private static Node classify(SemanticExprNode expr, List<SemanticExprNode> atoms) {
+    private static Node classify(SastNode expr, List<SastNode> atoms) {
 
         if (expr.isConstant()) {
             return new Lit(expr.constantValue.signum() != 0);
         }
 
-        if (expr instanceof SemanticBinOpNode bin) {
+        if (expr.kind == SastKind.BIN_OP) {
 
-            if (bin.op.equals("&&")) {
-                Node left = classify(bin.left, atoms);
-                Node right = classify(bin.right, atoms);
+            if (expr.op.equals("&&")) {
+                Node left = classify(expr.left, atoms);
+                Node right = classify(expr.right, atoms);
 
                 return left == null || right == null ? null : new And(left, right);
             }
 
-            if (bin.op.equals("||")) {
-                Node left = classify(bin.left, atoms);
-                Node right = classify(bin.right, atoms);
+            if (expr.op.equals("||")) {
+                Node left = classify(expr.left, atoms);
+                Node right = classify(expr.right, atoms);
 
                 return left == null || right == null ? null : new Or(left, right);
             }
         }
 
-        if (expr instanceof SemanticUnaryOpNode unary && unary.op.equals("!")) {
-            Node inner = classify(unary.expr, atoms);
+        if (expr.kind == SastKind.UNARY_OP && expr.op.equals("!")) {
+            Node inner = classify(expr.expr, atoms);
 
             return inner == null ? null : new Not(inner);
         }
@@ -318,20 +318,20 @@ final class BranchPruner {
         return atomFor(expr, atoms);
     }
 
-    private static Node atomFor(SemanticExprNode expr, List<SemanticExprNode> atoms) {
+    private static Node atomFor(SastNode expr, List<SastNode> atoms) {
 
         if (!TypeChecker.isByteType(expr.type) || !isEffectFree(expr)) {
             return null;
         }
 
-        if (expr instanceof SemanticBinOpNode bin
-                && (bin.op.equals("==") || bin.op.equals("!="))) {
+        if (expr.kind == SastKind.BIN_OP
+                && (expr.op.equals("==") || expr.op.equals("!="))) {
 
-            boolean complement = bin.op.equals("!=");
+            boolean complement = expr.op.equals("!=");
 
             for (int i = 0; i < atoms.size(); i++) {
 
-                if (sameComparisonOperands(atoms.get(i), bin)) {
+                if (sameComparisonOperands(atoms.get(i), expr)) {
                     Node base = new Var(i);
 
                     return complement ? new Not(base) : base;
@@ -358,13 +358,13 @@ final class BranchPruner {
     }
 
     private static boolean sameComparisonOperands(
-            SemanticExprNode existing,
-            SemanticBinOpNode bin
+            SastNode existing,
+            SastNode bin
     ) {
-        return existing instanceof SemanticBinOpNode other
-                && (other.op.equals("==") || other.op.equals("!="))
-                && sameAtom(other.left, bin.left)
-                && sameAtom(other.right, bin.right);
+        return existing.kind == SastKind.BIN_OP
+                && (existing.op.equals("==") || existing.op.equals("!="))
+                && sameAtom(existing.left, bin.left)
+                && sameAtom(existing.right, bin.right);
     }
 
     private static boolean eval(Node node, int mask) {
@@ -392,137 +392,137 @@ final class BranchPruner {
         throw new IllegalStateException("Unknown formula node: " + node);
     }
 
-    private static boolean containsCall(SemanticExprNode expr) {
+    private static boolean containsCall(SastNode expr) {
 
-        if (expr instanceof SemanticFunctionCallNode
-                || expr instanceof SemanticArrayIntrinsicCallNode) {
+        if (expr.kind == SastKind.FUNCTION_CALL
+                || expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
             return true;
         }
 
-        if (expr instanceof SemanticUnaryOpNode unary) {
-            return containsCall(unary.expr);
+        if (expr.kind == SastKind.UNARY_OP) {
+            return containsCall(expr.expr);
         }
 
-        if (expr instanceof SemanticBinOpNode bin) {
-            return containsCall(bin.left) || containsCall(bin.right);
+        if (expr.kind == SastKind.BIN_OP) {
+            return containsCall(expr.left) || containsCall(expr.right);
         }
 
-        if (expr instanceof SemanticArrayAccessNode access) {
-            return containsCall(access.target) || containsCall(access.index);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            return containsCall(expr.target) || containsCall(expr.index);
         }
 
-        if (expr instanceof SemanticMemberAccessNode member) {
-            return containsCall(member.target);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            return containsCall(expr.target);
         }
 
-        if (expr instanceof SemanticGetPtrNode getPtr) {
-            return containsCall(getPtr.target);
+        if (expr.kind == SastKind.GET_PTR) {
+            return containsCall(expr.target);
         }
 
-        if (expr instanceof SemanticDerefNode deref) {
-            return containsCall(deref.expr);
+        if (expr.kind == SastKind.DEREF) {
+            return containsCall(expr.expr);
         }
 
-        if (expr instanceof SemanticCastExprNode cast) {
-            return containsCall(cast.expr);
+        if (expr.kind == SastKind.CAST) {
+            return containsCall(expr.expr);
         }
 
         return false;
     }
 
-    private static boolean isEffectFree(SemanticExprNode expr) {
+    private static boolean isEffectFree(SastNode expr) {
 
-        if (expr instanceof SemanticFunctionCallNode
-                || expr instanceof SemanticArrayIntrinsicCallNode) {
+        if (expr.kind == SastKind.FUNCTION_CALL
+                || expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
             return false;
         }
 
-        if (expr instanceof SemanticVarExprNode
-                || expr instanceof SemanticIntLiteralNode
-                || expr instanceof SemanticNullLiteralNode) {
+        if (expr.kind == SastKind.VAR_EXPR
+                || expr.kind == SastKind.INT_LITERAL
+                || expr.kind == SastKind.NULL_LITERAL) {
             return true;
         }
 
-        if (expr instanceof SemanticUnaryOpNode unary) {
-            return isEffectFree(unary.expr);
+        if (expr.kind == SastKind.UNARY_OP) {
+            return isEffectFree(expr.expr);
         }
 
-        if (expr instanceof SemanticBinOpNode bin) {
-            return isEffectFree(bin.left) && isEffectFree(bin.right);
+        if (expr.kind == SastKind.BIN_OP) {
+            return isEffectFree(expr.left) && isEffectFree(expr.right);
         }
 
-        if (expr instanceof SemanticArrayAccessNode access) {
-            return isEffectFree(access.target) && isEffectFree(access.index);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            return isEffectFree(expr.target) && isEffectFree(expr.index);
         }
 
-        if (expr instanceof SemanticMemberAccessNode member) {
-            return isEffectFree(member.target);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            return isEffectFree(expr.target);
         }
 
-        if (expr instanceof SemanticGetPtrNode getPtr) {
-            return isEffectFree(getPtr.target);
+        if (expr.kind == SastKind.GET_PTR) {
+            return isEffectFree(expr.target);
         }
 
-        if (expr instanceof SemanticDerefNode deref) {
-            return isEffectFree(deref.expr);
+        if (expr.kind == SastKind.DEREF) {
+            return isEffectFree(expr.expr);
         }
 
-        if (expr instanceof SemanticCastExprNode cast) {
-            return isEffectFree(cast.expr);
+        if (expr.kind == SastKind.CAST) {
+            return isEffectFree(expr.expr);
         }
 
         return false;
     }
 
-    private static boolean sameAtom(SemanticExprNode a, SemanticExprNode b) {
+    private static boolean sameAtom(SastNode a, SastNode b) {
 
         if (a == b) {
             return true;
         }
 
-        if (a instanceof SemanticVarExprNode va && b instanceof SemanticVarExprNode vb) {
-            return va.symbol == vb.symbol;
+        if (a.kind == SastKind.VAR_EXPR && b.kind == SastKind.VAR_EXPR) {
+            return a.symbol == b.symbol;
         }
 
-        if (a instanceof SemanticIntLiteralNode ia && b instanceof SemanticIntLiteralNode ib) {
-            return Objects.equals(ia.constantValue, ib.constantValue)
-                    && ia.type.equals(ib.type);
+        if (a.kind == SastKind.INT_LITERAL && b.kind == SastKind.INT_LITERAL) {
+            return Objects.equals(a.constantValue, b.constantValue)
+                    && a.type.equals(b.type);
         }
 
-        if (a instanceof SemanticNullLiteralNode && b instanceof SemanticNullLiteralNode) {
+        if (a.kind == SastKind.NULL_LITERAL && b.kind == SastKind.NULL_LITERAL) {
             return true;
         }
 
-        if (a instanceof SemanticBinOpNode ba && b instanceof SemanticBinOpNode bb) {
-            return ba.op.equals(bb.op)
-                    && sameAtom(ba.left, bb.left)
-                    && sameAtom(ba.right, bb.right);
+        if (a.kind == SastKind.BIN_OP && b.kind == SastKind.BIN_OP) {
+            return a.op.equals(b.op)
+                    && sameAtom(a.left, b.left)
+                    && sameAtom(a.right, b.right);
         }
 
-        if (a instanceof SemanticUnaryOpNode ua && b instanceof SemanticUnaryOpNode ub) {
-            return ua.op.equals(ub.op) && sameAtom(ua.expr, ub.expr);
+        if (a.kind == SastKind.UNARY_OP && b.kind == SastKind.UNARY_OP) {
+            return a.op.equals(b.op) && sameAtom(a.expr, b.expr);
         }
 
-        if (a instanceof SemanticArrayAccessNode aa && b instanceof SemanticArrayAccessNode ab) {
-            return sameAtom(aa.target, ab.target) && sameAtom(aa.index, ab.index);
+        if (a.kind == SastKind.ARRAY_ACCESS && b.kind == SastKind.ARRAY_ACCESS) {
+            return sameAtom(a.target, b.target) && sameAtom(a.index, b.index);
         }
 
-        if (a instanceof SemanticMemberAccessNode ma && b instanceof SemanticMemberAccessNode mb) {
-            return ma.field == mb.field && sameAtom(ma.target, mb.target);
+        if (a.kind == SastKind.MEMBER_ACCESS && b.kind == SastKind.MEMBER_ACCESS) {
+            return a.field == b.field && sameAtom(a.target, b.target);
         }
 
-        if (a instanceof SemanticGetPtrNode ga && b instanceof SemanticGetPtrNode gb) {
-            return sameAtom(ga.target, gb.target);
+        if (a.kind == SastKind.GET_PTR && b.kind == SastKind.GET_PTR) {
+            return sameAtom(a.target, b.target);
         }
 
-        if (a instanceof SemanticDerefNode da && b instanceof SemanticDerefNode db) {
-            return sameAtom(da.expr, db.expr);
+        if (a.kind == SastKind.DEREF && b.kind == SastKind.DEREF) {
+            return sameAtom(a.expr, b.expr);
         }
 
-        if (a instanceof SemanticCastExprNode ca && b instanceof SemanticCastExprNode cb) {
-            return ca.checked == cb.checked
-                    && ca.type.equals(cb.type)
-                    && sameAtom(ca.expr, cb.expr);
+        if (a.kind == SastKind.CAST && b.kind == SastKind.CAST) {
+            return a.checked == b.checked
+                    && a.type.equals(b.type)
+                    && sameAtom(a.expr, b.expr);
         }
 
         return false;

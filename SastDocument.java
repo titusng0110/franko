@@ -4,14 +4,14 @@ public final class SastDocument {
     public final EntryKind entryKind;
     public final SourceTable sources;
     public final SymbolRegistry symbols;
-    public final SemanticProgramNode root;
+    public final SastNode root;
 
     public SastDocument(
             SastPhase phase,
             EntryKind entryKind,
             SourceTable sources,
             SymbolRegistry symbols,
-            SemanticProgramNode root
+            SastNode root
     ) {
         this.phase = phase;
         this.entryKind = entryKind == null ? EntryKind.NONE : entryKind;

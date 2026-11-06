@@ -190,10 +190,10 @@ public final class DynamicArrayMemoryChecker {
         this.context = context;
     }
 
-    public void check(SemanticASTNode node) {
-        if (!(node instanceof SemanticProgramNode program)) {
+    public void check(SastNode node) {
+        if (!(node.kind == SastKind.PROGRAM)) {
             throw new IllegalArgumentException(
-                    "Dynamic-array checking requires a semantic program root"
+                    "Dynamic-array checking requires a semantic node root"
             );
         }
 
@@ -202,7 +202,7 @@ public final class DynamicArrayMemoryChecker {
                 EntryKind.NONE,
                 new SourceTable(),
                 new SymbolRegistry(),
-                program
+                node
         ));
     }
 
@@ -219,7 +219,7 @@ public final class DynamicArrayMemoryChecker {
         );
     }
 
-    private void ensureContext(SemanticProgramNode root) {
+    private void ensureContext(SastNode root) {
         if (context == null || context.root != root) {
             context = MemoryAnalysisContext.build(root);
             state = null;
@@ -271,7 +271,7 @@ public final class DynamicArrayMemoryChecker {
             currentBfsResult = null;
             suppressed = false;
 
-            SemanticFunctionDeclNode decl = context.functionDecl(functionId);
+            SastNode decl = context.functionDecl(functionId);
 
             if (decl == null) {
                 builder = null;
@@ -312,7 +312,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void seedSummaryParameters(SemanticFunctionDeclNode decl) {
+        private void seedSummaryParameters(SastNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
                 Symbol parameter = decl.parameterVariables.get(i);
 
@@ -374,7 +374,7 @@ public final class DynamicArrayMemoryChecker {
                     && parameter.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY;
         }
 
-        private void seedCheckParameters(SemanticFunctionDeclNode decl) {
+        private void seedCheckParameters(SastNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
                 Symbol parameter = decl.parameterVariables.get(i);
                 int ownerIndex = state.ownerIndexOf(parameter);
@@ -551,13 +551,13 @@ public final class DynamicArrayMemoryChecker {
         }
 
         @Override
-        public void enterBlock(SemanticBlockNode node, int depth) {
+        public void enterBlock(SastNode node, int depth) {
             state.enterBlock(node, depth);
         }
 
         @Override
         public void leaveBlock(
-                SemanticBlockNode node,
+                SastNode node,
                 int depth,
                 boolean terminated
         ) {
@@ -581,11 +581,11 @@ public final class DynamicArrayMemoryChecker {
         }
 
         @Override
-        public void markLoopBodyLocalsDead(SemanticStmtNode body) {
+        public void markLoopBodyLocalsDead(SastNode body) {
         }
 
         @Override
-        public void checkVarDecl(SemanticVarDeclNode node) {
+        public void checkVarDecl(SastNode node) {
             diagnostics.push(node.span);
 
             try {
@@ -631,7 +631,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         @Override
-        public void checkAssign(SemanticAssignNode node) {
+        public void checkAssign(SastNode node) {
             diagnostics.push(node.span);
 
             try {
@@ -652,11 +652,11 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void applySummaryAssignment(SemanticAssignNode node) {
+        private void applySummaryAssignment(SastNode node) {
             long[] alias = symbolicAliasOf(node.value);
 
-            if (node.target instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndexOf(variable.symbol);
+            if (node.target.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndexOf(node.target.symbol);
 
                 if (pointerIndex >= 0) {
                     System.arraycopy(
@@ -674,16 +674,16 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private boolean isEscapeSink(SemanticExprNode target) {
-            if (target instanceof SemanticVarExprNode variable) {
-                return variable.symbol.kind == SymbolKind.GLOBAL;
+        private boolean isEscapeSink(SastNode target) {
+            if (target.kind == SastKind.VAR_EXPR) {
+                return target.symbol.kind == SymbolKind.GLOBAL;
             }
 
-            if (target instanceof SemanticMemberAccessNode) {
+            if (target.kind == SastKind.MEMBER_ACCESS) {
                 return true;
             }
 
-            if (target instanceof SemanticDerefNode) {
+            if (target.kind == SastKind.DEREF) {
                 return true;
             }
 
@@ -713,12 +713,12 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void applyCheckAssignment(SemanticAssignNode node) {
+        private void applyCheckAssignment(SastNode node) {
             AliasValue value = concreteAliasOf(node.value);
 
-            if (node.target instanceof SemanticVarExprNode variable) {
-                int ownerIndex = state.ownerIndexOf(variable.symbol);
-                int pointerIndex = state.pointerIndexOf(variable.symbol);
+            if (node.target.kind == SastKind.VAR_EXPR) {
+                int ownerIndex = state.ownerIndexOf(node.target.symbol);
+                int pointerIndex = state.pointerIndexOf(node.target.symbol);
 
                 if (ownerIndex >= 0) {
                     state.clearOwner(ownerIndex);
@@ -742,7 +742,7 @@ public final class DynamicArrayMemoryChecker {
                     }
                 }
 
-                if (variable.symbol.kind == SymbolKind.GLOBAL
+                if (node.target.symbol.kind == SymbolKind.GLOBAL
                         && value.arrayIndex >= 0) {
                     state.escaped[value.arrayIndex] = true;
                 }
@@ -750,8 +750,8 @@ public final class DynamicArrayMemoryChecker {
                 return;
             }
 
-            if (node.target instanceof SemanticDerefNode deref) {
-                int ownerIndex = ownerIndexForCell(deref.expr);
+            if (node.target.kind == SastKind.DEREF) {
+                int ownerIndex = ownerIndexForCell(node.target.expr);
 
                 if (ownerIndex >= 0) {
                     state.clearOwner(ownerIndex);
@@ -772,16 +772,16 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private int ownerIndexForCell(SemanticExprNode pointerExpression) {
-            if (pointerExpression instanceof SemanticVarExprNode variable) {
-                return state.ownerIndexOf(variable.symbol);
+        private int ownerIndexForCell(SastNode pointerExpression) {
+            if (pointerExpression.kind == SastKind.VAR_EXPR) {
+                return state.ownerIndexOf(pointerExpression.symbol);
             }
 
             return -1;
         }
 
         @Override
-        public void checkExpr(SemanticExprNode expression) {
+        public void checkExpr(SastNode expression) {
             if (expression == null) {
                 return;
             }
@@ -795,121 +795,121 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void checkExprInner(SemanticExprNode expression) {
-            if (expression instanceof SemanticIntLiteralNode
-                    || expression instanceof SemanticNullLiteralNode
-                    || expression instanceof SemanticVarExprNode
-                    || expression instanceof SemanticEnumVariantNode) {
+        private void checkExprInner(SastNode expression) {
+            if (expression.kind == SastKind.INT_LITERAL
+                    || expression.kind == SastKind.NULL_LITERAL
+                    || expression.kind == SastKind.VAR_EXPR
+                    || expression.kind == SastKind.ENUM_VARIANT) {
                 return;
             }
 
-            if (expression instanceof SemanticUnaryOpNode unary) {
-                checkExpr(unary.expr);
+            if (expression.kind == SastKind.UNARY_OP) {
+                checkExpr(expression.expr);
                 return;
             }
 
-            if (expression instanceof SemanticBinOpNode binary) {
-                checkExpr(binary.left);
-                checkExpr(binary.right);
+            if (expression.kind == SastKind.BIN_OP) {
+                checkExpr(expression.left);
+                checkExpr(expression.right);
                 return;
             }
 
-            if (expression instanceof SemanticArrayAccessNode access) {
-                checkExpr(access.target);
-                checkExpr(access.index);
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                checkExpr(expression.target);
+                checkExpr(expression.index);
 
                 if (summaryMode) {
-                    markSummaryUse(access.target);
-                    markSummaryRequire(access.target);
+                    markSummaryUse(expression.target);
+                    markSummaryRequire(expression.target);
                 } else {
-                    checkAliasUse(access.target, access);
-                    requireInitializedForExpression(access.target, access);
+                    checkAliasUse(expression.target, expression);
+                    requireInitializedForExpression(expression.target, expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                checkExpr(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                checkExpr(expression.target);
 
                 if (!summaryMode) {
-                    checkAliasUse(member.target, member);
+                    checkAliasUse(expression.target, expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                for (SemanticExprNode argument : call.args) {
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                for (SastNode argument : expression.args) {
                     checkExpr(argument);
                 }
 
                 if (summaryMode) {
-                    recordSummaryCall(call);
+                    recordSummaryCall(expression);
                 } else {
-                    handleCheckCall(call);
+                    handleCheckCall(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-                checkExpr(intrinsic.receiver);
+            if (expression.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+                checkExpr(expression.receiver);
 
-                for (SemanticExprNode argument : intrinsic.args) {
+                for (SastNode argument : expression.args) {
                     checkExpr(argument);
                 }
 
                 if (summaryMode) {
-                    applySummaryIntrinsic(intrinsic);
+                    applySummaryIntrinsic(expression);
                 } else {
-                    checkAliasUse(intrinsic.receiver, intrinsic);
-                    applyCheckIntrinsic(intrinsic);
+                    checkAliasUse(expression.receiver, expression);
+                    applyCheckIntrinsic(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticAggregateLiteralNode aggregate) {
-                for (SemanticAggregateFieldInit field : aggregate.fields) {
+            if (expression.kind == SastKind.AGGREGATE_LITERAL) {
+                for (SastNode field : expression.fields) {
                     checkExpr(field.value);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                checkExpr(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                checkExpr(expression.target);
 
                 if (!summaryMode) {
-                    checkAliasUse(getPtr.target, getPtr);
+                    checkAliasUse(expression.target, expression);
                 } else {
-                    markSummaryUse(getPtr.target);
+                    markSummaryUse(expression.target);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                checkExpr(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                checkExpr(expression.expr);
 
                 if (summaryMode) {
-                    markSummaryUse(deref.expr);
+                    markSummaryUse(expression.expr);
                 } else {
-                    checkAliasUse(deref.expr, deref);
+                    checkAliasUse(expression.expr, expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                checkExpr(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                checkExpr(expression.expr);
             }
         }
 
         private void checkAliasUse(
-                SemanticExprNode expression,
-                SemanticASTNode site
+                SastNode expression,
+                SastNode site
         ) {
             int pointerIndex = pointerIndexOfExpression(expression);
 
@@ -945,23 +945,23 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private int pointerIndexOfExpression(SemanticExprNode expression) {
-            if (expression instanceof SemanticVarExprNode variable) {
-                return state.pointerIndexOf(variable.symbol);
+        private int pointerIndexOfExpression(SastNode expression) {
+            if (expression.kind == SastKind.VAR_EXPR) {
+                return state.pointerIndexOf(expression.symbol);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return pointerIndexOfExpression(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return pointerIndexOfExpression(expression.expr);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return pointerIndexOfExpression(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return pointerIndexOfExpression(expression.expr);
             }
 
             return -1;
         }
 
-        private void reportAliasError(SemanticASTNode site, String message) {
+        private void reportAliasError(SastNode site, String message) {
             if (suppressed) {
                 return;
             }
@@ -973,7 +973,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void reportAliasWarning(SemanticASTNode site, String message) {
+        private void reportAliasWarning(SastNode site, String message) {
             if (suppressed) {
                 return;
             }
@@ -986,8 +986,8 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void requireInitializedForExpression(
-                SemanticExprNode expression,
-                SemanticASTNode site
+                SastNode expression,
+                SastNode site
         ) {
             ArrayOrigins origins = storageArrayOrigins(expression);
 
@@ -1008,9 +1008,9 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void applyCheckIntrinsic(
-                SemanticArrayIntrinsicCallNode intrinsic
+                SastNode intrinsic
         ) {
-            switch (intrinsic.kind) {
+            switch (intrinsic.intrinsicKind) {
                 case INIT:
                 case INIT_ZERO:
                     applyInit(intrinsic.receiver);
@@ -1033,9 +1033,9 @@ public final class DynamicArrayMemoryChecker {
                             intrinsic
                     );
 
-                    if (intrinsic.kind == SemanticArrayIntrinsicKind.MEMCPY
-                            || intrinsic.kind == SemanticArrayIntrinsicKind.MEMCMP
-                            || intrinsic.kind == SemanticArrayIntrinsicKind.MEMMEM) {
+                    if (intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.MEMCPY
+                            || intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.MEMCMP
+                            || intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.MEMMEM) {
                         if (!intrinsic.args.isEmpty()) {
                             requirePointerSourceInitialized(
                                     intrinsic.args.get(0),
@@ -1047,8 +1047,8 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void requirePointerSourceInitialized(
-                SemanticExprNode source,
-                SemanticASTNode site
+                SastNode source,
+                SastNode site
         ) {
             AliasValue value = concreteAliasOf(source);
 
@@ -1058,17 +1058,17 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void applySummaryIntrinsic(
-                SemanticArrayIntrinsicCallNode intrinsic
+                SastNode intrinsic
         ) {
             long[] aliases = symbolicArrayOf(intrinsic.receiver);
-            boolean require = intrinsic.kind != SemanticArrayIntrinsicKind.INIT
-                    && intrinsic.kind != SemanticArrayIntrinsicKind.INIT_ZERO
-                    && intrinsic.kind != SemanticArrayIntrinsicKind.LENGTH;
-            boolean invalidate = intrinsic.kind == SemanticArrayIntrinsicKind.INIT
-                    || intrinsic.kind == SemanticArrayIntrinsicKind.INIT_ZERO
-                    || intrinsic.kind == SemanticArrayIntrinsicKind.RESIZE
-                    || intrinsic.kind == SemanticArrayIntrinsicKind.UNINIT;
-            boolean free = intrinsic.kind == SemanticArrayIntrinsicKind.UNINIT;
+            boolean require = intrinsic.intrinsicKind != SemanticArrayIntrinsicKind.INIT
+                    && intrinsic.intrinsicKind != SemanticArrayIntrinsicKind.INIT_ZERO
+                    && intrinsic.intrinsicKind != SemanticArrayIntrinsicKind.LENGTH;
+            boolean invalidate = intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.INIT
+                    || intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.INIT_ZERO
+                    || intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.RESIZE
+                    || intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.UNINIT;
+            boolean free = intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.UNINIT;
 
             for (int word = 0; word < context.templates.words; word++) {
                 long bits = aliases[word];
@@ -1101,7 +1101,7 @@ public final class DynamicArrayMemoryChecker {
                                     1L << (param & 63);
                         }
 
-                        byte newPost = postForIntrinsic(intrinsic.kind);
+                        byte newPost = postForIntrinsic(intrinsic.intrinsicKind);
 
                         if (newPost
                                 != DynamicArrayAnalysisState.POST_UNCHANGED) {
@@ -1131,7 +1131,7 @@ public final class DynamicArrayMemoryChecker {
                 }
             }
 
-            if (intrinsic.kind == SemanticArrayIntrinsicKind.LENGTH) {
+            if (intrinsic.intrinsicKind == SemanticArrayIntrinsicKind.LENGTH) {
                 return;
             }
 
@@ -1147,7 +1147,7 @@ public final class DynamicArrayMemoryChecker {
             };
         }
 
-        private void markSummaryRequire(SemanticExprNode expression) {
+        private void markSummaryRequire(SastNode expression) {
             long[] aliases = symbolicArrayOf(expression);
 
             for (int word = 0; word < context.templates.words; word++) {
@@ -1185,7 +1185,7 @@ public final class DynamicArrayMemoryChecker {
             state.requireMay[param >>> 6] |= 1L << (param & 63);
         }
 
-        private int summaryOwnerParam(SemanticExprNode expression) {
+        private int summaryOwnerParam(SastNode expression) {
             long[] aliases = symbolicArrayOf(expression);
 
             for (int word = 0; word < context.templates.words; word++) {
@@ -1215,7 +1215,7 @@ public final class DynamicArrayMemoryChecker {
             return -1;
         }
 
-        private int summaryLocalArray(SemanticExprNode expression) {
+        private int summaryLocalArray(SastNode expression) {
             long[] aliases = symbolicArrayOf(expression);
 
             for (int word = 0; word < context.templates.words; word++) {
@@ -1247,7 +1247,7 @@ public final class DynamicArrayMemoryChecker {
             return -1;
         }
 
-        private void markSummaryUse(SemanticExprNode expression) {
+        private void markSummaryUse(SastNode expression) {
             long[] aliases = symbolicArrayOf(expression);
 
             for (int word = 0; word < context.templates.words; word++) {
@@ -1278,9 +1278,9 @@ public final class DynamicArrayMemoryChecker {
 
         private void applyLocalIntrinsic(
                 int arrayIndex,
-                SemanticArrayIntrinsicCallNode intrinsic
+                SastNode intrinsic
         ) {
-            switch (intrinsic.kind) {
+            switch (intrinsic.intrinsicKind) {
                 case INIT:
                 case INIT_ZERO:
                     state.lifecycle[arrayIndex] =
@@ -1314,7 +1314,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void applyInit(SemanticExprNode receiver) {
+        private void applyInit(SastNode receiver) {
             ArrayOrigins origins = storageArrayOrigins(receiver);
 
             if (origins.unknown || origins.count() == 0) {
@@ -1339,8 +1339,8 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void applyResize(
-                SemanticExprNode receiver,
-                SemanticASTNode site
+                SastNode receiver,
+                SastNode site
         ) {
             ArrayOrigins origins = storageArrayOrigins(receiver);
 
@@ -1367,8 +1367,8 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void applyUninit(
-                SemanticExprNode receiver,
-                SemanticASTNode site
+                SastNode receiver,
+                SastNode site
         ) {
             ArrayOrigins origins = storageArrayOrigins(receiver);
 
@@ -1389,7 +1389,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void applyUninitToArray(int arrayIndex, SemanticASTNode site) {
+        private void applyUninitToArray(int arrayIndex, SastNode site) {
             byte lifecycle = state.lifecycle[arrayIndex];
 
             if (lifecycle == DynamicArrayAnalysisState.INITED) {
@@ -1450,7 +1450,7 @@ public final class DynamicArrayMemoryChecker {
 
         private void requireInitialized(
                 int arrayIndex,
-                SemanticASTNode site
+                SastNode site
         ) {
             byte lifecycle = state.lifecycle[arrayIndex];
 
@@ -1542,7 +1542,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void reportErrorOnce(SemanticASTNode site, String message) {
+        private void reportErrorOnce(SastNode site, String message) {
             if (suppressed) {
                 return;
             }
@@ -1554,7 +1554,7 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void reportWarningOnce(SemanticASTNode site, String message) {
+        private void reportWarningOnce(SastNode site, String message) {
             if (suppressed) {
                 return;
             }
@@ -1567,7 +1567,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void reportInterErrorOnce(
-                SemanticASTNode site,
+                SastNode site,
                 String message
         ) {
             if (suppressed) {
@@ -1582,7 +1582,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void reportInterWarningOnce(
-                SemanticASTNode site,
+                SastNode site,
                 String message
         ) {
             if (suppressed) {
@@ -1597,7 +1597,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         @Override
-        public void onReturn(SemanticReturnNode node) {
+        public void onReturn(SastNode node) {
             if (summaryMode) {
                 exitReturnSets.add(
                         node.value == null
@@ -1634,7 +1634,7 @@ public final class DynamicArrayMemoryChecker {
 
         @Override
         public boolean guardPathFeasible(
-                SemanticExprNode condition,
+                SastNode condition,
                 boolean guardHolds
         ) {
             if (condition.constantValue != null) {
@@ -1697,7 +1697,7 @@ public final class DynamicArrayMemoryChecker {
 
         @Override
         public void refineFromGuard(
-                SemanticExprNode condition,
+                SastNode condition,
                 boolean guardHolds
         ) {
             LengthGuard guard = lengthGuard(condition);
@@ -1812,7 +1812,7 @@ public final class DynamicArrayMemoryChecker {
             suppressed = value;
         }
 
-        private void recordSummaryCall(SemanticFunctionCallNode call) {
+        private void recordSummaryCall(SastNode call) {
             int callSiteId = context.callSiteId(call);
             int edgeIndex = context.callGraph.callSiteLocalIndex[callSiteId];
 
@@ -1825,7 +1825,7 @@ public final class DynamicArrayMemoryChecker {
             for (int param = 0;
                     param < call.function.parameters.size();
                     param++) {
-                SemanticExprNode argument = param < call.args.size()
+                SastNode argument = param < call.args.size()
                         ? call.args.get(param)
                         : null;
 
@@ -1842,8 +1842,8 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void handleCheckCall(SemanticFunctionCallNode call) {
-            for (SemanticExprNode argument : call.args) {
+        private void handleCheckCall(SastNode call) {
+            for (SastNode argument : call.args) {
                 checkAliasUse(argument, call);
             }
 
@@ -1854,7 +1854,7 @@ public final class DynamicArrayMemoryChecker {
                     paramCount * DynamicArrayAnalysisState.BINDING_STRIDE];
 
             for (int i = 0; i < paramCount; i++) {
-                SemanticExprNode argument = call.args.get(i);
+                SastNode argument = call.args.get(i);
                 AliasValue value = concreteAliasOf(argument);
                 int offset = i * DynamicArrayAnalysisState.BINDING_STRIDE;
                 rootBinding[offset + DynamicArrayAnalysisState.BINDING_ARRAY] =
@@ -1967,7 +1967,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void emitRequirementDiagnostics(
-                SemanticFunctionCallNode call,
+                SastNode call,
                 DynamicSummary summary,
                 int param,
                 int arrayIndex,
@@ -1992,7 +1992,7 @@ public final class DynamicArrayMemoryChecker {
             );
             String arrayName = arrayName(arrayIndex);
             String functionName = call.function.qualifiedName();
-            SemanticASTNode site = call;
+            SastNode site = call;
 
             if (lifecycle == DynamicArrayAnalysisState.UNINITED) {
                 String message = freed == DynamicArrayAnalysisState.FREED_YES
@@ -2080,7 +2080,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void emitCrossParameterWarnings(
-                SemanticFunctionCallNode call,
+                SastNode call,
                 DynamicSummary summary,
                 MemoryBfsResult result,
                 int node
@@ -2122,7 +2122,7 @@ public final class DynamicArrayMemoryChecker {
                         continue;
                     }
 
-                    SemanticExprNode argument = call.args.get(j);
+                    SastNode argument = call.args.get(j);
                     String pointerName = pointerExpressionName(argument);
                     reportInterWarningOnce(
                             call,
@@ -2139,9 +2139,9 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void markOwnerArgumentsMaybeInited(
-                SemanticFunctionCallNode call
+                SastNode call
         ) {
-            for (SemanticExprNode argument : call.args) {
+            for (SastNode argument : call.args) {
                 AliasValue value = concreteAliasOf(argument);
 
                 if (value.arrayIndex >= 0) {
@@ -2504,17 +2504,17 @@ public final class DynamicArrayMemoryChecker {
             return left;
         }
 
-        private AliasValue concreteAliasOf(SemanticExprNode expression) {
+        private AliasValue concreteAliasOf(SastNode expression) {
             if (expression == null) {
                 return AliasValue.UNKNOWN;
             }
 
-            if (expression instanceof SemanticNullLiteralNode) {
+            if (expression.kind == SastKind.NULL_LITERAL) {
                 return AliasValue.NONE;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndexOf(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndexOf(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     int root = state.aliasRoot[pointerIndex];
@@ -2532,7 +2532,7 @@ public final class DynamicArrayMemoryChecker {
                         );
                     }
 
-                    int ownerIndex = state.ownerIndexOf(variable.symbol);
+                    int ownerIndex = state.ownerIndexOf(expression.symbol);
 
                     if (ownerIndex >= 0) {
                         int arrayIndex = state.singleOwner(ownerIndex);
@@ -2556,7 +2556,7 @@ public final class DynamicArrayMemoryChecker {
                     }
                 }
 
-                int arrayIndex = state.arrayIndexOf(variable.symbol);
+                int arrayIndex = state.arrayIndexOf(expression.symbol);
 
                 if (arrayIndex >= 0) {
                     return new AliasValue(
@@ -2574,8 +2574,8 @@ public final class DynamicArrayMemoryChecker {
                 return AliasValue.UNKNOWN;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                int elementArray = elementArrayOf(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                int elementArray = elementArrayOf(expression.target);
 
                 if (elementArray >= 0) {
                     return new AliasValue(
@@ -2590,19 +2590,19 @@ public final class DynamicArrayMemoryChecker {
                     );
                 }
 
-                return concreteAliasOf(getPtr.target);
+                return concreteAliasOf(expression.target);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return concreteAliasOf(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return concreteAliasOf(expression.expr);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return concreteAliasOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return concreteAliasOf(expression.expr);
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                int callSiteId = context.callSiteId(call);
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                int callSiteId = context.callSiteId(expression);
 
                 if (callSiteId < 0) {
                     return AliasValue.UNKNOWN;
@@ -2615,40 +2615,40 @@ public final class DynamicArrayMemoryChecker {
             return AliasValue.UNKNOWN;
         }
 
-        private int elementArrayOf(SemanticExprNode expression) {
-            if (expression instanceof SemanticArrayAccessNode access) {
-                ArrayOrigins origins = storageArrayOrigins(access.target);
+        private int elementArrayOf(SastNode expression) {
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                ArrayOrigins origins = storageArrayOrigins(expression.target);
 
                 if (!origins.unknown && origins.count() == 1) {
                     return origins.first();
                 }
 
-                return elementArrayOf(access.target);
+                return elementArrayOf(expression.target);
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                return elementArrayOf(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                return elementArrayOf(expression.target);
             }
 
             return -1;
         }
 
-        private ArrayOrigins storageArrayOrigins(SemanticExprNode expression) {
+        private ArrayOrigins storageArrayOrigins(SastNode expression) {
             long[] bits = new long[state.arrayWords];
 
             if (expression == null) {
                 return new ArrayOrigins(bits, true);
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int arrayIndex = state.arrayIndexOf(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int arrayIndex = state.arrayIndexOf(expression.symbol);
 
                 if (arrayIndex >= 0) {
                     bits[arrayIndex >>> 6] |= 1L << (arrayIndex & 63);
                     return new ArrayOrigins(bits, false);
                 }
 
-                int ownerIndex = state.ownerIndexOf(variable.symbol);
+                int ownerIndex = state.ownerIndexOf(expression.symbol);
 
                 if (ownerIndex >= 0) {
                     int offset = ownerIndex * state.arrayWords;
@@ -2665,18 +2665,18 @@ public final class DynamicArrayMemoryChecker {
                 return new ArrayOrigins(bits, true);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return storageArrayOrigins(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return storageArrayOrigins(expression.expr);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return storageArrayOrigins(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return storageArrayOrigins(expression.expr);
             }
 
             return new ArrayOrigins(bits, true);
         }
 
-        private long[] symbolicAliasOf(SemanticExprNode expression) {
+        private long[] symbolicAliasOf(SastNode expression) {
             long[] set = context.templates.newSet();
 
             if (expression == null) {
@@ -2684,13 +2684,13 @@ public final class DynamicArrayMemoryChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticNullLiteralNode) {
+            if (expression.kind == SastKind.NULL_LITERAL) {
                 context.templates.set(set, MemoryTemplate.NULL);
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndexOf(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndexOf(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     int offset = pointerIndex * context.templates.words;
@@ -2702,13 +2702,13 @@ public final class DynamicArrayMemoryChecker {
                     return set;
                 }
 
-                int arrayIndex = state.arrayIndexOf(variable.symbol);
+                int arrayIndex = state.arrayIndexOf(expression.symbol);
 
                 if (arrayIndex >= 0) {
                     context.templates.set(
                             set,
                             context.templates.localValue(
-                                    context.variableId(variable.symbol)
+                                    context.variableId(expression.symbol)
                             )
                     );
                     return set;
@@ -2718,10 +2718,10 @@ public final class DynamicArrayMemoryChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target instanceof SemanticArrayAccessNode
-                        || getPtr.target instanceof SemanticMemberAccessNode) {
-                    long[] base = symbolicElementArrayOf(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.kind == SastKind.ARRAY_ACCESS
+                        || expression.target.kind == SastKind.MEMBER_ACCESS) {
+                    long[] base = symbolicElementArrayOf(expression.target);
 
                     for (int word = 0; word < context.templates.words; word++) {
                         long bits = base[word];
@@ -2762,27 +2762,27 @@ public final class DynamicArrayMemoryChecker {
                     return set;
                 }
 
-                if (getPtr.target instanceof SemanticDerefNode deref) {
-                    return symbolicAliasOf(deref.expr);
+                if (expression.target.kind == SastKind.DEREF) {
+                    return symbolicAliasOf(expression.target.expr);
                 }
 
-                if (getPtr.target instanceof SemanticCastExprNode cast) {
-                    return symbolicAliasOf(cast.expr);
+                if (expression.target.kind == SastKind.CAST) {
+                    return symbolicAliasOf(expression.target.expr);
                 }
 
-                return symbolicAliasOf(getPtr.target);
+                return symbolicAliasOf(expression.target);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return symbolicAliasOf(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return symbolicAliasOf(expression.expr);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return symbolicAliasOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return symbolicAliasOf(expression.expr);
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                int callSiteId = context.callSiteId(call);
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                int callSiteId = context.callSiteId(expression);
                 context.templates.set(
                         set,
                         context.templates.callResult(callSiteId)
@@ -2794,19 +2794,19 @@ public final class DynamicArrayMemoryChecker {
             return set;
         }
 
-        private long[] symbolicElementArrayOf(SemanticExprNode expression) {
-            if (expression instanceof SemanticArrayAccessNode access) {
-                return symbolicArrayOf(access.target);
+        private long[] symbolicElementArrayOf(SastNode expression) {
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                return symbolicArrayOf(expression.target);
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                return symbolicElementArrayOf(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                return symbolicElementArrayOf(expression.target);
             }
 
             return context.templates.newSet();
         }
 
-        private long[] symbolicArrayOf(SemanticExprNode expression) {
+        private long[] symbolicArrayOf(SastNode expression) {
             long[] set = context.templates.newSet();
 
             if (expression == null) {
@@ -2814,20 +2814,20 @@ public final class DynamicArrayMemoryChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int arrayIndex = state.arrayIndexOf(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int arrayIndex = state.arrayIndexOf(expression.symbol);
 
                 if (arrayIndex >= 0) {
                     context.templates.set(
                             set,
                             context.templates.localValue(
-                                    context.variableId(variable.symbol)
+                                    context.variableId(expression.symbol)
                             )
                     );
                     return set;
                 }
 
-                int pointerIndex = state.pointerIndexOf(variable.symbol);
+                int pointerIndex = state.pointerIndexOf(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     int offset = pointerIndex * context.templates.words;
@@ -2843,35 +2843,35 @@ public final class DynamicArrayMemoryChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return symbolicArrayOf(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return symbolicArrayOf(expression.expr);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return symbolicArrayOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return symbolicArrayOf(expression.expr);
             }
 
             context.templates.set(set, MemoryTemplate.UNKNOWN);
             return set;
         }
 
-        private LengthGuard lengthGuard(SemanticExprNode condition) {
+        private LengthGuard lengthGuard(SastNode condition) {
             if (condition == null) {
                 return null;
             }
 
-            if (condition instanceof SemanticArrayIntrinsicCallNode call
-                    && call.kind == SemanticArrayIntrinsicKind.LENGTH) {
+            if (condition.kind == SastKind.ARRAY_INTRINSIC_CALL
+                    && condition.intrinsicKind == SemanticArrayIntrinsicKind.LENGTH) {
                 return new LengthGuard(
-                        call.receiver,
+                        condition.receiver,
                         "!=",
                         BigInteger.ZERO
                 );
             }
 
-            if (condition instanceof SemanticUnaryOpNode unary
-                    && unary.op.equals("!")) {
-                LengthGuard inner = lengthGuard(unary.expr);
+            if (condition.kind == SastKind.UNARY_OP
+                    && condition.op.equals("!")) {
+                LengthGuard inner = lengthGuard(condition.expr);
 
                 if (inner == null) {
                     return null;
@@ -2884,39 +2884,39 @@ public final class DynamicArrayMemoryChecker {
                 );
             }
 
-            if (!(condition instanceof SemanticBinOpNode binary)
-                    || !isComparison(binary.op)) {
+            if (!(condition.kind == SastKind.BIN_OP)
+                    || !isComparison(condition.op)) {
                 return null;
             }
 
-            boolean leftLength = isLengthCall(binary.left);
-            boolean rightLength = isLengthCall(binary.right);
+            boolean leftLength = isLengthCall(condition.left);
+            boolean rightLength = isLengthCall(condition.right);
 
             if (leftLength == rightLength) {
                 return null;
             }
 
-            SemanticExprNode lengthSide = leftLength
-                    ? binary.left
-                    : binary.right;
-            SemanticExprNode constantSide = leftLength
-                    ? binary.right
-                    : binary.left;
+            SastNode lengthSide = leftLength
+                    ? condition.left
+                    : condition.right;
+            SastNode constantSide = leftLength
+                    ? condition.right
+                    : condition.left;
 
             if (constantSide.constantValue == null) {
                 return null;
             }
 
-            String op = leftLength ? binary.op : reverse(binary.op);
-            SemanticExprNode receiver =
-                    ((SemanticArrayIntrinsicCallNode) lengthSide).receiver;
+            String op = leftLength ? condition.op : reverse(condition.op);
+            SastNode receiver =
+                    ((SastNode) lengthSide).receiver;
 
             return new LengthGuard(receiver, op, constantSide.constantValue);
         }
 
-        private boolean isLengthCall(SemanticExprNode expression) {
-            return expression instanceof SemanticArrayIntrinsicCallNode call
-                    && call.kind == SemanticArrayIntrinsicKind.LENGTH;
+        private boolean isLengthCall(SastNode expression) {
+            return expression.kind == SastKind.ARRAY_INTRINSIC_CALL
+                    && expression.intrinsicKind == SemanticArrayIntrinsicKind.LENGTH;
         }
 
         private boolean isComparison(String op) {
@@ -3000,9 +3000,9 @@ public final class DynamicArrayMemoryChecker {
             return symbol == null ? "<pointer>" : symbol.qualifiedName();
         }
 
-        private String pointerExpressionName(SemanticExprNode expression) {
-            if (expression instanceof SemanticVarExprNode variable) {
-                return variable.symbol.qualifiedName();
+        private String pointerExpressionName(SastNode expression) {
+            if (expression.kind == SastKind.VAR_EXPR) {
+                return expression.symbol.qualifiedName();
             }
 
             return "<expression>";
@@ -3017,12 +3017,12 @@ public final class DynamicArrayMemoryChecker {
         return (bits[offset + (index >>> 6)] & (1L << (index & 63))) != 0L;
     }
 
-    private static final class LengthGuard {        final SemanticExprNode receiver;
+    private static final class LengthGuard {        final SastNode receiver;
         final String op;
         final BigInteger constant;
 
         LengthGuard(
-                SemanticExprNode receiver,
+                SastNode receiver,
                 String op,
                 BigInteger constant
         ) {

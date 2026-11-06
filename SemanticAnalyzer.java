@@ -23,13 +23,13 @@ public final class SemanticAnalyzer {
     private final Map<String, Symbol> hoistedArrayLiteralGlobals =
             new LinkedHashMap<>();
 
-    private final List<SemanticVarDeclNode> pendingHoistedArrayLiterals =
+    private final List<SastNode> pendingHoistedArrayLiterals =
             new ArrayList<>();
 
     private final Map<String, Symbol> hoistedStaticStringGlobals =
             new LinkedHashMap<>();
 
-    private final List<SemanticVarDeclNode> pendingHoistedStaticStrings =
+    private final List<SastNode> pendingHoistedStaticStrings =
             new ArrayList<>();
 
     private EntryKind entryKind = EntryKind.NONE;
@@ -46,7 +46,7 @@ public final class SemanticAnalyzer {
                 constEval,
                 new ArrayLiteralLowerer.Hoister() {
                     @Override
-                    public SemanticVarExprNode hoistArrayLiteral(
+                    public SastNode hoistArrayLiteral(
                             SastType arrayType,
                             List<BigInteger> values,
                             SourceSpan span) {
@@ -61,7 +61,7 @@ public final class SemanticAnalyzer {
         this.typeResolver = lowering.typeResolver;
     }
 
-    public SemanticASTNode analyze(AstNode root) {
+    public SastNode analyze(AstNode root) {
         symbolTable.clear();
         typeResolver.resetTupleTypes();
         hoistedArrayLiteralGlobals.clear();
@@ -72,7 +72,7 @@ public final class SemanticAnalyzer {
         entryKind = EntryKind.NONE;
         globalMainCount = 0;
 
-        SemanticASTNode result;
+        SastNode result;
 
         if (root != null && root.kind == AstKind.PROGRAM) {
             DeclarationSelector.Selection selection =
@@ -101,22 +101,22 @@ public final class SemanticAnalyzer {
             throw new IllegalArgumentException("Cannot analyze a null AST document");
         }
 
-        SemanticASTNode root = analyze(ast.root);
-        SemanticProgramNode program;
+        SastNode root = analyze(ast.root);
+        SastNode program;
 
-        if (root instanceof SemanticProgramNode semanticProgram) {
-            program = semanticProgram;
+        if (root.kind == SastKind.PROGRAM) {
+            program = root;
         } else if (root == null) {
-            program = new SemanticProgramNode(
+            program = SastNode.program(
                     ast.root == null ? SourceSpan.NONE : ast.root.span,
                     List.of()
             );
         } else {
-            program = new SemanticProgramNode(root.span, List.of(root));
+            program = SastNode.program(root.span, List.of(root));
         }
 
         SymbolRegistry registry = new SymbolRegistry();
-        SemanticASTSerializer.registerFromNode(program, registry);
+        SastSerializer.registerFromNode(program, registry);
         registry.registerAll(symbolTable.allSymbols());
         SastDocument document = new SastDocument(
                 SastPhase.SEMANTIC,
@@ -129,7 +129,7 @@ public final class SemanticAnalyzer {
         return new PassResult(document, symbolTable.diagnostics().diagnostics());
     }
 
-    public List<SemanticStmtNode> analyze(List<AstNode> nodes) {
+    public List<SastNode> analyze(List<AstNode> nodes) {
         symbolTable.clear();
         typeResolver.resetTupleTypes();
         hoistedArrayLiteralGlobals.clear();
@@ -138,7 +138,7 @@ public final class SemanticAnalyzer {
         pendingHoistedStaticStrings.clear();
         symbolTable.pushScope();
 
-        List<SemanticStmtNode> out = new ArrayList<>();
+        List<SastNode> out = new ArrayList<>();
 
         for (AstNode stmt : nodes) {
             appendAnalyzedStmt(stmt, out);
@@ -160,7 +160,7 @@ public final class SemanticAnalyzer {
         }
     }
 
-    SemanticVarExprNode hoistArrayLiteralGlobal(
+    SastNode hoistArrayLiteralGlobal(
             SastType arrayType,
             List<BigInteger> values,
             SourceSpan span
@@ -178,7 +178,7 @@ public final class SemanticAnalyzer {
                 hoistedArrayLiteralGlobals.get(keyText);
 
         if (existing != null) {
-            return new SemanticVarExprNode(span, existing.type, existing);
+            return SastNode.varExpr(span, existing.type, existing);
         }
 
         String baseName = "ARRLIT_" + Mangler.hashHex64(keyText);
@@ -202,9 +202,9 @@ public final class SemanticAnalyzer {
 
         sym.literalValues = List.copyOf(values);
         hoistedArrayLiteralGlobals.put(keyText, sym);
-        pendingHoistedArrayLiterals.add(new SemanticVarDeclNode(span, sym));
+        pendingHoistedArrayLiterals.add(SastNode.varDecl(span, sym));
 
-        return new SemanticVarExprNode(span, sym.type, sym);
+        return SastNode.varExpr(span, sym.type, sym);
     }
 
     Symbol hoistStaticStringGlobal(
@@ -249,7 +249,7 @@ public final class SemanticAnalyzer {
                     sym.literalBytes = List.copyOf(bytes);
                     hoistedStaticStringGlobals.put(keyText, sym);
                     pendingHoistedStaticStrings.add(
-                            new SemanticVarDeclNode(span, sym));
+                            SastNode.varDecl(span, sym));
                     return sym;
                 }
             } else if (candidate.kind == SymbolKind.GLOBAL
@@ -265,7 +265,7 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private SemanticProgramNode analyzeProgram(AstNode program) {
+    private SastNode analyzeProgram(AstNode program) {
 
         for (AstNode item : program.items) {
             symbolTable.diagnostics().push(item.span);
@@ -310,7 +310,7 @@ public final class SemanticAnalyzer {
         Map<AstNode, AstNode> globalArrayLiteralInitializers =
                 new IdentityHashMap<>();
 
-        Map<AstNode, SemanticASTNode> loweredByNode = new IdentityHashMap<>();
+        Map<AstNode, SastNode> loweredByNode = new IdentityHashMap<>();
 
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
@@ -470,7 +470,7 @@ public final class SemanticAnalyzer {
                     if (enumSymbol != null) {
                         loweredByNode.put(
                                 item,
-                                new SemanticEnumDeclNode(item.span, enumSymbol)
+                                SastNode.enumDecl(item.span, enumSymbol)
                         );
                     }
 
@@ -481,11 +481,11 @@ public final class SemanticAnalyzer {
                     StructSymbol structSymbol = symbolTable.resolveStruct(item.name);
 
                     if (structSymbol != null) {
-                        List<SemanticFunctionDeclNode> loweredMethods =
+                        List<SastNode> loweredMethods =
                                 new ArrayList<>();
 
                         for (AstNode methodNode : item.methods) {
-                            SemanticFunctionDeclNode loweredMethod =
+                            SastNode loweredMethod =
                                     analyzeMethodDecl(structSymbol, methodNode);
 
                             if (loweredMethod != null) {
@@ -495,7 +495,7 @@ public final class SemanticAnalyzer {
 
                         loweredByNode.put(
                                 item,
-                                new SemanticStructDeclNode(
+                                SastNode.structDecl(
                                         item.span,
                                         structSymbol,
                                         loweredMethods
@@ -512,7 +512,7 @@ public final class SemanticAnalyzer {
                     if (sym != null) {
                         AstNode staticInit = globalStaticInitializers.get(item);
 
-                        SemanticExprNode loweredStaticInit = staticInit == null
+                        SastNode loweredStaticInit = staticInit == null
                                 ? null
                                 : exprAnalyzer.analyzeExprWithExpectedType(
                                         staticInit,
@@ -528,7 +528,7 @@ public final class SemanticAnalyzer {
                                             sym.type);
                         }
 
-                        loweredByNode.put(item, new SemanticVarDeclNode(
+                        loweredByNode.put(item, SastNode.varDecl(
                                 item.span,
                                 sym,
                                 globalInitializers.get(item),
@@ -540,7 +540,7 @@ public final class SemanticAnalyzer {
                 }
 
                 if (item.kind == AstKind.FUNCTION_DECL) {
-                    SemanticFunctionDeclNode lowered = analyzeFunctionDecl(item);
+                    SastNode lowered = analyzeFunctionDecl(item);
 
                     if (lowered != null) {
                         loweredByNode.put(item, lowered);
@@ -551,7 +551,7 @@ public final class SemanticAnalyzer {
 
         symbolTable.setCurrentNamespace(null);
 
-        List<SemanticASTNode> semanticItems = new ArrayList<>();
+        List<SastNode> semanticItems = new ArrayList<>();
         Set<String> emittedNamespaces = new LinkedHashSet<>();
 
         for (AstNode item : program.items) {
@@ -568,7 +568,7 @@ public final class SemanticAnalyzer {
                 continue;
             }
 
-            SemanticASTNode lowered = loweredByNode.get(item);
+            SastNode lowered = loweredByNode.get(item);
 
             if (lowered != null) {
                 semanticItems.add(lowered);
@@ -581,7 +581,7 @@ public final class SemanticAnalyzer {
             }
 
             if (emittedNamespaces.add(space.space.name)) {
-                semanticItems.add(new SemanticNamespaceNode(
+                semanticItems.add(SastNode.namespace(
                         space.span,
                         space.space.name,
                         loweredItemsOf(space, loweredByNode)
@@ -597,7 +597,7 @@ public final class SemanticAnalyzer {
             semanticItems.add(0, pendingHoistedArrayLiterals.get(i));
         }
 
-        List<SemanticStructDeclNode> pendingTuples =
+        List<SastNode> pendingTuples =
                 typeResolver.pendingTupleDecls();
 
         for (int i = pendingTuples.size() - 1; i >= 0; i--) {
@@ -612,7 +612,7 @@ public final class SemanticAnalyzer {
             );
         }
 
-        return new SemanticProgramNode(program.span, semanticItems);
+        return SastNode.program(program.span, semanticItems);
     }
 
     private void collectNamespaceDecl(
@@ -664,14 +664,14 @@ public final class SemanticAnalyzer {
             String path,
             List<NamespaceProgramItems> spaces,
             Map<String, NamespaceProgramItems> spacesByName,
-            Map<AstNode, SemanticASTNode> loweredByNode,
-            List<SemanticASTNode> semanticItems,
+            Map<AstNode, SastNode> loweredByNode,
+            List<SastNode> semanticItems,
             Set<String> emittedNamespaces
     ) {
         NamespaceProgramItems space = spacesByName.get(path);
 
         if (space != null && emittedNamespaces.add(path)) {
-            semanticItems.add(new SemanticNamespaceNode(
+            semanticItems.add(SastNode.namespace(
                     space.span,
                     path,
                     loweredItemsOf(space, loweredByNode)
@@ -690,7 +690,7 @@ public final class SemanticAnalyzer {
             }
 
             if (emittedNamespaces.add(nested.space.name)) {
-                semanticItems.add(new SemanticNamespaceNode(
+                semanticItems.add(SastNode.namespace(
                         nested.span,
                         nested.space.name,
                         loweredItemsOf(nested, loweredByNode)
@@ -699,14 +699,14 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private List<SemanticASTNode> loweredItemsOf(
+    private List<SastNode> loweredItemsOf(
             NamespaceProgramItems space,
-            Map<AstNode, SemanticASTNode> loweredByNode
+            Map<AstNode, SastNode> loweredByNode
     ) {
-        List<SemanticASTNode> out = new ArrayList<>();
+        List<SastNode> out = new ArrayList<>();
 
         for (AstNode item : space.items) {
-            SemanticASTNode lowered = loweredByNode.get(item);
+            SastNode lowered = loweredByNode.get(item);
 
             if (lowered != null) {
                 out.add(lowered);
@@ -890,7 +890,7 @@ public final class SemanticAnalyzer {
         symbolTable.declareMethod(owner, methodNode, symbol);
     }
 
-    private SemanticFunctionDeclNode analyzeFunctionDecl(AstNode fn) {
+    private SastNode analyzeFunctionDecl(AstNode fn) {
         symbolTable.diagnostics().push(fn.span);
         try {
         Symbol symbol = symbolTable.findRegisteredFunction(fn);
@@ -930,7 +930,7 @@ public final class SemanticAnalyzer {
             parameterVariables.add(param);
         }
 
-        List<SemanticStmtNode> bodyStatements = new ArrayList<>();
+        List<SastNode> bodyStatements = new ArrayList<>();
 
         if (fn.body != null) {
             for (AstNode stmt : fn.body.items) {
@@ -944,11 +944,11 @@ public final class SemanticAnalyzer {
 
         currentFunction = previousFunction;
 
-        return new SemanticFunctionDeclNode(
+        return SastNode.functionDecl(
                 fn.span,
                 symbol,
                 parameterVariables,
-                new SemanticBlockNode(
+                SastNode.block(
                         fn.body == null ? fn.span : fn.body.span,
                         bodyStatements
                 )
@@ -958,7 +958,7 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private SemanticFunctionDeclNode analyzeMethodDecl(
+    private SastNode analyzeMethodDecl(
             StructSymbol owner,
             AstNode methodNode
     ) {
@@ -1001,7 +1001,7 @@ public final class SemanticAnalyzer {
             parameterVariables.add(param);
         }
 
-        List<SemanticStmtNode> bodyStatements = new ArrayList<>();
+        List<SastNode> bodyStatements = new ArrayList<>();
 
         if (methodNode.body != null) {
             for (AstNode stmt : methodNode.body.items) {
@@ -1019,11 +1019,11 @@ public final class SemanticAnalyzer {
 
         currentFunction = previousFunction;
 
-        return new SemanticFunctionDeclNode(
+        return SastNode.functionDecl(
                 methodNode.span,
                 symbol,
                 parameterVariables,
-                new SemanticBlockNode(
+                SastNode.block(
                         methodNode.body == null
                                 ? methodNode.span
                                 : methodNode.body.span,
@@ -1037,7 +1037,7 @@ public final class SemanticAnalyzer {
 
     private void appendAnalyzedStmt(
             AstNode stmt,
-            List<SemanticStmtNode> out
+            List<SastNode> out
     ) {
         if (stmt == null) {
             return;
@@ -1053,7 +1053,7 @@ public final class SemanticAnalyzer {
             return;
         }
 
-        SemanticStmtNode lowered = analyzeStmt(stmt);
+        SastNode lowered = analyzeStmt(stmt);
 
         if (lowered != null) {
             out.add(lowered);
@@ -1062,7 +1062,7 @@ public final class SemanticAnalyzer {
 
     private void appendCompileTimeIf(
             AstNode node,
-            List<SemanticStmtNode> out
+            List<SastNode> out
     ) {
         AstNode selected = selectCompileTimeBranch(node);
 
@@ -1075,7 +1075,7 @@ public final class SemanticAnalyzer {
 
     private void appendCompileTimeBranch(
             AstNode selected,
-            List<SemanticStmtNode> out
+            List<SastNode> out
     ) {
         if (selected.kind == AstKind.BLOCK) {
             for (AstNode stmt : selected.items) {
@@ -1090,7 +1090,7 @@ public final class SemanticAnalyzer {
     private AstNode selectCompileTimeBranch(AstNode node) {
         symbolTable.diagnostics().push(node.span);
         try {
-            SemanticExprNode condition =
+            SastNode condition =
                     exprAnalyzer.analyzeExpr(node.condition);
 
             if (!(condition.type.kind == SastTypeKind.PRIMITIVE)) {
@@ -1113,7 +1113,7 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private SemanticStmtNode analyzeStmt(AstNode node) {
+    private SastNode analyzeStmt(AstNode node) {
         if (node == null) {
             return null;
         }
@@ -1124,7 +1124,7 @@ public final class SemanticAnalyzer {
         if (node.kind == AstKind.BLOCK) {
             symbolTable.pushScope();
 
-            List<SemanticStmtNode> stmts = new ArrayList<>();
+            List<SastNode> stmts = new ArrayList<>();
 
             for (AstNode stmt : node.items) {
                 appendAnalyzedStmt(stmt, stmts);
@@ -1132,16 +1132,16 @@ public final class SemanticAnalyzer {
 
             symbolTable.popScope();
 
-            return new SemanticBlockNode(node.span, stmts);
+            return SastNode.block(node.span, stmts);
         }
 
         if (node.kind == AstKind.VAR_DECL_INIT) {
 
             symbolTable.pushScope();
-            List<SemanticStmtNode> stmts = analyzeVarDeclInitStmtList(node);
+            List<SastNode> stmts = analyzeVarDeclInitStmtList(node);
             symbolTable.popScope();
 
-            return new SemanticBlockNode(node.span, stmts);
+            return SastNode.block(node.span, stmts);
         }
 
         if (node.kind == AstKind.VAR_DECL) {
@@ -1150,7 +1150,7 @@ public final class SemanticAnalyzer {
                     symbolTable.findRegisteredVarDeclSymbol(node);
 
             if (registered != null) {
-                return new SemanticVarDeclNode(node.span, registered);
+                return SastNode.varDecl(node.span, registered);
             }
 
             Symbol sym = Symbol.variable(
@@ -1161,11 +1161,11 @@ public final class SemanticAnalyzer {
 
             symbolTable.declare(sym);
 
-            return new SemanticVarDeclNode(node.span, sym);
+            return SastNode.varDecl(node.span, sym);
         }
 
         if (node.kind == AstKind.ASSIGN) {
-            SemanticExprNode target =
+            SastNode target =
                     exprAnalyzer.analyzeRequiredLValueExpr(
                             node.target,
                             "Assignment target"
@@ -1182,14 +1182,14 @@ public final class SemanticAnalyzer {
 
                 if (lowered != null) {
                     if (lowered.call != null) {
-                        return new SemanticExprStmtNode(
+                        return SastNode.exprStmt(
                                 node.span,
                                 lowered.call
                         );
                     }
 
                     if (lowered.fallbackValue != null) {
-                        return new SemanticAssignNode(
+                        return SastNode.assign(
                                 node.span,
                                 node.text,
                                 target,
@@ -1199,12 +1199,12 @@ public final class SemanticAnalyzer {
                 }
             }
 
-            SemanticExprNode value =
+            SastNode value =
                     exprAnalyzer.analyzeExprWithExpectedType(
                             node.value,
                             target.type);
 
-            return new SemanticAssignNode(node.span, node.text, target, value);
+            return SastNode.assign(node.span, node.text, target, value);
         }
 
         if (node.kind == AstKind.COMPILE_TIME_IF) {
@@ -1214,24 +1214,24 @@ public final class SemanticAnalyzer {
                 return null;
             }
 
-            List<SemanticStmtNode> stmts = new ArrayList<>();
+            List<SastNode> stmts = new ArrayList<>();
             appendCompileTimeBranch(selected, stmts);
-            return new SemanticBlockNode(node.span, stmts);
+            return SastNode.block(node.span, stmts);
         }
 
         if (node.kind == AstKind.IF) {
-            SemanticExprNode condition =
+            SastNode condition =
                     exprAnalyzer.analyzeExpr(node.condition);
 
-            SemanticStmtNode thenBranch =
+            SastNode thenBranch =
                     analyzeStmt(node.thenBranch);
 
-            SemanticStmtNode elseBranch =
+            SastNode elseBranch =
                     node.elseBranch != null
                             ? analyzeStmt(node.elseBranch)
                             : null;
 
-            return new SemanticIfNode(
+            return SastNode.ifStmt(
                     node.span,
                     condition,
                     thenBranch,
@@ -1240,15 +1240,15 @@ public final class SemanticAnalyzer {
         }
 
         if (node.kind == AstKind.WHILE) {
-            SemanticExprNode condition =
+            SastNode condition =
                     exprAnalyzer.analyzeExpr(node.condition);
 
             loopDepth++;
 
-            SemanticStmtNode body =
+            SastNode body =
                     analyzeStmt(node.body);
 
-            List<SemanticStmtNode> update = new ArrayList<>();
+            List<SastNode> update = new ArrayList<>();
 
             for (AstNode updateStmt : node.updateItems) {
                 appendAnalyzedStmt(updateStmt, update);
@@ -1256,7 +1256,7 @@ public final class SemanticAnalyzer {
 
             loopDepth--;
 
-            return new SemanticWhileNode(node.span, condition, body, update);
+            return SastNode.whileStmt(node.span, condition, body, update);
         }
 
         if (node.kind == AstKind.BREAK) {
@@ -1278,7 +1278,7 @@ public final class SemanticAnalyzer {
                 return null;
             }
 
-            return new SemanticContinueNode(node.span);
+            return SastNode.continueStmt(node.span);
         }
 
         if (node.kind == AstKind.RETURN) {
@@ -1286,7 +1286,7 @@ public final class SemanticAnalyzer {
         }
 
         if (node.kind == AstKind.EXPR_STMT) {
-            return new SemanticExprStmtNode(
+            return SastNode.exprStmt(
                     node.span,
                     exprAnalyzer.analyzeExpr(node.expr)
             );
@@ -1315,7 +1315,7 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private List<SemanticStmtNode> analyzeVarDeclInitStmtList(
+    private List<SastNode> analyzeVarDeclInitStmtList(
             AstNode n
     ) {
         symbolTable.diagnostics().push(n.span);
@@ -1330,12 +1330,12 @@ public final class SemanticAnalyzer {
 
         symbolTable.declare(sym);
 
-        List<SemanticStmtNode> stmts = new ArrayList<>();
-        stmts.add(new SemanticVarDeclNode(n.span, sym));
+        List<SastNode> stmts = new ArrayList<>();
+        stmts.add(SastNode.varDecl(n.span, sym));
 
         if (n.init != null) {
-            SemanticExprNode target =
-                    new SemanticVarExprNode(n.span, sym.type, sym);
+            SastNode target =
+                    SastNode.varExpr(n.span, sym.type, sym);
 
             ExpressionAnalyzer.OperatorAssignmentLowering lowered = null;
 
@@ -1350,12 +1350,12 @@ public final class SemanticAnalyzer {
 
             if (lowered != null) {
                 if (lowered.call != null) {
-                    stmts.add(new SemanticExprStmtNode(n.span, lowered.call));
+                    stmts.add(SastNode.exprStmt(n.span, lowered.call));
                     return stmts;
                 }
 
                 if (lowered.fallbackValue != null) {
-                    stmts.add(new SemanticAssignNode(
+                    stmts.add(SastNode.assign(
                             n.span,
                             target,
                             lowered.fallbackValue));
@@ -1363,10 +1363,10 @@ public final class SemanticAnalyzer {
                 }
             }
 
-            SemanticExprNode value =
+            SastNode value =
                     exprAnalyzer.analyzeExprWithExpectedType(n.init, type);
 
-            stmts.add(new SemanticAssignNode(n.span, target, value));
+            stmts.add(SastNode.assign(n.span, target, value));
         }
 
         return stmts;
@@ -1375,8 +1375,8 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private SemanticReturnNode analyzeReturnStmt(AstNode n) {
-        SemanticExprNode value =
+    private SastNode analyzeReturnStmt(AstNode n) {
+        SastNode value =
                 n.value != null
                         ? exprAnalyzer.analyzeExprWithExpectedType(
                                 n.value,
@@ -1396,28 +1396,28 @@ public final class SemanticAnalyzer {
                     false
             );
 
-            return new SemanticReturnNode(
+            return SastNode.returnStmt(
                     n.span,
                     fallbackFn,
                     value
             );
         }
 
-        return new SemanticReturnNode(
+        return SastNode.returnStmt(
                 n.span,
                 currentFunction,
                 value
         );
     }
 
-    private SemanticStmtNode analyzeBreakStmt(AstNode n) {
+    private SastNode analyzeBreakStmt(AstNode n) {
         if (loopDepth == 0) {
             symbolTable.error("break statement outside of a loop");
             return null;
         }
 
         if (n.level == null) {
-            return new SemanticBreakNode(n.span, 1);
+            return SastNode.breakStmt(n.span, 1);
         }
 
         BigInteger level = null;
@@ -1453,7 +1453,7 @@ public final class SemanticAnalyzer {
             return null;
         }
 
-        return new SemanticBreakNode(n.span, level.intValue());
+        return SastNode.breakStmt(n.span, level.intValue());
     }
 
 }
