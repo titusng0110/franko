@@ -16,7 +16,7 @@ public final class PointerPermissionChecker {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
-    public void check(SemanticASTNode node) {
+    public void check(SastNode node) {
         diagnostics.clear();
 
         checkNode(node);
@@ -30,7 +30,7 @@ public final class PointerPermissionChecker {
         );
     }
 
-    private void checkNode(SemanticASTNode node) {
+    private void checkNode(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkNodeInner(node);
@@ -39,39 +39,39 @@ public final class PointerPermissionChecker {
         }
     }
 
-    private void checkNodeInner(SemanticASTNode node) {
+    private void checkNodeInner(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticProgramNode n) {
-            for (SemanticASTNode item : n.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 checkNode(item);
             }
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode n) {
-            for (SemanticASTNode item : n.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 checkNode(item);
             }
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode n) {
-            checkFunction(n);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            checkFunction(node);
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode n) {
-            for (SemanticFunctionDeclNode method : n.methods) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            for (SastNode method : node.methods) {
                 checkFunction(method);
             }
             return;
         }
     }
 
-    private void checkFunction(SemanticFunctionDeclNode node) {
+    private void checkFunction(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkFunctionInner(node);
@@ -80,7 +80,7 @@ public final class PointerPermissionChecker {
         }
     }
 
-    private void checkFunctionInner(SemanticFunctionDeclNode node) {
+    private void checkFunctionInner(SastNode node) {
         highWaterMark.clear();
         trackedOrder.clear();
 
@@ -166,7 +166,7 @@ public final class PointerPermissionChecker {
         }
     }
 
-    private void checkStmt(SemanticStmtNode node) {
+    private void checkStmt(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkStmtInner(node);
@@ -175,60 +175,60 @@ public final class PointerPermissionChecker {
         }
     }
 
-    private void checkStmtInner(SemanticStmtNode node) {
+    private void checkStmtInner(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticBlockNode n) {
-            for (SemanticStmtNode stmt : n.statements) {
+        if (node.kind == SastKind.BLOCK) {
+            for (SastNode stmt : node.statements) {
                 checkStmt(stmt);
             }
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode n) {
-            trackIfPointer(n.symbol);
+        if (node.kind == SastKind.VAR_DECL) {
+            trackIfPointer(node.symbol);
             return;
         }
 
-        if (node instanceof SemanticAssignNode n) {
-            markPath(n.target, PtrPermission.MUTABLE);
-            markValue(n.value, requiredLevel(n.target.type));
+        if (node.kind == SastKind.ASSIGN) {
+            markPath(node.target, PtrPermission.MUTABLE);
+            markValue(node.value, requiredLevel(node.target.type));
             return;
         }
 
-        if (node instanceof SemanticIfNode n) {
-            markValue(n.condition, PtrPermission.READ_ONLY);
-            checkStmt(n.thenBranch);
-            checkStmt(n.elseBranch);
+        if (node.kind == SastKind.IF) {
+            markValue(node.condition, PtrPermission.READ_ONLY);
+            checkStmt(node.thenBranch);
+            checkStmt(node.elseBranch);
             return;
         }
 
-        if (node instanceof SemanticWhileNode n) {
-            markValue(n.condition, PtrPermission.READ_ONLY);
-            checkStmt(n.body);
+        if (node.kind == SastKind.WHILE) {
+            markValue(node.condition, PtrPermission.READ_ONLY);
+            checkStmt(node.body);
 
-            for (SemanticStmtNode updateStmt : n.update) {
+            for (SastNode updateStmt : node.update) {
                 checkStmt(updateStmt);
             }
 
             return;
         }
 
-        if (node instanceof SemanticReturnNode n) {
-            if (n.value != null) {
+        if (node.kind == SastKind.RETURN) {
+            if (node.value != null) {
                 markValue(
-                        n.value,
-                        requiredLevel(n.function.returnType())
+                        node.value,
+                        requiredLevel(node.function.returnType())
                 );
             }
 
             return;
         }
 
-        if (node instanceof SemanticExprStmtNode n) {
-            markValue(n.expr, PtrPermission.READ_ONLY);
+        if (node.kind == SastKind.EXPR_STMT) {
+            markValue(node.expr, PtrPermission.READ_ONLY);
         }
     }
 
@@ -236,67 +236,67 @@ public final class PointerPermissionChecker {
         return PointerPermissions.pointerPermission(type);
     }
 
-    private void markValue(SemanticExprNode expr, PtrPermission level) {
+    private void markValue(SastNode expr, PtrPermission level) {
         if (expr == null) {
             return;
         }
 
-        if (expr instanceof SemanticVarExprNode n) {
-            credit(n.symbol, level);
+        if (expr.kind == SastKind.VAR_EXPR) {
+            credit(expr.symbol, level);
             return;
         }
 
-        if (expr instanceof SemanticDerefNode
-                || expr instanceof SemanticArrayAccessNode
-                || expr instanceof SemanticMemberAccessNode) {
+        if (expr.kind == SastKind.DEREF
+                || expr.kind == SastKind.ARRAY_ACCESS
+                || expr.kind == SastKind.MEMBER_ACCESS) {
             markPath(expr, PtrPermission.READ_ONLY);
             return;
         }
 
-        if (expr instanceof SemanticGetPtrNode n) {
-            markPath(n.target, PointerPermissions.pointerPermission(n.type));
+        if (expr.kind == SastKind.GET_PTR) {
+            markPath(expr.target, PointerPermissions.pointerPermission(expr.type));
             return;
         }
 
-        if (expr instanceof SemanticCastExprNode n) {
-            markValue(n.expr, requiredLevel(n.type));
+        if (expr.kind == SastKind.CAST) {
+            markValue(expr.expr, requiredLevel(expr.type));
             return;
         }
 
-        if (expr instanceof SemanticAggregateLiteralNode n) {
-            for (SemanticAggregateFieldInit field : n.fields) {
+        if (expr.kind == SastKind.AGGREGATE_LITERAL) {
+            for (SastNode field : expr.fields) {
                 markValue(field.value, requiredLevel(field.field.type));
             }
 
             return;
         }
 
-        if (expr instanceof SemanticFunctionCallNode n) {
-            for (int i = 0; i < n.args.size(); i++) {
-                markValue(n.args.get(i), parameterLevel(n, i));
+        if (expr.kind == SastKind.FUNCTION_CALL) {
+            for (int i = 0; i < expr.args.size(); i++) {
+                markValue(expr.args.get(i), parameterLevel(expr, i));
             }
 
             return;
         }
 
-        if (expr instanceof SemanticArrayIntrinsicCallNode n) {
-            markIntrinsic(n);
+        if (expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            markIntrinsic(expr);
             return;
         }
 
-        if (expr instanceof SemanticUnaryOpNode n) {
-            markValue(n.expr, PtrPermission.READ_ONLY);
+        if (expr.kind == SastKind.UNARY_OP) {
+            markValue(expr.expr, PtrPermission.READ_ONLY);
             return;
         }
 
-        if (expr instanceof SemanticBinOpNode n) {
-            markValue(n.left, PtrPermission.READ_ONLY);
-            markValue(n.right, PtrPermission.READ_ONLY);
+        if (expr.kind == SastKind.BIN_OP) {
+            markValue(expr.left, PtrPermission.READ_ONLY);
+            markValue(expr.right, PtrPermission.READ_ONLY);
         }
     }
 
     private static PtrPermission parameterLevel(
-            SemanticFunctionCallNode call,
+            SastNode call,
             int index
     ) {
         List<SastType> parameterTypes = call.function.parameterTypes();
@@ -308,8 +308,8 @@ public final class PointerPermissionChecker {
         return requiredLevel(parameterTypes.get(index));
     }
 
-    private void markIntrinsic(SemanticArrayIntrinsicCallNode node) {
-        switch (node.kind) {
+    private void markIntrinsic(SastNode node) {
+        switch (node.intrinsicKind) {
             case INIT, INIT_ZERO, RESIZE, UNINIT ->
                     markPath(node.receiver, PtrPermission.OWNER);
 
@@ -337,36 +337,36 @@ public final class PointerPermissionChecker {
                     markPath(node.receiver, PtrPermission.READ_ONLY);
         }
 
-        for (SemanticExprNode arg : node.args) {
+        for (SastNode arg : node.args) {
             markValue(arg, PtrPermission.READ_ONLY);
         }
     }
 
-    private void markPath(SemanticExprNode path, PtrPermission level) {
+    private void markPath(SastNode path, PtrPermission level) {
         if (path == null) {
             return;
         }
 
-        if (path instanceof SemanticDerefNode n) {
-            markRegion(n, level);
+        if (path.kind == SastKind.DEREF) {
+            markRegion(path, level);
             return;
         }
 
-        if (path instanceof SemanticArrayAccessNode n) {
-            markPath(n.target, level);
-            markValue(n.index, PtrPermission.READ_ONLY);
+        if (path.kind == SastKind.ARRAY_ACCESS) {
+            markPath(path.target, level);
+            markValue(path.index, PtrPermission.READ_ONLY);
             return;
         }
 
-        if (path instanceof SemanticMemberAccessNode n) {
-            markPath(n.target, level);
+        if (path.kind == SastKind.MEMBER_ACCESS) {
+            markPath(path.target, level);
         }
     }
 
-    private void markRegion(SemanticDerefNode deref, PtrPermission level) {
-        if (deref.expr instanceof SemanticVarExprNode n
-                && n.type.kind == SastTypeKind.PTR) {
-            credit(n.symbol, level);
+    private void markRegion(SastNode deref, PtrPermission level) {
+        if (deref.expr.kind == SastKind.VAR_EXPR
+                && deref.expr.type.kind == SastTypeKind.PTR) {
+            credit(deref.expr.symbol, level);
             return;
         }
 

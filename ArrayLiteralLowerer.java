@@ -6,7 +6,7 @@ import java.util.Objects;
 public final class ArrayLiteralLowerer {
 
     public interface Hoister {
-        SemanticVarExprNode hoistArrayLiteral(
+        SastNode hoistArrayLiteral(
                 SastType arrayType,
                 List<BigInteger> values,
                 SourceSpan span
@@ -31,7 +31,7 @@ public final class ArrayLiteralLowerer {
         this.hoister = Objects.requireNonNull(hoister);
     }
 
-    public SemanticExprNode lower(AstNode lit, SastType expectedType) {
+    public SastNode lower(AstNode lit, SastType expectedType) {
         if (lit.elements.isEmpty()) {
             ctx.error("Empty array literals are not supported: an array "
                     + "literal is a view<[T, N]> value with N >= 1");
@@ -149,7 +149,7 @@ public final class ArrayLiteralLowerer {
                 return null;
             }
 
-            SemanticExprNode lowered = exprAnalyzer.analyzeExpr(element);
+            SastNode lowered = exprAnalyzer.analyzeExpr(element);
 
             if (!(lowered.type.kind == SastTypeKind.PRIMITIVE)) {
                 ctx.error("Array literal elements must be integer expressions, got "
@@ -203,9 +203,9 @@ public final class ArrayLiteralLowerer {
                 return null;
             }
 
-            SemanticExprNode lowered = exprAnalyzer.analyzeExpr(element);
+            SastNode lowered = exprAnalyzer.analyzeExpr(element);
 
-            if (!(lowered instanceof SemanticEnumVariantNode variantNode)) {
+            if (!(lowered.kind == SastKind.ENUM_VARIANT)) {
                 ctx.error("Array literal elements must be enum variants of type '"
                         + enumType.enumSymbol.qualifiedName()
                         + "', got "
@@ -213,18 +213,18 @@ public final class ArrayLiteralLowerer {
                 return null;
             }
 
-            if (variantNode.enumSymbol != enumType.enumSymbol) {
+            if (lowered.enumSymbol != enumType.enumSymbol) {
                 ctx.error("Array literal element '"
-                        + variantNode.variant.name
+                        + lowered.variant.name
                         + "' has enum type '"
-                        + variantNode.enumSymbol.qualifiedName()
+                        + lowered.enumSymbol.qualifiedName()
                         + "', expected '"
                         + enumType.enumSymbol.qualifiedName()
                         + "'");
                 return null;
             }
 
-            values.add(variantNode.variant.value);
+            values.add(lowered.variant.value);
         }
 
         return new LiteralValues(
@@ -281,7 +281,7 @@ public final class ArrayLiteralLowerer {
         );
     }
 
-    private SemanticExprNode hoist(
+    private SastNode hoist(
             SastType arrayType,
             List<BigInteger> values,
             SourceSpan span
@@ -289,7 +289,7 @@ public final class ArrayLiteralLowerer {
         if (hoister == null) {
             ctx.error("Internal compiler error: no array literal hoister "
                     + "wired into the array literal lowerer");
-            return new SemanticIntLiteralNode(
+            return SastNode.intLiteral(
                     span,
                     FALLBACK_TYPE,
                     BigInteger.ZERO,
@@ -297,17 +297,17 @@ public final class ArrayLiteralLowerer {
             );
         }
 
-        SemanticVarExprNode global =
+        SastNode global =
                 hoister.hoistArrayLiteral(arrayType, values, span);
 
-        return new SemanticGetPtrNode(
+        return SastNode.getPtr(
                 span,
                 SastType.view(arrayType),
                 global
         );
     }
 
-    private SemanticExprNode hoistFallback(AstNode lit) {
+    private SastNode hoistFallback(AstNode lit) {
         SastType shape = fallbackShapeType(lit.elements);
         List<BigInteger> values = new ArrayList<>();
         appendZeroValues(values, shape);

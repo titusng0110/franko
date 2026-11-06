@@ -18,53 +18,53 @@ public class StatementChecker {
         this.types = types;
     }
 
-    public void checkStmt(SemanticStmtNode node) {
+    public void checkStmt(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticBlockNode n) {
-            visitBlock(n);
+        if (node.kind == SastKind.BLOCK) {
+            visitBlock(node);
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode n) {
-            declarations.checkVarDecl(n);
+        if (node.kind == SastKind.VAR_DECL) {
+            declarations.checkVarDecl(node);
             return;
         }
 
-        if (node instanceof SemanticAssignNode n) {
-            visitAssign(n);
+        if (node.kind == SastKind.ASSIGN) {
+            visitAssign(node);
             return;
         }
 
-        if (node instanceof SemanticIfNode n) {
-            visitIf(n);
+        if (node.kind == SastKind.IF) {
+            visitIf(node);
             return;
         }
 
-        if (node instanceof SemanticWhileNode n) {
-            visitWhile(n);
+        if (node.kind == SastKind.WHILE) {
+            visitWhile(node);
             return;
         }
 
-        if (node instanceof SemanticBreakNode) {
-
-            return;
-        }
-
-        if (node instanceof SemanticContinueNode) {
+        if (node.kind == SastKind.BREAK) {
 
             return;
         }
 
-        if (node instanceof SemanticReturnNode n) {
-            visitReturnOutsideFunctionChecker(n);
+        if (node.kind == SastKind.CONTINUE) {
+
             return;
         }
 
-        if (node instanceof SemanticExprStmtNode n) {
-            visitExprStmt(n);
+        if (node.kind == SastKind.RETURN) {
+            visitReturnOutsideFunctionChecker(node);
+            return;
+        }
+
+        if (node.kind == SastKind.EXPR_STMT) {
+            visitExprStmt(node);
             return;
         }
 
@@ -72,17 +72,17 @@ public class StatementChecker {
                 + node.getClass().getSimpleName());
     }
 
-    private void visitBlock(SemanticBlockNode node) {
-        for (SemanticStmtNode stmt : node.statements) {
+    private void visitBlock(SastNode node) {
+        for (SastNode stmt : node.statements) {
             checkStmt(stmt);
         }
     }
 
-    private void visitExprStmt(SemanticExprStmtNode node) {
+    private void visitExprStmt(SastNode node) {
         expressions.checkExpr(node.expr);
     }
 
-    private void visitAssign(SemanticAssignNode node) {
+    private void visitAssign(SastNode node) {
         expressions.checkExpr(node.target);
         expressions.checkExpr(node.value);
 
@@ -120,7 +120,7 @@ public class StatementChecker {
         );
     }
 
-    private void checkCompoundAssign(SemanticAssignNode node) {
+    private void checkCompoundAssign(SastNode node) {
         String baseOp = node.baseOp();
 
         if (("/".equals(baseOp) || "%".equals(baseOp))
@@ -136,7 +136,7 @@ public class StatementChecker {
         );
     }
 
-    private void visitIf(SemanticIfNode node) {
+    private void visitIf(SastNode node) {
         expressions.checkExpr(node.condition);
 
         if (types.ensureValueExpression(
@@ -156,7 +156,7 @@ public class StatementChecker {
         }
     }
 
-    private void visitWhile(SemanticWhileNode node) {
+    private void visitWhile(SastNode node) {
         expressions.checkExpr(node.condition);
 
         if (types.ensureValueExpression(
@@ -171,12 +171,12 @@ public class StatementChecker {
 
         checkStmt(node.body);
 
-        for (SemanticStmtNode updateStmt : node.update) {
+        for (SastNode updateStmt : node.update) {
             checkStmt(updateStmt);
         }
     }
 
-    private void visitReturnOutsideFunctionChecker(SemanticReturnNode node) {
+    private void visitReturnOutsideFunctionChecker(SastNode node) {
         if (node.value != null) {
             expressions.checkExpr(node.value);
         }
@@ -184,25 +184,25 @@ public class StatementChecker {
         diagnostics.error("Return statement was checked outside FunctionChecker");
     }
 
-    private boolean isStorageBackedLValue(SemanticExprNode expr) {
+    private boolean isStorageBackedLValue(SastNode expr) {
         if (expr == null || !expr.isLValue()) {
             return false;
         }
 
-        if (expr instanceof SemanticVarExprNode) {
+        if (expr.kind == SastKind.VAR_EXPR) {
             return true;
         }
 
-        if (expr instanceof SemanticDerefNode) {
+        if (expr.kind == SastKind.DEREF) {
             return true;
         }
 
-        if (expr instanceof SemanticArrayAccessNode arrayAccess) {
-            return isStorageBackedLValue(arrayAccess.target);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            return isStorageBackedLValue(expr.target);
         }
 
-        if (expr instanceof SemanticMemberAccessNode memberAccess) {
-            return isStorageBackedLValue(memberAccess.target);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            return isStorageBackedLValue(expr.target);
         }
 
         return false;

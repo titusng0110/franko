@@ -187,7 +187,7 @@ public class TypeChecker {
     }
 
     public boolean ensureValueExpression(
-            SemanticExprNode expr,
+            SastNode expr,
             String where
     ) {
         if (expr == null) {
@@ -310,7 +310,7 @@ public class TypeChecker {
 
     public void ensureAssignable(
             SastType targetType,
-            SemanticExprNode expr,
+            SastNode expr,
             String message
     ) {
         if (targetType == null || expr == null || expr.type == null) {
@@ -442,18 +442,18 @@ public class TypeChecker {
         }
     }
 
-    private static boolean isStringLiteralView(SemanticExprNode expr) {
-        return expr instanceof SemanticGetPtrNode get
-                && get.target instanceof SemanticVarExprNode var
-                && var.symbol.kind == SymbolKind.GLOBAL
-                && var.symbol.literalBytes != null;
+    private static boolean isStringLiteralView(SastNode expr) {
+        return expr.kind == SastKind.GET_PTR
+                && expr.target.kind == SastKind.VAR_EXPR
+                && expr.target.symbol.kind == SymbolKind.GLOBAL
+                && expr.target.symbol.literalBytes != null;
     }
 
-    private static boolean isArrayLiteralView(SemanticExprNode expr) {
-        return expr instanceof SemanticGetPtrNode get
-                && get.target instanceof SemanticVarExprNode var
-                && var.symbol.kind == SymbolKind.GLOBAL
-                && var.symbol.literalValues != null;
+    private static boolean isArrayLiteralView(SastNode expr) {
+        return expr.kind == SastKind.GET_PTR
+                && expr.target.kind == SastKind.VAR_EXPR
+                && expr.target.symbol.kind == SymbolKind.GLOBAL
+                && expr.target.symbol.literalValues != null;
     }
 
     private void requireAssignableConstant(
@@ -471,8 +471,8 @@ public class TypeChecker {
     }
 
     public void ensureSameIntegralTypeOrFit(
-            SemanticExprNode left,
-            SemanticExprNode right,
+            SastNode left,
+            SastNode right,
             String op
     ) {
         if (!ensureIntegralOperands(left, right, op)) {
@@ -513,8 +513,8 @@ public class TypeChecker {
     }
 
     public void ensureMixedIntegralOperandsWithConstantFit(
-            SemanticExprNode left,
-            SemanticExprNode right,
+            SastNode left,
+            SastNode right,
             String op
     ) {
         if (!ensureIntegralOperands(left, right, op)) {
@@ -543,8 +543,8 @@ public class TypeChecker {
     }
 
     private boolean ensureIntegralOperands(
-            SemanticExprNode left,
-            SemanticExprNode right,
+            SastNode left,
+            SastNode right,
             String op
     ) {
         if (left == null || right == null) {
@@ -559,8 +559,8 @@ public class TypeChecker {
     }
 
     public void ensureValidShiftOperands(
-            SemanticExprNode left,
-            SemanticExprNode right,
+            SastNode left,
+            SastNode right,
             String op
     ) {
         if (!ensureIntegralOperands(left, right, op)) {

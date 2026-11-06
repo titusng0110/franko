@@ -6,7 +6,7 @@ import java.util.List;
 final class MemoryAnalysisContext {
     static final int MAX_BRANCH_DEPTH = 12;
 
-    final SemanticProgramNode root;
+    final SastNode root;
     final MemoryCallGraph callGraph;
     final MemoryShapeIndex shapes;
     final MemoryTemplateRegistry templates;
@@ -23,7 +23,7 @@ final class MemoryAnalysisContext {
     final int[] globalIndexByVariable;
     final IdentityHashMap<Symbol, Integer> functionIds;
 
-    final SemanticFunctionCallNode[] callSiteNodes;
+    final SastNode[] callSiteNodes;
     final int callSiteCount;
     final int[] callSiteIdBySite;
 
@@ -31,13 +31,13 @@ final class MemoryAnalysisContext {
     final int maxSnapshotDemand;
 
     final int siteCount;
-    final IdentityHashMap<SemanticASTNode, Integer> siteIds;
+    final IdentityHashMap<SastNode, Integer> siteIds;
 
-    private final IdentityHashMap<SemanticBlockNode, int[]> blockLocals;
+    private final IdentityHashMap<SastNode, int[]> blockLocals;
     private final int[][] functionLocalIds;
 
     private MemoryAnalysisContext(
-            SemanticProgramNode root,
+            SastNode root,
             MemoryCallGraph callGraph,
             MemoryShapeIndex shapes,
             MemoryTemplateRegistry templates,
@@ -49,13 +49,13 @@ final class MemoryAnalysisContext {
             int[] globalVariableIds,
             int[] globalIndexByVariable,
             IdentityHashMap<Symbol, Integer> functionIds,
-            SemanticFunctionCallNode[] callSiteNodes,
+            SastNode[] callSiteNodes,
             int[] callSiteIdBySite,
             int[] snapshotDemand,
             int maxSnapshotDemand,
             int siteCount,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
-            IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
+            IdentityHashMap<SastNode, Integer> siteIds,
+            IdentityHashMap<SastNode, int[]> blockLocals,
             int[][] functionLocalIds
     ) {
         this.root = root;
@@ -83,13 +83,13 @@ final class MemoryAnalysisContext {
         this.functionLocalIds = functionLocalIds;
     }
 
-    static MemoryAnalysisContext build(SemanticProgramNode root) {
+    static MemoryAnalysisContext build(SastNode root) {
         MemoryCallGraph.Builder builder = new MemoryCallGraph.Builder();
         IdentityHashMap<Symbol, Integer> variableIds = new IdentityHashMap<>();
         List<Symbol> variables = new ArrayList<>();
         List<Integer> globals = new ArrayList<>();
-        IdentityHashMap<SemanticASTNode, Integer> siteIds = new IdentityHashMap<>();
-        IdentityHashMap<SemanticBlockNode, int[]> blockLocals = new IdentityHashMap<>();
+        IdentityHashMap<SastNode, Integer> siteIds = new IdentityHashMap<>();
+        IdentityHashMap<SastNode, int[]> blockLocals = new IdentityHashMap<>();
         int[] siteCount = {0};
 
         collectDeclarations(
@@ -165,7 +165,7 @@ final class MemoryAnalysisContext {
         int maxSnapshotDemand = 0;
 
         for (int i = 0; i < functionCount; i++) {
-            SemanticFunctionDeclNode decl = callGraph.decls[i];
+            SastNode decl = callGraph.decls[i];
 
             if (decl != null && decl.body != null) {
                 snapshotDemand[i] = estimateSnapshotDemand(decl.body, 0);
@@ -228,7 +228,7 @@ final class MemoryAnalysisContext {
     }
 
     private static void collectDeclarations(
-            SemanticASTNode node,
+            SastNode node,
             MemoryCallGraph.Builder builder,
             IdentityHashMap<Symbol, Integer> variableIds,
             List<Symbol> variables,
@@ -238,39 +238,39 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (node instanceof SemanticProgramNode program) {
-            for (SemanticASTNode item : program.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 collectDeclarations(item, builder, variableIds, variables, globals);
             }
 
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 collectDeclarations(item, builder, variableIds, variables, globals);
             }
 
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            for (SemanticFunctionDeclNode method : struct.methods) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            for (SastNode method : node.methods) {
                 builder.addFunction(method.symbol, method);
             }
 
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode function) {
-            builder.addFunction(function.symbol, function);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            builder.addFunction(node.symbol, node);
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode declaration
-                && declaration.symbol.kind == SymbolKind.GLOBAL) {
+        if (node.kind == SastKind.VAR_DECL
+                && node.symbol.kind == SymbolKind.GLOBAL) {
             int variableId = addVariable(
-                    declaration.symbol,
+                    node.symbol,
                     variableIds,
                     variables
             );
@@ -280,21 +280,21 @@ final class MemoryAnalysisContext {
     }
 
     private static void collectBodies(
-            SemanticASTNode node,
+            SastNode node,
             MemoryCallGraph.Builder builder,
             IdentityHashMap<Symbol, Integer> variableIds,
             List<Symbol> variables,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
+            IdentityHashMap<SastNode, Integer> siteIds,
             int[] siteCount,
-            IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
+            IdentityHashMap<SastNode, int[]> blockLocals,
             List<List<Integer>> functionLocals
     ) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticProgramNode program) {
-            for (SemanticASTNode item : program.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 collectBodies(
                         item,
                         builder,
@@ -310,8 +310,8 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 collectBodies(
                         item,
                         builder,
@@ -327,8 +327,8 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            for (SemanticFunctionDeclNode method : struct.methods) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            for (SastNode method : node.methods) {
                 collectFunctionBody(
                         method,
                         builder,
@@ -344,9 +344,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode function) {
+        if (node.kind == SastKind.FUNCTION_DECL) {
             collectFunctionBody(
-                    function,
+                    node,
                     builder,
                     variableIds,
                     variables,
@@ -359,13 +359,13 @@ final class MemoryAnalysisContext {
     }
 
     private static void collectFunctionBody(
-            SemanticFunctionDeclNode function,
+            SastNode function,
             MemoryCallGraph.Builder builder,
             IdentityHashMap<Symbol, Integer> variableIds,
             List<Symbol> variables,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
+            IdentityHashMap<SastNode, Integer> siteIds,
             int[] siteCount,
-            IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
+            IdentityHashMap<SastNode, int[]> blockLocals,
             List<List<Integer>> functionLocals
     ) {
         int functionId = builder.functionId(function.symbol);
@@ -392,31 +392,31 @@ final class MemoryAnalysisContext {
     }
 
     private static void collectBlock(
-            SemanticBlockNode block,
+            SastNode block,
             int functionId,
             MemoryCallGraph.Builder builder,
             IdentityHashMap<Symbol, Integer> variableIds,
             List<Symbol> variables,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
+            IdentityHashMap<SastNode, Integer> siteIds,
             int[] siteCount,
-            IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
+            IdentityHashMap<SastNode, int[]> blockLocals,
             List<Integer> functionLocals
     ) {
         assignSite(block, siteIds, siteCount);
 
         List<Integer> directLocals = new ArrayList<>();
 
-        for (SemanticStmtNode statement : block.statements) {
-            if (statement instanceof SemanticVarDeclNode declaration) {
+        for (SastNode statement : block.statements) {
+            if (statement.kind == SastKind.VAR_DECL) {
                 int variableId = addVariable(
-                        declaration.symbol,
+                        statement.symbol,
                         variableIds,
                         variables
                 );
 
                 directLocals.add(variableId);
 
-                if (!(declaration.symbol.kind == SymbolKind.GLOBAL)) {
+                if (!(statement.symbol.kind == SymbolKind.GLOBAL)) {
                     functionLocals.add(variableId);
                 }
             }
@@ -444,14 +444,14 @@ final class MemoryAnalysisContext {
     }
 
     private static void collectStatement(
-            SemanticStmtNode statement,
+            SastNode statement,
             int functionId,
             MemoryCallGraph.Builder builder,
             IdentityHashMap<Symbol, Integer> variableIds,
             List<Symbol> variables,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
+            IdentityHashMap<SastNode, Integer> siteIds,
             int[] siteCount,
-            IdentityHashMap<SemanticBlockNode, int[]> blockLocals,
+            IdentityHashMap<SastNode, int[]> blockLocals,
             List<Integer> functionLocals
     ) {
         if (statement == null) {
@@ -460,9 +460,9 @@ final class MemoryAnalysisContext {
 
         assignSite(statement, siteIds, siteCount);
 
-        if (statement instanceof SemanticBlockNode block) {
+        if (statement.kind == SastKind.BLOCK) {
             collectBlock(
-                    block,
+                    statement,
                     functionId,
                     builder,
                     variableIds,
@@ -475,9 +475,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (statement instanceof SemanticVarDeclNode declaration) {
+        if (statement.kind == SastKind.VAR_DECL) {
             collectExpression(
-                    declaration.staticInitializer,
+                    statement.staticInitializer,
                     functionId,
                     builder,
                     variableIds,
@@ -488,9 +488,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (statement instanceof SemanticAssignNode assignment) {
+        if (statement.kind == SastKind.ASSIGN) {
             collectExpression(
-                    assignment.target,
+                    statement.target,
                     functionId,
                     builder,
                     variableIds,
@@ -499,7 +499,7 @@ final class MemoryAnalysisContext {
                     siteCount
             );
             collectExpression(
-                    assignment.value,
+                    statement.value,
                     functionId,
                     builder,
                     variableIds,
@@ -510,9 +510,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (statement instanceof SemanticIfNode branch) {
+        if (statement.kind == SastKind.IF) {
             collectExpression(
-                    branch.condition,
+                    statement.condition,
                     functionId,
                     builder,
                     variableIds,
@@ -521,7 +521,7 @@ final class MemoryAnalysisContext {
                     siteCount
             );
             collectStatement(
-                    branch.thenBranch,
+                    statement.thenBranch,
                     functionId,
                     builder,
                     variableIds,
@@ -532,7 +532,7 @@ final class MemoryAnalysisContext {
                     functionLocals
             );
             collectStatement(
-                    branch.elseBranch,
+                    statement.elseBranch,
                     functionId,
                     builder,
                     variableIds,
@@ -545,9 +545,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (statement instanceof SemanticWhileNode loop) {
+        if (statement.kind == SastKind.WHILE) {
             collectExpression(
-                    loop.condition,
+                    statement.condition,
                     functionId,
                     builder,
                     variableIds,
@@ -556,7 +556,7 @@ final class MemoryAnalysisContext {
                     siteCount
             );
             collectStatement(
-                    loop.body,
+                    statement.body,
                     functionId,
                     builder,
                     variableIds,
@@ -567,7 +567,7 @@ final class MemoryAnalysisContext {
                     functionLocals
             );
 
-            for (SemanticStmtNode update : loop.update) {
+            for (SastNode update : statement.update) {
                 collectStatement(
                         update,
                         functionId,
@@ -584,9 +584,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (statement instanceof SemanticReturnNode returned) {
+        if (statement.kind == SastKind.RETURN) {
             collectExpression(
-                    returned.value,
+                    statement.value,
                     functionId,
                     builder,
                     variableIds,
@@ -597,9 +597,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (statement instanceof SemanticExprStmtNode expressionStatement) {
+        if (statement.kind == SastKind.EXPR_STMT) {
             collectExpression(
-                    expressionStatement.expr,
+                    statement.expr,
                     functionId,
                     builder,
                     variableIds,
@@ -611,12 +611,12 @@ final class MemoryAnalysisContext {
     }
 
     private static void collectExpression(
-            SemanticExprNode expression,
+            SastNode expression,
             int functionId,
             MemoryCallGraph.Builder builder,
             IdentityHashMap<Symbol, Integer> variableIds,
             List<Symbol> variables,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
+            IdentityHashMap<SastNode, Integer> siteIds,
             int[] siteCount
     ) {
         if (expression == null) {
@@ -625,38 +625,16 @@ final class MemoryAnalysisContext {
 
         assignSite(expression, siteIds, siteCount);
 
-        if (expression instanceof SemanticIntLiteralNode
-                || expression instanceof SemanticNullLiteralNode
-                || expression instanceof SemanticVarExprNode
-                || expression instanceof SemanticEnumVariantNode) {
+        if (expression.kind == SastKind.INT_LITERAL
+                || expression.kind == SastKind.NULL_LITERAL
+                || expression.kind == SastKind.VAR_EXPR
+                || expression.kind == SastKind.ENUM_VARIANT) {
             return;
         }
 
-        if (expression instanceof SemanticUnaryOpNode unary) {
+        if (expression.kind == SastKind.UNARY_OP) {
             collectExpression(
-                    unary.expr,
-                    functionId,
-                    builder,
-                    variableIds,
-                    variables,
-                    siteIds,
-                    siteCount
-            );
-            return;
-        }
-
-        if (expression instanceof SemanticBinOpNode binary) {
-            collectExpression(
-                    binary.left,
-                    functionId,
-                    builder,
-                    variableIds,
-                    variables,
-                    siteIds,
-                    siteCount
-            );
-            collectExpression(
-                    binary.right,
+                    expression.expr,
                     functionId,
                     builder,
                     variableIds,
@@ -667,9 +645,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticArrayAccessNode access) {
+        if (expression.kind == SastKind.BIN_OP) {
             collectExpression(
-                    access.target,
+                    expression.left,
                     functionId,
                     builder,
                     variableIds,
@@ -678,20 +656,7 @@ final class MemoryAnalysisContext {
                     siteCount
             );
             collectExpression(
-                    access.index,
-                    functionId,
-                    builder,
-                    variableIds,
-                    variables,
-                    siteIds,
-                    siteCount
-            );
-            return;
-        }
-
-        if (expression instanceof SemanticMemberAccessNode member) {
-            collectExpression(
-                    member.target,
+                    expression.right,
                     functionId,
                     builder,
                     variableIds,
@@ -702,11 +667,46 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticFunctionCallNode call) {
-            int calleeId = builder.functionId(call.function);
-            builder.addCallSite(call, functionId, calleeId);
+        if (expression.kind == SastKind.ARRAY_ACCESS) {
+            collectExpression(
+                    expression.target,
+                    functionId,
+                    builder,
+                    variableIds,
+                    variables,
+                    siteIds,
+                    siteCount
+            );
+            collectExpression(
+                    expression.index,
+                    functionId,
+                    builder,
+                    variableIds,
+                    variables,
+                    siteIds,
+                    siteCount
+            );
+            return;
+        }
 
-            for (SemanticExprNode argument : call.args) {
+        if (expression.kind == SastKind.MEMBER_ACCESS) {
+            collectExpression(
+                    expression.target,
+                    functionId,
+                    builder,
+                    variableIds,
+                    variables,
+                    siteIds,
+                    siteCount
+            );
+            return;
+        }
+
+        if (expression.kind == SastKind.FUNCTION_CALL) {
+            int calleeId = builder.functionId(expression.function);
+            builder.addCallSite(expression, functionId, calleeId);
+
+            for (SastNode argument : expression.args) {
                 collectExpression(
                         argument,
                         functionId,
@@ -721,9 +721,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticArrayIntrinsicCallNode intrinsic) {
+        if (expression.kind == SastKind.ARRAY_INTRINSIC_CALL) {
             collectExpression(
-                    intrinsic.receiver,
+                    expression.receiver,
                     functionId,
                     builder,
                     variableIds,
@@ -732,7 +732,7 @@ final class MemoryAnalysisContext {
                     siteCount
             );
 
-            for (SemanticExprNode argument : intrinsic.args) {
+            for (SastNode argument : expression.args) {
                 collectExpression(
                         argument,
                         functionId,
@@ -747,8 +747,8 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticAggregateLiteralNode aggregate) {
-            for (SemanticAggregateFieldInit field : aggregate.fields) {
+        if (expression.kind == SastKind.AGGREGATE_LITERAL) {
+            for (SastNode field : expression.fields) {
                 collectExpression(
                         field.value,
                         functionId,
@@ -762,9 +762,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticGetPtrNode getPtr) {
+        if (expression.kind == SastKind.GET_PTR) {
             collectExpression(
-                    getPtr.target,
+                    expression.target,
                     functionId,
                     builder,
                     variableIds,
@@ -775,9 +775,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticDerefNode deref) {
+        if (expression.kind == SastKind.DEREF) {
             collectExpression(
-                    deref.expr,
+                    expression.expr,
                     functionId,
                     builder,
                     variableIds,
@@ -788,9 +788,9 @@ final class MemoryAnalysisContext {
             return;
         }
 
-        if (expression instanceof SemanticCastExprNode cast) {
+        if (expression.kind == SastKind.CAST) {
             collectExpression(
-                    cast.expr,
+                    expression.expr,
                     functionId,
                     builder,
                     variableIds,
@@ -819,8 +819,8 @@ final class MemoryAnalysisContext {
     }
 
     private static void assignSite(
-            SemanticASTNode node,
-            IdentityHashMap<SemanticASTNode, Integer> siteIds,
+            SastNode node,
+            IdentityHashMap<SastNode, Integer> siteIds,
             int[] siteCount
     ) {
         if (node == null || siteIds.containsKey(node)) {
@@ -831,44 +831,44 @@ final class MemoryAnalysisContext {
     }
 
     private static int estimateSnapshotDemand(
-            SemanticASTNode node,
+            SastNode node,
             int depth
     ) {
         if (node == null) {
             return 0;
         }
 
-        if (node instanceof SemanticBlockNode block) {
+        if (node.kind == SastKind.BLOCK) {
             int total = 0;
 
-            for (SemanticStmtNode statement : block.statements) {
+            for (SastNode statement : node.statements) {
                 total += estimateSnapshotDemand(statement, depth);
             }
 
             return total;
         }
 
-        if (node instanceof SemanticIfNode branch) {
-            int local = branch.elseBranch == null ? 2 : 3;
+        if (node.kind == SastKind.IF) {
+            int local = node.elseBranch == null ? 2 : 3;
             int nextDepth = depth < MAX_BRANCH_DEPTH ? depth + 1 : depth;
 
             return local
-                    + estimateSnapshotDemand(branch.thenBranch, nextDepth)
-                    + estimateSnapshotDemand(branch.elseBranch, nextDepth);
+                    + estimateSnapshotDemand(node.thenBranch, nextDepth)
+                    + estimateSnapshotDemand(node.elseBranch, nextDepth);
         }
 
-        if (node instanceof SemanticWhileNode loop) {
-            int total = 2 + estimateSnapshotDemand(loop.body, depth);
+        if (node.kind == SastKind.WHILE) {
+            int total = 2 + estimateSnapshotDemand(node.body, depth);
 
-            for (SemanticStmtNode update : loop.update) {
+            for (SastNode update : node.update) {
                 total += estimateSnapshotDemand(update, depth);
             }
 
             return total;
         }
 
-        if (node instanceof SemanticBreakNode
-                || node instanceof SemanticContinueNode) {
+        if (node.kind == SastKind.BREAK
+                || node.kind == SastKind.CONTINUE) {
             return 1;
         }
 
@@ -914,7 +914,7 @@ final class MemoryAnalysisContext {
         return globalIndexByVariable[variableId];
     }
 
-    int siteId(SemanticASTNode node) {
+    int siteId(SastNode node) {
         if (node == null) {
             return -1;
         }
@@ -923,7 +923,7 @@ final class MemoryAnalysisContext {
         return id == null ? -1 : id;
     }
 
-    int callSiteId(SemanticASTNode node) {
+    int callSiteId(SastNode node) {
         int site = siteId(node);
 
         if (site < 0 || site >= callSiteIdBySite.length) {
@@ -933,7 +933,7 @@ final class MemoryAnalysisContext {
         return callSiteIdBySite[site];
     }
 
-    int[] blockLocalIds(SemanticBlockNode block) {
+    int[] blockLocalIds(SastNode block) {
         int[] ids = blockLocals.get(block);
         return ids == null ? new int[0] : ids;
     }
@@ -955,7 +955,7 @@ final class MemoryAnalysisContext {
         return id == null ? -1 : id;
     }
 
-    SemanticFunctionDeclNode functionDecl(int functionId) {
+    SastNode functionDecl(int functionId) {
         if (functionId < 0 || functionId >= callGraph.decls.length) {
             return null;
         }

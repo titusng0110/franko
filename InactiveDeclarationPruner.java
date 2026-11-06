@@ -13,14 +13,14 @@ final class InactiveDeclarationPruner {
     private final Set<StructSymbol> keptStructs = newSet();
     private final Set<EnumSymbol> keptEnums = newSet();
 
-    private final IdentityHashMap<Symbol, SemanticFunctionDeclNode> declBySymbol =
+    private final IdentityHashMap<Symbol, SastNode> declBySymbol =
             new IdentityHashMap<>();
 
     private final Deque<StructSymbol> structWorklist = new ArrayDeque<>();
 
     private boolean entryPointFound = false;
 
-    private final List<SemanticVarDeclNode> globalVarDecls = new ArrayList<>();
+    private final List<SastNode> globalVarDecls = new ArrayList<>();
 
     private static <T> Set<T> newSet() {
         return Collections.newSetFromMap(new IdentityHashMap<>());
@@ -32,11 +32,11 @@ final class InactiveDeclarationPruner {
                 document.entryKind,
                 document.sources,
                 document.symbols,
-                (SemanticProgramNode) prune(document.root)
+                (SastNode) prune(document.root)
         );
     }
 
-    SemanticASTNode prune(SemanticASTNode root) {
+    SastNode prune(SastNode root) {
         indexDeclarations(root);
 
         if (!entryPointFound) {
@@ -50,43 +50,43 @@ final class InactiveDeclarationPruner {
         return rebuildItem(root);
     }
 
-    private void indexDeclarations(SemanticASTNode node) {
+    private void indexDeclarations(SastNode node) {
 
-        if (node instanceof SemanticProgramNode program) {
-            for (SemanticASTNode item : program.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 indexDeclarations(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 indexDeclarations(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            for (SemanticFunctionDeclNode method : struct.methods) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            for (SastNode method : node.methods) {
                 indexFunction(method);
             }
 
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode fn) {
-            indexFunction(fn);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            indexFunction(node);
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode varDecl) {
-            globalVarDecls.add(varDecl);
+        if (node.kind == SastKind.VAR_DECL) {
+            globalVarDecls.add(node);
         }
     }
 
-    private void indexFunction(SemanticFunctionDeclNode fn) {
+    private void indexFunction(SastNode fn) {
         declBySymbol.put(fn.symbol, fn);
 
         if (fn.symbol.kind == SymbolKind.METHOD) {
@@ -100,9 +100,9 @@ final class InactiveDeclarationPruner {
 
     private void computeKeptFunctions() {
 
-        SemanticFunctionDeclNode main = null;
+        SastNode main = null;
 
-        for (SemanticFunctionDeclNode fn : declBySymbol.values()) {
+        for (SastNode fn : declBySymbol.values()) {
 
             if (!(fn.symbol.kind == SymbolKind.METHOD)
                     && fn.symbol.name.equals("main")
@@ -123,7 +123,7 @@ final class InactiveDeclarationPruner {
 
         while (!worklist.isEmpty()) {
             Symbol fn = worklist.poll();
-            SemanticFunctionDeclNode node = declBySymbol.get(fn);
+            SastNode node = declBySymbol.get(fn);
 
             if (node == null) {
                 continue;
@@ -144,7 +144,7 @@ final class InactiveDeclarationPruner {
     private void computeKeptVariables() {
 
         for (Symbol fn : keptFunctions) {
-            SemanticFunctionDeclNode node = declBySymbol.get(fn);
+            SastNode node = declBySymbol.get(fn);
 
             if (node == null) {
                 continue;
@@ -161,7 +161,7 @@ final class InactiveDeclarationPruner {
         while (changed) {
             changed = false;
 
-            for (SemanticVarDeclNode global : globalVarDecls) {
+            for (SastNode global : globalVarDecls) {
                 if (!keptVariables.contains(global.symbol)) {
                     continue;
                 }
@@ -181,7 +181,7 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private void computeKeptStructs(SemanticASTNode root) {
+    private void computeKeptStructs(SastNode root) {
 
         for (Symbol fn : keptFunctions) {
             markType(fn.type());
@@ -194,7 +194,7 @@ final class InactiveDeclarationPruner {
         collectKeptVarDeclTypes(root);
 
         for (Symbol fn : keptFunctions) {
-            SemanticFunctionDeclNode node = declBySymbol.get(fn);
+            SastNode node = declBySymbol.get(fn);
 
             if (node != null) {
                 collectExprTypes(node.body);
@@ -219,86 +219,86 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private void collectKeptVarDeclTypes(SemanticASTNode node) {
+    private void collectKeptVarDeclTypes(SastNode node) {
 
-        if (node instanceof SemanticVarDeclNode varDecl) {
+        if (node.kind == SastKind.VAR_DECL) {
 
-            if (keptVariables.contains(varDecl.symbol)) {
-                markType(varDecl.symbol.type());
+            if (keptVariables.contains(node.symbol)) {
+                markType(node.symbol.type());
             }
 
             return;
         }
 
-        if (node instanceof SemanticProgramNode program) {
-            for (SemanticASTNode item : program.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 collectKeptVarDeclTypes(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 collectKeptVarDeclTypes(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode) {
+        if (node.kind == SastKind.STRUCT_DECL) {
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode fn) {
+        if (node.kind == SastKind.FUNCTION_DECL) {
 
-            if (!keptFunctions.contains(fn.symbol)) {
+            if (!keptFunctions.contains(node.symbol)) {
                 return;
             }
 
-            for (Symbol param : fn.parameterVariables) {
+            for (Symbol param : node.parameterVariables) {
                 markType(param.type());
             }
 
-            collectStmtVarDeclTypes(fn.body);
+            collectStmtVarDeclTypes(node.body);
 
             return;
         }
     }
 
-    private void collectStmtVarDeclTypes(SemanticStmtNode stmt) {
+    private void collectStmtVarDeclTypes(SastNode stmt) {
 
-        if (stmt instanceof SemanticVarDeclNode varDecl) {
+        if (stmt.kind == SastKind.VAR_DECL) {
 
-            if (keptVariables.contains(varDecl.symbol)) {
-                markType(varDecl.symbol.type());
+            if (keptVariables.contains(stmt.symbol)) {
+                markType(stmt.symbol.type());
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticBlockNode block) {
-            for (SemanticStmtNode inner : block.statements) {
+        if (stmt.kind == SastKind.BLOCK) {
+            for (SastNode inner : stmt.statements) {
                 collectStmtVarDeclTypes(inner);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticIfNode ifNode) {
-            collectStmtVarDeclTypes(ifNode.thenBranch);
+        if (stmt.kind == SastKind.IF) {
+            collectStmtVarDeclTypes(stmt.thenBranch);
 
-            if (ifNode.elseBranch != null) {
-                collectStmtVarDeclTypes(ifNode.elseBranch);
+            if (stmt.elseBranch != null) {
+                collectStmtVarDeclTypes(stmt.elseBranch);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticWhileNode whileNode) {
-            collectStmtVarDeclTypes(whileNode.body);
+        if (stmt.kind == SastKind.WHILE) {
+            collectStmtVarDeclTypes(stmt.body);
 
-            for (SemanticStmtNode update : whileNode.update) {
+            for (SastNode update : stmt.update) {
                 collectStmtVarDeclTypes(update);
             }
         }
@@ -358,79 +358,79 @@ final class InactiveDeclarationPruner {
         }
     }
 
-    private SemanticASTNode rebuildItem(SemanticASTNode node) {
+    private SastNode rebuildItem(SastNode node) {
 
-        if (node instanceof SemanticProgramNode program) {
-            List<SemanticASTNode> items = rebuildItemList(program.topLevelItems);
+        if (node.kind == SastKind.PROGRAM) {
+            List<SastNode> items = rebuildItemList(node.topLevelItems);
 
-            return items == program.topLevelItems
-                    ? program
-                    : new SemanticProgramNode(program.span, items);
+            return items == node.topLevelItems
+                    ? node
+                    : SastNode.program(node.span, items);
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            List<SemanticASTNode> items = rebuildItemList(namespace.items);
+        if (node.kind == SastKind.NAMESPACE) {
+            List<SastNode> items = rebuildItemList(node.items);
 
-            if (items == namespace.items) {
-                return namespace;
+            if (items == node.items) {
+                return node;
             }
 
             return items.isEmpty()
                     ? null
-                    : new SemanticNamespaceNode(namespace.span, namespace.name, items);
+                    : SastNode.namespace(node.span, node.name, items);
         }
 
-        if (node instanceof SemanticFunctionDeclNode fn) {
+        if (node.kind == SastKind.FUNCTION_DECL) {
 
-            if (!keptFunctions.contains(fn.symbol)) {
+            if (!keptFunctions.contains(node.symbol)) {
                 return null;
             }
 
-            SemanticBlockNode body = rebuildBlock(fn.body);
+            SastNode body = rebuildBlock(node.body);
 
-            return body == fn.body
-                    ? fn
-                    : new SemanticFunctionDeclNode(
-                            fn.span,
-                            fn.symbol,
-                            fn.parameterVariables,
+            return body == node.body
+                    ? node
+                    : SastNode.functionDecl(
+                            node.span,
+                            node.symbol,
+                            node.parameterVariables,
                             body
                     );
         }
 
-        if (node instanceof SemanticVarDeclNode varDecl) {
+        if (node.kind == SastKind.VAR_DECL) {
 
-            if (!keptVariables.contains(varDecl.symbol)) {
+            if (!keptVariables.contains(node.symbol)) {
                 return null;
             }
 
-            return varDecl;
+            return node;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
+        if (node.kind == SastKind.STRUCT_DECL) {
 
-            if (!keptStructs.contains(struct.symbol)) {
+            if (!keptStructs.contains(node.structSymbol)) {
                 return null;
             }
 
-            List<SemanticFunctionDeclNode> methods = null;
+            List<SastNode> methods = null;
 
-            for (int i = 0; i < struct.methods.size(); i++) {
-                SemanticFunctionDeclNode method = struct.methods.get(i);
+            for (int i = 0; i < node.methods.size(); i++) {
+                SastNode method = node.methods.get(i);
 
                 if (!keptFunctions.contains(method.symbol)) {
                     methods = methods == null
-                            ? new ArrayList<>(struct.methods.subList(0, i))
+                            ? new ArrayList<>(node.methods.subList(0, i))
                             : methods;
 
                     continue;
                 }
 
-                SemanticFunctionDeclNode rebuilt =
-                        (SemanticFunctionDeclNode) rebuildItem(method);
+                SastNode rebuilt =
+                        (SastNode) rebuildItem(method);
 
                 if (methods == null && rebuilt != method) {
-                    methods = new ArrayList<>(struct.methods.subList(0, i));
+                    methods = new ArrayList<>(node.methods.subList(0, i));
                 }
 
                 if (methods != null) {
@@ -439,27 +439,27 @@ final class InactiveDeclarationPruner {
             }
 
             return methods == null
-                    ? struct
-                    : new SemanticStructDeclNode(
-                            struct.span,
-                            struct.symbol,
+                    ? node
+                    : SastNode.structDecl(
+                            node.span,
+                            node.structSymbol,
                             methods
                     );
         }
 
-        if (node instanceof SemanticEnumDeclNode enumDecl) {
-            return keptEnums.contains(enumDecl.symbol) ? enumDecl : null;
+        if (node.kind == SastKind.ENUM_DECL) {
+            return keptEnums.contains(node.enumSymbol) ? node : null;
         }
 
         return node;
     }
 
-    private List<SemanticASTNode> rebuildItemList(List<SemanticASTNode> items) {
-        List<SemanticASTNode> out = null;
+    private List<SastNode> rebuildItemList(List<SastNode> items) {
+        List<SastNode> out = null;
 
         for (int i = 0; i < items.size(); i++) {
-            SemanticASTNode item = items.get(i);
-            SemanticASTNode rebuilt = rebuildItem(item);
+            SastNode item = items.get(i);
+            SastNode rebuilt = rebuildItem(item);
 
             if (out == null && rebuilt != item) {
                 out = new ArrayList<>(items.subList(0, i));
@@ -473,12 +473,12 @@ final class InactiveDeclarationPruner {
         return out == null ? items : out;
     }
 
-    private SemanticBlockNode rebuildBlock(SemanticBlockNode block) {
-        List<SemanticStmtNode> out = null;
+    private SastNode rebuildBlock(SastNode block) {
+        List<SastNode> out = null;
 
         for (int i = 0; i < block.statements.size(); i++) {
-            SemanticStmtNode stmt = block.statements.get(i);
-            SemanticStmtNode rebuilt = rebuildStmt(stmt);
+            SastNode stmt = block.statements.get(i);
+            SastNode rebuilt = rebuildStmt(stmt);
 
             if (out == null && rebuilt != stmt) {
                 out = new ArrayList<>(block.statements.subList(0, i));
@@ -489,459 +489,459 @@ final class InactiveDeclarationPruner {
             }
         }
 
-        return out == null ? block : new SemanticBlockNode(block.span, out);
+        return out == null ? block : SastNode.block(block.span, out);
     }
 
-    private SemanticStmtNode rebuildStmt(SemanticStmtNode stmt) {
+    private SastNode rebuildStmt(SastNode stmt) {
 
-        if (stmt instanceof SemanticVarDeclNode varDecl) {
+        if (stmt.kind == SastKind.VAR_DECL) {
 
-            if (!keptVariables.contains(varDecl.symbol)) {
+            if (!keptVariables.contains(stmt.symbol)) {
                 return null;
             }
 
-            return varDecl;
+            return stmt;
         }
 
-        if (stmt instanceof SemanticBlockNode block) {
-            SemanticBlockNode rebuilt = rebuildBlock(block);
+        if (stmt.kind == SastKind.BLOCK) {
+            SastNode rebuilt = rebuildBlock(stmt);
 
-            return rebuilt == block ? block : rebuilt;
+            return rebuilt == stmt ? stmt : rebuilt;
         }
 
-        if (stmt instanceof SemanticIfNode ifNode) {
-            SemanticStmtNode thenBranch = rebuildStmt(ifNode.thenBranch);
-            SemanticStmtNode elseBranch =
-                    ifNode.elseBranch == null ? null : rebuildStmt(ifNode.elseBranch);
+        if (stmt.kind == SastKind.IF) {
+            SastNode thenBranch = rebuildStmt(stmt.thenBranch);
+            SastNode elseBranch =
+                    stmt.elseBranch == null ? null : rebuildStmt(stmt.elseBranch);
 
-            if (thenBranch == ifNode.thenBranch && elseBranch == ifNode.elseBranch) {
-                return ifNode;
+            if (thenBranch == stmt.thenBranch && elseBranch == stmt.elseBranch) {
+                return stmt;
             }
 
-            return new SemanticIfNode(
-                    ifNode.span,
-                    ifNode.condition,
+            return SastNode.ifStmt(
+                    stmt.span,
+                    stmt.condition,
                     thenBranch == null
-                            ? new SemanticBlockNode(ifNode.span, List.of())
+                            ? SastNode.block(stmt.span, List.of())
                             : thenBranch,
                     elseBranch
             );
         }
 
-        if (stmt instanceof SemanticWhileNode whileNode) {
-            SemanticStmtNode body = rebuildStmt(whileNode.body);
+        if (stmt.kind == SastKind.WHILE) {
+            SastNode body = rebuildStmt(stmt.body);
 
-            if (body == whileNode.body) {
-                return whileNode;
+            if (body == stmt.body) {
+                return stmt;
             }
 
-            return new SemanticWhileNode(
-                    whileNode.span,
-                    whileNode.condition,
+            return SastNode.whileStmt(
+                    stmt.span,
+                    stmt.condition,
                     body == null
-                            ? new SemanticBlockNode(whileNode.span, List.of())
+                            ? SastNode.block(stmt.span, List.of())
                             : body,
-                    whileNode.update
+                    stmt.update
             );
         }
 
         return stmt;
     }
 
-    private static void collectCalls(SemanticStmtNode stmt, Set<Symbol> out) {
+    private static void collectCalls(SastNode stmt, Set<Symbol> out) {
 
-        if (stmt instanceof SemanticBlockNode block) {
-            for (SemanticStmtNode inner : block.statements) {
+        if (stmt.kind == SastKind.BLOCK) {
+            for (SastNode inner : stmt.statements) {
                 collectCalls(inner, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticVarDeclNode) {
+        if (stmt.kind == SastKind.VAR_DECL) {
             return;
         }
 
-        if (stmt instanceof SemanticAssignNode assign) {
-            collectExprCalls(assign.target, out);
-            collectExprCalls(assign.value, out);
+        if (stmt.kind == SastKind.ASSIGN) {
+            collectExprCalls(stmt.target, out);
+            collectExprCalls(stmt.value, out);
 
             return;
         }
 
-        if (stmt instanceof SemanticIfNode ifNode) {
-            collectExprCalls(ifNode.condition, out);
-            collectCalls(ifNode.thenBranch, out);
+        if (stmt.kind == SastKind.IF) {
+            collectExprCalls(stmt.condition, out);
+            collectCalls(stmt.thenBranch, out);
 
-            if (ifNode.elseBranch != null) {
-                collectCalls(ifNode.elseBranch, out);
+            if (stmt.elseBranch != null) {
+                collectCalls(stmt.elseBranch, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticWhileNode whileNode) {
-            collectExprCalls(whileNode.condition, out);
-            collectCalls(whileNode.body, out);
+        if (stmt.kind == SastKind.WHILE) {
+            collectExprCalls(stmt.condition, out);
+            collectCalls(stmt.body, out);
 
-            for (SemanticStmtNode update : whileNode.update) {
+            for (SastNode update : stmt.update) {
                 collectCalls(update, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticReturnNode returnNode) {
+        if (stmt.kind == SastKind.RETURN) {
 
-            if (returnNode.value != null) {
-                collectExprCalls(returnNode.value, out);
+            if (stmt.value != null) {
+                collectExprCalls(stmt.value, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticExprStmtNode exprStmt) {
-            collectExprCalls(exprStmt.expr, out);
+        if (stmt.kind == SastKind.EXPR_STMT) {
+            collectExprCalls(stmt.expr, out);
         }
     }
 
-    private static void collectExprCalls(SemanticExprNode expr, Set<Symbol> out) {
+    private static void collectExprCalls(SastNode expr, Set<Symbol> out) {
 
-        if (expr instanceof SemanticFunctionCallNode call) {
-            out.add(call.function);
+        if (expr.kind == SastKind.FUNCTION_CALL) {
+            out.add(expr.function);
 
-            for (SemanticExprNode arg : call.args) {
+            for (SastNode arg : expr.args) {
                 collectExprCalls(arg, out);
             }
 
             return;
         }
 
-        if (expr instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-            collectExprCalls(intrinsic.receiver, out);
+        if (expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            collectExprCalls(expr.receiver, out);
 
-            for (SemanticExprNode arg : intrinsic.args) {
+            for (SastNode arg : expr.args) {
                 collectExprCalls(arg, out);
             }
 
             return;
         }
 
-        if (expr instanceof SemanticUnaryOpNode unary) {
-            collectExprCalls(unary.expr, out);
+        if (expr.kind == SastKind.UNARY_OP) {
+            collectExprCalls(expr.expr, out);
 
             return;
         }
 
-        if (expr instanceof SemanticBinOpNode bin) {
-            collectExprCalls(bin.left, out);
-            collectExprCalls(bin.right, out);
+        if (expr.kind == SastKind.BIN_OP) {
+            collectExprCalls(expr.left, out);
+            collectExprCalls(expr.right, out);
 
             return;
         }
 
-        if (expr instanceof SemanticArrayAccessNode access) {
-            collectExprCalls(access.target, out);
-            collectExprCalls(access.index, out);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            collectExprCalls(expr.target, out);
+            collectExprCalls(expr.index, out);
 
             return;
         }
 
-        if (expr instanceof SemanticMemberAccessNode member) {
-            collectExprCalls(member.target, out);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            collectExprCalls(expr.target, out);
 
             return;
         }
 
-        if (expr instanceof SemanticGetPtrNode getPtr) {
-            collectExprCalls(getPtr.target, out);
+        if (expr.kind == SastKind.GET_PTR) {
+            collectExprCalls(expr.target, out);
 
             return;
         }
 
-        if (expr instanceof SemanticDerefNode deref) {
-            collectExprCalls(deref.expr, out);
+        if (expr.kind == SastKind.DEREF) {
+            collectExprCalls(expr.expr, out);
 
             return;
         }
 
-        if (expr instanceof SemanticCastExprNode cast) {
-            collectExprCalls(cast.expr, out);
+        if (expr.kind == SastKind.CAST) {
+            collectExprCalls(expr.expr, out);
             return;
         }
 
-        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
-            for (SemanticAggregateFieldInit field : aggregate.fields) {
+        if (expr.kind == SastKind.AGGREGATE_LITERAL) {
+            for (SastNode field : expr.fields) {
                 collectExprCalls(field.value, out);
             }
         }
     }
 
-    private static void collectVariables(SemanticStmtNode stmt, Set<Symbol> out) {
+    private static void collectVariables(SastNode stmt, Set<Symbol> out) {
 
-        if (stmt instanceof SemanticBlockNode block) {
-            for (SemanticStmtNode inner : block.statements) {
+        if (stmt.kind == SastKind.BLOCK) {
+            for (SastNode inner : stmt.statements) {
                 collectVariables(inner, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticAssignNode assign) {
-            collectExprVariables(assign.target, out);
-            collectExprVariables(assign.value, out);
+        if (stmt.kind == SastKind.ASSIGN) {
+            collectExprVariables(stmt.target, out);
+            collectExprVariables(stmt.value, out);
 
             return;
         }
 
-        if (stmt instanceof SemanticIfNode ifNode) {
-            collectExprVariables(ifNode.condition, out);
-            collectVariables(ifNode.thenBranch, out);
+        if (stmt.kind == SastKind.IF) {
+            collectExprVariables(stmt.condition, out);
+            collectVariables(stmt.thenBranch, out);
 
-            if (ifNode.elseBranch != null) {
-                collectVariables(ifNode.elseBranch, out);
+            if (stmt.elseBranch != null) {
+                collectVariables(stmt.elseBranch, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticWhileNode whileNode) {
-            collectExprVariables(whileNode.condition, out);
-            collectVariables(whileNode.body, out);
+        if (stmt.kind == SastKind.WHILE) {
+            collectExprVariables(stmt.condition, out);
+            collectVariables(stmt.body, out);
 
-            for (SemanticStmtNode update : whileNode.update) {
+            for (SastNode update : stmt.update) {
                 collectVariables(update, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticReturnNode returnNode) {
+        if (stmt.kind == SastKind.RETURN) {
 
-            if (returnNode.value != null) {
-                collectExprVariables(returnNode.value, out);
+            if (stmt.value != null) {
+                collectExprVariables(stmt.value, out);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticExprStmtNode exprStmt) {
-            collectExprVariables(exprStmt.expr, out);
+        if (stmt.kind == SastKind.EXPR_STMT) {
+            collectExprVariables(stmt.expr, out);
         }
     }
 
-    private static void collectExprVariables(SemanticExprNode expr, Set<Symbol> out) {
+    private static void collectExprVariables(SastNode expr, Set<Symbol> out) {
 
-        if (expr instanceof SemanticVarExprNode varExpr) {
-            out.add(varExpr.symbol);
+        if (expr.kind == SastKind.VAR_EXPR) {
+            out.add(expr.symbol);
 
             return;
         }
 
-        if (expr instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-            collectExprVariables(intrinsic.receiver, out);
+        if (expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            collectExprVariables(expr.receiver, out);
 
-            for (SemanticExprNode arg : intrinsic.args) {
+            for (SastNode arg : expr.args) {
                 collectExprVariables(arg, out);
             }
 
             return;
         }
 
-        if (expr instanceof SemanticFunctionCallNode call) {
-            for (SemanticExprNode arg : call.args) {
+        if (expr.kind == SastKind.FUNCTION_CALL) {
+            for (SastNode arg : expr.args) {
                 collectExprVariables(arg, out);
             }
 
             return;
         }
 
-        if (expr instanceof SemanticUnaryOpNode unary) {
-            collectExprVariables(unary.expr, out);
+        if (expr.kind == SastKind.UNARY_OP) {
+            collectExprVariables(expr.expr, out);
 
             return;
         }
 
-        if (expr instanceof SemanticBinOpNode bin) {
-            collectExprVariables(bin.left, out);
-            collectExprVariables(bin.right, out);
+        if (expr.kind == SastKind.BIN_OP) {
+            collectExprVariables(expr.left, out);
+            collectExprVariables(expr.right, out);
 
             return;
         }
 
-        if (expr instanceof SemanticArrayAccessNode access) {
-            collectExprVariables(access.target, out);
-            collectExprVariables(access.index, out);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            collectExprVariables(expr.target, out);
+            collectExprVariables(expr.index, out);
 
             return;
         }
 
-        if (expr instanceof SemanticMemberAccessNode member) {
-            collectExprVariables(member.target, out);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            collectExprVariables(expr.target, out);
 
             return;
         }
 
-        if (expr instanceof SemanticGetPtrNode getPtr) {
-            collectExprVariables(getPtr.target, out);
+        if (expr.kind == SastKind.GET_PTR) {
+            collectExprVariables(expr.target, out);
 
             return;
         }
 
-        if (expr instanceof SemanticDerefNode deref) {
-            collectExprVariables(deref.expr, out);
+        if (expr.kind == SastKind.DEREF) {
+            collectExprVariables(expr.expr, out);
 
             return;
         }
 
-        if (expr instanceof SemanticCastExprNode cast) {
-            collectExprVariables(cast.expr, out);
+        if (expr.kind == SastKind.CAST) {
+            collectExprVariables(expr.expr, out);
             return;
         }
 
-        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
-            for (SemanticAggregateFieldInit field : aggregate.fields) {
+        if (expr.kind == SastKind.AGGREGATE_LITERAL) {
+            for (SastNode field : expr.fields) {
                 collectExprVariables(field.value, out);
             }
         }
     }
 
-    private void collectExprTypes(SemanticStmtNode stmt) {
+    private void collectExprTypes(SastNode stmt) {
 
-        if (stmt instanceof SemanticBlockNode block) {
-            for (SemanticStmtNode inner : block.statements) {
+        if (stmt.kind == SastKind.BLOCK) {
+            for (SastNode inner : stmt.statements) {
                 collectExprTypes(inner);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticVarDeclNode varDecl) {
+        if (stmt.kind == SastKind.VAR_DECL) {
 
-            if (keptVariables.contains(varDecl.symbol)) {
-                markType(varDecl.symbol.type());
+            if (keptVariables.contains(stmt.symbol)) {
+                markType(stmt.symbol.type());
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticAssignNode assign) {
-            markType(assign.value.type);
-            collectExprTypeExprs(assign.target);
-            collectExprTypeExprs(assign.value);
+        if (stmt.kind == SastKind.ASSIGN) {
+            markType(stmt.value.type);
+            collectExprTypeExprs(stmt.target);
+            collectExprTypeExprs(stmt.value);
 
             return;
         }
 
-        if (stmt instanceof SemanticIfNode ifNode) {
-            markType(ifNode.condition.type);
-            collectExprTypeExprs(ifNode.condition);
-            collectExprTypes(ifNode.thenBranch);
+        if (stmt.kind == SastKind.IF) {
+            markType(stmt.condition.type);
+            collectExprTypeExprs(stmt.condition);
+            collectExprTypes(stmt.thenBranch);
 
-            if (ifNode.elseBranch != null) {
-                collectExprTypes(ifNode.elseBranch);
+            if (stmt.elseBranch != null) {
+                collectExprTypes(stmt.elseBranch);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticWhileNode whileNode) {
-            markType(whileNode.condition.type);
-            collectExprTypeExprs(whileNode.condition);
-            collectExprTypes(whileNode.body);
+        if (stmt.kind == SastKind.WHILE) {
+            markType(stmt.condition.type);
+            collectExprTypeExprs(stmt.condition);
+            collectExprTypes(stmt.body);
 
-            for (SemanticStmtNode update : whileNode.update) {
+            for (SastNode update : stmt.update) {
                 collectExprTypes(update);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticReturnNode returnNode) {
+        if (stmt.kind == SastKind.RETURN) {
 
-            if (returnNode.value != null) {
-                markType(returnNode.value.type);
-                collectExprTypeExprs(returnNode.value);
+            if (stmt.value != null) {
+                markType(stmt.value.type);
+                collectExprTypeExprs(stmt.value);
             }
 
             return;
         }
 
-        if (stmt instanceof SemanticExprStmtNode exprStmt) {
-            markType(exprStmt.expr.type);
-            collectExprTypeExprs(exprStmt.expr);
+        if (stmt.kind == SastKind.EXPR_STMT) {
+            markType(stmt.expr.type);
+            collectExprTypeExprs(stmt.expr);
         }
     }
 
-    private void collectExprTypeExprs(SemanticExprNode expr) {
+    private void collectExprTypeExprs(SastNode expr) {
         markType(expr.type);
 
-        if (expr instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-            collectExprTypeExprs(intrinsic.receiver);
+        if (expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            collectExprTypeExprs(expr.receiver);
 
-            for (SemanticExprNode arg : intrinsic.args) {
+            for (SastNode arg : expr.args) {
                 collectExprTypeExprs(arg);
             }
 
             return;
         }
 
-        if (expr instanceof SemanticFunctionCallNode call) {
+        if (expr.kind == SastKind.FUNCTION_CALL) {
 
-            for (SemanticExprNode arg : call.args) {
+            for (SastNode arg : expr.args) {
                 collectExprTypeExprs(arg);
             }
 
             return;
         }
 
-        if (expr instanceof SemanticUnaryOpNode unary) {
-            collectExprTypeExprs(unary.expr);
+        if (expr.kind == SastKind.UNARY_OP) {
+            collectExprTypeExprs(expr.expr);
 
             return;
         }
 
-        if (expr instanceof SemanticBinOpNode bin) {
-            collectExprTypeExprs(bin.left);
-            collectExprTypeExprs(bin.right);
+        if (expr.kind == SastKind.BIN_OP) {
+            collectExprTypeExprs(expr.left);
+            collectExprTypeExprs(expr.right);
 
             return;
         }
 
-        if (expr instanceof SemanticArrayAccessNode access) {
-            collectExprTypeExprs(access.target);
-            collectExprTypeExprs(access.index);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            collectExprTypeExprs(expr.target);
+            collectExprTypeExprs(expr.index);
 
             return;
         }
 
-        if (expr instanceof SemanticMemberAccessNode member) {
-            collectExprTypeExprs(member.target);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            collectExprTypeExprs(expr.target);
 
             return;
         }
 
-        if (expr instanceof SemanticGetPtrNode getPtr) {
-            collectExprTypeExprs(getPtr.target);
+        if (expr.kind == SastKind.GET_PTR) {
+            collectExprTypeExprs(expr.target);
 
             return;
         }
 
-        if (expr instanceof SemanticDerefNode deref) {
-            collectExprTypeExprs(deref.expr);
+        if (expr.kind == SastKind.DEREF) {
+            collectExprTypeExprs(expr.expr);
 
             return;
         }
 
-        if (expr instanceof SemanticCastExprNode cast) {
-            collectExprTypeExprs(cast.expr);
+        if (expr.kind == SastKind.CAST) {
+            collectExprTypeExprs(expr.expr);
             return;
         }
 
-        if (expr instanceof SemanticAggregateLiteralNode aggregate) {
-            markType(aggregate.type);
+        if (expr.kind == SastKind.AGGREGATE_LITERAL) {
+            markType(expr.type);
 
-            for (SemanticAggregateFieldInit field : aggregate.fields) {
+            for (SastNode field : expr.fields) {
                 collectExprTypeExprs(field.value);
             }
         }

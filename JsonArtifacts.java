@@ -61,7 +61,7 @@ public final class JsonArtifacts {
         }
 
         lastSources = doc.sources;
-        write(Path.of(base + "." + phase.artifactName() + ".sast.json"), SemanticASTSerializer.toJson(doc));
+        write(Path.of(base + "." + phase.artifactName() + ".sast.json"), SastSerializer.toJson(doc));
     }
 
     public void writeDiagnostics(DiagnosticLog log) {

@@ -41,7 +41,7 @@ public final class SastRoundTrip {
         }
 
         String original = Files.readString(path, StandardCharsets.UTF_8);
-        SastArtifact artifact = SastSerializer.fromJson(original);
+        SastDocument artifact = SastSerializer.fromJson(original);
         String roundTripped = SastSerializer.toJson(artifact);
         String canonicalOriginal = Json.canonical(Json.parse(original));
         String canonicalRoundTrip = Json.canonical(Json.parse(roundTripped));

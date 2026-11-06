@@ -5,7 +5,7 @@ final class Cpp14ExpressionEmitter {
 
     private Cpp14Codegen owner;
 
-    String emitExpr(Cpp14Codegen owner, SemanticExprNode node) {
+    String emitExpr(Cpp14Codegen owner, SastNode node) {
         this.owner = owner;
 
         if (node == null) {
@@ -14,61 +14,61 @@ final class Cpp14ExpressionEmitter {
             );
         }
 
-        if (node instanceof SemanticIntLiteralNode literal) {
-            return emitIntLiteral(literal);
+        if (node.kind == SastKind.INT_LITERAL) {
+            return emitIntLiteral(node);
         }
 
-        if (node instanceof SemanticNullLiteralNode) {
+        if (node.kind == SastKind.NULL_LITERAL) {
 
             return "nullptr";
         }
 
-        if (node instanceof SemanticVarExprNode var) {
-            return owner.emitSymbolName(var.symbol);
+        if (node.kind == SastKind.VAR_EXPR) {
+            return owner.emitSymbolName(node.symbol);
         }
 
-        if (node instanceof SemanticUnaryOpNode unary) {
-            return emitUnaryOp(unary);
+        if (node.kind == SastKind.UNARY_OP) {
+            return emitUnaryOp(node);
         }
 
-        if (node instanceof SemanticBinOpNode bin) {
-            return emitBinOp(bin);
+        if (node.kind == SastKind.BIN_OP) {
+            return emitBinOp(node);
         }
 
-        if (node instanceof SemanticArrayAccessNode access) {
-            return emitArrayAccess(access);
+        if (node.kind == SastKind.ARRAY_ACCESS) {
+            return emitArrayAccess(node);
         }
 
-        if (node instanceof SemanticFunctionCallNode call) {
-            return emitFunctionCall(call);
+        if (node.kind == SastKind.FUNCTION_CALL) {
+            return emitFunctionCall(node);
         }
 
-        if (node instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-            return emitArrayIntrinsicCall(intrinsic);
+        if (node.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            return emitArrayIntrinsicCall(node);
         }
 
-        if (node instanceof SemanticAggregateLiteralNode aggregate) {
-            return emitAggregateLiteral(aggregate);
+        if (node.kind == SastKind.AGGREGATE_LITERAL) {
+            return emitAggregateLiteral(node);
         }
 
-        if (node instanceof SemanticGetPtrNode getPtr) {
-            return emitGetPtr(getPtr);
+        if (node.kind == SastKind.GET_PTR) {
+            return emitGetPtr(node);
         }
 
-        if (node instanceof SemanticDerefNode deref) {
-            return emitDeref(deref);
+        if (node.kind == SastKind.DEREF) {
+            return emitDeref(node);
         }
 
-        if (node instanceof SemanticCastExprNode cast) {
-            return emitCast(cast);
+        if (node.kind == SastKind.CAST) {
+            return emitCast(node);
         }
 
-        if (node instanceof SemanticEnumVariantNode enumVariant) {
-            return owner.emitEnumVariant(enumVariant);
+        if (node.kind == SastKind.ENUM_VARIANT) {
+            return owner.emitEnumVariant(node);
         }
 
-        if (node instanceof SemanticMemberAccessNode member) {
-            return emitExpr(owner, member.target) + "." + member.field.emittedName();
+        if (node.kind == SastKind.MEMBER_ACCESS) {
+            return emitExpr(owner, node.target) + "." + node.field.emittedName();
         }
 
         throw new IllegalStateException(
@@ -77,7 +77,7 @@ final class Cpp14ExpressionEmitter {
         );
     }
 
-    private String emitIntLiteral(SemanticIntLiteralNode node) {
+    private String emitIntLiteral(SastNode node) {
 
         String raw = node.rawValue;
 
@@ -122,7 +122,7 @@ final class Cpp14ExpressionEmitter {
         return negative ? "-" + core : core;
     }
 
-    private String emitUnaryOp(SemanticUnaryOpNode node) {
+    private String emitUnaryOp(SastNode node) {
 
         if (node.isConstant() && node.constantValue != null) {
             return emitBigIntegerLiteral(owner, node.constantValue);
@@ -134,7 +134,7 @@ final class Cpp14ExpressionEmitter {
         return castToType(owner, node, raw);
     }
 
-    private String emitBinOp(SemanticBinOpNode node) {
+    private String emitBinOp(SastNode node) {
 
         if (node.isConstant() && node.constantValue != null) {
             return emitBigIntegerLiteral(owner, node.constantValue);
@@ -148,11 +148,11 @@ final class Cpp14ExpressionEmitter {
         return castToType(owner, node, raw);
     }
 
-    private String emitArrayAccess(SemanticArrayAccessNode node) {
+    private String emitArrayAccess(SastNode node) {
         String index = emitAsType(owner, node.index, Cpp14Codegen.UINT32_TYPE);
 
-        if (node.target instanceof SemanticDerefNode deref) {
-            return "(" + emitExpr(owner, deref.expr) + "[" + index + "])";
+        if (node.target.kind == SastKind.DEREF) {
+            return "(" + emitExpr(owner, node.target.expr) + "[" + index + "])";
         }
 
         if (node.target.type.kind == SastTypeKind.STATIC_ARRAY
@@ -164,7 +164,7 @@ final class Cpp14ExpressionEmitter {
         return "(" + emitExpr(owner, node.target) + "[" + index + "])";
     }
 
-    private String emitFunctionCall(SemanticFunctionCallNode node) {
+    private String emitFunctionCall(SastNode node) {
         Symbol fn = node.function;
 
         if (fn == null) {
@@ -204,7 +204,7 @@ final class Cpp14ExpressionEmitter {
                 sb.append(", ");
             }
 
-            SemanticExprNode arg = node.args.get(i);
+            SastNode arg = node.args.get(i);
             SastType paramType = parameterTypes.get(i);
 
             sb.append(emitAsType(owner, arg, paramType));
@@ -215,14 +215,14 @@ final class Cpp14ExpressionEmitter {
         return sb.toString();
     }
 
-    private String emitArrayIntrinsicCall(SemanticArrayIntrinsicCallNode node) {
-        if (node.kind == null) {
+    private String emitArrayIntrinsicCall(SastNode node) {
+        if (node.intrinsicKind == null) {
             throw new IllegalStateException(
                     "Internal compiler error: array intrinsic call has null kind"
             );
         }
 
-        if (node.kind == SemanticArrayIntrinsicKind.LENGTH) {
+        if (node.intrinsicKind == SemanticArrayIntrinsicKind.LENGTH) {
             return emitArrayLengthCall(node);
         }
 
@@ -232,7 +232,7 @@ final class Cpp14ExpressionEmitter {
 
         sb.append(emitIntrinsicReceiver(node));
         sb.append(".");
-        sb.append(node.kind.runtimeName);
+        sb.append(node.intrinsicKind.runtimeName);
         sb.append("(");
 
         for (int i = 0; i < node.args.size(); i++) {
@@ -248,13 +248,13 @@ final class Cpp14ExpressionEmitter {
         return sb.toString();
     }
 
-    private String emitIntrinsicReceiver(SemanticArrayIntrinsicCallNode node) {
-        if (node.kind.dynamicOnly) {
+    private String emitIntrinsicReceiver(SastNode node) {
+        if (node.intrinsicKind.dynamicOnly) {
             return emitLValue(owner, node.receiver);
         }
 
-        if (node.receiver instanceof SemanticDerefNode deref) {
-            return emitExpr(owner, deref.expr);
+        if (node.receiver.kind == SastKind.DEREF) {
+            return emitExpr(owner, node.receiver.expr);
         }
 
         if (node.receiver.type.kind == SastTypeKind.STATIC_ARRAY) {
@@ -276,15 +276,15 @@ final class Cpp14ExpressionEmitter {
         );
     }
 
-    private String emitArrayLengthCall(SemanticArrayIntrinsicCallNode node) {
+    private String emitArrayLengthCall(SastNode node) {
         if (!node.args.isEmpty()) {
             throw new IllegalStateException(
                     "Internal compiler error: invalid arity for array intrinsic 'length'"
             );
         }
 
-        if (node.receiver instanceof SemanticDerefNode deref) {
-            return emitExpr(owner, deref.expr) + ".length()";
+        if (node.receiver.kind == SastKind.DEREF) {
+            return emitExpr(owner, node.receiver.expr) + ".length()";
         }
 
         if (node.receiver.type.kind == SastTypeKind.STATIC_ARRAY) {
@@ -301,11 +301,11 @@ final class Cpp14ExpressionEmitter {
     }
 
     private String emitArrayIntrinsicArg(
-            SemanticArrayIntrinsicCallNode node,
+            SastNode node,
             int index
     ) {
-        SemanticExprNode arg = node.args.get(index);
-        SemanticIntrinsicArgKind argKind = node.kind.argKind(index);
+        SastNode arg = node.args.get(index);
+        SemanticIntrinsicArgKind argKind = node.intrinsicKind.argKind(index);
 
         if (argKind.isPointer()) {
             return emitExpr(owner, arg);
@@ -315,12 +315,12 @@ final class Cpp14ExpressionEmitter {
     }
 
     private void validateArrayIntrinsicArityForCodegen(
-            SemanticArrayIntrinsicCallNode node
+            SastNode node
     ) {
-        if (!node.kind.acceptsArity(node.args.size())) {
+        if (!node.intrinsicKind.acceptsArity(node.args.size())) {
             throw new IllegalStateException(
                     "Internal compiler error: invalid arity for array intrinsic '"
-                            + node.kind.runtimeName
+                            + node.intrinsicKind.runtimeName
                             + "': got "
                             + node.args.size()
             );
@@ -328,7 +328,7 @@ final class Cpp14ExpressionEmitter {
     }
 
     private String emitAggregateLiteral(
-            SemanticAggregateLiteralNode node
+            SastNode node
     ) {
         String type = owner.emitType(node.type);
         StringBuilder sb = new StringBuilder();
@@ -336,7 +336,7 @@ final class Cpp14ExpressionEmitter {
         sb.append("([&]() -> ").append(type).append(" { ");
         sb.append(type).append(" _franko_literal; ");
 
-        for (SemanticAggregateFieldInit init : node.fields) {
+        for (SastNode init : node.fields) {
             sb.append("_franko_literal.")
               .append(init.field.emittedName())
               .append(" = ")
@@ -348,7 +348,7 @@ final class Cpp14ExpressionEmitter {
         return sb.toString();
     }
 
-    private String emitGetPtr(SemanticGetPtrNode node) {
+    private String emitGetPtr(SastNode node) {
         if (node.temporary) {
             String value = emitExpr(owner, node.target);
 
@@ -375,8 +375,8 @@ final class Cpp14ExpressionEmitter {
             return borrowed;
         }
 
-        if (node.target instanceof SemanticDerefNode deref) {
-            return emitExpr(owner, deref.expr);
+        if (node.target.kind == SastKind.DEREF) {
+            return emitExpr(owner, node.target.expr);
         }
 
         if (node.target.type.kind == SastTypeKind.STATIC_ARRAY) {
@@ -396,7 +396,7 @@ final class Cpp14ExpressionEmitter {
         return "franko_make_thin_pointer(&" + emitLValue(owner, node.target) + ")";
     }
 
-    private String emitDeref(SemanticDerefNode node) {
+    private String emitDeref(SastNode node) {
         if (!(node.expr.type.kind == SastTypeKind.PTR)) {
             throw new IllegalStateException(
                     "Internal compiler error: dereference operand is not a pointer type"
@@ -430,7 +430,7 @@ final class Cpp14ExpressionEmitter {
         return "(*(" + pointer + ").data)";
     }
 
-    private String emitCast(SemanticCastExprNode node) {
+    private String emitCast(SastNode node) {
 
         if (node.type.kind == SastTypeKind.ENUM) {
             String raw = emitExpr(owner, node.expr);
@@ -468,23 +468,23 @@ final class Cpp14ExpressionEmitter {
         return "franko_integer_unsafe_cast<" + owner.emitType(node.type) + ">(" + raw + ")";
     }
 
-    String emitLValue(Cpp14Codegen owner, SemanticExprNode node) {
+    String emitLValue(Cpp14Codegen owner, SastNode node) {
         this.owner = owner;
 
-        if (node instanceof SemanticVarExprNode var) {
-            return owner.emitSymbolName(var.symbol);
+        if (node.kind == SastKind.VAR_EXPR) {
+            return owner.emitSymbolName(node.symbol);
         }
 
-        if (node instanceof SemanticArrayAccessNode access) {
-            return emitArrayAccess(access);
+        if (node.kind == SastKind.ARRAY_ACCESS) {
+            return emitArrayAccess(node);
         }
 
-        if (node instanceof SemanticDerefNode deref) {
-            return emitDeref(deref);
+        if (node.kind == SastKind.DEREF) {
+            return emitDeref(node);
         }
 
-        if (node instanceof SemanticMemberAccessNode member) {
-            return emitExpr(owner, member.target) + "." + member.field.emittedName();
+        if (node.kind == SastKind.MEMBER_ACCESS) {
+            return emitExpr(owner, node.target) + "." + node.field.emittedName();
         }
 
         throw new IllegalStateException(
@@ -495,7 +495,7 @@ final class Cpp14ExpressionEmitter {
 
     String emitAsType(
             Cpp14Codegen owner,
-            SemanticExprNode expr,
+            SastNode expr,
             SastType targetType
     ) {
         this.owner = owner;
@@ -519,7 +519,7 @@ final class Cpp14ExpressionEmitter {
 
     String castToType(
             Cpp14Codegen owner,
-            SemanticExprNode node,
+            SastNode node,
             String raw
     ) {
         this.owner = owner;

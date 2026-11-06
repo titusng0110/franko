@@ -23,7 +23,7 @@ final class SemanticTypeResolver {
     private final Map<String, String> tupleNameKeys =
             new LinkedHashMap<>();
 
-    private final List<SemanticStructDeclNode> pendingTupleDecls =
+    private final List<SastNode> pendingTupleDecls =
             new ArrayList<>();
 
     SemanticTypeResolver(
@@ -40,7 +40,7 @@ final class SemanticTypeResolver {
         pendingTupleDecls.clear();
     }
 
-    List<SemanticStructDeclNode> pendingTupleDecls() {
+    List<SastNode> pendingTupleDecls() {
         return List.copyOf(pendingTupleDecls);
     }
 
@@ -277,7 +277,7 @@ final class SemanticTypeResolver {
 
         tupleCppSymbols.put(structuralKey, symbol);
         tupleNameKeys.put(emittedName, structuralKey);
-        pendingTupleDecls.add(new SemanticStructDeclNode(span, symbol));
+        pendingTupleDecls.add(SastNode.structDecl(span, symbol));
 
         return symbol;
     }

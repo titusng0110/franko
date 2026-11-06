@@ -11,7 +11,7 @@ public final class PrivateIdentifierLinter {
         this.diagnostics = Objects.requireNonNull(diagnostics);
     }
 
-    public void check(SemanticASTNode node) {
+    public void check(SastNode node) {
         diagnostics.clear();
         currentStruct = null;
         currentFunction = null;
@@ -27,7 +27,7 @@ public final class PrivateIdentifierLinter {
         );
     }
 
-    private void checkTopLevel(SemanticASTNode node) {
+    private void checkTopLevel(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkTopLevelInner(node);
@@ -36,50 +36,50 @@ public final class PrivateIdentifierLinter {
         }
     }
 
-    private void checkTopLevelInner(SemanticASTNode node) {
+    private void checkTopLevelInner(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticProgramNode n) {
-            for (SemanticASTNode item : n.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 checkTopLevel(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode n) {
-            for (SemanticASTNode item : n.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 checkTopLevel(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode n) {
-            checkFunction(n, null);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            checkFunction(node, null);
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode n) {
-            if (n.symbol.isTuple) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            if (node.structSymbol.isTuple) {
                 return;
             }
 
-            checkStruct(n);
+            checkStruct(node);
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode n) {
+        if (node.kind == SastKind.VAR_DECL) {
             String previousNamespace = currentNamespace;
-            currentNamespace = n.symbol.namespace;
-            checkType(n.symbol.type);
+            currentNamespace = node.symbol.namespace;
+            checkType(node.symbol.type);
             currentNamespace = previousNamespace;
         }
     }
 
-    private void checkStruct(SemanticStructDeclNode node) {
+    private void checkStruct(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkStructInner(node);
@@ -88,19 +88,19 @@ public final class PrivateIdentifierLinter {
         }
     }
 
-    private void checkStructInner(SemanticStructDeclNode node) {
+    private void checkStructInner(SastNode node) {
         StructSymbol previousStruct = currentStruct;
         String previousNamespace = currentNamespace;
 
-        currentStruct = node.symbol;
-        currentNamespace = node.symbol.namespace;
+        currentStruct = node.structSymbol;
+        currentNamespace = node.structSymbol.namespace;
 
-        for (FieldSymbol field : node.symbol.fields) {
+        for (FieldSymbol field : node.structSymbol.fields) {
             checkType(field.type);
         }
 
-        for (SemanticFunctionDeclNode method : node.methods) {
-            checkFunction(method, node.symbol);
+        for (SastNode method : node.methods) {
+            checkFunction(method, node.structSymbol);
         }
 
         currentStruct = previousStruct;
@@ -108,7 +108,7 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkFunction(
-            SemanticFunctionDeclNode node,
+            SastNode node,
             StructSymbol owner
     ) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
@@ -120,7 +120,7 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkFunctionInner(
-            SemanticFunctionDeclNode node,
+            SastNode node,
             StructSymbol owner
     ) {
         StructSymbol previousStruct = currentStruct;
@@ -143,7 +143,7 @@ public final class PrivateIdentifierLinter {
         currentNamespace = previousNamespace;
     }
 
-    private void checkStmt(SemanticStmtNode node) {
+    private void checkStmt(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkStmtInner(node);
@@ -152,59 +152,59 @@ public final class PrivateIdentifierLinter {
         }
     }
 
-    private void checkStmtInner(SemanticStmtNode node) {
+    private void checkStmtInner(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticBlockNode n) {
-            for (SemanticStmtNode stmt : n.statements) {
+        if (node.kind == SastKind.BLOCK) {
+            for (SastNode stmt : node.statements) {
                 checkStmt(stmt);
             }
 
             return;
         }
 
-        if (node instanceof SemanticExprStmtNode n) {
-            checkExpr(n.expr);
+        if (node.kind == SastKind.EXPR_STMT) {
+            checkExpr(node.expr);
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode n) {
-            checkType(n.symbol.type);
+        if (node.kind == SastKind.VAR_DECL) {
+            checkType(node.symbol.type);
             return;
         }
 
-        if (node instanceof SemanticAssignNode n) {
-            checkExpr(n.target);
-            checkExpr(n.value);
+        if (node.kind == SastKind.ASSIGN) {
+            checkExpr(node.target);
+            checkExpr(node.value);
             return;
         }
 
-        if (node instanceof SemanticIfNode n) {
-            checkExpr(n.condition);
-            checkStmt(n.thenBranch);
-            checkStmt(n.elseBranch);
+        if (node.kind == SastKind.IF) {
+            checkExpr(node.condition);
+            checkStmt(node.thenBranch);
+            checkStmt(node.elseBranch);
             return;
         }
 
-        if (node instanceof SemanticWhileNode n) {
-            checkExpr(n.condition);
-            checkStmt(n.body);
+        if (node.kind == SastKind.WHILE) {
+            checkExpr(node.condition);
+            checkStmt(node.body);
 
-            for (SemanticStmtNode update : n.update) {
+            for (SastNode update : node.update) {
                 checkStmt(update);
             }
 
             return;
         }
 
-        if (node instanceof SemanticReturnNode n) {
-            checkExpr(n.value);
+        if (node.kind == SastKind.RETURN) {
+            checkExpr(node.value);
         }
     }
 
-    private void checkExpr(SemanticExprNode node) {
+    private void checkExpr(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkExprInner(node);
@@ -213,80 +213,80 @@ public final class PrivateIdentifierLinter {
         }
     }
 
-    private void checkExprInner(SemanticExprNode node) {
+    private void checkExprInner(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticUnaryOpNode n) {
-            checkExpr(n.expr);
+        if (node.kind == SastKind.UNARY_OP) {
+            checkExpr(node.expr);
             return;
         }
 
-        if (node instanceof SemanticBinOpNode n) {
-            checkExpr(n.left);
-            checkExpr(n.right);
+        if (node.kind == SastKind.BIN_OP) {
+            checkExpr(node.left);
+            checkExpr(node.right);
             return;
         }
 
-        if (node instanceof SemanticArrayAccessNode n) {
-            checkExpr(n.target);
-            checkExpr(n.index);
+        if (node.kind == SastKind.ARRAY_ACCESS) {
+            checkExpr(node.target);
+            checkExpr(node.index);
             return;
         }
 
-        if (node instanceof SemanticMemberAccessNode n) {
-            checkFieldAccess(n);
-            checkExpr(n.target);
+        if (node.kind == SastKind.MEMBER_ACCESS) {
+            checkFieldAccess(node);
+            checkExpr(node.target);
             return;
         }
 
-        if (node instanceof SemanticFunctionCallNode n) {
-            checkCall(n);
+        if (node.kind == SastKind.FUNCTION_CALL) {
+            checkCall(node);
 
-            for (SemanticExprNode arg : n.args) {
+            for (SastNode arg : node.args) {
                 checkExpr(arg);
             }
 
             return;
         }
 
-        if (node instanceof SemanticArrayIntrinsicCallNode n) {
-            checkExpr(n.receiver);
+        if (node.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            checkExpr(node.receiver);
 
-            for (SemanticExprNode arg : n.args) {
+            for (SastNode arg : node.args) {
                 checkExpr(arg);
             }
 
             return;
         }
 
-        if (node instanceof SemanticGetPtrNode n) {
-            checkExpr(n.target);
+        if (node.kind == SastKind.GET_PTR) {
+            checkExpr(node.target);
             return;
         }
 
-        if (node instanceof SemanticDerefNode n) {
-            checkExpr(n.expr);
+        if (node.kind == SastKind.DEREF) {
+            checkExpr(node.expr);
             return;
         }
 
-        if (node instanceof SemanticCastExprNode n) {
-            checkType(n.type);
-            checkExpr(n.expr);
+        if (node.kind == SastKind.CAST) {
+            checkType(node.type);
+            checkExpr(node.expr);
             return;
         }
 
-        if (node instanceof SemanticEnumVariantNode n) {
-            checkEnumAccess(n.enumSymbol);
+        if (node.kind == SastKind.ENUM_VARIANT) {
+            checkEnumAccess(node.enumSymbol);
             return;
         }
 
-        if (node instanceof SemanticAggregateLiteralNode n) {
-            for (SemanticAggregateFieldInit init : n.fields) {
-                if (n.type.kind == SastTypeKind.STRUCT) {
+        if (node.kind == SastKind.AGGREGATE_LITERAL) {
+            for (SastNode init : node.fields) {
+                if (node.type.kind == SastTypeKind.STRUCT) {
                     checkFieldAccess(
-                            n.type.structSymbol,
+                            node.type.structSymbol,
                             init.field,
                             init.value.span
                     );
@@ -297,7 +297,7 @@ public final class PrivateIdentifierLinter {
         }
     }
 
-    private void checkFieldAccess(SemanticMemberAccessNode node) {
+    private void checkFieldAccess(SastNode node) {
         if (!(node.target.type.kind == SastTypeKind.STRUCT)) {
             return;
         }
@@ -342,7 +342,7 @@ public final class PrivateIdentifierLinter {
         }
     }
 
-    private void checkCall(SemanticFunctionCallNode node) {
+    private void checkCall(SastNode node) {
         Symbol function = node.function;
 
         if (function.kind == SymbolKind.METHOD) {

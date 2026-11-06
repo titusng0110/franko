@@ -23,7 +23,7 @@ public class FunctionChecker {
         this.types = Objects.requireNonNull(types);
     }
 
-    public void checkFunction(SemanticFunctionDeclNode node) {
+    public void checkFunction(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkFunctionInner(node);
@@ -32,7 +32,7 @@ public class FunctionChecker {
         }
     }
 
-    private void checkFunctionInner(SemanticFunctionDeclNode node) {
+    private void checkFunctionInner(SastNode node) {
         if (node == null) {
             diagnostics.error("Function declaration node cannot be null");
             return;
@@ -74,7 +74,7 @@ public class FunctionChecker {
         }
     }
 
-    private void validateParameters(SemanticFunctionDeclNode node) {
+    private void validateParameters(SastNode node) {
         Set<String> names = new HashSet<>();
 
         for (Symbol param : node.parameterVariables) {
@@ -93,7 +93,7 @@ public class FunctionChecker {
                         + "'");
             }
 
-            declarations.checkVarDecl(new SemanticVarDeclNode(node.span, param));
+            declarations.checkVarDecl(SastNode.varDecl(node.span, param));
 
             if (!types.isValueAssignableType(param.type)) {
                 diagnostics.error("Parameter '"
@@ -298,10 +298,10 @@ public class FunctionChecker {
         }
     }
 
-    private boolean checkFunctionBody(SemanticFunctionDeclNode fn) {
+    private boolean checkFunctionBody(SastNode fn) {
         boolean sawReturn = false;
 
-        for (SemanticStmtNode stmt : fn.body.statements) {
+        for (SastNode stmt : fn.body.statements) {
             if (checkStmtInsideFunction(stmt, fn.symbol)) {
                 sawReturn = true;
             }
@@ -311,28 +311,28 @@ public class FunctionChecker {
     }
 
     private boolean checkStmtInsideFunction(
-            SemanticStmtNode stmt,
+            SastNode stmt,
             Symbol function
     ) {
         if (stmt == null) {
             return false;
         }
 
-        if (stmt instanceof SemanticReturnNode n) {
-            visitReturn(n, function);
+        if (stmt.kind == SastKind.RETURN) {
+            visitReturn(stmt, function);
             return true;
         }
 
-        if (stmt instanceof SemanticBlockNode n) {
-            return visitBlock(n, function);
+        if (stmt.kind == SastKind.BLOCK) {
+            return visitBlock(stmt, function);
         }
 
-        if (stmt instanceof SemanticIfNode n) {
-            return visitIf(n, function);
+        if (stmt.kind == SastKind.IF) {
+            return visitIf(stmt, function);
         }
 
-        if (stmt instanceof SemanticWhileNode n) {
-            return visitWhile(n, function);
+        if (stmt.kind == SastKind.WHILE) {
+            return visitWhile(stmt, function);
         }
 
         statements.checkStmt(stmt);
@@ -340,12 +340,12 @@ public class FunctionChecker {
     }
 
     private boolean visitBlock(
-            SemanticBlockNode node,
+            SastNode node,
             Symbol function
     ) {
         boolean sawReturn = false;
 
-        for (SemanticStmtNode stmt : node.statements) {
+        for (SastNode stmt : node.statements) {
             if (checkStmtInsideFunction(stmt, function)) {
                 sawReturn = true;
             }
@@ -355,7 +355,7 @@ public class FunctionChecker {
     }
 
     private boolean visitIf(
-            SemanticIfNode node,
+            SastNode node,
             Symbol function
     ) {
         expressions.checkExpr(node.condition);
@@ -388,7 +388,7 @@ public class FunctionChecker {
     }
 
     private boolean visitWhile(
-            SemanticWhileNode node,
+            SastNode node,
             Symbol function
     ) {
         expressions.checkExpr(node.condition);
@@ -405,7 +405,7 @@ public class FunctionChecker {
 
         boolean sawReturn = checkStmtInsideFunction(node.body, function);
 
-        for (SemanticStmtNode updateStmt : node.update) {
+        for (SastNode updateStmt : node.update) {
             if (checkStmtInsideFunction(updateStmt, function)) {
                 sawReturn = true;
             }
@@ -415,7 +415,7 @@ public class FunctionChecker {
     }
 
     private void visitReturn(
-            SemanticReturnNode node,
+            SastNode node,
             Symbol enclosingFunction
     ) {
         if (node.function == null) {
@@ -442,7 +442,7 @@ public class FunctionChecker {
     }
 
     private void visitVoidFunctionReturn(
-            SemanticReturnNode node,
+            SastNode node,
             Symbol function
     ) {
         if (node.value == null) {
@@ -458,7 +458,7 @@ public class FunctionChecker {
     }
 
     private void visitNonVoidFunctionReturn(
-            SemanticReturnNode node,
+            SastNode node,
             Symbol function
     ) {
         if (node.value == null) {

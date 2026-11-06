@@ -6,23 +6,23 @@ final class MemoryDataflowDriver {
 
         void endFunction(int exitCount, boolean fallthrough);
 
-        void enterBlock(SemanticBlockNode node, int depth);
+        void enterBlock(SastNode node, int depth);
 
-        void leaveBlock(SemanticBlockNode node, int depth, boolean terminated);
+        void leaveBlock(SastNode node, int depth, boolean terminated);
 
-        void checkVarDecl(SemanticVarDeclNode node);
+        void checkVarDecl(SastNode node);
 
-        void checkAssign(SemanticAssignNode node);
+        void checkAssign(SastNode node);
 
-        void checkExpr(SemanticExprNode expr);
+        void checkExpr(SastNode expr);
 
-        void onReturn(SemanticReturnNode node);
+        void onReturn(SastNode node);
 
         void onFallthrough();
 
-        boolean guardPathFeasible(SemanticExprNode condition, boolean guardHolds);
+        boolean guardPathFeasible(SastNode condition, boolean guardHolds);
 
-        void refineFromGuard(SemanticExprNode condition, boolean guardHolds);
+        void refineFromGuard(SastNode condition, boolean guardHolds);
 
         int snapshot();
 
@@ -44,7 +44,7 @@ final class MemoryDataflowDriver {
 
         void markLocalsDeadForJump(int targetBlockDepth, int snapshotSlot);
 
-        void markLoopBodyLocalsDead(SemanticStmtNode body);
+        void markLoopBodyLocalsDead(SastNode body);
 
         boolean isSuppressed();
 
@@ -87,45 +87,45 @@ final class MemoryDataflowDriver {
         }
     }
 
-    void run(SemanticProgramNode root) {
+    void run(SastNode root) {
         checkTopLevel(root);
     }
 
-    private void checkTopLevel(SemanticASTNode node) {
+    private void checkTopLevel(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticProgramNode program) {
-            for (SemanticASTNode item : program.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 checkTopLevel(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 checkTopLevel(item);
             }
 
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            for (SemanticFunctionDeclNode method : struct.methods) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            for (SastNode method : node.methods) {
                 checkFunction(method);
             }
 
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode function) {
-            checkFunction(function);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            checkFunction(node);
         }
     }
 
-    private void checkFunction(SemanticFunctionDeclNode function) {
+    private void checkFunction(SastNode function) {
         int functionId = context.functionId(function.symbol);
 
         branchDepth = 0;
@@ -165,7 +165,7 @@ final class MemoryDataflowDriver {
         return exitSlots[index];
     }
 
-    private boolean checkStmt(SemanticStmtNode node) {
+    private boolean checkStmt(SastNode node) {
         if (node == null) {
             return false;
         }
@@ -179,62 +179,62 @@ final class MemoryDataflowDriver {
         }
     }
 
-    private boolean checkStmtInner(SemanticStmtNode node) {
-        if (node instanceof SemanticBlockNode block) {
-            return checkBlock(block);
+    private boolean checkStmtInner(SastNode node) {
+        if (node.kind == SastKind.BLOCK) {
+            return checkBlock(node);
         }
 
-        if (node instanceof SemanticVarDeclNode declaration) {
-            domain.checkVarDecl(declaration);
+        if (node.kind == SastKind.VAR_DECL) {
+            domain.checkVarDecl(node);
             return false;
         }
 
-        if (node instanceof SemanticAssignNode assignment) {
-            domain.checkAssign(assignment);
+        if (node.kind == SastKind.ASSIGN) {
+            domain.checkAssign(node);
             return false;
         }
 
-        if (node instanceof SemanticIfNode branch) {
-            return checkIf(branch);
+        if (node.kind == SastKind.IF) {
+            return checkIf(node);
         }
 
-        if (node instanceof SemanticWhileNode loop) {
-            return checkWhile(loop);
+        if (node.kind == SastKind.WHILE) {
+            return checkWhile(node);
         }
 
-        if (node instanceof SemanticBreakNode jump) {
-            recordJumpState(jump.levels, false);
+        if (node.kind == SastKind.BREAK) {
+            recordJumpState(node.levels, false);
             return true;
         }
 
-        if (node instanceof SemanticContinueNode) {
+        if (node.kind == SastKind.CONTINUE) {
             recordJumpState(1, true);
             return true;
         }
 
-        if (node instanceof SemanticReturnNode returned) {
-            domain.checkExpr(returned.value);
-            domain.onReturn(returned);
+        if (node.kind == SastKind.RETURN) {
+            domain.checkExpr(node.value);
+            domain.onReturn(node);
             addExit();
             return true;
         }
 
-        if (node instanceof SemanticExprStmtNode expressionStatement) {
-            domain.checkExpr(expressionStatement.expr);
+        if (node.kind == SastKind.EXPR_STMT) {
+            domain.checkExpr(node.expr);
             return false;
         }
 
         return false;
     }
 
-    private boolean checkBlock(SemanticBlockNode block) {
+    private boolean checkBlock(SastNode block) {
         int depth = ++blockDepth;
         domain.enterBlock(block, depth);
 
         boolean terminated = false;
 
         try {
-            for (SemanticStmtNode statement : block.statements) {
+            for (SastNode statement : block.statements) {
                 if (checkStmt(statement)) {
                     terminated = true;
                     break;
@@ -248,7 +248,7 @@ final class MemoryDataflowDriver {
         return terminated;
     }
 
-    private boolean checkIf(SemanticIfNode node) {
+    private boolean checkIf(SastNode node) {
         domain.checkExpr(node.condition);
 
         if (branchDepth >= MAX_BRANCH_DEPTH) {
@@ -314,7 +314,7 @@ final class MemoryDataflowDriver {
         return thenActuallyLeaves && elseActuallyLeaves;
     }
 
-    private boolean checkIfPathInsensitive(SemanticIfNode node) {
+    private boolean checkIfPathInsensitive(SastNode node) {
         int before = domain.snapshot();
 
         boolean thenLeaves = checkStmt(node.thenBranch);
@@ -344,7 +344,7 @@ final class MemoryDataflowDriver {
         return node.elseBranch != null && thenLeaves && elseLeaves;
     }
 
-    private boolean checkWhile(SemanticWhileNode node) {
+    private boolean checkWhile(SastNode node) {
         domain.checkExpr(node.condition);
 
         int before = domain.snapshot();
@@ -354,7 +354,7 @@ final class MemoryDataflowDriver {
         LoopFrame frame = loopFrames[frameIndex];
         frame.breakHead = -1;
         frame.continueHead = -1;
-        frame.bodyBlockDepth = node.body instanceof SemanticBlockNode
+        frame.bodyBlockDepth = node.body.kind == SastKind.BLOCK
                 ? blockDepth + 1
                 : blockDepth;
 
@@ -419,7 +419,7 @@ final class MemoryDataflowDriver {
             domain.setSuppressed(true);
             checkStmt(node.body);
 
-            for (SemanticStmtNode update : node.update) {
+            for (SastNode update : node.update) {
                 checkStmt(update);
             }
 
@@ -448,8 +448,8 @@ final class MemoryDataflowDriver {
         return !hasExit;
     }
 
-    private boolean checkUpdates(java.util.List<SemanticStmtNode> updates) {
-        for (SemanticStmtNode update : updates) {
+    private boolean checkUpdates(java.util.List<SastNode> updates) {
+        for (SastNode update : updates) {
             if (checkStmt(update)) {
                 return false;
             }

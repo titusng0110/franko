@@ -78,10 +78,10 @@ final class FfiHandler {
 
     PassResult verify(SastDocument document) {
         List<Diagnostic> diagnostics = new ArrayList<>();
-        List<SemanticFunctionDeclNode> functions = new ArrayList<>();
+        List<SastNode> functions = new ArrayList<>();
         collectFunctions(document.root, functions);
 
-        for (SemanticFunctionDeclNode declaration : functions) {
+        for (SastNode declaration : functions) {
             FfiMatch match = matchFunction(declaration.symbol);
 
             if (match == null) {
@@ -218,32 +218,32 @@ final class FfiHandler {
     }
 
     private static void collectFunctions(
-            SemanticASTNode node,
-            List<SemanticFunctionDeclNode> out
+            SastNode node,
+            List<SastNode> out
     ) {
-        if (node instanceof SemanticProgramNode program) {
-            for (SemanticASTNode item : program.topLevelItems) {
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
                 collectFunctions(item, out);
             }
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 collectFunctions(item, out);
             }
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            for (SemanticFunctionDeclNode method : struct.methods) {
+        if (node.kind == SastKind.STRUCT_DECL) {
+            for (SastNode method : node.methods) {
                 collectFunctions(method, out);
             }
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode function) {
-            out.add(function);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            out.add(node);
         }
     }
 }

@@ -47,7 +47,7 @@ public class LegalityChecker {
                 );
     }
 
-    public void check(SemanticASTNode node) {
+    public void check(SastNode node) {
         if (node == null) {
             throw new IllegalArgumentException("Cannot check a null AST.");
         }
@@ -65,7 +65,7 @@ public class LegalityChecker {
         );
     }
 
-    private void checkNode(SemanticASTNode node) {
+    private void checkNode(SastNode node) {
         diagnostics.push(node == null ? SourceSpan.NONE : node.span);
         try {
             checkNodeInner(node);
@@ -74,92 +74,92 @@ public class LegalityChecker {
         }
     }
 
-    private void checkNodeInner(SemanticASTNode node) {
+    private void checkNodeInner(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticProgramNode program) {
-            checkProgram(program);
+        if (node.kind == SastKind.PROGRAM) {
+            checkProgram(node);
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
-            for (SemanticASTNode item : namespace.items) {
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
                 checkNode(item);
             }
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode fn) {
-            functionChecker.checkFunction(fn);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            functionChecker.checkFunction(node);
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            declarationChecker.checkStructDecl(struct);
+        if (node.kind == SastKind.STRUCT_DECL) {
+            declarationChecker.checkStructDecl(node);
 
-            for (SemanticFunctionDeclNode method : struct.methods) {
+            for (SastNode method : node.methods) {
                 functionChecker.checkFunction(method);
             }
 
             return;
         }
 
-        if (node instanceof SemanticEnumDeclNode) {
+        if (node.kind == SastKind.ENUM_DECL) {
             return;
         }
 
-        if (node instanceof SemanticStmtNode stmt) {
-            statementChecker.checkStmt(stmt);
+        if (node.isStmt()) {
+            statementChecker.checkStmt(node);
             return;
         }
 
-        if (node instanceof SemanticExprNode expr) {
-            expressionChecker.checkExpr(expr);
+        if (node.isExpr()) {
+            expressionChecker.checkExpr(node);
             return;
         }
 
-        diagnostics.error("Unknown SemanticASTNode type passed to MasterChecker: "
+        diagnostics.error("Unknown SastNode type passed to MasterChecker: "
                 + node.getClass().getSimpleName());
     }
 
-    private void checkProgram(SemanticProgramNode program) {
-        for (SemanticASTNode item : program.topLevelItems) {
-            if (item instanceof SemanticNamespaceNode namespace) {
-                for (SemanticASTNode namespaceItem : namespace.items) {
+    private void checkProgram(SastNode program) {
+        for (SastNode item : program.topLevelItems) {
+            if (item.kind == SastKind.NAMESPACE) {
+                for (SastNode namespaceItem : item.items) {
                     checkNode(namespaceItem);
                 }
                 continue;
             }
 
-            if (item instanceof SemanticFunctionDeclNode fn) {
-                functionChecker.checkFunction(fn);
+            if (item.kind == SastKind.FUNCTION_DECL) {
+                functionChecker.checkFunction(item);
                 continue;
             }
 
-            if (item instanceof SemanticStructDeclNode struct) {
-                declarationChecker.checkStructDecl(struct);
+            if (item.kind == SastKind.STRUCT_DECL) {
+                declarationChecker.checkStructDecl(item);
 
-                for (SemanticFunctionDeclNode method : struct.methods) {
+                for (SastNode method : item.methods) {
                     functionChecker.checkFunction(method);
                 }
 
                 continue;
             }
 
-            if (item instanceof SemanticEnumDeclNode) {
+            if (item.kind == SastKind.ENUM_DECL) {
                 continue;
             }
 
-            if (item instanceof SemanticStmtNode stmt) {
-                statementChecker.checkStmt(stmt);
+            if (item.isStmt()) {
+                statementChecker.checkStmt(item);
                 continue;
             }
 
-            if (item instanceof SemanticExprNode expr) {
+            if (item.isExpr()) {
 
-                expressionChecker.checkExpr(expr);
+                expressionChecker.checkExpr(item);
                 continue;
             }
 

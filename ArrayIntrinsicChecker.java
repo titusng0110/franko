@@ -14,22 +14,22 @@ final class ArrayIntrinsicChecker {
 
     void check(
             ExpressionChecker owner,
-            SemanticArrayIntrinsicCallNode node
+            SastNode node
     ) {
         this.owner = owner;
 
-        if (node.kind == null) {
+        if (node.intrinsicKind == null) {
             diagnostics.error("Array intrinsic call has null kind");
             return;
         }
 
         owner.checkExpr(node.receiver);
 
-        switch (node.kind) {
+        switch (node.intrinsicKind) {
             case INIT, INIT_ZERO, RESIZE, UNINIT -> owner.ensureRegionPermission(
                     node.receiver,
                     PtrPermission.OWNER,
-                    node.kind.runtimeName + "()"
+                    node.intrinsicKind.runtimeName + "()"
             );
 
             case MEMSET, MEMCPY, MEMMOVE,
@@ -45,7 +45,7 @@ final class ArrayIntrinsicChecker {
                  SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT -> owner.ensureRegionPermission(
                     node.receiver,
                     PtrPermission.MUTABLE,
-                    node.kind.runtimeName + "()"
+                    node.intrinsicKind.runtimeName + "()"
             );
 
             case LENGTH, MEMCMP, MEMCHR, MEMMEM,
@@ -58,7 +58,7 @@ final class ArrayIntrinsicChecker {
                  READ_BIT, COUNT_SET_BITS -> { }
         }
 
-        switch (node.kind) {
+        switch (node.intrinsicKind) {
             case INIT, INIT_ZERO, RESIZE -> visitArrayAllocIntrinsic(node);
             case UNINIT -> visitArrayUninitIntrinsic(node);
             case MEMSET -> visitArrayMemsetIntrinsic(node);
@@ -92,7 +92,7 @@ final class ArrayIntrinsicChecker {
         }
     }
 
-    private void visitArrayMemcmpIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayMemcmpIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 4) {
             diagnostics.error("Array intrinsic 'memcmp' expects either 1 or 4 arguments, got "
                     + node.args.size());
@@ -101,7 +101,7 @@ final class ArrayIntrinsicChecker {
 
         checkNewIntrinsicReceiver(node);
 
-        SemanticExprNode sourcePtr = node.args.get(0);
+        SastNode sourcePtr = node.args.get(0);
         owner.checkExpr(sourcePtr);
 
         SastType sourceArrayType = null;
@@ -143,9 +143,9 @@ final class ArrayIntrinsicChecker {
         }
 
         if (node.args.size() == 4) {
-            SemanticExprNode dstStart = node.args.get(1);
-            SemanticExprNode srcStart = node.args.get(2);
-            SemanticExprNode count = node.args.get(3);
+            SastNode dstStart = node.args.get(1);
+            SastNode srcStart = node.args.get(2);
+            SastNode count = node.args.get(3);
 
             owner.ensureUInt32Compatible(dstStart, "memcmp() destination start", true);
             owner.ensureUInt32Compatible(srcStart, "memcmp() source start", true);
@@ -166,10 +166,10 @@ final class ArrayIntrinsicChecker {
             );
         }
 
-        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+        ensureArrayIntrinsicReturnType(node, node.intrinsicKind.returnType());
     }
 
-    private void visitArrayMemchrIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayMemchrIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memchr' expects either 1 or 3 arguments, got "
                     + node.args.size());
@@ -196,10 +196,10 @@ final class ArrayIntrinsicChecker {
             );
         }
 
-        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+        ensureArrayIntrinsicReturnType(node, node.intrinsicKind.returnType());
     }
 
-    private void visitArrayMemmemIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayMemmemIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memmem' expects either 1 or 3 arguments, got "
                     + node.args.size());
@@ -208,7 +208,7 @@ final class ArrayIntrinsicChecker {
 
         checkNewIntrinsicReceiver(node);
 
-        SemanticExprNode needle = node.args.get(0);
+        SastNode needle = node.args.get(0);
         owner.checkExpr(needle);
 
         if (types.ensureValueExpression(needle, "memmem() needle pointer")) {
@@ -242,13 +242,13 @@ final class ArrayIntrinsicChecker {
             );
         }
 
-        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+        ensureArrayIntrinsicReturnType(node, node.intrinsicKind.returnType());
     }
 
-    private void visitArrayReadIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayReadIntrinsic(SastNode node) {
         if (node.args.size() != 1) {
             diagnostics.error("Array intrinsic '"
-                    + node.kind.runtimeName
+                    + node.intrinsicKind.runtimeName
                     + "' expects exactly 1 argument, got "
                     + node.args.size());
             return;
@@ -256,28 +256,28 @@ final class ArrayIntrinsicChecker {
 
         checkNewIntrinsicReceiver(node);
 
-        SemanticExprNode offset = node.args.get(0);
+        SastNode offset = node.args.get(0);
 
         owner.ensureUInt32Compatible(
                 offset,
-                node.kind.runtimeName + "() offset",
+                node.intrinsicKind.runtimeName + "() offset",
                 true
         );
 
         owner.ensureStaticArrayByteAccessInBounds(
                 node.receiver.type,
                 offset,
-                TypeChecker.bitWidth(node.kind.returnKind) / 8,
-                node.kind.runtimeName + "() offset"
+                TypeChecker.bitWidth(node.intrinsicKind.returnKind) / 8,
+                node.intrinsicKind.runtimeName + "() offset"
         );
 
-        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+        ensureArrayIntrinsicReturnType(node, node.intrinsicKind.returnType());
     }
 
-    private void visitArrayWriteIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayWriteIntrinsic(SastNode node) {
         if (node.args.size() != 2) {
             diagnostics.error("Array intrinsic '"
-                    + node.kind.runtimeName
+                    + node.intrinsicKind.runtimeName
                     + "' expects exactly 2 arguments, got "
                     + node.args.size());
             return;
@@ -285,38 +285,38 @@ final class ArrayIntrinsicChecker {
 
         checkNewIntrinsicReceiver(node);
 
-        SemanticExprNode offset = node.args.get(0);
+        SastNode offset = node.args.get(0);
 
         owner.ensureUInt32Compatible(
                 offset,
-                node.kind.runtimeName + "() offset",
+                node.intrinsicKind.runtimeName + "() offset",
                 true
         );
 
         owner.ensureStaticArrayByteAccessInBounds(
                 node.receiver.type,
                 offset,
-                TypeChecker.bitWidth(node.kind.argKind(1).primitiveKind) / 8,
-                node.kind.runtimeName + "() offset"
+                TypeChecker.bitWidth(node.intrinsicKind.argKind(1).primitiveKind) / 8,
+                node.intrinsicKind.runtimeName + "() offset"
         );
 
-        SemanticIntrinsicArgKind valueKind = node.kind.argKind(1);
+        SemanticIntrinsicArgKind valueKind = node.intrinsicKind.argKind(1);
 
         owner.ensureScalarCompatible(
                 node.args.get(1),
                 valueKind.primitiveKind,
-                node.kind.runtimeName + "() value"
+                node.intrinsicKind.runtimeName + "() value"
         );
 
         ensureArrayIntrinsicReturnType(node, SastType.voidType());
     }
 
-    private void visitArrayBitIntrinsic(SemanticArrayIntrinsicCallNode node) {
-        if (!node.kind.acceptsArity(node.args.size())) {
+    private void visitArrayBitIntrinsic(SastNode node) {
+        if (!node.intrinsicKind.acceptsArity(node.args.size())) {
             diagnostics.error("Array intrinsic '"
-                    + node.kind.runtimeName
+                    + node.intrinsicKind.runtimeName
                     + "' expects "
-                    + node.kind.arityDescription()
+                    + node.intrinsicKind.arityDescription()
                     + " arguments, got "
                     + node.args.size());
             return;
@@ -325,37 +325,37 @@ final class ArrayIntrinsicChecker {
         checkNewIntrinsicReceiver(node);
 
         for (int i = 0; i < node.args.size(); i++) {
-            SemanticIntrinsicArgKind argKind = node.kind.argKind(i);
+            SemanticIntrinsicArgKind argKind = node.intrinsicKind.argKind(i);
 
             owner.ensureScalarCompatible(
                     node.args.get(i),
                     argKind.primitiveKind,
-                    node.kind.runtimeName + "() argument " + (i + 1)
+                    node.intrinsicKind.runtimeName + "() argument " + (i + 1)
             );
         }
 
-        if (node.kind == SemanticArrayIntrinsicKind.READ_BIT
-                || node.kind == SemanticArrayIntrinsicKind.WRITE_BIT
-                || node.kind == SemanticArrayIntrinsicKind.FLIP_BIT) {
+        if (node.intrinsicKind == SemanticArrayIntrinsicKind.READ_BIT
+                || node.intrinsicKind == SemanticArrayIntrinsicKind.WRITE_BIT
+                || node.intrinsicKind == SemanticArrayIntrinsicKind.FLIP_BIT) {
             owner.ensureStaticArrayBitIndexInBounds(
                     node.receiver.type,
                     node.args.get(0),
-                    node.kind.runtimeName + "() bit index"
+                    node.intrinsicKind.runtimeName + "() bit index"
             );
         }
 
-        ensureArrayIntrinsicReturnType(node, node.kind.returnType());
+        ensureArrayIntrinsicReturnType(node, node.intrinsicKind.returnType());
     }
 
-    private void checkNewIntrinsicReceiver(SemanticArrayIntrinsicCallNode node) {
-        if (node.kind.requiresStorageLValue()
+    private void checkNewIntrinsicReceiver(SastNode node) {
+        if (node.intrinsicKind.requiresStorageLValue()
                 && !owner.isStorageBackedLValue(node.receiver)) {
-            diagnostics.error(node.kind.runtimeName
+            diagnostics.error(node.intrinsicKind.runtimeName
                     + "() receiver must be a storage-backed lvalue");
         }
 
         if (!types.isArrayType(node.receiver.type)) {
-            diagnostics.error(node.kind.runtimeName
+            diagnostics.error(node.intrinsicKind.runtimeName
                     + "() receiver must be an array, got "
                     + types.describeSafe(node.receiver.type));
             return;
@@ -367,12 +367,12 @@ final class ArrayIntrinsicChecker {
             return;
         }
 
-        switch (node.kind.elementRule) {
+        switch (node.intrinsicKind.elementRule) {
             case NONE -> { }
 
             case MEMSET_SAFE -> {
                 if (!types.isMemsetSafe(elementType)) {
-                    diagnostics.error(node.kind.runtimeName
+                    diagnostics.error(node.intrinsicKind.runtimeName
                             + "() receiver element type is not memset-safe: "
                             + elementType.describe());
                 }
@@ -380,7 +380,7 @@ final class ArrayIntrinsicChecker {
 
             case MEMCPY_SAFE -> {
                 if (!types.isMemcpySafe(elementType)) {
-                    diagnostics.error(node.kind.runtimeName
+                    diagnostics.error(node.intrinsicKind.runtimeName
                             + "() receiver element type is not memcpy-safe: "
                             + elementType.describe());
                 }
@@ -388,7 +388,7 @@ final class ArrayIntrinsicChecker {
 
             case BYTE -> {
                 if (!TypeChecker.isByteType(elementType)) {
-                    diagnostics.error(node.kind.runtimeName
+                    diagnostics.error(node.intrinsicKind.runtimeName
                             + "() receiver element type must be byte, got "
                             + types.describeSafe(elementType));
                 }
@@ -396,29 +396,29 @@ final class ArrayIntrinsicChecker {
         }
     }
 
-    private void visitArrayAllocIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayAllocIntrinsic(SastNode node) {
         if (node.args.size() != 1) {
             diagnostics.error("Array intrinsic '"
-                    + node.kind.runtimeName
+                    + node.intrinsicKind.runtimeName
                     + "' expects exactly 1 argument, got "
                     + node.args.size());
             return;
         }
 
         if (!owner.isStorageBackedLValue(node.receiver)) {
-            diagnostics.error(node.kind.runtimeName
+            diagnostics.error(node.intrinsicKind.runtimeName
                     + "() receiver must be a storage-backed lvalue");
         }
 
         if (!types.isDynamicArrayType(node.receiver.type)) {
-            diagnostics.error(node.kind.runtimeName
+            diagnostics.error(node.intrinsicKind.runtimeName
                     + "() receiver must be a dynamic array, got "
                     + types.describeSafe(node.receiver.type));
         }
 
         owner.ensureArraySizeCompatible(
                 node.args.get(0),
-                node.kind.runtimeName + "() size"
+                node.intrinsicKind.runtimeName + "() size"
         );
 
         ensureArrayIntrinsicReturnType(
@@ -427,7 +427,7 @@ final class ArrayIntrinsicChecker {
         );
     }
 
-    private void visitArrayUninitIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayUninitIntrinsic(SastNode node) {
         if (node.args.size() != 0) {
             diagnostics.error("Array intrinsic 'uninit' expects exactly 0 arguments, got "
                     + node.args.size());
@@ -449,7 +449,7 @@ final class ArrayIntrinsicChecker {
         );
     }
 
-    private void visitArrayMemsetIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayMemsetIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memset' expects either 1 or 3 arguments, got "
                     + node.args.size());
@@ -472,7 +472,7 @@ final class ArrayIntrinsicChecker {
                     + elementType.describe());
         }
 
-        SemanticExprNode value = node.args.get(0);
+        SastNode value = node.args.get(0);
 
         owner.checkExpr(value);
 
@@ -510,7 +510,7 @@ final class ArrayIntrinsicChecker {
         );
     }
 
-    private void visitArrayMemcpyIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayMemcpyIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 4) {
             diagnostics.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments, got "
                     + node.args.size());
@@ -526,7 +526,7 @@ final class ArrayIntrinsicChecker {
                 "memcpy() target must be an array"
         );
 
-        SemanticExprNode sourcePtr = node.args.get(0);
+        SastNode sourcePtr = node.args.get(0);
         owner.checkExpr(sourcePtr);
 
         SastType sourceArrayType = null;
@@ -573,9 +573,9 @@ final class ArrayIntrinsicChecker {
         }
 
         if (node.args.size() == 4) {
-            SemanticExprNode dstStart = node.args.get(1);
-            SemanticExprNode srcStart = node.args.get(2);
-            SemanticExprNode count = node.args.get(3);
+            SastNode dstStart = node.args.get(1);
+            SastNode srcStart = node.args.get(2);
+            SastNode count = node.args.get(3);
 
             owner.ensureUInt32Compatible(
                     dstStart,
@@ -616,7 +616,7 @@ final class ArrayIntrinsicChecker {
         );
     }
 
-    private void visitArrayMemmoveIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayMemmoveIntrinsic(SastNode node) {
         if (node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memmove' expects exactly 3 arguments, got "
                     + node.args.size());
@@ -640,9 +640,9 @@ final class ArrayIntrinsicChecker {
                     + receiverElem.describe());
         }
 
-        SemanticExprNode dstStart = node.args.get(0);
-        SemanticExprNode srcStart = node.args.get(1);
-        SemanticExprNode count = node.args.get(2);
+        SastNode dstStart = node.args.get(0);
+        SastNode srcStart = node.args.get(1);
+        SastNode count = node.args.get(2);
 
         owner.ensureUInt32Compatible(
                 dstStart,
@@ -682,7 +682,7 @@ final class ArrayIntrinsicChecker {
         );
     }
 
-    private void visitArrayLengthIntrinsic(SemanticArrayIntrinsicCallNode node) {
+    private void visitArrayLengthIntrinsic(SastNode node) {
         if (node.args.size() != 0) {
             diagnostics.error("Array intrinsic 'length' expects exactly 0 arguments, got "
                     + node.args.size());
@@ -701,12 +701,12 @@ final class ArrayIntrinsicChecker {
     }
 
     private void ensureArrayIntrinsicReturnType(
-            SemanticArrayIntrinsicCallNode node,
+            SastNode node,
             SastType expected
     ) {
         if (!TypeChecker.sameType(node.type, expected)) {
             diagnostics.error("Array intrinsic '"
-                    + node.kind.runtimeName
+                    + node.intrinsicKind.runtimeName
                     + "' expression type mismatch: node has "
                     + types.describeSafe(node.type)
                     + ", expected "

@@ -115,10 +115,10 @@ public final class PointerNullStateChecker {
         this.context = context;
     }
 
-    public void check(SemanticASTNode node) {
-        if (!(node instanceof SemanticProgramNode program)) {
+    public void check(SastNode node) {
+        if (!(node.kind == SastKind.PROGRAM)) {
             throw new IllegalArgumentException(
-                    "Pointer null-state checking requires a semantic program root"
+                    "Pointer null-state checking requires a semantic node root"
             );
         }
 
@@ -127,7 +127,7 @@ public final class PointerNullStateChecker {
                 EntryKind.NONE,
                 new SourceTable(),
                 new SymbolRegistry(),
-                program
+                node
         ));
     }
 
@@ -144,7 +144,7 @@ public final class PointerNullStateChecker {
         );
     }
 
-    private void ensureContext(SemanticProgramNode root) {
+    private void ensureContext(SastNode root) {
         if (context == null || context.root != root) {
             context = MemoryAnalysisContext.build(root);
             state = null;
@@ -196,7 +196,7 @@ public final class PointerNullStateChecker {
             currentBfsResult = null;
             suppressed = false;
 
-            SemanticFunctionDeclNode decl = context.functionDecl(functionId);
+            SastNode decl = context.functionDecl(functionId);
 
             if (decl == null) {
                 builder = null;
@@ -218,7 +218,7 @@ public final class PointerNullStateChecker {
             seedGlobals();
         }
 
-        private void seedSummaryParameters(SemanticFunctionDeclNode decl) {
+        private void seedSummaryParameters(SastNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
                 Symbol parameter = decl.parameterVariables.get(i);
 
@@ -275,7 +275,7 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private void seedCheckParameters(SemanticFunctionDeclNode decl) {
+        private void seedCheckParameters(SastNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
                 Symbol parameter = decl.parameterVariables.get(i);
                 int pointerIndex = state.pointerIndex(parameter);
@@ -295,7 +295,7 @@ public final class PointerNullStateChecker {
         }
 
         private boolean isSelfParameter(
-                SemanticFunctionDeclNode decl,
+                SastNode decl,
                 Symbol parameter
         ) {
             return decl.symbol.kind == SymbolKind.METHOD
@@ -304,7 +304,7 @@ public final class PointerNullStateChecker {
         }
 
         private boolean isMainArgs(
-                SemanticFunctionDeclNode decl,
+                SastNode decl,
                 Symbol parameter
         ) {
             return !(decl.symbol.kind == SymbolKind.METHOD)
@@ -497,19 +497,19 @@ public final class PointerNullStateChecker {
         }
 
         @Override
-        public void enterBlock(SemanticBlockNode node, int depth) {
+        public void enterBlock(SastNode node, int depth) {
         }
 
         @Override
         public void leaveBlock(
-                SemanticBlockNode node,
+                SastNode node,
                 int depth,
                 boolean terminated
         ) {
         }
 
         @Override
-        public void checkVarDecl(SemanticVarDeclNode node) {
+        public void checkVarDecl(SastNode node) {
             diagnostics.push(node.span);
 
             try {
@@ -548,7 +548,7 @@ public final class PointerNullStateChecker {
         }
 
         @Override
-        public void checkAssign(SemanticAssignNode node) {
+        public void checkAssign(SastNode node) {
             diagnostics.push(node.span);
 
             try {
@@ -571,11 +571,11 @@ public final class PointerNullStateChecker {
                     return;
                 }
 
-                if (node.target instanceof SemanticDerefNode deref) {
+                if (node.target.kind == SastKind.DEREF) {
                     if (summaryMode) {
-                        applySummaryCellWrite(node, deref);
+                        applySummaryCellWrite(node, node.target);
                     } else {
-                        applyCheckCellWrite(deref, node.value);
+                        applyCheckCellWrite(node.target, node.value);
                     }
                 }
             } finally {
@@ -583,15 +583,15 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private Symbol pointerIndexSymbol(SemanticExprNode expression) {
-            return expression instanceof SemanticVarExprNode variable
-                    ? variable.symbol
+        private Symbol pointerIndexSymbol(SastNode expression) {
+            return expression.kind == SastKind.VAR_EXPR
+                    ? expression.symbol
                     : null;
         }
 
         private void applySummaryAssignment(
                 int pointerIndex,
-                SemanticExprNode value
+                SastNode value
         ) {
             long[] valueSet = symbolicValueOf(value);
             long[] pointeeSet = symbolicPointeeOf(value);
@@ -622,7 +622,7 @@ public final class PointerNullStateChecker {
 
         private void applyCheckAssignment(
                 int pointerIndex,
-                SemanticExprNode value
+                SastNode value
         ) {
             state.setState(pointerIndex, concreteValueOf(value));
             state.clearCellTargets(pointerIndex);
@@ -630,8 +630,8 @@ public final class PointerNullStateChecker {
         }
 
         private void applySummaryCellWrite(
-                SemanticAssignNode assignment,
-                SemanticDerefNode deref
+                SastNode assignment,
+                SastNode deref
         ) {
             long[] valueSet = symbolicValueOf(assignment.value);
             long[] cellSet = symbolicCellOf(deref.expr);
@@ -687,7 +687,7 @@ public final class PointerNullStateChecker {
                             state.slotSource[sourceOffset + i] |= valueSet[i];
                         }
 
-                        SemanticFunctionDeclNode decl =
+                        SastNode decl =
                                 context.functionDecl(currentFunctionId);
 
                         if (decl != null && param < decl.parameterVariables.size()) {
@@ -713,8 +713,8 @@ public final class PointerNullStateChecker {
         }
 
         private void applyCheckCellWrite(
-                SemanticDerefNode deref,
-                SemanticExprNode value
+                SastNode deref,
+                SastNode value
         ) {
             int cellVariable = concreteCellTargetVariable(deref.expr);
             int pointerIndex = state.pointerIndexByVariableId(cellVariable);
@@ -729,7 +729,7 @@ public final class PointerNullStateChecker {
         }
 
         @Override
-        public void checkExpr(SemanticExprNode expression) {
+        public void checkExpr(SastNode expression) {
             if (expression == null) {
                 return;
             }
@@ -743,91 +743,91 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private void checkExprInner(SemanticExprNode expression) {
-            if (expression instanceof SemanticIntLiteralNode
-                    || expression instanceof SemanticNullLiteralNode
-                    || expression instanceof SemanticVarExprNode
-                    || expression instanceof SemanticEnumVariantNode) {
+        private void checkExprInner(SastNode expression) {
+            if (expression.kind == SastKind.INT_LITERAL
+                    || expression.kind == SastKind.NULL_LITERAL
+                    || expression.kind == SastKind.VAR_EXPR
+                    || expression.kind == SastKind.ENUM_VARIANT) {
                 return;
             }
 
-            if (expression instanceof SemanticUnaryOpNode unary) {
-                checkExpr(unary.expr);
+            if (expression.kind == SastKind.UNARY_OP) {
+                checkExpr(expression.expr);
                 return;
             }
 
-            if (expression instanceof SemanticBinOpNode binary) {
-                checkExpr(binary.left);
-                checkExpr(binary.right);
+            if (expression.kind == SastKind.BIN_OP) {
+                checkExpr(expression.left);
+                checkExpr(expression.right);
                 return;
             }
 
-            if (expression instanceof SemanticArrayAccessNode access) {
-                checkExpr(access.target);
-                checkExpr(access.index);
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                checkExpr(expression.target);
+                checkExpr(expression.index);
                 return;
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                checkExpr(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                checkExpr(expression.target);
                 return;
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                for (SemanticExprNode argument : call.args) {
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                for (SastNode argument : expression.args) {
                     checkExpr(argument);
                 }
 
                 if (summaryMode) {
-                    recordSummaryCall(call);
+                    recordSummaryCall(expression);
                 } else {
-                    handleCheckCall(call);
+                    handleCheckCall(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-                checkExpr(intrinsic.receiver);
+            if (expression.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+                checkExpr(expression.receiver);
 
-                for (SemanticExprNode argument : intrinsic.args) {
+                for (SastNode argument : expression.args) {
                     checkExpr(argument);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticAggregateLiteralNode aggregate) {
-                for (SemanticAggregateFieldInit field : aggregate.fields) {
+            if (expression.kind == SastKind.AGGREGATE_LITERAL) {
+                for (SastNode field : expression.fields) {
                     checkExpr(field.value);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                checkExpr(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                checkExpr(expression.target);
                 return;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                checkExpr(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                checkExpr(expression.expr);
 
                 if (summaryMode) {
-                    markSummaryDeref(deref.expr);
+                    markSummaryDeref(expression.expr);
                 } else if (!suppressed) {
-                    checkConcreteDeref(deref);
+                    checkConcreteDeref(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                checkExpr(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                checkExpr(expression.expr);
             }
         }
 
-        private void markSummaryDeref(SemanticExprNode pointerExpression) {
+        private void markSummaryDeref(SastNode pointerExpression) {
             long[] valueSet = symbolicValueOf(pointerExpression);
 
             for (int word = 0; word < context.templates.words; word++) {
@@ -856,22 +856,22 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private void checkConcreteDeref(SemanticDerefNode deref) {
-            if (!(deref.expr instanceof SemanticVarExprNode)
-                    && !(deref.expr instanceof SemanticFunctionCallNode)
-                    && !(deref.expr instanceof SemanticCastExprNode)
-                    && !(deref.expr instanceof SemanticDerefNode)) {
+        private void checkConcreteDeref(SastNode deref) {
+            if (!(deref.expr.kind == SastKind.VAR_EXPR)
+                    && !(deref.expr.kind == SastKind.FUNCTION_CALL)
+                    && !(deref.expr.kind == SastKind.CAST)
+                    && !(deref.expr.kind == SastKind.DEREF)) {
                 return;
             }
 
             byte valueState = concreteValueOf(deref.expr);
 
             if (valueState == PointerNullAnalysisState.NULL) {
-                if (deref.expr instanceof SemanticVarExprNode variable) {
+                if (deref.expr.kind == SastKind.VAR_EXPR) {
                     diagnostics.error(
                             INTRA
                                     + "Cannot dereference null variable '"
-                                    + variable.symbol.qualifiedName()
+                                    + deref.expr.symbol.qualifiedName()
                                     + "'"
                     );
                 } else {
@@ -887,15 +887,15 @@ public final class PointerNullStateChecker {
                 return;
             }
 
-            if (deref.expr instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (deref.expr.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(deref.expr.symbol);
 
                 if (pointerIndex >= 0
                         && addBit(warnedVariables, pointerIndex)) {
                     diagnostics.warning(
                             INTRA
                                     + "Deref of possibly null variable '"
-                                    + variable.symbol.qualifiedName()
+                                    + deref.expr.symbol.qualifiedName()
                                     + "'"
                     );
                 }
@@ -911,7 +911,7 @@ public final class PointerNullStateChecker {
         }
 
         @Override
-        public void onReturn(SemanticReturnNode node) {
+        public void onReturn(SastNode node) {
             if (summaryMode) {
                 long[] set = node.value == null
                         ? context.templates.newSet()
@@ -931,7 +931,7 @@ public final class PointerNullStateChecker {
 
         @Override
         public boolean guardPathFeasible(
-                SemanticExprNode condition,
+                SastNode condition,
                 boolean guardHolds
         ) {
             if (condition.constantValue != null) {
@@ -982,7 +982,7 @@ public final class PointerNullStateChecker {
 
         @Override
         public void refineFromGuard(
-                SemanticExprNode condition,
+                SastNode condition,
                 boolean guardHolds
         ) {
             NullGuard guard = nullGuard(condition);
@@ -1152,7 +1152,7 @@ public final class PointerNullStateChecker {
         }
 
         @Override
-        public void markLoopBodyLocalsDead(SemanticStmtNode body) {
+        public void markLoopBodyLocalsDead(SastNode body) {
         }
 
         @Override
@@ -1165,7 +1165,7 @@ public final class PointerNullStateChecker {
             suppressed = value;
         }
 
-        private void recordSummaryCall(SemanticFunctionCallNode call) {
+        private void recordSummaryCall(SastNode call) {
             int callSiteId = context.callSiteId(call);
             int edgeIndex = context.callGraph.callSiteLocalIndex[callSiteId];
 
@@ -1178,7 +1178,7 @@ public final class PointerNullStateChecker {
             for (int param = 0;
                     param < call.function.parameters.size();
                     param++) {
-                SemanticExprNode argument = param < call.args.size()
+                SastNode argument = param < call.args.size()
                         ? call.args.get(param)
                         : null;
 
@@ -1206,7 +1206,7 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private void handleCheckCall(SemanticFunctionCallNode call) {
+        private void handleCheckCall(SastNode call) {
             int callSiteId = context.callSiteId(call);
             int calleeId = context.callGraph.callSiteCallee[callSiteId];
             int paramCount = call.function.parameters.size();
@@ -1214,7 +1214,7 @@ public final class PointerNullStateChecker {
                     paramCount * PointerNullAnalysisState.BINDING_STRIDE];
 
             for (int i = 0; i < paramCount; i++) {
-                SemanticExprNode argument = call.args.get(i);
+                SastNode argument = call.args.get(i);
                 int offset = i * PointerNullAnalysisState.BINDING_STRIDE;
                 rootBinding[offset + PointerNullAnalysisState.BINDING_VALUE] =
                         concreteValueOf(argument);
@@ -1715,7 +1715,7 @@ public final class PointerNullStateChecker {
         }
 
         private void emitCallRequirements(
-                SemanticFunctionCallNode call,
+                SastNode call,
                 byte[] requirements,
                 byte[] pointeeRequirements
         ) {
@@ -1727,7 +1727,7 @@ public final class PointerNullStateChecker {
 
                 String parameterName = call.function.parameters.get(i).name;
                 String functionName = call.function.qualifiedName();
-                SemanticExprNode argument = call.args.get(i);
+                SastNode argument = call.args.get(i);
                 byte value = concreteValueOf(argument);
                 byte pointee = concretePointeeState(argument);
 
@@ -1812,8 +1812,8 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private void havocRootCells(SemanticFunctionCallNode call) {
-            for (SemanticExprNode argument : call.args) {
+        private void havocRootCells(SastNode call) {
+            for (SastNode argument : call.args) {
                 int cellVariable = concreteCellTargetVariable(argument);
                 int pointerIndex = state.pointerIndexByVariableId(cellVariable);
 
@@ -1826,37 +1826,37 @@ public final class PointerNullStateChecker {
             }
         }
 
-        private byte concreteValueOf(SemanticExprNode expression) {
+        private byte concreteValueOf(SastNode expression) {
             if (expression == null) {
                 return PointerNullAnalysisState.MAYBE_NULL;
             }
 
-            if (expression instanceof SemanticNullLiteralNode) {
+            if (expression.kind == SastKind.NULL_LITERAL) {
                 return PointerNullAnalysisState.NULL;
             }
 
-            if (expression instanceof SemanticGetPtrNode) {
+            if (expression.kind == SastKind.GET_PTR) {
                 return PointerNullAnalysisState.POINTING;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 return pointerIndex < 0
                         ? PointerNullAnalysisState.MAYBE_NULL
                         : state.stateOf(pointerIndex);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return concreteValueOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return concreteValueOf(expression.expr);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return concretePointeeState(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return concretePointeeState(expression.expr);
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                int callSiteId = context.callSiteId(call);
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                int callSiteId = context.callSiteId(expression);
                 byte value = callResultStates[callSiteId];
 
                 return value < 0
@@ -1867,13 +1867,13 @@ public final class PointerNullStateChecker {
             return PointerNullAnalysisState.MAYBE_NULL;
         }
 
-        private byte concretePointeeState(SemanticExprNode expression) {
+        private byte concretePointeeState(SastNode expression) {
             if (expression == null) {
                 return PointerNullAnalysisState.MAYBE_NULL;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex < 0) {
                     return PointerNullAnalysisState.MAYBE_NULL;
@@ -1887,63 +1887,63 @@ public final class PointerNullStateChecker {
                         : state.stateOf(cellPointer);
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target.type.kind == SastTypeKind.PTR) {
-                    return concreteValueOf(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.type.kind == SastTypeKind.PTR) {
+                    return concreteValueOf(expression.target);
                 }
 
                 return PointerNullAnalysisState.MAYBE_NULL;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return concretePointeeState(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return concretePointeeState(expression.expr);
             }
 
             return PointerNullAnalysisState.MAYBE_NULL;
         }
 
-        private int concreteCellTargetVariable(SemanticExprNode expression) {
+        private int concreteCellTargetVariable(SastNode expression) {
             if (expression == null) {
                 return -1;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 return pointerIndex < 0
                         ? -1
                         : state.singleCellTarget(pointerIndex);
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target instanceof SemanticVarExprNode variable) {
-                    return context.variableId(variable.symbol);
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.kind == SastKind.VAR_EXPR) {
+                    return context.variableId(expression.target.symbol);
                 }
 
-                if (getPtr.target instanceof SemanticDerefNode deref) {
-                    return concreteCellTargetVariable(deref.expr);
+                if (expression.target.kind == SastKind.DEREF) {
+                    return concreteCellTargetVariable(expression.target.expr);
                 }
 
-                if (getPtr.target instanceof SemanticCastExprNode cast) {
-                    return concreteCellTargetVariable(cast.expr);
+                if (expression.target.kind == SastKind.CAST) {
+                    return concreteCellTargetVariable(expression.target.expr);
                 }
 
                 return -1;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return concreteCellTargetVariable(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return concreteCellTargetVariable(expression.expr);
             }
 
             return -1;
         }
 
         private void copyConcreteCellTargets(
-                SemanticExprNode expression,
+                SastNode expression,
                 int targetPointerIndex
         ) {
-            if (expression instanceof SemanticVarExprNode variable) {
-                int sourcePointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int sourcePointerIndex = state.pointerIndex(expression.symbol);
 
                 if (sourcePointerIndex >= 0) {
                     state.copyCellTargets(
@@ -1955,31 +1955,31 @@ public final class PointerNullStateChecker {
                 return;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target instanceof SemanticVarExprNode variable) {
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.kind == SastKind.VAR_EXPR) {
                     state.setCellTarget(
                             targetPointerIndex,
-                            context.variableId(variable.symbol)
+                            context.variableId(expression.target.symbol)
                     );
-                } else if (getPtr.target instanceof SemanticDerefNode deref) {
-                    int cellVariable = concreteCellTargetVariable(deref.expr);
+                } else if (expression.target.kind == SastKind.DEREF) {
+                    int cellVariable = concreteCellTargetVariable(expression.target.expr);
 
                     if (cellVariable >= 0) {
                         state.setCellTarget(targetPointerIndex, cellVariable);
                     }
-                } else if (getPtr.target instanceof SemanticCastExprNode cast) {
-                    copyConcreteCellTargets(cast.expr, targetPointerIndex);
+                } else if (expression.target.kind == SastKind.CAST) {
+                    copyConcreteCellTargets(expression.target.expr, targetPointerIndex);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                copyConcreteCellTargets(cast.expr, targetPointerIndex);
+            if (expression.kind == SastKind.CAST) {
+                copyConcreteCellTargets(expression.expr, targetPointerIndex);
             }
         }
 
-        private long[] symbolicValueOf(SemanticExprNode expression) {
+        private long[] symbolicValueOf(SastNode expression) {
             long[] set = context.templates.newSet();
 
             if (expression == null) {
@@ -1987,18 +1987,18 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticNullLiteralNode) {
+            if (expression.kind == SastKind.NULL_LITERAL) {
                 context.templates.set(set, MemoryTemplate.NULL);
                 return set;
             }
 
-            if (expression instanceof SemanticGetPtrNode) {
+            if (expression.kind == SastKind.GET_PTR) {
                 context.templates.set(set, MemoryTemplate.NONNULL);
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     int offset = state.symValueOffset(pointerIndex);
@@ -2014,8 +2014,8 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                long[] pointee = symbolicPointeeOf(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                long[] pointee = symbolicPointeeOf(expression.expr);
 
                 for (int i = 0; i < context.templates.words; i++) {
                     set[i] = pointee[i];
@@ -2024,8 +2024,8 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                long[] inner = symbolicValueOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                long[] inner = symbolicValueOf(expression.expr);
 
                 for (int i = 0; i < context.templates.words; i++) {
                     set[i] = inner[i];
@@ -2034,8 +2034,8 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                int callSiteId = context.callSiteId(call);
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                int callSiteId = context.callSiteId(expression);
                 context.templates.set(
                         set,
                         context.templates.callResult(callSiteId)
@@ -2047,7 +2047,7 @@ public final class PointerNullStateChecker {
             return set;
         }
 
-        private long[] symbolicPointeeOf(SemanticExprNode expression) {
+        private long[] symbolicPointeeOf(SastNode expression) {
             long[] set = context.templates.newSet();
 
             if (expression == null) {
@@ -2055,8 +2055,8 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     int offset = state.symPointeeOffset(pointerIndex);
@@ -2069,17 +2069,17 @@ public final class PointerNullStateChecker {
                 }
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target.type.kind == SastTypeKind.PTR) {
-                    return symbolicValueOf(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.type.kind == SastTypeKind.PTR) {
+                    return symbolicValueOf(expression.target);
                 }
 
                 context.templates.set(set, MemoryTemplate.UNKNOWN);
                 return set;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                long[] inner = symbolicPointeeOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                long[] inner = symbolicPointeeOf(expression.expr);
 
                 for (int i = 0; i < context.templates.words; i++) {
                     set[i] = inner[i];
@@ -2092,15 +2092,15 @@ public final class PointerNullStateChecker {
             return set;
         }
 
-        private long[] symbolicCellOf(SemanticExprNode expression) {
+        private long[] symbolicCellOf(SastNode expression) {
             long[] set = context.templates.newSet();
 
             if (expression == null) {
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     int offset = state.symCellOffset(pointerIndex);
@@ -2113,10 +2113,10 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target instanceof SemanticVarExprNode variable) {
-                    int variableId = context.variableId(variable.symbol);
-                    int globalIndex = context.globalIndex(variable.symbol);
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.kind == SastKind.VAR_EXPR) {
+                    int variableId = context.variableId(expression.target.symbol);
+                    int globalIndex = context.globalIndex(expression.target.symbol);
 
                     if (globalIndex >= 0) {
                         context.templates.set(
@@ -2133,8 +2133,8 @@ public final class PointerNullStateChecker {
                     return set;
                 }
 
-                if (getPtr.target instanceof SemanticDerefNode deref) {
-                    long[] inner = symbolicCellOf(deref.expr);
+                if (expression.target.kind == SastKind.DEREF) {
+                    long[] inner = symbolicCellOf(expression.target.expr);
 
                     for (int i = 0; i < context.templates.words; i++) {
                         set[i] = inner[i];
@@ -2143,8 +2143,8 @@ public final class PointerNullStateChecker {
                     return set;
                 }
 
-                if (getPtr.target instanceof SemanticCastExprNode cast) {
-                    long[] inner = symbolicCellOf(cast.expr);
+                if (expression.target.kind == SastKind.CAST) {
+                    long[] inner = symbolicCellOf(expression.target.expr);
 
                     for (int i = 0; i < context.templates.words; i++) {
                         set[i] = inner[i];
@@ -2156,8 +2156,8 @@ public final class PointerNullStateChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                long[] inner = symbolicCellOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                long[] inner = symbolicCellOf(expression.expr);
 
                 for (int i = 0; i < context.templates.words; i++) {
                     set[i] = inner[i];
@@ -2292,39 +2292,39 @@ public final class PointerNullStateChecker {
         }
     }
 
-    private int pointerIndexOfExpression(SemanticExprNode expression) {
-        if (expression instanceof SemanticVarExprNode variable) {
-            return state.pointerIndex(variable.symbol);
+    private int pointerIndexOfExpression(SastNode expression) {
+        if (expression.kind == SastKind.VAR_EXPR) {
+            return state.pointerIndex(expression.symbol);
         }
 
         return -1;
     }
 
     private static final class NullGuard {
-        final SemanticExprNode variable;
+        final SastNode variable;
         final boolean isEquality;
 
-        NullGuard(SemanticExprNode variable, boolean isEquality) {
+        NullGuard(SastNode variable, boolean isEquality) {
             this.variable = variable;
             this.isEquality = isEquality;
         }
     }
 
-    private static NullGuard nullGuard(SemanticExprNode condition) {
-        if (!(condition instanceof SemanticBinOpNode binary)) {
+    private static NullGuard nullGuard(SastNode condition) {
+        if (!(condition.kind == SastKind.BIN_OP)) {
             return null;
         }
 
-        if (!binary.op.equals("==") && !binary.op.equals("!=")) {
+        if (!condition.op.equals("==") && !condition.op.equals("!=")) {
             return null;
         }
 
-        if (binary.left instanceof SemanticNullLiteralNode) {
-            return new NullGuard(binary.right, binary.op.equals("=="));
+        if (condition.left.kind == SastKind.NULL_LITERAL) {
+            return new NullGuard(condition.right, condition.op.equals("=="));
         }
 
-        if (binary.right instanceof SemanticNullLiteralNode) {
-            return new NullGuard(binary.left, binary.op.equals("=="));
+        if (condition.right.kind == SastKind.NULL_LITERAL) {
+            return new NullGuard(condition.left, condition.op.equals("=="));
         }
 
         return null;

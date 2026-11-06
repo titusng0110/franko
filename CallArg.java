@@ -4,12 +4,12 @@ import java.util.Objects;
 
 final class CallArg {
 
-    final SemanticExprNode lowered;
+    final SastNode lowered;
     final AstNode literal;
     private final boolean operator;
 
     private CallArg(
-            SemanticExprNode lowered,
+            SastNode lowered,
             AstNode literal,
             boolean operator
     ) {
@@ -18,7 +18,7 @@ final class CallArg {
         this.operator = operator;
     }
 
-    static CallArg lowered(SemanticExprNode expr) {
+    static CallArg lowered(SastNode expr) {
         return new CallArg(Objects.requireNonNull(expr), null, false);
     }
 
@@ -26,7 +26,7 @@ final class CallArg {
         return new CallArg(null, Objects.requireNonNull(literal), false);
     }
 
-    static CallArg operatorLowered(SemanticExprNode expr) {
+    static CallArg operatorLowered(SastNode expr) {
         return new CallArg(Objects.requireNonNull(expr), null, true);
     }
 
@@ -34,10 +34,10 @@ final class CallArg {
         return new CallArg(null, Objects.requireNonNull(literal), true);
     }
 
-    static List<CallArg> listOf(List<SemanticExprNode> args) {
+    static List<CallArg> listOf(List<SastNode> args) {
         List<CallArg> out = new ArrayList<>(args.size());
 
-        for (SemanticExprNode arg : args) {
+        for (SastNode arg : args) {
             out.add(lowered(arg));
         }
 

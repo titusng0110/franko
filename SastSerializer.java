@@ -2,28 +2,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
-final class SastArtifact {
-    final SastPhase phase;
-    final EntryKind entryKind;
-    final SourceTable sources;
-    final SymbolRegistry symbols;
-    final SastNode root;
-
-    SastArtifact(
-            SastPhase phase,
-            EntryKind entryKind,
-            SourceTable sources,
-            SymbolRegistry symbols,
-            SastNode root
-    ) {
-        this.phase = phase;
-        this.entryKind = entryKind == null ? EntryKind.NONE : entryKind;
-        this.sources = sources == null ? new SourceTable() : sources;
-        this.symbols = symbols == null ? new SymbolRegistry() : symbols;
-        this.root = root;
-    }
-}
-
 public final class SastSerializer {
 
     private static final String FORMAT = "franko-sast";
@@ -32,17 +10,17 @@ public final class SastSerializer {
     private SastSerializer() {
     }
 
-    public static String toJson(SastArtifact doc) {
+    public static String toJson(SastDocument doc) {
         if (doc == null) {
             throw new IllegalArgumentException("Cannot serialize a null SAST document");
         }
 
         registerFromNode(doc.root, doc.symbols);
-        SemanticASTSerializer.registerRelatedSymbols(doc.symbols);
+        SastSymbolSupport.registerRelatedSymbols(doc.symbols);
 
         JsonObject root = nodeToJson(doc.root, doc.symbols, doc.sources);
-        SemanticASTSerializer.registerRelatedSymbols(doc.symbols);
-        JsonArray symbols = SemanticASTSerializer.symbolsToJson(doc.symbols);
+        SastSymbolSupport.registerRelatedSymbols(doc.symbols);
+        JsonArray symbols = SastSymbolSupport.symbolsToJson(doc.symbols);
 
         JsonObject document = new JsonObject();
         document.put("format", FORMAT);
@@ -56,7 +34,7 @@ public final class SastSerializer {
         return Json.write(document, true) + "\n";
     }
 
-    public static SastArtifact fromJson(String json) {
+    public static SastDocument fromJson(String json) {
         JsonObject document = JsonAstSupport.requireDocument(json, "SAST", FORMAT, VERSION);
         SastPhase phase = JsonAstSupport.requireEnumName(
                 document.requireString("phase"),
@@ -68,7 +46,7 @@ public final class SastSerializer {
         );
         SourceTable sources = JsonAstSupport.sourceTable(document.requireArray("sources"), "SAST");
         JsonArray symbolArray = document.requireArray("symbols");
-        SymbolRegistry registry = SemanticASTSerializer.symbolsFromJson(symbolArray, sources);
+        SymbolRegistry registry = SastSymbolSupport.symbolsFromJson(symbolArray, sources);
         SastNode root = nodeFromJson(
                 document.requireObject("root"),
                 registry,
@@ -79,10 +57,10 @@ public final class SastSerializer {
             throw new IllegalArgumentException("SAST document root must be a program node");
         }
 
-        return new SastArtifact(phase, entryKind, sources, registry, root);
+        return new SastDocument(phase, entryKind, sources, registry, root);
     }
 
-    private static void registerFromNode(SastNode node, SymbolRegistry registry) {
+    static void registerFromNode(SastNode node, SymbolRegistry registry) {
         if (node == null) {
             return;
         }
@@ -267,7 +245,7 @@ public final class SastSerializer {
             case VAR_DECL -> {
                 obj.put("node", "varDecl");
                 obj.put("symbol", registry.idFor(node.symbol));
-                obj.put("foldedConstInitializer", SemanticASTSerializer.stringOrNull(
+                obj.put("foldedConstInitializer", SastSymbolSupport.stringOrNull(
                         node.foldedConstInitializer));
                 obj.put("staticInitializer", nodeToJson(
                         node.staticInitializer, registry, sources));
@@ -318,8 +296,8 @@ public final class SastSerializer {
             SymbolRegistry registry,
             SourceTable sources
     ) {
-        obj.put("type", SemanticASTSerializer.typeToJson(expr.type, registry));
-        obj.put("constantValue", SemanticASTSerializer.stringOrNull(expr.constantValue));
+        obj.put("type", SastSymbolSupport.typeToJson(expr.type, registry));
+        obj.put("constantValue", SastSymbolSupport.stringOrNull(expr.constantValue));
 
         switch (expr.kind) {
             case INT_LITERAL -> {
@@ -490,7 +468,7 @@ public final class SastSerializer {
             case "varDecl" -> SastNode.varDecl(
                     span,
                     (Symbol) registry.require(obj.requireString("symbol")),
-                    SemanticASTSerializer.bigIntegerOrNull(
+                    SastSymbolSupport.bigIntegerOrNull(
                             obj.get("foldedConstInitializer")),
                     nodeFromJson(obj.optObject("staticInitializer"), registry, sources)
             );
@@ -546,9 +524,9 @@ public final class SastSerializer {
             SourceTable sources,
             SourceSpan span
     ) {
-        SastType type = SemanticASTSerializer.typeFromJson(
+        SastType type = SastSymbolSupport.typeFromJson(
                 obj.requireObject("type"), registry);
-        BigInteger constantValue = SemanticASTSerializer.bigIntegerOrNull(
+        BigInteger constantValue = SastSymbolSupport.bigIntegerOrNull(
                 obj.get("constantValue"));
 
         return switch (kind) {

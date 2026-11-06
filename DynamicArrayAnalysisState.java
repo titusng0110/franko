@@ -355,7 +355,7 @@ final class DynamicArrayAnalysisState {
         aliasEpoch[target] = aliasEpoch[source];
     }
 
-    void enterBlock(SemanticBlockNode node, int depth) {
+    void enterBlock(SastNode node, int depth) {
         if (depth >= blockLocals.length) {
             blockLocals = Arrays.copyOf(blockLocals, blockLocals.length * 2);
         }
@@ -363,7 +363,7 @@ final class DynamicArrayAnalysisState {
         blockLocals[depth] = context.blockLocalIds(node);
     }
 
-    void leaveBlock(SemanticBlockNode node, int depth, boolean terminated) {
+    void leaveBlock(SastNode node, int depth, boolean terminated) {
         int[] locals = blockLocals[depth];
 
         if (locals != null) {

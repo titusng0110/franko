@@ -41,11 +41,11 @@ final class CompileTimeIntrinsics {
         this.typeResolver = typeResolver;
     }
 
-    SemanticExprNode analyzeCall(AstNode call) {
+    SastNode analyzeCall(AstNode call) {
         return materialize(evaluateCall(call.name, call.args, call.span), call.span);
     }
 
-    SemanticExprNode analyzeName(AstNode name) {
+    SastNode analyzeName(AstNode name) {
         return materialize(evaluateName(name.name, name.span), name.span);
     }
 
@@ -298,12 +298,12 @@ final class CompileTimeIntrinsics {
         return bytes;
     }
 
-    private SemanticExprNode materialize(
+    private SastNode materialize(
             StaticValue value,
             SourceSpan span
     ) {
         if (value instanceof StaticIntValue integer) {
-            return new SemanticIntLiteralNode(
+            return SastNode.intLiteral(
                     span,
                     integer.type(),
                     integer.value(),
@@ -316,7 +316,7 @@ final class CompileTimeIntrinsics {
         }
 
         if (value instanceof StaticVoidValue) {
-            return new SemanticIntLiteralNode(
+            return SastNode.intLiteral(
                     span,
                     VOID_TYPE,
                     BigInteger.ZERO,
@@ -327,8 +327,8 @@ final class CompileTimeIntrinsics {
         return fallback(span);
     }
 
-    private SemanticExprNode fallback(SourceSpan span) {
-        return new SemanticIntLiteralNode(
+    private SastNode fallback(SourceSpan span) {
+        return SastNode.intLiteral(
                 span,
                 INT32_TYPE,
                 BigInteger.ZERO,
@@ -336,7 +336,7 @@ final class CompileTimeIntrinsics {
         );
     }
 
-    private SemanticExprNode materializeStaticString(
+    private SastNode materializeStaticString(
             List<BigInteger> bytes,
             SourceSpan span
     ) {
@@ -350,13 +350,13 @@ final class CompileTimeIntrinsics {
                 Integer.toString(bytes.size())
         );
 
-        SemanticExprNode target = new SemanticVarExprNode(
+        SastNode target = SastNode.varExpr(
                 span,
                 arrayType,
                 global
         );
 
-        return new SemanticGetPtrNode(
+        return SastNode.getPtr(
                 span,
                 SastType.view(arrayType),
                 target

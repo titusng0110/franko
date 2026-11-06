@@ -34,76 +34,76 @@ public class ExpressionChecker {
         );
     }
 
-    public void checkExpr(SemanticExprNode node) {
+    public void checkExpr(SastNode node) {
         if (node == null) {
             return;
         }
 
-        if (node instanceof SemanticIntLiteralNode) {
+        if (node.kind == SastKind.INT_LITERAL) {
             return;
         }
 
-        if (node instanceof SemanticNullLiteralNode) {
+        if (node.kind == SastKind.NULL_LITERAL) {
 
             return;
         }
 
-        if (node instanceof SemanticVarExprNode n) {
-            visitVarExpr(n);
+        if (node.kind == SastKind.VAR_EXPR) {
+            visitVarExpr(node);
             return;
         }
 
-        if (node instanceof SemanticUnaryOpNode n) {
-            visitUnaryOp(n);
+        if (node.kind == SastKind.UNARY_OP) {
+            visitUnaryOp(node);
             return;
         }
 
-        if (node instanceof SemanticBinOpNode n) {
-            visitBinOp(n);
+        if (node.kind == SastKind.BIN_OP) {
+            visitBinOp(node);
             return;
         }
 
-        if (node instanceof SemanticArrayAccessNode n) {
-            visitArrayAccess(n);
+        if (node.kind == SastKind.ARRAY_ACCESS) {
+            visitArrayAccess(node);
             return;
         }
 
-        if (node instanceof SemanticFunctionCallNode n) {
-            visitFunctionCall(n);
+        if (node.kind == SastKind.FUNCTION_CALL) {
+            visitFunctionCall(node);
             return;
         }
 
-        if (node instanceof SemanticArrayIntrinsicCallNode n) {
-            arrayIntrinsicChecker.check(this, n);
+        if (node.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            arrayIntrinsicChecker.check(this, node);
             return;
         }
 
-        if (node instanceof SemanticAggregateLiteralNode n) {
-            visitAggregateLiteral(n);
+        if (node.kind == SastKind.AGGREGATE_LITERAL) {
+            visitAggregateLiteral(node);
             return;
         }
 
-        if (node instanceof SemanticGetPtrNode n) {
-            visitGetPtr(n);
+        if (node.kind == SastKind.GET_PTR) {
+            visitGetPtr(node);
             return;
         }
 
-        if (node instanceof SemanticDerefNode n) {
-            visitDeref(n);
+        if (node.kind == SastKind.DEREF) {
+            visitDeref(node);
             return;
         }
 
-        if (node instanceof SemanticCastExprNode n) {
-            visitCast(n);
+        if (node.kind == SastKind.CAST) {
+            visitCast(node);
             return;
         }
 
-        if (node instanceof SemanticMemberAccessNode n) {
-            visitMemberAccess(n);
+        if (node.kind == SastKind.MEMBER_ACCESS) {
+            visitMemberAccess(node);
             return;
         }
 
-        if (node instanceof SemanticEnumVariantNode) {
+        if (node.kind == SastKind.ENUM_VARIANT) {
             return;
         }
 
@@ -111,7 +111,7 @@ public class ExpressionChecker {
                 + node.getClass().getSimpleName());
     }
 
-    private void visitAggregateLiteral(SemanticAggregateLiteralNode node) {
+    private void visitAggregateLiteral(SastNode node) {
         if (!types.isValueAssignableType(node.type)) {
             diagnostics.error(
                     "Aggregate literal type "
@@ -122,7 +122,7 @@ public class ExpressionChecker {
             );
         }
 
-        for (SemanticAggregateFieldInit init : node.fields) {
+        for (SastNode init : node.fields) {
             checkExpr(init.value);
 
             types.ensureAssignable(
@@ -136,7 +136,7 @@ public class ExpressionChecker {
         }
     }
 
-    private void visitVarExpr(SemanticVarExprNode node) {
+    private void visitVarExpr(SastNode node) {
         if (node.symbol == null) {
             diagnostics.error("Variable expression has null symbol");
             return;
@@ -147,7 +147,7 @@ public class ExpressionChecker {
         }
     }
 
-    private void visitUnaryOp(SemanticUnaryOpNode node) {
+    private void visitUnaryOp(SastNode node) {
         checkExpr(node.expr);
 
         if (!types.ensureValueExpression(node.expr, "Operand of unary '" + node.op + "'")) {
@@ -182,7 +182,7 @@ public class ExpressionChecker {
         }
     }
 
-    private void visitBinOp(SemanticBinOpNode node) {
+    private void visitBinOp(SastNode node) {
         checkExpr(node.left);
         checkExpr(node.right);
 
@@ -252,7 +252,7 @@ public class ExpressionChecker {
     }
 
     private void visitComparison(
-            SemanticBinOpNode node,
+            SastNode node,
             String op
     ) {
         boolean leftEnum = node.left.type.kind == SastTypeKind.ENUM;
@@ -298,7 +298,7 @@ public class ExpressionChecker {
         }
 
         if (leftNull || rightNull) {
-            SemanticExprNode other = leftNull ? node.right : node.left;
+            SastNode other = leftNull ? node.right : node.left;
 
             if (types.isNullType(other.type)) {
 
@@ -340,13 +340,13 @@ public class ExpressionChecker {
         );
     }
 
-    private void visitFunctionCall(SemanticFunctionCallNode node) {
+    private void visitFunctionCall(SastNode node) {
         if (node.function == null) {
             diagnostics.error("Function call has null resolved function");
             return;
         }
 
-        List<SemanticExprNode> args = node.args;
+        List<SastNode> args = node.args;
         List<SastType> parameterTypes = node.function.parameterTypes();
 
         boolean isMethod = node.function.kind == SymbolKind.METHOD;
@@ -375,7 +375,7 @@ public class ExpressionChecker {
         int count = Math.min(args.size(), parameterTypes.size());
 
         for (int i = 0; i < count; i++) {
-            SemanticExprNode arg = args.get(i);
+            SastNode arg = args.get(i);
             SastType parameterType = parameterTypes.get(i);
 
             if (isMethod && i == 0) {
@@ -416,7 +416,7 @@ public class ExpressionChecker {
     }
 
     private void ensureArgumentCompatibleWithParameter(
-            SemanticExprNode arg,
+            SastNode arg,
             SastType parameterType,
             int index,
             Symbol function
@@ -507,7 +507,7 @@ public class ExpressionChecker {
                 + types.describeSafe(arg.type));
     }
 
-    private void visitArrayAccess(SemanticArrayAccessNode node) {
+    private void visitArrayAccess(SastNode node) {
         checkExpr(node.target);
 
         if (!types.ensureValueExpression(node.target, "Indexed expression")) {
@@ -527,7 +527,7 @@ public class ExpressionChecker {
         ensureStaticArrayIndexInBounds(node);
     }
 
-    private void ensureStaticArrayIndexInBounds(SemanticArrayAccessNode node) {
+    private void ensureStaticArrayIndexInBounds(SastNode node) {
         if (!(node.target.type.kind == SastTypeKind.STATIC_ARRAY)) {
             return;
         }
@@ -561,7 +561,7 @@ public class ExpressionChecker {
         }
     }
 
-    private void visitGetPtr(SemanticGetPtrNode node) {
+    private void visitGetPtr(SastNode node) {
         checkExpr(node.target);
 
         String intrinsicName = PointerPermissions.creationIntrinsic(
@@ -597,7 +597,7 @@ public class ExpressionChecker {
     }
 
     public void ensureRegionPermission(
-            SemanticExprNode target,
+            SastNode target,
             PtrPermission required,
             String what
     ) {
@@ -623,7 +623,7 @@ public class ExpressionChecker {
                 + " here");
     }
 
-    private void visitDeref(SemanticDerefNode node) {        checkExpr(node.expr);
+    private void visitDeref(SastNode node) {        checkExpr(node.expr);
 
         if (!types.ensureValueExpression(node.expr, "Operand of '$'")) {
             return;
@@ -645,7 +645,7 @@ public class ExpressionChecker {
         }
     }
 
-    private void visitCast(SemanticCastExprNode node) {
+    private void visitCast(SastNode node) {
         checkExpr(node.expr);
 
         String syntax = node.checked ? "unsafe_cast" : "cast";
@@ -757,7 +757,7 @@ public class ExpressionChecker {
     }
 
     private void visitPermissionCast(
-            SemanticCastExprNode node,
+            SastNode node,
             SastType targetPointer
     ) {
         if (node.checked) {
@@ -835,7 +835,7 @@ public class ExpressionChecker {
         }
     }
 
-    private void visitMemberAccess(SemanticMemberAccessNode node) {
+    private void visitMemberAccess(SastNode node) {
         if (node.field == null) {
             diagnostics.error("Member access expression has null field symbol");
             return;
@@ -849,7 +849,7 @@ public class ExpressionChecker {
         checkExpr(node.target);
     }
 
-    boolean isStorageBackedLValue(SemanticExprNode expr) {
+    boolean isStorageBackedLValue(SastNode expr) {
         if (expr == null) {
             return false;
         }
@@ -858,27 +858,27 @@ public class ExpressionChecker {
             return false;
         }
 
-        if (expr instanceof SemanticVarExprNode) {
+        if (expr.kind == SastKind.VAR_EXPR) {
             return true;
         }
 
-        if (expr instanceof SemanticDerefNode) {
+        if (expr.kind == SastKind.DEREF) {
             return true;
         }
 
-        if (expr instanceof SemanticArrayAccessNode arrayAccess) {
-            return isStorageBackedLValue(arrayAccess.target);
+        if (expr.kind == SastKind.ARRAY_ACCESS) {
+            return isStorageBackedLValue(expr.target);
         }
 
-        if (expr instanceof SemanticMemberAccessNode memberAccess) {
-            return isStorageBackedLValue(memberAccess.target);
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            return isStorageBackedLValue(expr.target);
         }
 
         return false;
     }
 
     public void ensureArraySizeCompatible(
-            SemanticExprNode size,
+            SastNode size,
             String message
     ) {
         ensureUInt32Compatible(
@@ -889,7 +889,7 @@ public class ExpressionChecker {
     }
 
     public void ensureArrayIndexCompatible(
-            SemanticExprNode index,
+            SastNode index,
             String message
     ) {
         ensureUInt32Compatible(
@@ -900,7 +900,7 @@ public class ExpressionChecker {
     }
 
     void ensureUInt32Compatible(
-            SemanticExprNode expr,
+            SastNode expr,
             String message,
             boolean allowZero
     ) {
@@ -949,7 +949,7 @@ public class ExpressionChecker {
     }
 
     void ensureScalarCompatible(
-            SemanticExprNode expr,
+            SastNode expr,
             SemanticPrimitiveKind kind,
             String message
     ) {
@@ -984,7 +984,7 @@ public class ExpressionChecker {
 
     void ensureStaticArrayByteAccessInBounds(
             SastType arrayType,
-            SemanticExprNode offsetExpr,
+            SastNode offsetExpr,
             int byteWidth,
             String message
     ) {
@@ -1026,7 +1026,7 @@ public class ExpressionChecker {
 
     void ensureStaticArrayBitIndexInBounds(
             SastType arrayType,
-            SemanticExprNode bitIndexExpr,
+            SastNode bitIndexExpr,
             String message
     ) {
         if (!(arrayType.kind == SastTypeKind.STATIC_ARRAY)) {
@@ -1075,8 +1075,8 @@ public class ExpressionChecker {
 
     void ensureStaticArrayRangeInBounds(
             SastType arrayType,
-            SemanticExprNode startExpr,
-            SemanticExprNode countExpr,
+            SastNode startExpr,
+            SastNode countExpr,
             String message
     ) {
         if (!(arrayType.kind == SastTypeKind.STATIC_ARRAY)) {
@@ -1123,7 +1123,7 @@ public class ExpressionChecker {
         }
     }
 
-    void ensureMemsetValueCompatible(SemanticExprNode value) {
+    void ensureMemsetValueCompatible(SastNode value) {
         if (value == null) {
             diagnostics.error("memset() fill value cannot be null");
             return;

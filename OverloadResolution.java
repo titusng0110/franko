@@ -212,7 +212,7 @@ final class OverloadResolution {
             return false;
         }
 
-        SemanticExprNode lowered = arg.lowered;
+        SastNode lowered = arg.lowered;
 
         if (lowered.type.kind == SastTypeKind.NULL) {
             return false;
@@ -344,7 +344,7 @@ final class OverloadResolution {
             return false;
         }
 
-        SemanticExprNode lowered = arg.lowered;
+        SastNode lowered = arg.lowered;
 
         if (lowered.type.kind == SastTypeKind.NULL) {
             return parameterType.kind == SastTypeKind.PTR;

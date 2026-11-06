@@ -20,7 +20,7 @@ public class DeclarationChecker {
         this.types = Objects.requireNonNull(types);
     }
 
-    public void checkVarDecl(SemanticVarDeclNode node) {
+    public void checkVarDecl(SastNode node) {
         if (node == null) {
             diagnostics.error("Variable declaration node cannot be null");
             return;
@@ -45,7 +45,7 @@ public class DeclarationChecker {
         }
     }
 
-    private void validateGlobalStaticInitializer(SemanticVarDeclNode node) {
+    private void validateGlobalStaticInitializer(SastNode node) {
         SastType type = node.symbol.type;
 
         if (!(type.kind == SastTypeKind.PTR)) {
@@ -75,42 +75,42 @@ public class DeclarationChecker {
         }
     }
 
-    public void checkStructDecl(SemanticStructDeclNode node) {
-        if (node == null || node.symbol == null) {
+    public void checkStructDecl(SastNode node) {
+        if (node == null || node.structSymbol == null) {
             diagnostics.error("Struct declaration node cannot be null");
             return;
         }
 
-        if (node.symbol.isTuple) {
+        if (node.structSymbol.isTuple) {
             return;
         }
 
         checkDeclaredType(
-            SastType.structType(node.symbol),
-            "Struct '" + node.symbol.qualifiedName() + "'"
+            SastType.structType(node.structSymbol),
+            "Struct '" + node.structSymbol.qualifiedName() + "'"
         );
 
-        for (SemanticFunctionDeclNode methodNode : node.methods) {
+        for (SastNode methodNode : node.methods) {
             if (methodNode == null || methodNode.symbol == null) {
                 continue;
             }
 
             if (!(methodNode.symbol.kind == SymbolKind.METHOD)) {
                 diagnostics.error("Struct '"
-                        + node.symbol.qualifiedName()
+                        + node.structSymbol.qualifiedName()
                         + "' has a non-method function '"
                         + methodNode.symbol.name
                         + "'");
                 continue;
             }
 
-            if (node.symbol.resolveField(methodNode.symbol.name) != null) {
+            if (node.structSymbol.resolveField(methodNode.symbol.name) != null) {
                 diagnostics.error("Method '"
                         + methodNode.symbol.qualifiedName()
                         + "' conflicts with field '"
                         + methodNode.symbol.name
                         + "' of struct '"
-                        + node.symbol.qualifiedName()
+                        + node.structSymbol.qualifiedName()
                         + "'");
             }
         }
@@ -329,7 +329,7 @@ public class DeclarationChecker {
             + " has an initializer, but only primitive fields can have default values");
     }
 
-    private void validateGlobalConstInitializer(SemanticVarDeclNode node) {
+    private void validateGlobalConstInitializer(SastNode node) {
         if (node.symbol.type.kind == SastTypeKind.PRIMITIVE) {
             if (!TypeChecker.fitsBigIntegerToPrimitive(
                     node.foldedConstInitializer,

@@ -472,7 +472,7 @@ public final class SymbolTable {
     public Symbol resolveMethod(
             StructSymbol owner,
             String name,
-            List<SemanticExprNode> args
+            List<SastNode> args
     ) {
         return resolveMethodWithLiterals(owner, name, CallArg.listOf(args));
     }
@@ -587,7 +587,7 @@ public final class SymbolTable {
 
     public Symbol resolveFunction(
             String name,
-            List<SemanticExprNode> args
+            List<SastNode> args
     ) {
         return resolveFunctionWithLiterals(name, CallArg.listOf(args));
     }
@@ -611,7 +611,7 @@ public final class SymbolTable {
     public Symbol resolveFunctionIn(
             NamespaceSymbol namespace,
             String name,
-            List<SemanticExprNode> args
+            List<SastNode> args
     ) {
         return resolveFunctionInWithLiterals(namespace, name, CallArg.listOf(args));
     }

@@ -120,10 +120,10 @@ public final class DanglingPointerChecker {
         this.context = context;
     }
 
-    public void check(SemanticASTNode node) {
-        if (!(node instanceof SemanticProgramNode program)) {
+    public void check(SastNode node) {
+        if (!(node.kind == SastKind.PROGRAM)) {
             throw new IllegalArgumentException(
-                    "Dangling-pointer checking requires a semantic program root"
+                    "Dangling-pointer checking requires a semantic node root"
             );
         }
 
@@ -132,7 +132,7 @@ public final class DanglingPointerChecker {
                 EntryKind.NONE,
                 new SourceTable(),
                 new SymbolRegistry(),
-                program
+                node
         ));
     }
 
@@ -149,7 +149,7 @@ public final class DanglingPointerChecker {
         );
     }
 
-    private void ensureContext(SemanticProgramNode root) {
+    private void ensureContext(SastNode root) {
         if (context == null || context.root != root) {
             context = MemoryAnalysisContext.build(root);
             state = null;
@@ -213,7 +213,7 @@ public final class DanglingPointerChecker {
             currentBfsResult = null;
             suppressed = false;
 
-            SemanticFunctionDeclNode decl = context.functionDecl(functionId);
+            SastNode decl = context.functionDecl(functionId);
 
             if (decl == null) {
                 builder = null;
@@ -235,7 +235,7 @@ public final class DanglingPointerChecker {
             seedGlobals();
         }
 
-        private void seedSummaryParameters(SemanticFunctionDeclNode decl) {
+        private void seedSummaryParameters(SastNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
                 Symbol parameter = decl.parameterVariables.get(i);
 
@@ -287,7 +287,7 @@ public final class DanglingPointerChecker {
         }
 
         private boolean isOperatorOther(
-                SemanticFunctionDeclNode decl,
+                SastNode decl,
                 int parameterIndex
         ) {
             return decl.symbol.kind == SymbolKind.METHOD
@@ -295,7 +295,7 @@ public final class DanglingPointerChecker {
                     && parameterIndex == 1;
         }
 
-        private void seedCheckParameters(SemanticFunctionDeclNode decl) {
+        private void seedCheckParameters(SastNode decl) {
             for (int i = 0; i < decl.parameterVariables.size(); i++) {
                 Symbol parameter = decl.parameterVariables.get(i);
                 int pointerIndex = state.pointerIndex(parameter);
@@ -445,13 +445,13 @@ public final class DanglingPointerChecker {
         }
 
         @Override
-        public void enterBlock(SemanticBlockNode node, int depth) {
+        public void enterBlock(SastNode node, int depth) {
             state.enterBlock(node, depth);
         }
 
         @Override
         public void leaveBlock(
-                SemanticBlockNode node,
+                SastNode node,
                 int depth,
                 boolean terminated
         ) {
@@ -464,12 +464,12 @@ public final class DanglingPointerChecker {
         }
 
         @Override
-        public void markLoopBodyLocalsDead(SemanticStmtNode body) {
-            if (!(body instanceof SemanticBlockNode block)) {
+        public void markLoopBodyLocalsDead(SastNode body) {
+            if (!(body.kind == SastKind.BLOCK)) {
                 return;
             }
 
-            int[] locals = context.blockLocalIds(block);
+            int[] locals = context.blockLocalIds(body);
 
             for (int variableId : locals) {
                 state.markDead(variableId);
@@ -477,7 +477,7 @@ public final class DanglingPointerChecker {
         }
 
         @Override
-        public void checkVarDecl(SemanticVarDeclNode node) {
+        public void checkVarDecl(SastNode node) {
             diagnostics.push(node.span);
 
             try {
@@ -505,7 +505,7 @@ public final class DanglingPointerChecker {
         }
 
         @Override
-        public void checkAssign(SemanticAssignNode node) {
+        public void checkAssign(SastNode node) {
             diagnostics.push(node.span);
 
             try {
@@ -527,21 +527,21 @@ public final class DanglingPointerChecker {
             }
         }
 
-        private void applySummaryStore(SemanticAssignNode node) {
+        private void applySummaryStore(SastNode node) {
             long[] value = symbolicValueOf(node.value);
             long[] pointee = symbolicPointeeOf(node.value);
             long[] cell = symbolicCellOf(node.value);
 
-            if (node.target instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (node.target.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(node.target.symbol);
 
                 if (pointerIndex >= 0) {
                     state.setSymValue(pointerIndex, value);
                     state.setSymPointee(pointerIndex, pointee);
                     state.setSymCell(pointerIndex, cell);
                 }
-            } else if (node.target instanceof SemanticDerefNode deref) {
-                updateSymbolicCells(deref.expr, value, pointee, cell);
+            } else if (node.target.kind == SastKind.DEREF) {
+                updateSymbolicCells(node.target.expr, value, pointee, cell);
             }
 
             int site = context.siteId(node);
@@ -564,7 +564,7 @@ public final class DanglingPointerChecker {
         }
 
         private void updateSymbolicCells(
-                SemanticExprNode pointerExpression,
+                SastNode pointerExpression,
                 long[] value,
                 long[] pointee,
                 long[] cell
@@ -595,7 +595,7 @@ public final class DanglingPointerChecker {
             }
         }
 
-        private void applyCheckStore(SemanticAssignNode node) {
+        private void applyCheckStore(SastNode node) {
             DanglingOrigin value = valueOrigins(node.value);
             DanglingOrigin targetStorage = storageOrigins(node.target);
 
@@ -612,8 +612,8 @@ public final class DanglingPointerChecker {
                 }
             }
 
-            if (node.target instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (node.target.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(node.target.symbol);
 
                 if (pointerIndex >= 0) {
                     state.setPointer(pointerIndex, value);
@@ -622,8 +622,8 @@ public final class DanglingPointerChecker {
                 return;
             }
 
-            if (node.target instanceof SemanticDerefNode deref) {
-                DanglingOrigin cells = valueOrigins(deref.expr);
+            if (node.target.kind == SastKind.DEREF) {
+                DanglingOrigin cells = valueOrigins(node.target.expr);
                 int cell = exactlyOnePointerCell(cells);
 
                 if (cell >= 0) {
@@ -633,7 +633,7 @@ public final class DanglingPointerChecker {
         }
 
         @Override
-        public void checkExpr(SemanticExprNode expression) {
+        public void checkExpr(SastNode expression) {
             if (expression == null) {
                 return;
             }
@@ -647,94 +647,94 @@ public final class DanglingPointerChecker {
             }
         }
 
-        private void checkExprInner(SemanticExprNode expression) {
-            if (expression instanceof SemanticIntLiteralNode
-                    || expression instanceof SemanticNullLiteralNode
-                    || expression instanceof SemanticVarExprNode
-                    || expression instanceof SemanticEnumVariantNode) {
+        private void checkExprInner(SastNode expression) {
+            if (expression.kind == SastKind.INT_LITERAL
+                    || expression.kind == SastKind.NULL_LITERAL
+                    || expression.kind == SastKind.VAR_EXPR
+                    || expression.kind == SastKind.ENUM_VARIANT) {
                 return;
             }
 
-            if (expression instanceof SemanticUnaryOpNode unary) {
-                checkExpr(unary.expr);
+            if (expression.kind == SastKind.UNARY_OP) {
+                checkExpr(expression.expr);
                 return;
             }
 
-            if (expression instanceof SemanticBinOpNode binary) {
-                checkExpr(binary.left);
-                checkExpr(binary.right);
+            if (expression.kind == SastKind.BIN_OP) {
+                checkExpr(expression.left);
+                checkExpr(expression.right);
                 return;
             }
 
-            if (expression instanceof SemanticArrayAccessNode access) {
-                checkExpr(access.target);
-                checkExpr(access.index);
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                checkExpr(expression.target);
+                checkExpr(expression.index);
                 return;
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                checkExpr(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                checkExpr(expression.target);
                 return;
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                for (SemanticExprNode argument : call.args) {
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                for (SastNode argument : expression.args) {
                     checkExpr(argument);
                 }
 
                 if (summaryMode) {
-                    recordSummaryCall(call);
+                    recordSummaryCall(expression);
                 } else {
-                    handleCheckCall(call);
+                    handleCheckCall(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticArrayIntrinsicCallNode intrinsic) {
-                checkExpr(intrinsic.receiver);
+            if (expression.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+                checkExpr(expression.receiver);
 
-                for (SemanticExprNode argument : intrinsic.args) {
+                for (SastNode argument : expression.args) {
                     checkExpr(argument);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticAggregateLiteralNode aggregate) {
-                for (SemanticAggregateFieldInit field : aggregate.fields) {
+            if (expression.kind == SastKind.AGGREGATE_LITERAL) {
+                for (SastNode field : expression.fields) {
                     checkExpr(field.value);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                checkExpr(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                checkExpr(expression.target);
 
                 if (!summaryMode) {
-                    markAddressTaken(getPtr);
+                    markAddressTaken(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                checkExpr(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                checkExpr(expression.expr);
 
                 if (!summaryMode && !suppressed) {
-                    checkDerefLiveness(deref);
+                    checkDerefLiveness(expression);
                 }
 
                 return;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                checkExpr(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                checkExpr(expression.expr);
             }
         }
 
-        private void checkDerefLiveness(SemanticDerefNode deref) {
+        private void checkDerefLiveness(SastNode deref) {
             DanglingOrigin origins = valueOrigins(deref.expr);
             int site = context.siteId(deref);
 
@@ -760,8 +760,8 @@ public final class DanglingPointerChecker {
         }
 
         private void checkUseLiveness(
-                SemanticExprNode expression,
-                SemanticASTNode site
+                SastNode expression,
+                SastNode site
         ) {
             if (!(expression.type.kind == SastTypeKind.PTR)) {
                 return;
@@ -791,7 +791,7 @@ public final class DanglingPointerChecker {
             }
         }
 
-        private void markAddressTaken(SemanticGetPtrNode node) {
+        private void markAddressTaken(SastNode node) {
             PtrPermission permission =
                     PointerPermissions.pointerPermission(node.type);
 
@@ -821,7 +821,7 @@ public final class DanglingPointerChecker {
         }
 
         @Override
-        public void onReturn(SemanticReturnNode node) {
+        public void onReturn(SastNode node) {
             if (summaryMode) {
                 exitReturnSets.add(
                         node.value == null
@@ -903,7 +903,7 @@ public final class DanglingPointerChecker {
 
         @Override
         public boolean guardPathFeasible(
-                SemanticExprNode condition,
+                SastNode condition,
                 boolean guardHolds
         ) {
             if (condition.constantValue != null) {
@@ -937,7 +937,7 @@ public final class DanglingPointerChecker {
 
         @Override
         public void refineFromGuard(
-                SemanticExprNode condition,
+                SastNode condition,
                 boolean guardHolds
         ) {
             NullGuard guard = nullGuard(condition);
@@ -1035,7 +1035,7 @@ public final class DanglingPointerChecker {
             suppressed = value;
         }
 
-        private void recordSummaryCall(SemanticFunctionCallNode call) {
+        private void recordSummaryCall(SastNode call) {
             int callSiteId = context.callSiteId(call);
             int edgeIndex = context.callGraph.callSiteLocalIndex[callSiteId];
 
@@ -1048,7 +1048,7 @@ public final class DanglingPointerChecker {
             for (int param = 0;
                     param < call.function.parameters.size();
                     param++) {
-                SemanticExprNode argument = param < call.args.size()
+                SastNode argument = param < call.args.size()
                         ? call.args.get(param)
                         : null;
 
@@ -1067,8 +1067,8 @@ public final class DanglingPointerChecker {
             }
         }
 
-        private void handleCheckCall(SemanticFunctionCallNode call) {
-            for (SemanticExprNode argument : call.args) {
+        private void handleCheckCall(SastNode call) {
+            for (SastNode argument : call.args) {
                 checkUseLiveness(argument, call);
             }
 
@@ -1079,7 +1079,7 @@ public final class DanglingPointerChecker {
                     paramCount * DanglingPointerState.BINDING_STRIDE];
 
             for (int i = 0; i < paramCount; i++) {
-                SemanticExprNode argument = call.args.get(i);
+                SastNode argument = call.args.get(i);
                 int offset = i * DanglingPointerState.BINDING_STRIDE;
                 rootBinding[offset + DanglingPointerState.BINDING_VALUE] =
                         context.templateSets.intern(
@@ -1155,7 +1155,7 @@ public final class DanglingPointerChecker {
         }
 
         private void emitCaptureDiagnostic(
-                SemanticFunctionCallNode call,
+                SastNode call,
                 int callSiteId,
                 DanglingSummary summary,
                 int capture,
@@ -1194,7 +1194,7 @@ public final class DanglingPointerChecker {
         private String captureSinkDescription(
                 DanglingSummary summary,
                 int capture,
-                SemanticFunctionCallNode call,
+                SastNode call,
                 MemoryBfsResult result,
                 int node
         ) {
@@ -1515,7 +1515,7 @@ public final class DanglingPointerChecker {
             return origin;
         }
 
-        private void invalidateForCall(SemanticFunctionCallNode call) {
+        private void invalidateForCall(SastNode call) {
             for (int globalIndex = 0;
                     globalIndex < context.globalVariableIds.length;
                     globalIndex++) {
@@ -1539,7 +1539,7 @@ public final class DanglingPointerChecker {
                 }
             }
 
-            for (SemanticExprNode argument : call.args) {
+            for (SastNode argument : call.args) {
                 DanglingOrigin origins = valueOrigins(argument);
                 invalidateCells(origins);
             }
@@ -1564,71 +1564,71 @@ public final class DanglingPointerChecker {
             }
         }
 
-        private DanglingOrigin storageOrigins(SemanticExprNode expression) {
+        private DanglingOrigin storageOrigins(SastNode expression) {
             if (expression == null) {
                 return originUnknown();
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int variableId = context.variableId(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int variableId = context.variableId(expression.symbol);
 
-                if (variable.symbol.kind == SymbolKind.GLOBAL) {
+                if (expression.symbol.kind == SymbolKind.GLOBAL) {
                     return originGlobal(variableId);
                 }
 
                 return originFrame(variableId);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return valueOrigins(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return valueOrigins(expression.expr);
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                return storageOrigins(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                return storageOrigins(expression.target);
             }
 
-            if (expression instanceof SemanticArrayAccessNode access) {
-                return storageOrigins(access.target);
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                return storageOrigins(expression.target);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return storageOrigins(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return storageOrigins(expression.expr);
             }
 
             return originUnknown();
         }
 
-        private DanglingOrigin valueOrigins(SemanticExprNode expression) {
+        private DanglingOrigin valueOrigins(SastNode expression) {
             if (expression == null) {
                 return originUnknown();
             }
 
-            if (expression instanceof SemanticNullLiteralNode) {
+            if (expression.kind == SastKind.NULL_LITERAL) {
                 return originEmpty();
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                return storageOrigins(getPtr.target).withNonNull();
+            if (expression.kind == SastKind.GET_PTR) {
+                return storageOrigins(expression.target).withNonNull();
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 return pointerIndex < 0
                         ? originUnknown()
                         : state.pointerOrigin(pointerIndex);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return readPointerCells(valueOrigins(deref.expr));
+            if (expression.kind == SastKind.DEREF) {
+                return readPointerCells(valueOrigins(expression.expr));
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return valueOrigins(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return valueOrigins(expression.expr);
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                int callSiteId = context.callSiteId(call);
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                int callSiteId = context.callSiteId(expression);
 
                 if (callSiteId < 0) {
                     return originUnknown();
@@ -1642,30 +1642,30 @@ public final class DanglingPointerChecker {
         }
 
         private DanglingOrigin concretePointeeOrigins(
-                SemanticExprNode expression
+                SastNode expression
         ) {
             if (expression == null) {
                 return originUnknown();
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 return pointerIndex < 0
                         ? originUnknown()
                         : readPointerCells(state.pointerOrigin(pointerIndex));
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                return valueOrigins(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                return valueOrigins(expression.target);
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return readPointerCells(valueOrigins(deref.expr));
+            if (expression.kind == SastKind.DEREF) {
+                return readPointerCells(valueOrigins(expression.expr));
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return concretePointeeOrigins(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return concretePointeeOrigins(expression.expr);
             }
 
             return originUnknown();
@@ -1726,7 +1726,7 @@ public final class DanglingPointerChecker {
             return found;
         }
 
-        private long[] symbolicValueOf(SemanticExprNode expression) {
+        private long[] symbolicValueOf(SastNode expression) {
             long[] set = templates().newSet();
 
             if (expression == null) {
@@ -1734,20 +1734,20 @@ public final class DanglingPointerChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticNullLiteralNode) {
+            if (expression.kind == SastKind.NULL_LITERAL) {
                 templates().set(set, MemoryTemplate.NULL);
                 return set;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                long[] storage = symbolicStorageOrigins(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                long[] storage = symbolicStorageOrigins(expression.target);
                 templates().union(set, storage);
                 templates().set(set, MemoryTemplate.NONNULL);
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     return state.symValueOf(pointerIndex);
@@ -1757,16 +1757,16 @@ public final class DanglingPointerChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return symbolicPointeeOf(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return symbolicPointeeOf(expression.expr);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return symbolicValueOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return symbolicValueOf(expression.expr);
             }
 
-            if (expression instanceof SemanticFunctionCallNode call) {
-                int callSiteId = context.callSiteId(call);
+            if (expression.kind == SastKind.FUNCTION_CALL) {
+                int callSiteId = context.callSiteId(expression);
                 templates().set(
                         set,
                         context.templates.callResult(callSiteId)
@@ -1778,7 +1778,7 @@ public final class DanglingPointerChecker {
             return set;
         }
 
-        private long[] symbolicPointeeOf(SemanticExprNode expression) {
+        private long[] symbolicPointeeOf(SastNode expression) {
             long[] set = templates().newSet();
 
             if (expression == null) {
@@ -1786,27 +1786,27 @@ public final class DanglingPointerChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     return state.symPointeeOf(pointerIndex);
                 }
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                return symbolicValueOf(getPtr.target);
+            if (expression.kind == SastKind.GET_PTR) {
+                return symbolicValueOf(expression.target);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return symbolicPointeeOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return symbolicPointeeOf(expression.expr);
             }
 
             templates().set(set, MemoryTemplate.UNKNOWN);
             return set;
         }
 
-        private long[] symbolicStorageOrigins(SemanticExprNode expression) {
+        private long[] symbolicStorageOrigins(SastNode expression) {
             long[] set = templates().newSet();
 
             if (expression == null) {
@@ -1814,10 +1814,10 @@ public final class DanglingPointerChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int variableId = context.variableId(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int variableId = context.variableId(expression.symbol);
 
-                if (variable.symbol.kind == SymbolKind.GLOBAL) {
+                if (expression.symbol.kind == SymbolKind.GLOBAL) {
                     int globalIndex = globalIndexOfVariable(variableId);
 
                     if (globalIndex >= 0) {
@@ -1838,35 +1838,35 @@ public final class DanglingPointerChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticDerefNode deref) {
-                return symbolicValueOf(deref.expr);
+            if (expression.kind == SastKind.DEREF) {
+                return symbolicValueOf(expression.expr);
             }
 
-            if (expression instanceof SemanticMemberAccessNode member) {
-                return symbolicStorageOrigins(member.target);
+            if (expression.kind == SastKind.MEMBER_ACCESS) {
+                return symbolicStorageOrigins(expression.target);
             }
 
-            if (expression instanceof SemanticArrayAccessNode access) {
-                return symbolicStorageOrigins(access.target);
+            if (expression.kind == SastKind.ARRAY_ACCESS) {
+                return symbolicStorageOrigins(expression.target);
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return symbolicStorageOrigins(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return symbolicStorageOrigins(expression.expr);
             }
 
             templates().set(set, MemoryTemplate.UNKNOWN);
             return set;
         }
 
-        private long[] symbolicCellOf(SemanticExprNode expression) {
+        private long[] symbolicCellOf(SastNode expression) {
             long[] set = templates().newSet();
 
             if (expression == null) {
                 return set;
             }
 
-            if (expression instanceof SemanticVarExprNode variable) {
-                int pointerIndex = state.pointerIndex(variable.symbol);
+            if (expression.kind == SastKind.VAR_EXPR) {
+                int pointerIndex = state.pointerIndex(expression.symbol);
 
                 if (pointerIndex >= 0) {
                     return state.symCellOf(pointerIndex);
@@ -1875,9 +1875,9 @@ public final class DanglingPointerChecker {
                 return set;
             }
 
-            if (expression instanceof SemanticGetPtrNode getPtr) {
-                if (getPtr.target instanceof SemanticVarExprNode variable) {
-                    int variableId = context.variableId(variable.symbol);
+            if (expression.kind == SastKind.GET_PTR) {
+                if (expression.target.kind == SastKind.VAR_EXPR) {
+                    int variableId = context.variableId(expression.target.symbol);
                     int globalIndex = globalIndexOfVariable(variableId);
 
                     if (globalIndex >= 0) {
@@ -1895,29 +1895,29 @@ public final class DanglingPointerChecker {
                     return set;
                 }
 
-                if (getPtr.target instanceof SemanticDerefNode deref) {
-                    return symbolicCellOf(deref.expr);
+                if (expression.target.kind == SastKind.DEREF) {
+                    return symbolicCellOf(expression.target.expr);
                 }
 
-                if (getPtr.target instanceof SemanticCastExprNode cast) {
-                    return symbolicCellOf(cast.expr);
+                if (expression.target.kind == SastKind.CAST) {
+                    return symbolicCellOf(expression.target.expr);
                 }
 
                 return set;
             }
 
-            if (expression instanceof SemanticCastExprNode cast) {
-                return symbolicCellOf(cast.expr);
+            if (expression.kind == SastKind.CAST) {
+                return symbolicCellOf(expression.expr);
             }
 
             return set;
         }
 
-        private CaptureSink captureSink(SemanticExprNode target) {
-            if (target instanceof SemanticVarExprNode variable
-                    && variable.symbol.kind == SymbolKind.GLOBAL) {
+        private CaptureSink captureSink(SastNode target) {
+            if (target.kind == SastKind.VAR_EXPR
+                    && target.symbol.kind == SymbolKind.GLOBAL) {
                 int globalIndex = globalIndexOfVariable(
-                        context.variableId(variable.symbol)
+                        context.variableId(target.symbol)
                 );
 
                 if (globalIndex >= 0) {
@@ -1925,11 +1925,11 @@ public final class DanglingPointerChecker {
                 }
             }
 
-            if (target instanceof SemanticMemberAccessNode member) {
-                CaptureSink base = captureSink(member.target);
+            if (target.kind == SastKind.MEMBER_ACCESS) {
+                CaptureSink base = captureSink(target.target);
 
                 if (base != null) {
-                    String path = member.field.name;
+                    String path = target.field.name;
 
                     if (base.fieldPath != null) {
                         path = base.fieldPath + "." + path;
@@ -1946,14 +1946,14 @@ public final class DanglingPointerChecker {
                 }
             }
 
-            if (target instanceof SemanticDerefNode deref) {
+            if (target.kind == SastKind.DEREF) {
                 int param = parameterIndexFromSet(
-                        symbolicValueOf(deref.expr)
+                        symbolicValueOf(target.expr)
                 );
 
                 if (param < 0) {
                     param = parameterIndexFromCellSet(
-                            symbolicCellOf(deref.expr)
+                            symbolicCellOf(target.expr)
                     );
                 }
 
@@ -2330,9 +2330,9 @@ public final class DanglingPointerChecker {
         return function == null ? "<unknown>" : function.qualifiedName();
     }
 
-    private int pointerIndexOfExpression(SemanticExprNode expression) {
-        if (expression instanceof SemanticVarExprNode variable) {
-            return state.pointerIndex(variable.symbol);
+    private int pointerIndexOfExpression(SastNode expression) {
+        if (expression.kind == SastKind.VAR_EXPR) {
+            return state.pointerIndex(expression.symbol);
         }
 
         return -1;
@@ -2353,30 +2353,30 @@ public final class DanglingPointerChecker {
     }
 
     private static final class NullGuard {
-        final SemanticExprNode variable;
+        final SastNode variable;
         final boolean isEquality;
 
-        NullGuard(SemanticExprNode variable, boolean isEquality) {
+        NullGuard(SastNode variable, boolean isEquality) {
             this.variable = variable;
             this.isEquality = isEquality;
         }
     }
 
-    private static NullGuard nullGuard(SemanticExprNode condition) {
-        if (!(condition instanceof SemanticBinOpNode binary)) {
+    private static NullGuard nullGuard(SastNode condition) {
+        if (!(condition.kind == SastKind.BIN_OP)) {
             return null;
         }
 
-        if (!binary.op.equals("==") && !binary.op.equals("!=")) {
+        if (!condition.op.equals("==") && !condition.op.equals("!=")) {
             return null;
         }
 
-        if (binary.left instanceof SemanticNullLiteralNode) {
-            return new NullGuard(binary.right, binary.op.equals("=="));
+        if (condition.left.kind == SastKind.NULL_LITERAL) {
+            return new NullGuard(condition.right, condition.op.equals("=="));
         }
 
-        if (binary.right instanceof SemanticNullLiteralNode) {
-            return new NullGuard(binary.left, binary.op.equals("=="));
+        if (condition.right.kind == SastKind.NULL_LITERAL) {
+            return new NullGuard(condition.left, condition.op.equals("=="));
         }
 
         return null;

@@ -47,7 +47,7 @@ public class Cpp14Codegen {
     static final SastType UINT32_TYPE =
             SastType.primitive(SemanticPrimitiveKind.UINT32);
 
-    public String generate(SemanticASTNode root) {
+    public String generate(SastNode root) {
         if (root == null) {
             throw new IllegalStateException(
                     "Internal compiler error: cannot generate code for null Semantic AST"
@@ -71,68 +71,68 @@ public class Cpp14Codegen {
         return body;
     }
 
-    private void emitNode(SemanticASTNode node) {
-        if (node instanceof SemanticProgramNode program) {
-            emitProgram(program);
+    private void emitNode(SastNode node) {
+        if (node.kind == SastKind.PROGRAM) {
+            emitProgram(node);
             return;
         }
 
-        if (node instanceof SemanticNamespaceNode namespace) {
+        if (node.kind == SastKind.NAMESPACE) {
 
-            emitProgram(new SemanticProgramNode(
-                    namespace.span,
-                    List.of(namespace)
+            emitProgram(SastNode.program(
+                    node.span,
+                    List.of(node)
             ));
             return;
         }
 
-        if (node instanceof SemanticFunctionDeclNode fn) {
-            emitFunctionDecl(fn);
+        if (node.kind == SastKind.FUNCTION_DECL) {
+            emitFunctionDecl(node);
             return;
         }
 
-        if (node instanceof SemanticStructDeclNode struct) {
-            emitStructDecl(struct);
+        if (node.kind == SastKind.STRUCT_DECL) {
+            emitStructDecl(node);
             return;
         }
 
-        if (node instanceof SemanticEnumDeclNode enumDecl) {
-            emitEnumDecl(enumDecl);
+        if (node.kind == SastKind.ENUM_DECL) {
+            emitEnumDecl(node);
             return;
         }
 
-        if (node instanceof SemanticStmtNode stmt) {
-            emitStmt(stmt);
+        if (node.isStmt()) {
+            emitStmt(node);
             return;
         }
 
-        if (node instanceof SemanticExprNode expr) {
-            emitLine(expressionEmitter.emitExpr(this, expr) + ";");
+        if (node.isExpr()) {
+            emitLine(expressionEmitter.emitExpr(this, node) + ";");
             return;
         }
 
         throw new IllegalStateException(
-                "Internal compiler error: unsupported SemanticASTNode for codegen: "
+                "Internal compiler error: unsupported SastNode for codegen: "
                         + node.getClass().getSimpleName()
         );
     }
 
-    private void emitProgram(SemanticProgramNode node) {
+    private void emitProgram(SastNode node) {
 
-        List<SemanticStructDeclNode> globalStructs = new ArrayList<>();
-        List<SemanticEnumDeclNode> globalEnums = new ArrayList<>();
-        List<SemanticVarDeclNode> globalGlobals = new ArrayList<>();
-        List<SemanticFunctionDeclNode> globalFunctions = new ArrayList<>();
+        List<SastNode> globalStructs = new ArrayList<>();
+        List<SastNode> globalEnums = new ArrayList<>();
+        List<SastNode> globalGlobals = new ArrayList<>();
+        List<SastNode> globalFunctions = new ArrayList<>();
 
-        Map<String, List<SemanticStructDeclNode>> nsStructs = new LinkedHashMap<>();
-        Map<String, List<SemanticEnumDeclNode>> nsEnums = new LinkedHashMap<>();
-        Map<String, List<SemanticVarDeclNode>> nsGlobals = new LinkedHashMap<>();
-        Map<String, List<SemanticFunctionDeclNode>> nsFunctions = new LinkedHashMap<>();
+        Map<String, List<SastNode>> nsStructs = new LinkedHashMap<>();
+        Map<String, List<SastNode>> nsEnums = new LinkedHashMap<>();
+        Map<String, List<SastNode>> nsGlobals = new LinkedHashMap<>();
+        Map<String, List<SastNode>> nsFunctions = new LinkedHashMap<>();
 
-        for (SemanticASTNode item : node.topLevelItems) {
-            if (item instanceof SemanticNamespaceNode namespace) {
+        for (SastNode item : node.topLevelItems) {
+            if (item.kind == SastKind.NAMESPACE) {
                 partitionNamespaceItems(
-                        namespace,
+                        item,
                         nsStructs,
                         nsEnums,
                         nsGlobals,
@@ -144,7 +144,7 @@ public class Cpp14Codegen {
             partitionItem(item, globalStructs, globalEnums, globalGlobals, globalFunctions);
         }
 
-        for (SemanticEnumDeclNode enumDecl : globalEnums) {
+        for (SastNode enumDecl : globalEnums) {
             emitEnumDecl(enumDecl);
         }
 
@@ -152,14 +152,14 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        for (Map.Entry<String, List<SemanticEnumDeclNode>> entry : nsEnums.entrySet()) {
+        for (Map.Entry<String, List<SastNode>> entry : nsEnums.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 continue;
             }
 
             openNamespace(entry.getKey());
 
-            for (SemanticEnumDeclNode enumDecl : entry.getValue()) {
+            for (SastNode enumDecl : entry.getValue()) {
                 emitEnumDeclBody(enumDecl);
             }
 
@@ -170,18 +170,18 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
+        for (Map.Entry<String, List<SastNode>> entry : nsStructs.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 continue;
             }
 
             openNamespace(entry.getKey());
 
-            for (SemanticStructDeclNode struct : entry.getValue()) {
+            for (SastNode struct : entry.getValue()) {
                 emitLine("struct "
                         + qualify(
-                                struct.symbol.namespace,
-                                emittedStructTypeName(struct.symbol)
+                                struct.structSymbol.namespace,
+                                emittedStructTypeName(struct.structSymbol)
                         )
                         + ";");
             }
@@ -190,11 +190,11 @@ public class Cpp14Codegen {
         }
 
         if (!globalStructs.isEmpty()) {
-            for (SemanticStructDeclNode struct : globalStructs) {
+            for (SastNode struct : globalStructs) {
                 emitLine("struct "
                         + qualify(
-                                struct.symbol.namespace,
-                                emittedStructTypeName(struct.symbol)
+                                struct.structSymbol.namespace,
+                                emittedStructTypeName(struct.structSymbol)
                         )
                         + ";");
             }
@@ -204,16 +204,16 @@ public class Cpp14Codegen {
             emitLine("");
         }
 
-        List<SemanticStructDeclNode> allStructs = new ArrayList<>();
+        List<SastNode> allStructs = new ArrayList<>();
 
-        for (List<SemanticStructDeclNode> structs : nsStructs.values()) {
+        for (List<SastNode> structs : nsStructs.values()) {
             allStructs.addAll(structs);
         }
 
         allStructs.addAll(globalStructs);
 
         if (!allStructs.isEmpty()) {
-            for (SemanticStructDeclNode struct : orderStructsByValueDependency(allStructs)) {
+            for (SastNode struct : orderStructsByValueDependency(allStructs)) {
                 emitStructDecl(struct);
             }
 
@@ -221,49 +221,49 @@ public class Cpp14Codegen {
         }
 
         if (anyNonEmpty(nsGlobals) || !globalGlobals.isEmpty()) {
-            for (Map.Entry<String, List<SemanticVarDeclNode>> entry : nsGlobals.entrySet()) {
+            for (Map.Entry<String, List<SastNode>> entry : nsGlobals.entrySet()) {
                 if (entry.getValue().isEmpty()) {
                     continue;
                 }
 
                 openNamespace(entry.getKey());
 
-                for (SemanticVarDeclNode global : entry.getValue()) {
+                for (SastNode global : entry.getValue()) {
                     emitGlobalForwardDeclaration(global);
                 }
 
                 closeNamespace(entry.getKey());
             }
 
-            for (SemanticVarDeclNode global : globalGlobals) {
+            for (SastNode global : globalGlobals) {
                 emitGlobalForwardDeclaration(global);
             }
 
             emitLine("");
 
-            for (Map.Entry<String, List<SemanticVarDeclNode>> entry : nsGlobals.entrySet()) {
+            for (Map.Entry<String, List<SastNode>> entry : nsGlobals.entrySet()) {
                 if (entry.getValue().isEmpty()) {
                     continue;
                 }
 
                 openNamespace(entry.getKey());
 
-                for (SemanticVarDeclNode global : entry.getValue()) {
+                for (SastNode global : entry.getValue()) {
                     emitVarDecl(global);
                 }
 
                 closeNamespace(entry.getKey());
             }
 
-            for (SemanticVarDeclNode global : globalGlobals) {
+            for (SastNode global : globalGlobals) {
                 emitVarDecl(global);
             }
 
             emitLine("");
         }
 
-        Map<String, List<SemanticFunctionDeclNode>> nsMethods = collectNamespaceMethods(nsStructs);
-        List<SemanticFunctionDeclNode> globalMethods = collectGlobalMethods(globalStructs);
+        Map<String, List<SastNode>> nsMethods = collectNamespaceMethods(nsStructs);
+        List<SastNode> globalMethods = collectGlobalMethods(globalStructs);
 
         checkEmittedNameCollisions(globalFunctions, globalMethods, nsFunctions, nsMethods);
 
@@ -271,8 +271,8 @@ public class Cpp14Codegen {
                 || anyNonEmpty(nsMethods)
                 || !globalFunctions.isEmpty()
                 || !globalMethods.isEmpty()) {
-            for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
-                List<SemanticFunctionDeclNode> combined = new ArrayList<>(entry.getValue());
+            for (Map.Entry<String, List<SastNode>> entry : nsFunctions.entrySet()) {
+                List<SastNode> combined = new ArrayList<>(entry.getValue());
                 combined.addAll(nsMethods.getOrDefault(entry.getKey(), List.of()));
 
                 if (combined.isEmpty()) {
@@ -281,14 +281,14 @@ public class Cpp14Codegen {
 
                 openNamespace(entry.getKey());
 
-                for (SemanticFunctionDeclNode fn : combined) {
+                for (SastNode fn : combined) {
                     emitLine(emitFunctionHeader(fn) + ";");
                 }
 
                 closeNamespace(entry.getKey());
             }
 
-            for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsMethods.entrySet()) {
+            for (Map.Entry<String, List<SastNode>> entry : nsMethods.entrySet()) {
                 if (nsFunctions.containsKey(entry.getKey())) {
                     continue;
                 }
@@ -299,26 +299,26 @@ public class Cpp14Codegen {
 
                 openNamespace(entry.getKey());
 
-                for (SemanticFunctionDeclNode fn : entry.getValue()) {
+                for (SastNode fn : entry.getValue()) {
                     emitLine(emitFunctionHeader(fn) + ";");
                 }
 
                 closeNamespace(entry.getKey());
             }
 
-            for (SemanticFunctionDeclNode fn : globalFunctions) {
+            for (SastNode fn : globalFunctions) {
                 emitLine(emitFunctionHeader(fn) + ";");
             }
 
-            for (SemanticFunctionDeclNode fn : globalMethods) {
+            for (SastNode fn : globalMethods) {
                 emitLine(emitFunctionHeader(fn) + ";");
             }
 
             emitLine("");
         }
 
-        for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsFunctions.entrySet()) {
-            List<SemanticFunctionDeclNode> combined = new ArrayList<>(entry.getValue());
+        for (Map.Entry<String, List<SastNode>> entry : nsFunctions.entrySet()) {
+            List<SastNode> combined = new ArrayList<>(entry.getValue());
             combined.addAll(nsMethods.getOrDefault(entry.getKey(), List.of()));
 
             if (combined.isEmpty()) {
@@ -327,7 +327,7 @@ public class Cpp14Codegen {
 
             openNamespace(entry.getKey());
 
-            for (SemanticFunctionDeclNode fn : combined) {
+            for (SastNode fn : combined) {
                 emitFunctionDecl(fn);
                 emitLine("");
             }
@@ -335,7 +335,7 @@ public class Cpp14Codegen {
             closeNamespace(entry.getKey());
         }
 
-        for (Map.Entry<String, List<SemanticFunctionDeclNode>> entry : nsMethods.entrySet()) {
+        for (Map.Entry<String, List<SastNode>> entry : nsMethods.entrySet()) {
             if (nsFunctions.containsKey(entry.getKey())) {
                 continue;
             }
@@ -346,7 +346,7 @@ public class Cpp14Codegen {
 
             openNamespace(entry.getKey());
 
-            for (SemanticFunctionDeclNode fn : entry.getValue()) {
+            for (SastNode fn : entry.getValue()) {
                 emitFunctionDecl(fn);
                 emitLine("");
             }
@@ -354,41 +354,41 @@ public class Cpp14Codegen {
             closeNamespace(entry.getKey());
         }
 
-        for (SemanticFunctionDeclNode fn : globalFunctions) {
+        for (SastNode fn : globalFunctions) {
             emitFunctionDecl(fn);
             emitLine("");
         }
 
-        for (SemanticFunctionDeclNode fn : globalMethods) {
+        for (SastNode fn : globalMethods) {
             emitFunctionDecl(fn);
             emitLine("");
         }
     }
 
-    private static List<SemanticFunctionDeclNode> collectGlobalMethods(
-            List<SemanticStructDeclNode> globalStructs
+    private static List<SastNode> collectGlobalMethods(
+            List<SastNode> globalStructs
     ) {
-        List<SemanticFunctionDeclNode> out = new ArrayList<>();
+        List<SastNode> out = new ArrayList<>();
 
-        for (SemanticStructDeclNode struct : globalStructs) {
+        for (SastNode struct : globalStructs) {
             out.addAll(struct.methods);
         }
 
         return out;
     }
 
-    private static Map<String, List<SemanticFunctionDeclNode>> collectNamespaceMethods(
-            Map<String, List<SemanticStructDeclNode>> nsStructs
+    private static Map<String, List<SastNode>> collectNamespaceMethods(
+            Map<String, List<SastNode>> nsStructs
     ) {
-        Map<String, List<SemanticFunctionDeclNode>> out = new LinkedHashMap<>();
+        Map<String, List<SastNode>> out = new LinkedHashMap<>();
 
-        for (Map.Entry<String, List<SemanticStructDeclNode>> entry : nsStructs.entrySet()) {
-            List<SemanticFunctionDeclNode> methods = out.computeIfAbsent(
+        for (Map.Entry<String, List<SastNode>> entry : nsStructs.entrySet()) {
+            List<SastNode> methods = out.computeIfAbsent(
                     entry.getKey(),
                     ignored -> new ArrayList<>()
             );
 
-            for (SemanticStructDeclNode struct : entry.getValue()) {
+            for (SastNode struct : entry.getValue()) {
                 methods.addAll(struct.methods);
             }
         }
@@ -407,26 +407,26 @@ public class Cpp14Codegen {
     }
 
     private static void checkEmittedNameCollisions(
-            List<SemanticFunctionDeclNode> globalFunctions,
-            List<SemanticFunctionDeclNode> globalMethods,
-            Map<String, List<SemanticFunctionDeclNode>> nsFunctions,
-            Map<String, List<SemanticFunctionDeclNode>> nsMethods
+            List<SastNode> globalFunctions,
+            List<SastNode> globalMethods,
+            Map<String, List<SastNode>> nsFunctions,
+            Map<String, List<SastNode>> nsMethods
     ) {
         Map<String, String> seen = new LinkedHashMap<>();
 
-        List<SemanticFunctionDeclNode> all = new ArrayList<>();
+        List<SastNode> all = new ArrayList<>();
         all.addAll(globalFunctions);
         all.addAll(globalMethods);
 
-        for (List<SemanticFunctionDeclNode> fns : nsFunctions.values()) {
+        for (List<SastNode> fns : nsFunctions.values()) {
             all.addAll(fns);
         }
 
-        for (List<SemanticFunctionDeclNode> fns : nsMethods.values()) {
+        for (List<SastNode> fns : nsMethods.values()) {
             all.addAll(fns);
         }
 
-        for (SemanticFunctionDeclNode fn : all) {
+        for (SastNode fn : all) {
             if (fn == null || fn.symbol == null) {
                 continue;
             }
@@ -465,67 +465,67 @@ public class Cpp14Codegen {
     }
 
     private void partitionNamespaceItems(
-            SemanticNamespaceNode namespace,
-            Map<String, List<SemanticStructDeclNode>> nsStructs,
-            Map<String, List<SemanticEnumDeclNode>> nsEnums,
-            Map<String, List<SemanticVarDeclNode>> nsGlobals,
-            Map<String, List<SemanticFunctionDeclNode>> nsFunctions
+            SastNode namespace,
+            Map<String, List<SastNode>> nsStructs,
+            Map<String, List<SastNode>> nsEnums,
+            Map<String, List<SastNode>> nsGlobals,
+            Map<String, List<SastNode>> nsFunctions
     ) {
-        List<SemanticStructDeclNode> structs = nsStructs.computeIfAbsent(
+        List<SastNode> structs = nsStructs.computeIfAbsent(
                 namespace.name,
                 ignored -> new ArrayList<>()
         );
 
-        List<SemanticEnumDeclNode> enums = nsEnums.computeIfAbsent(
+        List<SastNode> enums = nsEnums.computeIfAbsent(
                 namespace.name,
                 ignored -> new ArrayList<>()
         );
 
-        List<SemanticVarDeclNode> globals = nsGlobals.computeIfAbsent(
+        List<SastNode> globals = nsGlobals.computeIfAbsent(
                 namespace.name,
                 ignored -> new ArrayList<>()
         );
 
-        List<SemanticFunctionDeclNode> functions = nsFunctions.computeIfAbsent(
+        List<SastNode> functions = nsFunctions.computeIfAbsent(
                 namespace.name,
                 ignored -> new ArrayList<>()
         );
 
-        for (SemanticASTNode item : namespace.items) {
+        for (SastNode item : namespace.items) {
             partitionItem(item, structs, enums, globals, functions);
         }
     }
 
     private void partitionItem(
-            SemanticASTNode item,
-            List<SemanticStructDeclNode> structs,
-            List<SemanticEnumDeclNode> enums,
-            List<SemanticVarDeclNode> globals,
-            List<SemanticFunctionDeclNode> functions
+            SastNode item,
+            List<SastNode> structs,
+            List<SastNode> enums,
+            List<SastNode> globals,
+            List<SastNode> functions
     ) {
-        if (item instanceof SemanticStructDeclNode struct) {
-            structs.add(struct);
+        if (item.kind == SastKind.STRUCT_DECL) {
+            structs.add(item);
             return;
         }
 
-        if (item instanceof SemanticEnumDeclNode enumDecl) {
-            enums.add(enumDecl);
+        if (item.kind == SastKind.ENUM_DECL) {
+            enums.add(item);
             return;
         }
 
-        if (item instanceof SemanticVarDeclNode global) {
-            globals.add(global);
+        if (item.kind == SastKind.VAR_DECL) {
+            globals.add(item);
             return;
         }
 
-        if (item instanceof SemanticFunctionDeclNode fn) {
-            functions.add(fn);
+        if (item.kind == SastKind.FUNCTION_DECL) {
+            functions.add(item);
             return;
         }
 
         if (item == null) {
             throw new IllegalStateException(
-                    "Internal compiler error: null top-level item in SemanticProgramNode"
+                    "Internal compiler error: null top-level item in SastNode"
             );
         }
 
@@ -535,30 +535,30 @@ public class Cpp14Codegen {
         );
     }
 
-    private void emitStructDecl(SemanticStructDeclNode node) {
-        if (node == null || node.symbol == null) {
+    private void emitStructDecl(SastNode node) {
+        if (node == null || node.structSymbol == null) {
             throw new IllegalStateException(
                     "Internal compiler error: null struct declaration or symbol"
             );
         }
 
-        openNamespace(node.symbol.namespace);
+        openNamespace(node.structSymbol.namespace);
 
         emitLine("struct " + qualify(
-                node.symbol.namespace,
-                emittedStructTypeName(node.symbol)
+                node.structSymbol.namespace,
+                emittedStructTypeName(node.structSymbol)
         ));
         emitLine("{");
         indentLevel++;
 
-        for (FieldSymbol field : node.symbol.fields) {
+        for (FieldSymbol field : node.structSymbol.fields) {
             emitStructField(field);
         }
 
         indentLevel--;
         emitLine("};");
 
-        closeNamespace(node.symbol.namespace);
+        closeNamespace(node.structSymbol.namespace);
     }
 
     private void emitStructField(FieldSymbol field) {
@@ -585,21 +585,21 @@ public class Cpp14Codegen {
         emitLine(sb.toString());
     }
 
-    private List<SemanticStructDeclNode> orderStructsByValueDependency(
-            List<SemanticStructDeclNode> structs
+    private List<SastNode> orderStructsByValueDependency(
+            List<SastNode> structs
     ) {
 
-        Map<String, SemanticStructDeclNode> declByName = new LinkedHashMap<>();
+        Map<String, SastNode> declByName = new LinkedHashMap<>();
 
-        for (SemanticStructDeclNode struct : structs) {
-            declByName.put(struct.symbol.qualifiedName(), struct);
+        for (SastNode struct : structs) {
+            declByName.put(struct.structSymbol.qualifiedName(), struct);
         }
 
         LinkedHashSet<String> emitted = new LinkedHashSet<>();
         LinkedHashSet<String> inProgress = new LinkedHashSet<>();
-        List<SemanticStructDeclNode> ordered = new ArrayList<>();
+        List<SastNode> ordered = new ArrayList<>();
 
-        for (SemanticStructDeclNode struct : structs) {
+        for (SastNode struct : structs) {
             visitStructDependency(
                     struct,
                     declByName,
@@ -613,13 +613,13 @@ public class Cpp14Codegen {
     }
 
     private void visitStructDependency(
-            SemanticStructDeclNode node,
-            Map<String, SemanticStructDeclNode> declByName,
+            SastNode node,
+            Map<String, SastNode> declByName,
             LinkedHashSet<String> emitted,
             LinkedHashSet<String> inProgress,
-            List<SemanticStructDeclNode> ordered
+            List<SastNode> ordered
     ) {
-        String name = node.symbol.qualifiedName();
+        String name = node.structSymbol.qualifiedName();
 
         if (emitted.contains(name)) {
             return;
@@ -633,9 +633,9 @@ public class Cpp14Codegen {
             );
         }
 
-        for (FieldSymbol field : node.symbol.fields) {
+        for (FieldSymbol field : node.structSymbol.fields) {
             for (String dependencyName : byValueStructDependencies(field.type)) {
-                SemanticStructDeclNode dependency =
+                SastNode dependency =
                         declByName.get(dependencyName);
 
                 if (dependency != null) {
@@ -675,7 +675,7 @@ public class Cpp14Codegen {
         return names;
     }
 
-    private void emitFunctionDecl(SemanticFunctionDeclNode node) {
+    private void emitFunctionDecl(SastNode node) {
 
         if (ffiHandler != null && ffiHandler.matchFunction(node.symbol) != null) {
             return;
@@ -694,7 +694,7 @@ public class Cpp14Codegen {
         emitBlock(node.body);
     }
 
-    private String emitFunctionHeader(SemanticFunctionDeclNode node) {
+    private String emitFunctionHeader(SastNode node) {
         if (node == null || node.symbol == null) {
             throw new IllegalStateException(
                     "Internal compiler error: null function declaration or symbol"
@@ -724,55 +724,55 @@ public class Cpp14Codegen {
         return sb.toString();
     }
 
-    private void emitStmt(SemanticStmtNode node) {
+    private void emitStmt(SastNode node) {
         if (node == null) {
             throw new IllegalStateException(
                     "Internal compiler error: cannot emit null statement"
             );
         }
 
-        if (node instanceof SemanticBlockNode block) {
-            emitBlock(block);
+        if (node.kind == SastKind.BLOCK) {
+            emitBlock(node);
             return;
         }
 
-        if (node instanceof SemanticVarDeclNode decl) {
-            emitVarDecl(decl);
+        if (node.kind == SastKind.VAR_DECL) {
+            emitVarDecl(node);
             return;
         }
 
-        if (node instanceof SemanticAssignNode assign) {
-            emitAssign(assign);
+        if (node.kind == SastKind.ASSIGN) {
+            emitAssign(node);
             return;
         }
 
-        if (node instanceof SemanticIfNode ifNode) {
-            emitIf(ifNode);
+        if (node.kind == SastKind.IF) {
+            emitIf(node);
             return;
         }
 
-        if (node instanceof SemanticWhileNode whileNode) {
-            emitWhile(whileNode);
+        if (node.kind == SastKind.WHILE) {
+            emitWhile(node);
             return;
         }
 
-        if (node instanceof SemanticBreakNode brk) {
-            emitBreak(brk);
+        if (node.kind == SastKind.BREAK) {
+            emitBreak(node);
             return;
         }
 
-        if (node instanceof SemanticContinueNode) {
+        if (node.kind == SastKind.CONTINUE) {
             emitContinue();
             return;
         }
 
-        if (node instanceof SemanticReturnNode ret) {
-            emitReturn(ret);
+        if (node.kind == SastKind.RETURN) {
+            emitReturn(node);
             return;
         }
 
-        if (node instanceof SemanticExprStmtNode exprStmt) {
-            String expr = expressionEmitter.emitExpr(this, exprStmt.expr);
+        if (node.kind == SastKind.EXPR_STMT) {
+            String expr = expressionEmitter.emitExpr(this, node.expr);
             emitLine(expr + ";");
             return;
         }
@@ -783,11 +783,11 @@ public class Cpp14Codegen {
         );
     }
 
-    private void emitBlock(SemanticBlockNode node) {
+    private void emitBlock(SastNode node) {
         emitLine("{");
         indentLevel++;
 
-        for (SemanticStmtNode stmt : node.statements) {
+        for (SastNode stmt : node.statements) {
             emitStmt(stmt);
         }
 
@@ -795,7 +795,7 @@ public class Cpp14Codegen {
         emitLine("}");
     }
 
-    private void emitGlobalForwardDeclaration(SemanticVarDeclNode node) {
+    private void emitGlobalForwardDeclaration(SastNode node) {
         Symbol sym = node.symbol;
 
         String qualifier = "";
@@ -810,7 +810,7 @@ public class Cpp14Codegen {
                 + emitDecl(sym.type, emitSymbolName(sym)) + ";");
     }
 
-    private void emitVarDecl(SemanticVarDeclNode node) {
+    private void emitVarDecl(SastNode node) {
         Symbol sym = node.symbol;
 
         String declaration = emitDecl(sym.type, emitSymbolName(sym));
@@ -972,7 +972,7 @@ public class Cpp14Codegen {
         return sb.toString();
     }
 
-    private void emitAssign(SemanticAssignNode node) {
+    private void emitAssign(SastNode node) {
 
         String target = expressionEmitter.emitLValue(this, node.target);
         String value = expressionEmitter.emitAsType(this, node.value, node.target.type);
@@ -987,7 +987,7 @@ public class Cpp14Codegen {
         );
     }
 
-    private void emitIf(SemanticIfNode node) {
+    private void emitIf(SastNode node) {
 
         String condition = expressionEmitter.emitExpr(this, node.condition);
         emitLine("if (" + condition + ")");
@@ -999,7 +999,7 @@ public class Cpp14Codegen {
         }
     }
 
-    private void emitWhile(SemanticWhileNode node) {
+    private void emitWhile(SastNode node) {
 
         boolean needsContinueLabel =
                 scanForContinueTarget(node.body, 0);
@@ -1028,7 +1028,7 @@ public class Cpp14Codegen {
 
             emitLine("L_cont_" + frame.id + ": ;");
 
-            for (SemanticStmtNode updateStmt : node.update) {
+            for (SastNode updateStmt : node.update) {
                 emitStmt(updateStmt);
             }
 
@@ -1039,15 +1039,15 @@ public class Cpp14Codegen {
             emitLine("{");
             indentLevel++;
 
-            if (node.body instanceof SemanticBlockNode bodyBlock) {
-                for (SemanticStmtNode stmt : bodyBlock.statements) {
+            if (node.body.kind == SastKind.BLOCK) {
+                for (SastNode stmt : node.body.statements) {
                     emitStmt(stmt);
                 }
             } else {
                 emitStmt(node.body);
             }
 
-            for (SemanticStmtNode updateStmt : node.update) {
+            for (SastNode updateStmt : node.update) {
                 emitStmt(updateStmt);
             }
 
@@ -1064,7 +1064,7 @@ public class Cpp14Codegen {
         }
     }
 
-    private void emitBreak(SemanticBreakNode node) {
+    private void emitBreak(SastNode node) {
         if (loopStack.isEmpty() || node.levels > loopStack.size()) {
             throw new IllegalStateException(
                     "Internal compiler error: break with no enclosing loop"
@@ -1089,25 +1089,25 @@ public class Cpp14Codegen {
         emitLine("goto L_cont_" + target.id + ";");
     }
 
-    private boolean scanForContinueTarget(SemanticStmtNode node, int depth) {
+    private boolean scanForContinueTarget(SastNode node, int depth) {
         if (node == null) {
             return false;
         }
 
-        if (node instanceof SemanticContinueNode) {
+        if (node.kind == SastKind.CONTINUE) {
             return depth == 0;
         }
 
-        if (node instanceof SemanticBreakNode) {
+        if (node.kind == SastKind.BREAK) {
             return false;
         }
 
-        if (node instanceof SemanticWhileNode n) {
-            if (scanForContinueTarget(n.body, depth + 1)) {
+        if (node.kind == SastKind.WHILE) {
+            if (scanForContinueTarget(node.body, depth + 1)) {
                 return true;
             }
 
-            for (SemanticStmtNode updateStmt : n.update) {
+            for (SastNode updateStmt : node.update) {
                 if (scanForContinueTarget(updateStmt, depth + 1)) {
                     return true;
                 }
@@ -1116,8 +1116,8 @@ public class Cpp14Codegen {
             return false;
         }
 
-        if (node instanceof SemanticBlockNode n) {
-            for (SemanticStmtNode stmt : n.statements) {
+        if (node.kind == SastKind.BLOCK) {
+            for (SastNode stmt : node.statements) {
                 if (scanForContinueTarget(stmt, depth)) {
                     return true;
                 }
@@ -1126,33 +1126,33 @@ public class Cpp14Codegen {
             return false;
         }
 
-        if (node instanceof SemanticIfNode n) {
-            return scanForContinueTarget(n.thenBranch, depth)
-                    || scanForContinueTarget(n.elseBranch, depth);
+        if (node.kind == SastKind.IF) {
+            return scanForContinueTarget(node.thenBranch, depth)
+                    || scanForContinueTarget(node.elseBranch, depth);
         }
 
         return false;
     }
 
-    private boolean scanForBreakTarget(SemanticStmtNode node, int depth) {
+    private boolean scanForBreakTarget(SastNode node, int depth) {
         if (node == null) {
             return false;
         }
 
-        if (node instanceof SemanticBreakNode brk) {
-            return brk.levels == depth + 1;
+        if (node.kind == SastKind.BREAK) {
+            return node.levels == depth + 1;
         }
 
-        if (node instanceof SemanticContinueNode) {
+        if (node.kind == SastKind.CONTINUE) {
             return false;
         }
 
-        if (node instanceof SemanticWhileNode n) {
-            if (scanForBreakTarget(n.body, depth + 1)) {
+        if (node.kind == SastKind.WHILE) {
+            if (scanForBreakTarget(node.body, depth + 1)) {
                 return true;
             }
 
-            for (SemanticStmtNode updateStmt : n.update) {
+            for (SastNode updateStmt : node.update) {
                 if (scanForBreakTarget(updateStmt, depth + 1)) {
                     return true;
                 }
@@ -1161,8 +1161,8 @@ public class Cpp14Codegen {
             return false;
         }
 
-        if (node instanceof SemanticBlockNode n) {
-            for (SemanticStmtNode stmt : n.statements) {
+        if (node.kind == SastKind.BLOCK) {
+            for (SastNode stmt : node.statements) {
                 if (scanForBreakTarget(stmt, depth)) {
                     return true;
                 }
@@ -1171,16 +1171,16 @@ public class Cpp14Codegen {
             return false;
         }
 
-        if (node instanceof SemanticIfNode n) {
-            return scanForBreakTarget(n.thenBranch, depth)
-                    || scanForBreakTarget(n.elseBranch, depth);
+        if (node.kind == SastKind.IF) {
+            return scanForBreakTarget(node.thenBranch, depth)
+                    || scanForBreakTarget(node.elseBranch, depth);
         }
 
         return false;
     }
 
-    private void emitControlledStmt(SemanticStmtNode node) {
-        if (node instanceof SemanticBlockNode) {
+    private void emitControlledStmt(SastNode node) {
+        if (node.kind == SastKind.BLOCK) {
             emitStmt(node);
             return;
         }
@@ -1190,7 +1190,7 @@ public class Cpp14Codegen {
         indentLevel--;
     }
 
-    private void emitReturn(SemanticReturnNode node) {
+    private void emitReturn(SastNode node) {
         if (node.value == null) {
             emitLine("return;");
             return;
@@ -1367,14 +1367,14 @@ public class Cpp14Codegen {
         return expressionEmitter.emitBigIntegerLiteral(this, value);
     }
 
-    private void emitEnumDecl(SemanticEnumDeclNode node) {
-        openNamespace(node.symbol.namespace);
+    private void emitEnumDecl(SastNode node) {
+        openNamespace(node.enumSymbol.namespace);
         emitEnumDeclBody(node);
-        closeNamespace(node.symbol.namespace);
+        closeNamespace(node.enumSymbol.namespace);
     }
 
-    private void emitEnumDeclBody(SemanticEnumDeclNode node) {
-        EnumSymbol symbol = node.symbol;
+    private void emitEnumDeclBody(SastNode node) {
+        EnumSymbol symbol = node.enumSymbol;
         String backingCpp = emitPrimitiveType(symbol.backingKind);
         String enumCpp = emittedEnumTypeName(symbol);
 
@@ -1450,7 +1450,7 @@ public class Cpp14Codegen {
         emitLine("};");
     }
 
-    String emitEnumVariant(SemanticEnumVariantNode node) {
+    String emitEnumVariant(SastNode node) {
         return qualify(
                 node.enumSymbol.namespace,
                 emittedEnumTypeName(node.enumSymbol) + "::VARIANT_" + node.variant.name + "()"
