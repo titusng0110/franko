@@ -10,7 +10,134 @@
 //   ./programs/calculator.out < programs/calculator.stdin
 
 import "franko/io"
-import "./lib/text"
+import "franko/string"
+
+namespace text {
+    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+        if (buf == null) {
+            return -1
+        }
+        if (line_len == null) {
+            return -1
+        }
+        std::String line_text
+        if (read_line(getptr(line_text)) != 0) {
+            line_text.uninit()
+            return -1
+        }
+        uint32 n = line_text.length()
+        if (n > cap) {
+            line_text.uninit()
+            return -1
+        }
+        uint32 i = 0
+        while (i < n) {
+            $(buf)[i] = line_text.get(i)
+            i = i + 1
+        }
+        $(line_len) = n
+        line_text.uninit()
+        return 0
+    }
+
+    // Copy buf[start, start+count) into a std::String.
+    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+        if (buf == null) {
+            return -1
+        }
+        if (out == null) {
+            return -1
+        }
+        uint32 n = $(buf).length()
+        if (start > n || count > n - start) {
+            return -1
+        }
+        std::String full
+        int32 st = full.from(buf)
+        if (st != 0) {
+            full.uninit()
+            return -1
+        }
+        st = full.get_slice(start, start + count, out)
+        full.uninit()
+        if (st != 0) {
+            return -1
+        }
+        return 0
+    }
+
+    func parse_int64(view<[byte]> buf, uint32 start, uint32 count, mview<int64> out) -> byte {
+        if (out == null) {
+            return 0
+        }
+        std::String token
+        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+            token.uninit()
+            return 0
+        }
+        (int64 val, int32 err) parsed = token.to_int64()
+        token.uninit()
+        if (parsed.err != 0) {
+            return 0
+        }
+        $(out) = parsed.val
+        return 1
+    }
+
+    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+        if (out == null) {
+            return 0
+        }
+        std::String token
+        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+            token.uninit()
+            return 0
+        }
+        (uint32 val, int32 err) parsed = token.to_uint32()
+        token.uninit()
+        if (parsed.err != 0) {
+            return 0
+        }
+        $(out) = parsed.val
+        return 1
+    }
+
+    func skip_spaces(view<[byte]> buf, mview<uint32> pos) -> void {
+        if (buf == null) {
+            return
+        }
+        if (pos == null) {
+            return
+        }
+        uint32 i = $(pos)
+        uint32 n = $(buf).length()
+        while (i < n) {
+            byte b = $(buf)[i]
+            if (b != 32 && b != 9) {
+                break
+            }
+            i = i + 1
+        }
+        $(pos) = i
+        return
+    }
+
+    func print_slice(view<[byte]> buf, uint32 start, uint32 count) -> void {
+        if (buf == null || count == 0) {
+            return
+        }
+        std::String token
+        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+            token.uninit()
+            return
+        }
+        view<[byte]> no_end = null
+        print(getview(token), no_end)
+        token.uninit()
+        return
+    }
+}
+
 
 enum<uint8> TokenKind {
     endOfInput,

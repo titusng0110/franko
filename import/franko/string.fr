@@ -36,10 +36,46 @@
 //
 // `length()` reports the logical byte length. `is_utf8_compliant()`
 // validates the stored bytes as UTF-8.
+//
+// Content operations:
+//
+//   - `append(...)` grows the string (the += operator calls it);
+//   - `from_integer(...)` writes a primitive integer in decimal;
+//   - `to_int8` ... `to_uint64` parse decimal, binary, or hexadecimal;
+//   - `find`, `find_next`, `count`, and `count_from` search a byte, a
+//     byte view, or another String;
+//   - `get` and `set` access one byte;
+//   - `get_slice` copies [start, end) into a String or byte array;
+//   - `insert` and `erase` edit the contents in place;
+//   - `split` fills a StringList and `join` concatenates a StringList.
+//
+// StringList:
+//
+//   struct StringList {
+//       [String] data          // buffer; data.length() is capacity
+//       uint32 data_size = 0   // number of live elements
+//   }
+//
+// StringList stores a buffered dynamic array of String values. The
+// array length is the buffer capacity and `data_size` is the live
+// element count. The initial buffer is at least 128 elements; later growth is
+// geometric (at least doubling). Passing a null view to `from` clears
+// the live elements and keeps the buffer; `uninit` frees every element
+// and the buffer.
 // ============================================================
 
 namespace std {
     func __string_default_buffer_size(uint32 payload) -> uint32 {
+        if (payload < 128) {
+            return 128
+        }
+        if (payload > 0xFFFFFFFF - 128) {
+            return payload
+        }
+        return payload + 128
+    }
+
+    func __stringlist_default_buffer_size(uint32 payload) -> uint32 {
         if (payload < 128) {
             return 128
         }
@@ -256,6 +292,2292 @@ namespace std {
             return
         }
 
+        // Append one byte. Returns 0 on success, -1 on overflow or
+        // allocation failure.
+        func append(ptr<String> self, byte payload) -> int32 {
+            uint32 old = $(self)._data_size
+            if (old == 0xFFFFFFFF) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + 1)
+            if (st != 0) {
+                return -1
+            }
+            $(self)._data[old] = payload
+            $(self)._data_size = old + 1
+            return 0
+        }
+
+        // Append the bytes in `payload`. Returns 0 on success, -1 on
+        // overflow or allocation failure. Appending the string's own
+        // buffer is handled without copying stale bytes.
+        func append(ptr<String> self, view<[byte]> payload) -> int32 {
+            if (payload == null) {
+                return 0
+            }
+            uint32 n = $(payload).length()
+            if (n == 0) {
+                return 0
+            }
+            uint8 self_source = 0
+            if (payload == getview($(self)._data)) {
+                self_source = 1
+            }
+            uint32 old = $(self)._data_size
+            if (self_source != 0) {
+                n = old
+            }
+            if (n == 0) {
+                return 0
+            }
+            if (old > 0xFFFFFFFF - n) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + n)
+            if (st != 0) {
+                return -1
+            }
+            if (self_source != 0) {
+                $(self)._data.memmove(old, 0, n)
+            } else {
+                $(self)._data.memcpy(payload, old, 0, n)
+            }
+            $(self)._data_size = old + n
+            return 0
+        }
+
+        // Append another string. Returns 0 on success, -1 on overflow
+        // or allocation failure.
+        func append(ptr<String> self, view<String> payload) -> int32 {
+            if (payload == null) {
+                return 0
+            }
+            uint32 n = $(payload)._data_size
+            if (n == 0) {
+                return 0
+            }
+            uint8 self_source = 0
+            if (payload == getview($(self))) {
+                self_source = 1
+            }
+            uint32 old = $(self)._data_size
+            if (self_source != 0) {
+                n = old
+            }
+            if (n == 0) {
+                return 0
+            }
+            if (old > 0xFFFFFFFF - n) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + n)
+            if (st != 0) {
+                return -1
+            }
+            if (self_source != 0) {
+                $(self)._data.memmove(old, 0, n)
+            } else {
+                view<[byte]> src = getview($(payload)._data)
+                $(self)._data.memcpy(src, old, 0, n)
+            }
+            $(self)._data_size = old + n
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // int8. Negative values include a leading '-'. Returns 0 on
+        // success, -1 on allocation failure.
+        func from_integer(ptr<String> self, int8 value) -> int32 {
+            int64 v = cast<int64>(value)
+            uint8 negative = 0
+            if (v < 0) {
+                negative = 1
+            }
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                int64 rem = v % 10
+                if (negative != 0) {
+                    rem = -rem
+                }
+                $(self)._data[len] = unsafe_cast<byte>(rem + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            if (negative != 0) {
+                $(self)._data.memmove(1, 0, len)
+                $(self)._data[0] = 45
+                len = len + 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // int16. Negative values include a leading '-'. Returns 0 on
+        // success, -1 on allocation failure.
+        func from_integer(ptr<String> self, int16 value) -> int32 {
+            int64 v = cast<int64>(value)
+            uint8 negative = 0
+            if (v < 0) {
+                negative = 1
+            }
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                int64 rem = v % 10
+                if (negative != 0) {
+                    rem = -rem
+                }
+                $(self)._data[len] = unsafe_cast<byte>(rem + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            if (negative != 0) {
+                $(self)._data.memmove(1, 0, len)
+                $(self)._data[0] = 45
+                len = len + 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // int32. Negative values include a leading '-'. Returns 0 on
+        // success, -1 on allocation failure.
+        func from_integer(ptr<String> self, int32 value) -> int32 {
+            int64 v = cast<int64>(value)
+            uint8 negative = 0
+            if (v < 0) {
+                negative = 1
+            }
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                int64 rem = v % 10
+                if (negative != 0) {
+                    rem = -rem
+                }
+                $(self)._data[len] = unsafe_cast<byte>(rem + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            if (negative != 0) {
+                $(self)._data.memmove(1, 0, len)
+                $(self)._data[0] = 45
+                len = len + 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // int64. Negative values include a leading '-'. Returns 0 on
+        // success, -1 on allocation failure.
+        func from_integer(ptr<String> self, int64 value) -> int32 {
+            int64 v = value
+            uint8 negative = 0
+            if (v < 0) {
+                negative = 1
+            }
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                int64 rem = v % 10
+                if (negative != 0) {
+                    rem = -rem
+                }
+                $(self)._data[len] = unsafe_cast<byte>(rem + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            if (negative != 0) {
+                $(self)._data.memmove(1, 0, len)
+                $(self)._data[0] = 45
+                len = len + 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // uint8. Returns 0 on success, -1 on allocation failure.
+        func from_integer(ptr<String> self, uint8 value) -> int32 {
+            uint64 v = cast<uint64>(value)
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                $(self)._data[len] = unsafe_cast<byte>(v % 10 + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // uint16. Returns 0 on success, -1 on allocation failure.
+        func from_integer(ptr<String> self, uint16 value) -> int32 {
+            uint64 v = cast<uint64>(value)
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                $(self)._data[len] = unsafe_cast<byte>(v % 10 + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // uint32. Returns 0 on success, -1 on allocation failure.
+        func from_integer(ptr<String> self, uint32 value) -> int32 {
+            uint64 v = cast<uint64>(value)
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                $(self)._data[len] = unsafe_cast<byte>(v % 10 + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Replace this string with the decimal representation of a
+        // uint64. Returns 0 on success, -1 on allocation failure.
+        func from_integer(ptr<String> self, uint64 value) -> int32 {
+            uint64 v = value
+            int32 st = $(self)._reserve(20)
+            if (st != 0) {
+                return -1
+            }
+            uint32 len = 0
+            while (1) {
+                $(self)._data[len] = unsafe_cast<byte>(v % 10 + 48)
+                len = len + 1
+                v = v / 10
+                if (v == 0) {
+                    break
+                }
+            }
+            uint32 a = 0
+            uint32 b = len - 1
+            while (a < b) {
+                byte tmp = $(self)._data[a]
+                $(self)._data[a] = $(self)._data[b]
+                $(self)._data[b] = tmp
+                a = a + 1
+                b = b - 1
+            }
+            $(self)._data_size = len
+            return 0
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal int8. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_int8(view<String> self) -> (int8 val, int32 err) {
+            (int8 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0) {
+                if (magnitude == 0) {
+                    result.val = 0
+                    result.err = 0
+                    return result
+                }
+                if (magnitude > 128) {
+                    return result
+                }
+                if (magnitude == 128) {
+                    result.val = -128
+                    result.err = 0
+                    return result
+                }
+                result.val = -unsafe_cast<int8>(magnitude)
+                result.err = 0
+                return result
+            }
+            if (magnitude > 127) {
+                return result
+            }
+            result.val = unsafe_cast<int8>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal int16. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_int16(view<String> self) -> (int16 val, int32 err) {
+            (int16 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0) {
+                if (magnitude == 0) {
+                    result.val = 0
+                    result.err = 0
+                    return result
+                }
+                if (magnitude > 32768) {
+                    return result
+                }
+                if (magnitude == 32768) {
+                    result.val = -32768
+                    result.err = 0
+                    return result
+                }
+                result.val = -unsafe_cast<int16>(magnitude)
+                result.err = 0
+                return result
+            }
+            if (magnitude > 32767) {
+                return result
+            }
+            result.val = unsafe_cast<int16>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal int32. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_int32(view<String> self) -> (int32 val, int32 err) {
+            (int32 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0) {
+                if (magnitude == 0) {
+                    result.val = 0
+                    result.err = 0
+                    return result
+                }
+                if (magnitude > 2147483648) {
+                    return result
+                }
+                if (magnitude == 2147483648) {
+                    result.val = -2147483648
+                    result.err = 0
+                    return result
+                }
+                result.val = -unsafe_cast<int32>(magnitude)
+                result.err = 0
+                return result
+            }
+            if (magnitude > 2147483647) {
+                return result
+            }
+            result.val = unsafe_cast<int32>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal int64. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_int64(view<String> self) -> (int64 val, int32 err) {
+            (int64 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0) {
+                if (magnitude == 0) {
+                    result.val = 0
+                    result.err = 0
+                    return result
+                }
+                if (magnitude > 9223372036854775808) {
+                    return result
+                }
+                if (magnitude == 9223372036854775808) {
+                    result.val = -9223372036854775808
+                    result.err = 0
+                    return result
+                }
+                result.val = -unsafe_cast<int64>(magnitude)
+                result.err = 0
+                return result
+            }
+            if (magnitude > 9223372036854775807) {
+                return result
+            }
+            result.val = unsafe_cast<int64>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal uint8. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_uint8(view<String> self) -> (uint8 val, int32 err) {
+            (uint8 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0 && magnitude != 0) {
+                return result
+            }
+            if (magnitude > 255) {
+                return result
+            }
+            result.val = unsafe_cast<uint8>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal uint16. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_uint16(view<String> self) -> (uint16 val, int32 err) {
+            (uint16 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0 && magnitude != 0) {
+                return result
+            }
+            if (magnitude > 65535) {
+                return result
+            }
+            result.val = unsafe_cast<uint16>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal uint32. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_uint32(view<String> self) -> (uint32 val, int32 err) {
+            (uint32 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0 && magnitude != 0) {
+                return result
+            }
+            if (magnitude > 4294967295) {
+                return result
+            }
+            result.val = unsafe_cast<uint32>(magnitude)
+            result.err = 0
+            return result
+        }
+
+        // Parse this string as a decimal, 0b/0B binary, or 0x/0X
+        // hexadecimal uint64. A single leading '-' is allowed for decimal.
+        // Returns (val, err): err is 0 on success and -1 on invalid
+        // input or overflow; val is 0 on failure.
+        func to_uint64(view<String> self) -> (uint64 val, int32 err) {
+            (uint64 val, int32 err) result
+            result.val = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (n == 0) {
+                return result
+            }
+            uint32 i = 0
+            uint8 negative = 0
+            uint8 has_sign = 0
+            byte c = $(self)._data[0]
+            if (c == 45) {
+                has_sign = 1
+                negative = 1
+                i = 1
+                if (i >= n) {
+                    return result
+                }
+            }
+            uint64 base = 10
+            if (has_sign == 0 && $(self)._data[i] == 48) {
+                if (i + 1 < n) {
+                    byte prefix = $(self)._data[i + 1]
+                    if (prefix == 98 || prefix == 66) {
+                        base = 2
+                        i = i + 2
+                    } else if (prefix == 120 || prefix == 88) {
+                        base = 16
+                        i = i + 2
+                    }
+                }
+            }
+            if (i >= n) {
+                return result
+            }
+            uint64 magnitude = 0
+            while (i < n) {
+                uint64 cv = cast<uint64>($(self)._data[i])
+                uint64 digit = 0
+                if (cv >= 48 && cv <= 57) {
+                    digit = cv - 48
+                } else if (cv >= 97 && cv <= 102) {
+                    digit = cv - 97 + 10
+                } else if (cv >= 65 && cv <= 70) {
+                    digit = cv - 65 + 10
+                } else {
+                    return result
+                }
+                if (digit >= base) {
+                    return result
+                }
+                if (magnitude > (0xFFFFFFFFFFFFFFFF - digit) / base) {
+                    return result
+                }
+                magnitude = magnitude * base + digit
+                i = i + 1
+            }
+            if (negative != 0 && magnitude != 0) {
+                return result
+            }
+            if (magnitude > 18446744073709551615) {
+                return result
+            }
+            result.val = magnitude
+            result.err = 0
+            return result
+        }
+
+        // Find the first occurrence of a byte. Returns (idx, err):
+        // err is 0 when found and -1 otherwise; idx is 0 on failure.
+        func find(view<String> self, byte needle) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            if (self == null) {
+                return result
+            }
+            uint32 n = $(self)._data_size
+            if (n == 0) {
+                return result
+            }
+            uint32 hit = $(self)._data.memchr(needle, 0, n)
+            if (hit != 0xFFFFFFFF) {
+                result.idx = hit
+                result.err = 0
+            }
+            return result
+        }
+
+        // Find the first occurrence of a byte substring. An empty or
+        // null substring matches at index 0.
+        func find(view<String> self, view<[byte]> substring) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring).length()
+            }
+            if (m == 0) {
+                result.idx = 0
+                result.err = 0
+                return result
+            }
+            if (self == null || substring == null || n < m) {
+                return result
+            }
+            uint32 hit = $(self)._data.memmem(substring, 0, n)
+            if (hit != 0xFFFFFFFF) {
+                result.idx = hit
+                result.err = 0
+            }
+            return result
+        }
+
+        // Find the first occurrence of another string. An empty or null
+        // substring matches at index 0.
+        func find(view<String> self, view<String> substring) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring)._data_size
+            }
+            if (m == 0) {
+                result.idx = 0
+                result.err = 0
+                return result
+            }
+            if (self == null) {
+                return result
+            }
+            if (substring == null) {
+                return result
+            }
+            if (n < m) {
+                return result
+            }
+            view<[byte]> needle_data = getview($(substring)._data)
+            byte first = $(substring)._data[0]
+            uint32 i = 0
+            while (i <= n - m) {
+                uint32 hit = $(self)._data.memchr(first, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                if (hit > n - m) {
+                    break
+                }
+                if ($(self)._data.memcmp(needle_data, hit, 0, m) == 0) {
+                    result.idx = hit
+                    result.err = 0
+                    return result
+                }
+                i = hit + 1
+            }
+            return result
+        }
+
+        // Find the first occurrence of a byte at or after `start_idx`.
+        func find_next(view<String> self, byte needle, uint32 start_idx) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            if (self == null) {
+                return result
+            }
+            uint32 n = $(self)._data_size
+            if (start_idx >= n) {
+                return result
+            }
+            uint32 hit = $(self)._data.memchr(needle, start_idx, n - start_idx)
+            if (hit != 0xFFFFFFFF) {
+                result.idx = hit
+                result.err = 0
+            }
+            return result
+        }
+
+        // Find a byte substring at or after `start_idx`.
+        func find_next(view<String> self, view<[byte]> substring, uint32 start_idx) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring).length()
+            }
+            if (start_idx > n) {
+                return result
+            }
+            if (m == 0) {
+                result.idx = start_idx
+                result.err = 0
+                return result
+            }
+            if (self == null || substring == null || n - start_idx < m) {
+                return result
+            }
+            uint32 hit = $(self)._data.memmem(substring, start_idx, n - start_idx)
+            if (hit != 0xFFFFFFFF) {
+                result.idx = hit
+                result.err = 0
+            }
+            return result
+        }
+
+        // Find a string at or after `start_idx`.
+        func find_next(view<String> self, view<String> substring, uint32 start_idx) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring)._data_size
+            }
+            if (start_idx > n) {
+                return result
+            }
+            if (m == 0) {
+                result.idx = start_idx
+                result.err = 0
+                return result
+            }
+            if (self == null) {
+                return result
+            }
+            if (substring == null) {
+                return result
+            }
+            if (n - start_idx < m) {
+                return result
+            }
+            view<[byte]> needle_data = getview($(substring)._data)
+            byte first = $(substring)._data[0]
+            uint32 i = start_idx
+            while (i <= n - m) {
+                uint32 hit = $(self)._data.memchr(first, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                if (hit > n - m) {
+                    break
+                }
+                if ($(self)._data.memcmp(needle_data, hit, 0, m) == 0) {
+                    result.idx = hit
+                    result.err = 0
+                    return result
+                }
+                i = hit + 1
+            }
+            return result
+        }
+
+        // Count non-overlapping occurrences of a byte.
+        func count(view<String> self, byte needle) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            uint32 n = $(self)._data_size
+            uint32 total = 0
+            uint32 i = 0
+            while (i < n) {
+                uint32 hit = $(self)._data.memchr(needle, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                total = total + 1
+                i = hit + 1
+            }
+            return total
+        }
+
+        // Count overlapping occurrences of a byte substring. An empty
+        // or null substring occurs at every position.
+        func count(view<String> self, view<[byte]> substring) -> uint32 {
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring).length()
+            }
+            if (m == 0) {
+                return n + 1
+            }
+            if (self == null || substring == null || n < m) {
+                return 0
+            }
+            uint32 total = 0
+            uint32 i = 0
+            while (i <= n - m) {
+                uint32 hit = $(self)._data.memmem(substring, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                total = total + 1
+                i = hit + 1
+            }
+            return total
+        }
+
+        // Count overlapping occurrences of another string.
+        func count(view<String> self, view<String> substring) -> uint32 {
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring)._data_size
+            }
+            if (m == 0) {
+                return n + 1
+            }
+            if (self == null) {
+                return 0
+            }
+            if (substring == null) {
+                return 0
+            }
+            if (n < m) {
+                return 0
+            }
+            view<[byte]> needle_data = getview($(substring)._data)
+            byte first = $(substring)._data[0]
+            uint32 total = 0
+            uint32 i = 0
+            while (i <= n - m) {
+                uint32 hit = $(self)._data.memchr(first, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                if (hit > n - m) {
+                    break
+                }
+                if ($(self)._data.memcmp(needle_data, hit, 0, m) == 0) {
+                    total = total + 1
+                }
+                i = hit + 1
+            }
+            return total
+        }
+
+        // Count non-overlapping occurrences of a byte at or after
+        // `start_idx`.
+        func count_from(view<String> self, byte needle, uint32 start_idx) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            uint32 n = $(self)._data_size
+            if (start_idx >= n) {
+                return 0
+            }
+            uint32 total = 0
+            uint32 i = start_idx
+            while (i < n) {
+                uint32 hit = $(self)._data.memchr(needle, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                total = total + 1
+                i = hit + 1
+            }
+            return total
+        }
+
+        // Count overlapping occurrences of a byte substring at or after
+        // `start_idx`.
+        func count_from(view<String> self, view<[byte]> substring, uint32 start_idx) -> uint32 {
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring).length()
+            }
+            if (start_idx > n) {
+                return 0
+            }
+            if (m == 0) {
+                return n - start_idx + 1
+            }
+            if (self == null || substring == null || n - start_idx < m) {
+                return 0
+            }
+            uint32 total = 0
+            uint32 i = start_idx
+            while (i <= n - m) {
+                uint32 hit = $(self)._data.memmem(substring, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                total = total + 1
+                i = hit + 1
+            }
+            return total
+        }
+
+        // Count overlapping occurrences of another string at or after
+        // `start_idx`.
+        func count_from(view<String> self, view<String> substring, uint32 start_idx) -> uint32 {
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (substring != null) {
+                m = $(substring)._data_size
+            }
+            if (start_idx > n) {
+                return 0
+            }
+            if (m == 0) {
+                return n - start_idx + 1
+            }
+            if (self == null) {
+                return 0
+            }
+            if (substring == null) {
+                return 0
+            }
+            if (n - start_idx < m) {
+                return 0
+            }
+            view<[byte]> needle_data = getview($(substring)._data)
+            byte first = $(substring)._data[0]
+            uint32 total = 0
+            uint32 i = start_idx
+            while (i <= n - m) {
+                uint32 hit = $(self)._data.memchr(first, i, n - i)
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                if (hit > n - m) {
+                    break
+                }
+                if ($(self)._data.memcmp(needle_data, hit, 0, m) == 0) {
+                    total = total + 1
+                }
+                i = hit + 1
+            }
+            return total
+        }
+
+        // Read one byte. Returns 0 for a null string or an out-of-range
+        // index.
+        func get(view<String> self, uint32 idx) -> byte {
+            if (self == null) {
+                return 0
+            }
+            if (idx >= $(self)._data_size) {
+                return 0
+            }
+            return $(self)._data[idx]
+        }
+
+        // Write one byte. A null string or an out-of-range index is
+        // ignored.
+        func set(mview<String> self, uint32 idx, byte value) -> void {
+            if (self == null) {
+                return
+            }
+            if (idx >= $(self)._data_size) {
+                return
+            }
+            $(self)._data[idx] = value
+            return
+        }
+
+        // Copy [start, end) into `out`, completely replacing it. Returns
+        // 0 on success, -1 for a null destination, an invalid range, or
+        // an allocation failure.
+        func get_slice(view<String> self, uint32 start, uint32 end, ptr<String> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (start > end || end > n) {
+                return -1
+            }
+            uint32 len = end - start
+            if (getview($(out)) == self) {
+                if (len == 0) {
+                    if ($(out).length() != 0) {
+                        $(out).uninit()
+                    }
+                    return 0
+                }
+                $(out)._data.memmove(0, start, len)
+                $(out)._data_size = len
+                return 0
+            }
+            if (len == 0) {
+                if ($(out).length() != 0) {
+                    $(out).uninit()
+                }
+                return 0
+            }
+            int32 st = $(out)._reserve(len)
+            if (st != 0) {
+                return -1
+            }
+            view<[byte]> src = getview($(self)._data)
+            $(out)._data.memcpy(src, 0, start, len)
+            $(out)._data_size = len
+            return 0
+        }
+
+        // Copy [start, end) into a byte array, completely replacing it.
+        // Returns 0 on success, -1 for a null destination, an invalid
+        // range, or an allocation failure.
+        func get_slice(view<String> self, uint32 start, uint32 end, ptr<[byte]> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            if (start > end || end > n) {
+                return -1
+            }
+            uint32 len = end - start
+            uint8 self_source = 0
+            if (self != null && getview($(out)) == getview($(self)._data)) {
+                self_source = 1
+            }
+            if (len == 0) {
+                if ($(out).length() != 0) {
+                    $(out).uninit()
+                }
+                return 0
+            }
+            if (self_source != 0) {
+                $(out).memmove(0, start, len)
+                if ($(out).length() != len) {
+                    int32 st = $(out).resize(len)
+                    if (st != 0) {
+                        return -1
+                    }
+                }
+                return 0
+            }
+            if ($(out).length() == 0) {
+                int32 st = $(out).init(len)
+                if (st != 0) {
+                    return -1
+                }
+            } else if ($(out).length() != len) {
+                int32 st = $(out).resize(len)
+                if (st != 0) {
+                    return -1
+                }
+            }
+            view<[byte]> src = getview($(self)._data)
+            $(out).memcpy(src, 0, start, len)
+            return 0
+        }
+
+        // Insert one byte at `idx`. Returns 0 on success, -1 for an
+        // out-of-range index, overflow, or allocation failure.
+        func insert(ptr<String> self, byte payload, uint32 idx) -> int32 {
+            uint32 old = $(self)._data_size
+            if (idx > old) {
+                return -1
+            }
+            if (old == 0xFFFFFFFF) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + 1)
+            if (st != 0) {
+                return -1
+            }
+            $(self)._data.memmove(idx + 1, idx, old - idx)
+            $(self)._data[idx] = payload
+            $(self)._data_size = old + 1
+            return 0
+        }
+
+        // Insert a byte substring at `idx`.
+        func insert(ptr<String> self, view<[byte]> payload, uint32 idx) -> int32 {
+            uint32 old = $(self)._data_size
+            if (idx > old) {
+                return -1
+            }
+            uint32 n = 0
+            if (payload != null) {
+                n = $(payload).length()
+            }
+            if (n == 0) {
+                return 0
+            }
+            if (payload == null) {
+                return 0
+            }
+            uint8 self_source = 0
+            if (payload == getview($(self)._data)) {
+                self_source = 1
+            }
+            if (self_source != 0) {
+                n = old
+            }
+            if (n == 0) {
+                return 0
+            }
+            if (old > 0xFFFFFFFF - n) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + n)
+            if (st != 0) {
+                return -1
+            }
+            $(self)._data.memmove(idx + n, idx, old - idx)
+            if (self_source != 0) {
+                $(self)._data.memmove(idx, 0, n)
+            } else {
+                $(self)._data.memcpy(payload, idx, 0, n)
+            }
+            $(self)._data_size = old + n
+            return 0
+        }
+
+        // Insert another string at `idx`.
+        func insert(ptr<String> self, view<String> payload, uint32 idx) -> int32 {
+            uint32 old = $(self)._data_size
+            if (idx > old) {
+                return -1
+            }
+            uint32 n = 0
+            if (payload != null) {
+                n = $(payload)._data_size
+            }
+            if (n == 0) {
+                return 0
+            }
+            if (payload == null) {
+                return 0
+            }
+            uint8 self_source = 0
+            if (payload == getview($(self))) {
+                self_source = 1
+            }
+            if (self_source != 0) {
+                n = old
+            }
+            if (n == 0) {
+                return 0
+            }
+            if (old > 0xFFFFFFFF - n) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + n)
+            if (st != 0) {
+                return -1
+            }
+            $(self)._data.memmove(idx + n, idx, old - idx)
+            if (self_source != 0) {
+                $(self)._data.memmove(idx, 0, n)
+            } else {
+                view<[byte]> src = getview($(payload)._data)
+                $(self)._data.memcpy(src, idx, 0, n)
+            }
+            $(self)._data_size = old + n
+            return 0
+        }
+
+        // Erase the byte at `idx`. Returns 0 on success, -1 when `idx`
+        // is out of range.
+        func erase(mview<String> self, uint32 idx) -> int32 {
+            uint32 n = $(self)._data_size
+            if (idx >= n) {
+                return -1
+            }
+            uint32 tail = n - idx - 1
+            if (tail != 0) {
+                $(self)._data.memmove(idx, idx + 1, tail)
+            }
+            $(self)._data_size = n - 1
+            return 0
+        }
+
+        // Erase [start, end). Returns 0 on success, -1 for an invalid
+        // range.
+        func erase(mview<String> self, uint32 start, uint32 end) -> int32 {
+            uint32 n = $(self)._data_size
+            if (start > end || end > n) {
+                return -1
+            }
+            uint32 len = end - start
+            if (len == 0) {
+                return 0
+            }
+            uint32 tail = n - end
+            if (tail != 0) {
+                $(self)._data.memmove(start, end, tail)
+            }
+            $(self)._data_size = n - len
+            return 0
+        }
+
+        // Split on one byte. Completely replaces the live contents of
+        // `out`; the buffer is reused. Every delimiter produces a
+        // segment, including empty leading, trailing, and consecutive
+        // segments.
+        func split(view<String> self, byte splitter, ptr<StringList> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            uint32 old_out = $(out).data_size
+            uint32 i = 0
+            while (i < old_out) {
+                $(out).data[i].uninit()
+                i = i + 1
+            }
+            $(out).data_size = 0
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 segments = 1
+            uint32 scan = 0
+            while (1) {
+                uint32 hit = 0xFFFFFFFF
+                if (self != null) {
+                    hit = $(self)._data.memchr(splitter, scan, n - scan)
+                }
+                if (hit == 0xFFFFFFFF) {
+                    break
+                }
+                segments = segments + 1
+                scan = hit + 1
+            }
+            uint32 cap = $(out).data.length()
+            if (cap < segments) {
+                uint32 target = __stringlist_default_buffer_size(segments)
+                int32 st = 0
+                if (cap == 0) {
+                    st = $(out).data.init(target)
+                } else {
+                    st = $(out).data.resize(target)
+                }
+                if (st != 0) {
+                    return -1
+                }
+            }
+            $(out).data_size = segments
+            uint32 start = 0
+            scan = 0
+            uint32 seg = 0
+            while (1) {
+                uint32 hit = 0xFFFFFFFF
+                if (self != null) {
+                    hit = $(self)._data.memchr(splitter, scan, n - scan)
+                }
+                uint32 end = n
+                uint8 found = 0
+                if (hit != 0xFFFFFFFF) {
+                    end = hit
+                    found = 1
+                }
+                uint32 len = end - start
+                ptr<String> dest = getptr($(out).data[seg])
+                int32 st = $(dest)._reserve(len)
+                if (st != 0) {
+                    return -1
+                }
+                if (len != 0) {
+                    if (self != null) {
+                        $(dest)._data.memcpy(getview($(self)._data), 0, start, len)
+                    }
+                }
+                $(dest)._data_size = len
+                seg = seg + 1
+                if (found == 0) {
+                    break
+                }
+                start = end + 1
+                scan = start
+            }
+            return 0
+        }
+
+        // Split on a byte substring. An empty or null splitter does not
+        // split; the whole string becomes the only segment. The buffer
+        // is reused.
+        func split(view<String> self, view<[byte]> splitter, ptr<StringList> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            uint32 old_out = $(out).data_size
+            uint32 i = 0
+            while (i < old_out) {
+                $(out).data[i].uninit()
+                i = i + 1
+            }
+            $(out).data_size = 0
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (splitter != null) {
+                m = $(splitter).length()
+            }
+            uint32 segments = 1
+            if (m != 0) {
+                if (splitter == null) {
+                    return -1
+                }
+                if (self != null) {
+                    uint32 scan = 0
+                    while (n - scan >= m) {
+                        uint32 hit = $(self)._data.memmem(splitter, scan, n - scan)
+                        if (hit == 0xFFFFFFFF) {
+                            break
+                        }
+                        segments = segments + 1
+                        scan = hit + m
+                    }
+                }
+            }
+            uint32 cap = $(out).data.length()
+            if (cap < segments) {
+                uint32 target = __stringlist_default_buffer_size(segments)
+                int32 st = 0
+                if (cap == 0) {
+                    st = $(out).data.init(target)
+                } else {
+                    st = $(out).data.resize(target)
+                }
+                if (st != 0) {
+                    return -1
+                }
+            }
+            $(out).data_size = segments
+            uint32 start = 0
+            uint32 scan = 0
+            uint32 seg = 0
+            while (1) {
+                uint32 end = n
+                uint8 found = 0
+                if (m != 0) {
+                    if (splitter != null) {
+                        if (self != null) {
+                            if (n - scan >= m) {
+                                uint32 hit = $(self)._data.memmem(splitter, scan, n - scan)
+                                if (hit != 0xFFFFFFFF) {
+                                    end = hit
+                                    found = 1
+                                }
+                            }
+                        }
+                    }
+                }
+                uint32 len = end - start
+                ptr<String> dest = getptr($(out).data[seg])
+                int32 st = $(dest)._reserve(len)
+                if (st != 0) {
+                    return -1
+                }
+                if (len != 0) {
+                    if (self != null) {
+                        $(dest)._data.memcpy(getview($(self)._data), 0, start, len)
+                    }
+                }
+                $(dest)._data_size = len
+                seg = seg + 1
+                if (found == 0) {
+                    break
+                }
+                start = end + m
+                scan = start
+            }
+            return 0
+        }
+
+        // Split on another string. An empty or null splitter does not
+        // split; the whole string becomes the only segment. The buffer
+        // is reused.
+        func split(view<String> self, view<String> splitter, ptr<StringList> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            uint32 old_out = $(out).data_size
+            uint32 i = 0
+            while (i < old_out) {
+                $(out).data[i].uninit()
+                i = i + 1
+            }
+            $(out).data_size = 0
+            uint32 n = 0
+            if (self != null) {
+                n = $(self)._data_size
+            }
+            uint32 m = 0
+            if (splitter != null) {
+                m = $(splitter)._data_size
+            }
+            view<[byte]> splitter_data = null
+            if (splitter != null) {
+                splitter_data = getview($(splitter)._data)
+            }
+            uint32 segments = 1
+            if (m != 0) {
+                if (splitter_data == null) {
+                    return -1
+                }
+                if (self != null) {
+                    uint32 scan = 0
+                    while (n - scan >= m) {
+                        if ($(self)._data.memcmp(splitter_data, scan, 0, m) == 0) {
+                            segments = segments + 1
+                            scan = scan + m
+                        } else {
+                            scan = scan + 1
+                        }
+                    }
+                }
+            }
+            uint32 cap = $(out).data.length()
+            if (cap < segments) {
+                uint32 target = __stringlist_default_buffer_size(segments)
+                int32 st = 0
+                if (cap == 0) {
+                    st = $(out).data.init(target)
+                } else {
+                    st = $(out).data.resize(target)
+                }
+                if (st != 0) {
+                    return -1
+                }
+            }
+            $(out).data_size = segments
+            uint32 start = 0
+            uint32 scan = 0
+            uint32 seg = 0
+            while (1) {
+                uint32 end = n
+                uint8 found = 0
+                if (m != 0) {
+                    if (splitter_data != null) {
+                        if (self != null) {
+                            while (n - scan >= m) {
+                                if ($(self)._data.memcmp(splitter_data, scan, 0, m) == 0) {
+                                    end = scan
+                                    found = 1
+                                    break
+                                }
+                                scan = scan + 1
+                            }
+                        }
+                    }
+                }
+                uint32 len = end - start
+                ptr<String> dest = getptr($(out).data[seg])
+                int32 st = $(dest)._reserve(len)
+                if (st != 0) {
+                    return -1
+                }
+                if (len != 0) {
+                    if (self != null) {
+                        $(dest)._data.memcpy(getview($(self)._data), 0, start, len)
+                    }
+                }
+                $(dest)._data_size = len
+                seg = seg + 1
+                if (found == 0) {
+                    break
+                }
+                start = end + m
+                scan = start
+            }
+            return 0
+        }
+
+        // Replace this string with the concatenation of every string in
+        // `in`. Returns 0 on success, -1 on overflow or allocation
+        // failure.
+        func join(ptr<String> self, view<StringList> in) -> int32 {
+            if (in == null) {
+                $(self)._data_size = 0
+                return 0
+            }
+            uint32 count = $(in).data_size
+            view<String> self_view = getview($(self))
+            uint8 self_source = 0
+            uint32 total = 0
+            uint32 i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (total > 0xFFFFFFFF - piece) {
+                    return -1
+                }
+                total = total + piece
+                if (getview($(in).data[i]) == self_view) {
+                    self_source = 1
+                }
+                i = i + 1
+            }
+            if (total == 0) {
+                $(self)._data_size = 0
+                return 0
+            }
+            String result
+            ptr<String> dest = self
+            if (self_source != 0) {
+                dest = getptr(result)
+            }
+            int32 st = $(dest)._reserve(total)
+            if (st != 0) {
+                result.uninit()
+                return -1
+            }
+            uint32 pos = 0
+            i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (piece != 0) {
+                    view<[byte]> src = getview($(in).data[i]._data)
+                    $(dest)._data.memcpy(src, pos, 0, piece)
+                    pos = pos + piece
+                }
+                i = i + 1
+            }
+            $(dest)._data_size = pos
+            if (self_source != 0) {
+                st = $(self)._reserve(total)
+                if (st != 0) {
+                    result.uninit()
+                    return -1
+                }
+                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data_size = total
+                result.uninit()
+            }
+            return 0
+        }
+
+        // Replace this string with `in` joined by one byte.
+        func join(ptr<String> self, byte joiner, view<StringList> in) -> int32 {
+            if (in == null) {
+                $(self)._data_size = 0
+                return 0
+            }
+            uint32 count = $(in).data_size
+            view<String> self_view = getview($(self))
+            uint8 self_source = 0
+            uint32 total = 0
+            uint32 i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (total > 0xFFFFFFFF - piece) {
+                    return -1
+                }
+                total = total + piece
+                if (getview($(in).data[i]) == self_view) {
+                    self_source = 1
+                }
+                if (i + 1 < count) {
+                    if (total == 0xFFFFFFFF) {
+                        return -1
+                    }
+                    total = total + 1
+                }
+                i = i + 1
+            }
+            if (total == 0) {
+                $(self)._data_size = 0
+                return 0
+            }
+            String result
+            ptr<String> dest = self
+            if (self_source != 0) {
+                dest = getptr(result)
+            }
+            int32 st = $(dest)._reserve(total)
+            if (st != 0) {
+                result.uninit()
+                return -1
+            }
+            uint32 pos = 0
+            i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (piece != 0) {
+                    view<[byte]> src = getview($(in).data[i]._data)
+                    $(dest)._data.memcpy(src, pos, 0, piece)
+                    pos = pos + piece
+                }
+                if (i + 1 < count) {
+                    $(dest)._data[pos] = joiner
+                    pos = pos + 1
+                }
+                i = i + 1
+            }
+            $(dest)._data_size = pos
+            if (self_source != 0) {
+                st = $(self)._reserve(total)
+                if (st != 0) {
+                    result.uninit()
+                    return -1
+                }
+                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data_size = total
+                result.uninit()
+            }
+            return 0
+        }
+
+        // Replace this string with `in` joined by a byte substring.
+        func join(ptr<String> self, view<[byte]> joiner, view<StringList> in) -> int32 {
+            if (in == null) {
+                $(self)._data_size = 0
+                return 0
+            }
+            uint32 count = $(in).data_size
+            uint32 joiner_len = 0
+            if (joiner != null) {
+                joiner_len = $(joiner).length()
+            }
+            view<String> self_view = getview($(self))
+            uint8 self_source = 0
+            uint32 total = 0
+            uint32 i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (total > 0xFFFFFFFF - piece) {
+                    return -1
+                }
+                total = total + piece
+                if (getview($(in).data[i]) == self_view) {
+                    self_source = 1
+                }
+                if (i + 1 < count) {
+                    if (total > 0xFFFFFFFF - joiner_len) {
+                        return -1
+                    }
+                    total = total + joiner_len
+                }
+                i = i + 1
+            }
+            if (total == 0) {
+                $(self)._data_size = 0
+                return 0
+            }
+            uint8 joiner_source = 0
+            if (joiner != null && joiner == getview($(self)._data)) {
+                joiner_source = 1
+            }
+            String result
+            ptr<String> dest = self
+            if (self_source != 0 || joiner_source != 0) {
+                dest = getptr(result)
+            }
+            int32 st = $(dest)._reserve(total)
+            if (st != 0) {
+                result.uninit()
+                return -1
+            }
+            uint32 pos = 0
+            i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (piece != 0) {
+                    view<[byte]> src = getview($(in).data[i]._data)
+                    $(dest)._data.memcpy(src, pos, 0, piece)
+                    pos = pos + piece
+                }
+                if (i + 1 < count) {
+                    if (joiner != null) {
+                        if (joiner_len != 0) {
+                            $(dest)._data.memcpy(joiner, pos, 0, joiner_len)
+                            pos = pos + joiner_len
+                        }
+                    }
+                }
+                i = i + 1
+            }
+            $(dest)._data_size = pos
+            if (self_source != 0 || joiner_source != 0) {
+                st = $(self)._reserve(total)
+                if (st != 0) {
+                    result.uninit()
+                    return -1
+                }
+                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data_size = total
+                result.uninit()
+            }
+            return 0
+        }
+
+        // Replace this string with `in` joined by another string.
+        func join(ptr<String> self, view<String> joiner, view<StringList> in) -> int32 {
+            if (in == null) {
+                $(self)._data_size = 0
+                return 0
+            }
+            uint32 count = $(in).data_size
+            uint32 joiner_len = 0
+            if (joiner != null) {
+                joiner_len = $(joiner)._data_size
+            }
+            view<String> self_view = getview($(self))
+            uint8 self_source = 0
+            uint32 total = 0
+            uint32 i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (total > 0xFFFFFFFF - piece) {
+                    return -1
+                }
+                total = total + piece
+                if (getview($(in).data[i]) == self_view) {
+                    self_source = 1
+                }
+                if (i + 1 < count) {
+                    if (total > 0xFFFFFFFF - joiner_len) {
+                        return -1
+                    }
+                    total = total + joiner_len
+                }
+                i = i + 1
+            }
+            if (total == 0) {
+                $(self)._data_size = 0
+                return 0
+            }
+            uint8 joiner_source = 0
+            if (joiner != null && joiner == self_view) {
+                joiner_source = 1
+            }
+            String result
+            ptr<String> dest = self
+            if (self_source != 0 || joiner_source != 0) {
+                dest = getptr(result)
+            }
+            int32 st = $(dest)._reserve(total)
+            if (st != 0) {
+                result.uninit()
+                return -1
+            }
+            uint32 pos = 0
+            i = 0
+            while (i < count) {
+                uint32 piece = $(in).data[i]._data_size
+                if (piece != 0) {
+                    view<[byte]> src = getview($(in).data[i]._data)
+                    $(dest)._data.memcpy(src, pos, 0, piece)
+                    pos = pos + piece
+                }
+                if (i + 1 < count) {
+                    if (joiner != null) {
+                        if (joiner_len != 0) {
+                            $(dest)._data.memcpy(getview($(joiner)._data), pos, 0, joiner_len)
+                            pos = pos + joiner_len
+                        }
+                    }
+                }
+                i = i + 1
+            }
+            $(dest)._data_size = pos
+            if (self_source != 0 || joiner_source != 0) {
+                st = $(self)._reserve(total)
+                if (st != 0) {
+                    result.uninit()
+                    return -1
+                }
+                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data_size = total
+                result.uninit()
+            }
+            return 0
+        }
+
         func OPERATOR_EQ(view<String> self, view<String> other) -> uint8 {
             if ($(self)._compare(other) == 0) {
                 return 1
@@ -318,64 +2640,12 @@ namespace std {
         }
 
         func OPERATOR_ADDMOV(ptr<String> self, view<[byte]> other) -> void {
-            if (other == null) {
-                return
-            }
-            uint32 n = $(other).length()
-            if (n == 0) {
-                return
-            }
-            uint8 self_source = 0
-            if (other == getview($(self)._data)) {
-                self_source = 1
-            }
-            uint32 old = $(self)._data_size
-            if (self_source != 0) {
-                n = old
-            }
-            if (old > 0xFFFFFFFF - n) {
-                return
-            }
-            int32 st = $(self)._reserve(old + n)
-            if (st != 0) {
-                return
-            }
-            if (self_source != 0) {
-                $(self)._data.memmove(old, 0, n)
-            } else {
-                $(self)._data.memcpy(other, old, 0, n)
-            }
-            $(self)._data_size = old + n
+            $(self).append(other)
             return
         }
 
         func OPERATOR_ADDMOV(ptr<String> self, view<String> other) -> void {
-            if (other == null) {
-                return
-            }
-            uint32 n = $(other)._data_size
-            if (n == 0) {
-                return
-            }
-            uint8 self_source = 0
-            if (other == getview($(self))) {
-                self_source = 1
-            }
-            uint32 old = $(self)._data_size
-            if (old > 0xFFFFFFFF - n) {
-                return
-            }
-            int32 st = $(self)._reserve(old + n)
-            if (st != 0) {
-                return
-            }
-            if (self_source != 0) {
-                $(self)._data.memmove(old, 0, n)
-            } else {
-                view<[byte]> src = getview($(other)._data)
-                $(self)._data.memcpy(src, old, 0, n)
-            }
-            $(self)._data_size = old + n
+            $(self).append(other)
             return
         }
 
@@ -383,7 +2653,7 @@ namespace std {
             if (other == null) {
                 return
             }
-            $(self).OPERATOR_ADDMOV($(other))
+            $(self).append($(other))
             return
         }
 
@@ -449,6 +2719,564 @@ namespace std {
             if (a > b) {
                 return 1
             }
+            return 0
+        }
+    }
+
+    // ============================================================
+    // StringList — a dynamic array of String values
+    //
+    // Storage:
+    //
+    //   struct StringList {
+    //       [String] data          // buffer; data.length() is capacity
+    //       uint32 data_size = 0   // number of live elements
+    //   }
+    //
+    // `data.length()` is the buffer capacity. `data_size` is the live
+    // element count and is what `length()` returns. The initial buffer is
+    // at least 128 elements; later growth is geometric (at least doubling).
+    //
+    // Every live element owns its own String buffer. `from` replaces the
+    // live contents and keeps the buffer; `uninit` frees every element
+    // and the buffer.
+    // ============================================================
+    struct StringList {
+        [String] data
+        uint32 data_size = 0
+
+        // Number of live strings in the list.
+        func length(view<StringList> self) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            return $(self).data_size
+        }
+
+        // Internal: make sure `data` has room for at least `payload`
+        // elements. The initial buffer is at least 128 elements; later
+        // growth is geometric (at least doubling, or the requested size
+        // when larger). Returns 0 on success, -1 on allocation failure.
+        func _reserve(ptr<StringList> self, uint32 payload) -> int32 {
+            if (payload == 0) {
+                return 0
+            }
+            uint32 cap = $(self).data.length()
+            if (cap >= payload) {
+                return 0
+            }
+            uint32 target = __stringlist_default_buffer_size(payload)
+            if (cap != 0) {
+                uint32 doubled = 0xFFFFFFFF
+                if (cap <= 0xFFFFFFFF / 2) {
+                    doubled = cap * 2
+                }
+                if (doubled > target) {
+                    target = doubled
+                }
+            }
+            if (cap >= target) {
+                return 0
+            }
+            int32 st = 0
+            if (cap == 0) {
+                st = $(self).data.init(target)
+            } else {
+                st = $(self).data.resize(target)
+            }
+            if (st != 0) {
+                return -1
+            }
+            return 0
+        }
+
+        // Free every live element and the backing buffer.
+        func uninit(ptr<StringList> self) -> void {
+            uint32 n = $(self).data_size
+            uint32 i = 0
+            while (i < n) {
+                $(self).data[i].uninit()
+                i = i + 1
+            }
+            if ($(self).data.length() != 0) {
+                $(self).data.uninit()
+            }
+            $(self).data_size = 0
+            return
+        }
+
+        // Replace the list with a copy of another list's live elements.
+        func from(ptr<StringList> self, view<StringList> in) -> int32 {
+            if (in != null && in == getview($(self))) {
+                return 0
+            }
+            uint32 old = $(self).data_size
+            uint32 i = 0
+            while (i < old) {
+                $(self).data[i].uninit()
+                i = i + 1
+            }
+            $(self).data_size = 0
+            if (in == null) {
+                return 0
+            }
+            uint32 n = $(in).data_size
+            if (n == 0) {
+                return 0
+            }
+            int32 st = $(self)._reserve(n)
+            if (st != 0) {
+                return -1
+            }
+            $(self).data_size = n
+            i = 0
+            while (i < n) {
+                st = $(self).data[i].from(getview($(in).data[i]))
+                if (st != 0) {
+                    return -1
+                }
+                i = i + 1
+            }
+            return 0
+        }
+
+        // Append one String copied from a byte array.
+        func append(ptr<StringList> self, view<[byte]> in) -> int32 {
+            uint32 old = $(self).data_size
+            if (old == 0xFFFFFFFF) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + 1)
+            if (st != 0) {
+                return -1
+            }
+            $(self).data_size = old + 1
+            st = $(self).data[old].from(in)
+            if (st != 0) {
+                return -1
+            }
+            return 0
+        }
+
+        // Append one String copied from another string.
+        func append(ptr<StringList> self, view<String> in) -> int32 {
+            uint32 old = $(self).data_size
+            if (old == 0xFFFFFFFF) {
+                return -1
+            }
+            int32 st = $(self)._reserve(old + 1)
+            if (st != 0) {
+                return -1
+            }
+            $(self).data_size = old + 1
+            st = $(self).data[old].from(in)
+            if (st != 0) {
+                return -1
+            }
+            return 0
+        }
+
+        func OPERATOR_ADDMOV(ptr<StringList> self, view<[byte]> other) -> void {
+            $(self).append(other)
+            return
+        }
+
+        func OPERATOR_ADDMOV(ptr<StringList> self, view<String> other) -> void {
+            $(self).append(other)
+            return
+        }
+
+        func OPERATOR_ADDMOV(ptr<StringList> self, view<view<[byte]>> other) -> void {
+            if (other == null) {
+                return
+            }
+            $(self).append($(other))
+            return
+        }
+
+        // Find the first element equal to `needle`. Returns (idx, err):
+        // err is 0 when found and -1 otherwise; idx is 0 on failure.
+        func find(view<StringList> self, view<String> needle) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            if (self == null) {
+                return result
+            }
+            uint32 n = $(self).data_size
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 i = 0
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        result.idx = i
+                        result.err = 0
+                        return result
+                    }
+                }
+                i = i + 1
+            }
+            return result
+        }
+
+        // Find the first element equal to a byte array.
+        func find(view<StringList> self, view<[byte]> needle) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            if (self == null) {
+                return result
+            }
+            uint32 n = $(self).data_size
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 i = 0
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        result.idx = i
+                        result.err = 0
+                        return result
+                    }
+                }
+                i = i + 1
+            }
+            return result
+        }
+
+        // Find the first element equal to `needle` at or after
+        // `start_idx`.
+        func find_next(view<StringList> self, view<String> needle, uint32 start_idx) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            if (self == null) {
+                return result
+            }
+            uint32 n = $(self).data_size
+            if (start_idx >= n) {
+                return result
+            }
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 i = start_idx
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        result.idx = i
+                        result.err = 0
+                        return result
+                    }
+                }
+                i = i + 1
+            }
+            return result
+        }
+
+        // Find the first element equal to a byte array at or after
+        // `start_idx`.
+        func find_next(view<StringList> self, view<[byte]> needle, uint32 start_idx) -> (uint32 idx, int32 err) {
+            (uint32 idx, int32 err) result
+            result.idx = 0
+            result.err = -1
+            if (self == null) {
+                return result
+            }
+            uint32 n = $(self).data_size
+            if (start_idx >= n) {
+                return result
+            }
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 i = start_idx
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        result.idx = i
+                        result.err = 0
+                        return result
+                    }
+                }
+                i = i + 1
+            }
+            return result
+        }
+
+        // Count elements equal to `needle`.
+        func count(view<StringList> self, view<String> needle) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            uint32 n = $(self).data_size
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 total = 0
+            uint32 i = 0
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        total = total + 1
+                    }
+                }
+                i = i + 1
+            }
+            return total
+        }
+
+        // Count elements equal to a byte array.
+        func count(view<StringList> self, view<[byte]> needle) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            uint32 n = $(self).data_size
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 total = 0
+            uint32 i = 0
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        total = total + 1
+                    }
+                }
+                i = i + 1
+            }
+            return total
+        }
+
+        // Count elements equal to `needle` at or after `start_idx`.
+        func count_from(view<StringList> self, view<String> needle, uint32 start_idx) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            uint32 n = $(self).data_size
+            if (start_idx >= n) {
+                return 0
+            }
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 total = 0
+            uint32 i = start_idx
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        total = total + 1
+                    }
+                }
+                i = i + 1
+            }
+            return total
+        }
+
+        // Count elements equal to a byte array at or after `start_idx`.
+        func count_from(view<StringList> self, view<[byte]> needle, uint32 start_idx) -> uint32 {
+            if (self == null) {
+                return 0
+            }
+            uint32 n = $(self).data_size
+            if (start_idx >= n) {
+                return 0
+            }
+            uint32 needle_len = 0
+            if (needle != null) {
+                needle_len = $(needle).length()
+            }
+            uint32 total = 0
+            uint32 i = start_idx
+            while (i < n) {
+                if ($(self).data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                    if (found.err == 0 && found.idx == 0) {
+                        total = total + 1
+                    }
+                }
+                i = i + 1
+            }
+            return total
+        }
+
+        // Copy element `idx` into `out`, completely replacing it. Returns
+        // 0 on success, -1 for a null destination or an out-of-range
+        // index.
+        func get(view<StringList> self, uint32 idx, ptr<String> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            if (self == null) {
+                return -1
+            }
+            if (idx >= $(self).data_size) {
+                return -1
+            }
+            return $(out).from(getview($(self).data[idx]))
+        }
+
+        // Copy element `idx` into a byte array, completely replacing it.
+        func get(view<StringList> self, uint32 idx, ptr<[byte]> out) -> int32 {
+            if (out == null) {
+                return -1
+            }
+            if (self == null) {
+                return -1
+            }
+            if (idx >= $(self).data_size) {
+                return -1
+            }
+            return $(self).data[idx].to(out)
+        }
+
+        // Replace element `idx` with a copy of `value`.
+        func set(ptr<StringList> self, uint32 idx, view<String> value) -> int32 {
+            if (idx >= $(self).data_size) {
+                return -1
+            }
+            return $(self).data[idx].from(value)
+        }
+
+        // Replace element `idx` with a copy of a byte array.
+        func set(ptr<StringList> self, uint32 idx, view<[byte]> value) -> int32 {
+            if (idx >= $(self).data_size) {
+                return -1
+            }
+            return $(self).data[idx].from(value)
+        }
+
+        // Insert a copy of `payload` at `idx`.
+        func insert(ptr<StringList> self, view<String> payload, uint32 idx) -> int32 {
+            uint32 old = $(self).data_size
+            if (idx > old || old == 0xFFFFFFFF) {
+                return -1
+            }
+            String tmp
+            int32 st = tmp.from(payload)
+            if (st != 0) {
+                tmp.uninit()
+                return -1
+            }
+            st = $(self)._reserve(old + 1)
+            if (st != 0) {
+                tmp.uninit()
+                return -1
+            }
+            $(self).data_size = old + 1
+            uint32 i = old
+            while (i > idx) {
+                st = $(self).data[i].from(getview($(self).data[i - 1]))
+                if (st != 0) {
+                    tmp.uninit()
+                    return -1
+                }
+                i = i - 1
+            }
+            st = $(self).data[idx].from(getview(tmp))
+            tmp.uninit()
+            if (st != 0) {
+                return -1
+            }
+            return 0
+        }
+
+        // Insert a copy of a byte array at `idx`.
+        func insert(ptr<StringList> self, view<[byte]> payload, uint32 idx) -> int32 {
+            uint32 old = $(self).data_size
+            if (idx > old || old == 0xFFFFFFFF) {
+                return -1
+            }
+            String tmp
+            int32 st = tmp.from(payload)
+            if (st != 0) {
+                tmp.uninit()
+                return -1
+            }
+            st = $(self)._reserve(old + 1)
+            if (st != 0) {
+                tmp.uninit()
+                return -1
+            }
+            $(self).data_size = old + 1
+            uint32 i = old
+            while (i > idx) {
+                st = $(self).data[i].from(getview($(self).data[i - 1]))
+                if (st != 0) {
+                    tmp.uninit()
+                    return -1
+                }
+                i = i - 1
+            }
+            st = $(self).data[idx].from(getview(tmp))
+            tmp.uninit()
+            if (st != 0) {
+                return -1
+            }
+            return 0
+        }
+
+        // Erase element `idx`.
+        func erase(ptr<StringList> self, uint32 idx) -> int32 {
+            uint32 n = $(self).data_size
+            if (idx >= n) {
+                return -1
+            }
+            uint32 i = idx
+            while (i + 1 < n) {
+                int32 st = $(self).data[i].from(getview($(self).data[i + 1]))
+                if (st != 0) {
+                    return -1
+                }
+                i = i + 1
+            }
+            $(self).data[n - 1].uninit()
+            $(self).data_size = n - 1
+            return 0
+        }
+
+        // Erase elements [start, end).
+        func erase(ptr<StringList> self, uint32 start, uint32 end) -> int32 {
+            uint32 n = $(self).data_size
+            if (start > end || end > n) {
+                return -1
+            }
+            uint32 count = end - start
+            if (count == 0) {
+                return 0
+            }
+            uint32 i = start
+            while (i + count < n) {
+                int32 st = $(self).data[i].from(getview($(self).data[i + count]))
+                if (st != 0) {
+                    return -1
+                }
+                i = i + 1
+            }
+            uint32 drop = n - count
+            i = drop
+            while (i < n) {
+                $(self).data[i].uninit()
+                i = i + 1
+            }
+            $(self).data_size = drop
             return 0
         }
     }

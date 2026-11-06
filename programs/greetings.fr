@@ -1,7 +1,6 @@
 // Greeting demo: prompt on stdout, read one name line from stdin, and
-// print "Hello, <name>!" on the prompt line. This is the only example
-// program that uses franko/string: the name and greeting are assembled
-// with std::String::from and operator +=.
+// print "Hello, <name>!" on the prompt line. The name and greeting are
+// assembled with std::String::from and operator +=.
 //
 // Run with:
 //
@@ -14,28 +13,10 @@ func main() -> int32 {
     // Prompt without a newline; the greeting below completes the line.
     print("What's your name? ", null)
 
-    [byte] input
-    input.init(64)
-
-    (int64 val, int32 err) line = read_line(getmview(input), 64)
-    if (line.err != 0) {
-        input.uninit()
-        return 1
-    }
-
-    // Trim the buffer to the bytes the line actually stored, then build
-    // the greeting from the name string.
-    uint32 name_len = unsafe_cast<uint32>(line.val)
-    if (name_len != 0) {
-        if (input.resize(name_len) != 0) {
-            input.uninit()
-            return 1
-        }
-    }
-
     std::String name
-    if (name_len != 0) {
-        name.from(getview(input))
+    if (read_line(getptr(name)) != 0) {
+        name.uninit()
+        return 1
     }
 
     std::String greeting
@@ -46,6 +27,5 @@ func main() -> int32 {
 
     greeting.uninit()
     name.uninit()
-    input.uninit()
     return 0
 }

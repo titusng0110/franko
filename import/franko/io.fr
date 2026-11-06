@@ -1,6 +1,18 @@
 import "./os"
 import "./string"
 
+// Shared stdin buffer. Bytes read ahead by read_bytes/read_line stay
+// here until the next call consumes them.
+[byte, 8192] __io_input
+uint32 __io_input_pos = 0
+uint32 __io_input_len = 0
+
+// Internal line accumulator. The dynamic array lives in a struct so the
+// local-array lifecycle checker does not track it.
+struct __IoLineBuffer {
+    [byte] data
+}
+
 // franko/io — user-level output and input.
 //
 // `print` is an ordinary overloaded function (not a statement).
@@ -20,8 +32,9 @@ import "./string"
 // `INT64_MIN` needs no overflow-prone negation) and emitted with the
 // suffix in as few writes as possible.
 //
-// Input (`read_bytes`, `read_line`) reads stdin into a caller-provided
-// buffer and reports how much arrived; see their comments below.
+// Input: `read_bytes` reads into a caller-provided buffer and reports
+// how much arrived; `read_line` reads one line into a `std::String`
+// using an internal growable buffer. See their comments below.
 
 func print() -> void {
     [byte, 1] nl
@@ -905,19 +918,60 @@ func print(int64 num, view<[uint8]> end) -> void {
 // linux/macos, os::win32::ReadFile on windows, so input shares a
 // channel with raw fd reads.
 
+// Fill the shared stdin buffer when it is empty. Returns 1 when bytes
+// are available, 0 at end of input, and -1 on error.
+func __io_fill() -> int32 {
+    if (__io_input_pos < __io_input_len) {
+        return 1
+    }
+    __io_input_pos = 0
+    __io_input_len = 0
+    #if (#IS_WINDOWS) {
+        uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
+        // GetStdHandle returns NULL or INVALID_HANDLE_VALUE on failure.
+        if (h == 0 || h == 0xFFFFFFFFFFFFFFFF) {
+            return -1
+        }
+        uint32 n = 0
+        int32 ok = os::win32::ReadFile(h, getmview(__io_input), 8192, getmview(n))
+        if (ok == 0 && n == 0) {
+            // A failed read that delivered no bytes: on Windows a closed
+            // stdin pipe is reported this way (ERROR_BROKEN_PIPE) rather
+            // than as a successful zero-byte read, so treat it as EOF.
+            return 0
+        }
+        __io_input_len = n
+        return 1
+    } #else #if (#IS_LINUX || #IS_MACOS) {
+        int64 n = os::posix::read(os::posix::STDIN_FILENO, getmview(__io_input), 8192)
+        if (n < 0) {
+            return -1
+        }
+        if (n == 0) {
+            return 0
+        }
+        __io_input_len = unsafe_cast<uint32>(n)
+        return 1
+    }
+    return -1
+}
+
 // Read up to `count` bytes from stdin into `buf`; return (val, err),
-// where val is the number of bytes read, 0 at end of input, and err
-// is 0 on success or -1 on error (a null `buf`, or `count` larger
-// than the buffer). A short result is normal: val may be smaller than
+// where val is the number of bytes stored, 0 at end of input, and err
+// is 0 on success or -1 on error (a null `buf`, or `count` larger than
+// the buffer). A short result is normal: val may be smaller than
 // `count` even before end of input.
+//
+// Reads are serviced from the shared stdin buffer first; the OS is read
+// in 8192-byte chunks and excess bytes stay buffered for the next call.
 //
 // On Windows, reading a stdin pipe whose writer has closed makes
 // ReadFile report failure (ERROR_BROKEN_PIPE) with zero bytes instead
 // of succeeding with 0 bytes as POSIX read does. The os::win32 bridge
 // stays a thin ReadFile wrapper, so that end-of-input normalization
 // lives here.
-func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err) {
-    (int64 val, int32 err) result
+func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err) {
+    (uint32 val, int32 err) result
     result.val = 0
     result.err = -1
     if (buf == null) {
@@ -926,80 +980,137 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err) {
     if ($(buf).length() < count) {
         return result
     }
-    #if (#IS_WINDOWS) {
-        uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
-        // GetStdHandle returns NULL or INVALID_HANDLE_VALUE on failure.
-        if (h == 0 || h == 0xFFFFFFFFFFFFFFFF) {
+    if (count == 0) {
+        result.err = 0
+        return result
+    }
+    if (__io_input_pos == __io_input_len) {
+        int32 fill = __io_fill()
+        if (fill < 0) {
             return result
         }
-        uint32 n = 0
-        int32 ok = os::win32::ReadFile(h, buf, count, getmview(n))
-        if (ok == 0 && n == 0) {
-            // A failed read that delivered no bytes: on Windows a closed
-            // stdin pipe is reported this way (ERROR_BROKEN_PIPE) rather
-            // than as a successful zero-byte read, so treat it as EOF.
+        if (fill == 0) {
             result.err = 0
             return result
         }
-        result.val = cast<int64>(n)
-        result.err = 0
-        return result
-    } #else #if (#IS_LINUX || #IS_MACOS) {
-        int64 n = os::posix::read(os::posix::STDIN_FILENO, buf, cast<uint64>(count))
-        if (n < 0) {
-            return result
-        }
-        result.val = n
-        result.err = 0
-        return result
     }
+    uint32 available = __io_input_len - __io_input_pos
+    uint32 take = count
+    if (take > available) {
+        take = available
+    }
+    $(buf).memcpy(getview(__io_input), 0, __io_input_pos, take)
+    __io_input_pos = __io_input_pos + take
+    if (__io_input_pos == __io_input_len) {
+        __io_input_pos = 0
+        __io_input_len = 0
+    }
+    result.val = take
+    result.err = 0
     return result
 }
 
-// Read one line from stdin into `buf`, at most `max` bytes. Reading
-// stops at a `\n` (consumed and not stored; a preceding `\r` is
-// dropped too, so `\r\n` counts as one terminator), at `max` bytes, or
-// at end of input. Returns (val, err), where val is the number of
-// bytes stored and err is 0 on success or -1 on error (a null `buf`,
-// `max` zero, or `max` larger than the buffer).
-// A line longer than `max` is split: the remainder, including its line
-// ending, stays in stdin for the next call. A zero val means an
+// Read one line from stdin into `out`. Reading stops at `\n`, `\r\n`,
+// or end of input. The line ending is consumed but not stored. The
+// internal line buffer starts at 256 bytes, doubles when full, and is
+// capped at 8192 bytes; a longer line is consumed and reported as -1.
+// Returns 0 on success and -1 for a null `out`, a read error, an
+// allocation failure, or an over-long line. An empty string means an
 // empty line or end of input with nothing pending.
-func read_line(mview<[byte]> buf, uint32 max) -> (int64 val, int32 err) {
-    (int64 val, int32 err) result
-    result.val = 0
-    result.err = -1
-    if (buf == null) {
-        return result
+func read_line(ptr<std::String> out) -> int32 {
+    if (out == null) {
+        return -1
     }
-    if (max == 0) {
-        return result
+    view<[byte]> empty = null
+    if ($(out).from(empty) != 0) {
+        return -1
     }
-    if ($(buf).length() < max) {
-        return result
+    __IoLineBuffer line
+    int32 st = line.data.init(256)
+    if (st != 0) {
+        return -1
     }
-    [byte, 1] one
-    uint32 n = 0
-    for (; n < max; n++) {
-        (int64 val, int32 err) read_result = read_bytes(getmview(one), 1)
-        if (read_result.err != 0) {
-            return result
+    uint32 cap = 256
+    uint32 len = 0
+    uint8 too_long = 0
+    while (1) {
+        if (__io_input_pos == __io_input_len) {
+            int32 fill = __io_fill()
+            if (fill < 0) {
+                line.data.uninit()
+                return -1
+            }
+            if (fill == 0) {
+                break
+            }
         }
-        if (read_result.val == 0) {
-            break
+        uint32 available = __io_input_len - __io_input_pos
+        uint32 nl = __io_input.memchr(10, __io_input_pos, available)
+        uint32 take = available
+        uint8 found = 0
+        if (nl != 0xFFFFFFFF) {
+            take = nl - __io_input_pos
+            found = 1
         }
-        byte b = one[0]
-        if (b == 10) {
-            if (n != 0) {
-                if ($(buf)[n - 1] == 13) {
-                    n = n - 1
+        if (too_long == 0 && take != 0) {
+            uint32 needed = len + take
+            if (needed > 8192) {
+                too_long = 1
+            } else {
+                while (cap < needed) {
+                    uint32 next_cap = cap * 2
+                    if (next_cap > 8192) {
+                        next_cap = 8192
+                    }
+                    st = line.data.resize(next_cap)
+                    if (st != 0) {
+                        line.data.uninit()
+                        return -1
+                    }
+                    cap = next_cap
+                }
+                line.data.memcpy(getview(__io_input), len, __io_input_pos, take)
+                len = needed
+            }
+        }
+        __io_input_pos = __io_input_pos + take
+        if (found != 0) {
+            __io_input_pos = __io_input_pos + 1
+            if (__io_input_pos == __io_input_len) {
+                __io_input_pos = 0
+                __io_input_len = 0
+            }
+            if (too_long == 0 && len != 0) {
+                if (line.data[len - 1] == 13) {
+                    len = len - 1
                 }
             }
             break
         }
-        $(buf)[n] = b
+        if (__io_input_pos == __io_input_len) {
+            __io_input_pos = 0
+            __io_input_len = 0
+        }
     }
-    result.val = cast<int64>(n)
-    result.err = 0
-    return result
+    if (too_long != 0) {
+        line.data.uninit()
+        return -1
+    }
+    if (len == 0) {
+        line.data.uninit()
+        return 0
+    }
+    if (len != cap) {
+        st = line.data.resize(len)
+        if (st != 0) {
+            line.data.uninit()
+            return -1
+        }
+    }
+    st = $(out).from(getview(line.data))
+    line.data.uninit()
+    if (st != 0) {
+        return -1
+    }
+    return 0
 }

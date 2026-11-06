@@ -1,8 +1,9 @@
 # franko/io
 
 User-level output and input for Franko programs. `print` is an ordinary
-overloaded function here, not a compiler statement, and `read_bytes` /
-`read_line` fill caller-provided buffers with stdin data.
+overloaded function here, not a compiler statement. `read_bytes` fills a
+caller-provided byte buffer, and `read_line` reads one line into a
+`std::String`.
 
 ```franko
 import "franko/io"
@@ -38,13 +39,11 @@ Design rules:
   the minimum value of each signed type.
 - There are no overloads for pointers or arrays. Print elements or
   bytes instead. Struct printing is limited to `std::String`.
-- Input fills a caller-provided buffer (arrays cannot be returned
-  directly, so `read_bytes` / `read_line` write through an `mview`
-  out-buffer, like the pool allocators do) and returns
-  `(int64 val, int32 err)`. `val` is the number of bytes stored; `err`
-  is `0` on success and `-1` on error. A null buffer, or a
-  `count`/`max` larger than the buffer, returns `(0, -1)` without
-  consuming any input.
+- `read_bytes` fills a caller-provided byte buffer and returns
+  `(uint32 val, int32 err)`. `val` is the number of bytes stored; `err`
+  is `0` on success and `-1` on error. A null buffer, or a `count`
+  larger than the buffer, returns `(0, -1)` without consuming any
+  input. `read_line` fills a `std::String` and returns `int32`.
 
 ## API
 
@@ -77,8 +76,8 @@ func print(view<std::String> str) -> void
 func print(view<std::String> str, view<std::String> end) -> void
 func print(view<std::String> str, view<[byte]> end) -> void
 
-func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err)
-func read_line(mview<[byte]> buf, uint32 max) -> (int64 val, int32 err)
+func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err)
+func read_line(ptr<std::String> out) -> int32
 ```
 
 The two-argument forms exist so multi-value lines keep their old
@@ -143,15 +142,16 @@ func main() -> int32 {
 
 ## Input
 
-Both read functions read from stdin through the OS bridge and fill a
-buffer the caller owns. They return `(int64 val, int32 err)`: `val` is
-the number of bytes stored, `err` is `0` on success, and `err` is `-1`
-on error. `val` is `0` at end of input or for an empty line.
+Both read functions read from stdin through the OS bridge and share an
+internal 8192-byte input buffer; bytes read ahead stay buffered for the
+next call. `read_bytes` fills a caller-owned byte buffer and returns
+`(uint32 val, int32 err)`; `read_line` fills a `std::String` and returns
+`int32`.
 
 ### read_bytes
 
 ```franko
-func read_bytes(mview<[byte]> buf, uint32 count) -> (int64 val, int32 err)
+func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err)
 ```
 
 Read up to `count` bytes from stdin into `buf`. Returns `(val, err)`,
@@ -169,7 +169,7 @@ import "franko/io"
 func main() -> int32 {
     [byte] buf;
     buf.init(64);
-    (int64 val, int32 err) result = read_bytes(getmview(buf), 64);
+    (uint32 val, int32 err) result = read_bytes(getmview(buf), 64);
     if (result.err != 0) {
         print(result.err);
     } else {
@@ -183,39 +183,37 @@ func main() -> int32 {
 ### read_line
 
 ```franko
-func read_line(mview<[byte]> buf, uint32 max) -> (int64 val, int32 err)
+func read_line(ptr<std::String> out) -> int32
 ```
 
-Read one line from stdin into `buf`, at most `max` bytes. Reading stops
-at a `\n`, at `max` bytes, or at end of input. Returns `(val, err)`,
-where `val` is the number of bytes stored and `err` is `0` on success or
-`-1` on error (a null `buf`, `max` zero, or `max` larger than the
-buffer's length).
+Reads one line from stdin into `out`, completely replacing its contents.
+Reading stops at `\n`, `\r\n`, or end of input. Returns `0` on success
+and `-1` for a null `out`, a read error, an allocation failure, or an
+over-long line.
 
-- The line ending is consumed but not stored: `val` is the line's
-  length. A `\r\n` ending counts as one terminator — the `\r` is
-  dropped too — so lines read the same from an interactive Windows
-  console and from a pipe.
-- A line longer than `max` is split: the remainder, including its line
-  ending, stays in stdin for the next call.
+- The line ending is consumed but not stored. A `\r\n` ending counts as
+  one terminator; the `\r` is dropped too, so lines read the same from an
+  interactive Windows console and from a pipe.
+- The internal buffer starts at 256 bytes and doubles when full, up to a
+  maximum of 8192 bytes. A line longer than 8192 bytes is consumed
+  through its line ending and reported as `-1`.
 - A final line without a terminator (end of input mid-line) is returned
   normally.
-- `(0, 0)` means an empty line **or** end of input with nothing pending.
-  Read again (or track the expected line count) to tell them apart;
-  `err == -1` always means an error.
+- An empty string means an empty line **or** end of input with nothing
+  pending. Read again (or track the expected line count) to tell them
+  apart; a return value of `-1` always means an error.
 
 ```franko
 import "franko/io"
+import "franko/string"
 
 func main() -> int32 {
-    [byte] name;
-    name.init(32);
     print("What's your name? ", null);
-    (int64 val, int32 err) line = read_line(getmview(name), 32);
-    if (line.err != 0) {
-        print(line.err);
+    std::String name;
+    if (read_line(getptr(name)) != 0) {
+        print("input error");
     } else {
-        print(line.val);   // name length without the newline
+        print(name.length());   // name length without the newline
     }
     name.uninit();
     return 0;
@@ -231,6 +229,6 @@ library_tests/io/print/success/text_end/  // print(text, end), null text/end
 library_tests/io/print/success/std_string/ // print(std::String), String/byte ends
 library_tests/io/read/success/read_bytes/      // chunked reads, short read, EOF
 library_tests/io/read/success/read_line/       // lines, empty line, EOF
-library_tests/io/read/success/read_line_long/  // over-long line splitting
-library_tests/io/read/success/read_errors/     // null buffer, bad count/max
+library_tests/io/read/success/read_line_long/  // buffer growth, long line
+library_tests/io/read/success/read_errors/     // null buffers, bad count, EOF
 ```

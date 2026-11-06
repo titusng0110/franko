@@ -533,11 +533,11 @@ final class SastSymbolSupport {
                 PtrPermission permission = PtrPermission.valueOf(
                         obj.requireString("permission")
                 );
-                switch (permission) {
-                    case OWNER: return SastType.ptr(referenced);
-                    case MUTABLE: return SastType.mview(referenced);
-                    case READ_ONLY: return SastType.view(referenced);
-                }
+                return switch (permission) {
+                    case OWNER -> SastType.ptr(referenced);
+                    case MUTABLE -> SastType.mview(referenced);
+                    case READ_ONLY -> SastType.view(referenced);
+                };
             }
             case "null": return SastType.nullType();
             case "struct": return SastType.structType(

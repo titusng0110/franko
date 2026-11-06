@@ -14,7 +14,7 @@
 
 import "franko/io"
 
-func show_read((int64 val, int32 err) result) -> void {
+func show_read((uint32 val, int32 err) result) -> void {
     if (result.err != 0) {
         print(result.err)
     } else {
