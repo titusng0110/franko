@@ -1,0 +1,14 @@
+deposit 1 100: ok
+deposit 2 50: ok
+withdraw 1 30: ok
+transfer 1 2 25: ok
+balance 1: 45
+balance 2: 75
+withdraw 2 1000: insufficient funds
+deposit 9 50: unknown account
+total: 120
+final balances:
+  account 1 checking: 45
+  account 2 savings: 75
+  account 3 reserve: 0
+final total: 120

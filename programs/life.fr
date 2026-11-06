@@ -1,0 +1,146 @@
+// Conway's Game of Life: a glider seeded on a 16x16 grid.
+//
+// The two nested static cell arrays form a double buffer: each step
+// writes the successor state into `next`, then copies it back over
+// `cells`. Enum arrays are memcpy-safe but not memset-safe, so both
+// buffers are initialized with ordinary assignments.
+
+import "franko/io"
+
+enum<uint8> Cell {
+    dead,
+    alive
+}
+
+struct LifeGrid {
+    [[Cell, 16], 16] cells
+    [[Cell, 16], 16] next
+
+    // Clear both buffers by assignment (memset cannot be used on enums).
+    func clear(mview<LifeGrid> self) -> void {
+        for (uint32 row = 0; row < 16; row++) {
+            for (uint32 col = 0; col < 16; col++) {
+                $(self).cells[row][col] = Cell::dead
+                $(self).next[row][col] = Cell::dead
+            }
+        }
+        return
+    }
+
+    // Seed the classic five-cell glider near the top-left corner.
+    func seed_glider(mview<LifeGrid> self) -> void {
+        $(self).cells[1][2] = Cell::alive
+        $(self).cells[2][3] = Cell::alive
+        $(self).cells[3][1] = Cell::alive
+        $(self).cells[3][2] = Cell::alive
+        $(self).cells[3][3] = Cell::alive
+        return
+    }
+
+    // Count live cells in the eight surrounding positions.
+    func neighbour_count(view<LifeGrid> self, uint32 row, uint32 col) -> uint32 {
+        uint32 count = 0
+        int32 centre_row = unsafe_cast<int32>(row)
+        int32 centre_col = unsafe_cast<int32>(col)
+
+        for (int32 drow = -1; drow <= 1; drow++) {
+            for (int32 dcol = -1; dcol <= 1; dcol++) {
+                if (drow == 0 && dcol == 0) {
+                    continue
+                }
+
+                int32 r = centre_row + drow
+                int32 c = centre_col + dcol
+                if (r < 0 || r >= 16 || c < 0 || c >= 16) {
+                    continue
+                }
+
+                if ($(self).cells[unsafe_cast<uint32>(r)][unsafe_cast<uint32>(c)] == Cell::alive) {
+                    count++
+                }
+            }
+        }
+        return count
+    }
+
+    // Advance one generation into `next`, then copy it back into `cells`.
+    func step(mview<LifeGrid> self) -> void {
+        for (uint32 row = 0; row < 16; row++) {
+            for (uint32 col = 0; col < 16; col++) {
+                uint32 neighbours = $(self).neighbour_count(row, col)
+                byte alive = 0
+
+                if ($(self).cells[row][col] == Cell::alive) {
+                    if (neighbours == 2 || neighbours == 3) {
+                        alive = 1
+                    }
+                } else {
+                    if (neighbours == 3) {
+                        alive = 1
+                    }
+                }
+
+                if (alive != 0) {
+                    $(self).next[row][col] = Cell::alive
+                } else {
+                    $(self).next[row][col] = Cell::dead
+                }
+            }
+        }
+
+        $(self).cells.memcpy(getview($(self).next))
+        return
+    }
+
+    func alive_count(view<LifeGrid> self) -> uint32 {
+        uint32 count = 0
+        for (uint32 row = 0; row < 16; row++) {
+            for (uint32 col = 0; col < 16; col++) {
+                if ($(self).cells[row][col] == Cell::alive) {
+                    count++
+                }
+            }
+        }
+        return count
+    }
+
+    // Print a generation label, then the 16 rows of '#' (alive) and
+    // '.' (dead) cells through a byte row buffer.
+    func print_generation(view<LifeGrid> self, uint32 generation) -> void {
+        [byte] row_buffer
+        row_buffer.init(16)
+
+        print("Generation ", null)
+        print(generation, ": alive ")
+        print($(self).alive_count())
+
+        for (uint32 row = 0; row < 16; row++) {
+            for (uint32 col = 0; col < 16; col++) {
+                if ($(self).cells[row][col] == Cell::alive) {
+                    row_buffer[col] = 35
+                } else {
+                    row_buffer[col] = 46
+                }
+            }
+            print(getview(row_buffer))
+        }
+
+        row_buffer.uninit()
+        return
+    }
+}
+
+func main() -> int32 {
+    LifeGrid life
+    life.clear()
+    life.seed_glider()
+
+    for (uint32 generation = 0; generation <= 4; generation++) {
+        if (generation != 0) {
+            life.step()
+        }
+        life.print_generation(generation)
+    }
+
+    return 0
+}

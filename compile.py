@@ -4,8 +4,8 @@
 Replaces compile_linux-x86_64.sh and compile_windows-x64.ps1; the same
 command works on Linux, macOS and Windows:
 
-    uv run python compile.py programs/bfs.fr
-    uv run python compile.py -O programs/bfs.fr
+    uv run python compile.py programs/binary_codec.fr
+    uv run python compile.py -O programs/binary_codec.fr
 
 Without -O the default is an unoptimised debug build with
 AddressSanitizer (-O1 -fsanitize=address) using the
@@ -38,9 +38,9 @@ It runs the Franko compiler (Franko -> C++14), then links the generated
 C++ against the bundled jemalloc for the host platform. Output is written
 next to the source file:
 
-    programs/bfs.cpp
-    programs/bfs.out     (Linux/macOS)
-    programs/bfs.exe     (Windows)
+    programs/binary_codec.cpp
+    programs/binary_codec.out     (Linux/macOS)
+    programs/binary_codec.exe     (Windows)
 
 The two build stages are also importable so the test runners share them
 instead of reimplementing them: franko_compile() (Franko -> C++14) and

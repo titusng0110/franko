@@ -263,7 +263,7 @@ class FieldSymbol {
     }
 
     String emittedName() {
-        return tupleIndex >= 0 ? "_" + tupleIndex : name;
+        return tupleIndex >= 0 ? "_" + tupleIndex : "FIELD_" + name;
     }
 }
 

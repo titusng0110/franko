@@ -1,0 +1,10 @@
+9
+deposit 1 100
+deposit 2 50
+withdraw 1 30
+transfer 1 2 25
+balance 1
+balance 2
+withdraw 2 1000
+deposit 9 50
+total

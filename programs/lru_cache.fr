@@ -1,0 +1,682 @@
+// LRU cache simulator backed by a pool and an open-addressed key table.
+//
+// Input is count-prefixed: the first line holds the cache capacity, the
+// second line holds N, then N operation lines follow:
+//
+//   put KEY VALUE
+//   get KEY
+//   del KEY
+//   dump
+//
+// Live entries get their slots from std::SparseSetAllocator. Keys,
+// values, and the LRU prev/next links live in parallel uint32-indexed
+// arrays; 0xFFFFFFFF is NIL. The key lookup table is a small
+// open-addressed table with an enum SlotState (empty, full, tombstone).
+// Each successful get moves its entry to the front; put updates an
+// existing entry in place or evicts the least-recently-used entry when
+// the cache is full.
+//
+// Output: one line per operation, then hits/misses/evictions/live
+// counters. Run with:
+//
+//   ./programs/lru_cache.out < programs/lru_cache.stdin
+
+import "franko/io"
+import "franko/pool"
+import "./lib/text"
+
+uint32 NIL = 0xFFFFFFFF
+
+enum<uint8> SlotState {
+    empty,
+    full,
+    tombstone
+}
+
+enum<uint8> PutOutcome {
+    inserted,
+    updated,
+    evicted,
+    failed
+}
+
+// Round a positive value up to the next power of two.
+func next_power_of_two(uint32 value) -> uint32 {
+    uint32 result = 1
+    while (result < value) {
+        result = result * 2
+    }
+    return result
+}
+
+// 64-bit avalanche mix of KEY's sign-masked bits; the low 32 bits
+// select the initial table slot.
+func hash_key(int64 key) -> uint32 {
+    int64 magnitude = key & 0x7FFFFFFFFFFFFFFF
+    uint64 h = unsafe_cast<uint64>(magnitude)
+    if (key < 0) {
+        h = h | 0x8000000000000000
+    }
+    h = h ^ (h >> 33)
+    h = h * 0xFF51AFD7ED558CCD
+    h = h ^ (h >> 33)
+    return unsafe_cast<uint32>(h & 0xFFFFFFFF)
+}
+
+struct LruCache {
+    std::SparseSetAllocator pool
+    [int64] keys
+    [int64] values
+    [uint32] prev
+    [uint32] next
+
+    [int64] table_keys
+    [uint32] table_indices
+    [SlotState] table_states
+
+    uint32 capacity = 0
+    uint32 table_cap = 0
+    uint32 table_live = 0
+    uint32 tombstones = 0
+    uint32 head = 0xFFFFFFFF
+    uint32 tail = 0xFFFFFFFF
+    uint64 hits = 0
+    uint64 misses = 0
+    uint64 evictions = 0
+
+    // Allocate the pool, payload arrays, and key table. Every allocation
+    // failure unwinds the storage already acquired.
+    func init(ptr<LruCache> self, uint32 slot_count) -> int32 {
+        if (slot_count == 0 || $(self).capacity != 0) {
+            return -1
+        }
+        if (slot_count > 0x20000000) {
+            return -1
+        }
+
+        int32 status = $(self).pool.init(slot_count)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).keys.init(slot_count)
+        if (status != 0) {
+            $(self).pool.uninit()
+            return -1
+        }
+
+        status = $(self).values.init(slot_count)
+        if (status != 0) {
+            $(self).keys.uninit()
+            $(self).pool.uninit()
+            return -1
+        }
+
+        status = $(self).prev.init(slot_count)
+        if (status != 0) {
+            $(self).values.uninit()
+            $(self).keys.uninit()
+            $(self).pool.uninit()
+            return -1
+        }
+
+        status = $(self).next.init(slot_count)
+        if (status != 0) {
+            $(self).prev.uninit()
+            $(self).values.uninit()
+            $(self).keys.uninit()
+            $(self).pool.uninit()
+            return -1
+        }
+
+        uint32 table_size = next_power_of_two(slot_count * 4)
+        status = $(self).table_keys.init(table_size)
+        if (status != 0) {
+            $(self).next.uninit()
+            $(self).prev.uninit()
+            $(self).values.uninit()
+            $(self).keys.uninit()
+            $(self).pool.uninit()
+            return -1
+        }
+
+        status = $(self).table_indices.init(table_size)
+        if (status != 0) {
+            $(self).table_keys.uninit()
+            $(self).next.uninit()
+            $(self).prev.uninit()
+            $(self).values.uninit()
+            $(self).keys.uninit()
+            $(self).pool.uninit()
+            return -1
+        }
+
+        status = $(self).table_states.init(table_size)
+        if (status != 0) {
+            $(self).table_indices.uninit()
+            $(self).table_keys.uninit()
+            $(self).next.uninit()
+            $(self).prev.uninit()
+            $(self).values.uninit()
+            $(self).keys.uninit()
+            $(self).pool.uninit()
+            return -1
+        }
+
+        for (uint32 i = 0; i < slot_count; i++) {
+            $(self).prev[i] = NIL
+            $(self).next[i] = NIL
+        }
+        for (uint32 i = 0; i < table_size; i++) {
+            $(self).table_states[i] = SlotState::empty
+        }
+
+        $(self).capacity = slot_count
+        $(self).table_cap = table_size
+        $(self).table_live = 0
+        $(self).tombstones = 0
+        $(self).head = NIL
+        $(self).tail = NIL
+        $(self).hits = 0
+        $(self).misses = 0
+        $(self).evictions = 0
+        return 0
+    }
+
+    func uninit(ptr<LruCache> self) -> void {
+        if ($(self).capacity == 0) {
+            return
+        }
+
+        $(self).capacity = 0
+        $(self).table_cap = 0
+        $(self).table_live = 0
+        $(self).tombstones = 0
+        $(self).head = NIL
+        $(self).tail = NIL
+
+        $(self).table_states.uninit()
+        $(self).table_indices.uninit()
+        $(self).table_keys.uninit()
+        $(self).next.uninit()
+        $(self).prev.uninit()
+        $(self).values.uninit()
+        $(self).keys.uninit()
+        $(self).pool.uninit()
+        return
+    }
+
+    // Position of KEY in the open-addressed table, or NIL when absent.
+    // Tombstones are probed over; an empty slot ends the search.
+    func _table_find_slot(view<LruCache> self, int64 key) -> uint32 {
+        uint32 mask = $(self).table_cap - 1
+        uint32 pos = hash_key(key) & mask
+        uint32 probes = 0
+
+        while (probes < $(self).table_cap) {
+            SlotState state = $(self).table_states[pos]
+            if (state == SlotState::empty) {
+                return NIL
+            }
+            if (state == SlotState::full && $(self).table_keys[pos] == key) {
+                return pos
+            }
+            pos = (pos + 1) & mask
+            probes++
+        }
+        return NIL
+    }
+
+    // Insert an absent KEY into the first non-full slot of its probe run.
+    func _table_insert(mview<LruCache> self, int64 key, uint32 idx) -> void {
+        uint32 mask = $(self).table_cap - 1
+        uint32 pos = hash_key(key) & mask
+        uint32 probes = 0
+
+        while (probes < $(self).table_cap) {
+            SlotState state = $(self).table_states[pos]
+            if (state != SlotState::full) {
+                $(self).table_keys[pos] = key
+                $(self).table_indices[pos] = idx
+                $(self).table_states[pos] = SlotState::full
+                if (state == SlotState::tombstone) {
+                    $(self).tombstones--
+                }
+                $(self).table_live++
+                return
+            }
+            pos = (pos + 1) & mask
+            probes++
+        }
+        return
+    }
+
+    // Mark a known full table position as tombstone.
+    func _table_remove_at(mview<LruCache> self, uint32 pos) -> void {
+        if ($(self).table_states[pos] != SlotState::full) {
+            return
+        }
+        $(self).table_states[pos] = SlotState::tombstone
+        $(self).table_live--
+        $(self).tombstones++
+        return
+    }
+
+    // Drop the table contents so it can be rebuilt from the live pool slots.
+    func _table_clear(mview<LruCache> self) -> void {
+        for (uint32 i = 0; i < $(self).table_cap; i++) {
+            $(self).table_states[i] = SlotState::empty
+        }
+        $(self).table_live = 0
+        $(self).tombstones = 0
+        return
+    }
+
+    func _table_rebuild(mview<LruCache> self) -> void {
+        $(self)._table_clear()
+        for (uint32 idx = 0; idx < $(self).capacity; idx++) {
+            if ($(self).pool.exist(idx) == 1) {
+                $(self)._table_insert($(self).keys[idx], idx)
+            }
+        }
+        return
+    }
+
+    // Link IDX at the most-recently-used end of the list.
+    func _link_front(mview<LruCache> self, uint32 idx) -> void {
+        $(self).prev[idx] = NIL
+        $(self).next[idx] = $(self).head
+        if ($(self).head != NIL) {
+            $(self).prev[$(self).head] = idx
+        } else {
+            $(self).tail = idx
+        }
+        $(self).head = idx
+        return
+    }
+
+    func _unlink(mview<LruCache> self, uint32 idx) -> void {
+        uint32 before = $(self).prev[idx]
+        uint32 after = $(self).next[idx]
+
+        if (before != NIL) {
+            $(self).next[before] = after
+        } else {
+            $(self).head = after
+        }
+        if (after != NIL) {
+            $(self).prev[after] = before
+        } else {
+            $(self).tail = before
+        }
+
+        $(self).prev[idx] = NIL
+        $(self).next[idx] = NIL
+        return
+    }
+
+    func _touch(mview<LruCache> self, uint32 idx) -> void {
+        if ($(self).head == idx) {
+            return
+        }
+        $(self)._unlink(idx)
+        $(self)._link_front(idx)
+        return
+    }
+
+    // Look up KEY, update the hit/miss counters, and refresh recency.
+    func get(mview<LruCache> self, int64 key) -> (int64 value, uint8 found) {
+        (int64 value, uint8 found) result
+        result.value = 0
+        result.found = 0
+
+        uint32 pos = $(self)._table_find_slot(key)
+        if (pos == NIL) {
+            $(self).misses++
+            return result
+        }
+
+        uint32 idx = $(self).table_indices[pos]
+        result.value = $(self).values[idx]
+        result.found = 1
+        $(self).hits++
+        $(self)._touch(idx)
+        return result
+    }
+
+    // Insert or update KEY. When full, the LRU tail is evicted first.
+    func put(mview<LruCache> self, int64 key, int64 value) -> (PutOutcome outcome, int64 evicted_key) {
+        (PutOutcome outcome, int64 evicted_key) result
+        result.outcome = PutOutcome::inserted
+        result.evicted_key = 0
+
+        uint32 pos = $(self)._table_find_slot(key)
+        if (pos != NIL) {
+            uint32 existing = $(self).table_indices[pos]
+            $(self).values[existing] = value
+            $(self)._touch(existing)
+            result.outcome = PutOutcome::updated
+            return result
+        }
+
+        if ($(self).pool.used() >= $(self).capacity) {
+            uint32 victim = $(self).tail
+            result.evicted_key = $(self).keys[victim]
+            uint32 victim_pos = $(self)._table_find_slot($(self).keys[victim])
+            if (victim_pos != NIL) {
+                $(self)._table_remove_at(victim_pos)
+            }
+            $(self)._unlink(victim)
+            $(self).pool.free_index(victim)
+            $(self).evictions++
+            result.outcome = PutOutcome::evicted
+        }
+
+        if (($(self).table_live + $(self).tombstones + 1) * 2 > $(self).table_cap) {
+            $(self)._table_rebuild()
+        }
+
+        (uint32 idx, int32 err) allocated = $(self).pool.new_index()
+        if (allocated.err != 0) {
+            result.outcome = PutOutcome::failed
+            return result
+        }
+
+        uint32 new_idx = allocated.idx
+        $(self).keys[new_idx] = key
+        $(self).values[new_idx] = value
+        $(self)._table_insert(key, new_idx)
+        $(self)._link_front(new_idx)
+        return result
+    }
+
+    // Remove KEY. Returns 1 when an entry was removed, 0 when absent.
+    func remove(mview<LruCache> self, int64 key) -> uint8 {
+        uint32 pos = $(self)._table_find_slot(key)
+        if (pos == NIL) {
+            return 0
+        }
+
+        uint32 idx = $(self).table_indices[pos]
+        $(self)._table_remove_at(pos)
+        $(self)._unlink(idx)
+        $(self).pool.free_index(idx)
+        return 1
+    }
+
+    // MRU-to-LRU order, printed as key=value pairs.
+    func dump_entries(view<LruCache> self) -> void {
+        view<[byte]> no_end = null
+        uint32 idx = $(self).head
+
+        if (idx == NIL) {
+            print("empty", no_end)
+            return
+        }
+
+        while (idx != NIL) {
+            print($(self).keys[idx], "=")
+            uint32 following = $(self).next[idx]
+            if (following == NIL) {
+                print($(self).values[idx], no_end)
+            } else {
+                print($(self).values[idx], " ")
+            }
+            idx = following
+        }
+        return
+    }
+
+    func print_summary(view<LruCache> self) -> void {
+        print("hits ", null)
+        print($(self).hits)
+        print("misses ", null)
+        print($(self).misses)
+        print("evictions ", null)
+        print($(self).evictions)
+        print("live ", null)
+        print($(self).pool.used())
+        return
+    }
+}
+
+// Split the next whitespace-delimited token out of buf[0, len).
+func next_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+                mview<uint32> start, mview<uint32> count) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (start == null) {
+        return 0
+    }
+    if (count == null) {
+        return 0
+    }
+
+    uint32 i = $(pos)
+    while (i < len) {
+        byte b = $(buf)[i]
+        if (b != 32 && b != 9) {
+            break
+        }
+        i++
+    }
+    if (i >= len) {
+        $(pos) = i
+        return 0
+    }
+
+    uint32 token_start = i
+    while (i < len) {
+        byte b = $(buf)[i]
+        if (b == 32 || b == 9) {
+            break
+        }
+        i++
+    }
+
+    $(pos) = i
+    $(start) = token_start
+    $(count) = i - token_start
+    return 1
+}
+
+func parse_int_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+                     mview<int64> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+    uint32 start = 0
+    uint32 count = 0
+    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+        return 0
+    }
+    return text::parse_int64(buf, start, count, out)
+}
+
+func parse_uint_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+                      mview<uint32> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+    uint32 start = 0
+    uint32 count = 0
+    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+        return 0
+    }
+    return text::parse_uint32(buf, start, count, out)
+}
+
+func no_more_tokens(view<[byte]> buf, uint32 len, mview<uint32> pos) -> byte {
+    if (buf == null) {
+        return 1
+    }
+    if (pos == null) {
+        return 1
+    }
+    uint32 start = 0
+    uint32 count = 0
+    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+        return 1
+    }
+    return 0
+}
+
+func parse_count(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+    uint32 pos = 0
+    if (parse_uint_token(buf, len, getmview(pos), out) == 0) {
+        return 0
+    }
+    return no_more_tokens(buf, len, getmview(pos))
+}
+
+func main() -> int32 {
+    [byte, 256] line
+    view<[byte]> buf = getview(line)
+    uint32 len = 0
+
+    if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+        print("error: input failure")
+        return 1
+    }
+
+    uint32 capacity = 0
+    if (parse_count(buf, len, getmview(capacity)) == 0 || capacity == 0) {
+        print("error: invalid capacity")
+        return 1
+    }
+
+    if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+        print("error: input failure")
+        return 1
+    }
+
+    uint32 op_count = 0
+    if (parse_count(buf, len, getmview(op_count)) == 0) {
+        print("error: invalid operation count")
+        return 1
+    }
+
+    LruCache cache
+    if (cache.init(capacity) != 0) {
+        print("error: cache allocation failed")
+        return 1
+    }
+
+    print("capacity ", null)
+    print(capacity)
+    print("operations ", null)
+    print(op_count)
+
+    for (uint32 op = 0; op < op_count; op++) {
+        if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+            print("error: input failure")
+            cache.uninit()
+            return 1
+        }
+
+        uint32 pos = 0
+        uint32 word_start = 0
+        uint32 word_count = 0
+        if (next_token(buf, len, getmview(pos),
+                       getmview(word_start), getmview(word_count)) == 0) {
+            print("error: empty operation")
+            continue
+        }
+
+        if (text::match_word(buf, word_start, word_count, "put") != 0) {
+            int64 key = 0
+            int64 value = 0
+            if (parse_int_token(buf, len, getmview(pos), getmview(key)) == 0
+                    || parse_int_token(buf, len, getmview(pos),
+                                       getmview(value)) == 0
+                    || no_more_tokens(buf, len, getmview(pos)) == 0) {
+                print("put: parse error")
+                continue
+            }
+
+            (PutOutcome outcome, int64 evicted_key) result = cache.put(key, value)
+            print("put ", null)
+            print(key, " ")
+            print(value, null)
+            if (result.outcome == PutOutcome::inserted) {
+                print(": inserted")
+            } else if (result.outcome == PutOutcome::updated) {
+                print(": updated")
+            } else if (result.outcome == PutOutcome::evicted) {
+                print(": evicted ", null)
+                print(result.evicted_key)
+            } else {
+                print(": failed")
+            }
+        } else if (text::match_word(buf, word_start, word_count, "get") != 0) {
+            int64 key = 0
+            if (parse_int_token(buf, len, getmview(pos), getmview(key)) == 0
+                    || no_more_tokens(buf, len, getmview(pos)) == 0) {
+                print("get: parse error")
+                continue
+            }
+
+            (int64 value, uint8 found) result = cache.get(key)
+            print("get ", null)
+            print(key, null)
+            if (result.found != 0) {
+                print(": hit ", null)
+                print(result.value)
+            } else {
+                print(": miss")
+            }
+        } else if (text::match_word(buf, word_start, word_count, "del") != 0) {
+            int64 key = 0
+            if (parse_int_token(buf, len, getmview(pos), getmview(key)) == 0
+                    || no_more_tokens(buf, len, getmview(pos)) == 0) {
+                print("del: parse error")
+                continue
+            }
+
+            uint8 removed = cache.remove(key)
+            print("del ", null)
+            print(key, null)
+            if (removed != 0) {
+                print(": removed")
+            } else {
+                print(": missing")
+            }
+        } else if (text::match_word(buf, word_start, word_count, "dump") != 0) {
+            if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+                print("dump: parse error")
+                continue
+            }
+            print("dump: ", null)
+            cache.dump_entries()
+            print()
+        } else {
+            print("error: unknown operation")
+        }
+    }
+
+    cache.print_summary()
+    cache.uninit()
+    return 0
+}

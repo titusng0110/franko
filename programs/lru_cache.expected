@@ -1,0 +1,24 @@
+capacity 3
+operations 18
+put 1 10: inserted
+put 2 20: inserted
+put 3 30: inserted
+get 1: hit 10
+put 4 40: evicted 2
+get 2: miss
+put 3 33: updated
+get 4: hit 40
+del 1: removed
+get 1: miss
+put 5 50: inserted
+put 6 60: evicted 3
+get 6: hit 60
+get 5: hit 50
+dump: 5=50 6=60 4=40
+put 4 44: updated
+del 9: missing
+dump: 4=44 5=50 6=60
+hits 4
+misses 2
+evictions 2
+live 3

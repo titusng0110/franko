@@ -117,11 +117,12 @@ missing. On Windows ARM64, set `FRANKO_JAVA_RELEASE=23` first, or pass
 ## Compile a program
 
 ```bash
-uv run python compile.py programs/bfs.fr
+uv run python compile.py programs/binary_codec.fr
 ```
 
-This writes `programs/bfs.cpp` and a native executable next to the source
-(`programs/bfs.out` on Linux/macOS, `programs/bfs.exe` on Windows).
+This writes `programs/binary_codec.cpp` and a native executable next to the
+source (`programs/binary_codec.out` on Linux/macOS,
+`programs/binary_codec.exe` on Windows).
 
 Build modes:
 
@@ -134,9 +135,9 @@ Build modes:
   behavior; null and uninitialized-state checks remain.
 
 ```bash
-uv run python compile.py -O programs/bfs.fr
-uv run python compile.py -Omax programs/bfs.fr
-uv run python compile.py --target native programs/bfs.fr
+uv run python compile.py -O programs/binary_codec.fr
+uv run python compile.py -Omax programs/binary_codec.fr
+uv run python compile.py --target native programs/binary_codec.fr
 ```
 
 `--target native` adds `-march=native`; an explicit `<os>-<arch>` target
@@ -148,19 +149,24 @@ on a different host.
 Working programs live in [`programs/`](programs/):
 
 ```text
-programs/bfs.fr          breadth-first search
-programs/quicksort.fr    quicksort
-programs/mergesort.fr    mergesort
-programs/sieve.fr        prime sieve
-programs/redblack.fr     red-black tree
-programs/stack.fr        stack data structure
-programs/string.fr       string handling
-programs/args.fr         command-line arguments
-programs/greetings.fr    reading stdin
-programs/helloworld.fr   hello world
+programs/greetings.fr    stdin greeting (the one std::String demo)
+programs/ledger.fr       command-driven account ledger
+programs/wordfreq.fr     pool-backed word-frequency trie
+programs/calculator.fr   integer expression parser/evaluator
+programs/toposort.fr     dependency topological sort
+programs/dijkstra.fr     weighted shortest paths
+programs/lru_cache.fr    pool-backed LRU cache
+programs/binary_codec.fr byte/bit/endian packet codec
+programs/life.fr         Conway's Game of Life
+programs/sudoku.fr       bitmask backtracking Sudoku solver
 ```
 
-Compile and run them the same way as above.
+See [`programs/README.md`](programs/README.md) for what each program
+demonstrates, its input format, and the shared byte-text helpers. Compile
+and run them the same way as above.
+
+The smoke test keeps generated `.cpp` files next to each source so the
+C++14 output can be inspected; they are git-ignored.
 
 ## Tests
 

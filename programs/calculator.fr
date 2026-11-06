@@ -1,0 +1,349 @@
+// Integer expression calculator.
+//
+// Reads a count N followed by N expression lines and evaluates each one
+// with a recursive-descent parser supporting + - * / %, parentheses,
+// unary minus, and arbitrary ASCII whitespace. The expression is echoed
+// before its result or error.
+//
+// Run with:
+//
+//   ./programs/calculator.out < programs/calculator.stdin
+
+import "franko/io"
+import "./lib/text"
+
+enum<uint8> TokenKind {
+    endOfInput,
+    integer,
+    plus,
+    minus,
+    star,
+    slash,
+    percent,
+    leftParen,
+    rightParen,
+    invalid
+}
+
+enum<uint8> CalcError {
+    none,
+    unexpectedToken,
+    unexpectedEnd,
+    expectedRightParen,
+    divisionByZero,
+    trailingInput
+}
+
+struct Token {
+    TokenKind kind
+    int64 value = 0
+    uint32 start = 0
+    uint32 count = 0
+}
+
+struct Parser {
+    view<[byte]> line
+    uint32 line_len = 0
+    uint32 pos = 0
+    Token current
+    CalcError error
+
+    // Reset the parser and prime the first token.
+    func reset(mview<Parser> self, view<[byte]> line, uint32 line_len) -> void {
+        $(self).line = line
+        $(self).line_len = line_len
+        $(self).pos = 0
+        $(self).error = CalcError::none
+        $(self).current.kind = TokenKind::endOfInput
+        $(self).current.value = 0
+        $(self).current.start = 0
+        $(self).current.count = 0
+        $(self).advance()
+        return
+    }
+
+    func fail(mview<Parser> self, CalcError err) -> void {
+        if ($(self).error == CalcError::none) {
+            $(self).error = err
+        }
+        return
+    }
+
+    // Classify the next token, skipping spaces and tabs.
+    func advance(mview<Parser> self) -> void {
+        view<[byte]> src = $(self).line
+        if (src == null) {
+            $(self).current.kind = TokenKind::endOfInput
+            return
+        }
+
+        uint32 i = $(self).pos
+        uint32 n = $(self).line_len
+        if (n > $(src).length()) {
+            n = $(src).length()
+        }
+
+        while (i < n) {
+            byte b = $(src)[i]
+            if (b != 32 && b != 9) {
+                break
+            }
+            i++
+        }
+
+        $(self).current.kind = TokenKind::endOfInput
+        $(self).current.value = 0
+        $(self).current.start = i
+        $(self).current.count = 0
+
+        if (i >= n) {
+            $(self).pos = i
+            return
+        }
+
+        byte b = $(src)[i]
+
+        if (b >= 48 && b <= 57) {
+            uint32 start = i
+            while (i < n) {
+                byte digit = $(src)[i]
+                if (digit < 48 || digit > 57) {
+                    break
+                }
+                i++
+            }
+
+            uint32 count = i - start
+            int64 number = 0
+            if (text::parse_int64(src, start, count, getmview(number)) == 0) {
+                $(self).current.kind = TokenKind::invalid
+            } else {
+                $(self).current.kind = TokenKind::integer
+                $(self).current.value = number
+            }
+            $(self).current.start = start
+            $(self).current.count = count
+            $(self).pos = i
+            return
+        }
+
+        if (b == 43) {
+            $(self).current.kind = TokenKind::plus
+        } else if (b == 45) {
+            $(self).current.kind = TokenKind::minus
+        } else if (b == 42) {
+            $(self).current.kind = TokenKind::star
+        } else if (b == 47) {
+            $(self).current.kind = TokenKind::slash
+        } else if (b == 37) {
+            $(self).current.kind = TokenKind::percent
+        } else if (b == 40) {
+            $(self).current.kind = TokenKind::leftParen
+        } else if (b == 41) {
+            $(self).current.kind = TokenKind::rightParen
+        } else {
+            $(self).current.kind = TokenKind::invalid
+        }
+
+        $(self).current.start = i
+        $(self).current.count = 1
+        $(self).pos = i + 1
+        return
+    }
+
+    // primary := INTEGER | '(' expression ')'
+    func parse_primary(mview<Parser> self) -> int64 {
+        if ($(self).error != CalcError::none) {
+            return 0
+        }
+
+        if ($(self).current.kind == TokenKind::integer) {
+            int64 value = $(self).current.value
+            $(self).advance()
+            return value
+        }
+
+        if ($(self).current.kind == TokenKind::leftParen) {
+            $(self).advance()
+            int64 value = $(self).parse_expression()
+            if ($(self).error != CalcError::none) {
+                return 0
+            }
+            if ($(self).current.kind != TokenKind::rightParen) {
+                $(self).fail(CalcError::expectedRightParen)
+                return 0
+            }
+            $(self).advance()
+            return value
+        }
+
+        if ($(self).current.kind == TokenKind::endOfInput) {
+            $(self).fail(CalcError::unexpectedEnd)
+        } else {
+            $(self).fail(CalcError::unexpectedToken)
+        }
+        return 0
+    }
+
+    // factor := '-' factor | primary
+    func parse_factor(mview<Parser> self) -> int64 {
+        if ($(self).error != CalcError::none) {
+            return 0
+        }
+
+        if ($(self).current.kind == TokenKind::minus) {
+            $(self).advance()
+            int64 value = $(self).parse_factor()
+            if ($(self).error != CalcError::none) {
+                return 0
+            }
+            return -value
+        }
+
+        return $(self).parse_primary()
+    }
+
+    // term := factor (('*' | '/' | '%') factor)*
+    func parse_term(mview<Parser> self) -> int64 {
+        int64 value = $(self).parse_factor()
+
+        while ($(self).error == CalcError::none) {
+            TokenKind op = $(self).current.kind
+            if (op != TokenKind::star && op != TokenKind::slash && op != TokenKind::percent) {
+                break
+            }
+
+            $(self).advance()
+            int64 rhs = $(self).parse_factor()
+            if ($(self).error != CalcError::none) {
+                return 0
+            }
+
+            if (op == TokenKind::star) {
+                value = value * rhs
+            } else {
+                if (rhs == 0) {
+                    $(self).fail(CalcError::divisionByZero)
+                    return 0
+                }
+                if (op == TokenKind::slash) {
+                    value = value / rhs
+                } else {
+                    value = value % rhs
+                }
+            }
+        }
+
+        return value
+    }
+
+    // expression := term (('+' | '-') term)*
+    func parse_expression(mview<Parser> self) -> int64 {
+        int64 value = $(self).parse_term()
+
+        while ($(self).error == CalcError::none) {
+            TokenKind op = $(self).current.kind
+            if (op != TokenKind::plus && op != TokenKind::minus) {
+                break
+            }
+
+            $(self).advance()
+            int64 rhs = $(self).parse_term()
+            if ($(self).error != CalcError::none) {
+                return 0
+            }
+
+            if (op == TokenKind::plus) {
+                value = value + rhs
+            } else {
+                value = value - rhs
+            }
+        }
+
+        return value
+    }
+}
+
+func evaluate(view<[byte]> line, uint32 line_len) -> (int64 value, CalcError error) {
+    Parser parser
+    parser.reset(line, line_len)
+
+    int64 result = parser.parse_expression()
+    CalcError err = parser.error
+    if (err == CalcError::none && parser.current.kind != TokenKind::endOfInput) {
+        err = CalcError::trailingInput
+    }
+
+    return (int64 value, CalcError error) { value = result, error = err }
+}
+
+func error_text(CalcError err) -> view<[byte]> {
+    if (err == CalcError::unexpectedToken) {
+        return "unexpected token"
+    }
+    if (err == CalcError::unexpectedEnd) {
+        return "unexpected end of expression"
+    }
+    if (err == CalcError::expectedRightParen) {
+        return "expected ')'"
+    }
+    if (err == CalcError::divisionByZero) {
+        return "division by zero"
+    }
+    if (err == CalcError::trailingInput) {
+        return "trailing input"
+    }
+    return "unknown error"
+}
+
+func main() -> int32 {
+    [byte, 256] line
+    uint32 len = 0
+
+    if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+        return 1
+    }
+
+    uint32 start = 0
+    text::skip_spaces(getview(line), getmview(start))
+
+    uint32 end = len
+    while (end > start) {
+        byte b = line[end - 1]
+        if (b != 32 && b != 9) {
+            break
+        }
+        end--
+    }
+
+    if (end <= start) {
+        return 1
+    }
+
+    uint32 expression_count = 0
+    if (text::parse_uint32(getview(line), start, end - start, getmview(expression_count)) == 0) {
+        return 1
+    }
+
+    for (uint32 i = 0; i < expression_count; i++) {
+        len = 0
+        if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+            return 1
+        }
+
+        // Echo the expression exactly, then evaluate and report.
+        text::print_slice(getview(line), 0, len)
+        print(" = ", null)
+
+        (int64 value, CalcError error) result = evaluate(getview(line), len)
+
+        if (result.error == CalcError::none) {
+            print(result.value)
+        } else {
+            print("error: ", null)
+            print(error_text(result.error))
+        }
+    }
+
+    return 0
+}

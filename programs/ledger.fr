@@ -1,0 +1,525 @@
+// Command-driven account ledger.
+//
+// Input is a transaction count followed by that many command lines:
+//
+//   deposit id amount
+//   withdraw id amount
+//   transfer from to amount
+//   balance id
+//   total
+//
+// Money is a struct with comparison and assignment operator methods.
+// Account balances live in a fixed static array; a transaction is first
+// parsed into a Txn, then applied through ptr<Money> handles so the
+// operator methods receive the allocation rights their ptr<Money> self
+// parameters require.
+
+import "franko/io"
+import "./lib/text"
+
+enum<uint8> TxnKind {
+    deposit,
+    withdraw,
+    transfer,
+    balance,
+    total,
+    invalid
+}
+
+enum<uint8> LedgerError {
+    ok,
+    insufficient_funds,
+    unknown_account,
+    same_account,
+    invalid_amount,
+    invalid_command
+}
+
+struct Money {
+    int64 amount = 0
+
+    func OPERATOR_EQ(view<Money> self, view<Money> other) -> uint8 {
+        if (other == null) {
+            return 0
+        }
+        return $(self).amount == $(other).amount
+    }
+
+    func OPERATOR_NEQ(view<Money> self, view<Money> other) -> uint8 {
+        if (other == null) {
+            return 0
+        }
+        return $(self).amount != $(other).amount
+    }
+
+    func OPERATOR_LT(view<Money> self, view<Money> other) -> uint8 {
+        if (other == null) {
+            return 0
+        }
+        return $(self).amount < $(other).amount
+    }
+
+    func OPERATOR_GT(view<Money> self, view<Money> other) -> uint8 {
+        if (other == null) {
+            return 0
+        }
+        return $(self).amount > $(other).amount
+    }
+
+    func OPERATOR_MOV(ptr<Money> self, view<Money> other) -> void {
+        if (other == null) {
+            return
+        }
+        mview<int64> target = getptr($(self).amount)
+        $(target) = $(other).amount
+        return
+    }
+
+    func OPERATOR_ADDMOV(ptr<Money> self, view<Money> other) -> void {
+        if (other == null) {
+            return
+        }
+        mview<int64> target = getptr($(self).amount)
+        $(target) = $(target) + $(other).amount
+        return
+    }
+
+    func OPERATOR_SUBMOV(ptr<Money> self, view<Money> other) -> void {
+        if (other == null) {
+            return
+        }
+        mview<int64> target = getptr($(self).amount)
+        $(target) = $(target) - $(other).amount
+        return
+    }
+}
+
+struct Account {
+    uint32 id = 0
+    view<[byte]> name
+    Money balance
+}
+
+struct Txn {
+    TxnKind kind
+    uint32 account_id = 0
+    uint32 target_id = 0
+    Money amount
+}
+
+uint32 ACCOUNT_NONE = 0xFFFFFFFF
+
+[Account, 3] accounts
+
+func setup_accounts() -> void {
+    accounts[0].id = 1
+    accounts[0].name = "checking"
+    accounts[0].balance = Money { amount = 0 }
+
+    accounts[1].id = 2
+    accounts[1].name = "savings"
+    accounts[1].balance = Money { amount = 0 }
+
+    accounts[2].id = 3
+    accounts[2].name = "reserve"
+    accounts[2].balance = Money { amount = 0 }
+    return
+}
+
+func find_account(uint32 id) -> uint32 {
+    for (uint32 i = 0; i < accounts.length(); i++) {
+        if (accounts[i].id == id) {
+            return i
+        }
+    }
+    return ACCOUNT_NONE
+}
+
+// Split the next whitespace-delimited token out of buf[0, len).
+func next_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+                mview<uint32> start, mview<uint32> count) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (start == null) {
+        return 0
+    }
+    if (count == null) {
+        return 0
+    }
+
+    uint32 i = $(pos)
+
+    while (i < len) {
+        byte b = $(buf)[i]
+        if (b != 32 && b != 9) {
+            break
+        }
+        i++
+    }
+    if (i >= len) {
+        $(pos) = i
+        return 0
+    }
+
+    uint32 token_start = i
+    while (i < len) {
+        byte b = $(buf)[i]
+        if (b == 32 || b == 9) {
+            break
+        }
+        i++
+    }
+
+    $(pos) = i
+    $(start) = token_start
+    $(count) = i - token_start
+    return 1
+}
+
+func parse_uint_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+                      mview<uint32> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+
+    uint32 start = 0
+    uint32 count = 0
+    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+        return 0
+    }
+    return text::parse_uint32(buf, start, count, out)
+}
+
+func parse_money_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+                       mview<Money> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+
+    uint32 start = 0
+    uint32 count = 0
+    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+        return 0
+    }
+
+    int64 value = 0
+    if (text::parse_int64(buf, start, count, getmview(value)) == 0) {
+        return 0
+    }
+    if (value < 0) {
+        return 0
+    }
+
+    $(out).amount = value
+    return 1
+}
+
+func no_more_tokens(view<[byte]> buf, uint32 len, mview<uint32> pos) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+
+    uint32 start = 0
+    uint32 count = 0
+    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+        return 1
+    }
+    return 0
+}
+
+func parse_count(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+
+    uint32 pos = 0
+    if (parse_uint_token(buf, len, getmview(pos), out) == 0) {
+        return 0
+    }
+    return no_more_tokens(buf, len, getmview(pos))
+}
+
+func parse_transaction(view<[byte]> buf, uint32 len, mview<Txn> txn) -> LedgerError {
+    if (buf == null) {
+        return LedgerError::invalid_command
+    }
+    if (txn == null) {
+        return LedgerError::invalid_command
+    }
+
+    uint32 pos = 0
+    uint32 start = 0
+    uint32 count = 0
+
+    if (next_token(buf, len, getmview(pos), getmview(start), getmview(count)) == 0) {
+        return LedgerError::invalid_command
+    }
+
+    if (text::match_word(buf, start, count, "deposit") != 0) {
+        $(txn).kind = TxnKind::deposit
+        if (parse_uint_token(buf, len, getmview(pos),
+                             getmview($(txn).account_id)) == 0) {
+            return LedgerError::invalid_command
+        }
+        if (parse_money_token(buf, len, getmview(pos),
+                              getmview($(txn).amount)) == 0) {
+            return LedgerError::invalid_amount
+        }
+        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+            return LedgerError::invalid_command
+        }
+        return LedgerError::ok
+    }
+
+    if (text::match_word(buf, start, count, "withdraw") != 0) {
+        $(txn).kind = TxnKind::withdraw
+        if (parse_uint_token(buf, len, getmview(pos),
+                             getmview($(txn).account_id)) == 0) {
+            return LedgerError::invalid_command
+        }
+        if (parse_money_token(buf, len, getmview(pos),
+                              getmview($(txn).amount)) == 0) {
+            return LedgerError::invalid_amount
+        }
+        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+            return LedgerError::invalid_command
+        }
+        return LedgerError::ok
+    }
+
+    if (text::match_word(buf, start, count, "transfer") != 0) {
+        $(txn).kind = TxnKind::transfer
+        if (parse_uint_token(buf, len, getmview(pos),
+                             getmview($(txn).account_id)) == 0) {
+            return LedgerError::invalid_command
+        }
+        if (parse_uint_token(buf, len, getmview(pos),
+                             getmview($(txn).target_id)) == 0) {
+            return LedgerError::invalid_command
+        }
+        if (parse_money_token(buf, len, getmview(pos),
+                              getmview($(txn).amount)) == 0) {
+            return LedgerError::invalid_amount
+        }
+        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+            return LedgerError::invalid_command
+        }
+        return LedgerError::ok
+    }
+
+    if (text::match_word(buf, start, count, "balance") != 0) {
+        $(txn).kind = TxnKind::balance
+        if (parse_uint_token(buf, len, getmview(pos),
+                             getmview($(txn).account_id)) == 0) {
+            return LedgerError::invalid_command
+        }
+        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+            return LedgerError::invalid_command
+        }
+        return LedgerError::ok
+    }
+
+    if (text::match_word(buf, start, count, "total") != 0) {
+        $(txn).kind = TxnKind::total
+        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+            return LedgerError::invalid_command
+        }
+        return LedgerError::ok
+    }
+
+    return LedgerError::invalid_command
+}
+
+func print_prefix(view<Txn> txn) -> void {
+    if (txn == null) {
+        return
+    }
+
+    TxnKind kind = $(txn).kind
+
+    if (kind == TxnKind::deposit) {
+        print("deposit ", null)
+        print($(txn).account_id, " ")
+        print($(txn).amount.amount, ": ")
+        return
+    }
+    if (kind == TxnKind::withdraw) {
+        print("withdraw ", null)
+        print($(txn).account_id, " ")
+        print($(txn).amount.amount, ": ")
+        return
+    }
+    if (kind == TxnKind::transfer) {
+        print("transfer ", null)
+        print($(txn).account_id, " ")
+        print($(txn).target_id, " ")
+        print($(txn).amount.amount, ": ")
+        return
+    }
+    if (kind == TxnKind::balance) {
+        print("balance ", null)
+        print($(txn).account_id, ": ")
+        return
+    }
+    if (kind == TxnKind::total) {
+        print("total: ", null)
+        return
+    }
+
+    print("invalid command")
+    return
+}
+
+func run_transaction(view<Txn> txn, ptr<Money> total) -> void {
+    if (txn == null) {
+        return
+    }
+    if (total == null) {
+        return
+    }
+
+    TxnKind kind = $(txn).kind
+    print_prefix(txn)
+
+    if (kind == TxnKind::deposit) {
+        uint32 idx = find_account($(txn).account_id)
+        if (idx == ACCOUNT_NONE) {
+            print("unknown account")
+            return
+        }
+        ptr<Money> balance = getptr(accounts[idx].balance)
+        $(balance) += $(txn).amount
+        $(total) += $(txn).amount
+        print("ok")
+        return
+    }
+
+    if (kind == TxnKind::withdraw) {
+        uint32 idx = find_account($(txn).account_id)
+        if (idx == ACCOUNT_NONE) {
+            print("unknown account")
+            return
+        }
+        ptr<Money> balance = getptr(accounts[idx].balance)
+        if ($(balance) < $(txn).amount) {
+            print("insufficient funds")
+            return
+        }
+        $(balance) -= $(txn).amount
+        $(total) -= $(txn).amount
+        print("ok")
+        return
+    }
+
+    if (kind == TxnKind::transfer) {
+        uint32 from_idx = find_account($(txn).account_id)
+        uint32 to_idx = find_account($(txn).target_id)
+        if (from_idx == ACCOUNT_NONE || to_idx == ACCOUNT_NONE) {
+            print("unknown account")
+            return
+        }
+        if (from_idx == to_idx) {
+            print("same account")
+            return
+        }
+        ptr<Money> from_balance = getptr(accounts[from_idx].balance)
+        ptr<Money> to_balance = getptr(accounts[to_idx].balance)
+        if ($(from_balance) < $(txn).amount) {
+            print("insufficient funds")
+            return
+        }
+        $(from_balance) -= $(txn).amount
+        $(to_balance) += $(txn).amount
+        print("ok")
+        return
+    }
+
+    if (kind == TxnKind::balance) {
+        uint32 idx = find_account($(txn).account_id)
+        if (idx == ACCOUNT_NONE) {
+            print("unknown account")
+            return
+        }
+        print(accounts[idx].balance.amount)
+        return
+    }
+
+    if (kind == TxnKind::total) {
+        print($(total).amount)
+        return
+    }
+
+    return
+}
+
+func main() -> int32 {
+    setup_accounts()
+
+    [byte, 256] line
+    uint32 len = 0
+
+    if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+        return 1
+    }
+
+    uint32 txn_count = 0
+    if (parse_count(getview(line), len, getmview(txn_count)) == 0) {
+        print("error: invalid transaction count")
+        return 1
+    }
+    if (txn_count > 16) {
+        print("error: too many transactions")
+        return 1
+    }
+
+    [Txn, 16] txns
+    for (uint32 i = 0; i < txn_count; i++) {
+        if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+            return 1
+        }
+        LedgerError parsed = parse_transaction(getview(line), len, getmview(txns[i]))
+        if (parsed != LedgerError::ok) {
+            txns[i].kind = TxnKind::invalid
+        }
+    }
+
+    Money total = Money { amount = 0 }
+    for (uint32 i = 0; i < txn_count; i++) {
+        run_transaction(getview(txns[i]), getptr(total))
+    }
+
+    print("final balances:")
+    for (uint32 i = 0; i < accounts.length(); i++) {
+        print("  account ", null)
+        print(accounts[i].id, " ")
+        print(accounts[i].name, null)
+        print(": ", null)
+        print(accounts[i].balance.amount)
+    }
+    print("final total: ", null)
+    print(total.amount)
+
+    return 0
+}
