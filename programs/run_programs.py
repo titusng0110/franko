@@ -6,11 +6,13 @@ command works on every platform:
 
     uv run python programs/run_programs.py
 
-Compiles every program in programs/, runs it, and compares its stdout
-against the checked-in <program>.expected file.
+Compiles every top-level program in programs/, runs it, and compares its
+stdout against the checked-in <program>.expected file. Shared helpers live
+under programs/lib/ and are imported by those programs, not run as cases.
 
-Every program in programs/ is a positive test. Negative checker tests live
-in language_tests/ and are intentionally not part of this smoke test; run
+Every top-level program in programs/ is a positive test. Negative checker
+tests live in language_tests/ and are intentionally not part of this smoke
+test; run
 `uv run python language_tests/run_language_tests.py` for the full suite.
 
 A program may provide programs/<name>.args: each line is one command-line
@@ -21,8 +23,9 @@ stdin (carriage returns are stripped, so CRLF checkouts behave like LF
 ones). This is what lets interactive-style programs that read stdin run
 deterministically under the smoke test.
 
-Generated artifacts (.cpp, .testbin, .actual) are removed after a passing
-case and kept for inspection after a failure.
+Generated C++ sources are kept for inspection after a passing case (they
+are git-ignored); only the test binaries and captured .actual output are
+removed. All artifacts are kept for inspection after a failure.
 
 Every program builds and runs in each active build mode (see
 franko_tools.active_build_modes): ASan/system-allocator mode (Franko
@@ -111,7 +114,7 @@ def main() -> int:
                 results.fail_case(f"{label} (output mismatch)")
                 continue
 
-            remove_artifacts(out_cpp, out_bin, actual)
+            remove_artifacts(out_bin, actual)
             results.pass_case(
                 f"{label} ran successfully, output matches {relative(expected)}"
             )

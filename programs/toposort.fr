@@ -1,0 +1,358 @@
+import "franko/io"
+import "./lib/text"
+
+// Topological sort of directed graphs.
+//
+// Input is count-prefixed:
+//   T
+//   n m
+//   u v           (m edge lines, 0-based node numbers)
+//   ...
+//   n m
+//   ...
+//
+// Each case uses parallel uint32 adjacency arrays: head[u] is the first
+// edge index of u, to[e] is the edge's destination, and next[e] links
+// the next edge of the same source. NODE_NIL terminates a list. DFS
+// colours nodes white/gray/black; meeting a gray node means a cycle.
+// A successful DFS fills reverse postorder into a node array, and a
+// position/verification pass checks every edge u -> v against the
+// resulting position array.
+//
+// The graph's working arrays live in one TopoSort value. Only the
+// setup/teardown methods need allocation rights (ptr self); the DFS and
+// verification methods use mview/read-only receivers.
+
+uint32 NODE_NIL = 0xFFFFFFFF
+
+enum<uint8> Mark {
+    white,
+    gray,
+    black
+}
+
+struct TopoSort {
+    [uint32] head
+    [uint32] to
+    [uint32] next
+    [Mark] mark
+    [uint32] order
+    [uint32] position
+    uint32 node_count = 0
+    uint32 edge_count = 0
+    uint32 order_len = 0
+    byte has_cycle = 0
+
+    func setup(ptr<TopoSort> self, uint32 nodes, uint32 edges) -> int32 {
+        int32 status = 0
+        uint32 node_cap = nodes
+        uint32 edge_cap = edges
+
+        if (node_cap == 0) {
+            node_cap = 1
+        }
+        if (edge_cap == 0) {
+            edge_cap = 1
+        }
+
+        $(self).node_count = nodes
+        $(self).edge_count = edges
+        $(self).order_len = 0
+        $(self).has_cycle = 0
+
+        status = $(self).head.init(node_cap)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).to.init(edge_cap)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).next.init(edge_cap)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).mark.init(node_cap)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).order.init(node_cap)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).position.init(node_cap)
+        if (status != 0) {
+            return -1
+        }
+
+        for (uint32 i = 0; i < nodes; i++) {
+            $(self).head[i] = NODE_NIL
+            $(self).mark[i] = Mark::white
+        }
+
+        return 0
+    }
+
+    func deinit(ptr<TopoSort> self) -> void {
+        $(self).head.uninit()
+        $(self).to.uninit()
+        $(self).next.uninit()
+        $(self).mark.uninit()
+        $(self).order.uninit()
+        $(self).position.uninit()
+        return
+    }
+
+    func add_edge(mview<TopoSort> self, uint32 edge_index, uint32 from, uint32 dest) -> void {
+        $(self).to[edge_index] = dest
+        $(self).next[edge_index] = $(self).head[from]
+        $(self).head[from] = edge_index
+        return
+    }
+
+    func dfs_visit(mview<TopoSort> self, uint32 node) -> void {
+        $(self).mark[node] = Mark::gray
+
+        uint32 edge = $(self).head[node]
+        while (edge != NODE_NIL) {
+            uint32 dest = $(self).to[edge]
+            if ($(self).mark[dest] == Mark::white) {
+                $(self).dfs_visit(dest)
+            } else if ($(self).mark[dest] == Mark::gray) {
+                $(self).has_cycle = 1
+            }
+            edge = $(self).next[edge]
+        }
+
+        $(self).mark[node] = Mark::black
+        uint32 slot = $(self).node_count - 1 - $(self).order_len
+        $(self).order[slot] = node
+        $(self).order_len = $(self).order_len + 1
+        return
+    }
+
+    func run_dfs(mview<TopoSort> self) -> void {
+        for (uint32 node = 0; node < $(self).node_count; node++) {
+            if ($(self).mark[node] == Mark::white) {
+                $(self).dfs_visit(node)
+            }
+        }
+        return
+    }
+
+    func verify_order(mview<TopoSort> self) -> byte {
+        for (uint32 i = 0; i < $(self).node_count; i++) {
+            $(self).position[$(self).order[i]] = i
+        }
+
+        for (uint32 from = 0; from < $(self).node_count; from++) {
+            uint32 edge = $(self).head[from]
+            while (edge != NODE_NIL) {
+                uint32 dest = $(self).to[edge]
+                if ($(self).position[from] >= $(self).position[dest]) {
+                    return 0
+                }
+                edge = $(self).next[edge]
+            }
+        }
+
+        return 1
+    }
+
+    func emit_case(mview<TopoSort> self, uint32 case_number) -> void {
+        print("case ", null)
+
+        if ($(self).has_cycle != 0) {
+            print(case_number, ": cycle detected")
+            print()
+            return
+        }
+
+        if ($(self).verify_order() == 0) {
+            print(case_number, ": cycle detected")
+            print()
+            return
+        }
+
+        print(case_number, ": order")
+        for (uint32 i = 0; i < $(self).order_len; i++) {
+            print(" ", null)
+            print($(self).order[i], null)
+        }
+        print()
+        return
+    }
+}
+
+namespace topo {
+
+    func skip_ws(view<[byte]> buf, uint32 len, uint32 pos) -> uint32 {
+        if (buf == null) {
+            return pos
+        }
+
+        uint32 i = pos
+        while (i < len) {
+            byte b = $(buf)[i]
+            if (b != 32 && b != 9) {
+                break
+            }
+            i++
+        }
+        return i
+    }
+
+    func parse_one(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
+        if (buf == null) {
+            return 0
+        }
+        if (out == null) {
+            return 0
+        }
+
+        uint32 start = skip_ws(buf, len, 0)
+        uint32 i = start
+        while (i < len) {
+            byte b = $(buf)[i]
+            if (b == 32 || b == 9) {
+                break
+            }
+            i++
+        }
+
+        if (i == start) {
+            return 0
+        }
+        return text::parse_uint32(buf, start, i - start, out)
+    }
+
+    func parse_pair(view<[byte]> buf, uint32 len, mview<uint32> first, mview<uint32> second) -> byte {
+        if (buf == null) {
+            return 0
+        }
+        if (first == null) {
+            return 0
+        }
+        if (second == null) {
+            return 0
+        }
+
+        uint32 start = skip_ws(buf, len, 0)
+        uint32 i = start
+        while (i < len) {
+            byte b = $(buf)[i]
+            if (b == 32 || b == 9) {
+                break
+            }
+            i++
+        }
+        if (i == start) {
+            return 0
+        }
+        if (text::parse_uint32(buf, start, i - start, first) == 0) {
+            return 0
+        }
+
+        start = skip_ws(buf, len, i)
+        i = start
+        while (i < len) {
+            byte b = $(buf)[i]
+            if (b == 32 || b == 9) {
+                break
+            }
+            i++
+        }
+        if (i == start) {
+            return 0
+        }
+        return text::parse_uint32(buf, start, i - start, second)
+    }
+
+    func read_one(mview<[byte]> buf, uint32 cap, mview<uint32> out) -> byte {
+        if (buf == null) {
+            return 0
+        }
+        if (out == null) {
+            return 0
+        }
+
+        uint32 len = 0
+        if (text::read_line_len(buf, cap, getmview(len)) != 0) {
+            return 0
+        }
+        return parse_one(buf, len, out)
+    }
+
+    func read_pair(mview<[byte]> buf, uint32 cap, mview<uint32> first, mview<uint32> second) -> byte {
+        if (buf == null) {
+            return 0
+        }
+        if (first == null) {
+            return 0
+        }
+        if (second == null) {
+            return 0
+        }
+
+        uint32 len = 0
+        if (text::read_line_len(buf, cap, getmview(len)) != 0) {
+            return 0
+        }
+        return parse_pair(buf, len, first, second)
+    }
+
+    func solve_case(uint32 nodes, uint32 edges, mview<[byte]> line, uint32 cap, uint32 case_number) -> int32 {
+        if (line == null) {
+            return -1
+        }
+
+        TopoSort graph
+        if (graph.setup(nodes, edges) != 0) {
+            return -1
+        }
+
+        for (uint32 edge_index = 0; edge_index < edges; edge_index++) {
+            uint32 from = 0
+            uint32 dest = 0
+            if (read_pair(line, cap, getmview(from), getmview(dest)) == 0) {
+                graph.deinit()
+                return -1
+            }
+            graph.add_edge(edge_index, from, dest)
+        }
+
+        graph.run_dfs()
+        graph.emit_case(case_number)
+        graph.deinit()
+        return 0
+    }
+}
+
+func main() -> int32 {
+    [byte, 256] line
+    uint32 case_count = 0
+
+    if (topo::read_one(getmview(line), 256, getmview(case_count)) == 0) {
+        return 1
+    }
+
+    for (uint32 case_number = 1; case_number <= case_count; case_number++) {
+        uint32 nodes = 0
+        uint32 edges = 0
+
+        if (topo::read_pair(getmview(line), 256, getmview(nodes), getmview(edges)) == 0) {
+            return 1
+        }
+
+        if (topo::solve_case(nodes, edges, getmview(line), 256, case_number) != 0) {
+            return 1
+        }
+    }
+
+    return 0
+}

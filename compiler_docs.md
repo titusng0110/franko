@@ -870,7 +870,8 @@ field/method clash detection), `EnumVariant`, `EnumSymbol`, and
 
 - `FieldSymbol.tupleIndex` is `-1` for ordinary fields and the element index
   for tuple fields; `emittedName()` returns `_<index>` for tuple fields and
-  the declared name otherwise.
+  `FIELD_<name>` for ordinary fields, keeping emitted member names unambiguous
+  with the other `VAR_`/`STRUCT_`/`FUNC_` prefixes.
 - `StructSymbol.isTuple` marks the synthetic `TUPLE_<hash>` symbols created
   for tuple types (no namespace, no methods).
 - `EnumSymbol` stores name, namespace, backing kind, ordered variants, with
@@ -2138,11 +2139,12 @@ prototypes →
 function definitions, all under mangled names and inside `NS_<segment>`
 namespaces where applicable. Enums emit as `ENUM_<Name>` wrapper structs
 (`emittedEnumTypeName`, qualified by namespace in `emitType`) before any
-struct definition, since struct fields may use them. Ordinary structs emit as `STRUCT_<Name>`;
-synthetic tuple structs emit as their `TUPLE_<hash>` name directly and
-their fields as `_0`, `_1`, … (`FieldSymbol.emittedName()`), so differently
-named but structurally identical tuple declarations share one C++ type. Tuple
-types participate in `byValueStructDependencies` through `cppSymbol`, keeping
+struct definition, since struct fields may use them. Ordinary structs emit
+as `STRUCT_<Name>` and their ordinary fields as `FIELD_<name>`; synthetic
+tuple structs emit as their `TUPLE_<hash>` name directly and their fields
+as `_0`, `_1`, … (`FieldSymbol.emittedName()`), so differently named but
+structurally identical tuple declarations share one C++ type. Tuple types
+participate in `byValueStructDependencies` through `cppSymbol`, keeping
 tuple-containing structs, nested tuples, and tuples containing user structs
 in the existing topological order. The global forward declarations let a
 pointer global's static address initializer reference a global declared
@@ -2251,8 +2253,8 @@ fields exactly like a local declaration, named fields are assigned in source
 order, empty literals need no special case, and nested literals become
 nested lambdas; each value goes through `emitAsType` against the field type.
 Member access uses `FieldSymbol.emittedName()`, so
-tuple elements emit as `_0`/`_1` while ordinary struct fields keep their
-declared names. `Cpp14Codegen` keeps the statement/declaration
+tuple elements emit as `_0`/`_1` while ordinary struct fields emit as
+`FIELD_<name>`. `Cpp14Codegen` keeps the statement/declaration
 emitter, namespace/type/name formatting, struct ordering, and program-level
 ordering; its call sites invoke this helper directly. The helper calls back
 into `Cpp14Codegen` for type/name emission and the FFI match set.
@@ -2633,11 +2635,12 @@ type it would have in C++. Consequences:
 ### 4.3 Name mangling
 - `FUNC_<name>_<8hex>` / `METH_<name>_OFSTRUCT_<Struct>_<8hex>`,
   where the 8-hex hash is the low 32 bits of a 64-bit FNV-1a hash of the canonical `signatureKey()`.
-- `STRUCT_<name>`, `VAR_<name>`, `NS_<segment>` prefixes/namespaces make
-  kinds unambiguous, so struct names may legally clash with variable/function
-  names. Synthetic tuple structs use `TUPLE_<8hex>` directly rather
-  than the `STRUCT_` prefix; ordinary user structs keep `STRUCT_<name>` even
-  if their declared name starts with `TUPLE_`.
+- `STRUCT_<name>`, `VAR_<name>`, `FIELD_<name>`, `NS_<segment>`
+  prefixes/namespaces make kinds unambiguous, so struct names may legally
+  clash with variable/function names and field names cannot collide with
+  generated identifier prefixes. Synthetic tuple structs use `TUPLE_<8hex>`
+  directly rather than the `STRUCT_` prefix; ordinary user structs keep
+  `STRUCT_<name>` even if their declared name starts with `TUPLE_`.
 - Hoisted literal storage uses `STRLIT_<16hex>` for strings and
   `ARRLIT_<16hex>` for arrays. These are literal-backed storage objects, not
   variables, so they are emitted without the `VAR_` prefix.

@@ -1,0 +1,218 @@
+// Word frequency counter backed by a pool-allocated trie.
+//
+// Input is count-prefixed: the first line holds N, then N lines of text
+// follow. Each maximal ASCII [A-Za-z] run is a word; words are folded to
+// lowercase and inserted into a trie.
+//
+// The trie payload is one preallocated [TrieNode] array. Node indices
+// come from std::NextAllocator (franko/pool), child links are uint32
+// indices with 0xFFFFFFFF as NIL, and a node's count is the number of
+// times the word spelled by its root-to-node path occurred.
+//
+// Output: total word count, distinct word count, then one "word count"
+// line per distinct word in alphabetical order (DFS over a, b, ..., z).
+
+import "franko/io"
+import "franko/pool"
+import "./lib/text"
+
+uint32 NIL = 0xFFFFFFFF
+uint32 MAX_NODES = 4096
+
+struct TrieNode {
+    [uint32, 26] child
+    uint32 count = 0
+}
+
+struct WordTrie {
+    [TrieNode] nodes
+    std::NextAllocator slots
+    uint32 root = 0xFFFFFFFF
+    uint32 total = 0
+    uint32 distinct = 0
+    [byte, 512] word
+
+    // Allocate the payload and slot table, then take the root node.
+    func init(ptr<WordTrie> self, uint32 capacity) -> int32 {
+        int32 status = $(self).nodes.init(capacity)
+        if (status != 0) {
+            return -1
+        }
+
+        status = $(self).slots.init(capacity)
+        if (status != 0) {
+            $(self).nodes.uninit()
+            return -1
+        }
+
+        (uint32 idx, int32 err) allocated = $(self).new_node()
+        if (allocated.err != 0) {
+            $(self).slots.uninit()
+            $(self).nodes.uninit()
+            return -1
+        }
+
+        $(self).root = allocated.idx
+        return 0
+    }
+
+    func uninit(ptr<WordTrie> self) -> void {
+        $(self).nodes.uninit()
+        $(self).slots.uninit()
+        return
+    }
+
+    // Take one pool slot and clear its 26 child links to NIL.
+    func new_node(mview<WordTrie> self) -> (uint32 idx, int32 err) {
+        (uint32 idx, int32 err) result
+        result.idx = NIL
+        result.err = -1
+
+        (uint32 idx, int32 err) allocated = $(self).slots.new_index()
+        if (allocated.err != 0) {
+            return result
+        }
+
+        for (uint32 letter = 0; letter < 26; letter++) {
+            $(self).nodes[allocated.idx].child[letter] = NIL
+        }
+        $(self).nodes[allocated.idx].count = 0
+
+        result.idx = allocated.idx
+        result.err = 0
+        return result
+    }
+
+    // Insert the lowercase word in word[0, count).
+    func insert(mview<WordTrie> self, view<[byte]> word, uint32 count) -> int32 {
+        if (word == null) {
+            return -1
+        }
+
+        uint32 node = $(self).root
+
+        for (uint32 i = 0; i < count; i++) {
+            byte b = $(word)[i]
+            uint32 letter = cast<uint32>(b - 97)
+            uint32 next = $(self).nodes[node].child[letter]
+
+            if (next == NIL) {
+                (uint32 idx, int32 err) allocated = $(self).new_node()
+                if (allocated.err != 0) {
+                    return -1
+                }
+                $(self).nodes[node].child[letter] = allocated.idx
+                next = allocated.idx
+            }
+
+            node = next
+        }
+
+        if ($(self).nodes[node].count == 0) {
+            $(self).distinct += 1
+        }
+        $(self).nodes[node].count += 1
+        $(self).total += 1
+        return 0
+    }
+
+    // Split one input line into ASCII letter runs and insert each word.
+    func process_line(mview<WordTrie> self, view<[byte]> line, uint32 length) -> int32 {
+        if (line == null) {
+            return -1
+        }
+
+        uint32 word_len = 0
+
+        for (uint32 i = 0; i < length; i++) {
+            byte b = $(line)[i]
+
+            if (text::is_alpha(b) != 0) {
+                if (word_len < 512) {
+                    $(self).word[word_len] = text::to_lower(b)
+                    word_len++
+                }
+            } else {
+                if (word_len > 0) {
+                    int32 status = $(self).insert(getview($(self).word), word_len)
+                    if (status != 0) {
+                        return -1
+                    }
+                    word_len = 0
+                }
+            }
+        }
+
+        if (word_len > 0) {
+            int32 status = $(self).insert(getview($(self).word), word_len)
+            if (status != 0) {
+                return -1
+            }
+        }
+
+        return 0
+    }
+
+    // In-order traversal: print this node's word, then children a..z.
+    func walk(view<WordTrie> self, uint32 node, uint32 depth, mview<[byte]> path) -> void {
+        if (path == null) {
+            return
+        }
+
+        if ($(self).nodes[node].count > 0) {
+            text::print_slice(path, 0, depth)
+            print(" ", null)
+            print($(self).nodes[node].count)
+        }
+
+        for (uint32 letter = 0; letter < 26; letter++) {
+            uint32 child = $(self).nodes[node].child[letter]
+            if (child != NIL) {
+                $(path)[depth] = unsafe_cast<byte>(letter + 97)
+                $(self).walk(child, depth + 1, path)
+            }
+        }
+
+        return
+    }
+}
+
+func main() -> int32 {
+    [byte, 512] line
+    [byte, 512] path
+    uint32 line_len = 0
+
+    if (text::read_line_len(getmview(line), 512, getmview(line_len)) != 0) {
+        return 1
+    }
+
+    uint32 line_count = 0
+    if (text::parse_uint32(getview(line), 0, line_len, getmview(line_count)) == 0) {
+        return 1
+    }
+
+    WordTrie trie
+    if (trie.init(MAX_NODES) != 0) {
+        return 1
+    }
+
+    for (uint32 i = 0; i < line_count; i++) {
+        if (text::read_line_len(getmview(line), 512, getmview(line_len)) != 0) {
+            trie.uninit()
+            return 1
+        }
+        if (trie.process_line(getview(line), line_len) != 0) {
+            trie.uninit()
+            return 1
+        }
+    }
+
+    print("total words: ", null)
+    print(trie.total)
+    print("distinct words: ", null)
+    print(trie.distinct)
+    trie.walk(trie.root, 0, getmview(path))
+
+    trie.uninit()
+    return 0
+}

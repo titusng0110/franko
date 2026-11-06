@@ -1,0 +1,20 @@
+3
+18
+put 1 10
+put 2 20
+put 3 30
+get 1
+put 4 40
+get 2
+put 3 33
+get 4
+del 1
+get 1
+put 5 50
+put 6 60
+get 6
+get 5
+dump
+put 4 44
+del 9
+dump

@@ -1,0 +1,289 @@
+// Weighted single-source shortest paths with Dijkstra's algorithm.
+//
+// Input is a single directed graph:
+//
+//   n m source
+//   u v w          (m lines, 0-based node indices, nonnegative weight)
+//
+// The graph is stored in parallel uint32 adjacency arrays (head/to/next/
+// weight), distances are int64, and the priority queue is an array-based
+// binary min-heap of HeapEntry values. For every node the program prints
+// its distance and reconstructed path, or `unreachable`. Run with:
+//
+//   ./programs/dijkstra.out < programs/dijkstra.stdin
+
+import "franko/io"
+import "franko/limit"
+import "./lib/text"
+
+// Adjacency and path storage are fixed-size smoke-test limits.
+// The graph must satisfy n <= 128 and m <= 512.
+enum<uint8> NodeState {
+    unseen,
+    queued,
+    settled
+}
+
+struct HeapEntry {
+    int64 dist
+    uint32 node
+}
+
+struct MinHeap {
+    [HeapEntry, 512] entries
+    uint32 count = 0
+
+    // Insert one entry and restore the heap order by sifting up.
+    func push(mview<MinHeap> self, HeapEntry entry) -> void {
+        uint32 i = $(self).count
+        $(self).count = i + 1
+
+        while (i > 0) {
+            uint32 parent = (i - 1) / 2
+            if ($(self).entries[parent].dist <= entry.dist) {
+                break
+            }
+            $(self).entries[i] = $(self).entries[parent]
+            i = parent
+        }
+
+        $(self).entries[i] = entry
+        return
+    }
+
+    // Remove and return the smallest entry, sifting the last entry down.
+    func pop(mview<MinHeap> self) -> HeapEntry {
+        HeapEntry result = $(self).entries[0]
+        uint32 last_index = $(self).count - 1
+        $(self).count = last_index
+
+        if (last_index == 0) {
+            return result
+        }
+
+        HeapEntry last = $(self).entries[last_index]
+        uint32 i = 0
+
+        while (1) {
+            uint32 left = i * 2 + 1
+            if (left >= last_index) {
+                break
+            }
+
+            uint32 smaller = left
+            uint32 right = left + 1
+            if (right < last_index && $(self).entries[right].dist < $(self).entries[left].dist) {
+                smaller = right
+            }
+
+            if (last.dist <= $(self).entries[smaller].dist) {
+                break
+            }
+
+            $(self).entries[i] = $(self).entries[smaller]
+            i = smaller
+        }
+
+        $(self).entries[i] = last
+        return result
+    }
+}
+
+// Read the next whitespace-separated unsigned decimal from
+// buf[start, start+len). Returns 1 on success and 0 on malformed input.
+func parse_next_uint32(view<[byte]> buf, uint32 len, mview<uint32> pos, mview<uint32> out) -> byte {
+    if (buf == null) {
+        return 0
+    }
+    if (pos == null) {
+        return 0
+    }
+    if (out == null) {
+        return 0
+    }
+
+    uint32 i = $(pos)
+    while (i < len) {
+        byte b = $(buf)[i]
+        if (b != 32 && b != 9) {
+            break
+        }
+        i++
+    }
+
+    if (i == len) {
+        return 0
+    }
+
+    uint32 start = i
+    while (i < len) {
+        byte b = $(buf)[i]
+        if (b == 32 || b == 9) {
+            break
+        }
+        i++
+    }
+
+    $(pos) = i
+    return text::parse_uint32(buf, start, i - start, out)
+}
+
+func main() -> int32 {
+    [byte, 256] line
+    uint32 line_len = 0
+
+    // Header: n m source.
+    if (text::read_line_len(getmview(line), 256, getmview(line_len)) != 0) {
+        return 1
+    }
+
+    uint32 n = 0
+    uint32 m = 0
+    uint32 source = 0
+    uint32 pos = 0
+    view<[byte]> line_view = getview(line)
+
+    if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(n)) == 0) {
+        return 1
+    }
+    if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(m)) == 0) {
+        return 1
+    }
+    if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(source)) == 0) {
+        return 1
+    }
+
+    if (n == 0 || n > 128) {
+        return 1
+    }
+    if (m > 512) {
+        return 1
+    }
+    if (source >= n) {
+        return 1
+    }
+
+    // Parallel adjacency arrays: edge e runs from head[u] to edge_to[e],
+    // then continues at edge_next[e].
+    [uint32, 128] head
+    [uint32, 512] edge_to
+    [uint32, 512] edge_next
+    [uint32, 512] edge_weight
+    head.memset(255)
+
+    for (uint32 i = 0; i < m; i++) {
+        line_len = 0
+        if (text::read_line_len(getmview(line), 256, getmview(line_len)) != 0) {
+            return 1
+        }
+
+        uint32 u = 0
+        uint32 v = 0
+        uint32 w = 0
+        pos = 0
+
+        if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(u)) == 0) {
+            return 1
+        }
+        if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(v)) == 0) {
+            return 1
+        }
+        if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(w)) == 0) {
+            return 1
+        }
+        if (u >= n || v >= n) {
+            return 1
+        }
+
+        edge_to[i] = v
+        edge_weight[i] = w
+        edge_next[i] = head[u]
+        head[u] = i
+    }
+
+    // Dijkstra state.
+    [int64, 128] dist
+    [uint32, 128] prev
+    [NodeState, 128] state
+
+    for (uint32 i = 0; i < n; i++) {
+        dist[i] = std::INT64_MAX
+        prev[i] = 0xFFFFFFFF
+        state[i] = NodeState::unseen
+    }
+
+    MinHeap heap
+    dist[source] = 0
+    state[source] = NodeState::queued
+    heap.push(HeapEntry { dist = 0, node = source })
+
+    while (heap.count != 0) {
+        HeapEntry current = heap.pop()
+
+        // Skip stale heap entries for an already settled node.
+        if (state[current.node] == NodeState::settled) {
+            continue
+        }
+        state[current.node] = NodeState::settled
+
+        uint32 edge = head[current.node]
+        while (edge != 0xFFFFFFFF) {
+            uint32 next_node = edge_to[edge]
+
+            if (state[next_node] != NodeState::settled) {
+                int64 candidate = current.dist + cast<int64>(edge_weight[edge])
+                if (candidate < dist[next_node]) {
+                    dist[next_node] = candidate
+                    prev[next_node] = current.node
+                    state[next_node] = NodeState::queued
+                    heap.push(HeapEntry { dist = candidate, node = next_node })
+                }
+            }
+
+            edge = edge_next[edge]
+        }
+    }
+
+    // Print each node's distance and shortest path, or `unreachable`.
+    [uint32, 128] path
+
+    for (uint32 node = 0; node < n; node++) {
+        print("node ", null)
+        print(node, ": ")
+
+        if (state[node] == NodeState::unseen) {
+            print("unreachable")
+        } else {
+            print("distance ", null)
+            print(dist[node], ", path ")
+
+            // Walk prev[] backwards, then print the path forwards.
+            uint32 path_len = 0
+            uint32 cur = node
+
+            while (1) {
+                path[path_len] = cur
+                path_len++
+
+                if (cur == source) {
+                    break
+                }
+
+                cur = prev[cur]
+                if (cur == 0xFFFFFFFF || path_len >= n) {
+                    break
+                }
+            }
+
+            for (uint32 i = path_len; i > 0; i--) {
+                if (i != path_len) {
+                    print(" -> ", null)
+                }
+                print(path[i - 1], null)
+            }
+            print()
+        }
+    }
+
+    return 0
+}

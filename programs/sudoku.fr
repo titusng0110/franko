@@ -1,0 +1,255 @@
+// Sudoku solver.
+//
+// Reads nine 9-character rows of '1'-'9' and '.' from stdin, validates the
+// givens, and solves the puzzle with bitmask-driven recursive backtracking:
+// each row, column, and 3x3 box keeps a uint32 mask of the digits already
+// used, and a cell's candidates are ~(row | column | box) & 0x1FF. Digits
+// are tried in ascending order.
+//
+// The status line reports the solver outcome. "Backtracks" counts the
+// partial assignments that failed and caused the search to retreat.
+
+import "franko/io"
+import "./lib/text"
+
+enum<uint8> SolveResult {
+    solved,
+    no_solution,
+    invalid_puzzle
+}
+
+struct Sudoku {
+    [[byte, 9], 9] board
+    [[byte, 9], 9] given
+    [uint32, 9] row_mask
+    [uint32, 9] col_mask
+    [uint32, 9] box_mask
+    uint32 empty_count
+    uint32 backtrack_count
+
+    func reset(mview<Sudoku> self) -> void {
+        $(self).board.memset(0)
+        $(self).given.memset(0)
+        $(self).row_mask.memset(0)
+        $(self).col_mask.memset(0)
+        $(self).box_mask.memset(0)
+        $(self).empty_count = 0
+        $(self).backtrack_count = 0
+        return
+    }
+
+    // Store one input row. Returns 1 when it is exactly nine valid cells.
+    func load_line(mview<Sudoku> self, uint32 row, view<[byte]> line, uint32 count) -> byte {
+        if (line == null) {
+            return 0
+        }
+        if (row >= 9) {
+            return 0
+        }
+        if (count != 9) {
+            return 0
+        }
+
+        byte ok = 1
+        for (uint32 col = 0; col < 9; col++) {
+            byte ch = $(line)[col]
+            if (ch == 46) {
+                $(self).given[row][col] = 0
+            } else if (ch >= 49 && ch <= 57) {
+                $(self).given[row][col] = ch - 48
+            } else {
+                $(self).given[row][col] = 0
+                ok = 0
+            }
+        }
+        return ok
+    }
+
+    // Copy the givens into the working board and build the digit masks.
+    // Returns 1 when the givens are consistent, 0 otherwise.
+    func prepare(mview<Sudoku> self) -> byte {
+        $(self).row_mask.memset(0)
+        $(self).col_mask.memset(0)
+        $(self).box_mask.memset(0)
+        $(self).empty_count = 0
+        $(self).backtrack_count = 0
+
+        for (uint32 row = 0; row < 9; row++) {
+            for (uint32 col = 0; col < 9; col++) {
+                byte v = $(self).given[row][col]
+                $(self).board[row][col] = v
+                if (v == 0) {
+                    $(self).empty_count++
+                }
+            }
+        }
+
+        for (uint32 row = 0; row < 9; row++) {
+            for (uint32 col = 0; col < 9; col++) {
+                byte v = $(self).given[row][col]
+                if (v == 0) {
+                    continue
+                }
+                if (v > 9) {
+                    return 0
+                }
+
+                uint32 bit = 1
+                bit = bit << (v - 1)
+                uint32 box = (row / 3) * 3 + (col / 3)
+
+                if (($(self).row_mask[row] & bit) != 0) {
+                    return 0
+                }
+                if (($(self).col_mask[col] & bit) != 0) {
+                    return 0
+                }
+                if (($(self).box_mask[box] & bit) != 0) {
+                    return 0
+                }
+
+                $(self).row_mask[row] = $(self).row_mask[row] | bit
+                $(self).col_mask[col] = $(self).col_mask[col] | bit
+                $(self).box_mask[box] = $(self).box_mask[box] | bit
+            }
+        }
+        return 1
+    }
+
+    func solve(mview<Sudoku> self) -> SolveResult {
+        uint32 best_row = 0
+        uint32 best_col = 0
+        byte found = 0
+
+        for (uint32 row = 0; row < 9; row++) {
+            for (uint32 col = 0; col < 9; col++) {
+                if ($(self).board[row][col] == 0) {
+                    best_row = row
+                    best_col = col
+                    found = 1
+                    break 2
+                }
+            }
+        }
+
+        if (found == 0) {
+            return SolveResult::solved
+        }
+
+        uint32 box = (best_row / 3) * 3 + (best_col / 3)
+        uint32 used = $(self).row_mask[best_row] | $(self).col_mask[best_col] | $(self).box_mask[box]
+        uint32 candidates = ~used & 0x1FF
+
+        if (candidates == 0) {
+            $(self).backtrack_count++
+            return SolveResult::no_solution
+        }
+
+        for (byte digit = 1; digit <= 9; digit++) {
+            uint32 bit = 1
+            bit = bit << (digit - 1)
+            if ((candidates & bit) == 0) {
+                continue
+            }
+
+            $(self).board[best_row][best_col] = digit
+            $(self).row_mask[best_row] = $(self).row_mask[best_row] | bit
+            $(self).col_mask[best_col] = $(self).col_mask[best_col] | bit
+            $(self).box_mask[box] = $(self).box_mask[box] | bit
+
+            SolveResult child = $(self).solve()
+            if (child == SolveResult::solved) {
+                return SolveResult::solved
+            }
+
+            $(self).row_mask[best_row] = $(self).row_mask[best_row] & ~bit
+            $(self).col_mask[best_col] = $(self).col_mask[best_col] & ~bit
+            $(self).box_mask[box] = $(self).box_mask[box] & ~bit
+            $(self).board[best_row][best_col] = 0
+        }
+
+        $(self).backtrack_count++
+        return SolveResult::no_solution
+    }
+
+    func print_puzzle(view<Sudoku> self) -> void {
+        [byte, 9] line
+        for (uint32 row = 0; row < 9; row++) {
+            for (uint32 col = 0; col < 9; col++) {
+                byte v = $(self).given[row][col]
+                if (v == 0) {
+                    line[col] = 46
+                } else {
+                    line[col] = v + 48
+                }
+            }
+            print(getview(line))
+        }
+        return
+    }
+
+    func print_solution(view<Sudoku> self) -> void {
+        [byte, 9] line
+        for (uint32 row = 0; row < 9; row++) {
+            for (uint32 col = 0; col < 9; col++) {
+                byte v = $(self).board[row][col]
+                if (v == 0) {
+                    line[col] = 46
+                } else {
+                    line[col] = v + 48
+                }
+            }
+            print(getview(line))
+        }
+        return
+    }
+}
+
+func main() -> int32 {
+    Sudoku s
+    s.reset()
+
+    [byte, 64] line
+    uint32 line_len = 0
+    byte input_ok = 1
+
+    for (uint32 row = 0; row < 9; row++) {
+        line_len = 0
+        if (text::read_line_len(getmview(line), 64, getmview(line_len)) != 0) {
+            return 1
+        }
+        if (s.load_line(row, getview(line), line_len) == 0) {
+            input_ok = 0
+        }
+    }
+
+    print("Puzzle:")
+    s.print_puzzle()
+
+    byte valid = s.prepare()
+    if (input_ok == 0) {
+        valid = 0
+    }
+
+    SolveResult result = SolveResult::invalid_puzzle
+    if (valid != 0) {
+        result = s.solve()
+    }
+
+    if (result == SolveResult::solved) {
+        print("Result: solved")
+        print("Solution:")
+        s.print_solution()
+    } else if (result == SolveResult::no_solution) {
+        print("Result: no solution")
+    } else {
+        print("Result: invalid puzzle")
+    }
+
+    print("Empty cells: ", null)
+    print(s.empty_count)
+    print("Backtracks: ", null)
+    print(s.backtrack_count)
+
+    return 0
+}
