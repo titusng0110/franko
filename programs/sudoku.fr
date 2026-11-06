@@ -10,7 +10,36 @@
 // partial assignments that failed and caused the search to retreat.
 
 import "franko/io"
-import "./lib/text"
+
+namespace text {
+    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+        if (buf == null) {
+            return -1
+        }
+        if (line_len == null) {
+            return -1
+        }
+        std::String line_text
+        if (read_line(getptr(line_text)) != 0) {
+            line_text.uninit()
+            return -1
+        }
+        uint32 n = line_text.length()
+        if (n > cap) {
+            line_text.uninit()
+            return -1
+        }
+        uint32 i = 0
+        while (i < n) {
+            $(buf)[i] = line_text.get(i)
+            i = i + 1
+        }
+        $(line_len) = n
+        line_text.uninit()
+        return 0
+    }
+}
+
 
 enum<uint8> SolveResult {
     solved,

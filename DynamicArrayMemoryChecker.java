@@ -2893,8 +2893,7 @@ public final class DynamicArrayMemoryChecker {
             }
 
             String op = leftLength ? condition.op : reverse(condition.op);
-            SastNode receiver =
-                    ((SastNode) lengthSide).receiver;
+            SastNode receiver = lengthSide.receiver;
 
             return new LengthGuard(receiver, op, constantSide.constantValue);
         }

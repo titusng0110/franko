@@ -67,6 +67,66 @@ func to(view<String> self, ptr<String> out) -> int32
 func length(view<String> self) -> uint32
 func is_utf8_compliant(view<String> self) -> uint8
 func uninit(ptr<String> self) -> void
+
+func append(ptr<String> self, byte payload) -> int32
+func append(ptr<String> self, view<[byte]> payload) -> int32
+func append(ptr<String> self, view<String> payload) -> int32
+
+func from_integer(ptr<String> self, int8 value) -> int32
+func from_integer(ptr<String> self, int16 value) -> int32
+func from_integer(ptr<String> self, int32 value) -> int32
+func from_integer(ptr<String> self, int64 value) -> int32
+func from_integer(ptr<String> self, uint8 value) -> int32
+func from_integer(ptr<String> self, uint16 value) -> int32
+func from_integer(ptr<String> self, uint32 value) -> int32
+func from_integer(ptr<String> self, uint64 value) -> int32
+
+func to_int8(view<String> self) -> (int8 val, int32 err)
+func to_int16(view<String> self) -> (int16 val, int32 err)
+func to_int32(view<String> self) -> (int32 val, int32 err)
+func to_int64(view<String> self) -> (int64 val, int32 err)
+func to_uint8(view<String> self) -> (uint8 val, int32 err)
+func to_uint16(view<String> self) -> (uint16 val, int32 err)
+func to_uint32(view<String> self) -> (uint32 val, int32 err)
+func to_uint64(view<String> self) -> (uint64 val, int32 err)
+
+func find(view<String> self, byte needle) -> (uint32 idx, int32 err)
+func find(view<String> self, view<[byte]> substring) -> (uint32 idx, int32 err)
+func find(view<String> self, view<String> substring) -> (uint32 idx, int32 err)
+
+func find_next(view<String> self, byte needle, uint32 start_idx) -> (uint32 idx, int32 err)
+func find_next(view<String> self, view<[byte]> substring, uint32 start_idx) -> (uint32 idx, int32 err)
+func find_next(view<String> self, view<String> substring, uint32 start_idx) -> (uint32 idx, int32 err)
+
+func count(view<String> self, byte needle) -> uint32
+func count(view<String> self, view<[byte]> substring) -> uint32
+func count(view<String> self, view<String> substring) -> uint32
+
+func count_from(view<String> self, byte needle, uint32 start_idx) -> uint32
+func count_from(view<String> self, view<[byte]> substring, uint32 start_idx) -> uint32
+func count_from(view<String> self, view<String> substring, uint32 start_idx) -> uint32
+
+func get(view<String> self, uint32 idx) -> byte
+func set(mview<String> self, uint32 idx, byte value) -> void
+
+func get_slice(view<String> self, uint32 start, uint32 end, ptr<String> out) -> int32
+func get_slice(view<String> self, uint32 start, uint32 end, ptr<[byte]> out) -> int32
+
+func insert(ptr<String> self, byte payload, uint32 idx) -> int32
+func insert(ptr<String> self, view<[byte]> payload, uint32 idx) -> int32
+func insert(ptr<String> self, view<String> payload, uint32 idx) -> int32
+
+func erase(mview<String> self, uint32 idx) -> int32
+func erase(mview<String> self, uint32 start, uint32 end) -> int32
+
+func split(view<String> self, byte splitter, ptr<StringList> out) -> int32
+func split(view<String> self, view<[byte]> splitter, ptr<StringList> out) -> int32
+func split(view<String> self, view<String> splitter, ptr<StringList> out) -> int32
+
+func join(ptr<String> self, view<StringList> in) -> int32
+func join(ptr<String> self, byte joiner, view<StringList> in) -> int32
+func join(ptr<String> self, view<[byte]> joiner, view<StringList> in) -> int32
+func join(ptr<String> self, view<String> joiner, view<StringList> in) -> int32
 ```
 
 ### from
@@ -190,6 +250,370 @@ func uninit(ptr<String> self) -> void
 Frees the backing buffer and returns the string to the empty state. Safe
 to call on an already empty string.
 
+### append
+
+```franko
+func append(ptr<String> self, byte payload) -> int32
+func append(ptr<String> self, view<[byte]> payload) -> int32
+func append(ptr<String> self, view<String> payload) -> int32
+```
+
+Appends one byte, a byte view, or another string. Returns `0` on success
+and `-1` on overflow or allocation failure. A null or empty payload is a
+successful no-op. Appending the string's own buffer or the string itself
+is handled correctly.
+
+The `+=` operator calls `append` and ignores its status.
+
+```franko
+std::String s
+s.from("ab")
+s.append(99)          // "abc"
+s.append("de")        // "abcde"
+s += "fg"             // "abcdefg"
+```
+
+### from_integer
+
+```franko
+func from_integer(ptr<String> self, int8 value) -> int32
+func from_integer(ptr<String> self, int16 value) -> int32
+func from_integer(ptr<String> self, int32 value) -> int32
+func from_integer(ptr<String> self, int64 value) -> int32
+func from_integer(ptr<String> self, uint8 value) -> int32
+func from_integer(ptr<String> self, uint16 value) -> int32
+func from_integer(ptr<String> self, uint32 value) -> int32
+func from_integer(ptr<String> self, uint64 value) -> int32
+```
+
+Replaces the string with the decimal representation of an integer.
+Signed negative values include a leading `-`; zero becomes `"0"`.
+Returns `0` on success and `-1` when the buffer cannot grow. The
+existing buffer is reused.
+
+```franko
+std::String s
+int32 n = -123
+s.from_integer(n)
+print(getview(s))   // -123
+
+uint64 big = 18446744073709551615
+s.from_integer(big)
+print(getview(s))   // 18446744073709551615
+```
+
+### to_int8, to_int16, to_int32, to_int64, to_uint8, to_uint16, to_uint32, to_uint64
+
+```franko
+func to_int8(view<String> self) -> (int8 val, int32 err)
+func to_int16(view<String> self) -> (int16 val, int32 err)
+func to_int32(view<String> self) -> (int32 val, int32 err)
+func to_int64(view<String> self) -> (int64 val, int32 err)
+func to_uint8(view<String> self) -> (uint8 val, int32 err)
+func to_uint16(view<String> self) -> (uint16 val, int32 err)
+func to_uint32(view<String> self) -> (uint32 val, int32 err)
+func to_uint64(view<String> self) -> (uint64 val, int32 err)
+```
+
+Parses the string as an integer. Decimal, `0b`/`0B` binary, and
+`0x`/`0X` hexadecimal forms are accepted. Decimal input may start with
+one `-`; a leading `+` is not part of Franko's grammar and is rejected.
+Binary and hexadecimal input must not have a sign. Leading zeros are
+allowed. Whitespace, underscores, extra signs, and trailing characters
+are rejected. An empty or null string returns `(0, -1)`.
+
+Returns `(val, err)`: `err` is `0` on success and `-1` on invalid input
+or overflow; `val` is `0` on failure. The target type's range is
+checked, including signed minimum values. For unsigned targets, a
+negative decimal value is rejected unless its magnitude is zero.
+
+```franko
+std::String s
+s.from("-123")
+(int32 val, int32 err) n = s.to_int32()
+print(n.val)    // -123
+print(n.err)    // 0
+
+s.from("0x7F")
+(uint8 byte_val, int32 byte_err) b = s.to_uint8()
+print(b.val)    // 127
+print(b.err)    // 0
+
+s.from("-0x7F")
+b = s.to_uint8()
+print(b.val)    // 0
+print(b.err)    // -1: signs are not allowed on hexadecimal input
+```
+
+### find, find_next, count, count_from
+
+```franko
+func find(view<String> self, byte needle) -> (uint32 idx, int32 err)
+func find(view<String> self, view<[byte]> substring) -> (uint32 idx, int32 err)
+func find(view<String> self, view<String> substring) -> (uint32 idx, int32 err)
+
+func find_next(view<String> self, byte needle, uint32 start_idx) -> (uint32 idx, int32 err)
+func find_next(view<String> self, view<[byte]> substring, uint32 start_idx) -> (uint32 idx, int32 err)
+func find_next(view<String> self, view<String> substring, uint32 start_idx) -> (uint32 idx, int32 err)
+
+func count(view<String> self, byte needle) -> uint32
+func count(view<String> self, view<[byte]> substring) -> uint32
+func count(view<String> self, view<String> substring) -> uint32
+
+func count_from(view<String> self, byte needle, uint32 start_idx) -> uint32
+func count_from(view<String> self, view<[byte]> substring, uint32 start_idx) -> uint32
+func count_from(view<String> self, view<String> substring, uint32 start_idx) -> uint32
+```
+
+`find` returns the first occurrence. `find_next` starts at `start_idx`
+(inclusive). Both return `(idx, err)`: `err` is `0` when found and `-1`
+when not found; `idx` is `0` on failure. An empty or null substring
+matches at index `0` for `find` and at `start_idx` for `find_next`; a
+`start_idx` greater than the string length reports not found.
+
+`count` counts occurrences; `count_from` starts at `start_idx`. Substring
+counts include overlapping occurrences. An empty or null substring occurs
+`length() + 1` times from index `0` (one occurrence per position,
+including the end).
+
+```franko
+std::String s
+s.from("a,b,,c,")
+(uint32 idx, int32 err) hit = s.find(44)       // (1, 0)
+hit = s.find("c,")                             // (5, 0)
+hit = s.find("zz")                             // (0, -1)
+print(s.count(44))                             // 4
+print(s.count_from(44, 4))                     // 2
+```
+
+### get and set
+
+```franko
+func get(view<String> self, uint32 idx) -> byte
+func set(mview<String> self, uint32 idx, byte value) -> void
+```
+
+`get` returns the byte at `idx`, or `0` for a null string or an
+out-of-range index. `set` writes the byte at `idx`; a null string or an
+out-of-range index is ignored. Callers that need strict bounds checking
+should test `length()` first.
+
+```franko
+std::String s
+s.from("abc")
+print(s.get(1))    // 98
+s.set(1, 66)       // "aBc"
+```
+
+### get_slice
+
+```franko
+func get_slice(view<String> self, uint32 start, uint32 end, ptr<String> out) -> int32
+func get_slice(view<String> self, uint32 start, uint32 end, ptr<[byte]> out) -> int32
+```
+
+Copies `[start, end)` (`end` exclusive) into `out`, completely replacing
+its contents. Returns `0` on success and `-1` for a null `out`, an
+invalid range, or an allocation failure. An empty slice clears `out`.
+Slicing a string into itself is safe.
+
+```franko
+std::String s
+s.from("abcdef")
+std::String part
+s.get_slice(1, 4, getptr(part))   // "bcd"
+[byte] bytes
+s.get_slice(2, 5, getptr(bytes))  // "cde"
+bytes.uninit()
+part.uninit()
+```
+
+### insert and erase
+
+```franko
+func insert(ptr<String> self, byte payload, uint32 idx) -> int32
+func insert(ptr<String> self, view<[byte]> payload, uint32 idx) -> int32
+func insert(ptr<String> self, view<String> payload, uint32 idx) -> int32
+
+func erase(mview<String> self, uint32 idx) -> int32
+func erase(mview<String> self, uint32 start, uint32 end) -> int32
+```
+
+`insert` inserts before `idx`; valid indices are `0` through
+`length()` inclusive. Returns `0` on success and `-1` for an invalid
+index, overflow, or allocation failure. Inserting an empty payload at a
+valid index is a successful no-op.
+
+`erase` removes the byte at `idx`, or the range `[start, end)`.
+Returns `0` on success and `-1` for an invalid index or range.
+
+```franko
+std::String s
+s.from("abcd")
+s.insert(45, 2)        // "ab-cd"
+s.insert("XY", 0)      // "XYab-cd"
+s.erase(0)             // "Yab-cd"
+s.erase(1, 3)          // "Y-cd"
+```
+
+### split and join
+
+```franko
+func split(view<String> self, byte splitter, ptr<StringList> out) -> int32
+func split(view<String> self, view<[byte]> splitter, ptr<StringList> out) -> int32
+func split(view<String> self, view<String> splitter, ptr<StringList> out) -> int32
+
+func join(ptr<String> self, view<StringList> in) -> int32
+func join(ptr<String> self, byte joiner, view<StringList> in) -> int32
+func join(ptr<String> self, view<[byte]> joiner, view<StringList> in) -> int32
+func join(ptr<String> self, view<String> joiner, view<StringList> in) -> int32
+```
+
+`split` completely replaces the live contents of `out` with the
+segments between splitter occurrences; the list buffer is reused.
+Leading, trailing, and consecutive delimiters produce empty segments. An empty or null splitter does not split: the whole string
+becomes the only segment. Returns `0` on success and `-1` for a null
+`out` or an allocation failure.
+
+`join` completely replaces `self` with the elements of `in`, separated
+by the joiner. The no-joiner form concatenates directly. A null list
+clears `self`; a null or empty joiner adds no separator. Returns `0` on
+success and `-1` on overflow or allocation failure. Joining a list that
+contains `self` is safe.
+
+```franko
+std::String text
+text.from("a,b,,c,")
+std::StringList parts
+text.split(44, getptr(parts))       // ["a", "b", "", "c", ""]
+
+std::String joined
+joined.join(44, getview(parts))     // "a,b,,c,"
+joined.join(getview(parts))         // "abc"
+```
+
+## StringList
+
+```franko
+struct StringList {
+    [String] data          // buffer; data.length() is capacity
+    uint32 data_size = 0   // number of live elements
+}
+```
+
+`StringList` is a dynamic array of `String` values with a reusable
+buffer. `data.length()` is the buffer capacity; `data_size` is the live
+element count and is what `length()` returns. The initial buffer is at
+least 128 elements; later growth is geometric (at least doubling), so
+repeated appends do not reallocate on every call.
+
+Every live element owns its own String buffer. `from` replaces the live
+contents and keeps the buffer; `uninit` frees every live element and the
+buffer.
+
+`StringList` is pointer-only for the same reason as `String`: it
+contains a dynamic array. Use `view<StringList>` for read-only
+parameters and `ptr<StringList>` for mutation.
+
+Passing a null view to `from` clears the live elements and keeps the
+buffer for reuse. Call `uninit()` to release the buffer.
+
+### StringList API
+
+```franko
+struct StringList { ... }
+
+func length(view<StringList> self) -> uint32
+func uninit(ptr<StringList> self) -> void
+
+func from(ptr<StringList> self, view<StringList> in) -> int32
+
+func append(ptr<StringList> self, view<[byte]> in) -> int32
+func append(ptr<StringList> self, view<String> in) -> int32
+
+func OPERATOR_ADDMOV(ptr<StringList> self, view<[byte]> other) -> void
+func OPERATOR_ADDMOV(ptr<StringList> self, view<String> other) -> void
+func OPERATOR_ADDMOV(ptr<StringList> self, view<view<[byte]>> other) -> void
+
+func find(view<StringList> self, view<String> needle) -> (uint32 idx, int32 err)
+func find(view<StringList> self, view<[byte]> needle) -> (uint32 idx, int32 err)
+func find_next(view<StringList> self, view<String> needle, uint32 start_idx) -> (uint32 idx, int32 err)
+func find_next(view<StringList> self, view<[byte]> needle, uint32 start_idx) -> (uint32 idx, int32 err)
+
+func count(view<StringList> self, view<String> needle) -> uint32
+func count(view<StringList> self, view<[byte]> needle) -> uint32
+func count_from(view<StringList> self, view<String> needle, uint32 start_idx) -> uint32
+func count_from(view<StringList> self, view<[byte]> needle, uint32 start_idx) -> uint32
+
+func get(view<StringList> self, uint32 idx, ptr<String> out) -> int32
+func get(view<StringList> self, uint32 idx, ptr<[byte]> out) -> int32
+
+func set(ptr<StringList> self, uint32 idx, view<String> value) -> int32
+func set(ptr<StringList> self, uint32 idx, view<[byte]> value) -> int32
+
+func insert(ptr<StringList> self, view<String> payload, uint32 idx) -> int32
+func insert(ptr<StringList> self, view<[byte]> payload, uint32 idx) -> int32
+
+func erase(ptr<StringList> self, uint32 idx) -> int32
+func erase(ptr<StringList> self, uint32 start, uint32 end) -> int32
+```
+
+### StringList methods
+
+- `length()` returns `data_size`, or `0` for a null list.
+- `uninit()` frees every live element and the backing buffer, returning
+  the list to the empty unallocated state.
+- `from` replaces every live element with a copy of another list's live
+  elements and keeps the buffer. A null input clears the list. Passing
+  the list's own view is a no-op.
+- `append` adds one element at the end, either from a byte array or
+  from another string. The `+=` operator calls `append` and ignores its
+  status. Use `append` for individual elements; use `from` to copy a
+  whole list.
+- `find`, `find_next`, `count`, and `count_from` compare whole elements,
+  not substrings. They use the same `(idx, err)` convention as String:
+  `err` is `0` when found and `-1` otherwise; `idx` is `0` on failure.
+- `get` copies element `idx` into `out`, completely replacing it.
+  Returns `0` on success and `-1` for a null destination or an
+  out-of-range index.
+- `set` replaces element `idx` with a copy of `value`.
+- `insert` inserts a new element before `idx`; valid indices are `0`
+  through `length()` inclusive.
+- `erase` removes one element or the range `[start, end)` and uninitializes
+  the dropped elements; the buffer is kept.
+- `StringList` has no `get_slice`.
+
+```franko
+std::StringList list
+list.append("aa")
+list.append("bb")
+list.append("aa")
+
+print(list.length())          // 3
+print(list.count("aa"))       // 2
+
+(uint32 idx, int32 err) hit = list.find_next("aa", 1)
+print(hit.idx)                // 2
+print(hit.err)                // 0
+
+std::String out
+list.get(1, getptr(out))      // "bb"
+out.uninit()
+
+list.set(1, "cc")
+list.insert("dd", 2)
+list.erase(0)
+print(list.length())          // 3
+
+list += "ee"                  // append through OPERATOR_ADDMOV
+print(list.length())          // 4
+
+view<std::StringList> empty = null
+list.from(empty)              // clear live elements, keep buffer
+print(list.length())          // 0
+list.uninit()                 // release the buffer
+```
+
 ## Operator methods
 
 `std::String` overloads comparison and assignment operators.
@@ -300,4 +724,10 @@ library_tests/string/basic/success/reserve/               // growth across 127/1
 library_tests/string/basic/success/utf8/                  // valid and invalid UTF-8 sequences
 library_tests/string/operators/success/comparisons/       // all six comparators, prefixes, empties
 library_tests/string/operators/success/assign_append_multiply/ // =, +=, *=, clear
+library_tests/string/methods/success/from_integer/        // all eight integer widths, signs, min/max
+library_tests/string/methods/success/to_integer/          // decimal/binary/hex parsing, minus signs, overflow
+library_tests/string/methods/success/find_count/          // find/find_next/count/count_from, all needle forms
+library_tests/string/methods/success/slice_edit/          // append/get_slice/insert/erase, aliasing, bounds
+library_tests/string/methods/success/split_join/          // split/join, empty and aliased separators
+library_tests/string/stringlist/success/basic/            // StringList from/append/find/get/set/insert/erase
 ```

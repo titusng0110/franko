@@ -2,37 +2,40 @@
 // LIBRARY TEST (io/read): read_line
 // ============================================================
 // stdin is "ab\ncd\n\nef" (9 bytes, no final newline). read_line
-// stores the line without its terminator and returns (val, err),
-// where val is the stored byte count:
-//   read_line -> 2, 0  ("ab"; the \n is consumed, not stored)
-//   read_line -> 2, 0  ("cd")
-//   read_line -> 0, 0  (empty line)
-//   read_line -> 2, 0  ("ef"; end of input without a terminator)
-//   read_line -> 0, 0  (end of input)
-// A zero val therefore means an empty line or end of input.
+// stores one line in a std::String, consumes the terminator, and
+// returns 0 on success:
+//   read_line -> 0  ("ab")
+//   read_line -> 0  ("cd")
+//   read_line -> 0  (empty line)
+//   read_line -> 0  ("ef"; end of input without a terminator)
+//   read_line -> 0  (end of input)
 // ============================================================
 
 import "franko/io"
-
-func show_read((int64 val, int32 err) result) -> void {
-    if (result.err != 0) {
-        print(result.err)
-    } else {
-        print(result.val)
-    }
-}
+import "franko/string"
 
 func main() -> int32 {
-    [byte] buf;
-    buf.init(8);
-    show_read(read_line(getmview(buf), 8));
-    print(buf[0], " "); print(buf[1]);
-    show_read(read_line(getmview(buf), 8));
-    print(buf[0], " "); print(buf[1]);
-    show_read(read_line(getmview(buf), 8));
-    show_read(read_line(getmview(buf), 8));
-    print(buf[0], " "); print(buf[1]);
-    show_read(read_line(getmview(buf), 8));
-    buf.uninit();
-    return 0;
+    std::String line
+    print(read_line(getptr(line)))
+    print(line.length())
+    print(getview(line))
+
+    print(read_line(getptr(line)))
+    print(line.length())
+    print(getview(line))
+
+    print(read_line(getptr(line)))
+    print(line.length())
+    print(getview(line))
+
+    print(read_line(getptr(line)))
+    print(line.length())
+    print(getview(line))
+
+    print(read_line(getptr(line)))
+    print(line.length())
+    print(getview(line))
+
+    line.uninit()
+    return 0
 }

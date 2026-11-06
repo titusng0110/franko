@@ -8,8 +8,11 @@ compares stdout against the matching `.expected` file.
 uv run python programs/run_programs.py
 ```
 
-Shared helper code lives in [`lib/text.fr`](lib/text.fr). It is imported
-with `import "./lib/text"` and is not compiled as a standalone test case.
+Each program is self-contained: there is no shared helper module. Text
+parsing and formatting use `franko/string` (`std::String`), with small
+local helpers embedded in the programs that need them. Token parsers use
+`std::String::to_int64` / `to_uint32`; text output uses `std::String`
+slices and `print`.
 
 ## Design notes
 
@@ -18,21 +21,23 @@ with `import "./lib/text"` and is not compiled as a standalone test case.
   cache entries) use `franko/pool` instead of linked `ptr<Node>` chains.
 - Ordinary struct methods are used where they make the code clearer; the
   examples do not build an inheritance or class hierarchy.
-- Text is processed as `[byte]` arrays and views. `franko/string` appears
-  only in `greetings.fr`; the rest of the suite uses the array intrinsics.
+- Text handling uses `franko/string`: stdin lines are read into fixed byte
+  buffers, then sliced into `std::String` tokens for parsing, matching,
+  and printing. Raw byte arrays and array intrinsics are still used for
+  binary formats and fixed-size input buffers.
 - Output is ASCII, LF-only, deterministic, and identical on every platform.
 
 ## Programs
 
 | Program | What it shows | Input |
 |---|---|---|
-| `greetings.fr` | stdin, `std::String` `from`/`+=` (the only string-library demo) | `.stdin` |
-| `ledger.fr` | enums, arrays of account/transaction data, `Money` operator methods, command parsing | `.stdin` |
-| `wordfreq.fr` | pool-backed trie, `[uint32, 26]` links, `[byte]` word paths, DFS | `.stdin` |
-| `calculator.fr` | tokenizer + recursive-descent parser, enums, tuples, error handling | `.stdin` |
-| `toposort.fr` | index-linked adjacency arrays, DFS colors, cycle detection | `.stdin` |
-| `dijkstra.fr` | weighted graph, array binary heap, enum node states, path reconstruction | `.stdin` |
-| `lru_cache.fr` | `SparseSetAllocator` entries, open-addressed key table, index-linked LRU list | `.stdin` |
+| `greetings.fr` | stdin, `std::String` `from`/`+=`, line trimming | `.stdin` |
+| `ledger.fr` | enums, arrays of account/transaction data, `Money` operator methods, `std::String` command parsing | `.stdin` |
+| `wordfreq.fr` | pool-backed trie, `[uint32, 26]` links, `std::String` word parsing, DFS | `.stdin` |
+| `calculator.fr` | tokenizer + recursive-descent parser, enums, tuples, `std::String` number parsing, error handling | `.stdin` |
+| `toposort.fr` | index-linked adjacency arrays, DFS colors, cycle detection, `std::String` token parsing | `.stdin` |
+| `dijkstra.fr` | weighted graph, array binary heap, enum node states, path reconstruction, `std::String` token parsing | `.stdin` |
+| `lru_cache.fr` | `SparseSetAllocator` entries, open-addressed key table, index-linked LRU list, `std::String` command parsing | `.stdin` |
 | `binary_codec.fr` | byte/bit/endian intrinsics, FNV-1a checksum, reflection, `#if` compile-time assertions | `.args` |
 | `life.fr` | nested enum grids, double buffering with `memcpy` | none |
 | `sudoku.fr` | nested static arrays, bitmask candidate elimination, recursive backtracking | `.stdin` |

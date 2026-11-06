@@ -992,11 +992,10 @@ public final class ExpressionAnalyzer {
         SastNode userArg;
 
         if (arg.isLiteral()) {
-            SastType inner =
-                    ((SastType) parameterType).referencedType;
+            SastType inner = parameterType.referencedType;
 
             SastNode literalValue = lowerArrayLiteral(
-                    (AstNode) rawValue,
+                    rawValue,
                     inner
             );
 

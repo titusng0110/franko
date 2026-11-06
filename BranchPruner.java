@@ -77,7 +77,7 @@ final class BranchPruner {
                 document.entryKind,
                 document.sources,
                 document.symbols,
-                (SastNode) pruneItem(document.root)
+                pruneItem(document.root)
         );
     }
 
@@ -121,8 +121,7 @@ final class BranchPruner {
 
             for (int i = 0; i < node.methods.size(); i++) {
                 SastNode method = node.methods.get(i);
-                SastNode pruned =
-                        (SastNode) pruneItem(method);
+                SastNode pruned = pruneItem(method);
 
                 if (methods == null && pruned != method) {
                     methods = new ArrayList<>(node.methods.subList(0, i));

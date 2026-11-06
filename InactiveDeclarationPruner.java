@@ -32,7 +32,7 @@ final class InactiveDeclarationPruner {
                 document.entryKind,
                 document.sources,
                 document.symbols,
-                (SastNode) prune(document.root)
+                prune(document.root)
         );
     }
 
@@ -431,8 +431,7 @@ final class InactiveDeclarationPruner {
                     continue;
                 }
 
-                SastNode rebuilt =
-                        (SastNode) rebuildItem(method);
+                SastNode rebuilt = rebuildItem(method);
 
                 if (methods == null && rebuilt != method) {
                     methods = new ArrayList<>(node.methods.subList(0, i));

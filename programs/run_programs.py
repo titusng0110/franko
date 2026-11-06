@@ -7,8 +7,8 @@ command works on every platform:
     uv run python programs/run_programs.py
 
 Compiles every top-level program in programs/, runs it, and compares its
-stdout against the checked-in <program>.expected file. Shared helpers live
-under programs/lib/ and are imported by those programs, not run as cases.
+stdout against the checked-in <program>.expected file. Programs are
+self-contained; no shared helper directory is scanned.
 
 Every top-level program in programs/ is a positive test. Negative checker
 tests live in language_tests/ and are intentionally not part of this smoke
