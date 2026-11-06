@@ -221,6 +221,54 @@ class FieldSymbol {
     }
 }
 
+final class EnumVariant {
+    final String name;
+    final BigInteger value;
+
+    EnumVariant(String name, BigInteger value) {
+        this.name = Objects.requireNonNull(name);
+        this.value = Objects.requireNonNull(value);
+    }
+}
+
+final class EnumSymbol {
+    final String name;
+    final String namespace;
+    final SemanticPrimitiveKind backingKind;
+    final List<EnumVariant> variants;
+
+    EnumSymbol(String name, String namespace, SemanticPrimitiveKind backingKind, List<EnumVariant> variants) {
+        this.name = Objects.requireNonNull(name);
+        this.namespace = namespace;
+        this.backingKind = Objects.requireNonNull(backingKind);
+        this.variants = List.copyOf(variants);
+    }
+
+    public String qualifiedName() {
+        return namespace == null ? name : namespace + "::" + name;
+    }
+
+    public EnumVariant resolveVariant(String variantName) {
+        for (EnumVariant variant : variants) {
+            if (variant.name.equals(variantName)) {
+                return variant;
+            }
+        }
+
+        return null;
+    }
+
+    public EnumVariant variantWithValue(BigInteger value) {
+        for (EnumVariant variant : variants) {
+            if (variant.value.equals(value)) {
+                return variant;
+            }
+        }
+
+        return null;
+    }
+}
+
 class StructSymbol {
     final String name;
     final List<FieldSymbol> fields;
@@ -296,6 +344,7 @@ class NamespaceSymbol {
     final Map<String, NamespaceSymbol> children = new LinkedHashMap<>();
 
     final Map<String, StructSymbol> structs = new LinkedHashMap<>();
+    final Map<String, EnumSymbol> enums = new LinkedHashMap<>();
     final Map<String, List<FunctionSymbol>> functions = new LinkedHashMap<>();
     final Map<String, VariableSymbol> globalVariables = new LinkedHashMap<>();
 

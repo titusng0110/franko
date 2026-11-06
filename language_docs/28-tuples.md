@@ -223,6 +223,7 @@ A tuple is assignable as a whole only when every element is an assignable
 value type:
 
 - primitive integer;
+- enum;
 - pointer;
 - struct whose fields are all assignable;
 - another assignable tuple.
@@ -292,6 +293,7 @@ Rules:
 
 - tuples may nest;
 - a tuple may contain structs;
+- a tuple may contain enums;
 - a tuple may be an array element or a pointer referent;
 - a struct may have a tuple field;
 - a tuple element may itself be a static or dynamic array, but then the tuple
@@ -325,7 +327,7 @@ print(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
 `#what_type` prints the canonical tuple form `(int32,int32)` with element
-names removed and no spaces after commas. See [Compile-Time Reflection](33-compile-time-reflection.md).
+names removed and no spaces after commas. See [Compile-Time Reflection](34-compile-time-reflection.md).
 
 ---
 

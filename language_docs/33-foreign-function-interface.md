@@ -1,4 +1,4 @@
-# 32. Foreign Function Interface
+# 33. Foreign Function Interface
 
 Franko has no general native-call syntax. Instead, a Franko module can
 declare that some of its functions are implemented by a C++ bridge. The
@@ -26,7 +26,7 @@ import "lib/mathx"
 
 The compiler discovers `mathx.module.json` next to the resolved `mathx.fr`.
 
-## 32.1 Module Descriptor
+## 33.1 Module Descriptor
 
 The descriptor lists only the functions that are bridged:
 
@@ -56,7 +56,7 @@ The descriptor lists only the functions that are bridged:
   target-dependent constants. Platform selection is ordinary Franko code
   using `#if` and the built-in `#IS_*` target constants.
 
-## 32.2 Target Selection
+## 33.2 Target Selection
 
 Target-specific FFI calls are guarded with `#if`:
 
@@ -73,11 +73,11 @@ not need to exist on the current target, so the module does not need
 target filters. `franko/os` itself declares `os::posix` only for
 linux/macos and `os::win32` only for Windows, so off-target FFI functions
 are absent from the symbol table entirely. See
-[Compile-Time Reflection](33-compile-time-reflection.md).
+[Compile-Time Reflection](34-compile-time-reflection.md).
 
 An unguarded off-target call still fails when building for that target.
 
-## 32.3 Bridge Blocks
+## 33.3 Bridge Blocks
 
 The bridge file is split into named blocks:
 
@@ -125,7 +125,7 @@ Rules:
 - Merely importing a module with a bridge adds no C++ unless a bridged
   function is actually used.
 
-## 32.4 The Bundled `franko/os` Module
+## 33.4 The Bundled `franko/os` Module
 
 `franko/os` is Franko's standard FFI module. It ships
 `import/franko/os.module.json` and `import/franko/os.ffi.cpp` alongside
@@ -133,7 +133,7 @@ Rules:
 [`franko/os`](../library_docs/os.md). It uses the same descriptor and
 bridge rules described above.
 
-## 32.5 Failure Modes
+## 33.5 Failure Modes
 
 The compiler rejects an FFI module when:
 

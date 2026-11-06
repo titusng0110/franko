@@ -30,15 +30,19 @@ unsafe_cast<int32>(big)
 ```
 
 `cast<T>` accepts a full type as its target: one of the eight primitive
-integer types, or a pointer type (`ptr<T>`, `mview<T>`, `view<T>`).
-Arrays, structs, and `void` are rejected at check time. The operand must
-match the target category: an integer expression for integer targets, a
-pointer or `null` for pointer targets.
+integer types, an enum type, or a pointer type (`ptr<T>`, `mview<T>`,
+`view<T>`). Arrays, structs, tuples, and `void` are rejected at check
+time. The operand must match the target category: an integer expression
+for integer targets, an enum value for enum targets, a pointer or
+`null` for pointer targets.
 
-`unsafe_cast<T>` is restricted to the eight primitive integer types
-(`int8` … `uint64`, including the `int` / `uint` / `byte` aliases);
-a pointer target does not parse. The operand must be an integer
-expression.
+`unsafe_cast<T>` accepts a full type as its target: one of the eight
+primitive integer types (`int8` … `uint64`, including the `int` /
+`uint` / `byte` aliases) or an enum type. Array, struct, tuple,
+pointer, and `void` targets are rejected at check time. The operand
+must be an integer expression, except that an integer-to-enum
+conversion requires `unsafe_cast` and an enum source converts to an
+integer target.
 
 A cast is never an lvalue:
 
@@ -93,7 +97,27 @@ Writing `cast<T>` where the conversion can lose data is a compile error
 that points at `unsafe_cast<T>`: the two spellings keep the dangerous
 conversions visibly marked at every call site.
 
-## 12.4 Constant Casts
+## 12.4 Enum Casts
+
+Enums convert to and from raw integers with the same strict split.
+See [Enums](30-enums.md) for the complete rules.
+
+| Source | Target | `cast` | `unsafe_cast` |
+|---|---|---|---|
+| enum | exact backing integer | allowed | allowed |
+| enum | strictly wider compatible integer | allowed | allowed |
+| enum | narrower / signedness-incompatible integer | error, suggest `unsafe_cast` | allowed, runtime-checked |
+| enum | another enum | error | error |
+| integer | enum | error, suggest `unsafe_cast` | allowed, runtime-checked |
+| integer | integer | widening rule | checked conversion |
+| pointer | pointer | permission rules | error |
+| anything else | anything else | rejected | rejected |
+
+Enum-related conversions are always runtime-checked, even for constant
+values known to be invalid: `unsafe_cast<BigState>(999)` compiles and
+aborts at runtime instead of failing at compile time.
+
+## 12.5 Constant Casts
 
 A conversion of a folded constant expression is validated at compile
 time: the value must fit the target type or compilation fails. There is
@@ -104,7 +128,7 @@ uint8 ok = unsafe_cast<uint8>(200);    // valid
 uint8 bad = unsafe_cast<uint8>(300);   // invalid: 300 does not fit uint8
 ```
 
-## 12.5 Pointer Permission Casts
+## 12.6 Pointer Permission Casts
 
 `cast<T>` with a pointer target is an explicit **permission downgrade**
 (see [Pointers](25-pointers.md)): the referenced type must stay
@@ -150,7 +174,7 @@ new array object is created.
 
 Raw integers can never be converted to pointers.
 
-## 12.6 What Casts Do Not Cover
+## 12.7 What Casts Do Not Cover
 
 - A tuple type can be written as a cast target because `cast<T>` accepts a full type, but tuple casts are rejected: `cast<(int32, int32)>(x)` is a compile error. Tuples have no conversion operations.
 - Casts do not appear in constant-expression slots (static array

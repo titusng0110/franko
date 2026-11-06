@@ -41,6 +41,10 @@ final class DeclarationSelector {
             new IdentityHashMap<>();
     private final Map<StructDeclNode, Scope> structScopes =
             new IdentityHashMap<>();
+    private final Map<EnumDeclNode, EnumSymbol> enumSymbols =
+            new IdentityHashMap<>();
+    private final Map<EnumDeclNode, Scope> enumScopes =
+            new IdentityHashMap<>();
     private final Set<ASTNode> registeredMembers =
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<GlobalVarDeclNode> registeredGlobals =
@@ -115,6 +119,8 @@ final class DeclarationSelector {
                 preRegisterShells(n.items, child);
             } else if (item instanceof StructDeclNode s) {
                 registerStructShell(s, scope);
+            } else if (item instanceof EnumDeclNode e) {
+                registerEnumShell(e, scope);
             }
         }
     }
@@ -175,6 +181,123 @@ final class DeclarationSelector {
         structSymbols.put(node, symbol);
         structScopes.put(node, scope);
         return symbol;
+    }
+
+    private EnumSymbol registerEnumShell(
+            EnumDeclNode node,
+            Scope scope
+    ) {
+        ctx.setCurrentNamespace(scope.symbol);
+
+        EnumSymbol existing = enumSymbols.get(node);
+
+        if (existing != null) {
+            return existing;
+        }
+
+        String namespaceName = scope.symbol == null
+                ? null
+                : scope.symbol.name;
+        EnumSymbol symbol = buildEnumSymbolQuiet(node, namespaceName);
+
+        if (!ctx.declareEnum(symbol)) {
+            EnumSymbol resolved = ctx.resolveEnumIn(scope.symbol, node.name);
+
+            if (resolved != null) {
+                symbol = resolved;
+            }
+        }
+
+        enumSymbols.put(node, symbol);
+        enumScopes.put(node, scope);
+        return symbol;
+    }
+
+    private EnumSymbol buildEnumSymbolQuiet(EnumDeclNode node, String namespaceName) {
+        SemanticPrimitiveKind backingKind = SemanticPrimitiveKind.INT32;
+
+        if (node.backingType instanceof PrimitiveTypeNode p) {
+            try {
+                backingKind = SemanticPrimitiveKind.valueOf(p.kind.name());
+            } catch (IllegalArgumentException ignored) {
+                backingKind = SemanticPrimitiveKind.INT32;
+            }
+        }
+
+        if (node.variants.isEmpty()) {
+            return new EnumSymbol(node.name, namespaceName, backingKind, List.of());
+        }
+
+        java.util.Set<String> seenNames = new java.util.HashSet<>();
+        List<EnumVariantNode> uniqueVariants = new ArrayList<>();
+
+        for (EnumVariantNode variant : node.variants) {
+            if (!seenNames.add(variant.name)) {
+                continue;
+            }
+
+            uniqueVariants.add(variant);
+        }
+
+        int explicitCount = 0;
+
+        for (EnumVariantNode variant : uniqueVariants) {
+            if (variant.constInitializer != null) {
+                explicitCount++;
+            }
+        }
+
+        boolean allExplicit = explicitCount == uniqueVariants.size();
+        List<EnumVariant> computed = new ArrayList<>();
+
+        if (allExplicit) {
+            for (EnumVariantNode variant : uniqueVariants) {
+                BigInteger value = parseEnumVariantValueQuiet(variant);
+                computed.add(new EnumVariant(variant.name, value));
+            }
+        } else {
+            BigInteger previous = null;
+
+            for (EnumVariantNode variant : uniqueVariants) {
+                BigInteger value;
+
+                if (variant.constInitializer != null) {
+                    value = parseEnumVariantValueQuiet(variant);
+                } else if (previous == null) {
+                    value = TypeChecker.wrapBigIntegerToPrimitive(BigInteger.ZERO, backingKind);
+                } else {
+                    value = TypeChecker.wrapBigIntegerToPrimitive(previous.add(BigInteger.ONE), backingKind);
+                }
+
+                computed.add(new EnumVariant(variant.name, value));
+                previous = value;
+            }
+        }
+
+        return new EnumSymbol(node.name, namespaceName, backingKind, computed);
+    }
+
+    private static BigInteger parseEnumVariantValueQuiet(EnumVariantNode variant) {
+        if (variant.constInitializer instanceof IntNode n) {
+            try {
+                BigInteger parsed = ConstExpressionEvaluator.parseIntegerLiteralPure(n.value);
+
+                if (parsed != null) {
+                    return parsed;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (variant.constInitializer != null) {
+            BigInteger folded = ConstExpressionEvaluator.tryFold(variant.constInitializer);
+
+            if (folded != null) {
+                return folded;
+            }
+        }
+
+        return BigInteger.ZERO;
     }
 
     private void registerUnconditionalMembers(
@@ -428,6 +551,12 @@ final class DeclarationSelector {
 
                 processStruct(struct);
                 out.add(selectedStructs.get(struct));
+                continue;
+            }
+
+            if (item instanceof EnumDeclNode enumDecl) {
+                registerEnumShell(enumDecl, scope);
+                out.add(enumDecl);
                 continue;
             }
 

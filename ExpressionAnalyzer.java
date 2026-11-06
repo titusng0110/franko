@@ -360,9 +360,22 @@ public final class ExpressionAnalyzer {
                 );
             }
 
+            boolean targetIsEnum = targetType instanceof SemanticEnumType;
+            boolean sourceIsEnum = expr.type instanceof SemanticEnumType;
+
+            if (targetIsEnum || sourceIsEnum) {
+                return new SemanticCastExprNode(
+                        node.span,
+                        targetType,
+                        null,
+                        expr,
+                        n.unsafe
+                );
+            }
+
             if (n.unsafe
-                    && (!(targetType instanceof SemanticPrimitiveType)
-                        || !(expr.type instanceof SemanticPrimitiveType))) {
+                    && (targetType instanceof SemanticPrimitiveType)
+                    && !(expr.type instanceof SemanticPrimitiveType)) {
                 ctx.error("Operand of 'unsafe_cast' must be an integer "
                         + "expression, got " + expr.type.describe());
 
@@ -1019,6 +1032,12 @@ public final class ExpressionAnalyzer {
     }
 
     private SemanticExprNode analyzeQualifiedNameExpr(QualifiedNameNode q) {
+        SemanticExprNode enumVariant = tryAnalyzeEnumVariant(q);
+
+        if (enumVariant != null) {
+            return enumVariant;
+        }
+
         List<String> namespaceSegments =
                 q.segments.subList(0, q.segments.size() - 1);
         String name = q.segments.get(q.segments.size() - 1);
@@ -1065,6 +1084,39 @@ public final class ExpressionAnalyzer {
         }
 
         return new SemanticVarExprNode(q.span, sym.type, sym);
+    }
+
+    private SemanticExprNode tryAnalyzeEnumVariant(QualifiedNameNode q) {
+        if (q.segments.size() < 2) {
+            return null;
+        }
+
+        List<String> enumPath = q.segments.subList(0, q.segments.size() - 1);
+        String variantName = q.segments.get(q.segments.size() - 1);
+        EnumSymbol enumSymbol = ctx.resolveEnumReference(enumPath);
+
+        if (enumSymbol == null) {
+            return null;
+        }
+
+        EnumVariant variant = enumSymbol.resolveVariant(variantName);
+
+        if (variant == null) {
+            ctx.error("Enum '" + enumSymbol.qualifiedName() + "' has no variant named '" + variantName + "'");
+
+            if (!enumSymbol.variants.isEmpty()) {
+                return new SemanticEnumVariantNode(q.span, enumSymbol, enumSymbol.variants.get(0));
+            }
+
+            return new SemanticIntLiteralNode(
+                    q.span,
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        return new SemanticEnumVariantNode(q.span, enumSymbol, variant);
     }
 
     private List<CallArg> lowerCallArgs(List<ASTNode> rawArgs) {

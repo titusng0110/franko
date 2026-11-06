@@ -1,0 +1,16 @@
+enum<int32> A {
+    a
+}
+
+enum<int32> B {
+    b
+}
+
+func main() -> int32 {
+    A x = A::a;
+    B y = B::b;
+    if (x == y) {
+        return 1;
+    }
+    return 0;
+}

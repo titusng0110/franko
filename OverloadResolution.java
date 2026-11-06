@@ -466,7 +466,8 @@ final class OverloadResolution {
             return true;
         }
 
-        return elementShape instanceof SemanticPrimitiveType;
+        return elementShape instanceof SemanticPrimitiveType
+                || elementShape instanceof SemanticEnumType;
     }
 
     static <T> List<T> preferExactPermissionMatches(

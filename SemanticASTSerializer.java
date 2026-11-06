@@ -106,6 +106,11 @@ public final class SemanticASTSerializer {
             return;
         }
 
+        if (node instanceof SemanticEnumDeclNode enumDecl) {
+            registry.register(enumDecl.symbol);
+            return;
+        }
+
         if (node instanceof SemanticFunctionDeclNode function) {
             registerFunction(function, registry);
             return;
@@ -258,6 +263,13 @@ public final class SemanticASTSerializer {
                 registry.register(field.field);
                 registerFromExpr(field.value, registry);
             }
+
+            return;
+        }
+
+        if (expr instanceof SemanticEnumVariantNode enumVariant) {
+            registry.register(enumVariant.enumSymbol);
+            return;
         }
     }
 
@@ -350,6 +362,22 @@ public final class SemanticASTSerializer {
             if (struct.isTuple) {
                 obj.put("tuple", true);
             }
+        } else if (symbol instanceof EnumSymbol enumSymbol) {
+            obj.put("kind", "enum");
+            obj.put("name", enumSymbol.name);
+            obj.put("namespace", enumSymbol.namespace);
+            obj.put("backing", enumSymbol.backingKind.name());
+
+            JsonArray variants = new JsonArray();
+
+            for (EnumVariant variant : enumSymbol.variants) {
+                JsonObject variantObj = new JsonObject();
+                variantObj.put("name", variant.name);
+                variantObj.put("value", variant.value.toString(10));
+                variants.add(variantObj);
+            }
+
+            obj.put("variants", variants);
         } else if (symbol instanceof FieldSymbol field) {
             obj.put("kind", "field");
             obj.put("name", field.name);
@@ -442,6 +470,28 @@ public final class SemanticASTSerializer {
                     );
                     registry.registerWithId(id, struct);
                     structShells.put(id, obj);
+                }
+                case "enum" -> {
+                    SemanticPrimitiveKind backing = SemanticPrimitiveKind.valueOf(
+                            obj.requireString("backing")
+                    );
+                    List<EnumVariant> variants = new ArrayList<>();
+
+                    for (JsonValue variantValue : obj.requireArray("variants").values()) {
+                        JsonObject variantObj = JsonAstSupport.requireObject(variantValue, "enum variant");
+                        variants.add(new EnumVariant(
+                                variantObj.requireString("name"),
+                                new java.math.BigInteger(variantObj.requireString("value"))
+                        ));
+                    }
+
+                    EnumSymbol enumSymbol = new EnumSymbol(
+                            obj.requireString("name"),
+                            obj.optString("namespace"),
+                            backing,
+                            variants
+                    );
+                    registry.registerWithId(id, enumSymbol);
                 }
                 case "field" -> pendingFields.put(id, obj);
                 case "parameter" -> pendingParameters.put(id, obj);
@@ -659,6 +709,9 @@ public final class SemanticASTSerializer {
         } else if (type instanceof SemanticStructType struct) {
             obj.put("type", "struct");
             obj.put("symbol", registry.idFor(struct.structSymbol));
+        } else if (type instanceof SemanticEnumType enumType) {
+            obj.put("type", "enum");
+            obj.put("symbol", registry.idFor(enumType.enumSymbol));
         } else if (type instanceof SemanticTupleType tuple) {
             obj.put("type", "tuple");
             obj.put("symbol", registry.idFor(tuple.cppSymbol));
@@ -724,6 +777,9 @@ public final class SemanticASTSerializer {
             case "null" -> new SemanticNullType();
             case "struct" -> new SemanticStructType(
                     (StructSymbol) registry.require(obj.requireString("symbol"))
+            );
+            case "enum" -> new SemanticEnumType(
+                    (EnumSymbol) registry.require(obj.requireString("symbol"))
             );
             case "tuple" -> {
                 StructSymbol cppSymbol = (StructSymbol) registry.require(
@@ -817,6 +873,9 @@ public final class SemanticASTSerializer {
             obj.put("node", "structDecl");
             obj.put("symbol", registry.idFor(struct.symbol));
             obj.put("methods", nodeArray(struct.methods, registry));
+        } else if (node instanceof SemanticEnumDeclNode enumDecl) {
+            obj.put("node", "enumDecl");
+            obj.put("symbol", registry.idFor(enumDecl.symbol));
         } else if (node instanceof SemanticBlockNode block) {
             obj.put("node", "block");
             obj.put("statements", nodeArray(block.statements, registry));
@@ -918,6 +977,10 @@ public final class SemanticASTSerializer {
             obj.put("node", "cast");
             obj.put("checked", cast.checked);
             obj.put("expr", nodeToJson(cast.expr, registry));
+        } else if (expr instanceof SemanticEnumVariantNode enumVariant) {
+            obj.put("node", "enumVariant");
+            obj.put("enum", registry.idFor(enumVariant.enumSymbol));
+            obj.put("variant", enumVariant.variant.name);
         } else if (expr instanceof SemanticAggregateLiteralNode aggregate) {
             obj.put("node", "aggregateLiteral");
 
@@ -1014,6 +1077,10 @@ public final class SemanticASTSerializer {
                     (StructSymbol) registry.require(obj.requireString("symbol")),
                     methodNodesFromArray(obj.requireArray("methods"), registry, sources)
             );
+            case "enumDecl" -> new SemanticEnumDeclNode(
+                    span,
+                    (EnumSymbol) registry.require(obj.requireString("symbol"))
+            );
             case "block" -> new SemanticBlockNode(
                     span,
                     stmtNodesFromArray(
@@ -1108,7 +1175,7 @@ public final class SemanticASTSerializer {
             case "intLiteral", "nullLiteral", "varExpr", "unaryOp", "binOp",
                     "arrayAccess", "memberAccess", "functionCall",
                     "arrayIntrinsicCall", "getPtr", "deref", "cast",
-                    "aggregateLiteral" -> true;
+                    "aggregateLiteral", "enumVariant" -> true;
             default -> false;
         };
     }
@@ -1233,6 +1300,23 @@ public final class SemanticASTSerializer {
                     ),
                     obj.requireBool("checked")
             );
+            case "enumVariant" -> {
+                EnumSymbol enumSymbol = (EnumSymbol) registry.require(obj.requireString("enum"));
+                String variantName = obj.requireString("variant");
+                EnumVariant variant = enumSymbol.resolveVariant(variantName);
+
+                if (variant == null && !enumSymbol.variants.isEmpty()) {
+                    variant = enumSymbol.variants.get(0);
+                }
+
+                if (variant == null) {
+                    throw new IllegalArgumentException(
+                            "Unknown enum variant '" + variantName + "' for enum '" + enumSymbol.qualifiedName() + "'"
+                    );
+                }
+
+                yield new SemanticEnumVariantNode(span, enumSymbol, variant);
+            }
             case "aggregateLiteral" -> {
                 List<SemanticAggregateFieldInit> fields = new ArrayList<>();
 

@@ -122,6 +122,11 @@ public class Desugarer {
             return;
         }
 
+        if (item instanceof EnumDeclNode) {
+            out.add(desugarEnumDecl((EnumDeclNode) item));
+            return;
+        }
+
         if (item instanceof GlobalVarDeclNode) {
             out.add(desugarGlobalVarDecl((GlobalVarDeclNode) item));
             return;
@@ -227,6 +232,23 @@ public class Desugarer {
         }
 
         return new StructDeclNode(n.span, n.name, fields, methods, members);
+    }
+
+    private EnumDeclNode desugarEnumDecl(EnumDeclNode n) {
+        TypeNode backing = desugarType(n.backingType);
+        List<EnumVariantNode> variants = new ArrayList<>();
+
+        for (EnumVariantNode variant : n.variants) {
+            ASTNode folded = null;
+
+            if (variant.constInitializer != null) {
+                folded = evalConstExpr(variant.constInitializer, "enum variant value");
+            }
+
+            variants.add(new EnumVariantNode(variant.span, variant.name, folded));
+        }
+
+        return new EnumDeclNode(n.span, n.name, backing, variants);
     }
 
     private GlobalVarDeclNode desugarGlobalVarDecl(GlobalVarDeclNode n) {

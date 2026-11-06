@@ -1,19 +1,22 @@
-# 35. Naming Conventions
+# 36. Naming Conventions
 
 Franko does not require particular spellings for user-defined names, but
 consistent names make programs easier to read and make the standard library
 easier to navigate. The conventions in this chapter are the recommended style
 for Franko code.
 
-Only the private-member and namespace-internal access rules in §34.7 produce
+Only the private-member and namespace-internal access rules in §4.8 produce
 compiler warnings. The other conventions in this chapter are style guidance.
 
-## 35.1 Summary
+## 36.1 Summary
 
 | Item | Convention | Examples |
 |---|---|---|
 | Struct | `CapitalLetterCamelCase` | `BigInteger`, `Point`, `SparseSetAllocator` |
 | Internal struct | `__` + `CapitalLetterCamelCase` | `__SecretStruct` |
+| Enum | `CapitalLetterCamelCase` | `Status`, `AiState`, `NetworkState` |
+| Internal enum | `__` + `CapitalLetterCamelCase` | `__SecretState` |
+| Enum variant | `camelCaseStartingWithLowerCaseLetter` | `Types::type1`, `Types::complexType` |
 | Function | `lower_case_snake_case` | `read_line`, `new_index` |
 | Method | `lower_case_snake_case` | `write_active_indices`, `get_capacity` |
 | Private method | `_` + `lower_case_snake_case` | `_secret_function` |
@@ -26,7 +29,7 @@ compiler warnings. The other conventions in this chapter are style guidance.
 | Private member constant | `_` + `ALL_CAPS_WITH_UNDERSCORES` | `_END`, `_ALLOCATED` |
 | Internal constant | `__` + `ALL_CAPS_WITH_UNDERSCORES` | `__SECRET_CONSTANT` |
 
-## 35.2 Structs
+## 36.2 Structs
 
 Struct names use `CapitalLetterCamelCase`:
 
@@ -52,7 +55,7 @@ namespace bignum {
 }
 ```
 
-## 35.3 Functions and Methods
+## 36.3 Functions and Methods
 
 Function and method names use `lower_case_snake_case`:
 
@@ -112,7 +115,7 @@ uppercase, and not renamed to snake case. They are reserved for struct
 operator methods and rejected on free functions. See
 [Operator Methods](27-methods.md#2710-operator-methods).
 
-## 35.4 Variables and Fields
+## 36.4 Variables and Fields
 
 Variable and field names use `lower_case_snake_case`:
 
@@ -136,7 +139,7 @@ struct Buffer {
 }
 ```
 
-## 35.5 Namespaces
+## 36.5 Namespaces
 
 Namespace names should be short, lowercase, and free of underscores. When a
 name really needs two words, concatenate them instead of inserting an
@@ -156,7 +159,7 @@ namespace os::win32 {
 Use `bignum::BigInteger` and `os::win32`, not `big_num::BigInteger` or
 `os::win_32`.
 
-## 35.6 Constants
+## 36.6 Constants
 
 Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`:
 
@@ -179,14 +182,14 @@ An internal constant adds the two-underscore prefix:
 int32 __SECRET_CONSTANT = 42
 ```
 
-## 35.7 Private and Internal Prefixes
+## 36.7 Private and Internal Prefixes
 
 Underscore prefixes communicate visibility:
 
 - one leading underscore `_` marks a private struct member: `_secret_field`,
   `_secret_function`, `_capacity`, `_END`;
 - two leading underscores `__` mark a namespace-internal declaration:
-  `__private_helper`, `__SecretStruct`, `__SECRET_CONSTANT`.
+  `__private_helper`, `__SecretStruct`, `__SecretState`, `__SECRET_CONSTANT`.
 
 The prefix composes with the base convention for the kind of declaration. For
 example, a private field uses snake case after `_`, while an internal struct
@@ -214,14 +217,14 @@ The compiler currently warns about the following public accesses:
 
 - accessing a field or method whose name starts with `_` from outside its
   declaring struct;
-- calling a free function or naming a struct whose name starts with `__` from
-  outside its declaring namespace.
+- calling a free function or naming a struct or enum whose name starts
+  with `__` from outside its declaring namespace.
 
 See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) for the
 exact access rules. These warnings do not reject the program. Other naming
 conventions in this chapter are not enforced by the compiler.
 
-## 35.8 Standard Library Imports
+## 36.8 Standard Library Imports
 
 The compiler's bundled standard library is stored under `./import/franko/`.
 The import prefix `franko/` is reserved for those standard modules:
@@ -243,13 +246,14 @@ import "myproject/my_module"
 
 See [Source Files](02-source-files.md) for the import search rules.
 
-## 35.9 Compiler-Enforced Rules
+## 36.9 Compiler-Enforced Rules
 
 The naming conventions are mostly documentation and style. The compiler only
 enforces the access restrictions for the reserved prefixes:
 
 - `_`-prefixed fields and methods are private to their struct;
-- `__`-prefixed free functions and structs are internal to their namespace.
+- `__`-prefixed free functions, structs, and enums are internal to their
+  namespace.
 
 The struct casing, function and variable casing, namespace spelling, constant
 casing, and `franko/` import reservation are conventions that should be

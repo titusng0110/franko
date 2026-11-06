@@ -116,6 +116,15 @@ class SemanticStructDeclNode extends SemanticASTNode {
     }
 }
 
+class SemanticEnumDeclNode extends SemanticASTNode {
+    public final EnumSymbol symbol;
+
+    public SemanticEnumDeclNode(SourceSpan span, EnumSymbol symbol) {
+        super(span);
+        this.symbol = Objects.requireNonNull(symbol);
+    }
+}
+
 class SemanticVarDeclNode extends SemanticStmtNode {
     public final VariableSymbol symbol;
     public final BigInteger foldedConstInitializer;
@@ -723,6 +732,26 @@ class SemanticVarExprNode extends SemanticExprNode {
     @Override
     public boolean isLValue() {
         return true;
+    }
+}
+
+class SemanticEnumVariantNode extends SemanticExprNode {
+    public final EnumSymbol enumSymbol;
+    public final EnumVariant variant;
+
+    public SemanticEnumVariantNode(
+            SourceSpan span,
+            EnumSymbol enumSymbol,
+            EnumVariant variant
+    ) {
+        super(span, new SemanticEnumType(enumSymbol), null);
+        this.enumSymbol = Objects.requireNonNull(enumSymbol);
+        this.variant = Objects.requireNonNull(variant);
+    }
+
+    @Override
+    public boolean isLValue() {
+        return false;
     }
 }
 

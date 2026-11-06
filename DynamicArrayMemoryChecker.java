@@ -798,7 +798,8 @@ public final class DynamicArrayMemoryChecker {
         private void checkExprInner(SemanticExprNode expression) {
             if (expression instanceof SemanticIntLiteralNode
                     || expression instanceof SemanticNullLiteralNode
-                    || expression instanceof SemanticVarExprNode) {
+                    || expression instanceof SemanticVarExprNode
+                    || expression instanceof SemanticEnumVariantNode) {
                 return;
             }
 

@@ -49,26 +49,29 @@ Franko is a small statically typed language with:
   initializers (see [Aggregate Literals](29-aggregate-literals.md));
 - struct operator overloading for comparisons and assignments through
   reserved `OPERATOR_*` methods (see [Operators](13-operators.md#1310-struct-operator-overloading));
+- enums as nominal types backed by primitive integers, with
+  `==`, `!=`, ordering, assignment, `cast`/`unsafe_cast` conversions,
+  and `#is_enum` (see [Enums](30-enums.md));
 - compile-time reflection:
   - `#if` / `#else` compile-time conditionals in statements and at
     global, namespace, and struct declaration level;
   - target constants `#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`,
     `#IS_X86_64`, and `#IS_ARM64`;
-  - type predicates such as `#has_default_value`, `#is_memcpy_safe`, and
-    `#is_same_type`, accepting either a type or a value;
+  - type predicates such as `#has_default_value`, `#is_memcpy_safe`,
+    `#is_same_type`, and `#is_enum`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
   - compile-time strings with `#strcat`, `#strcmp`, and `#panic`
-    (see [Compile-Time Reflection](33-compile-time-reflection.md));
+    (see [Compile-Time Reflection](34-compile-time-reflection.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));
 - FFI modules described by sidecar manifests and C++ bridge blocks (see
-  [Foreign Function Interface](32-foreign-function-interface.md));
+  [Foreign Function Interface](33-foreign-function-interface.md));
 - standard modules including `franko/io`, `franko/os`, `franko/pool`,
   `franko/limit`, and `franko/string`;
 - compiler checks for pointer null state, dangling frame pointers, dynamic
   array lifecycle, unused pointer permissions, and private identifier access
-  (see [Memory Safety Checking](30-memory-safety-checking.md) and
-  [Naming Conventions](35-naming-conventions.md)).
+  (see [Memory Safety Checking](31-memory-safety-checking.md) and
+  [Naming Conventions](36-naming-conventions.md)).
 
 Franko currently does **not** implement:
 

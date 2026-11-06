@@ -18,7 +18,7 @@ By convention function names use `lower_case_snake_case`. A function whose
 name starts with `__` is internal to its declaring namespace and produces a
 warning when referenced from outside that namespace. Direct FFI mappings keep
 the platform API spelling, such as `os::win32::ReadFile`; see
-[Naming Conventions](35-naming-conventions.md).
+[Naming Conventions](36-naming-conventions.md).
 
 ## 19.2 Function Declaration Placement
 
@@ -33,6 +33,7 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
+- a declared enum type (see [Enums](30-enums.md));
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; or
 - a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](26-structs.md); or
 - a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](28-tuples.md).
@@ -151,6 +152,7 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
+- a declared enum type (see [Enums](30-enums.md));
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
 - a struct type whose fields are all assignable value types, recursively (see [Structs](26-structs.md)); or
 - a tuple type whose elements are all assignable value types, recursively (see [Tuples](28-tuples.md)).
@@ -187,4 +189,4 @@ The built-in `#name(...)` functions (`#is_primitive`, `#what_type`,
 `#strcmp`, `#strcat`, and the rest) are compile-time functions, not
 callable values. They are resolved at compile time; they cannot be stored
 in a variable, passed as a function argument, or referred to without a
-call. See [Compile-Time Reflection](33-compile-time-reflection.md).
+call. See [Compile-Time Reflection](34-compile-time-reflection.md).

@@ -1,4 +1,4 @@
-# 33. Compile-Time Reflection
+# 34. Compile-Time Reflection
 
 Franko provides compile-time reflection through `#` expressions and `#if`
 compile-time conditionals. These are built into the compiler: there is no
@@ -41,7 +41,7 @@ A useful way to read this chapter:
 
 ---
 
-## 33.1 Compile-Time Names
+## 34.1 Compile-Time Names
 
 A compile-time name starts with `#`:
 
@@ -79,7 +79,7 @@ initializers, or field defaults.
 
 ---
 
-## 33.2 `#if` / `#else`
+## 34.2 `#if` / `#else`
 
 `#if` selects code at compile time:
 
@@ -217,7 +217,7 @@ Consequences:
 
 ---
 
-## 33.3 Declaration-Level `#if`
+## 34.3 Declaration-Level `#if`
 
 `#if` may wrap declarations at global scope, inside a namespace, or inside
 a struct:
@@ -276,7 +276,7 @@ Rules:
 
 ---
 
-## 33.4 Type and Value Arguments
+## 34.4 Type and Value Arguments
 
 The type predicates and `#what_type` accept either a variable/global
 identifier or a type:
@@ -313,25 +313,26 @@ referents.
 
 ---
 
-## 33.5 Introspection Functions
+## 34.5 Introspection Functions
 
 All introspection calls use `#name(...)`.
 
 | Function | Argument contract | Result | Semantics |
 |---|---|---|---|
 | `#is_primitive(x)` | one type or value | `uint8` | `1` iff the type is a primitive integer |
-| `#is_memcpy_safe(x)` | one type or value | `uint8` | `1` iff the type is memcpy-safe: primitive, pointer, static array of memcpy-safe elements, struct with all fields memcpy-safe, or tuple with all elements memcpy-safe. Dynamic arrays are not memcpy-safe. |
-| `#has_default_value(x)` | one type or value | `uint8` | `1` iff at least one part of the type has a defined default: pointers (null), dynamic arrays (empty), static arrays whose element type has a default, structs with any field default or any field whose type has a default, and tuples with any such element. `0` for primitive integers, static arrays of primitives, and aggregates whose parts are all raw-indeterminate. |
-| `#is_memset_safe(x)` | one type or value | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose fields are all memset-safe, and tuples whose elements are all memset-safe. Pointers and dynamic arrays are not. Field defaults do not affect this predicate. |
+| `#is_enum(x)` | one type or value | `uint8` | `1` iff the type is an enum |
+| `#is_memcpy_safe(x)` | one type or value | `uint8` | `1` iff the type is memcpy-safe: primitive, enum, pointer, static array of memcpy-safe elements, struct with all fields memcpy-safe, or tuple with all elements memcpy-safe. Dynamic arrays are not memcpy-safe. |
+| `#has_default_value(x)` | one type or value | `uint8` | `1` iff at least one part of the type has a defined default: enums (first variant), pointers (null), dynamic arrays (empty), static arrays whose element type has a default, structs with any field default or any field whose type has a default, and tuples with any such element. `0` for primitive integers, static arrays of primitives, and aggregates whose parts are all raw-indeterminate. |
+| `#is_memset_safe(x)` | one type or value | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose fields are all memset-safe, and tuples whose elements are all memset-safe. Enums, pointers, and dynamic arrays are not. Field defaults do not affect this predicate. |
 | `#is_same_type(x, y)` | two types/values | `uint8` | `1` iff the types are exactly equal; tuple element order matters, names do not |
 | `#what_type(x)` | one type or value | compile-time string | canonical type spelling with no spaces after commas, including `(int32,int32)` for tuples; matches the function signature hashing key |
 | `#strcat(a, b, ...)` | one or more compile-time strings | compile-time string | concatenates all arguments |
 | `#strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
-| `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
-| `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
-| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
-| `#is_value_assignable(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, pointers, structs whose fields are all value-assignable, and tuples whose elements are all value-assignable. Static arrays and dynamic arrays are not. |
+| `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
+| `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers and enums; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
+| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
+| `#is_value_assignable(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, enums, pointers, structs whose fields are all value-assignable, and tuples whose elements are all value-assignable. Static arrays and dynamic arrays are not. |
 
 The predicates are built-in compile-time functions. They cannot be stored
 in variables, passed as callbacks, or referred to without a call.
@@ -342,7 +343,7 @@ field defaults.
 
 ---
 
-## 33.6 `#what_type` Spellings
+## 34.6 `#what_type` Spellings
 
 `#what_type` produces a compile-time string. When used as an ordinary
 expression, it materializes as a read-only `view<[byte, N]>` backed by
@@ -368,12 +369,14 @@ hashing key:
 | `(int32 val, int32 err)` | `(int32,int32)` |
 | `(uint8, [int32, 3])` | `(uint8,[int32,3])` |
 | `a::b::Point` | `a::b::Point` |
+| `Status` | `Status` |
+| `ns::Status` | `ns::Status` |
 
 `byte` is an alias for `uint8`, so canonical spellings use `uint8`.
 
 ---
 
-## 33.7 Compile-Time Strings
+## 34.7 Compile-Time Strings
 
 `#strcmp`, `#panic`, and `#strcat` accept compile-time strings:
 
@@ -431,7 +434,7 @@ In a dead `#if` branch it is ignored.
 
 ---
 
-## 33.8 Choosing a Predicate
+## 34.8 Choosing a Predicate
 
 | Question | Predicate |
 |---|---|
@@ -529,7 +532,7 @@ print(#is_comparable(p));     // 1
 
 ---
 
-## 33.9 FFI Target Selection
+## 34.9 FFI Target Selection
 
 The intended use of declaration-level `#if` is to select platform-specific
 declarations and calls. Only the selected branch is compiled, so the other
@@ -560,7 +563,7 @@ An unguarded off-target FFI call still fails when building for that target.
 
 ---
 
-## 33.10 Restrictions and Edge Cases
+## 34.10 Restrictions and Edge Cases
 
 - `#if` cannot appear in a `for` header.
 - The `#if` condition must be a compile-time constant integer. A local
@@ -578,7 +581,7 @@ An unguarded off-target FFI call still fails when building for that target.
   `#panic`.
 - Declaration-level `#if` cannot wrap imports.
 
-## 33.11 Common Mistakes
+## 34.11 Common Mistakes
 
 A local variable is not a compile-time constant:
 

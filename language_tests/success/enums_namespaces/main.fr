@@ -1,0 +1,27 @@
+import "franko/io"
+
+namespace ns {
+    enum<uint8> Status {
+        ok,
+        err
+    }
+}
+
+enum<uint8> Global {
+    off,
+    on
+}
+
+func main() -> int32 {
+    ns::Status s = ns::Status::ok;
+    print(s == ns::Status::ok);
+    print(s == ns::Status::err);
+    s = ns::Status::err;
+    print(s == ns::Status::err);
+
+    Global g = Global::on;
+    print(g == Global::on);
+    print(#is_enum(ns::Status));
+    print(#what_type(s));
+    return 0;
+}

@@ -37,13 +37,15 @@ The cleaned section ordering is:
 27. Methods
 28. Tuples
 29. Aggregate Literals
-30. Memory Safety Checking
-31. Pool Allocation
-32. Foreign Function Interface
-33. Compile-Time Reflection
-34. Unsupported or Restricted Features
-35. Naming Conventions
-36. Examples
+30. Enums
+31. Memory Safety Checking
+32. Pool Allocation
+33. Foreign Function Interface
+34. Compile-Time Reflection
+35. Unsupported or Restricted Features
+36. Naming Conventions
+37. Examples
+38. Enums
 
 ## How to rebuild one combined document
 

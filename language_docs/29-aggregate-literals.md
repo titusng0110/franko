@@ -213,6 +213,7 @@ undefined behavior, exactly like reading any other uninitialized local.
 A type is **value-assignable** when:
 
 - it is a primitive integer;
+- it is an enum;
 - it is a pointer;
 - it is a struct whose fields are all value-assignable, recursively;
 - it is a tuple whose elements are all value-assignable, recursively.

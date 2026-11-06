@@ -1,10 +1,10 @@
-# 36. Examples
+# 37. Examples
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
 Examples that print assume `import "franko/io"` at the top of the file.
 
-## 36.1 Basic Integers
+## 37.1 Basic Integers
 
 ```franko
 func main() -> int32 {
@@ -20,7 +20,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.2 Static Array Copy From a Literal
+## 37.2 Static Array Copy From a Literal
 
 An array literal is a `view<[T, N]>` value, so arrays receive its
 elements through `memcpy` (see [Array Literals](21-array-literals.md)):
@@ -57,7 +57,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.3 Static Partial Copy From a Literal
+## 37.3 Static Partial Copy From a Literal
 
 ```franko
 func main() -> int32 {
@@ -72,7 +72,7 @@ func main() -> int32 {
 
 `xs[2]` is untouched: memcpy copies `min(source, target)` elements.
 
-## 36.4 Dynamic Array Copy From a Literal
+## 37.4 Dynamic Array Copy From a Literal
 
 ```franko
 func main() -> int32 {
@@ -92,7 +92,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.5 Constant Expressions Inside Array Literals
+## 37.5 Constant Expressions Inside Array Literals
 
 ```franko
 func main() -> int32 {
@@ -110,7 +110,7 @@ func main() -> int32 {
 Elements are compile-time constant expressions; runtime values are
 rejected because a literal is backed by immutable constant storage.
 
-## 36.6 Nested Static Array Literals
+## 37.6 Nested Static Array Literals
 
 ```franko
 func main() -> int32 {
@@ -130,7 +130,7 @@ func main() -> int32 {
 
 Nested literals are rectangular and static at every level.
 
-## 36.7 Nested Dynamic Arrays
+## 37.7 Nested Dynamic Arrays
 
 A nested literal has static rows, so dynamic rows are filled one at a
 time:
@@ -154,7 +154,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.8 Declaration Initializer With an Array Literal
+## 37.8 Declaration Initializer With an Array Literal
 
 A `view` declaration accepts a literal directly; its element type and
 length are inferred from the literal and checked against the declared
@@ -172,7 +172,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.9 Dynamic View Decay From a Literal
+## 37.9 Dynamic View Decay From a Literal
 
 A literal decays to `view<[T]>` wherever a dynamic view is
 expected:
@@ -192,7 +192,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.10 Array Copy Through Pointer
+## 37.10 Array Copy Through Pointer
 
 ```franko
 func main() -> int32 {
@@ -232,7 +232,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.11 String Literal Bytes
+## 37.11 String Literal Bytes
 
 ```franko
 func main() -> int32 {
@@ -254,7 +254,7 @@ func main() -> int32 {
 A string literal is a `view<[byte, N]>`; byte buffers receive its
 content through `memcpy`. See [String Literals](23-string-literals.md).
 
-## 36.12 Nested Static Array Grid
+## 37.12 Nested Static Array Grid
 
 ```franko
 func fill(ptr<[[byte, 3], 2]> grid) -> void {
@@ -276,7 +276,7 @@ func main() -> int32 {
 
 `[[byte, 3], 2]` is a 2 by 3 grid: `grid[r][c]` indexes `r` along the outer size (`2`) and `c` along the inner size (`3`).
 
-## 36.13 Status-Returning Intrinsics
+## 37.13 Status-Returning Intrinsics
 
 ```franko
 func main() -> int32 {
@@ -303,7 +303,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.14 Struct Declaration and Field Access
+## 37.14 Struct Declaration and Field Access
 
 ```franko
 struct Point {
@@ -336,7 +336,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.15 Struct Field Defaults
+## 37.15 Struct Field Defaults
 
 Field defaults are constant expressions; only primitive fields can have them.
 
@@ -356,7 +356,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.16 Whole-Struct Assignment
+## 37.16 Whole-Struct Assignment
 
 A struct is assignable as a whole value only if all of its fields are assignable, recursively.
 
@@ -379,7 +379,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.17 Structs Passed by Value and by Pointer
+## 37.17 Structs Passed by Value and by Pointer
 
 Assignable structs may be passed and returned by value; pointer-only structs are accessed through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access).
 
@@ -412,7 +412,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.18 Structs with Array Fields
+## 37.18 Structs with Array Fields
 
 An array field makes the struct non-assignable: the struct is pointer-only and its arrays are managed through the usual intrinsics.
 
@@ -442,7 +442,7 @@ func main() -> int32 {
 
 Dynamic array fields are not allocated as part of the struct declaration; allocate them explicitly with `field.init(n)` as above.
 
-## 36.19 Struct Globals
+## 37.19 Struct Globals
 
 Global variable declarations accept constant initializers.
 
@@ -467,7 +467,7 @@ func main() -> int32 {
 
 Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
 
-## 36.20 Array `length()`
+## 37.20 Array `length()`
 
 ```franko
 func main() -> int32 {
@@ -489,7 +489,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.21 Inferred Static Array Sizes (`?`)
+## 37.21 Inferred Static Array Sizes (`?`)
 
 ```franko
 func main() -> int32 {
@@ -507,7 +507,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.22 Command-Line Arguments
+## 37.22 Command-Line Arguments
 
 ```franko
 func main(view<[[byte]]> args) -> int32 {
@@ -524,7 +524,7 @@ func main(view<[[byte]]> args) -> int32 {
 
 Running the binary with two arguments prints `2`, then each argument's length. Each argument arrives as its raw bytes with no NUL terminator, and the args parameter always receives a live view, so it needs no null guard.
 
-## 36.23 Byte-Array Search, Endian, and Bit Intrinsics
+## 37.23 Byte-Array Search, Endian, and Bit Intrinsics
 
 ```franko
 import "franko/io"
@@ -563,7 +563,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.24 Tuple Values
+## 37.24 Tuple Values
 
 Named and unnamed tuple declarations, assignment across different names, and a function round-trip:
 
@@ -600,7 +600,7 @@ func main() -> int32 {
 }
 ```
 
-## 36.25 Aggregate Literals
+## 37.25 Aggregate Literals
 
 Struct literals, tuple literals, nested literals, and field-wise declaration
 initialization:

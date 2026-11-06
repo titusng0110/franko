@@ -30,6 +30,9 @@ public final class SymbolTable {
     private final Map<String, StructSymbol> structs =
             new LinkedHashMap<>();
 
+    private final Map<String, EnumSymbol> enums =
+            new LinkedHashMap<>();
+
     private final Set<String> declaredVariableNames =
             new HashSet<>();
 
@@ -62,6 +65,7 @@ public final class SymbolTable {
         functions.clear();
         functionDeclSymbols.clear();
         structs.clear();
+        enums.clear();
         declaredVariableNames.clear();
         globalNamespaceVariableNames.clear();
         namespaces.clear();
@@ -166,11 +170,37 @@ public final class SymbolTable {
 
     public boolean declareStruct(StructSymbol symbol) {
         Map<String, StructSymbol> target = targetStructs();
+        Map<String, EnumSymbol> targetEnums = targetEnums();
+
+        if (targetEnums.containsKey(symbol.name)) {
+            error("Duplicate declaration of struct '" + symbol.qualifiedName() + "'");
+            return false;
+        }
 
         StructSymbol existing = target.get(symbol.name);
 
         if (existing != null) {
             error("Duplicate declaration of struct '" + symbol.qualifiedName() + "'");
+            return false;
+        }
+
+        target.put(symbol.name, symbol);
+        return true;
+    }
+
+    public boolean declareEnum(EnumSymbol symbol) {
+        Map<String, EnumSymbol> target = targetEnums();
+        Map<String, StructSymbol> targetStructs = targetStructs();
+
+        if (targetStructs.containsKey(symbol.name)) {
+            error("Duplicate declaration of enum '" + symbol.qualifiedName() + "'");
+            return false;
+        }
+
+        EnumSymbol existing = target.get(symbol.name);
+
+        if (existing != null) {
+            error("Duplicate declaration of enum '" + symbol.qualifiedName() + "'");
             return false;
         }
 
@@ -198,10 +228,56 @@ public final class SymbolTable {
         return namespace.structs.get(name);
     }
 
+    public EnumSymbol resolveEnum(String name) {
+        if (currentNamespace != null) {
+            EnumSymbol sym = currentNamespace.enums.get(name);
+
+            if (sym != null) {
+                return sym;
+            }
+        }
+
+        return enums.get(name);
+    }
+
+    public EnumSymbol resolveEnumIn(NamespaceSymbol namespace, String name) {
+        if (namespace == null) {
+            return enums.get(name);
+        }
+
+        return namespace.enums.get(name);
+    }
+
+    public EnumSymbol resolveEnumReference(List<String> enumPath) {
+        if (enumPath == null || enumPath.isEmpty()) {
+            return null;
+        }
+
+        if (enumPath.size() == 1) {
+            return resolveEnum(enumPath.get(0));
+        }
+
+        List<String> namespaceSegments = enumPath.subList(0, enumPath.size() - 1);
+        String enumName = enumPath.get(enumPath.size() - 1);
+        NamespaceSymbol namespace = resolveNamespace(namespaceSegments);
+
+        if (namespace == null) {
+            return null;
+        }
+
+        return resolveEnumIn(namespace, enumName);
+    }
+
     private Map<String, StructSymbol> targetStructs() {
         return currentNamespace == null
                 ? structs
                 : currentNamespace.structs;
+    }
+
+    private Map<String, EnumSymbol> targetEnums() {
+        return currentNamespace == null
+                ? enums
+                : currentNamespace.enums;
     }
 
     public DiagnosticBag diagnostics() {
@@ -635,11 +711,13 @@ public final class SymbolTable {
         out.addAll(globalVariables.values());
         addFunctionSymbols(out, functions.values());
         addStructSymbols(out, structs.values());
+        out.addAll(enums.values());
 
         for (NamespaceSymbol namespace : allNamespaces()) {
             out.addAll(namespace.globalVariables.values());
             addFunctionSymbols(out, namespace.functions.values());
             addStructSymbols(out, namespace.structs.values());
+            out.addAll(namespace.enums.values());
         }
 
         return out;
@@ -686,6 +764,7 @@ public final class SymbolTable {
 
         warnStructNameClashesInSpace(
                 structs,
+                enums,
                 functions,
                 globalSpaceVariableNames
         );
@@ -693,6 +772,7 @@ public final class SymbolTable {
         for (NamespaceSymbol namespace : allNamespaces()) {
             warnStructNameClashesInSpace(
                     namespace.structs,
+                    namespace.enums,
                     namespace.functions,
                     namespace.variableNames
             );
@@ -749,6 +829,7 @@ public final class SymbolTable {
 
     private void warnStructNameClashesInSpace(
             Map<String, StructSymbol> spaceStructs,
+            Map<String, EnumSymbol> spaceEnums,
             Map<String, List<FunctionSymbol>> spaceFunctions,
             Set<String> spaceVariableNames
     ) {
@@ -790,6 +871,47 @@ public final class SymbolTable {
                         + " for the function and STRUCT_"
                         + structSymbol.name
                         + " for the struct type");
+            }
+        }
+
+        for (EnumSymbol enumSymbol : spaceEnums.values()) {
+            String enumName = enumSymbol.qualifiedName();
+
+            if (spaceVariableNames.contains(enumSymbol.name)) {
+                diagnostics.warning("Variable '"
+                        + enumName
+                        + "' shares its name with enum '"
+                        + enumName
+                        + "'; generated C++ uses VAR_"
+                        + enumSymbol.name
+                        + " for the variable and ENUM_"
+                        + enumSymbol.name
+                        + " for the enum type");
+            }
+
+            if (spaceFunctions.containsKey(enumSymbol.name)) {
+                List<FunctionSymbol> clashFunctions =
+                        spaceFunctions.get(enumSymbol.name);
+
+                StringBuilder emitted = new StringBuilder();
+
+                for (int i = 0; i < clashFunctions.size(); i++) {
+                    if (i > 0) {
+                        emitted.append(", ");
+                    }
+
+                    emitted.append(clashFunctions.get(i).emittedLocalName());
+                }
+
+                diagnostics.warning("Function '"
+                        + enumName
+                        + "' shares its name with enum '"
+                        + enumName
+                        + "'; generated C++ uses "
+                        + emitted
+                        + " for the function and ENUM_"
+                        + enumSymbol.name
+                        + " for the enum type");
             }
         }
     }

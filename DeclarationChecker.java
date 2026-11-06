@@ -138,6 +138,10 @@ public class DeclarationChecker {
             return;
         }
 
+        if (type instanceof SemanticEnumType) {
+            return;
+        }
+
         if (type instanceof SemanticDynamicArrayType dynamicArray) {
 
             checkDeclaredType(

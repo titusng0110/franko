@@ -1,1 +1,1 @@
-Cast target must be a primitive integer type or a pointer type
+Cast target must be a primitive integer type, a pointer type, or an enum type

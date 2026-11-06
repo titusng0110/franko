@@ -352,7 +352,7 @@ that writes through a `ptr<ptr<T>>` parameter can update the caller's pointer
 variable. Each function still reports its own local maybe-null warnings.
 Dangling pointers are checked separately (see
 [Pointer Lifetime Limitations](#2511-pointer-lifetime-limitations) and
-[Memory Safety Checking](30-memory-safety-checking.md)).
+[Memory Safety Checking](31-memory-safety-checking.md)).
 
 ### 25.9.3 Dereferencing and Warnings
 
@@ -437,7 +437,7 @@ What remains untracked:
 
 Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
 (see
-[Dynamic-Array Lifecycle Checking](30-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking)).
+[Dynamic-Array Lifecycle Checking](31-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking)).
 
 ## 25.12 Prefer Pool Indices to Linked Nodes
 

@@ -107,6 +107,11 @@ Structs with non-assignable fields can still be shared through a pointer
 read/write access is needed), and fields are accessed through
 `$(p).field`.
 
+An enum is assigned as a whole value: both sides must have the exact
+same enum type. An enum cannot be assigned to or from an integer or
+from a different enum type; convert explicitly with `cast` or
+`unsafe_cast` (see [Enums](30-enums.md)).
+
 ## 16.5 Compound Assignment
 
 Eight compound assignment operators exist:
@@ -257,7 +262,7 @@ materialized as a temporary of the referenced primitive type.
 The borrowed view is valid only for the duration of the operator call.
 An operator method must not store or forward it into caller-owned or
 global storage; the compiler rejects that pattern (see
-[Memory Safety Checking](30-memory-safety-checking.md#299-dangling-pointer-checking)).
+[Memory Safety Checking](31-memory-safety-checking.md#299-dangling-pointer-checking)).
 A local `view<T>` copy inside the operator body is allowed because the
 local dies before the operator call returns.
 

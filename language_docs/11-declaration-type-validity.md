@@ -4,6 +4,7 @@ A declared variable type is valid if it is one of:
 
 - primitive integer type;
 - a declared struct type;
+- a declared enum type;
 - a tuple of valid non-`void` element types (at least two elements);
 - dynamic array of a valid non-`void` type;
 - static array of a valid non-`void` type with valid size;
@@ -14,8 +15,11 @@ Valid:
 ```franko
 struct X { int32 n }
 
+enum<uint8> Status { spawning, alive }
+
 int32 x;
 X s;
+Status st;
 (int32, int32) pair;
 (int32 val, X) named;
 [X] xs;
@@ -43,6 +47,7 @@ A function return type has separate rules. It may be:
 
 - `void`;
 - a primitive integer type;
+- a declared enum type;
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
 - a struct whose fields are all assignable value types, recursively; or
 - a tuple whose elements are all assignable value types, recursively.

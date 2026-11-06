@@ -1,4 +1,4 @@
-# 30. Memory Safety Checking
+# 31. Memory Safety Checking
 
 Franko checks two independent properties of pointers: **null state**
 and **dangling storage**. Both checks cover all three pointer types
@@ -26,7 +26,7 @@ callee that writes through a `ptr<ptr<T>>` parameter can update the caller's
 pointer variable. A function still reports its own local maybe-null warnings
 as well.
 
-## 30.1 Pointer States
+## 31.1 Pointer States
 
 For each pointer variable the compiler tracks one of:
 
@@ -36,7 +36,7 @@ For each pointer variable the compiler tracks one of:
 | null | the variable is definitely null on the current path |
 | maybe-null | the variable is null on some continuing paths |
 
-## 30.2 Assignment Rules
+## 31.2 Assignment Rules
 
 - an ordinary pointer declaration is **null-initialized**, so it starts in the null state;
 - assigning the `null` literal makes the target null;
@@ -45,7 +45,7 @@ For each pointer variable the compiler tracks one of:
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
 - at function entry, a pointer parameter or global starts as maybe-null because the compiler cannot see the value it receives. Exceptions: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
 
-## 30.3 Dereference Checking
+## 31.3 Dereference Checking
 
 - `$(p)` where `p` is **null** is an **error**;
 - `$(p)` where `p` is **possibly null** is a **warning**.
@@ -53,7 +53,7 @@ For each pointer variable the compiler tracks one of:
 A variable warns at most once per check, so revisiting the same dereference on
 another path does not repeat the warning.
 
-## 30.4 Branch Handling
+## 31.4 Branch Handling
 
 `if` / `else` is checked branch by branch. Only branches that continue past the
 statement affect later checks. A branch that **definitely returns** does not
@@ -64,7 +64,7 @@ no diagnostics.
 Very deeply nested conditions may be handled more conservatively, so some
 warnings can be missed.
 
-## 30.5 Loop Handling
+## 31.5 Loop Handling
 
 `while` loops are checked without proving termination:
 
@@ -79,7 +79,7 @@ Loop termination is not proven; the post-loop state is conservative.
 
 `for` loops receive the same treatment as the equivalent block and `while` loop, so they are handled the same way. See [Desugaring](24-desugaring.md).
 
-## 30.6 Guard Refinement
+## 31.6 Guard Refinement
 
 Inside `if (p == null)` / `if (p != null)` (either operand order), the compiler refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
 
@@ -104,7 +104,7 @@ $(p);          // valid: p is still pointing; the else path was infeasible
 
 The same refinement runs for loop conditions, so `while (p != null) { ... }` sees `p` as pointing inside the body and as null after the loop.
 
-## 30.7 Limitations
+## 31.7 Limitations
 
 Current limitations of the pointer null-state check:
 
@@ -118,14 +118,14 @@ Current limitations of the pointer null-state check:
   nullness problems may be missed;
 - a non-variable dereference such as `$(f())` is an error when the resolved return state is definitely null and a warning when it is possibly null.
 
-## 30.8 Capability Linting
+## 31.8 Capability Linting
 
 A separate, independent check warns when a `ptr`/`mview` local variable or
 parameter requests permissions it never exercises, so developers default
 to the tightest pointer that fits. See the "Capability Linter" section of
 [Pointers](25-pointers.md).
 
-## 30.9 Dangling-Pointer Checking
+## 31.9 Dangling-Pointer Checking
 
 The compiler checks `return` values for pointers that outlive the storage
 they refer to, rejects pointer stores that move frame-scoped storage into
@@ -136,7 +136,7 @@ global or caller-owned storage is diagnosed at the call. Each function still
 reports its own return/store/lifetime diagnostics, and code removed as
 unreachable produces no diagnostics.
 
-### 30.9.1 What Is Tracked
+### 31.9.1 What Is Tracked
 
 Taking a pointer to a local or parameter and returning it is rejected:
 
@@ -160,7 +160,7 @@ The check follows assignments, pointer copies, `$(...)` aliases, and
 `getptr`/`getmview`/`getview` of lvalues. Pointer parameters and globals
 are never assumed to point into the current function's frame.
 
-### 30.9.2 Path and Loop Handling
+### 31.9.2 Path and Loop Handling
 
 `if`/`else` is followed branch by branch, and a branch whose condition cannot
 hold is not diagnosed. For `while`, the state after the loop accounts for zero
@@ -187,7 +187,7 @@ returning `p` is safe on that path even though the loop body saw a
 non-null pointer. Paths that leave the loop through `break` are handled
 separately and may still return a non-null `p`.
 
-### 30.9.3 The Return Rule
+### 31.9.3 The Return Rule
 
 At a pointer-typed `return`:
 
@@ -203,7 +203,7 @@ Intraprocedural: Returning a pointer to parameter 'x' from function 'bad' (dangl
 Intraprocedural: Returning a pointer that may refer to local variable 'x' from function 'maybe' (possibly dangling after return)
 ```
 
-### 30.9.4 Decayed Views
+### 31.9.4 Decayed Views
 
 Static-to-dynamic array view decay does not create a new storage object:
 the converted view refers to the same array. Therefore:
@@ -219,7 +219,7 @@ Literal views refer to constant storage with static lifetime, so
 returning or keeping one is safe. Global initializers are never checked
 as function bodies.
 
-### 30.9.5 The Store Rule
+### 31.9.5 The Store Rule
 
 A pointer store is rejected when the stored value refers to current-frame
 storage and the target storage is caller-owned or global:
@@ -256,7 +256,7 @@ returns. Storing a view of an inner local into a longer-lived local is still
 allowed and can still dangle; that is the pre-existing local-view hazard.
 Forwarding the pointer through a callee that stores it is also caught.
 
-### 30.9.6 Limitations
+### 31.9.6 Limitations
 
 The check intentionally does not detect:
 
@@ -274,7 +274,7 @@ storing it into caller-owned or global storage is rejected. Forwarding a
 borrowed or ordinary argument through a callee that stores it is also caught.
 Later checks do not assume that a call left a global pointer untouched.
 
-## 30.10 Dynamic-Array Lifecycle Checking
+## 31.10 Dynamic-Array Lifecycle Checking
 
 The compiler also tracks whether a function-local dynamic array has
 allocated element storage, whether element pointers still refer to its current
@@ -283,7 +283,7 @@ initialized array, initialize or free the caller's array, or return an element
 pointer into it. Each function or method still starts with a fresh local
 lifecycle state.
 
-### 30.10.1 Array States
+### 31.10.1 Array States
 
 Each tracked dynamic array is in one of three states:
 
@@ -297,7 +297,7 @@ A separate history flag distinguishes a never-initialized array from one
 that was already freed. That only changes diagnostic wording; it is not
 a fourth lifecycle state.
 
-### 30.10.2 What Is Tracked
+### 31.10.2 What Is Tracked
 
 The check covers function-local dynamic array variables and owner
 `ptr<[T]>` values obtained from `getptr(localArray)`, including pointer
@@ -327,7 +327,7 @@ that calls `init` makes the caller array `INITED`; and a callee that calls
 `view<[T]>` cannot initialize, resize, or free the array, so it does not change
 the caller's lifecycle state.
 
-### 30.10.3 Operations
+### 31.10.3 Operations
 
 | Operation | Required state | Result |
 |---|---|---|
@@ -353,7 +353,7 @@ Repeated `init`/`init_zero` is deliberately not diagnosed: the first
 call may have returned `-1`, and retrying is valid. The runtime still
 aborts if the array really was initialized already.
 
-### 30.10.4 Guard Traps
+### 31.10.4 Guard Traps
 
 A comparison of `d.length()` against a constant refines the state on
 each path:
@@ -386,7 +386,7 @@ if (d.length() > 0) {
 }
 ```
 
-### 30.10.5 Branches and Loops
+### 31.10.5 Branches and Loops
 
 `if`/`else` is followed branch by branch. Loops account for zero iterations,
 normal exits, `break`, and `continue`, and apply the condition-false
@@ -401,7 +401,7 @@ while (d.length() == 0) {
 d[0] = 1;           // valid: the loop exited with d initialized
 ```
 
-### 30.10.6 Buffer Invalidation
+### 31.10.6 Buffer Invalidation
 
 An element pointer/view is tied to the buffer that existed when it was
 created. `init`/`init_zero`, `resize`, and `uninit` replace or release that
@@ -420,7 +420,7 @@ may use element-pointer parameter `j`, and the caller passes an element alias
 of `i` as `j`, the compiler emits a possible cross-parameter invalidation
 warning.
 
-### 30.10.7 Missing `uninit`
+### 31.10.7 Missing `uninit`
 
 A local dynamic array's runtime destructor already frees its buffer when
 the array goes out of scope. Missing an explicit `uninit()` is therefore
@@ -435,7 +435,7 @@ The warning is suppressed when the array escaped through a global, an
 aggregate store, or a call that may let it escape, because the compiler can no
 longer prove the state.
 
-### 30.10.8 Limitations
+### 31.10.8 Limitations
 
 The check does not detect:
 

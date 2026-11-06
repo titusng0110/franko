@@ -5,7 +5,7 @@ import "franko/io"
 // ============================================================
 // Covers: value-preserving widening casts with cast<T> (plain
 // static_cast), same-type no-ops, unsafe_cast<T> for conversions
-// that can lose data (runtime-checked franko_unsafe_cast),
+// that can lose data (runtime-checked franko_integer_unsafe_cast),
 // constant folding with compile-time range checks, chained
 // casts, and casts on comparison results.
 // ============================================================

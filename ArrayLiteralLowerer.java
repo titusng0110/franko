@@ -44,7 +44,7 @@ public final class ArrayLiteralLowerer {
             ctx.error("Cannot infer the element type of an array literal here: "
                     + "array literals are view<[T, N]> values and need an "
                     + "assignment, return, or call-argument context with a "
-                    + "view<[integer type]> shape");
+                    + "view<[integer or enum type]> shape");
             return hoistFallback(lit);
         }
 
@@ -116,12 +116,16 @@ public final class ArrayLiteralLowerer {
             return lowerScalarLevel(lit, primitive);
         }
 
+        if (elementShape instanceof SemanticEnumType enumType) {
+            return lowerEnumLevel(lit, enumType);
+        }
+
         if (elementShape instanceof SemanticStaticArrayType
                 || elementShape instanceof SemanticDynamicArrayType) {
             return lowerNestedLevel(lit, elementShape);
         }
 
-        ctx.error("Array literals only support integer element types, got "
+        ctx.error("Array literals only support integer or enum element types, got "
                 + (elementShape == null ? "<null>" : elementShape.describe()));
 
         return null;
@@ -176,6 +180,52 @@ public final class ArrayLiteralLowerer {
         return new LiteralValues(
                 new SemanticStaticArrayType(
                         primitive,
+                        Integer.toString(lit.elements.size())
+                ),
+                values
+        );
+    }
+
+    private LiteralValues lowerEnumLevel(
+            ArrayLiteralNode lit,
+            SemanticEnumType enumType
+    ) {
+        List<BigInteger> values = new ArrayList<>();
+
+        for (ASTNode element : lit.elements) {
+            if (element instanceof ArrayLiteralNode) {
+                ctx.error("Array literal elements must be all nested array "
+                        + "literals or all enum variant expressions here");
+                return null;
+            }
+
+            SemanticExprNode lowered = exprAnalyzer.analyzeExpr(element);
+
+            if (!(lowered instanceof SemanticEnumVariantNode variantNode)) {
+                ctx.error("Array literal elements must be enum variants of type '"
+                        + enumType.enumSymbol.qualifiedName()
+                        + "', got "
+                        + lowered.type.describe());
+                return null;
+            }
+
+            if (variantNode.enumSymbol != enumType.enumSymbol) {
+                ctx.error("Array literal element '"
+                        + variantNode.variant.name
+                        + "' has enum type '"
+                        + variantNode.enumSymbol.qualifiedName()
+                        + "', expected '"
+                        + enumType.enumSymbol.qualifiedName()
+                        + "'");
+                return null;
+            }
+
+            values.add(variantNode.variant.value);
+        }
+
+        return new LiteralValues(
+                new SemanticStaticArrayType(
+                        enumType,
                         Integer.toString(lit.elements.size())
                 ),
                 values

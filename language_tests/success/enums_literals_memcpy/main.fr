@@ -1,0 +1,24 @@
+import "franko/io"
+
+enum<uint8> Status {
+    idle = 1,
+    running = 2,
+    done = 3
+}
+
+func main() -> int32 {
+    [Status, 3] states;
+    states.memcpy([Status::idle, Status::running, Status::done]);
+    print(states[0] == Status::idle);
+    print(states[1] == Status::running);
+    print(states[2] == Status::done);
+    print(states.memcmp([Status::idle, Status::running, Status::done]) == 0);
+
+    [Status] dyn;
+    dyn.init(2);
+    dyn.memcpy([Status::done, Status::done]);
+    print(dyn[0] == Status::done);
+    print(dyn[1] == Status::done);
+    dyn.uninit();
+    return 0;
+}

@@ -39,7 +39,7 @@
 #include <cstdlib>   // for std::malloc/calloc/realloc/free (non-jemalloc builds)
                      // and _byteswap_* (MSVC byte_swap fallback)
 #include <cstring>   // for std::memcpy, std::memset, std::memmove
-#include <limits>    // for std::numeric_limits (franko_unsafe_cast bounds)
+#include <limits>    // for std::numeric_limits (franko_integer_unsafe_cast bounds)
 #include <new>       // for placement new
 #include <stdexcept> // for std::runtime_error
 #include <string>    // for std::string (franko_byte_arrays::fail message assembly)
@@ -122,7 +122,7 @@ constexpr bool operator!=(std::nullptr_t, const Franko_Thin_Pointer<T>& pointer)
 }
 
 // ============================================================
-// franko_unsafe_cast<To>(v): runtime-checked integer conversion
+// franko_integer_unsafe_cast<To>(v): runtime-checked integer conversion
 // ============================================================
 //
 // Emitted for Franko unsafe_cast<T>(expr) conversions, which may lose
@@ -137,11 +137,11 @@ constexpr bool operator!=(std::nullptr_t, const Franko_Thin_Pointer<T>& pointer)
 // branch ever compares signed and unsigned values (warning-clean
 // under -Wall -Wextra -Wpedantic -Wshadow).
 template <typename To, typename From, bool FromSigned = std::is_signed<From>::value, bool ToSigned = std::is_signed<To>::value>
-struct franko_unsafe_cast_range;
+struct franko_integer_unsafe_cast_range;
 
 // Signed source, signed target: direct comparison promotes safely.
 template <typename To, typename From>
-struct franko_unsafe_cast_range<To, From, true, true> {
+struct franko_integer_unsafe_cast_range<To, From, true, true> {
     static bool below_min(From v) { return v < std::numeric_limits<To>::min(); }
     static bool above_max(From v) { return v > std::numeric_limits<To>::max(); }
 };
@@ -149,7 +149,7 @@ struct franko_unsafe_cast_range<To, From, true, true> {
 // Unsigned source, unsigned target: v >= 0 == min(To), so only the
 // upper bound can fail. Both sides unsigned: no sign warnings.
 template <typename To, typename From>
-struct franko_unsafe_cast_range<To, From, false, false> {
+struct franko_integer_unsafe_cast_range<To, From, false, false> {
     static bool below_min(From) { return false; }
     static bool above_max(From v) { return v > std::numeric_limits<To>::max(); }
 };
@@ -157,7 +157,7 @@ struct franko_unsafe_cast_range<To, From, false, false> {
 // Signed source, unsigned target: negatives always fail; the upper
 // bound compares non-negative values as unsigned.
 template <typename To, typename From>
-struct franko_unsafe_cast_range<To, From, true, false> {
+struct franko_integer_unsafe_cast_range<To, From, true, false> {
     static bool below_min(From v) { return v < 0; }
     static bool above_max(From v) {
         if (v < 0) {
@@ -172,7 +172,7 @@ struct franko_unsafe_cast_range<To, From, true, false> {
 // Unsigned source, signed target: v >= 0 can never fall below
 // min(To); the upper bound compares as unsigned against max(To).
 template <typename To, typename From>
-struct franko_unsafe_cast_range<To, From, false, true> {
+struct franko_integer_unsafe_cast_range<To, From, false, true> {
     static bool below_min(From) { return false; }
     static bool above_max(From v) {
         typedef typename std::make_unsigned<To>::type unsigned_to;
@@ -181,10 +181,10 @@ struct franko_unsafe_cast_range<To, From, false, true> {
 };
 
 template <typename To, typename From>
-To franko_unsafe_cast(From v) {
+To franko_integer_unsafe_cast(From v) {
 #if !FRANKO_BOUNDS_UNCHECKED
-    if (franko_unsafe_cast_range<To, From>::below_min(v) || franko_unsafe_cast_range<To, From>::above_max(v)) {
-        franko_panic("franko_unsafe_cast: value out of range for target type");
+    if (franko_integer_unsafe_cast_range<To, From>::below_min(v) || franko_integer_unsafe_cast_range<To, From>::above_max(v)) {
+        franko_panic("franko_integer_unsafe_cast: value out of range for target type");
     }
 #endif
 

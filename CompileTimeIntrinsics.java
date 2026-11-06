@@ -57,6 +57,8 @@ final class CompileTimeIntrinsics {
         return switch (name) {
             case "is_primitive" -> evaluateTypePredicate(
                     name, args, type -> type instanceof SemanticPrimitiveType);
+            case "is_enum" -> evaluateTypePredicate(
+                    name, args, type -> type instanceof SemanticEnumType);
             case "is_memcpy_safe" -> evaluateTypePredicate(
                     name, args, typeChecker::isMemcpySafe);
             case "has_default_value" -> evaluateTypePredicate(
@@ -431,16 +433,30 @@ final class CompileTimeIntrinsics {
 
             StructSymbol symbol = ctx.resolveStruct(struct.name);
 
-            if (symbol == null) {
-                ctx.error("#"
-                        + name
-                        + " argument '"
-                        + struct.name
-                        + "' is not a declared variable or type");
-                return null;
+            if (symbol != null) {
+                return new SemanticStructType(symbol);
             }
 
-            return new SemanticStructType(symbol);
+            EnumSymbol enumSymbol = ctx.resolveEnum(struct.name);
+
+            if (enumSymbol != null) {
+                return new SemanticEnumType(enumSymbol);
+            }
+
+            ctx.error("#"
+                    + name
+                    + " argument '"
+                    + struct.name
+                    + "' is not a declared variable or type");
+            return null;
+        }
+
+        List<String> fullPath = new ArrayList<>(struct.namespaceSegments);
+        fullPath.add(struct.name);
+        SemanticType variantType = tryResolveEnumVariantType(fullPath);
+
+        if (variantType != null) {
+            return variantType;
         }
 
         NamespaceSymbol namespace =
@@ -461,24 +477,36 @@ final class CompileTimeIntrinsics {
 
         StructSymbol symbol = ctx.resolveStructIn(namespace, struct.name);
 
-        if (symbol == null) {
-            ctx.error("#"
-                    + name
-                    + " argument '"
-                    + String.join("::", struct.namespaceSegments)
-                    + "::"
-                    + struct.name
-                    + "' is not a declared variable or type");
-            return null;
+        if (symbol != null) {
+            return new SemanticStructType(symbol);
         }
 
-        return new SemanticStructType(symbol);
+        EnumSymbol enumSymbol = ctx.resolveEnumIn(namespace, struct.name);
+
+        if (enumSymbol != null) {
+            return new SemanticEnumType(enumSymbol);
+        }
+
+        ctx.error("#"
+                + name
+                + " argument '"
+                + String.join("::", struct.namespaceSegments)
+                + "::"
+                + struct.name
+                + "' is not a declared variable or type");
+        return null;
     }
 
     private SemanticType resolveQualifiedValue(
             QualifiedNameNode qualified,
             String name
     ) {
+        SemanticType variantType = tryResolveEnumVariantType(qualified.segments);
+
+        if (variantType != null) {
+            return variantType;
+        }
+
         List<String> namespaceSegments = qualified.segments.subList(
                 0,
                 qualified.segments.size() - 1
@@ -507,12 +535,43 @@ final class CompileTimeIntrinsics {
             return new SemanticStructType(symbol);
         }
 
+        EnumSymbol enumSymbol = ctx.resolveEnumReference(
+                new ArrayList<>(qualified.segments.subList(0, qualified.segments.size() - 1)));
+
+        if (enumSymbol != null) {
+            EnumVariant variant = enumSymbol.resolveVariant(variableName);
+
+            if (variant != null) {
+                return new SemanticEnumType(enumSymbol);
+            }
+        }
+
         ctx.error("#"
                 + name
                 + " argument '"
                 + String.join("::", qualified.segments)
                 + "' is not a declared variable or type");
         return null;
+    }
+
+    private SemanticType tryResolveEnumVariantType(List<String> segments) {
+        if (segments.size() < 2) {
+            return null;
+        }
+
+        List<String> enumPath = segments.subList(0, segments.size() - 1);
+        String variantName = segments.get(segments.size() - 1);
+        EnumSymbol enumSymbol = ctx.resolveEnumReference(new ArrayList<>(enumPath));
+
+        if (enumSymbol == null) {
+            return null;
+        }
+
+        if (enumSymbol.resolveVariant(variantName) == null) {
+            return null;
+        }
+
+        return new SemanticEnumType(enumSymbol);
     }
 
     private List<BigInteger> decodeStringBytes(StringLiteralNode literal) {
@@ -542,7 +601,8 @@ final class CompileTimeIntrinsics {
 
     private boolean isMatchable(SemanticType type) {
         if (type instanceof SemanticPrimitiveType
-                || type instanceof SemanticPtrType) {
+                || type instanceof SemanticPtrType
+                || type instanceof SemanticEnumType) {
             return true;
         }
 
@@ -554,7 +614,8 @@ final class CompileTimeIntrinsics {
     }
 
     private boolean isComparable(SemanticType type) {
-        if (type instanceof SemanticPrimitiveType) {
+        if (type instanceof SemanticPrimitiveType
+                || type instanceof SemanticEnumType) {
             return true;
         }
 
@@ -567,7 +628,8 @@ final class CompileTimeIntrinsics {
 
     private boolean isAssignable(SemanticType type) {
         if (type instanceof SemanticPrimitiveType
-                || type instanceof SemanticPtrType) {
+                || type instanceof SemanticPtrType
+                || type instanceof SemanticEnumType) {
             return true;
         }
 

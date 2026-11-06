@@ -238,6 +238,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
             return visit(ctx.structDecl());
         }
 
+        if (ctx.enumDecl() != null) {
+            return visit(ctx.enumDecl());
+        }
+
         if (ctx.globalVarDecl() != null) {
             return visit(ctx.globalVarDecl());
         }
@@ -292,6 +296,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
         if (ctx.structDecl() != null) {
             return visit(ctx.structDecl());
+        }
+
+        if (ctx.enumDecl() != null) {
+            return visit(ctx.enumDecl());
         }
 
         if (ctx.globalVarDecl() != null) {
@@ -388,6 +396,34 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
         }
 
         return new StructFieldDeclNode(span(ctx), type, name, constInitializer);
+    }
+
+    @Override
+    public ASTNode visitEnumDecl(FrankoParser.EnumDeclContext ctx) {
+        TypeNode backingType = (TypeNode) visit(ctx.type());
+        String name = ctx.IDENTIFIER().getText();
+
+        List<EnumVariantNode> variants = new ArrayList<>();
+
+        if (ctx.enumVariantList() != null) {
+            for (FrankoParser.EnumVariantContext variantCtx : ctx.enumVariantList().enumVariant()) {
+                variants.add((EnumVariantNode) visit(variantCtx));
+            }
+        }
+
+        return new EnumDeclNode(span(ctx), name, backingType, variants);
+    }
+
+    @Override
+    public ASTNode visitEnumVariant(FrankoParser.EnumVariantContext ctx) {
+        String name = ctx.IDENTIFIER().getText();
+        ASTNode constInitializer = null;
+
+        if (ctx.constExpr() != null) {
+            constInitializer = visit(ctx.constExpr());
+        }
+
+        return new EnumVariantNode(span(ctx), name, constInitializer);
     }
 
     @Override
@@ -611,6 +647,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
     public ASTNode visitDeclarationItem(FrankoParser.DeclarationItemContext ctx) {
         if (ctx.structDecl() != null) {
             return visit(ctx.structDecl());
+        }
+
+        if (ctx.enumDecl() != null) {
+            return visit(ctx.enumDecl());
         }
 
         if (ctx.functionDecl() != null) {
@@ -1419,38 +1459,9 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitUnsafeCastExpr(FrankoParser.UnsafeCastExprContext ctx) {
-        TypeNode target = new PrimitiveTypeNode(
-                span(ctx.primitiveType()),
-                primitiveKindOf(ctx.primitiveType())
-        );
+        TypeNode target = (TypeNode) visit(ctx.type());
 
         return new CastNode(span(ctx), target, visit(ctx.expr()), true);
-    }
-
-    private static PrimitiveKind primitiveKindOf(
-            FrankoParser.PrimitiveTypeContext target
-    ) {
-        if (target.INT8() != null) {
-            return PrimitiveKind.INT8;
-        } else if (target.INT16() != null) {
-            return PrimitiveKind.INT16;
-        } else if (target.INT32() != null) {
-            return PrimitiveKind.INT32;
-        } else if (target.INT64() != null) {
-            return PrimitiveKind.INT64;
-        } else if (target.UINT8() != null) {
-            return PrimitiveKind.UINT8;
-        } else if (target.UINT16() != null) {
-            return PrimitiveKind.UINT16;
-        } else if (target.UINT32() != null) {
-            return PrimitiveKind.UINT32;
-        } else if (target.UINT64() != null) {
-            return PrimitiveKind.UINT64;
-        }
-
-        throw new RuntimeException(
-                "Internal compiler error: cast target is not a primitive integer type"
-        );
     }
 
     @Override

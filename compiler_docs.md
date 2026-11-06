@@ -7,17 +7,19 @@ From now on please do not add comments in the Java source files. All comments
 about the compiler design should reside here.
 
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
-  integer constants, dynamic/static arrays, tuples, a capability-based pointer system
+  integer constants, dynamic/static arrays, tuples, enums, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
 - **Compiler**: 68 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
-  `.cpp` is compiled with the host C++ toolchain.
+  `.cpp` is compiled with the host C++ toolchain. Enums lower to generated
+  C++ wrapper structs with `from_integer_checked` conversion; integer
+  range checks use `franko_integer_unsafe_cast`.
 - **Runtime**: `include/FrankoRuntime.hpp`, one header for all build
   modes: `Franko_Dynamic_Array<T>` (owning dynamic arrays), raw C++ static
   arrays, `Franko_Thin_Pointer<T>` (pointers whose pointee is not an array;
   null by default), `Franko_Fat_Pointer<T>` (pointers to arrays), the byte
-  intrinsics, and `franko_unsafe_cast`. Two C++ defines select the mode:
+  intrinsics, and `franko_integer_unsafe_cast`. Two C++ defines select the mode:
   `FRANKO_USE_JEMALLOC=1` links the bundled jemalloc (`third_party/`)
   instead of the system allocator, and `FRANKO_BOUNDS_UNCHECKED=1`
   strips bounds/range/bit/offset checks. Defaults (no defines) are the
@@ -290,16 +292,21 @@ carries the originating `SourceSpan`, consumed by every
 The single source of truth for Franko syntax: combined ANTLR4 lexer+parser
 grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
-`program`/`topLevelItem`, namespace/import/struct/function declarations,
+`program`/`topLevelItem`, namespace/import/struct/enum/function declarations,
 declaration-level `compileTimeDeclIf` in top-level, namespace, and struct
 member positions, a labeled-alternative `statement` rule (including the
 `#if` statement form), `hashExpr` (`#name` and `#name(...)`) with
-`hashArg: type | expr`, a full precedence-climbing expression
+`hashArg: type | expr`, `enumDecl` in `topLevelItem`, `namespaceItem`, and
+`declarationItem` (so declaration-level `#if` can select enums at
+global/namespace scope; enums are not valid inside structs), `enumVariant`
+(`IDENTIFIER (ASSIGN constExpr)?`) with `enumVariantSep` (comma or
+newline-separated), a full precedence-climbing expression
 layer (including unary `-`, `!`, `~` and the compound assignments `+=`, `-=`,
 `*=`, `/=`, `%=`, `&=`, `|=`, `^=`), a mirrored `constExpr` sub-grammar, and
 the `type` rule with primitive types, struct names, tuple types,
 `[T]` / `[T, size]` / `ptr<T>` / `mview<T>` / `view<T>` and the `?`
-inferred-size alternative. Tuple types use
+inferred-size alternative. Enum backing types use the full `type` rule so
+invalid backings reach semantic analysis with a diagnostic. Tuple types use
 `LPAREN tupleTypeElement (COMMA tupleTypeElement)+ RPAREN`, where each
 `tupleTypeElement` is `type IDENTIFIER?`; at least two elements are
 required. `aggregateLiteral` is an ordinary `primary` expression with two
@@ -316,10 +323,12 @@ declaration sugar while a newline before `{` leaves an ordinary following
 block untouched. Pointer
 permissions are created by the intrinsic
 forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
-by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening
-or pointer permission downgrade; the target is a full `type`) and
-`unsafe_cast<T>(expr)` (checked integer conversions; target restricted to
-`primitiveType` at parse time). Array literals are ordinary `primary`
+by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening,
+enum-to-integer value-preserving conversions, or pointer permission
+downgrade; the target is a full `type`) and
+`unsafe_cast<T>(expr)` (checked integer conversions and integer-to-enum
+conversions; the target is a full `type`, with non-integer/non-enum
+targets rejected by the semantic checker). Array literals are ordinary `primary`
 expressions (an array literal is a `view<[T, N]>` value, §4.13). Aggregate
 literals are ordinary expressions but are constrained to specific
 value-consuming contexts during semantic analysis (§4.26).
@@ -351,7 +360,13 @@ and `positional = false`; a bare expression becomes a `FieldInitNode` with
 `name = null` and `positional = true`. `visitVarDecl` distinguishes
 the two `declSuffix` alternatives with `instanceof`, producing
 `VarDeclInitNode` for `DeclAssignInit` and `VarDeclFieldsInitNode` for
-`DeclFieldInit`.
+`DeclFieldInit`. `visitEnumDecl` builds an `EnumDeclNode` with its
+desugared backing type and `EnumVariantNode`s, and `visitEnumVariant`
+keeps the raw `constExpr` (or `null` for implicit variants); enum cases
+are dispatched in `visitTopLevelItem`, `visitNamespaceItem`, and
+`visitDeclarationItem`, with no `visitStructMember` case since enums are
+not valid inside structs. `visitUnsafeCastExpr` visits the full `type`
+target so `unsafe_cast<Enum>` parses.
 Every rule/statement/declaration/type/literal construction attaches a
 `SourceSpan`; postfix and lvalue suffix chains merge the base span with the
 suffix span. Calls `StringLiteralDecoder.decodeRawContent` for import-path
@@ -366,7 +381,9 @@ then/else raw statements), `WhileNode` with its desugared-for update epilogue,
 `ReturnNode`); compile-time expressions (`CompileTimeCallNode`,
 `CompileTimeNameNode`); declaration conditionals (`DeclIfNode`); declarations
 (`FunctionDeclNode`, `ParameterNode`, `StructDeclNode` with ordered
-`memberItems`, `StructFieldDeclNode`, `GlobalVarDeclNode`, `VarDeclNode`,
+`memberItems`, `StructFieldDeclNode`, `EnumDeclNode` (name, backing `TypeNode`,
+ordered `EnumVariantNode`s) with `EnumVariantNode` (name plus nullable
+const `constInitializer`, `null` for implicit variants), `GlobalVarDeclNode`, `VarDeclNode`,
 `VarDeclInitNode`, `ImportNode`, `NamespaceNode`, `QualifiedNameNode`);
 types (`PrimitiveKind` enum, `PrimitiveTypeNode`,
 `VoidTypeNode`, `DynamicArrayTypeNode`, `StaticArrayTypeNode`, `PtrTypeNode`
@@ -393,10 +410,12 @@ Lifecycle rules that used to live as comments here:
   `ImportNode` survives desugaring and is consumed by `ImportResolver` when
   it splices imported documents. `ArrayLiteralNode` and
   `AggregateLiteralNode` are deliberately NOT sugar: they survive desugaring
-  and are lowered during semantic analysis (§4.13, §4.26).
+  and are lowered during semantic analysis (§4.13, §4.26, §4.27).
 - `GlobalVarDeclNode` is deliberately distinct from `VarDeclNode` because the
   Desugarer keys top-level handling off node classes and global const
   initializers must never be rewritten into assignment statements.
+- `EnumDeclNode` survives desugaring and is consumed by semantic analysis,
+  like `StructDeclNode` (§4.27).
 - `WhileNode.update` exists only so desugared for-loops run their update
   epilogue on `continue` (see §4.1).
 - `CompileTimeIfNode` is consumed by `SemanticAnalyzer`: the selected branch's
@@ -419,8 +438,13 @@ and `type`. Aggregate literals serialize as `"node": "aggregateLiteral"`
 with `type` and a `fields` array of `"node": "fieldInit"` entries (`name`,
 `positional`, and `value`; positional entries have `name: null`); the
 field-wise declaration sugar serializes as
-`"node": "varDeclFieldsInit"` with `type`, `name`, and `fields`. Unknown node
+`"node": "varDeclFieldsInit"` with `type`, `name`, and `fields`. Enum
+declarations serialize as `"node": "enumDecl"` with `name`,
+`backingType`, and `variants`, and each variant as `"node":
+"enumVariant"` with `name` and `constInitializer`. Unknown node
 kinds are hard errors.
+
+Because type syntax is parsed before name resolution, enum references in type positions remain raw `StructTypeNode`s and serialize as `"type": "struct"`. Semantic analysis decides whether the named type is a struct or an enum.
 
 #### `AstDocument` / `SourceTable` / `SourceSpan` / `SourcePaths`
 `AstDocument` is the pass-boundary raw-AST document (`phase`, `sources`,
@@ -486,7 +510,13 @@ every `constExpr` slot it owns (array sizes, global const initializers,
 field defaults) → a canonical decimal `IntNode` via
 `ConstExpressionEvaluator`; `break N` levels are folded later during
 semantic analysis. Array literals are passed through untouched
-(§4.13). `CompileTimeIfNode` is preserved: its condition is desugared
+(§4.13). `EnumDeclNode` is desugared in place (`desugarEnumDecl`): the
+backing `TypeNode` is desugared and every explicit variant `constExpr` is
+folded to a canonical `IntNode` (`null` is preserved for implicit
+variants); top-level and namespace enum declarations flow through the same
+top-level item list, so selected `#if` branches are desugared
+automatically. `ImportResolver` needs no special handling; it splices
+top-level items generically. `CompileTimeIfNode` is preserved: its condition is desugared
 normally, braceless branches are grouped, and nested `#if` nodes survive for
 semantic selection (§4.18). Declaration-level `DeclIfNode`s are preserved
 and their branch declarations are desugared in place; `SemanticAnalyzer`
@@ -602,11 +632,15 @@ declaration-level `DeclIfNode` before the normal six-phase analyzer starts.
 It uses its own `SymbolTable`, `ExpressionLowering`, and diagnostics. A
 pre-registration pass records unconditional namespaces, struct shells,
 fields, methods, and globals so forward type/global references work in
-conditions. Struct-member `#if`s are resolved into final field/method
+conditions. Enums are pre-registered too (`EnumDeclNode` handling in
+`preRegisterShells`): a quiet builder computes backing kinds and wrapped
+variant values without emitting diagnostics, so unconditional enums are
+visible while evaluating conditions and resolving field/global types
+without duplicating the main pass's diagnostics. Struct-member `#if`s are resolved into final field/method
 lists. A selection pass then walks global and namespace items in source
 order, evaluates each condition with `ExpressionAnalyzer`, splices the
 selected declarations into the enclosing scope, and registers newly
-selected declarations for later conditions. Unselected branches never enter
+selected declarations (including selected conditional enums) for later conditions. Unselected branches never enter
 the symbol table. Selection diagnostics are merged into the semantic pass.
 
 #### `SemanticAnalyzer`
@@ -615,14 +649,15 @@ symbol-resolved Semantic AST. It deliberately does **not** enforce full
 language correctness (that is the legality cluster's job). Entry:
 `analyze(AstDocument)` → `PassResult` (a `SastDocument` plus diagnostics). Ordinary
 user errors are returned as diagnostics rather than thrown. Program
-analysis runs six internal phases:
-1. register struct names (placeholder symbols),
-2. resolve struct fields, fold field defaults,
-3. register method signatures,
-4. register global variables (fold const initializers; propagate module
-   compile-time-constant flags),
-5. register all function signatures (enables forward references/recursion),
-6. lower items in source order (structs+methods, globals, function bodies).
+analysis runs eight internal phases:
+1. collect namespaces,
+2. create enum symbols (`analyzeEnumDecl`),
+3. create struct shells,
+4. resolve struct fields,
+5. register methods,
+6. register globals,
+7. register functions,
+8. lower items in source order (enums, structs+methods, globals, function bodies).
 
 Assignment statements to struct-typed targets are first offered to
 `ExpressionAnalyzer.tryLowerOperatorAssignment`, which lowers them to an
@@ -699,6 +734,22 @@ fields `_0`, `_1`, … with `tupleIndex >= 0`, and is recorded as a pending
 structural keys is an internal compiler error. `resetTupleTypes()` clears
 the intern map and pending declarations at the start of analysis, and
 `pendingTupleDecls()` exposes the declarations to prepend.
+Enum declarations are analyzed by `analyzeEnumDecl(EnumDeclNode, namespace)`:
+the backing type must be a `PrimitiveTypeNode` (otherwise
+`Enum backing type must be one of the eight primitive integer types, got
+<type>` with an `INT32` fallback); an empty enum is rejected; duplicate
+variant names are rejected; all-explicit vs all-implicit is enforced
+(mixed forms are rejected); explicit values are read via
+`preEvaluatedConstValue` and fit-checked; implicit values start at `0`
+and wrap with two's-complement arithmetic (`TypeChecker.wrapBigIntegerToPrimitive`:
+unsigned modulo `2^bits`, signed modulo `2^bits` then subtract `2^bits`
+in the upper half); duplicate numeric values after wrapping are rejected.
+The `EnumSymbol` is returned even on error for recovery.
+Named-type resolution treats `StructTypeNode` as a struct-or-enum
+reference: the struct symbol is tried first, then the enum symbol
+(`resolveStructTypeSymbolQuiet` / `resolveEnumTypeSymbolQuiet`, with
+strict namespace resolution for qualified forms), and `Unknown type 'X'`
+is reported when neither exists.
 
 #### `SemanticASTNode`
 The lowered AST data model (pure data classes): program/namespace/block
@@ -729,7 +780,7 @@ a selected operator parameter type that differs from `view<target.type>`
 (constant fitting or an inner array-view decay). User-written
 `getptr`/`getmview`/`getview` never set the flag. `SemanticCastExprNode` has a `checked`
 flag: `false` → plain `static_cast` (`cast`), `true` → runtime-checked
-`franko_unsafe_cast` (`unsafe_cast`). `SemanticVarDeclNode` carries either a
+`franko_integer_unsafe_cast` (`unsafe_cast`). `SemanticVarDeclNode` carries either a
 folded `BigInteger` initializer (primitive globals) or a `staticInitializer`
 expression (pointer globals initialized with a statically representable
 address). `SemanticAggregateLiteralNode` carries the resolved struct/tuple
@@ -747,7 +798,10 @@ canonical folded decimal so `[int32,5+5]` equals `[int32,10]`),
 `SemanticStructType` (nominal identity via its `StructSymbol`),
 `SemanticTupleType` (structural identity via its ordered element types),
 `SemanticFunctionType` (with `signatureKey()` like
-`fn(int32,ptr<std.X>)->void` for mangling). Two distinct text APIs:
+`fn(int32,ptr<std.X>)->void` for mangling), and `SemanticEnumType`
+(nominal identity via its `EnumSymbol`; `describe()`/`mangleKey()` return
+the qualified enum name, so `#what_type(Status)` is `"Status"`).
+Two distinct text APIs:
 `describe()` (diagnostic text, free to change) and `mangleKey()` (canonical
 space-free C++-spelling key embedded in generated names and returned by
 `#what_type` — must stay stable). Structural
@@ -802,8 +856,12 @@ The symbol hierarchy and mangling policy:
   returns `_<index>` for tuple fields and the declared name otherwise.
   `StructSymbol.isTuple` marks the synthetic `TUPLE_<hash>` symbols
   created for tuple types (no namespace, no methods).
+- `EnumVariant` (name + `BigInteger` value) and `EnumSymbol` (name,
+  namespace, backing kind, ordered variants, with `qualifiedName()`,
+  `resolveVariant(name)`, and `variantWithValue(value)`). Enums are nominal
+  types, not variables/functions, so `EnumSymbol` does not extend `Symbol`.
 - `NamespaceSymbol` — parent/children tree with per-namespace tables for
-  structs, functions, globals.
+  structs, enums, functions, globals.
 
 The hash in every mangled name is `Mangler.hashHex(signatureKey())`: the low
 32 bits of a 64-bit FNV-1a hash, emitted as 8 hex digits. Overloads therefore
@@ -814,8 +872,11 @@ Scope/symbol environment for semantic analysis (refactored out of an earlier
 `SemanticAnalyzer.Context`). Owns: lexical variable scopes
 (`pushScope/popScope/declare/resolve` with lexical → current-namespace globals
 → global-namespace globals lookup order); namespace declaration/resolution and
-`setCurrentNamespace`; struct tables with namespace-chain fallback
-(`resolveStruct`) vs strict (`resolveStructIn`); function/method overload
+`setCurrentNamespace`; struct and enum tables with namespace-chain fallback
+(`resolveStruct`/`resolveEnum`) vs strict (`resolveStructIn`/`resolveEnumIn`,
+plus `resolveEnumReference` for enum type paths); struct and enum names share
+one type-name namespace (`declareStruct` rejects an existing enum and vice
+versa); function/method overload
 registration and resolution (`resolveFunction/resolveMethod` — arity +
 type applicability, constant-fluid arguments may widen, nonconstants must
 match exactly **or be a pointer conversion** (permission downgrade or
@@ -837,9 +898,9 @@ argument's element type is inferred — a pending literal is applicable to
 a `view<[...]>` parameter whose shape matches the literal's
 (`isArrayLiteralShapeApplicable`, exact length = exact match, dynamic =
 decay cost 2); raw-decl→symbol registration maps;
-name-clash warnings (struct names live in a separate namespace so clashing
+name-clash warnings (struct and enum names live in a separate namespace so clashing
 with variables/functions is legal — the C++ backend's kind prefixes
-`VAR_`/`FUNC_`/`STRUCT_` keep generated names unambiguous); and diagnostic
+`VAR_`/`FUNC_`/`STRUCT_`/`ENUM_` keep generated names unambiguous); and diagnostic
 delegation to `DiagnosticBag`. `splitNamespacePath` is a static helper also
 used by `Cpp14Codegen`.
 `resolveOperatorMethodWithLiterals` is a separate, operator-only overload
@@ -865,7 +926,8 @@ the public registration/lookup API plus scope and namespace bookkeeping;
 argument to a parameter, exact-permission preference, constant-fit
 preference/costs, pointer-conversion/downgrade costs, array-literal shape
 matching, operator-method applicability/cost, duplicate-signature identity,
-and call-signature formatting. Keeping these rules in one helper leaves
+and call-signature formatting, with `arrayLiteralRowsMatch` accepting
+`SemanticEnumType` in the scalar-element case. Keeping these rules in one helper leaves
 `SymbolTable` focused on symbol tables and lookup order.
 
 #### `CallArg`
@@ -893,7 +955,11 @@ calls whose hidden self argument is synthesized as
 type** (pointer receivers need explicit `$(p).method(...)`; the creation
 intrinsic's permission rule is what rejects an under-qualified receiver);
 `getptr`/`getmview`/`getview` lower to `SemanticGetPtrNode` with the
-corresponding pointer permission; qualified `ns::name` references resolve
+corresponding pointer permission; qualified `ns::name` references first try
+enum variant resolution (`Enum::Variant`, returning
+`SemanticEnumVariantNode` with `constantValue` `null` so variants never
+participate in fluid constant folding; unknown variants are diagnosed and
+enum matches take precedence over namespace variables) and then resolve
 strictly against declared namespaces, and compile-time constants
 and `#IS_*` target names fold into integer literals; `#name(...)` calls are
 delegated to `CompileTimeIntrinsics` before ordinary function resolution
@@ -902,9 +968,14 @@ lowered). `inferBinaryResultType` implements the fluid-constant rule
 (when one operand is a folded constant, the result takes the other side's
 type), while unary `~` is type-preserving like unary `-`; casts between identical primitive kinds are returned unchanged (no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
-resolver) and `unsafe_cast<T>()` always lowers as a checked cast; the
+resolver) and `unsafe_cast<T>()` always lowers as a checked cast, with
+integer and pointer targets as before and enum targets accepted for
+semantic checking; enum-to-integer and integer-to-enum casts always produce
+a `SemanticCastExprNode` with `constantValue = null`, so enum conversions
+never take the constant-value fast path and constant invalid values still
+compile to runtime aborts; the
 legality checkers decide whether a `cast` is a permitted widening,
-permission downgrade, or array-view decay. Array literals are delegated
+enum-to-backing conversion, permission downgrade, or array-view decay. Array literals are delegated
 to `ArrayLiteralLowerer` with an optional expected type (the inference
 context of §4.13: assignment target type, return type, or call parameter
 type); call arguments are lowered in two phases through
@@ -960,7 +1031,7 @@ outermost result. The private `StaticValue` model has three cases:
 
 - target names (`#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`, `#IS_X86_64`,
   `#IS_ARM64`) → `StaticIntValue` `uint8`, from `TargetInfo`;
-- boolean predicates (`is_primitive`, `is_memcpy_safe`, `has_default_value`,
+- boolean predicates (`is_primitive`, `is_enum`, `is_memcpy_safe`, `has_default_value`,
   `is_memset_safe`, `is_same_type`, `is_matchable`, `is_comparable`,
   `is_assignable`, `is_value_assignable`) → `StaticIntValue`
   0/1 with type `uint8`;
@@ -979,7 +1050,9 @@ and runtime expressions are rejected as not being compile-time strings.
 producer is accepted without consumer-specific logic. Empty strings are
 rejected with the same `N >= 1` rule as ordinary strings. Type and value
 arguments are resolved through `resolveTypeOrValueArgument`: variables are
-resolved first, bare struct names fall back to struct types, and composite
+resolved first, bare struct names fall back to struct types and then enum
+types, qualified names fall back to variable/struct/enum types with enum
+variant references (`Status::alive`) resolving to the enum type, and composite
 types resolve through the wired `SemanticTypeResolver`. `materialize`
 turns `StaticIntValue` into `SemanticIntLiteralNode`, `StaticStringValue`
 into the hoisted `STRLIT_<hash>` `[byte, N]` global wrapped in a read-only
@@ -998,7 +1071,10 @@ value-assignable, assignable, memcpy/memset safe, and have no default value; a
 tuple with a static-array element is not value-assignable or assignable, and a
 tuple with a dynamic-array element is not memcpy/memset safe but has a
 default value. Tuples have no methods, so `is_matchable`/`is_comparable`
-return `0`. `what_type` prints the canonical `mangleKey()` form, for
+return `0`. Enums are `is_matchable`/`is_comparable`/`is_assignable`/
+`is_value_assignable` `1`, `is_memcpy_safe` `1` and `is_memset_safe` `0`
+via `TypeChecker`, `has_default_value` `1`, and `what_type` prints the
+qualified enum name. `what_type` prints the canonical `mangleKey()` form, for
 example `(int32,int32)`.
 `is_value_assignable` is exactly `TypeChecker.isValueAssignableType`
 (the by-value parameter and built-in whole-value assignment rule); unlike
@@ -1034,7 +1110,11 @@ Lowers `ArrayLiteralNode` expressions during semantic analysis into
 context passed in by `ExpressionAnalyzer` (an assignment target, return
 type, or call parameter of array shape); sizes come from the literal
 itself. Elements must be compile-time constant expressions of integer
-type: every literal is hoisted to a literal-backed global
+type, or enum variant references of a single enum type when the context
+element type is an enum (`lowerEnumLevel`: variants must be
+`SemanticEnumVariantNode`s of the same enum; runtime enum variables and
+expressions are rejected; underlying `BigInteger` values are stored in
+`literalValues` as usual): every literal is hoisted to a literal-backed global
 (`GlobalVariableSymbol.literalValues`, deduplicated by element type +
 values, named `ARRLIT_<hash>`) and lowered to `getview(<global>)` — exactly
 like string literals. Non-constant elements, jagged nested rows, empty
@@ -1091,7 +1171,7 @@ for these names so the dedicated message is the only one.
 
 #### `DeclarationChecker`
 Declaration-level legality: declared types must be legal Franko types
-(primitive, array, ptr/mview/view, struct, tuple; void and arrays-as-values
+(primitive, enum, array, ptr/mview/view, struct, tuple; void and arrays-as-values
 rejected),
 static array sizes must be constant, positive, and fit `uint32` (zero is
 rejected — the backend emits `T data[N]`), struct field graphs must not have
@@ -1135,12 +1215,17 @@ pointer conversion — permission downgrade or array-view decay —, no
 void/array arguments), array intrinsic calls are delegated to `ArrayIntrinsicChecker` (receiver
 permission, arity, element/argument rules, static-array bounds, and the
 intrinsic expression type); the rules kept here cover non-intrinsic
-expressions, constant static-array index/range bounds, cast rules
-(`cast` = value-preserving integer widening, pointer permission downgrade
+expressions, constant static-array index/range bounds, enum comparison
+rules (either operand enum requires the same exact enum type across all
+six operators), cast rules
+(`cast` = value-preserving integer widening, enum-to-exact-or-wider
+integer, pointer permission downgrade
 over an identical referenced type, or the static-to-dynamic array view
 decay — whose to-`ptr` form gets a dedicated "cannot decay ownership"
 error; `unsafe_cast` = checked integer
-conversion with compile-time constant range checks), creation-intrinsic
+conversion with compile-time constant range checks, integer-to-enum and
+enum-to-narrower conversions that are always runtime-checked with no
+constant rejection), creation-intrinsic
 legality (`getptr`/`getmview`/`getview` need an equally strong storage
 region, §4.9), deref legality, and void-in-value-context rules. A
 `SemanticGetPtrNode` with `temporary` set is accepted without the usual
@@ -1178,14 +1263,21 @@ constant-fit machinery (`requireConstantFitsType`, static
 `ExpressionAnalyzer`), pointer conversions (delegated directly to
 `PointerPermissions`), literal parsing (`parseIntegerLiteral`:
 0b/0x/decimal), element classification (`isMemsetSafe` — memset-filled
-byte-wise; `isMemcpySafe` — memcpy/memcmp-copied byte-wise; `hasDefaultValue`
-— the complement of raw-garbage validity: pointers and dynamic arrays
+byte-wise (`false` for enums); `isMemcpySafe` — memcpy/memcmp-copied byte-wise
+(`true` for enums); `hasDefaultValue`
+— the complement of raw-garbage validity: enums, pointers, and dynamic arrays
 return `true`, primitives and static arrays of primitives return `false`,
 and structs/tuples return `true` when at least one part has a defined
 default; separate from `isMemsetSafe`; `isByteType` — the byte/bit
 intrinsic element type) — recursive with
 path-scoped cycle detection so diamond-shaped field graphs stay fine while
-by-value cycles terminate.
+by-value cycles terminate. Enum helpers: `isEnumType`, `enumBackingKind`,
+`isValuePreservingEnumToIntegerCast` (exact backing kind or
+`isValuePreservingIntegerWidening`), and `wrapBigIntegerToPrimitive`
+(unsigned modulo `2^bits`, signed modulo `2^bits` then subtract `2^bits`
+in the upper half) for implicit wrapping. `isIntegral` is `false` for
+enums, which rejects arithmetic, bitwise, shifts, logical operators,
+conditions, and compound assignment naturally.
 Tuple types participate in the same recursive rules: a tuple is a
 value-assignable type iff every element is; `isMemsetSafe`,
 `hasDefaultValue`, and `isMemcpySafe` recurse through tuple elements exactly
@@ -1197,6 +1289,9 @@ also special-cases array targets fed a pointer-to-array source: the error
 suggests `memcpy`, and names string literals or array literals explicitly
 when the source is a hoisted literal view (`getview(<global>)` over a
 `literalBytes`/`literalValues` global).
+Enum targets require the exact same `SemanticEnumType` (integer literals
+and other enums are rejected); enum sources only assign to the same enum
+type (enum-to-integer assignment is rejected even when the value fits).
 It does not traverse the AST.
 
 #### `MemoryAnalysisContext`
@@ -1255,8 +1350,8 @@ arrays and dense indices.
 #### `MemoryShapeIndex`
 Recursive, boundary-stopped shape cache over `SemanticType`:
 `containsPointer`, `containsDynamicArray`, and `containsOwnerArrayPointer`.
-`SemanticPrimitiveType`, `SemanticVoidType`, `SemanticNullType`, and
-`SemanticFunctionType` have no flags. Any `SemanticPtrType` sets
+`SemanticPrimitiveType`, `SemanticEnumType`, `SemanticVoidType`, `SemanticNullType`, and
+`SemanticFunctionType` have no flags (enums are leaves with no hidden memory). Any `SemanticPtrType` sets
 `containsPointer` and stops descending; an owner pointer whose referenced type
 is a static or dynamic array also sets `containsOwnerArrayPointer`. A
 `SemanticDynamicArrayType` sets `containsDynamicArray` and stops. A static array
@@ -1861,7 +1956,7 @@ Implementation notes:
 The naming-visibility linter: run after both pruners and after
 `PointerPermissionChecker`, warnings-only. It reads the checked Semantic AST
 and never mutates it or affects codegen. The full user-facing naming style is
-documented in `language_docs/35-naming-conventions.md`; this pass enforces
+documented in `language_docs/36-naming-conventions.md`; this pass enforces
 only the access rules attached to the reserved prefixes.
 
 State per position:
@@ -1888,6 +1983,11 @@ Rules:
   global-scope code;
 - a struct referenced from a declared/function/field/cast-target type whose
   name starts with `__` is warned about under the same namespace rule;
+- an enum referenced from a declared/function/field/cast-target type or used
+  as an enum variant whose name starts with `__` is warned about under the
+  same namespace rule (`checkType`/`checkEnumAccess`); enum declarations
+  themselves need no linter pass since usage sites are checked through
+  declared type walks;
 - expression-inferred types are not rescanned, so a value obtained from an
   existing variable or function result does not produce an extra warning for
   the struct name;
@@ -1987,6 +2087,10 @@ dead-store analysis:
   struct, so the generated `TUPLE_<hash>` declaration survives whenever
   the tuple appears in a kept signature/declaration/expression/field; the
   synthetic struct's fields then pull in nested element types transitively.
+- **Enums**: kept iff a `SemanticEnumType` for them appears in surviving
+  code (`markType` marks the enum symbol); an enum declaration is kept iff
+  its symbol is kept. Expression types are already marked by
+  `collectExprTypeExprs`, so enum variant expressions keep their enum type.
 - If pruning empties a namespace, the namespace node itself is dropped.
   Blocks are never flattened (same scoping rule as `BranchPruner`).
 - If no `main` is found (cannot happen after successful analysis), the pass
@@ -2001,13 +2105,17 @@ dead-store analysis:
 The C++14 backend: walks the checked Semantic AST and emits the translation
 unit body that replaces `__FRANKO_PROGRAM__`. It performs **no** legality
 checking — it trusts every prior phase. Emission order is dependency-safe:
-struct forward declarations → struct definitions topologically sorted by
+global enum definitions → namespace enum definitions → struct forward
+declarations → struct definitions topologically sorted by
 by-value field dependency (with NSDMI initializers for folded field defaults,
-`= nullptr` for pointer fields) → global forward declarations (`extern`
+`= nullptr` for pointer fields; enum fields need no initializer since the
+wrapper's default constructor applies the first variant) → global forward declarations (`extern`
 per global, reopening each `NS_<segment>`) → global definitions → function
 prototypes →
 function definitions, all under mangled names and inside `NS_<segment>`
-namespaces where applicable. Ordinary structs emit as `STRUCT_<Name>`;
+namespaces where applicable. Enums emit as `ENUM_<Name>` wrapper structs
+(`emittedEnumTypeName`, qualified by namespace in `emitType`) before any
+struct definition, since struct fields may use them. Ordinary structs emit as `STRUCT_<Name>`;
 synthetic tuple structs emit as their `TUPLE_<hash>` name directly and
 their fields as `_0`, `_1`, … (`FieldSymbol.emittedName()`), so differently
 named but structurally identical tuple declarations share one C++ type. Tuple
@@ -2054,13 +2162,26 @@ dereference emits `(*(p).data)` for thin pointers,
 `(*static_cast<Franko_Dynamic_Array<T>*>(p.data))` for dynamic arrays,
 and `franko_static_array_ref<T, N>(static_cast<T*>(p.data))` for static
 arrays. Method `self` is an ordinary thin pointer parameter, so it is
-`Franko_Thin_Pointer<STRUCT_X>` at the call boundary. Static arrays are
+`Franko_Thin_Pointer<STRUCT_X>` at the call boundary. Enum declarations
+emit wrapper structs with a backing field, a first-variant default
+constructor, an explicit backing constructor, `VARIANT_<name>()`
+accessors, a templated `from_integer_checked` (range-checked via
+`franko_integer_unsafe_cast<Backing>`, membership-switched, panicking
+with the enum name, rejected value, and valid variants), and six
+comparison operators; `emitEnumVariant` emits
+`ENUM_Name::VARIANT_<name>()`, and enum array literals map stored backing
+values to their variants. Extreme backing literals (`INT64_MIN`,
+`UINT64_MAX`) go through `emitBackingLiteral`. Static arrays are
 raw C++ arrays (`int32_t VAR_x[3][2]`, outer dimension first); locals,
 globals, fields, and parameters use a declarator emitter, while return
 types and template arguments use a type-id emitter. Pre-folded constants
 are emitted directly; contextual `static_cast` via `emitAsType` preserves
 Franko's constant typing and already-chosen overloads; `unsafe_cast`
-emits `franko_unsafe_cast`.
+emits `franko_integer_unsafe_cast`. Enum casts never take the
+constant-value fast path: enum targets emit
+`ENUM::from_integer_checked(expr)`, enum-to-primitive checked casts emit
+`franko_integer_unsafe_cast<T>((expr).value)`, and safe ones emit
+`static_cast<T>((expr).value)`.
 
 Array indexing through a raw static array emits
 `franko_static_array_at(array, index)` in ASan and `-O` builds; `-Omax`
@@ -2151,10 +2272,15 @@ through a symbol registry. `SastDocument` is the pass-boundary semantic
 document; its `entryKind` is the top-level `EntryKind` enum shared with
 `SemanticAnalyzer` and `Main`. `SymbolRegistry` assigns deterministic `s0`, `s1`, ... IDs and
 preserves input IDs/order on load. Deserialization is multi-phase: struct
-shells, fields/parameters/globals/variables, functions/methods, struct
+shells, enum symbols with backing kinds and variants, fields/parameters/globals/variables, functions/methods, struct
 field/method tables, then AST nodes. `StructSymbol.methods` is serialized
 explicitly so overload groups survive; `methodDeclSymbols` /
-`functionDeclSymbols` are analysis-only and never serialized. The registry
+`functionDeclSymbols` are analysis-only and never serialized. Enum symbols
+serialize as kind `enum` with `name`, `namespace`, `backing`, and `variants`
+(`name`/`value` decimal strings), since variants are embedded rather than
+registered separately. Semantic types add kind `enum` (`symbol`), nodes add
+`enumDecl` (`symbol`), and expressions add `enumVariant` (`enum` symbol ID
+plus `variant` name). The registry
 may contain symbols not reachable from the final AST (for example pruned
 methods), intentionally keeping pass reruns information-complete.
 
@@ -2293,6 +2419,8 @@ AST node kinds and additional fields (all also carry `span`):
 | `parameter` | `type`, `name` |
 | `structDecl` | `name`, `fields`, `methods`, `members` |
 | `structFieldDecl` | `type`, `name`, `constInitializer` |
+| `enumDecl` | `name`, `backingType`, `variants` |
+| `enumVariant` | `name`, `constInitializer` |
 | `globalVarDecl` | `type`, `name`, `constInitializer`, `literalBytes`, `compileTimeConstant` |
 | `varDecl` | `type`, `name` |
 | `varDeclInit` | `type`, `name`, `init` |
@@ -2367,12 +2495,18 @@ that branch's statements.
 | `deref` | `expr` plus expression metadata |
 | `cast` | `checked`, `expr` plus expression metadata |
 | `aggregateLiteral` | `fields` (each `{field, value}`) plus expression metadata |
+| `enumDecl` | `symbol` |
+| `enumVariant` | `enum`, `variant` plus expression metadata |
+
+Expression metadata is always `type` (a semantic type object) and
+`constantValue` (decimal string or `null`; always `null` for enum variants).
 
 Expression metadata is always `type` (a semantic type object) and
 `constantValue` (decimal string or `null`).
 
 Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
-`tuple: true` for synthetic tuple structs), `field`
+`tuple: true` for synthetic tuple structs), `enum` (`name`, `namespace`,
+`backing`, `variants` with `{name, value}` decimal strings), `field`
 (`name`, `type`, `foldedDefault`, optional `tupleIndex` when `>= 0`),
 `function` (`name`, `namespace`,
 `parameters`, `returnType`, `isBuiltin`), `method` (function fields plus
@@ -2381,7 +2515,8 @@ Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
 `compileTimeConstantValue`, `literalBytes`, `literalValues`). Struct `methods`
 is a name → overload-ID array map. Semantic type kinds: `primitive` (`kind`),
 `void`, `dynamicArray` (`elementType`), `staticArray` (`elementType`, `size`),
-`ptr` (`permission`, `referencedType`), `null`, `struct` (`symbol`),
+`ptr` (`permission`, `referencedType`), `null`, `struct` (`symbol`), `enum`
+(`symbol`),
 `tuple` (`symbol`, `elements` with `{name, type}`), and
 `function` (`parameters`, `returnType`).
 
@@ -2459,7 +2594,7 @@ type it would have in C++. Consequences:
   `static_cast`); a conversion that can lose data must be written
   `unsafe_cast<T>(...)`, whose constants are range-checked at compile time
   (`ExpressionChecker.visitCast`) and whose runtime values emit the checked
-  `franko_unsafe_cast`.
+  `franko_integer_unsafe_cast`.
 
 ### 4.3 Name mangling
 - `FUNC_<name>_<8hex>` / `METH_<name>_OFSTRUCT_<Struct>_<8hex>`,
@@ -2705,7 +2840,7 @@ downgrades, then decays — see below):
 Everything else is exact. Explicit downgrades may be
 written `cast<view<T>>(p)`; casting upwards or across pointee types is an
 error. Integer `cast` is value-preserving widening only; `unsafe_cast`
-carries the checked conversions (`franko_unsafe_cast`).
+carries the checked conversions (`franko_integer_unsafe_cast`).
 
 **Decay implementation.** Decay is representation-preserving.
 `ptr<[T, N]>`/`mview<[T, N]>`/`view<[T, N]>` and their dynamic
@@ -3226,7 +3361,7 @@ their symbols. No new symbol or AST data is required.
 The complete user-facing naming style (struct casing, snake_case functions,
 variables and fields, namespace spelling, constant casing, reserved
 `franko/` imports, and the FFI naming exception) lives only in
-`language_docs/35-naming-conventions.md`; only the prefix access rules above
+`language_docs/36-naming-conventions.md`; only the prefix access rules above
 are compiler warnings.
 
 ## 4.17 Operator overloading (structs)
@@ -3640,6 +3775,56 @@ aggregate field values. `SemanticASTSerializer` registers the field symbols
 and round-trips the expression as `aggregateLiteral` with `{field, value}`
 entries.
 
+## 4.27 Enums
+
+Enums are nominal types backed by one of the eight primitive integer kinds.
+`EnumSymbol` (name, namespace, backing kind, ordered `EnumVariant`s) has
+object identity: two enums with the same backing and variants are distinct.
+`SemanticEnumType` wraps the symbol; `describe()`/`mangleKey()` return the
+qualified name, so `#what_type` yields `"Status"`.
+
+**Declarations.** `enumDecl` is valid at global or namespace scope (including
+inside declaration-level `#if` branches) and invalid inside structs (a parse
+error). `analyzeEnumDecl` requires a primitive backing (otherwise
+`Enum backing type must be one of the eight primitive integer types`),
+at least one variant, unique names, and all-explicit or all-implicit values
+(mixing is rejected). Explicit values are fit-checked; implicit values start
+at `0` and wrap with `TypeChecker.wrapBigIntegerToPrimitive`; duplicate
+numeric values after wrapping are rejected. The symbol is returned even on
+error for recovery.
+
+**C++ wrapper.** A plain C++ `enum class` cannot enforce the first-variant
+default: its elements would be indeterminate or zero. Codegen therefore
+emits one wrapper struct per enum (`ENUM_<Name>`, qualified by namespace)
+with a backing `value` field, a `constexpr` default constructor pinned to
+the first variant, an explicit backing constructor, `VARIANT_<name>()`
+accessors, a templated `from_integer_checked` (range-checked via
+`franko_integer_unsafe_cast<Backing>`, membership-switched, panicking with
+the enum name, rejected value, and valid variants), and six comparison
+operators. The wrapper is generated inline in the translation unit; the
+runtime header gains no enum machinery. The non-trivial default constructor
+is what enforces "never indeterminate" for locals, globals, struct fields,
+static array elements, and dynamic array `init`/`init_zero`/`resize` tails;
+`franko_element_lifecycle` already default-constructs such types, so the
+`calloc`ed `init_zero` bytes are safely overwritten. The membership switch
+is generated in every build mode; the backing-range check follows the
+renamed helper's `FRANKO_BOUNDS_UNCHECKED` stripping policy.
+
+**Conversions.** `cast` allows enum-to-exact-backing and enum-to-wider
+conversions; everything else needs `unsafe_cast`, which is always
+runtime-checked with no constant rejection: `unsafe_cast<BigState>(999)`
+compiles and aborts. Enum casts never take the constant-value fast path.
+The checked direction emits `franko_integer_unsafe_cast<T>((expr).value)`.
+
+**Predicates and literals.** `isValueAssignableType`/`hasDefaultValue` are
+`true` for enums, `isMemcpySafe` is `true`, `isMemsetSafe` is `false`
+(`isIntegral` stays `false`, so arithmetic/bitwise/shifts/logical/conditions
+reject enums naturally), and `is_matchable`/`is_comparable`/`is_assignable`
+are `true` via `CompileTimeIntrinsics`. `#is_enum` accepts types or values,
+including variant references. Enum array literals allow only variant
+references of the same enum and store backing values in `literalValues`,
+so hoisting, mangling, and `memcpy` work unchanged.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -3709,6 +3894,22 @@ language_tests/failure/dyn_array_buffer/
 language_tests/success/dyn_array_buffer/
 ```
 
+Enum fixtures:
+
+```text
+language_tests/success/enums_basic/
+language_tests/success/enums_defaults/
+language_tests/success/enums_state_machine/
+language_tests/success/enums_namespaces/
+language_tests/success/enums_casts/
+language_tests/success/enums_reflection/
+language_tests/success/enums_literals_memcpy/
+language_tests/success/enums_import/
+language_tests/success/enums_compile_time_decl/
+language_tests/runtime/enums/
+language_tests/failure/enums/
+```
+
 `language_tests/success/dyn_array_call_ptr_maybe` is intentionally warning-free
 now: the callee only writes elements, so it does not require `INITED` on the
 owner argument.
@@ -3733,6 +3934,7 @@ owner argument.
 | Remove unused structs/functions/variables | `InactiveDeclarationPruner` |
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Change normal/return type resolution | `SemanticTypeResolver` + `SemanticAnalyzer` + `ExpressionLowering` |
+| Add or change an enum | `Franko.g4` (`enumDecl`/`enumVariant`) + `FrankoASTVisitor` + `ASTNode.java` (`EnumDeclNode`/`EnumVariantNode`) + `ASTSerializer` + `Desugarer` (`desugarEnumDecl`) + `Symbol.java` (`EnumSymbol`/`EnumVariant`) + `SemanticType.java` (`SemanticEnumType`) + `SymbolTable`/`NamespaceSymbol` (enum tables, shared type-name namespace) + `SemanticTypeResolver.analyzeEnumDecl` + `DeclarationSelector` (quiet pre-registration) + `SemanticAnalyzer` (registration/lowering) + `ExpressionAnalyzer` (variant access, enum casts) + `TypeChecker`/`ExpressionChecker` (assignment, comparison, cast matrix) + `ArrayLiteralLowerer`/`OverloadResolution` (enum literals) + `CompileTimeIntrinsics` (`#is_enum`) + `Cpp14Codegen`/`Cpp14ExpressionEmitter` (wrapper emission, `from_integer_checked`, casts, enum literals) + `SemanticASTSerializer` + `InactiveDeclarationPruner`/`MemoryShapeIndex`/`PrivateIdentifierLinter` + §4.27 |
 | Change overload applicability/cost rules | `OverloadResolution` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |

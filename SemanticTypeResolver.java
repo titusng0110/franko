@@ -66,13 +66,29 @@ final class SemanticTypeResolver {
         }
 
         if (node instanceof StructTypeNode s) {
-            StructSymbol structSymbol = resolveStructTypeSymbol(s);
+            StructSymbol structSymbol = resolveStructTypeSymbolQuiet(s);
 
-            if (structSymbol == null) {
-                return FALLBACK_TYPE;
+            if (structSymbol != null) {
+                return new SemanticStructType(structSymbol);
             }
 
-            return new SemanticStructType(structSymbol);
+            EnumSymbol enumSymbol = resolveEnumTypeSymbolQuiet(s);
+
+            if (enumSymbol != null) {
+                return new SemanticEnumType(enumSymbol);
+            }
+
+            if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+                symbolTable.error("Unknown type '" + s.name + "'");
+            } else {
+                symbolTable.error("Unknown type '"
+                        + String.join("::", s.namespaceSegments)
+                        + "::"
+                        + s.name
+                        + "'");
+            }
+
+            return FALLBACK_TYPE;
         }
 
         if (node instanceof TupleTypeNode tuple) {
@@ -262,41 +278,216 @@ final class SemanticTypeResolver {
         return symbol;
     }
 
-    private StructSymbol resolveStructTypeSymbol(StructTypeNode s) {
+    private StructSymbol resolveStructTypeSymbolQuiet(StructTypeNode s) {
         if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
-            StructSymbol structSymbol = symbolTable.resolveStruct(s.name);
-
-            if (structSymbol == null) {
-                symbolTable.error("Unknown struct type '" + s.name + "'");
-            }
-
-            return structSymbol;
+            return symbolTable.resolveStruct(s.name);
         }
-
-        List<String> namespaceSegments = s.namespaceSegments;
-        String qualified = String.join("::", namespaceSegments)
-                + "::"
-                + s.name;
 
         NamespaceSymbol namespace =
-                symbolTable.resolveNamespace(namespaceSegments);
+                symbolTable.resolveNamespace(s.namespaceSegments);
 
         if (namespace == null) {
-            symbolTable.error("Unknown namespace '"
-                    + String.join("::", namespaceSegments)
-                    + "'");
             return null;
         }
 
-        StructSymbol structSymbol = symbolTable.resolveStructIn(namespace, s.name);
+        return symbolTable.resolveStructIn(namespace, s.name);
+    }
 
-        if (structSymbol == null) {
-            symbolTable.error("Unknown struct type '"
-                    + qualified
-                    + "'");
+    private EnumSymbol resolveEnumTypeSymbolQuiet(StructTypeNode s) {
+        if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+            return symbolTable.resolveEnum(s.name);
+        }
+
+        NamespaceSymbol namespace =
+                symbolTable.resolveNamespace(s.namespaceSegments);
+
+        if (namespace == null) {
             return null;
         }
 
-        return structSymbol;
+        return symbolTable.resolveEnumIn(namespace, s.name);
+    }
+
+    EnumSymbol analyzeEnumDecl(EnumDeclNode node, String namespace) {
+        SemanticPrimitiveKind backingKind = SemanticPrimitiveKind.INT32;
+
+        if (node.backingType instanceof PrimitiveTypeNode p) {
+            backingKind = SemanticPrimitiveKind.valueOf(p.kind.name());
+        } else {
+            String got = describeTypeNodeForEnumError(node.backingType);
+            symbolTable.error("Enum backing type must be one of the eight primitive integer types, got " + got);
+        }
+
+        String enumDisplay = namespace == null ? node.name : namespace + "::" + node.name;
+
+        if (node.variants.isEmpty()) {
+            symbolTable.error("Enum '" + enumDisplay + "' must declare at least one variant");
+            return new EnumSymbol(node.name, namespace, backingKind, List.of());
+        }
+
+        Set<String> seenNames = new HashSet<>();
+        List<EnumVariantNode> uniqueVariants = new ArrayList<>();
+
+        for (EnumVariantNode variant : node.variants) {
+            if (!seenNames.add(variant.name)) {
+                symbolTable.diagnostics().push(variant.span);
+                try {
+                    symbolTable.error("Duplicate variant '" + variant.name + "' in enum '" + enumDisplay + "'");
+                } finally {
+                    symbolTable.diagnostics().pop();
+                }
+                continue;
+            }
+
+            uniqueVariants.add(variant);
+        }
+
+        int explicitCount = 0;
+
+        for (EnumVariantNode variant : uniqueVariants) {
+            if (variant.constInitializer != null) {
+                explicitCount++;
+            }
+        }
+
+        if (explicitCount > 0 && explicitCount < uniqueVariants.size()) {
+            symbolTable.error("Enum '" + enumDisplay + "' must provide explicit values for every variant or for none; mixing explicit and implicit values is not allowed");
+        }
+
+        boolean allExplicit = explicitCount == uniqueVariants.size();
+        List<EnumVariant> computed = new ArrayList<>();
+        Map<BigInteger, String> valueToVariant = new LinkedHashMap<>();
+
+        if (allExplicit) {
+            for (EnumVariantNode variant : uniqueVariants) {
+                BigInteger value = exprAnalyzer.preEvaluatedConstValue(
+                        variant.constInitializer,
+                        "enum variant value"
+                );
+
+                if (!TypeChecker.fitsBigIntegerToPrimitive(value, backingKind)) {
+                    symbolTable.diagnostics().push(variant.span);
+                    try {
+                        symbolTable.error("Enum variant '" + variant.name + "' value " + value + " does not fit in " + backingKind.name().toLowerCase());
+                    } finally {
+                        symbolTable.diagnostics().pop();
+                    }
+                }
+
+                if (valueToVariant.containsKey(value)) {
+                    symbolTable.diagnostics().push(variant.span);
+                    try {
+                        symbolTable.error("Duplicate value '" + value + "' in enum '" + enumDisplay + "'");
+                    } finally {
+                        symbolTable.diagnostics().pop();
+                    }
+                } else {
+                    valueToVariant.put(value, variant.name);
+                }
+
+                computed.add(new EnumVariant(variant.name, value));
+            }
+        } else {
+            BigInteger previous = null;
+
+            for (EnumVariantNode variant : uniqueVariants) {
+                BigInteger value;
+
+                if (variant.constInitializer != null) {
+                    value = exprAnalyzer.preEvaluatedConstValue(
+                            variant.constInitializer,
+                            "enum variant value"
+                    );
+
+                    if (!TypeChecker.fitsBigIntegerToPrimitive(value, backingKind)) {
+                        symbolTable.diagnostics().push(variant.span);
+                        try {
+                            symbolTable.error("Enum variant '" + variant.name + "' value " + value + " does not fit in " + backingKind.name().toLowerCase());
+                        } finally {
+                            symbolTable.diagnostics().pop();
+                        }
+                    }
+                } else if (previous == null) {
+                    value = BigInteger.ZERO;
+                    value = TypeChecker.wrapBigIntegerToPrimitive(value, backingKind);
+                } else {
+                    value = TypeChecker.wrapBigIntegerToPrimitive(previous.add(BigInteger.ONE), backingKind);
+                }
+
+                if (valueToVariant.containsKey(value)) {
+                    symbolTable.diagnostics().push(variant.span);
+                    try {
+                        symbolTable.error("Duplicate value '" + value + "' in enum '" + enumDisplay + "'");
+                    } finally {
+                        symbolTable.diagnostics().pop();
+                    }
+                } else {
+                    valueToVariant.put(value, variant.name);
+                }
+
+                computed.add(new EnumVariant(variant.name, value));
+                previous = value;
+            }
+        }
+
+        return new EnumSymbol(node.name, namespace, backingKind, computed);
+    }
+
+    private static String describeTypeNodeForEnumError(TypeNode node) {
+        if (node == null) {
+            return "<null>";
+        }
+
+        if (node instanceof PrimitiveTypeNode p) {
+            return p.kind.name().toLowerCase();
+        }
+
+        if (node instanceof VoidTypeNode) {
+            return "void";
+        }
+
+        if (node instanceof StructTypeNode s) {
+            if (s.namespaceSegments == null || s.namespaceSegments.isEmpty()) {
+                return s.name;
+            }
+
+            return String.join("::", s.namespaceSegments) + "::" + s.name;
+        }
+
+        if (node instanceof DynamicArrayTypeNode d) {
+            return "[" + describeTypeNodeForEnumError(d.elementType) + "]";
+        }
+
+        if (node instanceof StaticArrayTypeNode s) {
+            String size = "?";
+
+            if (s.sizeExpr instanceof IntNode n) {
+                size = n.value;
+            }
+
+            return "[" + describeTypeNodeForEnumError(s.elementType) + ", " + size + "]";
+        }
+
+        if (node instanceof PtrTypeNode a) {
+            return a.kind.spelling() + "<" + describeTypeNodeForEnumError(a.referencedType) + ">";
+        }
+
+        if (node instanceof TupleTypeNode t) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("(");
+
+            for (int i = 0; i < t.elements.size(); i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+
+                sb.append(describeTypeNodeForEnumError(t.elements.get(i).type));
+            }
+
+            sb.append(")");
+            return sb.toString();
+        }
+
+        return node.getClass().getSimpleName();
     }
 }

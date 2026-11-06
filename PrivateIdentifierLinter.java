@@ -277,6 +277,11 @@ public final class PrivateIdentifierLinter {
             return;
         }
 
+        if (node instanceof SemanticEnumVariantNode n) {
+            checkEnumAccess(n.enumSymbol);
+            return;
+        }
+
         if (node instanceof SemanticAggregateLiteralNode n) {
             for (SemanticAggregateFieldInit init : n.fields) {
                 if (n.type instanceof SemanticStructType structType) {
@@ -383,6 +388,11 @@ public final class PrivateIdentifierLinter {
             return;
         }
 
+        if (type instanceof SemanticEnumType enumType) {
+            checkEnumAccess(enumType.enumSymbol);
+            return;
+        }
+
         if (type instanceof SemanticTupleType tupleType) {
             for (FieldSymbol field : tupleType.fields) {
                 checkType(field.type);
@@ -422,6 +432,24 @@ public final class PrivateIdentifierLinter {
                 + ". Are you sure you want to reference it from "
                 + accessContextDescription()
                 + "? Structs starting with '__' are internal to the namespace they are in.");
+    }
+
+    private void checkEnumAccess(EnumSymbol enumSymbol) {
+        if (!enumSymbol.name.startsWith("__")) {
+            return;
+        }
+
+        if (isInternalToCurrentNamespace(enumSymbol.namespace)) {
+            return;
+        }
+
+        diagnostics.warning("'"
+                + enumSymbol.qualifiedName()
+                + "' is an internal enum of "
+                + namespaceDescription(enumSymbol.namespace)
+                + ". Are you sure you want to reference it from "
+                + accessContextDescription()
+                + "? Enums starting with '__' are internal to the namespace they are in.");
     }
 
     private boolean isInternalToCurrentNamespace(String declaringNamespace) {

@@ -1,6 +1,6 @@
 // Failure fixture: casts/unsafe_cast_to_pointer
-// unsafe_cast<T> is restricted to the eight primitive integer types;
-// a pointer target does not parse.
+// unsafe_cast<T> accepts a full type, so a pointer target parses;
+// it is rejected by the semantic checker.
 func main() -> int32 {
     int32 x = 5;
     ptr<int32> p = unsafe_cast<ptr<int32>>(x);

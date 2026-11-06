@@ -1,7 +1,7 @@
 import "franko/io"
 
 // Failure fixture: casts/cast_to_array_target
-// cast<T> targets must be primitive integer types or pointer types.
+// cast<T> targets must be primitive integer types, pointer types, or enum types.
 func main() -> int32 {
     int32 x = 5;
     int32 y = cast<[int32, 3]>(x);
