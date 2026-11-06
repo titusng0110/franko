@@ -1,0 +1,5 @@
+// A tuple initializer is either entirely positional or entirely named.
+func main() -> int32 {
+    (int32, int32) t = (int32, int32) { 1, _1 = 2 }
+    return 0
+}

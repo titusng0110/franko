@@ -127,11 +127,13 @@ func insert(int key) -> void {
     }
     uint z = allocated.idx
 
-    nodes[z].key = key
-    nodes[z].red = 1
-    nodes[z].left = NIL
-    nodes[z].right = NIL
-    nodes[z].parent = NIL
+    nodes[z] = RbNode {
+        key = key,
+        red = 1,
+        left = NIL,
+        right = NIL,
+        parent = NIL
+    }
 
     uint y = NIL
     uint x = root

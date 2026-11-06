@@ -1,0 +1,13 @@
+// Field-wise initialization assigns fields directly, so a named
+// array field still follows ordinary array assignment rules.
+struct Buffer {
+    int32 cap
+    [byte] buf
+}
+
+func main() -> int32 {
+    [byte, 4] existing
+
+    Buffer b { cap = 20, buf = existing }
+    return 0
+}

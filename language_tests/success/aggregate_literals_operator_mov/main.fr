@@ -1,0 +1,38 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Aggregate Literals and OPERATOR_MOV
+// ============================================================
+// Declaration-assignment construction goes through ordinary
+// whole-value assignment, so an applicable OPERATOR_MOV runs.
+// Field-wise declaration initialization assigns each field
+// directly and never invokes OPERATOR_MOV.
+// ============================================================
+
+struct Marker {
+    int32 v
+    int32 source = 0
+
+    func OPERATOR_MOV(ptr<Marker> self, view<Marker> other) -> void {
+        $(self).v = $(other).v
+        $(self).source = 99
+        return
+    }
+}
+
+func main() -> int32 {
+    Marker a = Marker { v = 5, source = 0 }
+    print(a.v)
+    print(a.source)
+
+    Marker b { v = 5, source = 0 }
+    print(b.v)
+    print(b.source)
+
+    Marker c
+    c = Marker { v = 6, source = 0 }
+    print(c.v)
+    print(c.source)
+
+    return 0
+}

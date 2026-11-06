@@ -78,6 +78,11 @@ public class ExpressionChecker {
             return;
         }
 
+        if (node instanceof SemanticAggregateLiteralNode n) {
+            visitAggregateLiteral(n);
+            return;
+        }
+
         if (node instanceof SemanticGetPtrNode n) {
             visitGetPtr(n);
             return;
@@ -100,6 +105,31 @@ public class ExpressionChecker {
 
         diagnostics.error("Unknown semantic expression node: "
                 + node.getClass().getSimpleName());
+    }
+
+    private void visitAggregateLiteral(SemanticAggregateLiteralNode node) {
+        if (!types.isValueAssignableType(node.type)) {
+            diagnostics.error(
+                    "Aggregate literal type "
+                    + node.type.describe()
+                    + " is not value-assignable; only structs and tuples whose "
+                    + "fields/elements are all value-assignable can be constructed "
+                    + "as values"
+            );
+        }
+
+        for (SemanticAggregateFieldInit init : node.fields) {
+            checkExpr(init.value);
+
+            types.ensureAssignable(
+                    init.field.type,
+                    init.value,
+                    "Initializer for field '"
+                    + init.field.name
+                    + "' of "
+                    + node.type.describe()
+            );
+        }
     }
 
     private void visitVarExpr(SemanticVarExprNode node) {

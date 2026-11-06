@@ -14,7 +14,7 @@ p.y = 4;
 print(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](10-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](35-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](10-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](36-examples.md).
 
 ## 26.1 Declaring a Struct
 
@@ -34,7 +34,7 @@ Rules:
 - Separators between fields are optional, matching block syntax: a trailing separator before `}` is not required, and `;` and newlines may be mixed freely.
 - Duplicate struct names are rejected. Each struct name denotes exactly one declared type.
 - Struct names live in their own namespace: a struct may share its name with a variable or a function. The compiler emits a warning for such clashes.
-- By convention struct names use `CapitalLetterCamelCase`; a struct whose name starts with `__` is internal to its namespace and warns when named from outside it. See [Naming Conventions](34-naming-conventions.md).
+- By convention struct names use `CapitalLetterCamelCase`; a struct whose name starts with `__` is internal to its namespace and warns when named from outside it. See [Naming Conventions](35-naming-conventions.md).
 
 A struct body contains field declarations, method declarations (see [Methods](27-methods.md)), and `#if` conditionals that select fields or methods. Assignments, statements, nested functions outside methods, and nested struct declarations are invalid inside a struct body.
 
@@ -56,7 +56,7 @@ Rules:
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](22-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
 - Fields are kept in declaration order; that order is also the generated field order.
-- Field names are ordinary identifiers; keywords cannot be field names. By convention they use `lower_case_snake_case`: a field whose name starts with `_` is private to the struct and warns when accessed from outside it. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](34-naming-conventions.md).
+- Field names are ordinary identifiers; keywords cannot be field names. By convention they use `lower_case_snake_case`: a field whose name starts with `_` is private to the struct and warns when accessed from outside it. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](35-naming-conventions.md).
 
 ## 26.3 Field Default Values
 
@@ -134,6 +134,7 @@ Static arrays and dynamic arrays are not assignable, so a struct or tuple contai
 Consequences:
 
 - **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](16-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](16-assignment.md#167-operator-assignment)).
+- **Aggregate literals.** An assignable struct value can be constructed directly with `X { field = value, ... }`; the temporary requires the struct to be value-assignable. For pointer-only structs use the field-wise declaration form `X x { field = value }` instead. See [Aggregate Literals](29-aggregate-literals.md).
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](19-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
@@ -164,6 +165,8 @@ xs[i].field           // element of a static or dynamic array
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; fields without defaults start with indeterminate values, like ordinary local variables, except pointer fields, which are null (see [Declarations](18-declarations.md)).
 - **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
+- **Aggregate literals.** `P p = P { field = value, ... };` default-constructs a temporary, assigns the named fields in source order, then assigns the whole temporary to the declaration target. Empty and partial literals are legal. The struct must be value-assignable to be constructed this way, even when it declares `OPERATOR_MOV`. See [Aggregate Literals](29-aggregate-literals.md).
+- **Field-wise declaration initializers.** `P p { field = value, ... }` declares `p` and assigns each named field directly, without a temporary and without invoking `OPERATOR_MOV`. This form works for pointer-only structs.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
 Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
@@ -190,9 +193,9 @@ int32 scale = 2;
 - Structs are declared only at top level; no local or nested struct declarations.
 - Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](27-methods.md)).
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
-- No struct literals: a struct value is built field-by-field, copied from another struct, or returned by a function.
+- Aggregate literals construct assignable struct values as expressions; literal construction requires the struct to be value-assignable. Local field-wise declaration initializers initialize any struct, including pointer-only structs, one field at a time.
 - Field defaults are `constExpr` on primitive fields only.
 - A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
 - A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.
-- The complete list of current language restrictions is in [Unsupported or Restricted Features](33-unsupported-or-restricted-features.md).
+- The complete list of current language restrictions is in [Unsupported or Restricted Features](34-unsupported-or-restricted-features.md).

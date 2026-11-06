@@ -1,0 +1,10 @@
+// Field-wise declaration initialization is local-only.
+struct Literal {
+    int32 x
+}
+
+Literal global_lit { x = 1 }
+
+func main() -> int32 {
+    return 0
+}

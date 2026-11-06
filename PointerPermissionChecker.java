@@ -263,6 +263,14 @@ public final class PointerPermissionChecker {
             return;
         }
 
+        if (expr instanceof SemanticAggregateLiteralNode n) {
+            for (SemanticAggregateFieldInit field : n.fields) {
+                markValue(field.value, requiredLevel(field.field.type));
+            }
+
+            return;
+        }
+
         if (expr instanceof SemanticFunctionCallNode n) {
             for (int i = 0; i < n.args.size(); i++) {
                 markValue(n.args.get(i), parameterLevel(n, i));

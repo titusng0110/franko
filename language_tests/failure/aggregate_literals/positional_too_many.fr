@@ -1,0 +1,6 @@
+// Positional tuple initializers fill the first N elements; N may not
+// exceed the tuple size.
+func main() -> int32 {
+    (int32, int32) t = (int32, int32) { 1, 2, 3 }
+    return 0
+}

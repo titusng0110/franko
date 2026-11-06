@@ -17,7 +17,7 @@ For function-local dynamic arrays, the compiler also reports definite use
 before init, use after `uninit`, invalid free, and double free.
 Repeated `init` is not diagnosed because an earlier call may have failed
 with `-1` and a retry is valid. See
-[Dynamic-Array Lifecycle Checking](29-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
+[Dynamic-Array Lifecycle Checking](30-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
 
 | Intrinsic | Receiver | Returns | Status |
 |---|---|---|---|
@@ -178,7 +178,7 @@ Current memset-safe types:
 | pointers | no |
 
 `#is_memset_safe(x)` exposes this predicate at compile time (see
-[Compile-Time Reflection](32-compile-time-reflection.md)). It is
+[Compile-Time Reflection](33-compile-time-reflection.md)). It is
 deliberately distinct from `#has_default_value`: a struct with a field
 default is memset-safe and also has a defined default value.
 

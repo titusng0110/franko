@@ -1,0 +1,11 @@
+// The field-wise declaration form is positional only for all-unnamed
+// tuple declarations.
+struct Literal {
+    int32 x
+    int32 y
+}
+
+func main() -> int32 {
+    Literal lit { 1, 2 }
+    return 0
+}

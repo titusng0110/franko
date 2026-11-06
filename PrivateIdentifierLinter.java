@@ -274,37 +274,67 @@ public final class PrivateIdentifierLinter {
         if (node instanceof SemanticCastExprNode n) {
             checkType(n.type);
             checkExpr(n.expr);
+            return;
+        }
+
+        if (node instanceof SemanticAggregateLiteralNode n) {
+            for (SemanticAggregateFieldInit init : n.fields) {
+                if (n.type instanceof SemanticStructType structType) {
+                    checkFieldAccess(
+                            structType.structSymbol,
+                            init.field,
+                            init.value.span
+                    );
+                }
+
+                checkExpr(init.value);
+            }
         }
     }
 
     private void checkFieldAccess(SemanticMemberAccessNode node) {
-        if (node.field.tupleIndex >= 0) {
-            return;
-        }
-
-        if (!node.field.name.startsWith("_")) {
-            return;
-        }
-
         if (!(node.target.type instanceof SemanticStructType structType)) {
             return;
         }
 
-        StructSymbol owner = structType.structSymbol;
+        checkFieldAccess(
+                structType.structSymbol,
+                node.field,
+                node.span
+        );
+    }
+
+    private void checkFieldAccess(
+            StructSymbol owner,
+            FieldSymbol field,
+            SourceSpan span
+    ) {
+        if (field.tupleIndex >= 0) {
+            return;
+        }
+
+        if (!field.name.startsWith("_")) {
+            return;
+        }
 
         if (owner == currentStruct) {
             return;
         }
 
-        diagnostics.warning("'"
-                + owner.qualifiedName()
-                + "."
-                + node.field.name
-                + "' is a private field of struct '"
-                + owner.qualifiedName()
-                + "'. Are you sure you want to access it from "
-                + accessContextDescription()
-                + "? Fields and methods starting with '_' are private to the struct they are in.");
+        diagnostics.push(span);
+        try {
+            diagnostics.warning("'"
+                    + owner.qualifiedName()
+                    + "."
+                    + field.name
+                    + "' is a private field of struct '"
+                    + owner.qualifiedName()
+                    + "'. Are you sure you want to access it from "
+                    + accessContextDescription()
+                    + "? Fields and methods starting with '_' are private to the struct they are in.");
+        } finally {
+            diagnostics.pop();
+        }
     }
 
     private void checkCall(SemanticFunctionCallNode node) {

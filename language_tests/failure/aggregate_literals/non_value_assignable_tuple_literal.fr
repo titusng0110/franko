@@ -1,0 +1,5 @@
+// A tuple literal requires the tuple to be value-assignable.
+func main() -> int32 {
+    (int32, [int32, 3]) t = (int32, [int32, 3]) { _0 = 1 }
+    return 0
+}

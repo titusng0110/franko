@@ -1,5 +1,6 @@
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -65,38 +66,43 @@ public final class ExpressionAnalyzer {
             return lowerArrayLiteral(lit, expectedType);
         }
 
-        return analyzeExpr(node);
+        return analyzeValueExpr(node);
     }
 
-    private SemanticExprNode lowerArrayLiteral(
-            ArrayLiteralNode lit,
-            SemanticType expectedType
-    ) {
-        if (arrayLiteralLowerer == null) {
-            ctx.error("Internal compiler error: no array literal lowerer "
-                    + "wired into ExpressionAnalyzer");
-
-            return new SemanticIntLiteralNode(
-                    lit.span,
-                    FALLBACK_TYPE,
-                    BigInteger.ZERO,
-                    "0"
-            );
-        }
-
-        return arrayLiteralLowerer.lower(lit, expectedType);
+    public SemanticExprNode analyzeValueExpr(ASTNode node) {
+        return analyzeExpr(node, true);
     }
 
     public SemanticExprNode analyzeExpr(ASTNode node) {
+        return analyzeExpr(node, false);
+    }
+
+    private SemanticExprNode analyzeExpr(
+            ASTNode node,
+            boolean allowAggregateLiteral
+    ) {
         ctx.diagnostics().push(node.span);
         try {
-            return analyzeExprInner(node);
+            return analyzeExprInner(node, allowAggregateLiteral);
         } finally {
             ctx.diagnostics().pop();
         }
     }
 
-    private SemanticExprNode analyzeExprInner(ASTNode node) {
+    private SemanticExprNode analyzeExprInner(
+            ASTNode node,
+            boolean allowAggregateLiteral
+    ) {
+        if (node instanceof AggregateLiteralNode lit) {
+            if (!allowAggregateLiteral) {
+                ctx.error("Aggregate literals are only valid as assignment "
+                        + "values, return values, call arguments, or aggregate "
+                        + "field values");
+            }
+
+            return lowerAggregateLiteral(lit);
+        }
+
         if (node instanceof ArrayLiteralNode lit) {
             return lowerArrayLiteral(lit, null);
         }
@@ -416,6 +422,230 @@ public final class ExpressionAnalyzer {
         );
     }
 
+    private SemanticExprNode lowerArrayLiteral(
+            ArrayLiteralNode lit,
+            SemanticType expectedType
+    ) {
+        if (arrayLiteralLowerer == null) {
+            ctx.error("Internal compiler error: no array literal lowerer "
+                    + "wired into ExpressionAnalyzer");
+
+            return new SemanticIntLiteralNode(
+                    lit.span,
+                    FALLBACK_TYPE,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        return arrayLiteralLowerer.lower(lit, expectedType);
+    }
+
+    private SemanticExprNode lowerAggregateLiteral(AggregateLiteralNode lit) {
+        SemanticType literalType = resolveTypeNode(lit.type);
+
+        if (literalType instanceof SemanticStructType structType) {
+            StructSymbol owner = structType.structSymbol;
+            List<SemanticAggregateFieldInit> fields = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            boolean reportedPositional = false;
+
+            for (FieldInitNode init : lit.fields) {
+                if (init.positional) {
+                    if (!reportedPositional) {
+                        reportedPositional = true;
+                        ctx.error("Struct literal fields must be named; "
+                                + "positional initializers are only allowed for "
+                                + "all-unnamed tuple types");
+                    }
+
+                    analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
+                    continue;
+                }
+
+                FieldSymbol field = owner.resolveField(init.name);
+
+                if (field == null) {
+                    ctx.error("Struct '"
+                            + owner.qualifiedName()
+                            + "' has no field named '"
+                            + init.name
+                            + "'");
+                    analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
+                    continue;
+                }
+
+                if (!seen.add(init.name)) {
+                    ctx.error("Duplicate initializer for field '"
+                            + init.name
+                            + "' of struct '"
+                            + owner.qualifiedName()
+                            + "'");
+                    analyzeExprWithExpectedType(init.value, field.type);
+                    continue;
+                }
+
+                fields.add(new SemanticAggregateFieldInit(
+                        field,
+                        analyzeExprWithExpectedType(init.value, field.type)
+                ));
+            }
+
+            return new SemanticAggregateLiteralNode(
+                    lit.span,
+                    literalType,
+                    fields
+            );
+        }
+
+        if (literalType instanceof SemanticTupleType tupleType) {
+            requireUniformTupleLiteralNames(lit);
+
+            boolean anyPositional = false;
+            boolean anyNamed = false;
+
+            for (FieldInitNode init : lit.fields) {
+                if (init.positional) {
+                    anyPositional = true;
+                } else {
+                    anyNamed = true;
+                }
+            }
+
+            if (anyPositional && anyNamed) {
+                ctx.error("Cannot mix positional and named tuple element "
+                        + "initializers");
+            }
+
+            boolean unnamedLiteral = isAllUnnamedTupleLiteral(lit);
+            boolean reportedPositionalNotAllowed = false;
+            boolean reportedTooMany = false;
+            int position = 0;
+
+            List<SemanticAggregateFieldInit> fields = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+
+            for (FieldInitNode init : lit.fields) {
+                FieldSymbol field;
+
+                if (init.positional) {
+                    if (!unnamedLiteral) {
+                        if (!reportedPositionalNotAllowed) {
+                            reportedPositionalNotAllowed = true;
+                            ctx.error("Positional tuple literal fields are "
+                                    + "only allowed for an all-unnamed tuple "
+                                    + "type");
+                        }
+
+                        analyzeExprWithExpectedType(
+                                init.value,
+                                FALLBACK_TYPE
+                        );
+                        position++;
+                        continue;
+                    }
+
+                    if (position >= tupleType.fields.size()) {
+                        if (!reportedTooMany) {
+                            reportedTooMany = true;
+                            ctx.error("Positional initializer for tuple type '"
+                                    + tupleType.describe()
+                                    + "' has more entries than the tuple has "
+                                    + "elements");
+                        }
+
+                        analyzeExprWithExpectedType(
+                                init.value,
+                                FALLBACK_TYPE
+                        );
+                        position++;
+                        continue;
+                    }
+
+                    field = tupleType.fields.get(position);
+                    position++;
+                } else {
+                    field = tupleType.resolveField(init.name);
+
+                    if (field == null) {
+                        ctx.error("Tuple type '"
+                                + tupleType.describe()
+                                + "' has no element named '"
+                                + init.name
+                                + "'");
+                        analyzeExprWithExpectedType(
+                                init.value,
+                                FALLBACK_TYPE
+                        );
+                        continue;
+                    }
+                }
+
+                if (!seen.add(field.name)) {
+                    ctx.error("Duplicate initializer for tuple element '"
+                            + field.name
+                            + "' of tuple type '"
+                            + tupleType.describe()
+                            + "'");
+                    analyzeExprWithExpectedType(init.value, field.type);
+                    continue;
+                }
+
+                fields.add(new SemanticAggregateFieldInit(
+                        field,
+                        analyzeExprWithExpectedType(init.value, field.type)
+                ));
+            }
+
+            return new SemanticAggregateLiteralNode(
+                    lit.span,
+                    literalType,
+                    fields
+            );
+        }
+
+        ctx.error("Aggregate literal requires a struct or tuple type");
+
+        for (FieldInitNode init : lit.fields) {
+            analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
+        }
+
+        return operatorFallbackLiteral(lit.span);
+    }
+
+    private void requireUniformTupleLiteralNames(AggregateLiteralNode lit) {
+        if (!(lit.type instanceof TupleTypeNode tuple)) {
+            return;
+        }
+
+        int named = 0;
+
+        for (TupleTypeElementNode element : tuple.elements) {
+            if (element.name != null) {
+                named++;
+            }
+        }
+
+        if (named != 0 && named != tuple.elements.size()) {
+            ctx.error("Tuple literal type must name all elements or no "
+                    + "elements; mixed spellings are not allowed");
+        }
+    }
+
+    private boolean isAllUnnamedTupleLiteral(AggregateLiteralNode lit) {
+        if (!(lit.type instanceof TupleTypeNode tuple)) {
+            return false;
+        }
+
+        for (TupleTypeElementNode element : tuple.elements) {
+            if (element.name != null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private SemanticType resolveTypeNode(TypeNode node) {
         if (typeResolver == null) {
             ctx.error("Internal compiler error: no type resolver wired into "
@@ -664,7 +894,7 @@ public final class ExpressionAnalyzer {
         if (rawValue instanceof ArrayLiteralNode literal) {
             arg = CallArg.operatorLiteral(literal);
         } else {
-            loweredValue = analyzeExpr(rawValue);
+            loweredValue = analyzeValueExpr(rawValue);
 
             if (loweredValue.type instanceof SemanticVoidType) {
                 ctx.error("Right-hand side of operator '"
@@ -844,7 +1074,7 @@ public final class ExpressionAnalyzer {
             if (arg instanceof ArrayLiteralNode lit) {
                 out.add(CallArg.literal(lit));
             } else {
-                out.add(CallArg.lowered(analyzeExpr(arg)));
+                out.add(CallArg.lowered(analyzeValueExpr(arg)));
             }
         }
 

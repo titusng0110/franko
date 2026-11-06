@@ -341,6 +341,61 @@ class VarDeclInitNode extends ASTNode {
     }
 }
 
+class FieldInitNode extends ASTNode {
+    String name;
+    ASTNode value;
+    boolean positional;
+
+    FieldInitNode(SourceSpan span, String name, ASTNode value) {
+        this(span, name, value, false);
+    }
+
+    FieldInitNode(
+            SourceSpan span,
+            String name,
+            ASTNode value,
+            boolean positional
+    ) {
+        super(span);
+        this.name = name;
+        this.value = value;
+        this.positional = positional;
+    }
+}
+
+class AggregateLiteralNode extends ASTNode {
+    TypeNode type;
+    List<FieldInitNode> fields;
+
+    AggregateLiteralNode(
+            SourceSpan span,
+            TypeNode type,
+            List<FieldInitNode> fields
+    ) {
+        super(span);
+        this.type = type;
+        this.fields = fields;
+    }
+}
+
+class VarDeclFieldsInitNode extends ASTNode {
+    TypeNode type;
+    String name;
+    List<FieldInitNode> fields;
+
+    VarDeclFieldsInitNode(
+            SourceSpan span,
+            TypeNode type,
+            String name,
+            List<FieldInitNode> fields
+    ) {
+        super(span);
+        this.type = type;
+        this.name = name;
+        this.fields = fields;
+    }
+}
+
 enum PrimitiveKind {
     INT8,
     INT16,

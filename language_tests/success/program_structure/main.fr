@@ -27,9 +27,7 @@ namespace util {
 // A function declaration.
 func main() -> int32 {
     // Mixed separators: newlines and semicolons.
-    Point p;
-    p.x = 1
-    p.y = 2;
+    Point p { x = 1, y = 2 };
 
     // Mixed separators: consecutive separators.
     int32 sum = 0;;

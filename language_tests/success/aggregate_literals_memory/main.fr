@@ -1,0 +1,41 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Memory Checkers Traverse Aggregate Field Values
+// ============================================================
+// Calls and pointer uses inside aggregate literal field values
+// must be visible to the memory checkers.
+// ============================================================
+
+struct Holder {
+    int32 value
+    uint32 length
+}
+
+func read_ptr(view<int32> p) -> int32 {
+    return $(p)
+}
+
+func main() -> int32 {
+    int32 x = 5
+    view<int32> maybe
+    uint32 choose = 1
+
+    if (choose != 0) {
+        maybe = getview(x)
+    }
+
+    [int32] data
+    data.init(3)
+    data.memset(0)
+
+    Holder h = Holder {
+        value = read_ptr(maybe),
+        length = data.length()
+    }
+    print(h.value)
+    print(h.length)
+
+    data.uninit()
+    return 0
+}

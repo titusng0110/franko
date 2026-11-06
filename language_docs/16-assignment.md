@@ -75,6 +75,8 @@ See [Array Literals](21-array-literals.md) for literal-source rules.
 
 A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](28-tuples.md#286-assignment).
 
+A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the ordinary rules (including an applicable `OPERATOR_MOV`); see [Aggregate Literals](29-aggregate-literals.md).
+
 Valid:
 
 ```franko
@@ -255,7 +257,7 @@ materialized as a temporary of the referenced primitive type.
 The borrowed view is valid only for the duration of the operator call.
 An operator method must not store or forward it into caller-owned or
 global storage; the compiler rejects that pattern (see
-[Memory Safety Checking](29-memory-safety-checking.md#299-dangling-pointer-checking)).
+[Memory Safety Checking](30-memory-safety-checking.md#299-dangling-pointer-checking)).
 A local `view<T>` copy inside the operator body is allowed because the
 local dies before the operator call returns.
 

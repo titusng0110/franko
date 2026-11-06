@@ -869,6 +869,14 @@ public final class DynamicArrayMemoryChecker {
                 return;
             }
 
+            if (expression instanceof SemanticAggregateLiteralNode aggregate) {
+                for (SemanticAggregateFieldInit field : aggregate.fields) {
+                    checkExpr(field.value);
+                }
+
+                return;
+            }
+
             if (expression instanceof SemanticGetPtrNode getPtr) {
                 checkExpr(getPtr.target);
 

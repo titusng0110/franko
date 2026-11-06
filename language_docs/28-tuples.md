@@ -41,7 +41,33 @@ A tuple declaration uses the tuple type followed by the variable name:
 (uint hello, int world) a
 ```
 
-There is no tuple literal syntax. `(1, 2)` is not a tuple expression.
+A tuple literal spells the tuple type followed by a braced field list:
+
+```franko
+(int32, int32) pair = (int32, int32) { _0 = 1, _1 = 2 }
+(int32 first, int32 second) named =
+        (int32 x, int32 y) { x = 1, y = 2 }
+```
+
+The literal type spelling must be all-named or all-unnamed; a mixed spelling
+such as `(int32, int32 y) { _0 = 1, y = 2 }` is invalid. Named entries use
+the spelling's names. An all-unnamed literal also accepts positional entries,
+which fill the first N elements in order and may be partial:
+
+```franko
+(int32, int32) pair = (int32, int32) { 0, 1 }
+(int32, int32) partial = (int32, int32) { 0 }
+```
+
+Positional and named entries cannot be mixed, positional entries are invalid
+for named tuple spellings, and the positional count may not exceed the tuple
+size. Order is free for named entries, partial and empty literals are legal,
+and omitted pointer elements are null. Constructing a tuple literal requires
+the tuple to be value-assignable. See
+[Aggregate Literals](29-aggregate-literals.md).
+
+A bare parenthesized value list such as `(1, 2)` is not a tuple expression:
+the type must be spelled and entries must be named or positional.
 
 ---
 
@@ -113,8 +139,26 @@ pair._1 = 2
 
 - local tuple elements without a value are indeterminate until assigned, except pointer elements, which are null;
 - global tuple storage is zero-initialized before `main` runs;
-- tuple values are produced by declarations, element writes, whole-tuple
-  assignment, and function returns.
+- tuple values are produced by declarations, element writes, aggregate
+  literals, whole-tuple assignment, and function returns.
+
+A tuple literal can initialize a tuple directly:
+
+```franko
+(int32, int32) pair = (int32, int32) { _1 = 2, _0 = 1 }
+```
+
+A local tuple declaration can also use the field-wise form:
+
+```franko
+(int32 first, int32 second) pair { first = 1, second = 2 }
+(int32, int32) positional { 0, 1 }
+(int32, int32) partial { 0 }
+```
+
+The positional field-wise form is available only for all-unnamed tuple
+declarations. See [Aggregate Literals](29-aggregate-literals.md) for both
+forms.
 
 Declaration-initializer sugar works normally:
 
@@ -206,11 +250,10 @@ assignable value type.
 
 ```franko
 func swap((int32 x, int32 y) pair) -> (int32 left, int32 right) {
-    (int32 first, int32 second) copy = pair
-    (int32 upper, int32 lower) result
-    result.upper = copy.second
-    result.lower = copy.first
-    return result
+    return (int32 left, int32 right) {
+        left = pair.y,
+        right = pair.x
+    }
 }
 ```
 
@@ -282,7 +325,7 @@ print(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
 `#what_type` prints the canonical tuple form `(int32,int32)` with element
-names removed and no spaces after commas. See [Compile-Time Reflection](32-compile-time-reflection.md).
+names removed and no spaces after commas. See [Compile-Time Reflection](33-compile-time-reflection.md).
 
 ---
 
@@ -290,7 +333,11 @@ names removed and no spaces after commas. See [Compile-Time Reflection](32-compi
 
 Tuples are deliberately limited to ordinary aggregate values:
 
-- no tuple literals or construction sugar (`(1, 2)` is not an expression);
+- tuple literals spell the tuple type and use named entries or, for
+  all-unnamed spellings, positional entries; a bare parenthesized list such
+  as `(1, 2)` is not an expression;
+- positional entries are rejected for named/mixed tuple spellings and for
+  struct literals; positional and named entries cannot be mixed;
 - no destructuring declarations or tuple-pattern parameters;
 - no tuple methods, including intrinsic-named calls such as `t.length()`;
 - no tuple operators, including `OPERATOR_*` overloads;
@@ -300,8 +347,8 @@ Tuples are deliberately limited to ordinary aggregate values:
 - at least two elements are required;
 - a tuple containing a static array or dynamic array is pointer-only.
 
-Tuple values are produced by declarations, element writes, whole-tuple
-assignment, and function returns.
+Tuple values are produced by declarations, element writes, aggregate
+literals, whole-tuple assignment, and function returns.
 
 ---
 
@@ -311,16 +358,14 @@ assignment, and function returns.
 import "franko/io"
 
 func split((int32 left, int32 right) pair) -> (int32 first, int32 second) {
-    (int32 first, int32 second) result
-    result.first = pair.left
-    result.second = pair.right
-    return result
+    return (int32 first, int32 second) {
+        first = pair.left,
+        second = pair.right
+    }
 }
 
 func main() -> int32 {
-    (int32 x, int32 y) pair
-    pair.x = 10
-    pair.y = 20
+    (int32 x, int32 y) pair = (int32 x, int32 y) { x = 10, y = 20 }
 
     (int32 first, int32 second) result = split(pair)
     print(result.first)

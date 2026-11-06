@@ -45,6 +45,8 @@ Franko is a small statically typed language with:
     (see [Array Intrinsics](22-array-intrinsics.md));
 - array literals as `view<[T, N]>` values over immutable constant
   storage (element type inferred, see [Array Literals](21-array-literals.md));
+- struct and tuple aggregate literals, plus local field-wise declaration
+  initializers (see [Aggregate Literals](29-aggregate-literals.md));
 - struct operator overloading for comparisons and assignments through
   reserved `OPERATOR_*` methods (see [Operators](13-operators.md#1310-struct-operator-overloading));
 - compile-time reflection:
@@ -56,17 +58,17 @@ Franko is a small statically typed language with:
     `#is_same_type`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
   - compile-time strings with `#strcat`, `#strcmp`, and `#panic`
-    (see [Compile-Time Reflection](32-compile-time-reflection.md));
+    (see [Compile-Time Reflection](33-compile-time-reflection.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));
 - FFI modules described by sidecar manifests and C++ bridge blocks (see
-  [Foreign Function Interface](31-foreign-function-interface.md));
+  [Foreign Function Interface](32-foreign-function-interface.md));
 - standard modules including `franko/io`, `franko/os`, `franko/pool`,
   `franko/limit`, and `franko/string`;
 - compiler checks for pointer null state, dangling frame pointers, dynamic
   array lifecycle, unused pointer permissions, and private identifier access
-  (see [Memory Safety Checking](29-memory-safety-checking.md) and
-  [Naming Conventions](34-naming-conventions.md)).
+  (see [Memory Safety Checking](30-memory-safety-checking.md) and
+  [Naming Conventions](35-naming-conventions.md)).
 
 Franko currently does **not** implement:
 
@@ -86,7 +88,7 @@ Franko currently does **not** implement:
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`);
-- tuple literals, destructuring, tuple methods, tuple operators, and tuple casts (see [Tuples](28-tuples.md#2810-restrictions)).
+- tuple destructuring, tuple methods, tuple operators, and tuple casts (see [Tuples](28-tuples.md#2810-restrictions)).
 
 The repository also includes a VS Code extension with syntax highlighting,
 bracket matching, comment toggling, and snippets for `.fr` and `.franko`

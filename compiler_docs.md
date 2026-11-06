@@ -302,14 +302,27 @@ the `type` rule with primitive types, struct names, tuple types,
 inferred-size alternative. Tuple types use
 `LPAREN tupleTypeElement (COMMA tupleTypeElement)+ RPAREN`, where each
 `tupleTypeElement` is `type IDENTIFIER?`; at least two elements are
-required. There is deliberately no tuple-literal expression form. Pointer
+required. `aggregateLiteral` is an ordinary `primary` expression with two
+forms: `structTypeName { fieldInitList? }` and
+`( tupleTypeElement, ... ) { tupleInitList? }`; entries are
+`IDENTIFIER = expr` or a positional `expr`, separated by commas, with
+optional trailing comma and separators (newlines) treated as list whitespace
+inside the braces. Positional entries are accepted grammatically everywhere
+an initializer list appears and are restricted semantically to all-unnamed
+tuple types: they fill the first N elements and may be partial. `declSuffix`
+has the labeled alternatives `DeclAssignInit` (`= expr`) and `DeclFieldInit`
+(immediate `{ declInitList? }`), so `T x { field = expr }` is field-wise
+declaration sugar while a newline before `{` leaves an ordinary following
+block untouched. Pointer
 permissions are created by the intrinsic
 forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
 by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening
 or pointer permission downgrade; the target is a full `type`) and
 `unsafe_cast<T>(expr)` (checked integer conversions; target restricted to
 `primitiveType` at parse time). Array literals are ordinary `primary`
-expressions (an array literal is a `view<[T, N]>` value, §4.13).
+expressions (an array literal is a `view<[T, N]>` value, §4.13). Aggregate
+literals are ordinary expressions but are constrained to specific
+value-consuming contexts during semantic analysis (§4.26).
 Global initializers accept `constExpr`, a
 string literal, an array literal, a `getptr`/`getmview`/`getview` over a
 global, or `null`. `varDecl` carries a parse-time guard that reports
@@ -331,6 +344,14 @@ tokens, builds access/call/postfix chains from `lvalueSuffix` rules, joins
 statements, types, and the `constExpr` sub-grammar to their node classes.
 `visitTupleType` resolves each element's type and keeps its optional
 declaration-site identifier (or `null` for an unnamed element).
+`visitAggregateLiteral` builds a `StructTypeNode` (including qualified names)
+or a `TupleTypeNode` with element names preserved, plus ordered
+`FieldInitNode`s; `visitPrimary` dispatches it. A named entry keeps its name
+and `positional = false`; a bare expression becomes a `FieldInitNode` with
+`name = null` and `positional = true`. `visitVarDecl` distinguishes
+the two `declSuffix` alternatives with `instanceof`, producing
+`VarDeclInitNode` for `DeclAssignInit` and `VarDeclFieldsInitNode` for
+`DeclFieldInit`.
 Every rule/statement/declaration/type/literal construction attaches a
 `SourceSpan`; postfix and lvalue suffix chains merge the base span with the
 suffix span. Calls `StringLiteralDecoder.decodeRawContent` for import-path
@@ -356,7 +377,10 @@ expressions (`VarNode`, `IntNode`, `InferredSizeNode`, `ArrayLiteralNode`,
 `MemberAccessNode`, `CallNode`, `GetPtrNode` (kind: which of
 `getptr`/`getmview`/`getview` was written), `DerefNode`, `CastNode` (a full
 `TypeNode` target plus an `unsafe` flag distinguishing `cast` from
-`unsafe_cast`), `NullNode`). `GlobalVarDeclNode.literalBytes` is non-null
+`unsafe_cast`), `NullNode`, `AggregateLiteralNode` (a struct or tuple
+`TypeNode` plus ordered `FieldInitNode` entries), `FieldInitNode` (name +
+value), `VarDeclFieldsInitNode` (type + name + ordered field inits)).
+`GlobalVarDeclNode.literalBytes` is non-null
 only for string-literal globals hoisted by the Desugarer (§4.10): a
 literal-backed `[byte, N]` whose value is the decoded UTF-8 payload.
 Array-literal globals hoisted during semantic analysis carry
@@ -364,12 +388,12 @@ Array-literal globals hoisted during semantic analysis carry
 nesting is derived from the declared static array shape.
 The field layout is the ABI between all phases.
 Lifecycle rules that used to live as comments here:
-- `ForNode`, `IncDecNode`, `VarDeclInitNode` are **pre-desugaring sugar**:
-  none may reach `SemanticAnalyzer`.
+- `ForNode`, `IncDecNode`, `VarDeclInitNode`, and `VarDeclFieldsInitNode`
+  are **pre-desugaring sugar**: none may reach `SemanticAnalyzer`.
   `ImportNode` survives desugaring and is consumed by `ImportResolver` when
-  it splices imported documents. `ArrayLiteralNode` is deliberately NOT
-  sugar: it survives desugaring and is lowered during semantic analysis
-  (§4.13), where its element type is inferred.
+  it splices imported documents. `ArrayLiteralNode` and
+  `AggregateLiteralNode` are deliberately NOT sugar: they survive desugaring
+  and are lowered during semantic analysis (§4.13, §4.26).
 - `GlobalVarDeclNode` is deliberately distinct from `VarDeclNode` because the
   Desugarer keys top-level handling off node classes and global const
   initializers must never be rewritten into assignment statements.
@@ -391,7 +415,12 @@ names independent of Java class names; enums are serialized by name; every
 node carries `"node"` and `"span"`, and every type carries `"type"` and
 `"span"`. Raw tuple types are serialized as `"type": "tuple"` with an
 `elements` array, where each element carries its own span, optional `name`,
-and `type`. Unknown node kinds are hard errors.
+and `type`. Aggregate literals serialize as `"node": "aggregateLiteral"`
+with `type` and a `fields` array of `"node": "fieldInit"` entries (`name`,
+`positional`, and `value`; positional entries have `name: null`); the
+field-wise declaration sugar serializes as
+`"node": "varDeclFieldsInit"` with `type`, `name`, and `fields`. Unknown node
+kinds are hard errors.
 
 #### `AstDocument` / `SourceTable` / `SourceSpan` / `SourcePaths`
 `AstDocument` is the pass-boundary raw-AST document (`phase`, `sources`,
@@ -443,7 +472,11 @@ literals from the compound statement span, inferred `?` sizes from the
 `getview` from the literal span, canonicalized constants from the original
 constant expression). Lowers
 syntactic sugar to a small core AST: declaration initializers → decl +
-assignment, `x++/--` →
+assignment, field-wise declaration initializers → decl + per-entry
+assignments (duplicate labels rejected; non-struct/non-tuple declarations
+rejected; positional entries are mapped to `_0`, `_1`, … and are accepted
+only for all-unnamed tuple declarations, with a count check and no mixing
+with named entries), `x++/--` →
 `x += 1`, `for` → block + `while` (update as while-epilogue so `continue` is
 C-like), `?` array sizes in `view<[...]>` declarations → concrete
 constants via the rectangle rule (array
@@ -459,8 +492,10 @@ semantic selection (§4.18). Declaration-level `DeclIfNode`s are preserved
 and their branch declarations are desugared in place; `SemanticAnalyzer`
 splices the selected branch before registration.
 Tuple types are passed through with their element types recursively
-desugared and their declaration-site names preserved; no tuple expression
-syntax exists, so there is no tuple-specific expression desugaring.
+desugared and their declaration-site names preserved. Aggregate literals are
+expressions, not statement sugar: the Desugarer recursively desugars the
+literal's `TypeNode` and every field value and leaves the
+`AggregateLiteralNode` in place for semantic lowering.
 String-literal arguments of any `#` call are deliberately **not**
 hoisted, so `CompileTimeIntrinsics` can inspect the literal text; nested
 compile-time producers such as `#what_type` stay evaluable as
@@ -594,8 +629,13 @@ Assignment statements to struct-typed targets are first offered to
 ordinary `SemanticFunctionCallNode` when an `OPERATOR_*MOV` overload
 applies; an already-analyzed RHS value is reused by the built-in
 `SemanticAssignNode` fallback, and a raw array literal falls back to the
-normal context-aware path. The same lowering is reused for local
-declaration initializers.
+normal context-aware path. The RHS is analyzed with `analyzeValueExpr`, so
+an aggregate literal can be constructed before the ordinary assignment (and
+its `OPERATOR_MOV`, when applicable) runs. The same lowering is reused for
+local declaration initializers. Field-wise declaration initialization is
+fully desugared before this pass, so `VarDeclFieldsInitNode` never reaches
+semantic analysis; its expansion creates a plain declaration plus ordinary
+per-field assignments.
 
 Also determines the entry kind (`NONE`/`NO_ARGS`/`ARGS`), carried on
 `SastDocument` and used by `Main` to select the C++ program template, and owns
@@ -692,7 +732,10 @@ flag: `false` → plain `static_cast` (`cast`), `true` → runtime-checked
 `franko_unsafe_cast` (`unsafe_cast`). `SemanticVarDeclNode` carries either a
 folded `BigInteger` initializer (primitive globals) or a `staticInitializer`
 expression (pointer globals initialized with a statically representable
-address).
+address). `SemanticAggregateLiteralNode` carries the resolved struct/tuple
+type plus ordered `SemanticAggregateFieldInit` entries (`FieldSymbol` +
+value), preserving source order for evaluation and codegen; it is never an
+lvalue.
 
 #### `SemanticType`
 The structural type system: `SemanticPrimitiveType` (8 kinds),
@@ -867,6 +910,22 @@ context of §4.13: assignment target type, return type, or call parameter
 type); call arguments are lowered in two phases through
 `CallArg` so a literal argument participates in overload
 resolution before its element type is known (§4.13).
+
+Aggregate literals use a context flag: `analyzeValueExpr` allows them and is
+used at the exact value-consuming sites (declaration-initializer and
+assignment RHS, return expression, call argument, and nested aggregate field
+value), while `analyzeExpr` disallows them in every ordinary recursive walk.
+A disallowed literal still lowers for recovery, after reporting
+`Aggregate literals are only valid as assignment values, return values, call
+arguments, or aggregate field values`. `lowerAggregateLiteral` resolves the
+literal's `TypeNode`, resolves struct fields through `StructSymbol`, tuple
+entries through `SemanticTupleType` (after enforcing an all-named or
+all-unnamed tuple spelling), reports unknown and duplicate labels, and
+analyzes every entry value with the field's type as expected type so nested
+aggregate literals work (§4.26). Positional tuple entries are mapped to
+`_0`, `_1`, … in source order, fill the first N elements, and are rejected
+for structs, named/mixed tuple spellings, over-long lists, and lists that mix
+positional and named entries.
 Tuple member access resolves the requested name against the tuple's
 declaration-site fields and builds the same `SemanticMemberAccessNode` used
 for struct fields; an unknown element is a diagnostic naming the canonical
@@ -1012,7 +1071,12 @@ through blocks/ifs/whiles; the desugared for-update epilogue runs inside the
 loop so returns there count). It does not prove full control-flow coverage.
 Tuple parameter and return types follow the same rules through
 `TypeChecker.isValueAssignableType`: a tuple is passable/returnable exactly
-when every element is.
+when every element is. A pointer-only struct or tuple return type gets a
+dedicated diagnostic instead of the generic invalid-return-type message:
+`Function 'f() -> Buffer' cannot return pointer-only struct 'Buffer' by
+value: its fields are not all value-assignable. Return ptr<Buffer>, or
+write through a ptr<Buffer> output parameter.` (tuples use the analogous
+`pointer-only tuple`/`elements` wording).
 Intercepts `SemanticReturnNode` itself and delegates other statements to
 `StatementChecker`.
 
@@ -1081,7 +1145,12 @@ legality (`getptr`/`getmview`/`getview` need an equally strong storage
 region, §4.9), deref legality, and void-in-value-context rules. A
 `SemanticGetPtrNode` with `temporary` set is accepted without the usual
 storage-backed-lvalue requirement: it can only be created by operator
-lowering, and its type is required to be a read-only view. Carries
+lowering, and its type is required to be a read-only view. Aggregate
+literal legality is checked here too: `visitAggregateLiteral` rejects a
+non-value-assignable literal type and reuses `TypeChecker.ensureAssignable`
+on every field value against its `FieldSymbol` type, which enforces
+array-field rejection, constant fitting, pointer conversions, and nested
+aggregate rules. Carries
 the "fluid integer constants" model: folded constants stay fluid until a
 context constrains them.
 
@@ -1153,7 +1222,9 @@ identity changes.
    excluded from that list. Every block, statement, and expression receives a
    dense site ID, and every `SemanticFunctionCallNode` is also registered as a
    call-graph call site. `callSiteIdBySite` maps an expression site ID back to
-   the call-site ID.
+   the call-site ID. `collectExpression` recurses into every
+   `SemanticAggregateLiteralNode` field value, so nested calls and uses get
+   dense site IDs and call-graph edges.
 
 After the walk the context flattens:
 
@@ -1400,7 +1471,10 @@ when the dereferenced expression is a variable, call, cast, or another deref;
 field and element dereferences are not diagnosed here. A possibly-null variable
 warns at most once per pointer variable per function; a non-variable dereference
 warns at most once per dereference site; definitely-null errors are not
-deduplicated.
+deduplicated. `checkExprInner` also recurses into every
+`SemanticAggregateLiteralNode` field value; no null-state domain value is
+created for the literal temporary itself, but dereferences, calls, and pointer
+arguments inside its field values are checked normally.
 
 #### `PointerNullAnalysisState`
 Flat state/snapshot layer for the null checker. Concrete state is
@@ -1536,6 +1610,11 @@ variable to `GLOBAL(globalIndex)`, a local to `LOCAL(variableId)`, `$(p)` to
 and anything else to `UNKNOWN`. `symbolicCellOf` maps a pointer variable to its
 `symCell`, `getptr(variable)` to `GLOBAL(index)` or `LOCAL(variableId)`,
 `getptr($p)` to `symbolicCellOf(p)`, and a cast to the operand.
+
+`checkExprInner` recurses into every `SemanticAggregateLiteralNode` field
+value, so dereferences, calls, address-taking, and pointer uses inside literal
+fields get the normal liveness and capture treatment. The literal temporary
+itself has no pointer-origin state.
 
 #### `DanglingPointerState`
 Flat origin/liveness/snapshot layer for the dangling checker. `DanglingOrigin`
@@ -1698,6 +1777,10 @@ warning for each direct local array still `INITED`/`MAYBE_INITED`; every
 explicit return reports the same leak warning for every tracked array.
 Escaped arrays are exempt. Reaching the end of a function reports leaks through
 the function body block's leave callback rather than `onFallthrough`.
+`checkExprInner` recurses into every `SemanticAggregateLiteralNode` field
+value, so lifecycle intrinsics, indexing, element aliases, and calls inside
+literal fields are analyzed normally; the literal temporary adds no lifecycle
+state.
 
 #### `DynamicArrayAnalysisState`
 Flat lifecycle/alias/snapshot layer for the dynamic checker. It owns dense
@@ -1763,6 +1846,9 @@ Implementation notes:
   context requires (`requiredLevel`: a pointer-typed slot demands its own
   permission level); a storage path (deref, index, member access) only ever
   credits its region as read.
+- Aggregate literal fields are walked recursively and each field value is
+  credited at the level its `FieldSymbol` type requires, so a pointer used
+  only as an aggregate field value is properly counted.
 - The state map is cleared per function and at most one warning is emitted
   per variable: a variable that is only ever read is told to become a
   `view` even when declared `ptr`, a `ptr` exercised at most at the
@@ -1775,7 +1861,7 @@ Implementation notes:
 The naming-visibility linter: run after both pruners and after
 `PointerPermissionChecker`, warnings-only. It reads the checked Semantic AST
 and never mutates it or affects codegen. The full user-facing naming style is
-documented in `language_docs/34-naming-conventions.md`; this pass enforces
+documented in `language_docs/35-naming-conventions.md`; this pass enforces
 only the access rules attached to the reserved prefixes.
 
 State per position:
@@ -1791,6 +1877,9 @@ Rules:
 - a field access whose name starts with `_` warns unless the target struct is
   `currentStruct`; the field's owner is recovered from
   `((SemanticStructType) node.target.type).structSymbol`;
+- an aggregate literal field initializer whose `FieldSymbol` name starts with
+  `_` goes through the same private-field check, so
+  `Wallet w = Wallet { _balance = 1 }` warns like `w._balance = 1`;
 - a method call whose name starts with `_` warns unless
   `MethodSymbol.owner == currentStruct`;
 - a free-function call whose name starts with `__` warns unless
@@ -1883,6 +1972,11 @@ dead-store analysis:
   including variables whose only uses disappeared with a BranchPruner cut.
   A kept global additionally keeps alive whatever its static address
   initializer references (e.g. hoisted string-literal globals), transitively.
+- **Expression walks**: `collectExprCalls`, `collectExprVariables`, and
+  `collectExprTypeExprs` recurse into every
+  `SemanticAggregateLiteralNode` field value; the type walk also marks the
+  literal's struct or synthetic tuple type, which keeps that declaration
+  alive.
 - **Structs**: kept iff a `SemanticStructType` for them appears in surviving
   code: kept function signatures, kept variable declarations (globals and
   locals), expression types in kept bodies, or the receiver of a called
@@ -2004,8 +2098,15 @@ block per used function) and suppresses the Franko stub bodies.
 #### `Cpp14ExpressionEmitter`
 The expression/lvalue emitter split from `Cpp14Codegen`. It owns
 `emitExpr`/`emitLValue` and the concrete forms for literals, unary/binary
-operators, array access, function calls, array intrinsics, `getptr`, deref,
-casts, and member access. Member access uses `FieldSymbol.emittedName()`, so
+operators, array access, function calls, array intrinsics, aggregate
+literals, `getptr`, deref, casts, and member access. An aggregate literal
+emits an immediately invoked C++14 lambda:
+`([&]() -> T { T _franko_literal; _franko_literal.field = ...; return
+_franko_literal; }())`. Default construction applies NSDMIs and null pointer
+fields exactly like a local declaration, named fields are assigned in source
+order, empty literals need no special case, and nested literals become
+nested lambdas; each value goes through `emitAsType` against the field type.
+Member access uses `FieldSymbol.emittedName()`, so
 tuple elements emit as `_0`/`_1` while ordinary struct fields keep their
 declared names. `Cpp14Codegen` keeps the statement/declaration
 emitter, namespace/type/name formatting, struct ordering, and program-level
@@ -2195,6 +2296,9 @@ AST node kinds and additional fields (all also carry `span`):
 | `globalVarDecl` | `type`, `name`, `constInitializer`, `literalBytes`, `compileTimeConstant` |
 | `varDecl` | `type`, `name` |
 | `varDeclInit` | `type`, `name`, `init` |
+| `varDeclFieldsInit` | `type`, `name`, `fields` |
+| `aggregateLiteral` | `type`, `fields` |
+| `fieldInit` | `name`, `value` |
 | `exprStmt` | `expr` |
 | `assign` | `op`, `target`, `value` |
 | `incDec` | `op`, `target` |
@@ -2262,6 +2366,7 @@ that branch's statements.
 | `getPtr` | `target`, optional `temporary` (boolean, default false) plus expression metadata |
 | `deref` | `expr` plus expression metadata |
 | `cast` | `checked`, `expr` plus expression metadata |
+| `aggregateLiteral` | `fields` (each `{field, value}`) plus expression metadata |
 
 Expression metadata is always `type` (a semantic type object) and
 `constantValue` (decimal string or `null`).
@@ -3121,7 +3226,7 @@ their symbols. No new symbol or AST data is required.
 The complete user-facing naming style (struct casing, snake_case functions,
 variables and fields, namespace spelling, constant casing, reserved
 `franko/` imports, and the FFI naming exception) lives only in
-`language_docs/34-naming-conventions.md`; only the prefix access rules above
+`language_docs/35-naming-conventions.md`; only the prefix access rules above
 are compiler warnings.
 
 ## 4.17 Operator overloading (structs)
@@ -3471,6 +3576,70 @@ Additional accepted trade-offs:
 - the dynamic checker tracks only non-global arrays/owners/pointers; global
   owners and aliases are treated as unknown and forgotten at every call.
 
+## 4.26 Aggregate literals
+
+Aggregate literals are first-class expressions that construct struct or tuple
+temporaries. They are grammatically ordinary `primary` expressions and survive
+desugaring; `ExpressionAnalyzer` lowers them into
+`SemanticAggregateLiteralNode` values with ordered
+`SemanticAggregateFieldInit` entries.
+
+**Contexts.** `analyzeValueExpr` is the aggregate-literal-enabled entry and is
+used only for the entire RHS of an assignment or declaration initializer, the
+entire return expression, an entire call argument, and an entire aggregate
+field value. `analyzeExpr` disables aggregate literals in every other
+recursive walk, so member-access bases, operators, casts, dereferences, and
+creation-intrinsic operands report
+`Aggregate literals are only valid as assignment values, return values, call
+arguments, or aggregate field values`. The literal still lowers for recovery.
+
+**Lowering.** The literal's `TypeNode` resolves through
+`SemanticTypeResolver`; only struct and tuple types are accepted. Struct
+entries resolve through `StructSymbol.resolveField`; tuple entries resolve
+through `SemanticTupleType`. Unknown and duplicate labels are diagnostics.
+Each value is analyzed with the field/element type as its expected type, so a
+nested aggregate literal is accepted only as an entire field value. Tuple
+literal spellings must be all-named or all-unnamed. An all-unnamed tuple
+spelling also accepts positional expressions: they map to `_0`, `_1`, … in
+source order, may fill only the first N elements, may not exceed the element
+count, may not mix with named entries, and are rejected for struct literals
+and named/mixed tuple spellings. All entry values go through the ordinary
+assignment rules, so constants are fitted and pointer conversions are applied
+by `ExpressionChecker`.
+
+**Construction semantics.** A literal creates a temporary value:
+default-construction applies field defaults and null pointer fields, then
+named/positional entries are assigned in source order. Construction itself
+never invokes `OPERATOR_MOV`. It always requires the struct or tuple to be
+value-assignable (`TypeChecker.isValueAssignableType`), even when the struct
+declares `OPERATOR_MOV`; `ExpressionChecker.visitAggregateLiteral` enforces
+this and then calls `ensureAssignable` for every entry. The surrounding
+assignment then follows ordinary whole-value assignment, including an
+applicable `OPERATOR_MOV`.
+
+**Field-wise declaration initializers.** `VarDeclFieldsInitNode` is
+pre-desugaring sugar and never reaches semantic analysis. The Desugarer emits
+a plain declaration followed by one ordinary assignment per entry, in source
+order. Positional entries map to `_0`, `_1`, … and are accepted only for
+all-unnamed tuple declarations, with the same partial-fill, count, and
+mixing rules as tuple literals. The form creates no temporary and never
+invokes `OPERATOR_MOV`, so it works for pointer-only aggregates; each named
+field must still be assignable under ordinary assignment rules. It is
+local-only.
+
+**Codegen.** `Cpp14ExpressionEmitter.emitAggregateLiteral` emits an
+immediately invoked C++14 lambda that default-constructs a local of the
+resolved type, assigns the entries in source order through `emitAsType`, and
+returns the value. Nested literals become nested lambdas. No runtime header
+support is required.
+
+**Tooling walks.** `InactiveDeclarationPruner`,
+`MemoryAnalysisContext`, all three memory checkers,
+`PointerPermissionChecker`, and `PrivateIdentifierLinter` recurse into
+aggregate field values. `SemanticASTSerializer` registers the field symbols
+and round-trips the expression as `aggregateLiteral` with `{field, value}`
+entries.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -3514,6 +3683,17 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
   bare static-index emission in the generated C++.
 - `build/` and `.antlr/` are generated and gitignored; never edit them.
 
+Aggregate-literal fixtures:
+
+```text
+language_tests/success/aggregate_literals/
+language_tests/success/aggregate_literals_contexts/
+language_tests/success/aggregate_literals_operator_mov/
+language_tests/success/aggregate_literals_pointer_only/
+language_tests/success/aggregate_literals_memory/
+language_tests/failure/aggregate_literals/
+```
+
 Memory-checker fixtures added by the rewrite:
 
 ```text
@@ -3538,6 +3718,8 @@ owner argument.
 | You want to… | Put it in |
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `ASTNode.java` + `ASTSerializer` |
+| Change aggregate literal syntax or unnamed-tuple positional rules | `Franko.g4` (`aggregateLiteral`/`initItem`/`declSuffix`) + `FrankoASTVisitor` + `Desugarer` (field-wise form) + `ExpressionAnalyzer.lowerAggregateLiteral` + `ExpressionChecker.visitAggregateLiteral` + §4.26 |
+| Change field-wise declaration initialization | `Desugarer` (`appendDesugaredVarDeclFieldsInit`) + §4.26 |
 | Add compile-time branch syntax | `Franko.g4` (`compileTimeIfStmt`) + `CompileTimeIfNode` + `SemanticAnalyzer.appendCompileTimeIf` (splicing, statement and declaration level) + §4.18 |
 | Add a compile-time intrinsic | `CompileTimeIntrinsics` + `ExpressionAnalyzer` delegation + `TypeChecker` predicate helpers + §4.18 |
 | Add a compile-time declaration conditional | `Franko.g4` declaration `compileTimeDeclIf` + `DeclIfNode` + `DeclarationSelector` + §4.18 |

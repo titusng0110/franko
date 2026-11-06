@@ -1,0 +1,9 @@
+// Aggregate literals reject duplicate field initializers.
+struct Literal {
+    int32 x
+}
+
+func main() -> int32 {
+    Literal lit = Literal { x = 1, x = 2 }
+    return 0
+}

@@ -1,0 +1,10 @@
+// A struct literal requires the struct to be value-assignable.
+struct Buffer {
+    int32 cap
+    [byte] buf
+}
+
+func main() -> int32 {
+    Buffer b = Buffer { cap = 20 }
+    return 0
+}

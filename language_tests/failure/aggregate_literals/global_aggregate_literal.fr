@@ -1,0 +1,12 @@
+// Aggregate literals are local-only; global initializers are
+// restricted to constant expressions, statically representable
+// addresses, string literals, and array literals.
+struct Literal {
+    int32 x
+}
+
+Literal global_lit = Literal { x = 1 }
+
+func main() -> int32 {
+    return 0
+}

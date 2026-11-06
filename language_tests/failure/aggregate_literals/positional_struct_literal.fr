@@ -1,0 +1,11 @@
+// Struct literals always name their fields, even when every struct field
+// could be matched positionally.
+struct Literal {
+    int32 x
+    int32 y
+}
+
+func main() -> int32 {
+    Literal lit = Literal { 0, 1 }
+    return 0
+}

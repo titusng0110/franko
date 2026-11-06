@@ -47,6 +47,10 @@ final class Cpp14ExpressionEmitter {
             return emitArrayIntrinsicCall(intrinsic);
         }
 
+        if (node instanceof SemanticAggregateLiteralNode aggregate) {
+            return emitAggregateLiteral(aggregate);
+        }
+
         if (node instanceof SemanticGetPtrNode getPtr) {
             return emitGetPtr(getPtr);
         }
@@ -317,6 +321,27 @@ final class Cpp14ExpressionEmitter {
                             + node.args.size()
             );
         }
+    }
+
+    private String emitAggregateLiteral(
+            SemanticAggregateLiteralNode node
+    ) {
+        String type = owner.emitType(node.type);
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("([&]() -> ").append(type).append(" { ");
+        sb.append(type).append(" _franko_literal; ");
+
+        for (SemanticAggregateFieldInit init : node.fields) {
+            sb.append("_franko_literal.")
+              .append(init.field.emittedName())
+              .append(" = ")
+              .append(emitAsType(owner, init.value, init.field.type))
+              .append("; ");
+        }
+
+        sb.append("return _franko_literal; }())");
+        return sb.toString();
     }
 
     private String emitGetPtr(SemanticGetPtrNode node) {

@@ -1,8 +1,10 @@
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class Desugarer {
 
@@ -368,6 +370,11 @@ public class Desugarer {
             return;
         }
 
+        if (stmt instanceof VarDeclFieldsInitNode) {
+            appendDesugaredVarDeclFieldsInit((VarDeclFieldsInitNode) stmt, out);
+            return;
+        }
+
         if (stmt instanceof AssignNode) {
             appendDesugaredAssign((AssignNode) stmt, out);
             return;
@@ -484,6 +491,99 @@ public class Desugarer {
             target,
             desugarExpr(rawInit)
         ));
+    }
+
+    private void appendDesugaredVarDeclFieldsInit(
+            VarDeclFieldsInitNode n,
+            List<ASTNode> out
+    ) {
+        TypeNode type = desugarType(n.type);
+
+        out.add(new VarDeclNode(n.span, type, n.name));
+
+        if (!(type instanceof StructTypeNode)
+                && !(type instanceof TupleTypeNode)) {
+            diagnostics.error(
+                    "Field initializer requires a struct or tuple declaration"
+            );
+            return;
+        }
+
+        boolean anyPositional = false;
+        boolean anyNamed = false;
+
+        for (FieldInitNode init : n.fields) {
+            if (init.positional) {
+                anyPositional = true;
+            } else {
+                anyNamed = true;
+            }
+        }
+
+        TupleTypeNode tupleType = type instanceof TupleTypeNode tuple
+                ? tuple
+                : null;
+        boolean unnamedTuple = tupleType != null
+                && tupleType.elements.stream().allMatch(e -> e.name == null);
+
+        if (anyPositional) {
+            if (!unnamedTuple) {
+                diagnostics.error("Positional field initializers are only "
+                        + "allowed for all-unnamed tuple declarations");
+                return;
+            }
+
+            if (anyNamed) {
+                diagnostics.error("Cannot mix positional and named tuple "
+                        + "element initializers");
+                return;
+            }
+
+            if (n.fields.size() > tupleType.elements.size()) {
+                diagnostics.error("Positional initializer for '"
+                        + n.name
+                        + "' has "
+                        + n.fields.size()
+                        + " entries but the tuple type has only "
+                        + tupleType.elements.size()
+                        + " elements");
+                return;
+            }
+        }
+
+        Set<String> seen = new HashSet<>();
+        int position = 0;
+
+        for (FieldInitNode init : n.fields) {
+            String fieldName;
+
+            if (init.positional) {
+                fieldName = "_" + position;
+                position++;
+            } else {
+                fieldName = init.name;
+            }
+
+            if (!seen.add(fieldName)) {
+                diagnostics.push(init.span);
+                diagnostics.error(
+                        "Duplicate initializer for field '" + fieldName + "'"
+                );
+                diagnostics.pop();
+                continue;
+            }
+
+            out.add(new AssignNode(
+                    init.span,
+                    "=",
+                    new MemberAccessNode(
+                            init.span,
+                            new VarNode(n.span, n.name),
+                            fieldName
+                    ),
+                    desugarExpr(init.value)
+            ));
+        }
     }
 
     private boolean usesInferredSize(TypeNode type) {
@@ -776,6 +876,12 @@ public class Desugarer {
         if (stmt instanceof VarDeclInitNode) {
             List<ASTNode> lowered = new ArrayList<>();
             appendDesugaredVarDeclInit((VarDeclInitNode) stmt, lowered);
+            return new BlockNode(stmt.span, lowered);
+        }
+
+        if (stmt instanceof VarDeclFieldsInitNode) {
+            List<ASTNode> lowered = new ArrayList<>();
+            appendDesugaredVarDeclFieldsInit((VarDeclFieldsInitNode) stmt, lowered);
             return new BlockNode(stmt.span, lowered);
         }
 
@@ -1085,6 +1191,25 @@ public class Desugarer {
             }
 
             return new ArrayLiteralNode(expr.span, elements);
+        }
+
+        if (expr instanceof AggregateLiteralNode n) {
+            List<FieldInitNode> fields = new ArrayList<>();
+
+            for (FieldInitNode field : n.fields) {
+                fields.add(new FieldInitNode(
+                        field.span,
+                        field.name,
+                        desugarExpr(field.value),
+                        field.positional
+                ));
+            }
+
+            return new AggregateLiteralNode(
+                    expr.span,
+                    desugarType(n.type),
+                    fields
+            );
         }
 
         throw new RuntimeException(

@@ -47,5 +47,8 @@ func main() -> int32 {
     print(t.call_hidden(w))
     print(w.visible)
 
+    Wallet lit = Wallet { _balance = 1 }
+    print(lit.visible)
+
     return 0
 }

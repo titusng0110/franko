@@ -1,0 +1,14 @@
+// A pointer-only struct cannot be returned by value, even when the
+// return expression is an aggregate literal.
+struct Buffer {
+    int32 cap
+    [byte] buf
+}
+
+func make_buffer() -> Buffer {
+    return Buffer { cap = 20 }
+}
+
+func main() -> int32 {
+    return 0
+}

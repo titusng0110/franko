@@ -1,4 +1,4 @@
-# 34. Naming Conventions
+# 35. Naming Conventions
 
 Franko does not require particular spellings for user-defined names, but
 consistent names make programs easier to read and make the standard library
@@ -8,7 +8,7 @@ for Franko code.
 Only the private-member and namespace-internal access rules in §34.7 produce
 compiler warnings. The other conventions in this chapter are style guidance.
 
-## 34.1 Summary
+## 35.1 Summary
 
 | Item | Convention | Examples |
 |---|---|---|
@@ -26,7 +26,7 @@ compiler warnings. The other conventions in this chapter are style guidance.
 | Private member constant | `_` + `ALL_CAPS_WITH_UNDERSCORES` | `_END`, `_ALLOCATED` |
 | Internal constant | `__` + `ALL_CAPS_WITH_UNDERSCORES` | `__SECRET_CONSTANT` |
 
-## 34.2 Structs
+## 35.2 Structs
 
 Struct names use `CapitalLetterCamelCase`:
 
@@ -52,7 +52,7 @@ namespace bignum {
 }
 ```
 
-## 34.3 Functions and Methods
+## 35.3 Functions and Methods
 
 Function and method names use `lower_case_snake_case`:
 
@@ -112,7 +112,7 @@ uppercase, and not renamed to snake case. They are reserved for struct
 operator methods and rejected on free functions. See
 [Operator Methods](27-methods.md#2710-operator-methods).
 
-## 34.4 Variables and Fields
+## 35.4 Variables and Fields
 
 Variable and field names use `lower_case_snake_case`:
 
@@ -136,7 +136,7 @@ struct Buffer {
 }
 ```
 
-## 34.5 Namespaces
+## 35.5 Namespaces
 
 Namespace names should be short, lowercase, and free of underscores. When a
 name really needs two words, concatenate them instead of inserting an
@@ -156,7 +156,7 @@ namespace os::win32 {
 Use `bignum::BigInteger` and `os::win32`, not `big_num::BigInteger` or
 `os::win_32`.
 
-## 34.6 Constants
+## 35.6 Constants
 
 Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`:
 
@@ -179,7 +179,7 @@ An internal constant adds the two-underscore prefix:
 int32 __SECRET_CONSTANT = 42
 ```
 
-## 34.7 Private and Internal Prefixes
+## 35.7 Private and Internal Prefixes
 
 Underscore prefixes communicate visibility:
 
@@ -221,7 +221,7 @@ See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) for the
 exact access rules. These warnings do not reject the program. Other naming
 conventions in this chapter are not enforced by the compiler.
 
-## 34.8 Standard Library Imports
+## 35.8 Standard Library Imports
 
 The compiler's bundled standard library is stored under `./import/franko/`.
 The import prefix `franko/` is reserved for those standard modules:
@@ -243,7 +243,7 @@ import "myproject/my_module"
 
 See [Source Files](02-source-files.md) for the import search rules.
 
-## 34.9 Compiler-Enforced Rules
+## 35.9 Compiler-Enforced Rules
 
 The naming conventions are mostly documentation and style. The compiler only
 enforces the access restrictions for the reserved prefixes:

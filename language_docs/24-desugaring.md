@@ -33,6 +33,10 @@ literal is never rewritten into statements; its element type is inferred
 from the surrounding assignment, return, or call-argument context. See
 [Array Literals](21-array-literals.md).
 
+Aggregate literal expressions are likewise never rewritten into statements.
+They remain expressions and are lowered during semantic analysis into a
+temporary struct or tuple value. See [Aggregate Literals](29-aggregate-literals.md).
+
 ## 24.3 String Literal Desugaring
 
 Every string literal is a read-only `view<[byte, N]>` over immutable
@@ -196,3 +200,44 @@ Every rule that applies to `+=` / `-=` (integer storage-backed lvalue
 target, operand rules, single evaluation of the target) applies
 identically to `x++` / `x--`. The literal `1` remains a fluid integer
 constant. See [Assignment](16-assignment.md).
+
+## 24.9 Aggregate Field Initializer Desugaring
+
+A field-wise declaration initializer is sugar for a declaration followed by
+one ordinary field assignment per named field, in source order:
+
+```franko
+Literal lit { def = 1, x = 0 }
+```
+
+is equivalent to:
+
+```franko
+Literal lit
+lit.def = 1
+lit.x = 0
+```
+
+An all-unnamed tuple declaration accepts positional entries, which are
+written to `_0`, `_1`, … in order and fill the first N elements:
+
+```franko
+(int32, int32) pair { 0, 1 }
+```
+
+is equivalent to:
+
+```franko
+(int32, int32) pair
+pair._0 = 0
+pair._1 = 1
+```
+
+A partial list such as `{ 0 }` writes only `_0`. The brace must immediately
+follow the identifier; a newline ends the declaration. Duplicate field
+initializers and positional lists that exceed the tuple size are rejected
+during desugaring. Positional entries are invalid for structs and named or
+mixed tuple spellings, and positional and named entries cannot be mixed. No
+temporary aggregate value is created, so the form also works for pointer-only
+aggregates; each entry must still obey ordinary assignment rules. See
+[Aggregate Literals](29-aggregate-literals.md).
