@@ -43,7 +43,9 @@ Design rules:
   `(uint32 val, int32 err)`. `val` is the number of bytes stored; `err`
   is `0` on success and `-1` on error. A null buffer, or a `count`
   larger than the buffer, returns `(0, -1)` without consuming any
-  input. `read_line` fills a `std::String` and returns `int32`.
+  input. `read_line` fills a `std::String` and returns `int32`:
+  `0` on success, `-1` on a read/allocation error, and `-2` when the
+  line is too long.
 
 ## API
 
@@ -187,21 +189,24 @@ func read_line(ptr<std::String> out) -> int32
 ```
 
 Reads one line from stdin into `out`, completely replacing its contents.
-Reading stops at `\n`, `\r\n`, or end of input. Returns `0` on success
-and `-1` for a null `out`, a read error, an allocation failure, or an
-over-long line.
+Reading stops at `\n`, `\r\n`, or end of input. Returns `0` on success,
+`-1` for a null `out`, a read error, or an allocation failure, and `-2`
+for a line longer than 81920 bytes.
 
 - The line ending is consumed but not stored. A `\r\n` ending counts as
   one terminator; the `\r` is dropped too, so lines read the same from an
   interactive Windows console and from a pipe.
-- The internal buffer starts at 256 bytes and doubles when full, up to a
-  maximum of 8192 bytes. A line longer than 8192 bytes is consumed
-  through its line ending and reported as `-1`.
+- The line is accumulated in a local buffer sized to the exact length of
+  the first chunk. When the line does not fit, the buffer grows in
+  8192-byte steps up to a maximum of 81920 bytes of line content.
+- A line longer than 81920 bytes is consumed through its line ending and
+  reported as `-2`; `out` is left empty. `-2` means "line too long", not
+  a memory or read error.
 - A final line without a terminator (end of input mid-line) is returned
   normally.
 - An empty string means an empty line **or** end of input with nothing
   pending. Read again (or track the expected line count) to tell them
-  apart; a return value of `-1` always means an error.
+  apart; `-1` and `-2` always mean an error.
 
 ```franko
 import "franko/io"
@@ -230,5 +235,6 @@ library_tests/io/print/success/std_string/ // print(std::String), String/byte en
 library_tests/io/read/success/read_bytes/      // chunked reads, short read, EOF
 library_tests/io/read/success/read_line/       // lines, empty line, EOF
 library_tests/io/read/success/read_line_long/  // buffer growth, long line
+library_tests/io/read/success/read_line_limit/ // 81920-byte limit, -2, resync
 library_tests/io/read/success/read_errors/     // null buffers, bad count, EOF
 ```
