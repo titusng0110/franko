@@ -132,13 +132,13 @@ func main() -> int32 {
     std::StringList selflist
     selflist.append("ab")
     selflist.append("cd")
-    print(selflist.data[0].join(44, getview(selflist)))
-    print(selflist.data[0].to(getptr(out)))
+    print(selflist._data[0].join(44, getview(selflist)))
+    print(selflist._data[0].to(getptr(out)))
     print(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    print(selflist.data[1].to(getptr(out)))
+    print(selflist._data[1].to(getptr(out)))
     print(getview(out))
     if (out.length() != 0) {
         out.uninit()

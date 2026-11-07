@@ -20,12 +20,14 @@
 //
 // `_data.length()` is the buffer capacity. `_data_size` is the current
 // string length in bytes and is what `length()` returns. Bytes past
-// `_data_size` are unused buffer space. The buffer starts at 128 bytes
-// and doubles when full; it is only freed by `uninit()`.
+// `_data_size` are unused buffer space. The buffer starts at 64 bytes
+// and grows to the next power of two when full; it is only freed by
+// `uninit()`.
 //
 // The backing array is pointer-only, so String is pointer-only: it
 // cannot be passed or returned by value. Methods use `view<String>`
-// for read-only access and `ptr<String>` for lifecycle/mutation.
+// for read-only access, `mview<String>` for in-place mutation, and
+// `ptr<String>` for lifecycle/allocation operations.
 //
 // Lifecycle:
 //
@@ -34,6 +36,7 @@
 //     it to the exact logical length;
 //   - `to(ptr<String>)` replaces another String;
 //   - `clear()` resets the length to 0 and keeps the buffer for reuse;
+//   - `shrink_to_fit()` releases unused buffer space;
 //   - `uninit()` frees the backing buffer.
 //
 // `length()` reports the logical byte length. `is_utf8_compliant()`
@@ -54,33 +57,41 @@
 // StringList:
 //
 //   struct StringList {
-//       [String] data          // buffer; data.length() is capacity
-//       uint32 data_size = 0   // number of live elements
+//       [String] _data         // buffer; _data.length() is capacity
+//       uint32 _data_size = 0  // number of live elements
 //   }
 //
 // StringList stores a buffered dynamic array of String values. The
-// array length is the buffer capacity and `data_size` is the live
-// element count. The buffer starts at 128 elements and doubles when
-// full. Passing a null view to `from` or calling `clear` releases the
-// live elements and keeps the buffer; `uninit` frees every element and
-// the buffer.
+// array length is the buffer capacity and `_data_size` is the live
+// element count. The buffer starts at 64 elements and grows to the next
+// power of two when full. Passing a null view to `from` releases the
+// live elements and keeps the list buffer; `clear` resets the live
+// elements in place, keeping both the list buffer and each element's
+// String buffer; `shrink_to_fit` releases unused capacity; `uninit`
+// frees every element and the buffer.
 // ============================================================
 
 namespace std {
     // Internal: next capacity for a growable String or StringList buffer.
-    // Empty buffers start at 128; existing buffers double until they can
-    // hold `payload`. Buffers are only freed by uninit.
+    // Buffers start at 64 and always use the smallest power of two that
+    // can hold the request, so growth follows 64, 128, 256, ... even
+    // after shrink_to_fit leaves an odd capacity. Buffers are only freed
+    // by uninit.
     func __string_grow_capacity(uint32 cap, uint32 payload) -> uint32 {
-        if (cap == 0) {
-            cap = 128
-        }
-        while (cap < payload) {
-            if (cap > 0xFFFFFFFF / 2) {
+        uint32 target = 64
+        while (target < cap) {
+            if (target > 0xFFFFFFFF / 2) {
                 return payload
             }
-            cap = cap * 2
+            target = target * 2
         }
-        return cap
+        while (target < payload) {
+            if (target > 0xFFFFFFFF / 2) {
+                return payload
+            }
+            target = target * 2
+        }
+        return target
     }
 
     struct String {
@@ -137,9 +148,9 @@ namespace std {
         }
 
         // Internal: make sure `_data` has room for at least `payload`
-        // bytes. The buffer starts at 128 bytes and doubles when full;
-        // it is only freed by uninit. Returns 0 on success, -1 on
-        // allocation failure.
+        // bytes. The buffer starts at 64 bytes and grows to the next
+        // power of two when full; it is only freed by uninit. Returns 0
+        // on success, -1 on allocation failure.
         func _reserve(ptr<String> self, uint32 payload) -> int32 {
             if (payload == 0) {
                 return 0
@@ -296,6 +307,27 @@ namespace std {
         func clear(mview<String> self) -> void {
             $(self)._data_size = 0
             return
+        }
+
+        // Resize the backing buffer to the live length to release unused
+        // memory. An empty string frees the buffer. Returns 0 on success,
+        // -1 on allocation failure.
+        func shrink_to_fit(ptr<String> self) -> int32 {
+            uint32 n = $(self)._data_size
+            uint32 cap = $(self)._data.length()
+            if (n == 0) {
+                if (cap != 0) {
+                    $(self)._data.uninit()
+                }
+                return 0
+            }
+            if (n < cap) {
+                int32 st = $(self)._data.resize(n)
+                if (st != 0) {
+                    return -1
+                }
+            }
+            return 0
         }
 
         // Append one byte. Returns 0 on success, -1 on overflow or
@@ -2017,13 +2049,13 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            uint32 old_out = $(out).data_size
+            uint32 old_out = $(out)._data_size
             uint32 i = 0
             while (i < old_out) {
-                $(out).data[i].uninit()
+                $(out)._data[i].uninit()
                 i = i + 1
             }
-            $(out).data_size = 0
+            $(out)._data_size = 0
             uint32 n = 0
             if (self != null) {
                 n = $(self)._data_size
@@ -2041,20 +2073,20 @@ namespace std {
                 segments = segments + 1
                 scan = hit + 1
             }
-            uint32 cap = $(out).data.length()
+            uint32 cap = $(out)._data.length()
             if (cap < segments) {
                 uint32 target = __string_grow_capacity(cap, segments)
                 int32 st = 0
                 if (cap == 0) {
-                    st = $(out).data.init(target)
+                    st = $(out)._data.init(target)
                 } else {
-                    st = $(out).data.resize(target)
+                    st = $(out)._data.resize(target)
                 }
                 if (st != 0) {
                     return -1
                 }
             }
-            $(out).data_size = segments
+            $(out)._data_size = segments
             uint32 start = 0
             scan = 0
             uint32 seg = 0
@@ -2070,7 +2102,7 @@ namespace std {
                     found = 1
                 }
                 uint32 len = end - start
-                ptr<String> dest = getptr($(out).data[seg])
+                ptr<String> dest = getptr($(out)._data[seg])
                 int32 st = $(dest)._reserve(len)
                 if (st != 0) {
                     return -1
@@ -2098,13 +2130,13 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            uint32 old_out = $(out).data_size
+            uint32 old_out = $(out)._data_size
             uint32 i = 0
             while (i < old_out) {
-                $(out).data[i].uninit()
+                $(out)._data[i].uninit()
                 i = i + 1
             }
-            $(out).data_size = 0
+            $(out)._data_size = 0
             uint32 n = 0
             if (self != null) {
                 n = $(self)._data_size
@@ -2130,20 +2162,20 @@ namespace std {
                     }
                 }
             }
-            uint32 cap = $(out).data.length()
+            uint32 cap = $(out)._data.length()
             if (cap < segments) {
                 uint32 target = __string_grow_capacity(cap, segments)
                 int32 st = 0
                 if (cap == 0) {
-                    st = $(out).data.init(target)
+                    st = $(out)._data.init(target)
                 } else {
-                    st = $(out).data.resize(target)
+                    st = $(out)._data.resize(target)
                 }
                 if (st != 0) {
                     return -1
                 }
             }
-            $(out).data_size = segments
+            $(out)._data_size = segments
             uint32 start = 0
             uint32 scan = 0
             uint32 seg = 0
@@ -2164,7 +2196,7 @@ namespace std {
                     }
                 }
                 uint32 len = end - start
-                ptr<String> dest = getptr($(out).data[seg])
+                ptr<String> dest = getptr($(out)._data[seg])
                 int32 st = $(dest)._reserve(len)
                 if (st != 0) {
                     return -1
@@ -2192,13 +2224,13 @@ namespace std {
             if (out == null) {
                 return -1
             }
-            uint32 old_out = $(out).data_size
+            uint32 old_out = $(out)._data_size
             uint32 i = 0
             while (i < old_out) {
-                $(out).data[i].uninit()
+                $(out)._data[i].uninit()
                 i = i + 1
             }
-            $(out).data_size = 0
+            $(out)._data_size = 0
             uint32 n = 0
             if (self != null) {
                 n = $(self)._data_size
@@ -2228,20 +2260,20 @@ namespace std {
                     }
                 }
             }
-            uint32 cap = $(out).data.length()
+            uint32 cap = $(out)._data.length()
             if (cap < segments) {
                 uint32 target = __string_grow_capacity(cap, segments)
                 int32 st = 0
                 if (cap == 0) {
-                    st = $(out).data.init(target)
+                    st = $(out)._data.init(target)
                 } else {
-                    st = $(out).data.resize(target)
+                    st = $(out)._data.resize(target)
                 }
                 if (st != 0) {
                     return -1
                 }
             }
-            $(out).data_size = segments
+            $(out)._data_size = segments
             uint32 start = 0
             uint32 scan = 0
             uint32 seg = 0
@@ -2263,7 +2295,7 @@ namespace std {
                     }
                 }
                 uint32 len = end - start
-                ptr<String> dest = getptr($(out).data[seg])
+                ptr<String> dest = getptr($(out)._data[seg])
                 int32 st = $(dest)._reserve(len)
                 if (st != 0) {
                     return -1
@@ -2292,18 +2324,18 @@ namespace std {
                 $(self)._data_size = 0
                 return 0
             }
-            uint32 count = $(in).data_size
+            uint32 count = $(in)._data_size
             view<String> self_view = getview($(self))
             uint8 self_source = 0
             uint32 total = 0
             uint32 i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (total > 0xFFFFFFFF - piece) {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in).data[i]) == self_view) {
+                if (getview($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 i = i + 1
@@ -2325,9 +2357,9 @@ namespace std {
             uint32 pos = 0
             i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in).data[i]._data)
+                    view<[byte]> src = getview($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2353,18 +2385,18 @@ namespace std {
                 $(self)._data_size = 0
                 return 0
             }
-            uint32 count = $(in).data_size
+            uint32 count = $(in)._data_size
             view<String> self_view = getview($(self))
             uint8 self_source = 0
             uint32 total = 0
             uint32 i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (total > 0xFFFFFFFF - piece) {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in).data[i]) == self_view) {
+                if (getview($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 if (i + 1 < count) {
@@ -2392,9 +2424,9 @@ namespace std {
             uint32 pos = 0
             i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in).data[i]._data)
+                    view<[byte]> src = getview($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2424,7 +2456,7 @@ namespace std {
                 $(self)._data_size = 0
                 return 0
             }
-            uint32 count = $(in).data_size
+            uint32 count = $(in)._data_size
             uint32 joiner_len = 0
             if (joiner != null) {
                 joiner_len = $(joiner).length()
@@ -2434,12 +2466,12 @@ namespace std {
             uint32 total = 0
             uint32 i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (total > 0xFFFFFFFF - piece) {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in).data[i]) == self_view) {
+                if (getview($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 if (i + 1 < count) {
@@ -2471,9 +2503,9 @@ namespace std {
             uint32 pos = 0
             i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in).data[i]._data)
+                    view<[byte]> src = getview($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2507,7 +2539,7 @@ namespace std {
                 $(self)._data_size = 0
                 return 0
             }
-            uint32 count = $(in).data_size
+            uint32 count = $(in)._data_size
             uint32 joiner_len = 0
             if (joiner != null) {
                 joiner_len = $(joiner)._data_size
@@ -2517,12 +2549,12 @@ namespace std {
             uint32 total = 0
             uint32 i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (total > 0xFFFFFFFF - piece) {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in).data[i]) == self_view) {
+                if (getview($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 if (i + 1 < count) {
@@ -2554,9 +2586,9 @@ namespace std {
             uint32 pos = 0
             i = 0
             while (i < count) {
-                uint32 piece = $(in).data[i]._data_size
+                uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in).data[i]._data)
+                    view<[byte]> src = getview($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2735,49 +2767,50 @@ namespace std {
     // Storage:
     //
     //   struct StringList {
-    //       [String] data          // buffer; data.length() is capacity
-    //       uint32 data_size = 0   // number of live elements
+    //       [String] _data         // buffer; _data.length() is capacity
+    //       uint32 _data_size = 0  // number of live elements
     //   }
     //
-    // `data.length()` is the buffer capacity. `data_size` is the live
+    // `_data.length()` is the buffer capacity. `_data_size` is the live
     // element count and is what `length()` returns. The buffer starts
-    // at 128 elements and doubles when full.
+    // at 64 elements and grows to the next power of two when full.
     //
     // Every live element owns its own String buffer. `from` replaces the
-    // live contents and keeps the buffer; `clear` releases the live
-    // elements and keeps the buffer; `uninit` frees every element and
-    // the buffer.
+    // live contents and keeps the list buffer; `clear` resets the live
+    // elements in place, keeping both the list buffer and each element's
+    // String buffer; `shrink_to_fit` releases unused capacity; `uninit`
+    // frees every element and the buffer.
     // ============================================================
     struct StringList {
-        [String] data
-        uint32 data_size = 0
+        [String] _data
+        uint32 _data_size = 0
 
         // Number of live strings in the list.
         func length(view<StringList> self) -> uint32 {
             if (self == null) {
                 return 0
             }
-            return $(self).data_size
+            return $(self)._data_size
         }
 
-        // Internal: make sure `data` has room for at least `payload`
-        // elements. The buffer starts at 128 elements and doubles when
-        // full; it is only freed by uninit. Returns 0 on success, -1 on
-        // allocation failure.
+        // Internal: make sure `_data` has room for at least `payload`
+        // elements. The buffer starts at 64 elements and grows to the
+        // next power of two when full; it is only freed by uninit.
+        // Returns 0 on success, -1 on allocation failure.
         func _reserve(ptr<StringList> self, uint32 payload) -> int32 {
             if (payload == 0) {
                 return 0
             }
-            uint32 cap = $(self).data.length()
+            uint32 cap = $(self)._data.length()
             if (cap >= payload) {
                 return 0
             }
             uint32 target = __string_grow_capacity(cap, payload)
             int32 st = 0
             if (cap == 0) {
-                st = $(self).data.init(target)
+                st = $(self)._data.init(target)
             } else {
-                st = $(self).data.resize(target)
+                st = $(self)._data.resize(target)
             }
             if (st != 0) {
                 return -1
@@ -2787,30 +2820,51 @@ namespace std {
 
         // Free every live element and the backing buffer.
         func uninit(ptr<StringList> self) -> void {
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             uint32 i = 0
             while (i < n) {
-                $(self).data[i].uninit()
+                $(self)._data[i].uninit()
                 i = i + 1
             }
-            if ($(self).data.length() != 0) {
-                $(self).data.uninit()
+            if ($(self)._data.length() != 0) {
+                $(self)._data.uninit()
             }
-            $(self).data_size = 0
+            $(self)._data_size = 0
             return
         }
 
         // Clear every live element while keeping the list's backing
-        // buffer allocated for reuse.
-        func clear(ptr<StringList> self) -> void {
-            uint32 n = $(self).data_size
+        // buffer and each element's String buffer allocated for reuse.
+        func clear(mview<StringList> self) -> void {
+            uint32 n = $(self)._data_size
             uint32 i = 0
             while (i < n) {
-                $(self).data[i].uninit()
+                $(self)._data[i].clear()
                 i = i + 1
             }
-            $(self).data_size = 0
+            $(self)._data_size = 0
             return
+        }
+
+        // Resize the backing buffer to the live element count to release
+        // unused memory. An empty list frees the buffer. Returns 0 on
+        // success, -1 on allocation failure.
+        func shrink_to_fit(ptr<StringList> self) -> int32 {
+            uint32 n = $(self)._data_size
+            uint32 cap = $(self)._data.length()
+            if (n == 0) {
+                if (cap != 0) {
+                    $(self)._data.uninit()
+                }
+                return 0
+            }
+            if (n < cap) {
+                int32 st = $(self)._data.resize(n)
+                if (st != 0) {
+                    return -1
+                }
+            }
+            return 0
         }
 
         // Replace the list with a copy of another list's live elements.
@@ -2818,17 +2872,17 @@ namespace std {
             if (in != null && in == getview($(self))) {
                 return 0
             }
-            uint32 old = $(self).data_size
+            uint32 old = $(self)._data_size
             uint32 i = 0
             while (i < old) {
-                $(self).data[i].uninit()
+                $(self)._data[i].uninit()
                 i = i + 1
             }
-            $(self).data_size = 0
+            $(self)._data_size = 0
             if (in == null) {
                 return 0
             }
-            uint32 n = $(in).data_size
+            uint32 n = $(in)._data_size
             if (n == 0) {
                 return 0
             }
@@ -2836,10 +2890,10 @@ namespace std {
             if (st != 0) {
                 return -1
             }
-            $(self).data_size = n
+            $(self)._data_size = n
             i = 0
             while (i < n) {
-                st = $(self).data[i].from(getview($(in).data[i]))
+                st = $(self)._data[i].from(getview($(in)._data[i]))
                 if (st != 0) {
                     return -1
                 }
@@ -2850,7 +2904,7 @@ namespace std {
 
         // Append one String copied from a byte array.
         func append(ptr<StringList> self, view<[byte]> in) -> int32 {
-            uint32 old = $(self).data_size
+            uint32 old = $(self)._data_size
             if (old == 0xFFFFFFFF) {
                 return -1
             }
@@ -2858,8 +2912,8 @@ namespace std {
             if (st != 0) {
                 return -1
             }
-            $(self).data_size = old + 1
-            st = $(self).data[old].from(in)
+            $(self)._data_size = old + 1
+            st = $(self)._data[old].from(in)
             if (st != 0) {
                 return -1
             }
@@ -2868,7 +2922,7 @@ namespace std {
 
         // Append one String copied from another string.
         func append(ptr<StringList> self, view<String> in) -> int32 {
-            uint32 old = $(self).data_size
+            uint32 old = $(self)._data_size
             if (old == 0xFFFFFFFF) {
                 return -1
             }
@@ -2876,8 +2930,8 @@ namespace std {
             if (st != 0) {
                 return -1
             }
-            $(self).data_size = old + 1
-            st = $(self).data[old].from(in)
+            $(self)._data_size = old + 1
+            st = $(self)._data[old].from(in)
             if (st != 0) {
                 return -1
             }
@@ -2911,15 +2965,15 @@ namespace std {
             if (self == null) {
                 return result
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             uint32 needle_len = 0
             if (needle != null) {
                 needle_len = $(needle).length()
             }
             uint32 i = 0
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         result.idx = i
                         result.err = 0
@@ -2939,15 +2993,15 @@ namespace std {
             if (self == null) {
                 return result
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             uint32 needle_len = 0
             if (needle != null) {
                 needle_len = $(needle).length()
             }
             uint32 i = 0
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         result.idx = i
                         result.err = 0
@@ -2968,7 +3022,7 @@ namespace std {
             if (self == null) {
                 return result
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             if (start_idx >= n) {
                 return result
             }
@@ -2978,8 +3032,8 @@ namespace std {
             }
             uint32 i = start_idx
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         result.idx = i
                         result.err = 0
@@ -3000,7 +3054,7 @@ namespace std {
             if (self == null) {
                 return result
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             if (start_idx >= n) {
                 return result
             }
@@ -3010,8 +3064,8 @@ namespace std {
             }
             uint32 i = start_idx
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         result.idx = i
                         result.err = 0
@@ -3028,7 +3082,7 @@ namespace std {
             if (self == null) {
                 return 0
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             uint32 needle_len = 0
             if (needle != null) {
                 needle_len = $(needle).length()
@@ -3036,8 +3090,8 @@ namespace std {
             uint32 total = 0
             uint32 i = 0
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         total = total + 1
                     }
@@ -3052,7 +3106,7 @@ namespace std {
             if (self == null) {
                 return 0
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             uint32 needle_len = 0
             if (needle != null) {
                 needle_len = $(needle).length()
@@ -3060,8 +3114,8 @@ namespace std {
             uint32 total = 0
             uint32 i = 0
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         total = total + 1
                     }
@@ -3076,7 +3130,7 @@ namespace std {
             if (self == null) {
                 return 0
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             if (start_idx >= n) {
                 return 0
             }
@@ -3087,8 +3141,8 @@ namespace std {
             uint32 total = 0
             uint32 i = start_idx
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         total = total + 1
                     }
@@ -3103,7 +3157,7 @@ namespace std {
             if (self == null) {
                 return 0
             }
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             if (start_idx >= n) {
                 return 0
             }
@@ -3114,8 +3168,8 @@ namespace std {
             uint32 total = 0
             uint32 i = start_idx
             while (i < n) {
-                if ($(self).data[i].length() == needle_len) {
-                    (uint32 idx, int32 err) found = $(self).data[i].find(needle)
+                if ($(self)._data[i].length() == needle_len) {
+                    (uint32 idx, int32 err) found = $(self)._data[i].find(needle)
                     if (found.err == 0 && found.idx == 0) {
                         total = total + 1
                     }
@@ -3135,10 +3189,10 @@ namespace std {
             if (self == null) {
                 return -1
             }
-            if (idx >= $(self).data_size) {
+            if (idx >= $(self)._data_size) {
                 return -1
             }
-            return $(out).from(getview($(self).data[idx]))
+            return $(out).from(getview($(self)._data[idx]))
         }
 
         // Copy element `idx` into a byte array, completely replacing it.
@@ -3149,31 +3203,31 @@ namespace std {
             if (self == null) {
                 return -1
             }
-            if (idx >= $(self).data_size) {
+            if (idx >= $(self)._data_size) {
                 return -1
             }
-            return $(self).data[idx].to(out)
+            return $(self)._data[idx].to(out)
         }
 
         // Replace element `idx` with a copy of `value`.
         func set(ptr<StringList> self, uint32 idx, view<String> value) -> int32 {
-            if (idx >= $(self).data_size) {
+            if (idx >= $(self)._data_size) {
                 return -1
             }
-            return $(self).data[idx].from(value)
+            return $(self)._data[idx].from(value)
         }
 
         // Replace element `idx` with a copy of a byte array.
         func set(ptr<StringList> self, uint32 idx, view<[byte]> value) -> int32 {
-            if (idx >= $(self).data_size) {
+            if (idx >= $(self)._data_size) {
                 return -1
             }
-            return $(self).data[idx].from(value)
+            return $(self)._data[idx].from(value)
         }
 
         // Insert a copy of `payload` at `idx`.
         func insert(ptr<StringList> self, view<String> payload, uint32 idx) -> int32 {
-            uint32 old = $(self).data_size
+            uint32 old = $(self)._data_size
             if (idx > old || old == 0xFFFFFFFF) {
                 return -1
             }
@@ -3188,17 +3242,17 @@ namespace std {
                 tmp.uninit()
                 return -1
             }
-            $(self).data_size = old + 1
+            $(self)._data_size = old + 1
             uint32 i = old
             while (i > idx) {
-                st = $(self).data[i].from(getview($(self).data[i - 1]))
+                st = $(self)._data[i].from(getview($(self)._data[i - 1]))
                 if (st != 0) {
                     tmp.uninit()
                     return -1
                 }
                 i = i - 1
             }
-            st = $(self).data[idx].from(getview(tmp))
+            st = $(self)._data[idx].from(getview(tmp))
             tmp.uninit()
             if (st != 0) {
                 return -1
@@ -3208,7 +3262,7 @@ namespace std {
 
         // Insert a copy of a byte array at `idx`.
         func insert(ptr<StringList> self, view<[byte]> payload, uint32 idx) -> int32 {
-            uint32 old = $(self).data_size
+            uint32 old = $(self)._data_size
             if (idx > old || old == 0xFFFFFFFF) {
                 return -1
             }
@@ -3223,17 +3277,17 @@ namespace std {
                 tmp.uninit()
                 return -1
             }
-            $(self).data_size = old + 1
+            $(self)._data_size = old + 1
             uint32 i = old
             while (i > idx) {
-                st = $(self).data[i].from(getview($(self).data[i - 1]))
+                st = $(self)._data[i].from(getview($(self)._data[i - 1]))
                 if (st != 0) {
                     tmp.uninit()
                     return -1
                 }
                 i = i - 1
             }
-            st = $(self).data[idx].from(getview(tmp))
+            st = $(self)._data[idx].from(getview(tmp))
             tmp.uninit()
             if (st != 0) {
                 return -1
@@ -3243,26 +3297,26 @@ namespace std {
 
         // Erase element `idx`.
         func erase(ptr<StringList> self, uint32 idx) -> int32 {
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             if (idx >= n) {
                 return -1
             }
             uint32 i = idx
             while (i + 1 < n) {
-                int32 st = $(self).data[i].from(getview($(self).data[i + 1]))
+                int32 st = $(self)._data[i].from(getview($(self)._data[i + 1]))
                 if (st != 0) {
                     return -1
                 }
                 i = i + 1
             }
-            $(self).data[n - 1].uninit()
-            $(self).data_size = n - 1
+            $(self)._data[n - 1].uninit()
+            $(self)._data_size = n - 1
             return 0
         }
 
         // Erase elements [start, end).
         func erase(ptr<StringList> self, uint32 start, uint32 end) -> int32 {
-            uint32 n = $(self).data_size
+            uint32 n = $(self)._data_size
             if (start > end || end > n) {
                 return -1
             }
@@ -3272,7 +3326,7 @@ namespace std {
             }
             uint32 i = start
             while (i + count < n) {
-                int32 st = $(self).data[i].from(getview($(self).data[i + count]))
+                int32 st = $(self)._data[i].from(getview($(self)._data[i + count]))
                 if (st != 0) {
                     return -1
                 }
@@ -3281,10 +3335,10 @@ namespace std {
             uint32 drop = n - count
             i = drop
             while (i < n) {
-                $(self).data[i].uninit()
+                $(self)._data[i].uninit()
                 i = i + 1
             }
-            $(self).data_size = drop
+            $(self)._data_size = drop
             return 0
         }
     }

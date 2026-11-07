@@ -4,12 +4,23 @@
 // Covers length, both from overloads, both append overloads, both
 // find/find_next/count/count_from needle forms, both get overloads,
 // both set overloads, both insert overloads, both erase forms,
-// clearing through a null from view and clear(), the 128/256 doubling
-// growth, and appending after clearing.
+// clearing through a null from view and clear(), the 64/128/256
+// power-of-two growth, shrink_to_fit(), odd-capacity regrowth, and
+// appending after clearing.
 // ============================================================
 
 import "franko/io"
 import "franko/string"
+
+// Capacity is internal. This test inspects it through one helper so the
+// private-access warning is pinned once in main.warnings instead of on
+// every assertion.
+func list_capacity(view<std::StringList> list) -> uint32 {
+    if (list == null) {
+        return 0
+    }
+    return $(list)._data.length()
+}
 
 func main() -> int32 {
     [byte] out
@@ -142,24 +153,57 @@ func main() -> int32 {
         out.uninit()
     }
 
+    std::StringList odd
+    for (uint32 i = 0; i < 41; i = i + 1) {
+        odd.append("x")
+    }
+    print(odd.length())            // 41
+    print(list_capacity(getview(odd)))       // 64
+    print(odd.shrink_to_fit())     // 0
+    print(list_capacity(getview(odd)))       // 41: exact fit
+    print(odd.append("y"))         // 0
+    print(odd.length())            // 42
+    print(list_capacity(getview(odd)))       // 64: back on the power-of-two ladder
+    print(odd.shrink_to_fit())     // 0
+    print(list_capacity(getview(odd)))       // 42
+    print(odd.append("z"))         // 0
+    print(list_capacity(getview(odd)))       // 64
+    odd.uninit()
+
     std::StringList big
-    for (uint32 i = 0; i < 130; i = i + 1) {
+    big.append("x")
+    print(big.length())            // 1
+    print(list_capacity(getview(big)))       // 64: initial buffer
+    for (uint32 i = 1; i < 65; i = i + 1) {
         big.append("x")
     }
-    print(big.length())
-    print(big.data.length())       // 256: 128 doubled once
+    print(big.length())            // 65
+    print(list_capacity(getview(big)))       // 128: doubled once
+    for (uint32 i = 65; i < 130; i = i + 1) {
+        big.append("x")
+    }
+    print(big.length())            // 130
+    print(list_capacity(getview(big)))       // 256: doubled again
+    print(big.shrink_to_fit())
+    print(list_capacity(getview(big)))       // 130: trimmed to the live count
     print(big.from(empty_list))
     print(big.length())
-    print(big.data.length())
+    print(list_capacity(getview(big)))
     print(big.append("again"))
     print(big.length())
-    print(big.data.length())
+    print(list_capacity(getview(big)))
     big.clear()
     print(big.length())
-    print(big.data.length())       // 256: clear keeps the buffer
+    print(list_capacity(getview(big)))       // clear keeps the list buffer
     print(big.append("after"))
     print(big.length())
-    print(big.data.length())
+    print(list_capacity(getview(big)))
+    print(big.shrink_to_fit())
+    print(list_capacity(getview(big)))       // 1: trimmed to one live element
+    big.clear()
+    print(big.length())
+    print(big.shrink_to_fit())
+    print(list_capacity(getview(big)))       // 0: empty list frees the buffer
     big.uninit()
 
     list.clear()

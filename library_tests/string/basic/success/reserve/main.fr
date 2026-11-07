@@ -1,10 +1,10 @@
 // ============================================================
 // LIBRARY TEST (string/basic): growth and clearing
 // ============================================================
-// Covers from() at the 127/128-byte boundary, append/multiply growth,
-// clearing with *= 0 and clear(), reuse after clearing, and UTF-8
-// validity across those transitions. Capacity is internal and is not
-// inspected.
+// Covers from() at the 63/64/65-byte boundary, append/multiply growth,
+// clearing with *= 0 and clear(), reuse after clearing, shrink_to_fit(),
+// and UTF-8 validity across those transitions. Capacity is internal and
+// is not inspected.
 // ============================================================
 
 import "franko/io"
@@ -14,19 +14,26 @@ func main() -> int32 {
     std::String s
     print(s.length())
 
-    [byte] p127
-    p127.init_zero(127)
+    [byte] p63
+    p63.init_zero(63)
     std::String a
-    print(a.from(getview(p127)))
+    print(a.from(getview(p63)))
     print(a.length())
     print(a.is_utf8_compliant())
 
-    [byte] p128
-    p128.init_zero(128)
+    [byte] p64
+    p64.init_zero(64)
     std::String b
-    print(b.from(getview(p128)))
+    print(b.from(getview(p64)))
     print(b.length())
     print(b.is_utf8_compliant())
+
+    [byte] p65
+    p65.init_zero(65)
+    std::String d
+    print(d.from(getview(p65)))
+    print(d.length())
+    print(d.is_utf8_compliant())
 
     std::String c
     print(c.from("ab"))
@@ -37,7 +44,7 @@ func main() -> int32 {
     c *= 0
     print(c.length())
     print(c.is_utf8_compliant())
-    print(c.from(getview(p128)))
+    print(c.from(getview(p65)))
     print(c.length())
     print(c.is_utf8_compliant())
 
@@ -47,12 +54,22 @@ func main() -> int32 {
     print(c.from("reuse"))
     print(c.length())
     print(getview(c))
+    print(c.shrink_to_fit())
+    print(c.length())
+    print(getview(c))
+    c.clear()
+    print(c.shrink_to_fit())
+    print(c.length())
+    print(c.from("again"))
+    print(getview(c))
 
-    p127.uninit()
-    p128.uninit()
+    p63.uninit()
+    p64.uninit()
+    p65.uninit()
     s.uninit()
     a.uninit()
     b.uninit()
     c.uninit()
+    d.uninit()
     return 0
 }

@@ -22,11 +22,14 @@ Design rules:
 - `length()` returns the number of stored bytes, not the internal
   growth bookkeeping.
 - Strings are pointer-only because `_data` is a dynamic array. Use
-  `view<String>` for read-only parameters and `ptr<String>` for
-  mutation/lifecycle parameters.
+  `view<String>` for read-only parameters, `mview<String>` for in-place
+  mutation such as `clear`, `set`, and `erase`, and `ptr<String>` for
+  allocation/lifecycle operations.
 - The `_data` and `_data_size` fields, the `_reserve` method, and the
   `_compare` method are private by convention (`_` prefix): direct access
   from outside `std::String` warns. Use the public methods below instead.
+- `StringList`'s `_data` and `_data_size` fields are private for the same
+  reason: direct access from outside `std::StringList` warns.
 - Methods return `int32` status where allocation or copying can fail:
   `0` on success and `-1` on failure.
 - `is_utf8_compliant()` returns `uint8`: `1` for valid UTF-8 and `0`
@@ -47,10 +50,14 @@ number of live bytes and is what `length()` returns. Bytes past
 `_data_size` are unused buffer space.
 
 The buffer size is internal and is not exposed through the public API.
-An empty string allocates 128 bytes on first use; when the buffer is
-full it doubles (`128`, `256`, `512`, ...). The buffer is never shrunk
-by `from`, `clear`, or `erase`. `clear()` resets the length to 0 and
-keeps the buffer allocated for reuse; only `uninit()` frees it.
+An empty string allocates 64 bytes on first use; when the buffer is
+full it grows to the next power of two (`64`, `128`, `256`, ...). This
+also applies after `shrink_to_fit()`: an odd exact-fit capacity such as
+41 returns to the ladder with a capacity of 64 on the next growth. The
+buffer is never shrunk by `from`, `clear`, or `erase`. `clear()` resets
+the length to 0 and keeps the buffer allocated for reuse;
+`shrink_to_fit()` resizes it to the live length (freeing it when the
+string is empty); `uninit()` frees it too.
 
 A declaration starts empty: `_data` is uninitialized (capacity 0) and
 `_data_size` is 0.
@@ -69,6 +76,7 @@ func to(view<String> self, ptr<String> out) -> int32
 func length(view<String> self) -> uint32
 func is_utf8_compliant(view<String> self) -> uint8
 func clear(mview<String> self) -> void
+func shrink_to_fit(ptr<String> self) -> int32
 func uninit(ptr<String> self) -> void
 
 func append(ptr<String> self, byte payload) -> int32
@@ -272,6 +280,30 @@ s.clear()
 print(s.length())   // 0
 s.from("reuse")     // reuses the existing buffer
 print(getview(s))   // reuse
+```
+
+### shrink_to_fit
+
+```franko
+func shrink_to_fit(ptr<String> self) -> int32
+```
+
+Resizes the backing buffer to the live string length, releasing unused
+capacity. The resulting capacity may be any number, including an odd
+one; the next growth rounds back up to the power-of-two ladder (64,
+128, 256, ...). An empty string frees the buffer entirely. Returns `0`
+on success and `-1` when the resize fails.
+
+```franko
+std::String s
+s.from("hello")
+s.append(" world")
+s.erase(5, 11)      // "hello", buffer still has room
+print(s.shrink_to_fit())   // 0: buffer trimmed back to 5 bytes
+print(getview(s))          // hello
+s.clear()
+print(s.shrink_to_fit())   // 0: empty string frees its buffer
+print(s.length())          // 0
 ```
 
 ### append
@@ -520,31 +552,37 @@ joined.join(getview(parts))         // "abc"
 
 ```franko
 struct StringList {
-    [String] data          // buffer; data.length() is capacity
-    uint32 data_size = 0   // number of live elements
+    [String] _data         // buffer; _data.length() is capacity
+    uint32 _data_size = 0  // number of live elements
 }
 ```
 
 `StringList` is a dynamic array of `String` values with a reusable
-buffer. `data.length()` is the buffer capacity; `data_size` is the live
-element count and is what `length()` returns. An empty list allocates
-128 element slots on first use; when the buffer is full it doubles
-(`128`, `256`, `512`, ...). The buffer is never shrunk by `from`,
-`clear`, or `erase`, so repeated appends do not reallocate on every
-call.
+buffer. `_data.length()` is the buffer capacity; `_data_size` is the
+live element count and is what `length()` returns. Like `String`, both
+fields are private by convention (`_` prefix): direct access from
+outside `std::StringList` warns. An empty list allocates
+64 element slots on first use; when the buffer is full it grows to the
+next power of two (`64`, `128`, `256`, ...). This also applies after
+`shrink_to_fit()` leaves an odd exact-fit capacity. The buffer is never
+shrunk by `from`, `clear`, or `erase`, so repeated appends do not
+reallocate on every call. `shrink_to_fit()` resizes it to the live
+element count (freeing it when the list is empty).
 
 Every live element owns its own String buffer. `from` replaces the live
-contents and keeps the list buffer; `clear` releases the live elements
-and keeps the list buffer; `uninit` frees every live element and the
-buffer.
+contents and keeps the list buffer; `clear` resets every live element in
+place, keeping both the list buffer and each element's String buffer for
+reuse; `uninit` frees every live element and the buffer.
 
 `StringList` is pointer-only for the same reason as `String`: it
 contains a dynamic array. Use `view<StringList>` for read-only
-parameters and `ptr<StringList>` for mutation.
+parameters, `mview<StringList>` for in-place mutation such as `clear`,
+and `ptr<StringList>` for allocation/lifecycle operations.
 
-Passing a null view to `from` clears the live elements and keeps the
-buffer for reuse. `clear()` does the same without needing a null view.
-Call `uninit()` to release the buffer.
+Passing a null view to `from` releases the live elements and keeps the
+list buffer for reuse. `clear()` does the same without needing a null
+view, and also keeps each element's String buffer for reuse. Call
+`uninit()` to release everything.
 
 ### StringList API
 
@@ -552,7 +590,8 @@ Call `uninit()` to release the buffer.
 struct StringList { ... }
 
 func length(view<StringList> self) -> uint32
-func clear(ptr<StringList> self) -> void
+func clear(mview<StringList> self) -> void
+func shrink_to_fit(ptr<StringList> self) -> int32
 func uninit(ptr<StringList> self) -> void
 
 func from(ptr<StringList> self, view<StringList> in) -> int32
@@ -589,9 +628,14 @@ func erase(ptr<StringList> self, uint32 start, uint32 end) -> int32
 
 ### StringList methods
 
-- `length()` returns `data_size`, or `0` for a null list.
-- `clear()` releases every live element and resets `data_size` to 0
-  while keeping the list's backing buffer allocated for reuse.
+- `length()` returns `_data_size`, or `0` for a null list.
+- `clear()` clears every live element in place and resets `_data_size`
+  to 0, keeping both the list's backing buffer and each element's
+  String buffer allocated for reuse.
+- `shrink_to_fit()` resizes the backing buffer to `_data_size`, releasing
+  unused element slots. The capacity may become odd; the next growth
+  returns to the power-of-two ladder. An empty list frees the buffer
+  entirely. Returns `0` on success and `-1` when the resize fails.
 - `uninit()` frees every live element and the backing buffer, returning
   the list to the empty unallocated state.
 - `from` replaces every live element with a copy of another list's live
@@ -698,7 +742,8 @@ func OPERATOR_MULMOV(ptr<String> self, view<uint32> other) -> void
 The `view<view<[byte]>>` forms exist so string literals work with `=` and
 `+=`; a string literal is itself a `view<[byte, N]>` value. Byte arrays
 use the `view<[byte]>` forms and other strings use the `view<String>`
-forms. An existing buffer is reused; when it is too small it doubles.
+forms. An existing buffer is reused; when it is too small it grows to
+the next power of two.
 
 `*=` repeats the string. A multiplier of `0` clears the contents while
 keeping the buffer, `1` is a no-op, and larger values repeat the bytes.
@@ -750,7 +795,7 @@ func main() -> int32 {
 
 ```text
 library_tests/string/basic/success/from_to/               // from/to overloads, views, static arrays
-library_tests/string/basic/success/reserve/               // doubling growth across 127/128-byte payloads, clear, reuse
+library_tests/string/basic/success/reserve/               // 63/64/65-byte growth boundaries, clear/reuse, shrink_to_fit
 library_tests/string/basic/success/utf8/                  // valid and invalid UTF-8 sequences
 library_tests/string/operators/success/comparisons/       // all six comparators, prefixes, empties
 library_tests/string/operators/success/assign_append_multiply/ // =, +=, *=, clear
@@ -759,5 +804,5 @@ library_tests/string/methods/success/to_integer/          // decimal/binary/hex 
 library_tests/string/methods/success/find_count/          // find/find_next/count/count_from, all needle forms
 library_tests/string/methods/success/slice_edit/          // append/get_slice/insert/erase, aliasing, bounds
 library_tests/string/methods/success/split_join/          // split/join, empty and aliased separators
-library_tests/string/stringlist/success/basic/            // StringList from/append/find/get/set/insert/erase/clear
+library_tests/string/stringlist/success/basic/            // StringList from/append/find/get/set/insert/erase/clear/shrink/odd-regrow
 ```
