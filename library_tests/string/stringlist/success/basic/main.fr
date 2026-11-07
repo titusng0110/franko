@@ -4,7 +4,8 @@
 // Covers length, both from overloads, both append overloads, both
 // find/find_next/count/count_from needle forms, both get overloads,
 // both set overloads, both insert overloads, both erase forms,
-// clearing through a null from view, and appending after clearing.
+// clearing through a null from view and clear(), the 128/256 doubling
+// growth, and appending after clearing.
 // ============================================================
 
 import "franko/io"
@@ -146,11 +147,25 @@ func main() -> int32 {
         big.append("x")
     }
     print(big.length())
-    print(big.data.length())
+    print(big.data.length())       // 256: 128 doubled once
     print(big.from(empty_list))
     print(big.length())
     print(big.data.length())
+    print(big.append("again"))
+    print(big.length())
+    print(big.data.length())
+    big.clear()
+    print(big.length())
+    print(big.data.length())       // 256: clear keeps the buffer
+    print(big.append("after"))
+    print(big.length())
+    print(big.data.length())
     big.uninit()
+
+    list.clear()
+    print(list.length())
+    print(list.append("again"))
+    print(list.length())
 
     list.uninit()
     source.uninit()

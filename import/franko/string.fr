@@ -20,7 +20,8 @@
 //
 // `_data.length()` is the buffer capacity. `_data_size` is the current
 // string length in bytes and is what `length()` returns. Bytes past
-// `_data_size` are unused buffer space.
+// `_data_size` are unused buffer space. The buffer starts at 128 bytes
+// and doubles when full; it is only freed by `uninit()`.
 //
 // The backing array is pointer-only, so String is pointer-only: it
 // cannot be passed or returned by value. Methods use `view<String>`
@@ -32,6 +33,7 @@
 //   - `to(ptr<[byte]>)` copies the contents into a byte array, resizing
 //     it to the exact logical length;
 //   - `to(ptr<String>)` replaces another String;
+//   - `clear()` resets the length to 0 and keeps the buffer for reuse;
 //   - `uninit()` frees the backing buffer.
 //
 // `length()` reports the logical byte length. `is_utf8_compliant()`
@@ -58,31 +60,27 @@
 //
 // StringList stores a buffered dynamic array of String values. The
 // array length is the buffer capacity and `data_size` is the live
-// element count. The initial buffer is at least 128 elements; later growth is
-// geometric (at least doubling). Passing a null view to `from` clears
-// the live elements and keeps the buffer; `uninit` frees every element
-// and the buffer.
+// element count. The buffer starts at 128 elements and doubles when
+// full. Passing a null view to `from` or calling `clear` releases the
+// live elements and keeps the buffer; `uninit` frees every element and
+// the buffer.
 // ============================================================
 
 namespace std {
-    func __string_default_buffer_size(uint32 payload) -> uint32 {
-        if (payload < 128) {
-            return 128
+    // Internal: next capacity for a growable String or StringList buffer.
+    // Empty buffers start at 128; existing buffers double until they can
+    // hold `payload`. Buffers are only freed by uninit.
+    func __string_grow_capacity(uint32 cap, uint32 payload) -> uint32 {
+        if (cap == 0) {
+            cap = 128
         }
-        if (payload > 0xFFFFFFFF - 128) {
-            return payload
+        while (cap < payload) {
+            if (cap > 0xFFFFFFFF / 2) {
+                return payload
+            }
+            cap = cap * 2
         }
-        return payload + 128
-    }
-
-    func __stringlist_default_buffer_size(uint32 payload) -> uint32 {
-        if (payload < 128) {
-            return 128
-        }
-        if (payload > 0xFFFFFFFF - 128) {
-            return payload
-        }
-        return payload + 128
+        return cap
     }
 
     struct String {
@@ -139,17 +137,18 @@ namespace std {
         }
 
         // Internal: make sure `_data` has room for at least `payload`
-        // bytes. The buffer may be larger than the live contents.
-        // Returns 0 on success, -1 on allocation failure.
+        // bytes. The buffer starts at 128 bytes and doubles when full;
+        // it is only freed by uninit. Returns 0 on success, -1 on
+        // allocation failure.
         func _reserve(ptr<String> self, uint32 payload) -> int32 {
             if (payload == 0) {
                 return 0
             }
-            uint32 target = __string_default_buffer_size(payload)
             uint32 cap = $(self)._data.length()
-            if (cap >= target) {
+            if (cap >= payload) {
                 return 0
             }
+            uint32 target = __string_grow_capacity(cap, payload)
             int32 st = 0
             if (cap == 0) {
                 st = $(self)._data.init(target)
@@ -288,6 +287,13 @@ namespace std {
             if ($(self)._data.length() != 0) {
                 $(self)._data.uninit()
             }
+            $(self)._data_size = 0
+            return
+        }
+
+        // Clear the live contents while keeping the backing buffer
+        // allocated for reuse.
+        func clear(mview<String> self) -> void {
             $(self)._data_size = 0
             return
         }
@@ -2037,7 +2043,7 @@ namespace std {
             }
             uint32 cap = $(out).data.length()
             if (cap < segments) {
-                uint32 target = __stringlist_default_buffer_size(segments)
+                uint32 target = __string_grow_capacity(cap, segments)
                 int32 st = 0
                 if (cap == 0) {
                     st = $(out).data.init(target)
@@ -2126,7 +2132,7 @@ namespace std {
             }
             uint32 cap = $(out).data.length()
             if (cap < segments) {
-                uint32 target = __stringlist_default_buffer_size(segments)
+                uint32 target = __string_grow_capacity(cap, segments)
                 int32 st = 0
                 if (cap == 0) {
                     st = $(out).data.init(target)
@@ -2224,7 +2230,7 @@ namespace std {
             }
             uint32 cap = $(out).data.length()
             if (cap < segments) {
-                uint32 target = __stringlist_default_buffer_size(segments)
+                uint32 target = __string_grow_capacity(cap, segments)
                 int32 st = 0
                 if (cap == 0) {
                     st = $(out).data.init(target)
@@ -2734,12 +2740,13 @@ namespace std {
     //   }
     //
     // `data.length()` is the buffer capacity. `data_size` is the live
-    // element count and is what `length()` returns. The initial buffer is
-    // at least 128 elements; later growth is geometric (at least doubling).
+    // element count and is what `length()` returns. The buffer starts
+    // at 128 elements and doubles when full.
     //
     // Every live element owns its own String buffer. `from` replaces the
-    // live contents and keeps the buffer; `uninit` frees every element
-    // and the buffer.
+    // live contents and keeps the buffer; `clear` releases the live
+    // elements and keeps the buffer; `uninit` frees every element and
+    // the buffer.
     // ============================================================
     struct StringList {
         [String] data
@@ -2754,9 +2761,9 @@ namespace std {
         }
 
         // Internal: make sure `data` has room for at least `payload`
-        // elements. The initial buffer is at least 128 elements; later
-        // growth is geometric (at least doubling, or the requested size
-        // when larger). Returns 0 on success, -1 on allocation failure.
+        // elements. The buffer starts at 128 elements and doubles when
+        // full; it is only freed by uninit. Returns 0 on success, -1 on
+        // allocation failure.
         func _reserve(ptr<StringList> self, uint32 payload) -> int32 {
             if (payload == 0) {
                 return 0
@@ -2765,19 +2772,7 @@ namespace std {
             if (cap >= payload) {
                 return 0
             }
-            uint32 target = __stringlist_default_buffer_size(payload)
-            if (cap != 0) {
-                uint32 doubled = 0xFFFFFFFF
-                if (cap <= 0xFFFFFFFF / 2) {
-                    doubled = cap * 2
-                }
-                if (doubled > target) {
-                    target = doubled
-                }
-            }
-            if (cap >= target) {
-                return 0
-            }
+            uint32 target = __string_grow_capacity(cap, payload)
             int32 st = 0
             if (cap == 0) {
                 st = $(self).data.init(target)
@@ -2800,6 +2795,19 @@ namespace std {
             }
             if ($(self).data.length() != 0) {
                 $(self).data.uninit()
+            }
+            $(self).data_size = 0
+            return
+        }
+
+        // Clear every live element while keeping the list's backing
+        // buffer allocated for reuse.
+        func clear(ptr<StringList> self) -> void {
+            uint32 n = $(self).data_size
+            uint32 i = 0
+            while (i < n) {
+                $(self).data[i].uninit()
+                i = i + 1
             }
             $(self).data_size = 0
             return

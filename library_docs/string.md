@@ -47,8 +47,10 @@ number of live bytes and is what `length()` returns. Bytes past
 `_data_size` are unused buffer space.
 
 The buffer size is internal and is not exposed through the public API.
-`_reserve` grows the buffer when more room is needed, and clearing a
-string keeps the buffer allocated for reuse. `uninit()` frees it.
+An empty string allocates 128 bytes on first use; when the buffer is
+full it doubles (`128`, `256`, `512`, ...). The buffer is never shrunk
+by `from`, `clear`, or `erase`. `clear()` resets the length to 0 and
+keeps the buffer allocated for reuse; only `uninit()` frees it.
 
 A declaration starts empty: `_data` is uninitialized (capacity 0) and
 `_data_size` is 0.
@@ -66,6 +68,7 @@ func to(view<String> self, ptr<String> out) -> int32
 
 func length(view<String> self) -> uint32
 func is_utf8_compliant(view<String> self) -> uint8
+func clear(mview<String> self) -> void
 func uninit(ptr<String> self) -> void
 
 func append(ptr<String> self, byte payload) -> int32
@@ -249,6 +252,27 @@ func uninit(ptr<String> self) -> void
 
 Frees the backing buffer and returns the string to the empty state. Safe
 to call on an already empty string.
+
+### clear
+
+```franko
+func clear(mview<String> self) -> void
+```
+
+Resets the logical string length to 0 while keeping the backing buffer
+allocated. The next `from`, `append`, or other content operation reuses
+that buffer, so repeatedly clearing and refilling a string does not
+reallocate. Use `uninit()` to release the buffer instead.
+
+```franko
+std::String s
+s.from("hello")
+print(s.length())   // 5
+s.clear()
+print(s.length())   // 0
+s.from("reuse")     // reuses the existing buffer
+print(getview(s))   // reuse
+```
 
 ### append
 
@@ -503,12 +527,15 @@ struct StringList {
 
 `StringList` is a dynamic array of `String` values with a reusable
 buffer. `data.length()` is the buffer capacity; `data_size` is the live
-element count and is what `length()` returns. The initial buffer is at
-least 128 elements; later growth is geometric (at least doubling), so
-repeated appends do not reallocate on every call.
+element count and is what `length()` returns. An empty list allocates
+128 element slots on first use; when the buffer is full it doubles
+(`128`, `256`, `512`, ...). The buffer is never shrunk by `from`,
+`clear`, or `erase`, so repeated appends do not reallocate on every
+call.
 
 Every live element owns its own String buffer. `from` replaces the live
-contents and keeps the buffer; `uninit` frees every live element and the
+contents and keeps the list buffer; `clear` releases the live elements
+and keeps the list buffer; `uninit` frees every live element and the
 buffer.
 
 `StringList` is pointer-only for the same reason as `String`: it
@@ -516,7 +543,8 @@ contains a dynamic array. Use `view<StringList>` for read-only
 parameters and `ptr<StringList>` for mutation.
 
 Passing a null view to `from` clears the live elements and keeps the
-buffer for reuse. Call `uninit()` to release the buffer.
+buffer for reuse. `clear()` does the same without needing a null view.
+Call `uninit()` to release the buffer.
 
 ### StringList API
 
@@ -524,6 +552,7 @@ buffer for reuse. Call `uninit()` to release the buffer.
 struct StringList { ... }
 
 func length(view<StringList> self) -> uint32
+func clear(ptr<StringList> self) -> void
 func uninit(ptr<StringList> self) -> void
 
 func from(ptr<StringList> self, view<StringList> in) -> int32
@@ -561,6 +590,8 @@ func erase(ptr<StringList> self, uint32 start, uint32 end) -> int32
 ### StringList methods
 
 - `length()` returns `data_size`, or `0` for a null list.
+- `clear()` releases every live element and resets `data_size` to 0
+  while keeping the list's backing buffer allocated for reuse.
 - `uninit()` frees every live element and the backing buffer, returning
   the list to the empty unallocated state.
 - `from` replaces every live element with a copy of another list's live
@@ -608,8 +639,7 @@ print(list.length())          // 3
 list += "ee"                  // append through OPERATOR_ADDMOV
 print(list.length())          // 4
 
-view<std::StringList> empty = null
-list.from(empty)              // clear live elements, keep buffer
+list.clear()                  // release live elements, keep buffer
 print(list.length())          // 0
 list.uninit()                 // release the buffer
 ```
@@ -668,10 +698,10 @@ func OPERATOR_MULMOV(ptr<String> self, view<uint32> other) -> void
 The `view<view<[byte]>>` forms exist so string literals work with `=` and
 `+=`; a string literal is itself a `view<[byte, N]>` value. Byte arrays
 use the `view<[byte]>` forms and other strings use the `view<String>`
-forms.
+forms. An existing buffer is reused; when it is too small it doubles.
 
-`*=` repeats the string. A multiplier of `0` clears the contents, `1` is
-a no-op, and larger values repeat the bytes.
+`*=` repeats the string. A multiplier of `0` clears the contents while
+keeping the buffer, `1` is a no-op, and larger values repeat the bytes.
 
 ```franko
 std::String s
@@ -720,7 +750,7 @@ func main() -> int32 {
 
 ```text
 library_tests/string/basic/success/from_to/               // from/to overloads, views, static arrays
-library_tests/string/basic/success/reserve/               // growth across 127/128-byte payloads and clearing
+library_tests/string/basic/success/reserve/               // doubling growth across 127/128-byte payloads, clear, reuse
 library_tests/string/basic/success/utf8/                  // valid and invalid UTF-8 sequences
 library_tests/string/operators/success/comparisons/       // all six comparators, prefixes, empties
 library_tests/string/operators/success/assign_append_multiply/ // =, +=, *=, clear
@@ -729,5 +759,5 @@ library_tests/string/methods/success/to_integer/          // decimal/binary/hex 
 library_tests/string/methods/success/find_count/          // find/find_next/count/count_from, all needle forms
 library_tests/string/methods/success/slice_edit/          // append/get_slice/insert/erase, aliasing, bounds
 library_tests/string/methods/success/split_join/          // split/join, empty and aliased separators
-library_tests/string/stringlist/success/basic/            // StringList from/append/find/get/set/insert/erase
+library_tests/string/stringlist/success/basic/            // StringList from/append/find/get/set/insert/erase/clear
 ```

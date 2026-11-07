@@ -9,8 +9,8 @@ uint32 __io_input_len = 0
 
 // Internal line accumulator. The dynamic array lives in a struct so the
 // local-array lifecycle checker does not track it. read_line initializes
-// it to the exact size of the first chunk and grows it in 8192-byte
-// steps up to the 81920-byte line limit.
+// it to the exact size of the first chunk and doubles it up to the
+// 81920-byte line limit.
 struct __IoLineBuffer {
     [byte] data
 }
@@ -1015,8 +1015,8 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err) {
 // Read one line from stdin into `out`. Reading stops at `\n`, `\r\n`,
 // or end of input. The line ending is consumed but not stored. The
 // local line buffer is initialized to the exact size of the first
-// chunk; when a line does not fit, it grows in 8192-byte steps up to
-// 81920 bytes. A longer line is consumed through its line ending and
+// chunk; when a line does not fit, it doubles up to 81920 bytes. A
+// longer line is consumed through its line ending and
 // reported as -2, which means "line too long" rather than a memory or
 // read error. Returns 0 on success, -1 for a null `out`, a read error,
 // or an allocation failure, and -2 for an over-long line. An empty
@@ -1081,7 +1081,10 @@ func read_line(ptr<std::String> out) -> int32 {
                     cap = needed
                 } else {
                     while (cap < needed) {
-                        uint32 next_cap = cap + 8192
+                        uint32 next_cap = cap * 2
+                        if (next_cap < needed) {
+                            next_cap = needed
+                        }
                         if (next_cap > 81920) {
                             next_cap = 81920
                         }

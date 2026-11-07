@@ -197,8 +197,8 @@ for a line longer than 81920 bytes.
   one terminator; the `\r` is dropped too, so lines read the same from an
   interactive Windows console and from a pipe.
 - The line is accumulated in a local buffer sized to the exact length of
-  the first chunk. When the line does not fit, the buffer grows in
-  8192-byte steps up to a maximum of 81920 bytes of line content.
+  the first chunk. When the line does not fit, the buffer doubles up to
+  a maximum of 81920 bytes of line content.
 - A line longer than 81920 bytes is consumed through its line ending and
   reported as `-2`; `out` is left empty. `-2` means "line too long", not
   a memory or read error.

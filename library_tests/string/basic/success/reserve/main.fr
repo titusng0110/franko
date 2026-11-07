@@ -2,8 +2,9 @@
 // LIBRARY TEST (string/basic): growth and clearing
 // ============================================================
 // Covers from() at the 127/128-byte boundary, append/multiply growth,
-// clearing with *= 0, reuse after clearing, and UTF-8 validity across
-// those transitions. Capacity is internal and is not inspected.
+// clearing with *= 0 and clear(), reuse after clearing, and UTF-8
+// validity across those transitions. Capacity is internal and is not
+// inspected.
 // ============================================================
 
 import "franko/io"
@@ -39,6 +40,13 @@ func main() -> int32 {
     print(c.from(getview(p128)))
     print(c.length())
     print(c.is_utf8_compliant())
+
+    c.clear()
+    print(c.length())
+    print(c.is_utf8_compliant())
+    print(c.from("reuse"))
+    print(c.length())
+    print(getview(c))
 
     p127.uninit()
     p128.uninit()
