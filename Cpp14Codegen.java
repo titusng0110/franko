@@ -1427,11 +1427,18 @@ public class Cpp14Codegen {
             validList.append(symbol.variants.get(i).name).append("=").append(symbol.variants.get(i).value.toString(10));
         }
 
-        emitLine("franko_panic((\"Invalid value for enum " + symbol.qualifiedName() + ": \"");
-        indentLevel++;
-        emitLine("+ std::to_string(v)");
-        emitLine("+ \" is not a declared variant (valid variants: " + validList + ")\").c_str());");
-        indentLevel--;
+        boolean unsignedBacking = symbol.backingKind.name().startsWith("UINT");
+        String formatSpec = unsignedBacking ? "%llu" : "%lld";
+        String valueCast = unsignedBacking
+                ? "static_cast<unsigned long long>(backing)"
+                : "static_cast<long long>(backing)";
+
+        emitLine("char message[256];");
+        emitLine("std::snprintf(message, sizeof(message), \"Invalid value for enum "
+                + symbol.qualifiedName() + ": " + formatSpec
+                + " is not a declared variant (valid variants: " + validList
+                + ")\", " + valueCast + ");");
+        emitLine("franko_panic(message);");
         indentLevel--;
         emitLine("}");
         indentLevel--;

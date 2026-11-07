@@ -33,16 +33,13 @@
 #define FRANKO_BOUNDS_UNCHECKED 0
 #endif
 
-#include <algorithm> // for std::search (portable memmem fallback)
 #include <cstddef>   // for size_t, std::nullptr_t
 #include <cstdint>   // for uint8_t, uint32_t, int32_t
-#include <cstdlib>   // for std::malloc/calloc/realloc/free (non-jemalloc builds)
-                     // and _byteswap_* (MSVC byte_swap fallback)
-#include <cstring>   // for std::memcpy, std::memset, std::memmove
+#include <cstdlib>   // for std::malloc/calloc/realloc/free (non-jemalloc builds) _byteswap_* (MSVC byte_swap fallback) std::abort()
+#include <cstring>   // for std::memcpy, std::memset, std::memmove, std::memcmp, std::memchr
+#include <cstdio>    // for std::fputs, std::snprintf
 #include <limits>    // for std::numeric_limits (franko_integer_unsafe_cast bounds)
 #include <new>       // for placement new
-#include <stdexcept> // for std::runtime_error
-#include <string>    // for std::string (franko_byte_arrays::fail message assembly)
 #include <type_traits> // for std::is_signed, std::make_unsigned, std::enable_if, and trivial-construction traits
 
 #if FRANKO_USE_JEMALLOC
@@ -50,7 +47,10 @@
 #endif
 
 [[noreturn]] inline void franko_panic(const char* message) {
-    throw std::runtime_error(message);
+    std::fputs("Franko runtime panic: ", stderr);
+    std::fputs(message, stderr);
+    std::fputs("\n", stderr);
+    std::abort();
 }
 
 // ============================================================
@@ -396,15 +396,14 @@ T (&franko_static_array_ref(T* data))[N] {
 
 namespace franko_byte_arrays {
 
-// Assembles "<class> <intrinsic> <problem>" and panics. Only runs on
-// the failure path, so the std::string is cold-path only.
+// Assembles "<class> <intrinsic> <problem>" and panics. The message is
+// truncated to fit a fixed 256-byte stack buffer. snprintf never writes
+// past the buffer and always NUL-terminates. Only runs on the failure
+// path.
 inline void fail(const char* cls, const char* op, const char* what) {
-    std::string message(cls);
-    message += ' ';
-    message += op;
-    message += ' ';
-    message += what;
-    franko_panic(message.c_str());
+    char message[256];
+    std::snprintf(message, sizeof(message), "%s %s %s", cls, op, what);
+    franko_panic(message);
 }
 
 // Returned by memchr / memmem when there is no match. Every real
@@ -447,11 +446,10 @@ inline uint32_t memchr_impl(const char* cls, const char* op, const uint8_t* data
 
 // memmem is a GNU extension (also in POSIX-2008 and on macOS/BSD),
 // present in glibc whether linked statically or dynamically.
-// Toolchains without it (MSVC) fall back to std::search below.
+// Toolchains without it (MSVC) fall back to a hand-written scan below.
 // Defined to 0 externally to test the fallback path.
 #ifndef FRANKO_HAS_MEMMEM
-#if defined(__GLIBC__) || defined(__APPLE__) || defined(__FreeBSD__) \
-        || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(__GLIBC__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #define FRANKO_HAS_MEMMEM 1
 #else
 #define FRANKO_HAS_MEMMEM 0
@@ -492,12 +490,26 @@ inline uint32_t memmem_impl(const char* cls, const char* op, const uint8_t* data
 
     return static_cast<uint32_t>(static_cast<const uint8_t*>(hit) - data);
 #else
-    // Portable fallback (MSVC and friends): std::search is standard
-    // C++ and, unlike strstr, is binary-safe (no NUL termination is
-    // assumed, embedded NUL bytes are ordinary data).
+    // Portable fallback (MSVC and friends): a hand-written sequential
+    // scan. Unlike strstr, it is binary-safe: no NUL termination is
+    // assumed and embedded NUL bytes are ordinary data.
     const uint8_t* begin = data + start;
     const uint8_t* end = begin + range;
-    const uint8_t* hit = std::search(begin, end, needle, needle + needleCount);
+    const uint8_t* needleEnd = needle + needleCount;
+    const uint8_t* hit = end;
+
+    for (const uint8_t* candidate = begin; candidate + needleCount <= end; ++candidate) {
+        const uint8_t* h = candidate;
+        const uint8_t* n = needle;
+        while (n != needleEnd && *h == *n) {
+            ++h;
+            ++n;
+        }
+        if (n == needleEnd) {
+            hit = candidate;
+            break;
+        }
+    }
 
     if (hit == end) {
         return MEM_NOT_FOUND;
