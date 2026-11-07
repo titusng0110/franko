@@ -1,9 +1,10 @@
 // ============================================================
 // LIBRARY TEST (io/read): read_line growth
 // ============================================================
-// stdin is a 300-byte line of 'a' followed by LF, then "xy\n".
-// The internal buffer starts at 256 bytes and doubles to 512:
-//   read_line -> 0, length 300, first/last byte 'a'
+// stdin is a 9000-byte line of 'a' followed by LF, then "xy\n".
+// The line crosses the 8192-byte shared input buffer, so read_line
+// grows its local buffer:
+//   read_line -> 0, length 9000, first/last byte 'a'
 //   read_line -> 0, length 2, "xy"
 //   read_line -> 0, length 0 (end of input)
 // ============================================================
@@ -17,7 +18,7 @@ func main() -> int32 {
     print(read_line(getptr(line)))
     print(line.length())
     print(line.get(0))
-    print(line.get(299))
+    print(line.get(8999))
 
     print(read_line(getptr(line)))
     print(line.length())

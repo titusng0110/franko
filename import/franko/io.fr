@@ -8,7 +8,9 @@ uint32 __io_input_pos = 0
 uint32 __io_input_len = 0
 
 // Internal line accumulator. The dynamic array lives in a struct so the
-// local-array lifecycle checker does not track it.
+// local-array lifecycle checker does not track it. read_line initializes
+// it to the exact size of the first chunk and grows it in 8192-byte
+// steps up to the 81920-byte line limit.
 struct __IoLineBuffer {
     [byte] data
 }
@@ -1012,11 +1014,13 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err) {
 
 // Read one line from stdin into `out`. Reading stops at `\n`, `\r\n`,
 // or end of input. The line ending is consumed but not stored. The
-// internal line buffer starts at 256 bytes, doubles when full, and is
-// capped at 8192 bytes; a longer line is consumed and reported as -1.
-// Returns 0 on success and -1 for a null `out`, a read error, an
-// allocation failure, or an over-long line. An empty string means an
-// empty line or end of input with nothing pending.
+// local line buffer is initialized to the exact size of the first
+// chunk; when a line does not fit, it grows in 8192-byte steps up to
+// 81920 bytes. A longer line is consumed through its line ending and
+// reported as -2, which means "line too long" rather than a memory or
+// read error. Returns 0 on success, -1 for a null `out`, a read error,
+// or an allocation failure, and -2 for an over-long line. An empty
+// string means an empty line or end of input with nothing pending.
 func read_line(ptr<std::String> out) -> int32 {
     if (out == null) {
         return -1
@@ -1026,18 +1030,16 @@ func read_line(ptr<std::String> out) -> int32 {
         return -1
     }
     __IoLineBuffer line
-    int32 st = line.data.init(256)
-    if (st != 0) {
-        return -1
-    }
-    uint32 cap = 256
+    uint32 cap = 0
     uint32 len = 0
     uint8 too_long = 0
     while (1) {
         if (__io_input_pos == __io_input_len) {
             int32 fill = __io_fill()
             if (fill < 0) {
-                line.data.uninit()
+                if (cap != 0) {
+                    line.data.uninit()
+                }
                 return -1
             }
             if (fill == 0) {
@@ -1047,40 +1049,62 @@ func read_line(ptr<std::String> out) -> int32 {
         uint32 available = __io_input_len - __io_input_pos
         uint32 nl = __io_input.memchr(10, __io_input_pos, available)
         uint32 take = available
+        uint32 advance = available
         uint8 found = 0
+        uint8 strip_cr = 0
         if (nl != 0xFFFFFFFF) {
             take = nl - __io_input_pos
+            advance = take
             found = 1
+            if (take != 0) {
+                // Drop the CR of a CRLF ending before the size check so
+                // it does not count as line content.
+                if (__io_input[__io_input_pos + take - 1] == 13) {
+                    take = take - 1
+                }
+            } else {
+                // The LF follows bytes from a previous chunk: a trailing
+                // CR there is the CR of a split CRLF.
+                strip_cr = 1
+            }
         }
         if (too_long == 0 && take != 0) {
             uint32 needed = len + take
-            if (needed > 8192) {
+            if (needed > 81920) {
                 too_long = 1
             } else {
-                while (cap < needed) {
-                    uint32 next_cap = cap * 2
-                    if (next_cap > 8192) {
-                        next_cap = 8192
-                    }
-                    st = line.data.resize(next_cap)
+                if (cap == 0) {
+                    int32 st = line.data.init(needed)
                     if (st != 0) {
-                        line.data.uninit()
                         return -1
                     }
-                    cap = next_cap
+                    cap = needed
+                } else {
+                    while (cap < needed) {
+                        uint32 next_cap = cap + 8192
+                        if (next_cap > 81920) {
+                            next_cap = 81920
+                        }
+                        int32 st = line.data.resize(next_cap)
+                        if (st != 0) {
+                            line.data.uninit()
+                            return -1
+                        }
+                        cap = next_cap
+                    }
                 }
                 line.data.memcpy(getview(__io_input), len, __io_input_pos, take)
                 len = needed
             }
         }
-        __io_input_pos = __io_input_pos + take
+        __io_input_pos = __io_input_pos + advance
         if (found != 0) {
             __io_input_pos = __io_input_pos + 1
             if (__io_input_pos == __io_input_len) {
                 __io_input_pos = 0
                 __io_input_len = 0
             }
-            if (too_long == 0 && len != 0) {
+            if (too_long == 0 && strip_cr != 0 && len != 0) {
                 if (line.data[len - 1] == 13) {
                     len = len - 1
                 }
@@ -1093,21 +1117,25 @@ func read_line(ptr<std::String> out) -> int32 {
         }
     }
     if (too_long != 0) {
-        line.data.uninit()
-        return -1
+        if (cap != 0) {
+            line.data.uninit()
+        }
+        return -2
     }
     if (len == 0) {
-        line.data.uninit()
+        if (cap != 0) {
+            line.data.uninit()
+        }
         return 0
     }
     if (len != cap) {
-        st = line.data.resize(len)
+        int32 st = line.data.resize(len)
         if (st != 0) {
             line.data.uninit()
             return -1
         }
     }
-    st = $(out).from(getview(line.data))
+    int32 st = $(out).from(getview(line.data))
     line.data.uninit()
     if (st != 0) {
         return -1
