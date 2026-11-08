@@ -2,14 +2,17 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 using u32 = std::uint32_t;
 using u64 = std::uint64_t;
 using i64 = std::int64_t;
 
-static constexpr u32 NETWORK_LIMIT = 5;
-static constexpr u32 DNF_THRESHOLD = 30;
+static constexpr u32 NETWORK_LIMIT = 8;
+static constexpr u32 SMALL_SORT_LIMIT = 32;
+static constexpr u32 DNF_THRESHOLD = 55;
+static constexpr u32 LOMUTO_MAX_ITEMS = 100000;
 
 static constexpr u32 RANDOM_PIVOTS[128] = {
     0x5694C774u, 0xBCF2DC90u, 0xC22D6ECFu, 0x82DF89C3u, 0x2E5D3BB4u, 0x11754AC0u, 0x68E420EEu, 0xD2794F96u,
@@ -108,6 +111,167 @@ static void sort_network(i64* v, u32 lo, u32 n) {
         if (v[lo + 3] < v[lo + 2]) {
             std::swap(v[lo + 2], v[lo + 3]);
         }
+    } else if (n == 6) {
+        // layer 1
+        if (v[lo + 5] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 5]);
+        }
+        if (v[lo + 3] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 3]);
+        }
+        if (v[lo + 4] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 4]);
+        }
+        // layer 2
+        if (v[lo + 2] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 2]);
+        }
+        if (v[lo + 4] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 4]);
+        }
+        // layer 3
+        if (v[lo + 3] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 3]);
+        }
+        if (v[lo + 5] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 5]);
+        }
+        // layer 4
+        if (v[lo + 1] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 1]);
+        }
+        if (v[lo + 3] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 3]);
+        }
+        if (v[lo + 5] < v[lo + 4]) {
+            std::swap(v[lo + 4], v[lo + 5]);
+        }
+        // layer 5
+        if (v[lo + 2] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 2]);
+        }
+        if (v[lo + 4] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 4]);
+        }
+    } else if (n == 7) {
+        // layer 1
+        if (v[lo + 6] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 6]);
+        }
+        if (v[lo + 3] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 3]);
+        }
+        if (v[lo + 5] < v[lo + 4]) {
+            std::swap(v[lo + 4], v[lo + 5]);
+        }
+        // layer 2
+        if (v[lo + 2] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 2]);
+        }
+        if (v[lo + 4] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 4]);
+        }
+        if (v[lo + 6] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 6]);
+        }
+        // layer 3
+        if (v[lo + 1] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 1]);
+        }
+        if (v[lo + 5] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 5]);
+        }
+        if (v[lo + 4] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 4]);
+        }
+        // layer 4
+        if (v[lo + 2] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 2]);
+        }
+        if (v[lo + 6] < v[lo + 4]) {
+            std::swap(v[lo + 4], v[lo + 6]);
+        }
+        // layer 5
+        if (v[lo + 3] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 3]);
+        }
+        if (v[lo + 5] < v[lo + 4]) {
+            std::swap(v[lo + 4], v[lo + 5]);
+        }
+        // layer 6
+        if (v[lo + 2] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 2]);
+        }
+        if (v[lo + 4] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 4]);
+        }
+        if (v[lo + 6] < v[lo + 5]) {
+            std::swap(v[lo + 5], v[lo + 6]);
+        }
+    } else if (n == 8) {
+        // layer 1
+        if (v[lo + 2] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 2]);
+        }
+        if (v[lo + 3] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 3]);
+        }
+        if (v[lo + 6] < v[lo + 4]) {
+            std::swap(v[lo + 4], v[lo + 6]);
+        }
+        if (v[lo + 7] < v[lo + 5]) {
+            std::swap(v[lo + 5], v[lo + 7]);
+        }
+        // layer 2
+        if (v[lo + 4] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 4]);
+        }
+        if (v[lo + 5] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 5]);
+        }
+        if (v[lo + 6] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 6]);
+        }
+        if (v[lo + 7] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 7]);
+        }
+        // layer 3
+        if (v[lo + 1] < v[lo + 0]) {
+            std::swap(v[lo + 0], v[lo + 1]);
+        }
+        if (v[lo + 3] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 3]);
+        }
+        if (v[lo + 5] < v[lo + 4]) {
+            std::swap(v[lo + 4], v[lo + 5]);
+        }
+        if (v[lo + 7] < v[lo + 6]) {
+            std::swap(v[lo + 6], v[lo + 7]);
+        }
+        // layer 4
+        if (v[lo + 4] < v[lo + 2]) {
+            std::swap(v[lo + 2], v[lo + 4]);
+        }
+        if (v[lo + 5] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 5]);
+        }
+        // layer 5
+        if (v[lo + 4] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 4]);
+        }
+        if (v[lo + 6] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 6]);
+        }
+        // layer 6
+        if (v[lo + 2] < v[lo + 1]) {
+            std::swap(v[lo + 1], v[lo + 2]);
+        }
+        if (v[lo + 4] < v[lo + 3]) {
+            std::swap(v[lo + 3], v[lo + 4]);
+        }
+        if (v[lo + 6] < v[lo + 5]) {
+            std::swap(v[lo + 5], v[lo + 6]);
+        }
     }
 }
 
@@ -170,7 +334,7 @@ static Bounds partition_dnf(i64* v, u32 lo, u32 hi) {
             std::swap(v[lt], v[i]);
             ++lt;
             ++i;
-        } else if (key > pivot) {
+        } else if (pivot < key) {
             std::swap(v[i], v[gt]);
             --gt;
         } else {
@@ -180,14 +344,26 @@ static Bounds partition_dnf(i64* v, u32 lo, u32 hi) {
     return {lt, gt};
 }
 
-static void sift_down_indices(u32* sample, const i64* values, u32 root, u32 end) {
+static void insertion_sort_values(i64* v, u32 lo, u32 hi) {
+    for (u32 i = lo + 1; i <= hi; ++i) {
+        i64 key = v[i];
+        u32 j = i;
+        while (j > lo && key < v[j - 1]) {
+            v[j] = v[j - 1];
+            --j;
+        }
+        v[j] = key;
+    }
+}
+
+static void sift_down_values(i64* v, u32 lo, u32 root, u32 end) {
     while (root * 2 + 1 <= end) {
         u32 child = root * 2 + 1;
-        if (child + 1 <= end && values[sample[child]] < values[sample[child + 1]]) {
+        if (child + 1 <= end && v[lo + child] < v[lo + child + 1]) {
             ++child;
         }
-        if (values[sample[root]] < values[sample[child]]) {
-            std::swap(sample[root], sample[child]);
+        if (v[lo + root] < v[lo + child]) {
+            std::swap(v[lo + root], v[lo + child]);
             root = child;
         } else {
             return;
@@ -195,21 +371,91 @@ static void sift_down_indices(u32* sample, const i64* values, u32 root, u32 end)
     }
 }
 
-static void sort_sample_indices(u32* sample, const i64* values, u32 n) {
+static void heap_sort_values(i64* v, u32 lo, u32 n) {
+    if (n < 2) {
+        return;
+    }
+    if (n <= SMALL_SORT_LIMIT) {
+        if (n <= NETWORK_LIMIT) {
+            sort_network(v, lo, n);
+        } else {
+            insertion_sort_values(v, lo, lo + n - 1);
+        }
+        return;
+    }
+    u32 start = n / 2;
+    while (start > 0) {
+        --start;
+        sift_down_values(v, lo, start, n - 1);
+    }
+    u32 end = n - 1;
+    while (end > 0) {
+        std::swap(v[lo], v[lo + end]);
+        --end;
+        sift_down_values(v, lo, 0, end);
+    }
+}
+
+static void sift_down_indices(u32* order, const i64* values, u32 lo,
+                              u32 root, u32 end) {
+    while (root * 2 + 1 <= end) {
+        u32 child = root * 2 + 1;
+        if (child + 1 <= end &&
+            values[order[lo + child]] < values[order[lo + child + 1]]) {
+            ++child;
+        }
+        if (values[order[lo + root]] < values[order[lo + child]]) {
+            std::swap(order[lo + root], order[lo + child]);
+            root = child;
+        } else {
+            return;
+        }
+    }
+}
+
+static void heap_sort_indices(u32* order, const i64* values, u32 lo, u32 n) {
     if (n < 2) {
         return;
     }
     u32 start = n / 2;
     while (start > 0) {
         --start;
-        sift_down_indices(sample, values, start, n - 1);
+        sift_down_indices(order, values, lo, start, n - 1);
     }
     u32 end = n - 1;
     while (end > 0) {
-        std::swap(sample[0], sample[end]);
+        std::swap(order[lo], order[lo + end]);
         --end;
-        sift_down_indices(sample, values, 0, end);
+        sift_down_indices(order, values, lo, 0, end);
     }
+}
+
+static void insertion_sort_indices(u32* order, const i64* values,
+                                   u32 lo, u32 hi) {
+    for (u32 i = lo + 1; i <= hi; ++i) {
+        u32 key = order[i];
+        i64 key_value = values[key];
+        u32 j = i;
+        while (j > lo && key_value < values[order[j - 1]]) {
+            order[j] = order[j - 1];
+            --j;
+        }
+        order[j] = key;
+    }
+}
+
+static u32 floor_log2(u32 n) {
+    u32 r = 0;
+    while (n > 1) {
+        n >>= 1;
+        ++r;
+    }
+    return r;
+}
+
+// Equality using only operator<.
+static inline bool equivalent(i64 a, i64 b) {
+    return !(a < b) && !(b < a);
 }
 
 // Estimate the average duplicate-group size from a 0.1% sample.
@@ -217,15 +463,6 @@ static void sort_sample_indices(u32* sample, const i64* values, u32 n) {
 // RANDOM_PIVOTS for cheap stratified offsets.
 static bool estimate_use_dnf(const i64* v, u32 count) {
     u32 k = count / 1000;
-    if (k < 1024) {
-        k = 1024;
-    }
-    if (k > 65536) {
-        k = 65536;
-    }
-    if (k > count) {
-        k = count;
-    }
     if (k < 2) {
         return false;
     }
@@ -248,12 +485,12 @@ static bool estimate_use_dnf(const i64* v, u32 count) {
         sample[j] = block_start + offset;
     }
 
-    sort_sample_indices(sample, v, k);
+    heap_sort_indices(sample, v, 0, k);
 
     u64 collisions = 0;
     u32 run = 1;
     for (u32 j = 1; j < k; ++j) {
-        if (v[sample[j]] == v[sample[j - 1]]) {
+        if (equivalent(v[sample[j]], v[sample[j - 1]])) {
             ++run;
         } else {
             collisions += static_cast<u64>(run) * (run - 1) / 2;
@@ -269,31 +506,57 @@ static bool estimate_use_dnf(const i64* v, u32 count) {
     return result;
 }
 
-static void quicksort(i64* v, u32 lo, u32 hi) {
-    if (lo >= hi) {
-        return;
-    }
-    u32 count = hi - lo + 1;
-    if (count <= NETWORK_LIMIT) {
-        sort_network(v, lo, count);
-        return;
-    }
+static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
+    while (lo < hi) {
+        u32 count = hi - lo + 1;
+        if (count <= SMALL_SORT_LIMIT) {
+            if (count <= NETWORK_LIMIT) {
+                sort_network(v, lo, count);
+            } else {
+                insertion_sort_values(v, lo, hi);
+            }
+            return;
+        }
 
-    if (use_dnf != 0) {
-        Bounds bounds = partition_dnf(v, lo, hi);
-        if (bounds.lt > lo) {
-            quicksort(v, lo, bounds.lt - 1);
-        }
-        if (bounds.gt < hi) {
-            quicksort(v, bounds.gt + 1, hi);
-        }
-    } else {
-        u32 pivot = partition_lomuto(v, lo, hi);
-        if (pivot > lo) {
-            quicksort(v, lo, pivot - 1);
-        }
-        if (pivot < hi) {
-            quicksort(v, pivot + 1, hi);
+        if (use_dnf != 0) {
+            Bounds bounds = partition_dnf(v, lo, hi);
+            u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
+            u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
+            if (left_count > right_count) {
+                if (right_count > 0) {
+                    quicksort(v, bounds.gt + 1, hi, depth);
+                }
+                hi = bounds.lt - 1;
+            } else {
+                if (left_count > 0) {
+                    quicksort(v, lo, bounds.lt - 1, depth);
+                }
+                if (right_count == 0) {
+                    return;
+                }
+                lo = bounds.gt + 1;
+            }
+        } else {
+            if (depth == 0) {
+                heap_sort_values(v, lo, count);
+                return;
+            }
+            u32 pivot = partition_lomuto(v, lo, hi);
+            u32 left_count = pivot - lo;
+            u32 right_count = hi - pivot;
+            if (left_count > right_count) {
+                if (right_count > 0) {
+                    quicksort(v, pivot + 1, hi, depth - 1);
+                }
+                --depth;
+                hi = pivot - 1;
+            } else {
+                if (left_count > 0) {
+                    quicksort(v, lo, pivot - 1, depth - 1);
+                }
+                --depth;
+                lo = pivot + 1;
+            }
         }
     }
 }
@@ -311,44 +574,66 @@ int main(int argc, char** argv) {
         }
     }
 
-    const u32 count = 10000000;
+    u32 count = 10000000;
+    if (argc > 2) {
+        count = static_cast<u32>(std::strtoul(argv[2], nullptr, 10));
+        if (count == 0) {
+            count = 10000000;
+        }
+    }
+    u32 repeat = 1;
+    if (argc > 3) {
+        repeat = static_cast<u32>(std::strtoul(argv[3], nullptr, 10));
+        if (repeat == 0) {
+            repeat = 1;
+        }
+    }
+
     std::vector<i64> values(count);
 
-    u64 state = 0x9E3779B97F4A7C15ULL;
-    for (u32 i = 0; i < count; ++i) {
-        state += 0x9E3779B97F4A7C15ULL;
-        u64 z = state;
-        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-        z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-        z = z ^ (z >> 31);
-        if (dataset == 3) {
-            values[i] = static_cast<i64>(z % 10);
-        } else if (dataset == 2) {
-            values[i] = static_cast<i64>(z % 100000);
-        } else if (dataset == 1) {
-            values[i] = static_cast<i64>(z % 1000000);
-        } else {
-            values[i] = static_cast<i64>(z & 0x7FFFFFFFFFFFFFFFULL);
-        }
-    }
-
-    bool already_sorted = is_sorted(values.data(), 0, count - 1);
-    if (!already_sorted) {
-        use_dnf = estimate_use_dnf(values.data(), count) ? 1 : 0;
-        pivot_cursor = 0;
-        quicksort(values.data(), 0, count - 1);
-    }
-
     bool sorted_ok = true;
-    u64 checksum = 0;
-    for (u32 i = 0; i < count; ++i) {
-        if (i != 0 && values[i] < values[i - 1]) {
-            sorted_ok = false;
+    u64 total_checksum = 0;
+    for (u32 rep = 0; rep < repeat; ++rep) {
+        u64 state = 0x9E3779B97F4A7C15ULL;
+        for (u32 i = 0; i < count; ++i) {
+            state += 0x9E3779B97F4A7C15ULL;
+            u64 z = state;
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+            z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+            z = z ^ (z >> 31);
+            if (dataset == 3) {
+                values[i] = static_cast<i64>(z % 10);
+            } else if (dataset == 2) {
+                values[i] = static_cast<i64>(z % 100000);
+            } else if (dataset == 1) {
+                values[i] = static_cast<i64>(z % 1000000);
+            } else {
+                values[i] = static_cast<i64>(z & 0x7FFFFFFFFFFFFFFFULL);
+            }
         }
-        checksum += static_cast<u64>(values[i]);
+
+        bool already_sorted = is_sorted(values.data(), 0, count - 1);
+        if (!already_sorted) {
+            use_dnf = 0;
+            if (count > LOMUTO_MAX_ITEMS) {
+                use_dnf = estimate_use_dnf(values.data(), count) ? 1 : 0;
+            }
+            pivot_cursor = 0;
+            u32 depth = 2 * floor_log2(count);
+            quicksort(values.data(), 0, count - 1, depth);
+        }
+
+        u64 checksum = 0;
+        for (u32 i = 0; i < count; ++i) {
+            if (i != 0 && values[i] < values[i - 1]) {
+                sorted_ok = false;
+            }
+            checksum += static_cast<u64>(values[i]);
+        }
+        total_checksum += checksum;
     }
 
     std::printf("sorted %s\nchecksum %llu\n", sorted_ok ? "ok" : "FAILED",
-                static_cast<unsigned long long>(checksum));
+                static_cast<unsigned long long>(total_checksum));
     return 0;
 }
