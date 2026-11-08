@@ -1,0 +1,13 @@
+// ============================================================
+// LIBRARY TEST (error/panic): abort with a static string reason
+// ============================================================
+// std::panic writes the reason through the FFI bridge and aborts.
+// The test succeeds when the binary exits non-zero.
+// ============================================================
+
+import "franko/error"
+
+func main() -> int32 {
+    std::panic("boom")
+    return 0
+}

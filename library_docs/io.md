@@ -1,9 +1,9 @@
 # franko/io
 
 User-level output and input for Franko programs. `print` is an ordinary
-overloaded function here, not a compiler statement. `read_bytes` fills a
-caller-provided byte buffer, and `read_line` reads one line into a
-`std::String`.
+overloaded function here, not a compiler statement; `print_err` mirrors
+it on stderr. `read_bytes` fills a caller-provided byte buffer, and
+`read_line` reads one line into a `std::String`.
 
 ```franko
 import "franko/io"
@@ -37,6 +37,12 @@ Design rules:
 - Integers are written in decimal. `int8`/`uint8` print as numbers,
   not characters. Negative values print with a leading `-`, including
   the minimum value of each signed type.
+- Integer output is formatted into a 25-byte stack buffer. The separator
+  is appended there when it fits, so the whole line is written in one
+  call; a longer separator is written in a second call. This applies to
+  both `print` and `print_err`.
+- `print_err` mirrors every `print` overload on stderr. It has the same
+  null/empty and separator rules.
 - There are no overloads for pointers or arrays. Print elements or
   bytes instead. Struct printing is limited to `std::String`.
 - `read_bytes` fills a caller-provided byte buffer and returns
@@ -78,6 +84,34 @@ func print(view<std::String> str) -> void
 func print(view<std::String> str, view<std::String> end) -> void
 func print(view<std::String> str, view<[byte]> end) -> void
 
+func print_err() -> void
+
+func print_err(uint8 num) -> void
+func print_err(uint16 num) -> void
+func print_err(uint32 num) -> void
+func print_err(uint64 num) -> void
+func print_err(int8 num) -> void
+func print_err(int16 num) -> void
+func print_err(int32 num) -> void
+func print_err(int64 num) -> void
+
+func print_err(view<[uint8]> utf8str) -> void
+
+func print_err(uint8 num, view<[uint8]> end) -> void
+func print_err(uint16 num, view<[uint8]> end) -> void
+func print_err(uint32 num, view<[uint8]> end) -> void
+func print_err(uint64 num, view<[uint8]> end) -> void
+func print_err(int8 num, view<[uint8]> end) -> void
+func print_err(int16 num, view<[uint8]> end) -> void
+func print_err(int32 num, view<[uint8]> end) -> void
+func print_err(int64 num, view<[uint8]> end) -> void
+
+func print_err(view<[uint8]> utf8str, view<[uint8]> end) -> void
+
+func print_err(view<std::String> str) -> void
+func print_err(view<std::String> str, view<std::String> end) -> void
+func print_err(view<std::String> str, view<[byte]> end) -> void
+
 func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err)
 func read_line(ptr<std::String> out) -> int32
 ```
@@ -108,6 +142,30 @@ matching the constant's own type wins when the value fits, otherwise the
 narrowest fitting type (signed before unsigned at equal width). See
 [Fluid Integer Constants](../language_docs/07-fluid-integer-constants.md)
 and [Functions](../language_docs/19-functions.md).
+
+## print_err
+
+Every `print` overload has a `print_err` counterpart that writes to
+stderr instead of stdout. The semantics are identical: one argument
+adds `\n`, a second argument is written verbatim, a null or empty text
+view prints nothing, and integers are formatted in decimal.
+
+```franko
+import "franko/io"
+
+func main() -> int32 {
+    print_err("error: ")     // prompt-style, no newline
+    print_err(42)            // `42` + newline
+    print_err()              // blank line on stderr
+    print("done")            // stdout
+    return 0
+}
+```
+
+Both streams share the same channel as raw fd writes: `print` uses the
+stdout fd/handle and `print_err` uses the stderr fd/handle. On a
+terminal or when both streams are redirected to the same file, writes
+appear in program order.
 
 ## std::String output
 
@@ -232,6 +290,7 @@ library_tests/io/print/success/decimal/   // integer formatting per width
 library_tests/io/print/success/string/    // text, custom end, bare newline
 library_tests/io/print/success/text_end/  // print(text, end), null text/end
 library_tests/io/print/success/std_string/ // print(std::String), String/byte ends
+library_tests/io/print/success/err_overloads/ // every print_err overload, merged streams
 library_tests/io/read/success/read_bytes/      // chunked reads, short read, EOF
 library_tests/io/read/success/read_line/       // lines, empty line, EOF
 library_tests/io/read/success/read_line_long/  // buffer growth, long line

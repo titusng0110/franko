@@ -1,0 +1,26 @@
+// ============================================================
+// franko/error — process-fatal panics
+//
+// Import with:
+//
+//   import "franko/error"
+//
+//   std::panic("fatal: invalid state")
+//
+// `std::panic(reason)` writes `reason` as a Franko runtime panic and
+// aborts the process. It never returns.
+//
+// The message is copied into a fixed 512-byte buffer by the FFI bridge,
+// so a long reason is truncated to 511 bytes. A null or uninitialized
+// `reason` panics with "std::panic: null reason".
+//
+// The actual implementation is in error.ffi.cpp; the stub below is
+// replaced by the bridge definition when the module is used.
+// ============================================================
+
+namespace std {
+    // Abort the process with `reason` as the panic message.
+    func panic(view<[byte]> reason) -> void {
+        return
+    }
+}

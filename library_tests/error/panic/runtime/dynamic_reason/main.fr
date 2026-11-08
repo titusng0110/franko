@@ -1,0 +1,17 @@
+// ============================================================
+// LIBRARY TEST (error/panic): abort with a dynamic byte view
+// ============================================================
+// Exercises the mode-3 dynamic-array path of the FFI bridge.
+// The test succeeds when the binary exits non-zero.
+// ============================================================
+
+import "franko/error"
+
+func main() -> int32 {
+    [byte] reason
+    reason.init(4)
+    reason.memcpy("boom")
+    std::panic(getview(reason))
+    reason.uninit()
+    return 0
+}

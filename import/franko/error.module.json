@@ -1,0 +1,10 @@
+{
+  "format": "franko-module",
+  "version": 1,
+  "id": "franko/error",
+  "source": "error.fr",
+  "bridge": "error.ffi.cpp",
+  "functions": [
+    {"namespace": "std", "name": "panic"}
+  ]
+}

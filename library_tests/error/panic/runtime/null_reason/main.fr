@@ -1,0 +1,14 @@
+// ============================================================
+// LIBRARY TEST (error/panic): abort with a null reason
+// ============================================================
+// A null view still aborts, using the bridge's fixed message.
+// The test succeeds when the binary exits non-zero.
+// ============================================================
+
+import "franko/error"
+
+func main() -> int32 {
+    view<[byte]> reason = null
+    std::panic(reason)
+    return 0
+}
