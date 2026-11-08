@@ -25,8 +25,11 @@ view<[uint32, 128]> RANDOM_PIVOTS = [
 
 uint32 NETWORK_LIMIT = 8
 uint32 SMALL_SORT_LIMIT = 32
-uint32 DNF_THRESHOLD = 55
+uint32 DNF_THRESHOLD = 60
 uint32 LOMUTO_MAX_ITEMS = 100000
+uint32 SAMPLE31_MIN_ITEMS = 20000
+uint32 SAMPLE15_MIN_ITEMS = 2000
+uint32 DEPTH_UNLIMITED = 0xFFFFFFFF
 uint32 pivot_cursor = 0
 uint8 use_dnf = 0
 
@@ -530,11 +533,120 @@ func heap_sort_values(mview<[int64]> values, uint32 lo, uint32 n) -> void {
 
 func floor_log2(uint32 n) -> uint32 {
     uint32 r = 0
-    while (n > 1) {
+    if (n >= 0x10000) {
+        n = n >> 16
+        r = r + 16
+    }
+    if (n >= 0x100) {
+        n = n >> 8
+        r = r + 8
+    }
+    if (n >= 0x10) {
+        n = n >> 4
+        r = r + 4
+    }
+    if (n >= 0x4) {
+        n = n >> 2
+        r = r + 2
+    }
+    if (n >= 0x2) {
         n = n >> 1
         r = r + 1
     }
     return r
+}
+
+// Fixed-size duplicate probes for the 2k-100k ranges.
+func sample_has_duplicates_31(view<[int64]> values, uint32 count) -> byte {
+    if (values == null || count < 31) {
+        return 0
+    }
+    [int64, 31] sample
+    uint32 step = count / 31
+    uint32 j = 0
+    while (j < 31) {
+        uint32 block_start = j * step
+        uint32 remaining = count - block_start
+        uint32 span = step
+        if (span > remaining) {
+            span = remaining
+        }
+        uint32 r = $(RANDOM_PIVOTS)[j & 127]
+        r = r ^ (j * 0x9E3779B9)
+        r = r ^ (r >> 16)
+        uint64 scaled = cast<uint64>(r) * cast<uint64>(span)
+        uint32 offset = unsafe_cast<uint32>(scaled >> 32)
+        sample[j] = $(values)[block_start + offset]
+        j = j + 1
+    }
+    uint32 i = 1
+    while (i < 31) {
+        int64 key = sample[i]
+        uint32 pos = i
+        while (pos > 0 && key < sample[pos - 1]) {
+            sample[pos] = sample[pos - 1]
+            pos = pos - 1
+        }
+        if (pos > 0) {
+            int64 prev = sample[pos - 1]
+            byte same = 1
+            if (prev < key || key < prev) {
+                same = 0
+            }
+            if (same != 0) {
+                return 1
+            }
+        }
+        sample[pos] = key
+        i = i + 1
+    }
+    return 0
+}
+
+func sample_has_duplicates_15(view<[int64]> values, uint32 count) -> byte {
+    if (values == null || count < 15) {
+        return 0
+    }
+    [int64, 15] sample
+    uint32 step = count / 15
+    uint32 j = 0
+    while (j < 15) {
+        uint32 block_start = j * step
+        uint32 remaining = count - block_start
+        uint32 span = step
+        if (span > remaining) {
+            span = remaining
+        }
+        uint32 r = $(RANDOM_PIVOTS)[j & 127]
+        r = r ^ (j * 0x9E3779B9)
+        r = r ^ (r >> 16)
+        uint64 scaled = cast<uint64>(r) * cast<uint64>(span)
+        uint32 offset = unsafe_cast<uint32>(scaled >> 32)
+        sample[j] = $(values)[block_start + offset]
+        j = j + 1
+    }
+    uint32 i = 1
+    while (i < 15) {
+        int64 key = sample[i]
+        uint32 pos = i
+        while (pos > 0 && key < sample[pos - 1]) {
+            sample[pos] = sample[pos - 1]
+            pos = pos - 1
+        }
+        if (pos > 0) {
+            int64 prev = sample[pos - 1]
+            byte same = 1
+            if (prev < key || key < prev) {
+                same = 0
+            }
+            if (same != 0) {
+                return 1
+            }
+        }
+        sample[pos] = key
+        i = i + 1
+    }
+    return 0
 }
 
 // Estimate the average duplicate-group size from a 0.1% sample.
@@ -638,6 +750,52 @@ func partition_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
     $(values)[store] = $(values)[hi]
     $(values)[hi] = tmp_last
     return store
+}
+
+func partition_hoare_median3(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+    if (values == null) {
+        return lo
+    }
+    uint32 mid = lo + (hi - lo) / 2
+    if ($(values)[mid] < $(values)[lo]) {
+        int64 tmp = $(values)[mid]
+        $(values)[mid] = $(values)[lo]
+        $(values)[lo] = tmp
+    }
+    if ($(values)[hi] < $(values)[mid]) {
+        int64 tmp = $(values)[hi]
+        $(values)[hi] = $(values)[mid]
+        $(values)[mid] = tmp
+    }
+    if ($(values)[mid] < $(values)[lo]) {
+        int64 tmp = $(values)[mid]
+        $(values)[mid] = $(values)[lo]
+        $(values)[lo] = tmp
+    }
+    int64 tmp_pivot = $(values)[mid]
+    $(values)[mid] = $(values)[lo]
+    $(values)[lo] = tmp_pivot
+
+    int64 pivot = $(values)[lo]
+    uint32 i = lo
+    uint32 j = hi
+    while (1) {
+        while ($(values)[i] < pivot) {
+            i = i + 1
+        }
+        while (pivot < $(values)[j]) {
+            j = j - 1
+        }
+        if (i >= j) {
+            return j
+        }
+        int64 tmp = $(values)[i]
+        $(values)[i] = $(values)[j]
+        $(values)[j] = tmp
+        i = i + 1
+        j = j - 1
+    }
+    return lo
 }
 
 // Dutch national flag partition:
@@ -749,6 +907,42 @@ func quicksort(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> voi
     return
 }
 
+func quicksort_hoare(mview<[int64]> values, uint32 lo, uint32 hi) -> void {
+    if (values == null) {
+        return
+    }
+    while (lo < hi) {
+        uint32 count = hi - lo + 1
+        if (count <= SMALL_SORT_LIMIT) {
+            if (count <= NETWORK_LIMIT) {
+                sort_network(values, lo, count)
+            } else {
+                insertion_sort_values(values, lo, hi)
+            }
+            return
+        }
+        uint32 split = partition_hoare_median3(values, lo, hi)
+        if (split >= hi) {
+            heap_sort_values(values, lo, count)
+            return
+        }
+        uint32 left_count = split - lo + 1
+        uint32 right_count = hi - split
+        if (left_count > right_count) {
+            if (right_count > 0) {
+                quicksort_hoare(values, split + 1, hi)
+            }
+            hi = split
+        } else {
+            if (left_count > 0) {
+                quicksort_hoare(values, lo, split)
+            }
+            lo = split + 1
+        }
+    }
+    return
+}
+
 func parse_uint(view<[byte]> text) -> uint32 {
     if (text == null) {
         return 0
@@ -771,7 +965,11 @@ func main(view<[[byte]]> args) -> int32 {
         view<[byte]> mode_arg = getview($(args)[1])
         if ($(mode_arg).length() >= 1) {
             byte mode_byte = $(mode_arg)[0]
-            if (mode_byte == 51) {
+            if (mode_byte == 53) {
+                dataset = 5
+            } else if (mode_byte == 52) {
+                dataset = 4
+            } else if (mode_byte == 51) {
                 dataset = 3
             } else if (mode_byte == 50) {
                 dataset = 2
@@ -796,6 +994,20 @@ func main(view<[[byte]]> args) -> int32 {
         }
     }
 
+    uint32 pct_mod = 1
+    if (dataset == 1) {
+        pct_mod = count / 10
+    } else if (dataset == 2) {
+        pct_mod = count / 100
+    } else if (dataset == 4) {
+        pct_mod = count / 200
+    } else if (dataset == 5) {
+        pct_mod = count / 400
+    }
+    if (pct_mod == 0) {
+        pct_mod = 1
+    }
+
     [int64] values
     values.init(count)
     if (values.length() != count) {
@@ -817,10 +1029,9 @@ func main(view<[[byte]]> args) -> int32 {
             z = z ^ (z >> 31)
             if (dataset == 3) {
                 values[i] = unsafe_cast<int64>(z % 10)
-            } else if (dataset == 2) {
-                values[i] = unsafe_cast<int64>(z % 100000)
-            } else if (dataset == 1) {
-                values[i] = unsafe_cast<int64>(z % 1000000)
+            } else if (dataset == 1 || dataset == 2 ||
+                       dataset == 4 || dataset == 5) {
+                values[i] = unsafe_cast<int64>(z % cast<uint64>(pct_mod))
             } else {
                 values[i] = unsafe_cast<int64>(z & 0x7FFFFFFFFFFFFFFF)
             }
@@ -829,12 +1040,25 @@ func main(view<[[byte]]> args) -> int32 {
         byte already_sorted = is_sorted(getview(values), 0, count - 1)
         if (already_sorted == 0) {
             use_dnf = 0
-            if (count > LOMUTO_MAX_ITEMS) {
+            if (count >= LOMUTO_MAX_ITEMS) {
                 use_dnf = estimate_use_dnf(getview(values), count)
+            } else if (count >= SAMPLE31_MIN_ITEMS) {
+                use_dnf = sample_has_duplicates_31(getview(values), count)
+            } else if (count >= SAMPLE15_MIN_ITEMS) {
+                use_dnf = sample_has_duplicates_15(getview(values), count)
             }
             pivot_cursor = 0
-            uint32 depth = 2 * floor_log2(count)
-            quicksort(getmview(values), 0, count - 1, depth)
+            if (count < SAMPLE15_MIN_ITEMS) {
+                quicksort_hoare(getmview(values), 0, count - 1)
+            } else if (count < SAMPLE31_MIN_ITEMS) {
+                uint32 depth = 2 * floor_log2(count)
+                quicksort(getmview(values), 0, count - 1, depth)
+            } else if (count < LOMUTO_MAX_ITEMS) {
+                uint32 depth = (7 * floor_log2(count)) / 4
+                quicksort(getmview(values), 0, count - 1, depth)
+            } else {
+                quicksort(getmview(values), 0, count - 1, DEPTH_UNLIMITED)
+            }
         }
 
         uint64 checksum = 0

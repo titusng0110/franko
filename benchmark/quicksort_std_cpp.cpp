@@ -9,7 +9,11 @@ int main(int argc, char** argv) {
     int dataset = 0;
     if (argc > 1) {
         char mode = argv[1][0];
-        if (mode == '3') {
+        if (mode == '5') {
+            dataset = 5;
+        } else if (mode == '4') {
+            dataset = 4;
+        } else if (mode == '3') {
             dataset = 3;
         } else if (mode == '2') {
             dataset = 2;
@@ -33,6 +37,20 @@ int main(int argc, char** argv) {
         }
     }
 
+    std::uint32_t pct_mod = 1;
+    if (dataset == 1) {
+        pct_mod = count / 10;
+    } else if (dataset == 2) {
+        pct_mod = count / 100;
+    } else if (dataset == 4) {
+        pct_mod = count / 200;
+    } else if (dataset == 5) {
+        pct_mod = count / 400;
+    }
+    if (pct_mod == 0) {
+        pct_mod = 1;
+    }
+
     std::vector<std::int64_t> values(count);
 
     bool sorted_ok = true;
@@ -47,10 +65,9 @@ int main(int argc, char** argv) {
             z = z ^ (z >> 31);
             if (dataset == 3) {
                 values[i] = static_cast<std::int64_t>(z % 10);
-            } else if (dataset == 2) {
-                values[i] = static_cast<std::int64_t>(z % 100000);
-            } else if (dataset == 1) {
-                values[i] = static_cast<std::int64_t>(z % 1000000);
+            } else if (dataset == 1 || dataset == 2 ||
+                       dataset == 4 || dataset == 5) {
+                values[i] = static_cast<std::int64_t>(z % pct_mod);
             } else {
                 values[i] = static_cast<std::int64_t>(z & 0x7FFFFFFFFFFFFFFFULL);
             }

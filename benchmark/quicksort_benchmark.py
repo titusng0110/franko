@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 """In-place quicksort benchmark: Franko vs C++ vs std::sort.
 
-Workload: plain int64 keys in four distributions and four sizes.
+Workload: plain int64 keys in six distributions and five sizes.
 
-Datasets (first command-line argument to each binary):
+Datasets (first command-line argument to each binary), ordered from
+highest duplicate concentration to lowest:
 
   0-9      values uniform in 0..9
-  1pct     values modulo 100,000
-  10pct    values modulo 1,000,000
+  0.25pct  N/400 distinct values
+  0.5pct   N/200 distinct values
+  1pct     N/100 distinct values
+  10pct    N/10 distinct values
   random   full 63-bit random values
 
 Sizes and repetitions:
 
-  10M      10,000,000 keys   5 individual timed runs
-  1M        1,000,000 keys  10 individual timed runs
-  100k        100,000 keys  one chunk of 100 sorts
-  10k          10,000 keys  one chunk of 1,000 sorts
+  10M      10,000,000 keys  one chunk of 5 sorts
+  1M        1,000,000 keys  one chunk of 10 sorts
+  99k          99,000 keys  one chunk of 300 sorts
+  10k          10,000 keys  one chunk of 3,000 sorts
+  1k            1,000 keys  one chunk of 30,000 sorts
 
-The binaries accept three arguments: <dataset> <count> <repeat>. For the
-100k and 10k rows the harness passes the full repetition count to a single
-process and divides the chunk wall time by the repetition count, so process
-startup is paid once per cell instead of once per sort.
+The binaries accept three arguments: <dataset> <count> <repeat>. Every
+row passes the full repetition count to a single process and divides the
+chunk wall time by the repetition count, so process startup is paid once
+per cell instead of once per sort.
 
 Modes:
 
@@ -75,6 +79,8 @@ MODES = (
 
 DATASETS = (
     ("0-9", "3"),
+    ("0.25pct", "5"),
+    ("0.5pct", "4"),
     ("1pct", "2"),
     ("10pct", "1"),
     ("random", "0"),
@@ -82,10 +88,11 @@ DATASETS = (
 
 # (label, count argument, repetitions, time-as-one-chunk)
 SIZES = (
-    ("10M", "10000000", 5, False),
-    ("1M", "1000000", 10, False),
-    ("100k", "100000", 100, True),
-    ("10k", "10000", 1000, True),
+    ("10M", "10000000", 5, True),
+    ("1M", "1000000", 10, True),
+    ("99k", "99000", 300, True),
+    ("10k", "10000", 3000, True),
+    ("1k", "1000", 30000, True),
 )
 
 
@@ -251,22 +258,7 @@ def main() -> int:
                       + " | ".join(row) + " |")
 
         print()
-        print("Detailed statistics (individual runs)")
-        print("| size | dataset | mode | mean | median | min | max | SD | CV |")
-        print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-        for size_label, _count, reps, chunk in SIZES:
-            if chunk:
-                continue
-            for dataset, _dataset_arg in DATASETS:
-                for label in labels:
-                    s = summarize(results[(size_label, dataset, label)])
-                    print(f"| {size_label} | {dataset} | {label} | "
-                          f"{s['mean']:.6f} | {s['median']:.6f} | "
-                          f"{s['min']:.6f} | {s['max']:.6f} | "
-                          f"{s['sd']:.6f} | {s['cv']:.1f}% |")
-
-        print()
-        print("Chunk timings (100k and 10k)")
+        print("Chunk timings")
         print("| size | dataset | mode | chunk s | reps | mean/sort |")
         print("| --- | --- | --- | --- | --- | --- |")
         for size_label, _count, reps, chunk in SIZES:
