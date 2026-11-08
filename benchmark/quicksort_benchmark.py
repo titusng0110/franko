@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Quicksort benchmark: 10,000,000 int64 keys.
+"""Quicksort benchmark matrix: 10,000,000 int64 keys, four datasets.
 
-Five modes:
+Datasets (selected by the first command-line argument):
+
+  0-9      values uniform in 0..9
+  1pct     1,000,000 distinct values (1% of N)
+  10pct    10,000,000 distinct values (10% of N)
+  random   full 63-bit random values (effectively all distinct)
+
+Modes:
 
   franko-index     Franko -Omax, indirect index sort
                    (benchmark/quicksort_index_franko.fr)
@@ -14,11 +21,12 @@ Five modes:
   cpp-std-sort     Plain C++ std::sort reference
                    (benchmark/quicksort_std_cpp.cpp)
 
-Every mode generates the same splitmix64 values internally, sorts them,
-and prints only `sorted ok` and a checksum. There is no bulk input or
-output. The harness builds everything first, runs one untimed warm-up per
-binary, then REPS measured rounds in randomized (seeded) order, optionally
-pinned to one CPU. Timings are whole-process wall clock.
+Every mode generates the same splitmix64 stream internally, selects the
+dataset, sorts, and prints only `sorted ok` and a checksum. There is no
+bulk input or output. The harness builds everything first, runs one
+untimed warm-up per binary per dataset, then REPS measured rounds per
+dataset in randomized (seeded) order, optionally pinned to one CPU.
+Timings are whole-process wall clock.
 
 Usage:
     uv run python benchmark/quicksort_benchmark.py
@@ -70,6 +78,13 @@ REPORT_ORDER = (
     "cpp-std-sort",
 )
 
+DATASETS = (
+    ("0-9", "3"),
+    ("1pct", "2"),
+    ("10pct", "1"),
+    ("random", "0"),
+)
+
 
 def build_mode(mode: Mode, out_dir: Path) -> Path:
     """Build one mode, copy its binary to out_dir, and return the path."""
@@ -98,9 +113,9 @@ def build_mode(mode: Mode, out_dir: Path) -> Path:
     return dest
 
 
-def run_timed(binary: Path) -> tuple[float, str]:
+def run_timed(binary: Path, dataset_arg: str) -> tuple[float, str]:
     start = time.perf_counter()
-    proc = subprocess.run([str(binary)], cwd=ROOT, check=False,
+    proc = subprocess.run([str(binary), dataset_arg], cwd=ROOT, check=False,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     elapsed = time.perf_counter() - start
     out = proc.stdout.decode("utf-8", errors="replace")
@@ -109,10 +124,24 @@ def run_timed(binary: Path) -> tuple[float, str]:
     return elapsed, out
 
 
+def summarize(times: list[float]) -> dict[str, float]:
+    mean = statistics.fmean(times)
+    sd = statistics.stdev(times) if len(times) > 1 else 0.0
+    return {
+        "mean": mean,
+        "median": statistics.median(times),
+        "min": min(times),
+        "max": max(times),
+        "sd": sd,
+        "cv": 100.0 * sd / mean if mean else 0.0,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reps", nargs="?", type=int, default=10,
-                        help="measured repetitions per mode (default: 10)")
+                        help="measured repetitions per dataset and mode "
+                             "(default: 10)")
     parser.add_argument("--cpu", type=int, default=None,
                         help="pin the benchmark to one CPU (Linux)")
     parser.add_argument("--seed", type=int, default=12600,
@@ -143,61 +172,88 @@ def main() -> int:
             binaries[mode.label] = binary
             sizes[mode.label] = binary.stat().st_size
 
-        # One untimed warm-up per binary.
-        for label in labels:
-            print(f"[{label}] warm-up", flush=True)
-            run_timed(binaries[label])
+        # One untimed warm-up per binary per dataset.
+        for dataset, dataset_arg in DATASETS:
+            for label in labels:
+                print(f"[{dataset}][{label}] warm-up", flush=True)
+                run_timed(binaries[label], dataset_arg)
 
-        times = {label: [] for label in labels}
+        times = {dataset: {label: [] for label in labels}
+                 for dataset, _ in DATASETS}
         outputs = {}
         for rep in range(args.reps):
-            if args.no_shuffle:
-                order = labels
-            else:
-                rng.shuffle(run_order)
-                order = run_order
-            for label in order:
-                elapsed, out = run_timed(binaries[label])
-                times[label].append(elapsed)
-                outputs[label] = out
-                print(f"[{label}] rep {rep + 1}/{args.reps}: "
-                      f"{elapsed:.3f}s", flush=True)
+            for dataset, dataset_arg in DATASETS:
+                if args.no_shuffle:
+                    order = labels
+                else:
+                    rng.shuffle(run_order)
+                    order = run_order
+                for label in order:
+                    elapsed, out = run_timed(binaries[label], dataset_arg)
+                    times[dataset][label].append(elapsed)
+                    outputs[(dataset, label)] = out
+                    print(f"[{dataset}][{label}] rep {rep + 1}/{args.reps}: "
+                          f"{elapsed:.3f}s", flush=True)
 
         print()
-        unique_outputs = set(outputs.values())
-        print(f"outputs agree: {len(unique_outputs) == 1}")
-        for out in sorted(unique_outputs):
-            print(f"  {out!r}")
-        if len(unique_outputs) != 1:
-            return 1
+        for dataset, _ in DATASETS:
+            unique_outputs = {outputs[(dataset, label)] for label in labels}
+            print(f"{dataset}: outputs agree: {len(unique_outputs) == 1}")
+            for out in sorted(unique_outputs):
+                print(f"  {out!r}")
+            if len(unique_outputs) != 1:
+                return 1
 
         print()
-        print("| test | mean | median | min | max | SD | CV | bin (KB) |")
-        print("| --- | --- | --- | --- | --- | --- | --- | --- |")
+        print("Mean seconds")
+        print("| dataset | " + " | ".join(REPORT_ORDER) + " |")
+        print("| --- | " + " | ".join("---" for _ in REPORT_ORDER) + " |")
         means = {}
-        for label in REPORT_ORDER:
-            ts = times[label]
-            mean = statistics.fmean(ts)
-            means[label] = mean
-            sd = statistics.stdev(ts) if len(ts) > 1 else 0.0
-            cv = 100.0 * sd / mean if mean else 0.0
-            print(f"| {label} | {mean:.3f} | {statistics.median(ts):.3f} "
-                  f"| {min(ts):.3f} | {max(ts):.3f} | {sd:.3f} | {cv:.1f}% "
-                  f"| {sizes[label] / 1024:.0f} |")
+        for dataset, _ in DATASETS:
+            row = []
+            for label in REPORT_ORDER:
+                mean = statistics.fmean(times[dataset][label])
+                means[(dataset, label)] = mean
+                row.append(f"{mean:.3f}")
+            print(f"| {dataset} | " + " | ".join(row) + " |")
 
         print()
-        print("| comparison | slower factor |")
+        print("Detailed statistics")
+        print("| dataset | mode | mean | median | min | max | SD | CV |")
+        print("| --- | --- | --- | --- | --- | --- | --- | --- |")
+        for dataset, _ in DATASETS:
+            for label in REPORT_ORDER:
+                s = summarize(times[dataset][label])
+                print(f"| {dataset} | {label} | {s['mean']:.3f} "
+                      f"| {s['median']:.3f} | {s['min']:.3f} "
+                      f"| {s['max']:.3f} | {s['sd']:.3f} | {s['cv']:.1f}% |")
+
+        print()
+        print("Slowdown vs cpp-std-sort")
+        print("| dataset | franko-index | franko-inplace "
+              "| cpp-index | cpp-inplace |")
+        print("| --- | --- | --- | --- | --- |")
+        for dataset, _ in DATASETS:
+            base = means[(dataset, "cpp-std-sort")]
+            row = []
+            for label in ("franko-index", "franko-inplace",
+                          "cpp-index", "cpp-inplace"):
+                row.append(f"{means[(dataset, label)] / base:.2f}x")
+            print(f"| {dataset} | " + " | ".join(row) + " |")
+
+        print()
+        print("Binaries")
+        print("| mode | bin (KB) |")
         print("| --- | --- |")
-        base = means["cpp-std-sort"]
         for label in REPORT_ORDER:
-            if label == "cpp-std-sort":
-                continue
-            print(f"| {label} vs cpp-std-sort | {means[label] / base:.2f}x |")
+            print(f"| {label} | {sizes[label] / 1024:.0f} |")
 
         print()
-        print("raw runs")
-        for label in REPORT_ORDER:
-            print(f"{label}: " + " ".join(f"{t:.3f}" for t in times[label]))
+        print("Raw runs")
+        for dataset, _ in DATASETS:
+            for label in REPORT_ORDER:
+                print(f"{dataset}/{label}: "
+                      + " ".join(f"{t:.3f}" for t in times[dataset][label]))
 
     return 0
 

@@ -4,7 +4,19 @@
 #include <cstdio>
 #include <vector>
 
-int main() {
+int main(int argc, char** argv) {
+    int dataset = 0;
+    if (argc > 1) {
+        char mode = argv[1][0];
+        if (mode == '3') {
+            dataset = 3;
+        } else if (mode == '2') {
+            dataset = 2;
+        } else if (mode == '1') {
+            dataset = 1;
+        }
+    }
+
     const std::uint32_t count = 10000000;
     std::vector<std::int64_t> values(count);
 
@@ -15,7 +27,15 @@ int main() {
         z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
         z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
         z = z ^ (z >> 31);
-        values[i] = static_cast<std::int64_t>(z & 0x7FFFFFFFFFFFFFFFULL);
+        if (dataset == 3) {
+            values[i] = static_cast<std::int64_t>(z % 10);
+        } else if (dataset == 2) {
+            values[i] = static_cast<std::int64_t>(z % 100000);
+        } else if (dataset == 1) {
+            values[i] = static_cast<std::int64_t>(z % 1000000);
+        } else {
+            values[i] = static_cast<std::int64_t>(z & 0x7FFFFFFFFFFFFFFFULL);
+        }
     }
 
     std::sort(values.begin(), values.end());
