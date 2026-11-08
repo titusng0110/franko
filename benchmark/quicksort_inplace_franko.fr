@@ -1,0 +1,659 @@
+// In-place Franko quicksort for the 10M benchmark.
+// Same bubble pass, pivot table, partition, and 2..9 networks as the
+// index-sorting version, but swaps int64 values directly.
+
+import "franko/io"
+
+view<[uint32, 64]> RANDOM_PIVOTS = [
+    0x5694C774, 0xBCF2DC90, 0xC22D6ECF, 0x82DF89C3,
+    0x2E5D3BB4, 0x11754AC0, 0x68E420EE, 0xD2794F96,
+    0x5B22CDE9, 0xA49A1665, 0x59D5FEF7, 0x596C9D24,
+    0xB5AA244F, 0xBC390961, 0x747F2BF2, 0x4546145D,
+    0xBB3A57E1, 0xFD0D1D76, 0xE36237A5, 0x64E4AB28,
+    0x8407E185, 0xA4462908, 0x637D4682, 0x1DB262CA,
+    0x0FFC45EE, 0xA04A36C8, 0x5A3139A4, 0x14732B44,
+    0x020EE9DF, 0x30FA1FB5, 0xEEB9A7A8, 0xCA05052F,
+    0xE66313B3, 0x0594024D, 0xB16A9E7D, 0xCB06A3E8,
+    0x1B72E31A, 0x4AC319B5, 0x550F2307, 0x4610C2CC,
+    0x38015908, 0xD57934AC, 0x8E2BC2E8, 0xF3FC112C,
+    0x21781428, 0x903FDB8C, 0x03B709D8, 0x5C6A595F,
+    0x0917E134, 0x496E7177, 0x746C2637, 0x5D2660A8,
+    0x025C93DE, 0x8BD36979, 0x5BCFBA15, 0x1B21A66C,
+    0x9380C385, 0x93955A50, 0xBAE7A676, 0xC954CF68,
+    0x2B7A649F, 0x2098B166, 0xB5786F09, 0xB18B96F8
+]
+
+uint32 NETWORK_LIMIT = 9
+uint32 pivot_cursor = 0
+
+func sort_network(mview<[int64]> values, uint32 lo, uint32 n) -> void {
+    if (values == null) {
+        return
+    }
+    if (n < 2) {
+        return
+    }
+
+    if (n == 2) {
+        // layer 1
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+    } else if (n == 3) {
+        // layer 1
+        if ($(values)[lo + 2] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+    } else if (n == 4) {
+        // layer 1
+        if ($(values)[lo + 2] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+    } else if (n == 5) {
+        // layer 1
+        if ($(values)[lo + 3] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 2] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        // layer 4
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        // layer 5
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+    } else if (n == 6) {
+        // layer 1
+        if ($(values)[lo + 5] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 3] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        // layer 4
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        // layer 5
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+    } else if (n == 7) {
+        // layer 1
+        if ($(values)[lo + 6] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 2] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        // layer 4
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        // layer 5
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        // layer 6
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 5]) {
+            int64 tmp = $(values)[lo + 5]
+            $(values)[lo + 5] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+    } else if (n == 8) {
+        // layer 1
+        if ($(values)[lo + 2] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        if ($(values)[lo + 7] < $(values)[lo + 5]) {
+            int64 tmp = $(values)[lo + 5]
+            $(values)[lo + 5] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 4] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        if ($(values)[lo + 7] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 7] < $(values)[lo + 6]) {
+            int64 tmp = $(values)[lo + 6]
+            $(values)[lo + 6] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        // layer 4
+        if ($(values)[lo + 4] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        // layer 5
+        if ($(values)[lo + 4] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        // layer 6
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 5]) {
+            int64 tmp = $(values)[lo + 5]
+            $(values)[lo + 5] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+    } else if (n == 9) {
+        // layer 1
+        if ($(values)[lo + 3] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 7] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 8] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 8]
+            $(values)[lo + 8] = tmp
+        }
+        // layer 2
+        if ($(values)[lo + 7] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 8] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 8]
+            $(values)[lo + 8] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 5]) {
+            int64 tmp = $(values)[lo + 5]
+            $(values)[lo + 5] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        // layer 3
+        if ($(values)[lo + 2] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 3] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 8] < $(values)[lo + 7]) {
+            int64 tmp = $(values)[lo + 7]
+            $(values)[lo + 7] = $(values)[lo + 8]
+            $(values)[lo + 8] = tmp
+        }
+        // layer 4
+        if ($(values)[lo + 4] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+        if ($(values)[lo + 7] < $(values)[lo + 5]) {
+            int64 tmp = $(values)[lo + 5]
+            $(values)[lo + 5] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        // layer 5
+        if ($(values)[lo + 1] < $(values)[lo + 0]) {
+            int64 tmp = $(values)[lo + 0]
+            $(values)[lo + 0] = $(values)[lo + 1]
+            $(values)[lo + 1] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 8] < $(values)[lo + 6]) {
+            int64 tmp = $(values)[lo + 6]
+            $(values)[lo + 6] = $(values)[lo + 8]
+            $(values)[lo + 8] = tmp
+        }
+        // layer 6
+        if ($(values)[lo + 3] < $(values)[lo + 2]) {
+            int64 tmp = $(values)[lo + 2]
+            $(values)[lo + 2] = $(values)[lo + 3]
+            $(values)[lo + 3] = tmp
+        }
+        if ($(values)[lo + 5] < $(values)[lo + 4]) {
+            int64 tmp = $(values)[lo + 4]
+            $(values)[lo + 4] = $(values)[lo + 5]
+            $(values)[lo + 5] = tmp
+        }
+        if ($(values)[lo + 7] < $(values)[lo + 6]) {
+            int64 tmp = $(values)[lo + 6]
+            $(values)[lo + 6] = $(values)[lo + 7]
+            $(values)[lo + 7] = tmp
+        }
+        // layer 7
+        if ($(values)[lo + 2] < $(values)[lo + 1]) {
+            int64 tmp = $(values)[lo + 1]
+            $(values)[lo + 1] = $(values)[lo + 2]
+            $(values)[lo + 2] = tmp
+        }
+        if ($(values)[lo + 4] < $(values)[lo + 3]) {
+            int64 tmp = $(values)[lo + 3]
+            $(values)[lo + 3] = $(values)[lo + 4]
+            $(values)[lo + 4] = tmp
+        }
+        if ($(values)[lo + 6] < $(values)[lo + 5]) {
+            int64 tmp = $(values)[lo + 5]
+            $(values)[lo + 5] = $(values)[lo + 6]
+            $(values)[lo + 6] = tmp
+        }
+    }
+    return
+}
+
+func bubble_pass(mview<[int64]> values, uint32 lo, uint32 hi) -> byte {
+    if (values == null) {
+        return 0
+    }
+    byte swapped = 0
+    uint32 i = lo
+    while (i < hi) {
+        if ($(values)[i + 1] < $(values)[i]) {
+            int64 tmp = $(values)[i]
+            $(values)[i] = $(values)[i + 1]
+            $(values)[i + 1] = tmp
+            swapped = 1
+        }
+        i = i + 1
+    }
+    if (swapped != 0) {
+        return 0
+    }
+    return 1
+}
+
+func partition(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+    if (values == null) {
+        return lo
+    }
+    if (RANDOM_PIVOTS == null) {
+        return lo
+    }
+
+    uint32 count = hi - lo + 1
+    uint32 sample = $(RANDOM_PIVOTS)[pivot_cursor & 63]
+    uint64 scaled = cast<uint64>(sample) * cast<uint64>(count)
+    uint32 pivot_pos = lo + unsafe_cast<uint32>(scaled >> 32)
+    pivot_cursor = pivot_cursor + 1
+
+    int64 tmp_pivot = $(values)[pivot_pos]
+    $(values)[pivot_pos] = $(values)[hi]
+    $(values)[hi] = tmp_pivot
+
+    int64 pivot_key = $(values)[hi]
+    uint32 store = lo
+    uint32 i = lo
+    while (i < hi) {
+        if ($(values)[i] < pivot_key) {
+            int64 tmp_store = $(values)[store]
+            $(values)[store] = $(values)[i]
+            $(values)[i] = tmp_store
+            store = store + 1
+        }
+        i = i + 1
+    }
+
+    int64 tmp_last = $(values)[store]
+    $(values)[store] = $(values)[hi]
+    $(values)[hi] = tmp_last
+    return store
+}
+
+func quicksort(mview<[int64]> values, uint32 lo, uint32 hi) -> void {
+    if (values == null) {
+        return
+    }
+    uint32 count = hi - lo + 1
+    if (count <= NETWORK_LIMIT) {
+        sort_network(values, lo, count)
+        return
+    }
+
+    uint32 pivot = partition(values, lo, hi)
+    if (pivot > lo) {
+        quicksort(values, lo, pivot - 1)
+    }
+    if (pivot < hi) {
+        quicksort(values, pivot + 1, hi)
+    }
+    return
+}
+
+func main() -> int32 {
+    uint32 count = 10000000
+    [int64] values
+    values.init(count)
+    if (values.length() != count) {
+        print("allocation failed")
+        values.uninit()
+        return 1
+    }
+
+    uint64 state = 0x9E3779B97F4A7C15
+    for (uint32 i = 0; i < count; i++) {
+        state = state + 0x9E3779B97F4A7C15
+        uint64 z = state
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+        z = z ^ (z >> 31)
+        values[i] = unsafe_cast<int64>(z & 0x7FFFFFFFFFFFFFFF)
+    }
+
+    pivot_cursor = 0
+    byte already_sorted = bubble_pass(getmview(values), 0, count - 1)
+    if (already_sorted == 0) {
+        quicksort(getmview(values), 0, count - 2)
+    }
+
+    byte sorted_ok = 1
+    uint64 checksum = 0
+    for (uint32 i = 0; i < count; i++) {
+        if (i != 0 && values[i] < values[i - 1]) {
+            sorted_ok = 0
+        }
+        checksum = checksum + unsafe_cast<uint64>(values[i])
+    }
+
+    print("sorted ", null)
+    if (sorted_ok != 0) {
+        print("ok")
+    } else {
+        print("FAILED")
+    }
+    print("checksum ", null)
+    print(checksum)
+
+    values.uninit()
+    return 0
+}
