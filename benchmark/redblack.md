@@ -1,29 +1,30 @@
 # Red-black benchmark: Franko vs C++
 
-**2,000,000 inserts + 2,000,000 deletes · 10 measured rounds per build · 2026-11-04**
+**2,000,000 inserts + 2,000,000 deletes · 10 measured rounds per build · 2026-11-08**
 
 This report compares Franko with C++ on the same red-black tree workload,
 with two Franko allocator variants and two C++ references. The Franko
 programs are compiled by `compile.py` to C++14 and then by `g++`; the
 C++ references are compiled directly by `g++`.
 
-The short version: against idiomatic C++ `std::set`, Franko is **1.21x
-faster at maximum release optimization** and **1.73x faster under
+The short version: against idiomatic C++ `std::set`, Franko is **1.22x
+faster at maximum release optimization** and **1.38x faster under
 matched AddressSanitizer builds**. Against a hand-written C++ port of
 the *same* array-pool tree, Franko is **1.07x faster at max release**
-and its checked `-O` build is **1.03x slower** than the C++ control's
-unchecked `-O3` build. Under ASan, the unchecked C++ pool is **1.22x
+and its checked `-O` build is **1.07x slower** than the C++ control's
+unchecked `-O3` build. Under ASan, the unchecked C++ pool is **1.52x
 faster** than Franko's checked default build. Most of the gap to
 `std::set` is the array-pool design, not the language or code generator.
 
 The report also compares `SparseSetAllocator`, a second Franko-only pool
-implementation. It is essentially at parity with the existing
-`NextAllocator` on this workload: 1.06x slower in the ASan default
-build, equal in checked `-O`, and 1.01x slower in `-Omax`.
+implementation. It is at parity with the existing `NextAllocator` on
+this workload: 1.02x slower in every build, portable and native, across
+the ASan default, checked `-O`, and unchecked `-Omax` modes.
 
-`-march=native` is again not a free win: it is flat to slightly
-negative for most Franko builds, regresses the C++ pool `-O1` build by
-10.1%, and regresses the `std::set` ASan build by 22.2%.
+`-march=native` is not a free win: it is flat for Franko (within
+±0.9%), gives small gains to the `std::set` release builds (1.6–2.5%),
+and regresses the C++ pool `-O1` build by 10.0%, the C++ pool `-O3`
+build by 4.1%, and the `std::set` ASan build by 21.4%.
 
 ---
 
@@ -31,27 +32,27 @@ negative for most Franko builds, regresses the C++ pool `-O1` build by
 
 | Question | Answer |
 | --- | --- |
-| Fastest portable build | Franko `-Omax`, **0.330 s** (`sparse-Omax` 0.333 s) |
-| Fastest native build | Franko `-Omax-native`, **0.332 s** |
-| Fastest sparse-set build | Franko `sparse-Omax`, **0.333 s** |
-| Franko `-Omax` vs C++ `std::set -O3` | **1.21x faster** |
+| Fastest portable build | Franko `-Omax`, **0.329 s** (`sparse-Omax` 0.334 s) |
+| Fastest native build | Franko `-Omax-native`, **0.328 s** (`sparse-Omax-native` 0.334 s) |
+| Fastest sparse-set build | `sparse-Omax` / `sparse-Omax-native`, **0.334 s** |
+| Franko `-Omax` vs C++ `std::set -O3` | **1.22x faster** |
 | Franko `-Omax` vs same-data-structure C++ `-O3` | **1.07x faster** |
-| Franko `-O` vs same-data-structure C++ `-O3` | **1.03x slower** |
-| Sanitizer-matched, portable | **1.73x faster** than ASan `std::set` |
-| Sanitizer-matched, same data structure | **1.22x slower** than the C++ control |
-| Franko `default` → `-Omax` | **1.75x faster** |
-| `SparseSetAllocator` vs `NextAllocator` | parity (within 1.06x) |
-| `-march=native` overall | no consistent win; regressions up to **+22.2%** |
+| Franko `-O` vs same-data-structure C++ `-O3` | **1.07x slower** |
+| Sanitizer-matched, portable | **1.38x faster** than ASan `std::set` |
+| Sanitizer-matched, same data structure | **1.52x slower** than the C++ control |
+| Franko `default` → `-Omax` | **2.16x faster** |
+| `SparseSetAllocator` vs `NextAllocator` | parity (within 1.02x) |
+| `-march=native` overall | flat for Franko; C++ regressions up to **+21.4%** |
 
 Two defensible headline claims:
 
 - **Against `std::set`:** Franko's array-pool implementation is
-  **1.21x faster** at maximum release optimization and **1.73x faster**
+  **1.22x faster** at maximum release optimization and **1.38x faster**
   when both sides use the same `-O1 + ASan + system allocator` setup.
 - **Against the same array-pool design in C++:** Franko is within
   roughly ±7% of hand-written C++ at release. Under ASan, the checked
-  Franko default build is **1.22x slower** than the unchecked C++
-  control, while still **1.73x faster** than `std::set`. The large
+  Franko default build is **1.52x slower** than the unchecked C++
+  control, while still **1.38x faster** than `std::set`. The large
   advantage over `std::set` comes from storage/allocation, not from a
   fundamentally faster red-black algorithm or a huge code-generation
   advantage.
@@ -176,66 +177,68 @@ the authoritative ones.
 
 | test | mean (s) | median | min | max | SD | CV | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| default | 0.576 | 0.573 | 0.565 | 0.601 | 0.012 | 2.1% | 426 |
-| default-native | 0.585 | 0.583 | 0.578 | 0.597 | 0.006 | 1.1% | 428 |
-| -O | 0.362 | 0.360 | 0.354 | 0.377 | 0.008 | 2.2% | 1000 |
-| -O-native | 0.363 | 0.359 | 0.357 | 0.388 | 0.010 | 2.6% | 1000 |
-| -Omax | 0.330 | 0.329 | 0.324 | 0.338 | 0.004 | 1.4% | 1000 |
-| -Omax-native | 0.332 | 0.330 | 0.326 | 0.341 | 0.005 | 1.6% | 1000 |
+| default | 0.709 | 0.707 | 0.699 | 0.724 | 0.010 | 1.4% | 167 |
+| default-native | 0.711 | 0.712 | 0.699 | 0.721 | 0.007 | 0.9% | 168 |
+| -O | 0.377 | 0.375 | 0.373 | 0.390 | 0.005 | 1.4% | 803 |
+| -O-native | 0.375 | 0.374 | 0.372 | 0.379 | 0.002 | 0.5% | 803 |
+| -Omax | 0.329 | 0.327 | 0.326 | 0.334 | 0.003 | 0.9% | 803 |
+| -Omax-native | 0.328 | 0.327 | 0.323 | 0.342 | 0.006 | 1.7% | 803 |
 
 ### 3.2 Franko `SparseSetAllocator`
 
 | test | mean (s) | median | min | max | SD | CV | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| sparse-default | 0.609 | 0.609 | 0.595 | 0.625 | 0.008 | 1.4% | 431 |
-| sparse-default-native | 0.592 | 0.593 | 0.584 | 0.606 | 0.006 | 1.0% | 432 |
-| sparse-O | 0.362 | 0.361 | 0.357 | 0.374 | 0.005 | 1.3% | 1000 |
-| sparse-O-native | 0.366 | 0.363 | 0.362 | 0.390 | 0.008 | 2.3% | 1000 |
-| sparse-Omax | 0.333 | 0.334 | 0.323 | 0.340 | 0.005 | 1.5% | 1000 |
-| sparse-Omax-native | 0.334 | 0.332 | 0.330 | 0.347 | 0.005 | 1.5% | 1000 |
+| sparse-default | 0.726 | 0.725 | 0.720 | 0.736 | 0.005 | 0.7% | 176 |
+| sparse-default-native | 0.726 | 0.726 | 0.720 | 0.735 | 0.005 | 0.7% | 177 |
+| sparse-O | 0.385 | 0.382 | 0.379 | 0.397 | 0.007 | 1.7% | 803 |
+| sparse-O-native | 0.381 | 0.381 | 0.379 | 0.387 | 0.002 | 0.7% | 803 |
+| sparse-Omax | 0.334 | 0.332 | 0.328 | 0.348 | 0.006 | 1.8% | 803 |
+| sparse-Omax-native | 0.334 | 0.333 | 0.328 | 0.344 | 0.005 | 1.5% | 803 |
 
 ### 3.3 C++ `std::set`
 
 | test | mean (s) | median | min | max | SD | CV | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| cpp-O1-asan | 0.993 | 0.992 | 0.979 | 1.022 | 0.012 | 1.2% | 245 |
-| cpp-O1-asan-native | 1.214 | 1.211 | 1.202 | 1.234 | 0.011 | 0.9% | 246 |
-| cpp-O1 | 0.442 | 0.445 | 0.419 | 0.457 | 0.011 | 2.5% | 154 |
-| cpp-O1-native | 0.442 | 0.441 | 0.430 | 0.458 | 0.009 | 2.1% | 154 |
-| cpp-O3 | 0.398 | 0.400 | 0.382 | 0.411 | 0.009 | 2.2% | 158 |
-| cpp-O3-native | 0.397 | 0.396 | 0.383 | 0.417 | 0.010 | 2.5% | 158 |
+| cpp-O1-asan | 0.982 | 0.975 | 0.956 | 1.026 | 0.022 | 2.2% | 245 |
+| cpp-O1-asan-native | 1.192 | 1.189 | 1.165 | 1.255 | 0.026 | 2.2% | 246 |
+| cpp-O1 | 0.444 | 0.445 | 0.423 | 0.459 | 0.010 | 2.3% | 154 |
+| cpp-O1-native | 0.436 | 0.435 | 0.425 | 0.451 | 0.008 | 1.9% | 154 |
+| cpp-O3 | 0.401 | 0.401 | 0.391 | 0.414 | 0.008 | 1.9% | 158 |
+| cpp-O3-native | 0.391 | 0.394 | 0.367 | 0.414 | 0.015 | 3.9% | 158 |
 
 ### 3.4 C++ array-pool control
 
 | test | mean (s) | median | min | max | SD | CV | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| cpp-pool-O1-asan | 0.473 | 0.473 | 0.466 | 0.482 | 0.006 | 1.2% | 418 |
-| cpp-pool-O1-asan-native | 0.475 | 0.476 | 0.464 | 0.486 | 0.008 | 1.6% | 419 |
-| cpp-pool-O1 | 0.409 | 0.407 | 0.400 | 0.420 | 0.006 | 1.5% | 287 |
-| cpp-pool-O1-native | 0.451 | 0.451 | 0.441 | 0.460 | 0.006 | 1.4% | 287 |
-| cpp-pool-O3 | 0.353 | 0.351 | 0.342 | 0.366 | 0.007 | 1.9% | 287 |
-| cpp-pool-O3-native | 0.367 | 0.366 | 0.349 | 0.381 | 0.011 | 3.1% | 287 |
+| cpp-pool-O1-asan | 0.467 | 0.466 | 0.463 | 0.475 | 0.004 | 0.8% | 418 |
+| cpp-pool-O1-asan-native | 0.471 | 0.471 | 0.465 | 0.479 | 0.004 | 0.9% | 419 |
+| cpp-pool-O1 | 0.407 | 0.407 | 0.401 | 0.410 | 0.002 | 0.6% | 287 |
+| cpp-pool-O1-native | 0.447 | 0.445 | 0.443 | 0.463 | 0.006 | 1.3% | 287 |
+| cpp-pool-O3 | 0.351 | 0.350 | 0.342 | 0.358 | 0.005 | 1.4% | 287 |
+| cpp-pool-O3-native | 0.365 | 0.365 | 0.358 | 0.377 | 0.006 | 1.7% | 287 |
 
 ### 3.5 Native effect
 
 | Base build | Portable (s) | Native (s) | Native delta |
 | --- | --- | --- | --- |
-| Franko default | 0.576 | 0.585 | **+1.7%** |
-| Franko -O | 0.362 | 0.363 | **+0.3%** |
-| Franko -Omax | 0.330 | 0.332 | **+0.7%** |
-| Sparse default | 0.609 | 0.592 | **-2.8%** |
-| Sparse -O | 0.362 | 0.366 | **+1.0%** |
-| Sparse -Omax | 0.333 | 0.334 | **+0.4%** |
-| cpp-O1-asan | 0.993 | 1.214 | **+22.2%** |
-| cpp-O1 | 0.442 | 0.442 | **-0.2%** |
-| cpp-O3 | 0.398 | 0.397 | **-0.3%** |
-| cpp-pool-O1-asan | 0.473 | 0.475 | **+0.3%** |
-| cpp-pool-O1 | 0.409 | 0.451 | **+10.1%** |
-| cpp-pool-O3 | 0.353 | 0.367 | **+4.1%** |
+| Franko default | 0.709 | 0.711 | **+0.2%** |
+| Franko -O | 0.377 | 0.375 | **-0.6%** |
+| Franko -Omax | 0.329 | 0.328 | **-0.0%** |
+| Sparse default | 0.726 | 0.726 | **+0.1%** |
+| Sparse -O | 0.385 | 0.381 | **-0.9%** |
+| Sparse -Omax | 0.334 | 0.334 | **-0.1%** |
+| cpp-O1-asan | 0.982 | 1.192 | **+21.4%** |
+| cpp-O1 | 0.444 | 0.436 | **-1.6%** |
+| cpp-O3 | 0.401 | 0.391 | **-2.5%** |
+| cpp-pool-O1-asan | 0.467 | 0.471 | **+0.8%** |
+| cpp-pool-O1 | 0.407 | 0.447 | **+10.0%** |
+| cpp-pool-O3 | 0.351 | 0.365 | **+4.1%** |
 
-Negative means native is faster. Franko's only native win is the sparse
-default build at 2.8%; the other five Franko modes are flat or slightly
-slower. The large regressions are all in the C++ references.
+Negative means native is faster. Franko's native builds are flat: the
+six Franko modes range from 0.9% faster to 0.2% slower, with the two
+`-O` builds marginally faster and `-Omax` unchanged. The large
+regressions are all in the C++ references. The `std::set` release
+builds are 1.6–2.5% faster with `-march=native`, a small effect.
 
 ### 3.6 Head-to-head
 
@@ -243,11 +246,13 @@ slower. The large regressions are all in the C++ references.
 
 | Comparison | Faster | Speedup | Context |
 | --- | --- | --- | --- |
-| default vs cpp-O1-asan | Franko default | **1.73x** | Matched `-O1` + ASan + system allocator |
-| default-native vs cpp-O1-asan-native | Franko default-native | 2.07x | Matched, but native hurts `std::set` ASan |
-| -O vs cpp-O1 | Franko -O | **1.22x** | Franko uses `-O3` + jemalloc |
-| -O vs cpp-O3 | Franko -O | **1.10x** | Franko `-O` vs C++ max |
-| -Omax vs cpp-O3 | Franko -Omax | **1.21x** | Max vs max |
+| default vs cpp-O1-asan | Franko default | **1.38x** | Matched `-O1` + ASan + system allocator |
+| default-native vs cpp-O1-asan-native | Franko default-native | 1.68x | Matched, but native hurts `std::set` ASan |
+| -O vs cpp-O1 | Franko -O | **1.18x** | Franko uses `-O3` + jemalloc |
+| -O-native vs cpp-O1-native | Franko -O-native | 1.16x | Same, native |
+| -O vs cpp-O3 | Franko -O | **1.06x** | Franko `-O` vs C++ max |
+| -O-native vs cpp-O3-native | Franko -O-native | 1.04x | Same, native |
+| -Omax vs cpp-O3 | Franko -Omax | **1.22x** | Max vs max |
 | -Omax-native vs cpp-O3-native | Franko -Omax-native | 1.19x | Max vs max, native |
 
 **Franko vs the same-data-structure C++ control**
@@ -255,25 +260,27 @@ slower. The large regressions are all in the C++ references.
 | Comparison | Faster | Speedup | Context |
 | --- | --- | --- | --- |
 | -Omax vs cpp-pool-O3 | Franko -Omax | **1.07x** | Same array-pool design, both release |
-| -O vs cpp-pool-O3 | C++ pool -O3 | **1.03x** | Franko checked vs C++ unchecked |
-| default vs cpp-pool-O1-asan | C++ pool -O1-asan | **1.22x** | Same design, both ASan; Franko carries checks |
 | -Omax-native vs cpp-pool-O3-native | Franko -Omax-native | 1.11x | Native, but pool native regresses |
-| default-native vs cpp-pool-O1-asan-native | C++ pool | 1.23x | Native, both ASan |
+| -O vs cpp-pool-O3 | C++ pool -O3 | **1.07x** | Franko checked vs C++ unchecked |
+| -O-native vs cpp-pool-O3-native | C++ pool -O3-native | 1.03x | Same, native |
+| default vs cpp-pool-O1-asan | C++ pool -O1-asan | **1.52x** | Same design, both ASan; Franko carries checks |
+| default-native vs cpp-pool-O1-asan-native | C++ pool | 1.51x | Native, both ASan |
 
 ### 3.7 Franko allocator variants
 
 | Comparison | Faster | Speedup | Context |
 | --- | --- | --- | --- |
-| default vs sparse-default | NextAllocator | **1.06x** | Portable, ASan |
-| -O vs sparse-O | parity | **1.00x** | Portable, checked release |
-| -Omax vs sparse-Omax | NextAllocator | **1.01x** | Portable, unchecked release |
-| default-native vs sparse-default-native | NextAllocator | 1.01x | Native, ASan |
-| -O-native vs sparse-O-native | NextAllocator | 1.01x | Native, checked release |
-| -Omax-native vs sparse-Omax-native | NextAllocator | 1.01x | Native, unchecked release |
+| default vs sparse-default | NextAllocator | **1.02x** | Portable, ASan |
+| -O vs sparse-O | NextAllocator | **1.02x** | Portable, checked release |
+| -Omax vs sparse-Omax | NextAllocator | **1.02x** | Portable, unchecked release |
+| default-native vs sparse-default-native | NextAllocator | 1.02x | Native, ASan |
+| -O-native vs sparse-O-native | NextAllocator | 1.02x | Native, checked release |
+| -Omax-native vs sparse-Omax-native | NextAllocator | 1.02x | Native, unchecked release |
 
-The sparse-set pool has a small checked-build overhead and is at parity
-in `-Omax`. Its intended advantage — O(used) `write_active_indices`
-instead of O(capacity) — is not exercised by this workload.
+The sparse-set pool is within 2% of the free-list pool in every build;
+the difference is small enough to read as parity. Its intended
+advantage — O(used) `write_active_indices` instead of O(capacity) — is
+not exercised by this workload.
 
 ### 3.8 Decomposing the gap
 
@@ -281,25 +288,25 @@ instead of O(capacity) — is not exercised by this workload.
 
 | Step | Ratio | Interpretation |
 | --- | --- | --- |
-| `std::set -O3` → C++ pool `-O3` | **1.13x** | Same language, better storage/allocator |
+| `std::set -O3` → C++ pool `-O3` | **1.14x** | Same language, better storage/allocator |
 | C++ pool `-O3` → Franko `-Omax` | **1.07x** | Same design, generated-code difference |
-| `std::set -O3` → Franko `-Omax` | **1.21x** | Combined |
+| `std::set -O3` → Franko `-Omax` | **1.22x** | Combined |
 
 **Sanitizer-matched**
 
-| Step | Ratio | Interpretation |
+| Step | Effect | Interpretation |
 | --- | --- | --- |
-| ASan `std::set` → ASan C++ pool | **2.10x** | Per-node allocation is very expensive under ASan |
-| ASan C++ pool → Franko default | **1.22x** | Checked Franko build vs unchecked C++ control |
-| ASan `std::set` → Franko default | **1.73x** | Combined; most of it is storage |
+| ASan `std::set` → ASan C++ pool | **2.10x faster** | Per-node allocation is very expensive under ASan |
+| ASan C++ pool → Franko default | **1.52x slower** | Checked Franko build vs unchecked C++ control |
+| ASan `std::set` → Franko default | **1.38x faster** | Combined; storage gain partly returned as check cost |
 
 So the large sanitizer gap is not evidence that Franko's code
 generator is 2x better. It is evidence that `std::set`'s per-node
 allocation strategy is punished much harder by ASan than a bulk pool.
 At release, the data-structure advantage and the code-generation
-advantage are both real but modest: 1.13x × 1.07x ≈ 1.21x. Under ASan,
-storage is worth 2.10x, but the checked Franko build gives back 1.22x,
-leaving 1.73x end to end.
+advantage are both real but modest: 1.14x × 1.07x ≈ 1.22x. Under ASan,
+storage is worth 2.10x, but the checked Franko build gives back 1.52x,
+leaving 1.38x end to end.
 
 ---
 
@@ -333,9 +340,9 @@ nodes, and the pool reserves the full slot array up front.
 Both pools are O(1) for allocation and release. The sparse set performs
 more work per operation (two array accesses and four stores in
 `free_index`, plus the `exist` check), while the free list is a single
-linked-list update. That matches the measured 1.06x ASan-default
-difference and the parity-to-1.01x release differences. In `-Omax` the
-gap is about 1%, small enough to read as parity.
+linked-list update. That matches the measured 1.02x difference in every
+build. In release and under ASan the gap is about 2%, small enough to
+read as parity.
 
 The sparse set's O(used) `write_active_indices` would matter for a
 caller that enumerates live slots after many frees; this tree never
@@ -347,16 +354,16 @@ does. Choose `NextAllocator` for the lowest per-operation overhead and
 The control answers this more honestly than the `std::set` comparison:
 
 - **Release:** Franko `-Omax` is **1.07x faster** than the hand-written
-  C++ pool at `-O3`. Franko `-O` (checked) is **1.03x slower** than the
+  C++ pool at `-O3`. Franko `-O` (checked) is **1.07x slower** than the
   same C++ pool unchecked. That is parity, with a small advantage in
   the unchecked build and a small deficit when the checked runtime is
   included.
-- **ASan:** The hand-written C++ pool at `-O1-asan` is **1.22x faster**
+- **ASan:** The hand-written C++ pool at `-O1-asan` is **1.52x faster**
   than Franko default. Franko default also carries its own bounds and
   state checks on top of ASan, while the C++ control is unchecked, so
-  some of that 22% is expected.
+  some of that 52% is expected.
 - **Against `std::set`:** the same-data-structure control removes most
-  of Franko's advantage, confirming that the 1.21x release win is
+  of Franko's advantage, confirming that the 1.22x release win is
   mostly the data structure.
 
 Generated code is competitive with careful hand-written C++ on the same
@@ -367,19 +374,21 @@ algorithm. It is not a 2x code-generation win.
 `-march=native` is often treated as a free performance flag. On this
 workload it is not:
 
-- **Franko builds:** `-O` is **0.3% slower**, `-Omax` is **0.7%
-  slower**, and default is **1.7% slower**. The sparse default build is
-  2.8% faster, but sparse `-O` and `-Omax` are 1.0% and 0.4% slower.
-- **C++ `std::set`:** `-O1` and `-O3` are unchanged, but the ASan build
-  is **22.2% slower**.
-- **C++ array-pool control:** `-O3` is 4.1% slower, and the `-O1` build
-  is **10.1% slower**.
+- **Franko builds:** `default` is **0.2% slower**, `-O` is **0.6%
+  faster**, and `-Omax` is unchanged. The sparse builds are 0.1% slower,
+  0.9% faster, and 0.1% faster for default, `-O`, and `-Omax`
+  respectively. All six are within ±1%, so Franko is effectively flat.
+- **C++ `std::set`:** `-O1` is 1.6% faster and `-O3` is 2.5% faster,
+  but the ASan build is **21.4% slower**.
+- **C++ array-pool control:** `-O3` is 4.1% slower, `-O1` is **10.0%
+  slower**, and the ASan build is 0.8% slower.
 
-The only clear Franko win is sparse default at 2.8%; the other five
-modes are flat to slightly slower. The large regressions are branchy,
-scalar, pointer/index-chasing workloads with no meaningful vector loop;
-different instruction selection, inlining, and code layout are the
-likely causes. The practical lesson: `-march=native` is
+The only native wins are the `std::set` release builds at 1.6–2.5%,
+Franko `-O` at 0.6%, and sparse `-O` at 0.9% — all small. The large
+regressions are
+branchy, scalar, pointer/index-chasing workloads with no meaningful
+vector loop; different instruction selection, inlining, and code layout
+are the likely causes. The practical lesson: `-march=native` is
 code-shape-dependent and must be measured, not assumed.
 
 ### 4.5 Correctness
@@ -417,12 +426,15 @@ size=0
 
 ### 4.6 Noise
 
-All measured modes have a coefficient of variation between **0.9% and
-3.1%**. The largest spreads are `cpp-pool-O3-native` (3.1%),
-`-O-native` (2.6%), `cpp-O3-native` (2.5%), and `cpp-O1` (2.5%).
-Differences below ~5% should be read as small effects, not precise
-constants. Most of the secondary comparisons in this report are in that
-band; the 1.21x and 1.73x headline gaps are not.
+All measured modes have a coefficient of variation between **0.5% and
+3.9%**. The largest spreads are `cpp-O3-native` (3.9%), `cpp-O1`
+(2.3%), and `cpp-O1-asan` / `cpp-O1-asan-native` (2.2%); several Franko
+and pool modes are below 1%. Differences below ~5% should be read as
+small effects, not precise constants. Most of the secondary comparisons
+in this report are in that band; the 1.22x and 1.38x headline gaps are
+not. The checked default build is also sensitive to compiler/runtime
+changes, so cross-report comparisons of that build should be treated
+cautiously.
 
 ---
 
@@ -443,7 +455,7 @@ band; the 1.21x and 1.73x headline gaps are not.
    likely small here because the pool makes only two large allocations,
    but it is not controlled.
 5. **Checked vs unchecked under ASan.** Franko default keeps bounds and
-   state checks; the C++ ASan control is unchecked. The 1.22x
+   state checks; the C++ ASan control is unchecked. The 1.52x
    default-vs-pool gap therefore includes check overhead and is not a
    pure code-generation comparison.
 6. **Native builds are host-specific.** `-march=native` produced
@@ -458,9 +470,10 @@ band; the 1.21x and 1.73x headline gaps are not.
    environment, so cache misses, branch misses, and instructions per
    cycle are inferred from timing and layout, not measured.
 10. **Binary size is dominated by runtimes.** The Franko release
-    binaries are ~1 MB because jemalloc is statically linked; the
-    `std::set` binaries are 154–158 KB and the C++ pool is 287 KB, both
-    with static libstdc++/libgcc.
+    binaries are ~803 KB because jemalloc is statically linked; the
+    checked ASan default builds are 167–177 KB. The `std::set` binaries
+    are 154–158 KB, the C++ pool is 287 KB, and the ASan C++ pool is
+    418–419 KB, all with static libstdc++/libgcc.
 
 ---
 
@@ -469,19 +482,18 @@ band; the 1.21x and 1.73x headline gaps are not.
 For this codebase and workload:
 
 - **Use portable `-Omax` for maximum Franko speed.** It is the fastest
-  Franko build (0.330 s for `NextAllocator`, 0.333 s for
+  Franko build (0.329 s for `NextAllocator`, 0.334 s for
   `SparseSetAllocator`) and avoids host-specific binaries.
 - **Do not add `-march=native` by default.** It gives no reliable
   Franko release gain and can regress C++ controls substantially.
 - **Keep `NextAllocator` unless live-slot enumeration matters.**
-  `SparseSetAllocator` is at parity in release but 1.06x slower in the
-  ASan default build on this workload; its O(used) enumeration is its
-  real advantage.
+  `SparseSetAllocator` is at parity in release and 1.02x slower in every
+  build on this workload; its O(used) enumeration is its real advantage.
 - **Compare Franko to the same data structure when making language
   claims.** Against the C++ pool control, Franko is within about 7% at
-  release; under ASan the checked default build is 1.22x
-  slower than the unchecked control. Against `std::set`, the array-pool
-  design is the main advantage.
+  release; under ASan the checked default build is 1.52x slower than
+  the unchecked control. Against `std::set`, the array-pool design is
+  the main advantage.
 - **For C++ users, the actionable item is allocation.** A pool
   allocator for `std::set`, or a custom array-pool tree, captures most
   of the difference.
@@ -518,51 +530,53 @@ binaries, and `.bin` files are build artifacts and are ignored by git.
 
 These are the 10 measured rounds per mode in the order recorded. The
 mode order within each round was randomized; the columns are round
-numbers, not a fixed execution sequence.
+numbers, not a fixed execution sequence. Times are rounded to three
+decimals; the summary statistics in §3 are computed from the unrounded
+timings.
 
 **Franko `NextAllocator`**
 
 | test | r1 | r2 | r3 | r4 | r5 | r6 | r7 | r8 | r9 | r10 | mean | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| default | 0.601 | 0.572 | 0.568 | 0.574 | 0.565 | 0.595 | 0.568 | 0.566 | 0.573 | 0.574 | 0.576 | 426 |
-| default-native | 0.581 | 0.583 | 0.589 | 0.580 | 0.583 | 0.597 | 0.584 | 0.583 | 0.578 | 0.594 | 0.585 | 428 |
-| -O | 0.357 | 0.363 | 0.365 | 0.370 | 0.354 | 0.355 | 0.377 | 0.355 | 0.358 | 0.370 | 0.362 | 1000 |
-| -O-native | 0.360 | 0.358 | 0.359 | 0.359 | 0.388 | 0.357 | 0.357 | 0.368 | 0.360 | 0.368 | 0.363 | 1000 |
-| -Omax | 0.331 | 0.328 | 0.335 | 0.327 | 0.332 | 0.329 | 0.324 | 0.324 | 0.329 | 0.338 | 0.330 | 1000 |
-| -Omax-native | 0.341 | 0.328 | 0.333 | 0.326 | 0.329 | 0.327 | 0.340 | 0.331 | 0.336 | 0.328 | 0.332 | 1000 |
+| default | 0.701 | 0.716 | 0.700 | 0.701 | 0.714 | 0.701 | 0.718 | 0.699 | 0.724 | 0.719 | 0.709 | 167 |
+| default-native | 0.711 | 0.709 | 0.715 | 0.721 | 0.704 | 0.713 | 0.715 | 0.716 | 0.699 | 0.704 | 0.711 | 168 |
+| -O | 0.378 | 0.382 | 0.373 | 0.374 | 0.374 | 0.376 | 0.390 | 0.376 | 0.374 | 0.373 | 0.377 | 803 |
+| -O-native | 0.372 | 0.374 | 0.373 | 0.376 | 0.376 | 0.374 | 0.374 | 0.377 | 0.374 | 0.379 | 0.375 | 803 |
+| -Omax | 0.329 | 0.326 | 0.327 | 0.329 | 0.334 | 0.333 | 0.326 | 0.327 | 0.327 | 0.327 | 0.329 | 803 |
+| -Omax-native | 0.326 | 0.334 | 0.328 | 0.327 | 0.327 | 0.323 | 0.342 | 0.324 | 0.326 | 0.327 | 0.328 | 803 |
 
 **Franko `SparseSetAllocator`**
 
 | test | r1 | r2 | r3 | r4 | r5 | r6 | r7 | r8 | r9 | r10 | mean | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sparse-default | 0.609 | 0.610 | 0.616 | 0.625 | 0.595 | 0.609 | 0.609 | 0.600 | 0.606 | 0.614 | 0.609 | 431 |
-| sparse-default-native | 0.606 | 0.591 | 0.595 | 0.584 | 0.592 | 0.593 | 0.593 | 0.593 | 0.589 | 0.587 | 0.592 | 432 |
-| sparse-O | 0.362 | 0.364 | 0.360 | 0.363 | 0.360 | 0.359 | 0.361 | 0.374 | 0.357 | 0.364 | 0.362 | 1000 |
-| sparse-O-native | 0.390 | 0.363 | 0.363 | 0.364 | 0.363 | 0.362 | 0.366 | 0.362 | 0.365 | 0.364 | 0.366 | 1000 |
-| sparse-Omax | 0.332 | 0.336 | 0.329 | 0.335 | 0.323 | 0.329 | 0.340 | 0.329 | 0.337 | 0.336 | 0.333 | 1000 |
-| sparse-Omax-native | 0.347 | 0.331 | 0.335 | 0.330 | 0.332 | 0.332 | 0.331 | 0.335 | 0.334 | 0.331 | 0.334 | 1000 |
+| sparse-default | 0.721 | 0.727 | 0.723 | 0.727 | 0.736 | 0.727 | 0.733 | 0.720 | 0.722 | 0.722 | 0.726 | 176 |
+| sparse-default-native | 0.731 | 0.729 | 0.722 | 0.735 | 0.730 | 0.720 | 0.721 | 0.725 | 0.723 | 0.726 | 0.726 | 177 |
+| sparse-O | 0.379 | 0.390 | 0.384 | 0.394 | 0.380 | 0.382 | 0.382 | 0.397 | 0.379 | 0.380 | 0.385 | 803 |
+| sparse-O-native | 0.379 | 0.379 | 0.382 | 0.380 | 0.384 | 0.380 | 0.381 | 0.382 | 0.380 | 0.387 | 0.381 | 803 |
+| sparse-Omax | 0.330 | 0.348 | 0.341 | 0.332 | 0.333 | 0.331 | 0.331 | 0.334 | 0.328 | 0.332 | 0.334 | 803 |
+| sparse-Omax-native | 0.329 | 0.334 | 0.338 | 0.332 | 0.329 | 0.328 | 0.336 | 0.334 | 0.344 | 0.331 | 0.334 | 803 |
 
 **C++ `std::set`**
 
 | test | r1 | r2 | r3 | r4 | r5 | r6 | r7 | r8 | r9 | r10 | mean | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| cpp-O1-asan | 0.992 | 0.998 | 0.995 | 0.996 | 0.979 | 0.992 | 0.984 | 0.985 | 1.022 | 0.987 | 0.993 | 245 |
-| cpp-O1-asan-native | 1.202 | 1.203 | 1.225 | 1.222 | 1.210 | 1.206 | 1.234 | 1.212 | 1.218 | 1.204 | 1.214 | 246 |
-| cpp-O1 | 0.447 | 0.443 | 0.457 | 0.419 | 0.438 | 0.433 | 0.439 | 0.447 | 0.446 | 0.455 | 0.442 | 154 |
-| cpp-O1-native | 0.446 | 0.432 | 0.451 | 0.430 | 0.439 | 0.438 | 0.431 | 0.458 | 0.442 | 0.449 | 0.442 | 154 |
-| cpp-O3 | 0.405 | 0.395 | 0.400 | 0.385 | 0.395 | 0.400 | 0.382 | 0.400 | 0.411 | 0.404 | 0.398 | 158 |
-| cpp-O3-native | 0.399 | 0.393 | 0.395 | 0.384 | 0.397 | 0.391 | 0.405 | 0.383 | 0.417 | 0.401 | 0.397 | 158 |
+| cpp-O1-asan | 0.964 | 1.026 | 1.004 | 0.968 | 0.965 | 0.979 | 0.956 | 0.992 | 0.992 | 0.972 | 0.982 | 245 |
+| cpp-O1-asan-native | 1.191 | 1.255 | 1.188 | 1.211 | 1.182 | 1.190 | 1.194 | 1.180 | 1.165 | 1.168 | 1.192 | 246 |
+| cpp-O1 | 0.436 | 0.444 | 0.435 | 0.459 | 0.423 | 0.451 | 0.453 | 0.447 | 0.446 | 0.441 | 0.444 | 154 |
+| cpp-O1-native | 0.432 | 0.451 | 0.426 | 0.431 | 0.437 | 0.442 | 0.441 | 0.434 | 0.425 | 0.444 | 0.436 | 154 |
+| cpp-O3 | 0.398 | 0.414 | 0.395 | 0.405 | 0.391 | 0.404 | 0.393 | 0.406 | 0.395 | 0.409 | 0.401 | 158 |
+| cpp-O3-native | 0.374 | 0.408 | 0.379 | 0.395 | 0.380 | 0.414 | 0.393 | 0.398 | 0.401 | 0.367 | 0.391 | 158 |
 
 **C++ array-pool control**
 
 | test | r1 | r2 | r3 | r4 | r5 | r6 | r7 | r8 | r9 | r10 | mean | bin (KB) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| cpp-pool-O1-asan | 0.476 | 0.474 | 0.471 | 0.468 | 0.482 | 0.477 | 0.466 | 0.467 | 0.482 | 0.472 | 0.474 | 418 |
-| cpp-pool-O1-asan-native | 0.468 | 0.486 | 0.475 | 0.464 | 0.469 | 0.480 | 0.466 | 0.480 | 0.483 | 0.478 | 0.475 | 419 |
-| cpp-pool-O1 | 0.407 | 0.415 | 0.408 | 0.406 | 0.400 | 0.406 | 0.404 | 0.416 | 0.420 | 0.412 | 0.409 | 287 |
-| cpp-pool-O1-native | 0.450 | 0.452 | 0.459 | 0.441 | 0.445 | 0.449 | 0.444 | 0.460 | 0.453 | 0.454 | 0.451 | 287 |
-| cpp-pool-O3 | 0.356 | 0.366 | 0.351 | 0.351 | 0.348 | 0.342 | 0.351 | 0.353 | 0.360 | 0.351 | 0.353 | 287 |
-| cpp-pool-O3-native | 0.362 | 0.365 | 0.373 | 0.380 | 0.379 | 0.349 | 0.351 | 0.365 | 0.381 | 0.368 | 0.367 | 287 |
+| cpp-pool-O1-asan | 0.472 | 0.466 | 0.464 | 0.469 | 0.475 | 0.463 | 0.464 | 0.464 | 0.465 | 0.467 | 0.467 | 418 |
+| cpp-pool-O1-asan-native | 0.472 | 0.479 | 0.468 | 0.473 | 0.471 | 0.465 | 0.470 | 0.466 | 0.473 | 0.467 | 0.471 | 419 |
+| cpp-pool-O1 | 0.404 | 0.407 | 0.406 | 0.401 | 0.410 | 0.409 | 0.407 | 0.406 | 0.409 | 0.408 | 0.407 | 287 |
+| cpp-pool-O1-native | 0.446 | 0.446 | 0.445 | 0.445 | 0.443 | 0.463 | 0.451 | 0.445 | 0.444 | 0.445 | 0.447 | 287 |
+| cpp-pool-O3 | 0.353 | 0.351 | 0.355 | 0.350 | 0.350 | 0.350 | 0.358 | 0.344 | 0.342 | 0.354 | 0.351 | 287 |
+| cpp-pool-O3-native | 0.364 | 0.359 | 0.359 | 0.358 | 0.365 | 0.364 | 0.365 | 0.367 | 0.373 | 0.377 | 0.365 | 287 |
 
 ---
 
