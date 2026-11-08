@@ -5,7 +5,7 @@
 // caller-provided buffer and reports (val, err):
 //   read_bytes(buf, 4)  -> 4, 0    (the count caps a single call)
 //   read_bytes(buf, 4)  -> 4, 0
-//   read_bytes(buf, 8)  -> 3, 0    (a short read is normal)
+//   read_bytes(buf, 8)  -> 3, 0    (short because EOF arrives)
 //   read_bytes(buf, 4)  -> 0, 0    (end of input)
 // Bytes are printed numerically so the golden is exact. The
 // buffer is not cleared between reads, so stale bytes past the

@@ -214,14 +214,17 @@ next call. `read_bytes` fills a caller-owned byte buffer and returns
 func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err)
 ```
 
-Read up to `count` bytes from stdin into `buf`. Returns `(val, err)`,
-where `val` is the number of bytes read and `err` is `0` on success or
-`-1` on error (a null `buf`, or `count` larger than the buffer's
-length). End of input is `(0, 0)`.
+Read up to `count` bytes from stdin into `buf`, looping over the shared
+8192-byte input buffer until `count` bytes have been stored, end of
+input is reached, or a read error occurs. Returns `(val, err)`, where
+`val` is the number of bytes stored and `err` is `0` on success or `-1`
+on error (a null `buf`, or `count` larger than the buffer's length).
+End of input is `(0, 0)`.
 
-A short result is normal: `val` may be smaller than `count` even before
-end of input. Loop until `val` is `0` (or the wanted total arrives) when
-the exact byte count matters. Bytes past `val` are untouched.
+A request larger than 8192 bytes is filled from as many chunks as
+needed. A `val` smaller than `count` means end of input; when `err` is
+`-1`, `val` holds the bytes stored before the error. Bytes past `val`
+are untouched.
 
 ```franko
 import "franko/io"
@@ -291,7 +294,8 @@ library_tests/io/print/success/string/    // text, custom end, bare newline
 library_tests/io/print/success/text_end/  // print(text, end), null text/end
 library_tests/io/print/success/std_string/ // print(std::String), String/byte ends
 library_tests/io/print/success/err_overloads/ // every print_err overload, merged streams
-library_tests/io/read/success/read_bytes/      // chunked reads, short read, EOF
+library_tests/io/read/success/read_bytes/      // chunked reads, EOF
+library_tests/io/read/success/read_bytes_large/ // >8192-byte request, leftovers
 library_tests/io/read/success/read_line/       // lines, empty line, EOF
 library_tests/io/read/success/read_line_long/  // buffer growth, long line
 library_tests/io/read/success/read_line_limit/ // 81920-byte limit, -2, resync

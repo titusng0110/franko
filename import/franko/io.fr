@@ -556,14 +556,18 @@ func __io_fill() -> int32 {
     return -1
 }
 
-// Read up to `count` bytes from stdin into `buf`; return (val, err),
-// where val is the number of bytes stored, 0 at end of input, and err
-// is 0 on success or -1 on error (a null `buf`, or `count` larger than
-// the buffer). A short result is normal: val may be smaller than
-// `count` even before end of input.
+// Read up to `count` bytes from stdin into `buf`, looping over the
+// shared 8192-byte input buffer until `count` bytes have been stored,
+// end of input is reached, or a read error occurs. Returns (val, err),
+// where val is the number of bytes stored and err is 0 on success or
+// -1 on error (a null `buf`, or `count` larger than the buffer). A val
+// smaller than `count` means end of input, or an error with the bytes
+// stored before it in val.
 //
 // Reads are serviced from the shared stdin buffer first; the OS is read
 // in 8192-byte chunks and excess bytes stay buffered for the next call.
+// A request larger than 8192 bytes is filled from as many chunks as
+// needed.
 //
 // On Windows, reading a stdin pipe whose writer has closed makes
 // ReadFile report failure (ERROR_BROKEN_PIPE) with zero bytes instead
@@ -584,28 +588,36 @@ func read_bytes(mview<[byte]> buf, uint32 count) -> (uint32 val, int32 err) {
         result.err = 0
         return result
     }
-    if (__io_input_pos == __io_input_len) {
-        int32 fill = __io_fill()
-        if (fill < 0) {
-            return result
+    uint32 copied = 0
+    while (copied < count) {
+        if (__io_input_pos == __io_input_len) {
+            int32 fill = __io_fill()
+            if (fill < 0) {
+                result.val = copied
+                result.err = -1
+                return result
+            }
+            if (fill == 0) {
+                break
+            }
+            if (__io_input_len == 0) {
+                break
+            }
         }
-        if (fill == 0) {
-            result.err = 0
-            return result
+        uint32 available = __io_input_len - __io_input_pos
+        uint32 take = count - copied
+        if (take > available) {
+            take = available
+        }
+        $(buf).memcpy(getview(__io_input), copied, __io_input_pos, take)
+        copied = copied + take
+        __io_input_pos = __io_input_pos + take
+        if (__io_input_pos == __io_input_len) {
+            __io_input_pos = 0
+            __io_input_len = 0
         }
     }
-    uint32 available = __io_input_len - __io_input_pos
-    uint32 take = count
-    if (take > available) {
-        take = available
-    }
-    $(buf).memcpy(getview(__io_input), 0, __io_input_pos, take)
-    __io_input_pos = __io_input_pos + take
-    if (__io_input_pos == __io_input_len) {
-        __io_input_pos = 0
-        __io_input_len = 0
-    }
-    result.val = take
+    result.val = copied
     result.err = 0
     return result
 }
