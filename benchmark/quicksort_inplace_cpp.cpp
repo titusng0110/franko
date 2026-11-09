@@ -296,13 +296,12 @@ struct Bounds {
     u32 gt;
 };
 
-static u32 partition_lomuto(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
-    u32 sample = RANDOM_PIVOTS[pivot_cursor & 127];
-    u64 scaled = static_cast<u64>(sample) * static_cast<u64>(count);
-    u32 pivot_pos = lo + static_cast<u32>(scaled >> 32);
-    ++pivot_cursor;
+static inline u32 median3_pivot_pos(i64* v, u32 lo, u32 hi);
+static inline u32 random_median3_pivot_pos(i64* v, u32 lo, u32 hi);
 
+static u32 partition_lomuto(i64* v, u32 lo, u32 hi, bool random_median) {
+    u32 pivot_pos = random_median ? random_median3_pivot_pos(v, lo, hi)
+                                  : median3_pivot_pos(v, lo, hi);
     std::swap(v[pivot_pos], v[hi]);
 
     i64 pivot_key = v[hi];
@@ -317,12 +316,47 @@ static u32 partition_lomuto(i64* v, u32 lo, u32 hi) {
     return store;
 }
 
-static u32 partition_hoare_random(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
+static inline u32 random_offset(u32 count) {
     u32 sample = RANDOM_PIVOTS[pivot_cursor & 127];
-    u64 scaled = static_cast<u64>(sample) * static_cast<u64>(count);
-    u32 pivot_pos = lo + static_cast<u32>(scaled >> 32);
     ++pivot_cursor;
+    u64 scaled = static_cast<u64>(sample) * static_cast<u64>(count);
+    return static_cast<u32>(scaled >> 32);
+}
+
+static inline u32 median3_pivot_pos(i64* v, u32 lo, u32 hi) {
+    u32 mid = lo + (hi - lo) / 2;
+    if (v[mid] < v[lo]) {
+        std::swap(v[mid], v[lo]);
+    }
+    if (v[hi] < v[mid]) {
+        std::swap(v[hi], v[mid]);
+    }
+    if (v[mid] < v[lo]) {
+        std::swap(v[mid], v[lo]);
+    }
+    return mid;
+}
+
+static inline u32 random_median3_pivot_pos(i64* v, u32 lo, u32 hi) {
+    u32 count = hi - lo + 1;
+    u32 p0 = lo + random_offset(count);
+    u32 p1 = lo + random_offset(count);
+    u32 p2 = lo + random_offset(count);
+    if (v[p1] < v[p0]) {
+        std::swap(v[p1], v[p0]);
+    }
+    if (v[p2] < v[p1]) {
+        std::swap(v[p2], v[p1]);
+    }
+    if (v[p1] < v[p0]) {
+        std::swap(v[p1], v[p0]);
+    }
+    return p1;
+}
+
+static u32 partition_hoare(i64* v, u32 lo, u32 hi, bool random_median) {
+    u32 pivot_pos = random_median ? random_median3_pivot_pos(v, lo, hi)
+                                  : median3_pivot_pos(v, lo, hi);
     std::swap(v[pivot_pos], v[lo]);
 
     i64 pivot = v[lo];
@@ -349,12 +383,9 @@ static u32 partition_hoare_random(i64* v, u32 lo, u32 hi) {
 //   v[lt .. gt]   == pivot
 //   v[gt+1 .. hi] > pivot
 // The equal block is final and is not passed to either recursive call.
-static Bounds partition_dnf(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
-    u32 sample = RANDOM_PIVOTS[pivot_cursor & 127];
-    u64 scaled = static_cast<u64>(sample) * static_cast<u64>(count);
-    u32 pivot_pos = lo + static_cast<u32>(scaled >> 32);
-    ++pivot_cursor;
+static Bounds partition_dnf(i64* v, u32 lo, u32 hi, bool random_median) {
+    u32 pivot_pos = random_median ? random_median3_pivot_pos(v, lo, hi)
+                                  : median3_pivot_pos(v, lo, hi);
 
     i64 pivot = v[pivot_pos];
 
@@ -579,7 +610,7 @@ static bool estimate_use_dnf(const i64* v, u32 count) {
     return result;
 }
 
-static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
         if (count <= SMALL_SORT_LIMIT) {
@@ -596,18 +627,18 @@ static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
                 heap_sort_values(v, lo, count);
                 return;
             }
-            Bounds bounds = partition_dnf(v, lo, hi);
+            Bounds bounds = partition_dnf(v, lo, hi, hi - lo > 10000);
             u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
             u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    quicksort(v, bounds.gt + 1, hi, depth - 1);
+                    quicksort_rec(v, bounds.gt + 1, hi, depth - 1);
                 }
                 --depth;
                 hi = bounds.lt - 1;
             } else {
                 if (left_count > 0) {
-                    quicksort(v, lo, bounds.lt - 1, depth - 1);
+                    quicksort_rec(v, lo, bounds.lt - 1, depth - 1);
                 }
                 if (right_count == 0) {
                     return;
@@ -620,18 +651,18 @@ static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
                 heap_sort_values(v, lo, count);
                 return;
             }
-            u32 pivot = partition_lomuto(v, lo, hi);
+            u32 pivot = partition_lomuto(v, lo, hi, hi - lo > 10000);
             u32 left_count = pivot - lo;
             u32 right_count = hi - pivot;
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    quicksort(v, pivot + 1, hi, depth - 1);
+                    quicksort_rec(v, pivot + 1, hi, depth - 1);
                 }
                 --depth;
                 hi = pivot - 1;
             } else {
                 if (left_count > 0) {
-                    quicksort(v, lo, pivot - 1, depth - 1);
+                    quicksort_rec(v, lo, pivot - 1, depth - 1);
                 }
                 --depth;
                 lo = pivot + 1;
@@ -640,7 +671,49 @@ static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
     }
 }
 
-static void quicksort_hoare(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
+    if (lo >= hi) {
+        return;
+    }
+    u32 count = hi - lo + 1;
+    if (count <= SMALL_SORT_LIMIT) {
+        if (count <= NETWORK_LIMIT) {
+            sort_network(v, lo, count);
+        } else {
+            insertion_sort_values(v, lo, hi);
+        }
+        return;
+    }
+    if (depth == 0) {
+        heap_sort_values(v, lo, count);
+        return;
+    }
+
+    // First pass is always a randomized median-of-3 pivot.
+    if (use_dnf != 0) {
+        Bounds bounds = partition_dnf(v, lo, hi, true);
+        u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
+        u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
+        if (left_count > 0) {
+            quicksort_rec(v, lo, bounds.lt - 1, depth - 1);
+        }
+        if (right_count > 0) {
+            quicksort_rec(v, bounds.gt + 1, hi, depth - 1);
+        }
+    } else {
+        u32 pivot = partition_lomuto(v, lo, hi, true);
+        u32 left_count = pivot - lo;
+        u32 right_count = hi - pivot;
+        if (left_count > 0) {
+            quicksort_rec(v, lo, pivot - 1, depth - 1);
+        }
+        if (right_count > 0) {
+            quicksort_rec(v, pivot + 1, hi, depth - 1);
+        }
+    }
+}
+
+static void quicksort_hoare_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
         if (count <= SMALL_SORT_LIMIT) {
@@ -655,7 +728,7 @@ static void quicksort_hoare(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        u32 split = partition_hoare_random(v, lo, hi);
+        u32 split = partition_hoare(v, lo, hi, hi - lo > 10000);
         if (split >= hi) {
             heap_sort_values(v, lo, count);
             return;
@@ -664,17 +737,45 @@ static void quicksort_hoare(i64* v, u32 lo, u32 hi, u32 depth) {
         u32 right_count = hi - split;
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_hoare(v, split + 1, hi, depth - 1);
+                quicksort_hoare_rec(v, split + 1, hi, depth - 1);
             }
             hi = split;
         } else {
             if (left_count > 0) {
-                quicksort_hoare(v, lo, split, depth - 1);
+                quicksort_hoare_rec(v, lo, split, depth - 1);
             }
             lo = split + 1;
         }
         --depth;
     }
+}
+
+static void quicksort_hoare(i64* v, u32 lo, u32 hi, u32 depth) {
+    if (lo >= hi) {
+        return;
+    }
+    u32 count = hi - lo + 1;
+    if (count <= SMALL_SORT_LIMIT) {
+        if (count <= NETWORK_LIMIT) {
+            sort_network(v, lo, count);
+        } else {
+            insertion_sort_values(v, lo, hi);
+        }
+        return;
+    }
+    if (depth == 0) {
+        heap_sort_values(v, lo, count);
+        return;
+    }
+
+    // First pass is always a randomized median-of-3 pivot.
+    u32 split = partition_hoare(v, lo, hi, true);
+    if (split >= hi) {
+        heap_sort_values(v, lo, count);
+        return;
+    }
+    quicksort_hoare_rec(v, lo, split, depth - 1);
+    quicksort_hoare_rec(v, split + 1, hi, depth - 1);
 }
 
 int main(int argc, char** argv) {

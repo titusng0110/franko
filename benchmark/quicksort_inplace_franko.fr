@@ -677,19 +677,75 @@ func estimate_use_dnf(view<[int64]> values, uint32 count) -> byte {
     return result
 }
 
-func partition_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func random_offset(uint32 count) -> uint32 {
+    if (RANDOM_PIVOTS == null) {
+        return 0
+    }
+    uint32 sample = $(RANDOM_PIVOTS)[pivot_cursor & 127]
+    pivot_cursor = pivot_cursor + 1
+    uint64 scaled = cast<uint64>(sample) * cast<uint64>(count)
+    return unsafe_cast<uint32>(scaled >> 32)
+}
+
+func median3_pivot_pos(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
     if (values == null) {
         return lo
     }
-    if (RANDOM_PIVOTS == null) {
+    uint32 mid = lo + (hi - lo) / 2
+    if ($(values)[mid] < $(values)[lo]) {
+        int64 tmp = $(values)[mid]
+        $(values)[mid] = $(values)[lo]
+        $(values)[lo] = tmp
+    }
+    if ($(values)[hi] < $(values)[mid]) {
+        int64 tmp = $(values)[hi]
+        $(values)[hi] = $(values)[mid]
+        $(values)[mid] = tmp
+    }
+    if ($(values)[mid] < $(values)[lo]) {
+        int64 tmp = $(values)[mid]
+        $(values)[mid] = $(values)[lo]
+        $(values)[lo] = tmp
+    }
+    return mid
+}
+
+func random_median3_pivot_pos(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+    if (values == null) {
         return lo
     }
-
     uint32 count = hi - lo + 1
-    uint32 sample = $(RANDOM_PIVOTS)[pivot_cursor & 127]
-    uint64 scaled = cast<uint64>(sample) * cast<uint64>(count)
-    uint32 pivot_pos = lo + unsafe_cast<uint32>(scaled >> 32)
-    pivot_cursor = pivot_cursor + 1
+    uint32 p0 = lo + random_offset(count)
+    uint32 p1 = lo + random_offset(count)
+    uint32 p2 = lo + random_offset(count)
+    if ($(values)[p1] < $(values)[p0]) {
+        int64 tmp = $(values)[p1]
+        $(values)[p1] = $(values)[p0]
+        $(values)[p0] = tmp
+    }
+    if ($(values)[p2] < $(values)[p1]) {
+        int64 tmp = $(values)[p2]
+        $(values)[p2] = $(values)[p1]
+        $(values)[p1] = tmp
+    }
+    if ($(values)[p1] < $(values)[p0]) {
+        int64 tmp = $(values)[p1]
+        $(values)[p1] = $(values)[p0]
+        $(values)[p0] = tmp
+    }
+    return p1
+}
+
+func partition_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, byte random_median) -> uint32 {
+    if (values == null) {
+        return lo
+    }
+    uint32 pivot_pos = 0
+    if (random_median != 0) {
+        pivot_pos = random_median3_pivot_pos(values, lo, hi)
+    } else {
+        pivot_pos = median3_pivot_pos(values, lo, hi)
+    }
 
     int64 tmp_pivot = $(values)[pivot_pos]
     $(values)[pivot_pos] = $(values)[hi]
@@ -714,18 +770,16 @@ func partition_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
     return store
 }
 
-func partition_hoare_random(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func partition_hoare(mview<[int64]> values, uint32 lo, uint32 hi, byte random_median) -> uint32 {
     if (values == null) {
         return lo
     }
-    if (RANDOM_PIVOTS == null) {
-        return lo
+    uint32 pivot_pos = 0
+    if (random_median != 0) {
+        pivot_pos = random_median3_pivot_pos(values, lo, hi)
+    } else {
+        pivot_pos = median3_pivot_pos(values, lo, hi)
     }
-    uint32 count = hi - lo + 1
-    uint32 sample = $(RANDOM_PIVOTS)[pivot_cursor & 127]
-    uint64 scaled = cast<uint64>(sample) * cast<uint64>(count)
-    uint32 pivot_pos = lo + unsafe_cast<uint32>(scaled >> 32)
-    pivot_cursor = pivot_cursor + 1
     int64 tmp_pivot = $(values)[pivot_pos]
     $(values)[pivot_pos] = $(values)[lo]
     $(values)[lo] = tmp_pivot
@@ -757,19 +811,16 @@ func partition_hoare_random(mview<[int64]> values, uint32 lo, uint32 hi) -> uint
 //   values[lt .. gt]   == pivot
 //   values[gt+1 .. hi] > pivot
 // The equal block is final and is not passed to either recursive call.
-func partition_dnf(mview<[int64]> values, uint32 lo, uint32 hi) -> (uint32 lt, uint32 gt) {
+func partition_dnf(mview<[int64]> values, uint32 lo, uint32 hi, byte random_median) -> (uint32 lt, uint32 gt) {
     if (values == null) {
         return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
     }
-    if (RANDOM_PIVOTS == null) {
-        return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
+    uint32 pivot_pos = 0
+    if (random_median != 0) {
+        pivot_pos = random_median3_pivot_pos(values, lo, hi)
+    } else {
+        pivot_pos = median3_pivot_pos(values, lo, hi)
     }
-
-    uint32 count = hi - lo + 1
-    uint32 sample = $(RANDOM_PIVOTS)[pivot_cursor & 127]
-    uint64 scaled = cast<uint64>(sample) * cast<uint64>(count)
-    uint32 pivot_pos = lo + unsafe_cast<uint32>(scaled >> 32)
-    pivot_cursor = pivot_cursor + 1
 
     int64 pivot = $(values)[pivot_pos]
 
@@ -800,6 +851,58 @@ func quicksort(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> voi
     if (values == null) {
         return
     }
+    if (lo >= hi) {
+        return
+    }
+    uint32 count = hi - lo + 1
+    if (count <= SMALL_SORT_LIMIT) {
+        if (count <= NETWORK_LIMIT) {
+            sort_network(values, lo, count)
+        } else {
+            insertion_sort_values(values, lo, hi)
+        }
+        return
+    }
+    if (depth == 0) {
+        heap_sort_values(values, lo, count)
+        return
+    }
+
+    // First pass is always a randomized median-of-3 pivot.
+    if (use_dnf != 0) {
+        (uint32 lt, uint32 gt) bounds = partition_dnf(values, lo, hi, 1)
+        uint32 left_count = 0
+        if (bounds.lt > lo) {
+            left_count = bounds.lt - lo
+        }
+        uint32 right_count = 0
+        if (bounds.gt < hi) {
+            right_count = hi - bounds.gt
+        }
+        if (left_count > 0) {
+            quicksort_rec(values, lo, bounds.lt - 1, depth - 1)
+        }
+        if (right_count > 0) {
+            quicksort_rec(values, bounds.gt + 1, hi, depth - 1)
+        }
+    } else {
+        uint32 pivot = partition_lomuto(values, lo, hi, 1)
+        uint32 left_count = pivot - lo
+        uint32 right_count = hi - pivot
+        if (left_count > 0) {
+            quicksort_rec(values, lo, pivot - 1, depth - 1)
+        }
+        if (right_count > 0) {
+            quicksort_rec(values, pivot + 1, hi, depth - 1)
+        }
+    }
+    return
+}
+
+func quicksort_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+    if (values == null) {
+        return
+    }
     while (lo < hi) {
         uint32 count = hi - lo + 1
         if (count <= SMALL_SORT_LIMIT) {
@@ -816,7 +919,11 @@ func quicksort(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> voi
                 heap_sort_values(values, lo, count)
                 return
             }
-            (uint32 lt, uint32 gt) bounds = partition_dnf(values, lo, hi)
+            byte random_median = 0
+            if (hi - lo > 10000) {
+                random_median = 1
+            }
+            (uint32 lt, uint32 gt) bounds = partition_dnf(values, lo, hi, random_median)
             uint32 left_count = 0
             if (bounds.lt > lo) {
                 left_count = bounds.lt - lo
@@ -827,13 +934,13 @@ func quicksort(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> voi
             }
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    quicksort(values, bounds.gt + 1, hi, depth - 1)
+                    quicksort_rec(values, bounds.gt + 1, hi, depth - 1)
                 }
                 depth = depth - 1
                 hi = bounds.lt - 1
             } else {
                 if (left_count > 0) {
-                    quicksort(values, lo, bounds.lt - 1, depth - 1)
+                    quicksort_rec(values, lo, bounds.lt - 1, depth - 1)
                 }
                 if (right_count == 0) {
                     return
@@ -846,18 +953,22 @@ func quicksort(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> voi
                 heap_sort_values(values, lo, count)
                 return
             }
-            uint32 pivot = partition_lomuto(values, lo, hi)
+            byte random_median = 0
+            if (hi - lo > 10000) {
+                random_median = 1
+            }
+            uint32 pivot = partition_lomuto(values, lo, hi, random_median)
             uint32 left_count = pivot - lo
             uint32 right_count = hi - pivot
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    quicksort(values, pivot + 1, hi, depth - 1)
+                    quicksort_rec(values, pivot + 1, hi, depth - 1)
                 }
                 depth = depth - 1
                 hi = pivot - 1
             } else {
                 if (left_count > 0) {
-                    quicksort(values, lo, pivot - 1, depth - 1)
+                    quicksort_rec(values, lo, pivot - 1, depth - 1)
                 }
                 depth = depth - 1
                 lo = pivot + 1
@@ -867,7 +978,7 @@ func quicksort(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> voi
     return
 }
 
-func quicksort_hoare(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_hoare_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -885,7 +996,11 @@ func quicksort_hoare(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) 
             heap_sort_values(values, lo, count)
             return
         }
-        uint32 split = partition_hoare_random(values, lo, hi)
+        byte random_median = 0
+        if (hi - lo > 10000) {
+            random_median = 1
+        }
+        uint32 split = partition_hoare(values, lo, hi, random_median)
         if (split >= hi) {
             heap_sort_values(values, lo, count)
             return
@@ -894,17 +1009,49 @@ func quicksort_hoare(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) 
         uint32 right_count = hi - split
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_hoare(values, split + 1, hi, depth - 1)
+                quicksort_hoare_rec(values, split + 1, hi, depth - 1)
             }
             hi = split
         } else {
             if (left_count > 0) {
-                quicksort_hoare(values, lo, split, depth - 1)
+                quicksort_hoare_rec(values, lo, split, depth - 1)
             }
             lo = split + 1
         }
         depth = depth - 1
     }
+    return
+}
+
+func quicksort_hoare(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+    if (values == null) {
+        return
+    }
+    if (lo >= hi) {
+        return
+    }
+    uint32 count = hi - lo + 1
+    if (count <= SMALL_SORT_LIMIT) {
+        if (count <= NETWORK_LIMIT) {
+            sort_network(values, lo, count)
+        } else {
+            insertion_sort_values(values, lo, hi)
+        }
+        return
+    }
+    if (depth == 0) {
+        heap_sort_values(values, lo, count)
+        return
+    }
+
+    // First pass is always a randomized median-of-3 pivot.
+    uint32 split = partition_hoare(values, lo, hi, 1)
+    if (split >= hi) {
+        heap_sort_values(values, lo, count)
+        return
+    }
+    quicksort_hoare_rec(values, lo, split, depth - 1)
+    quicksort_hoare_rec(values, split + 1, hi, depth - 1)
     return
 }
 

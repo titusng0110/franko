@@ -20,24 +20,26 @@ All percentage datasets are relative to `N`.
 
 The short version:
 
-- `0-9` wins every size: Franko is **0.62x–0.82x** and C++ is
-  **0.61x–0.87x** of `std::sort`.
-- `0.25pct` is 1.02x slower at 10M, then wins every smaller size:
-  **0.96x** at 1M, **0.90x** at 99k, **0.76x–0.83x** at 10k, and
-  **0.89x–0.92x** at 1k.
-- `0.5pct` is 1.05x–1.08x slower at 10M, then wins: **0.96x–0.97x** at
-  1M, **0.90x–0.91x** at 99k, **0.83x–0.94x** at 10k, and
-  **0.85x–0.86x** at 1k.
-- `1pct` is 1.07x–1.08x slower at 10M, then wins at 1M/99k/10k
-  (**0.90x–0.98x**) and at 1k (**0.89x–0.90x**).
-- `10pct` and `random` are near parity. The custom sorts are 4–6%
-  slower at 10M, within ±6% elsewhere, and `random` at 1k is the one
-  small-size loss (**1.03x–1.04x**).
-- The larger probes now find duplicates at 99k and 10k, so `0.5pct`
-  and `1pct` switch to DNF and beat `std::sort` there instead of
-  losing on Lomuto.
-- Franko vs hand-written C++ stays within about 5% on most cells; the
-  smallest duplicate-heavy rows show gaps up to 19%.
+- `0-9` wins every size: Franko is **0.62x–0.96x** and C++ is
+  **0.59x–0.90x** of `std::sort`.
+- `0.25pct`: C++ wins at 1M–1k (**0.79x–0.97x**) and loses only at 10M
+  (1.04x). Franko wins at 99k–1k (**0.79x–0.99x**) and loses at 10M/1M
+  (1.06x–1.12x).
+- `0.5pct`: C++ wins at 1M–1k (**0.87x–0.97x**) and loses at 10M
+  (1.04x). Franko wins at 10k/1k (0.87x–0.98x), ties 99k (1.00x), and
+  loses at 10M/1M (1.05x–1.14x).
+- `1pct`: C++ wins at 99k–1k (**0.89x–0.98x**) and loses at 10M/1M
+  (1.02x–1.06x). Franko wins at 10k/1k (0.90x–0.98x) and loses at
+  10M/1M/99k (1.03x–1.13x).
+- `10pct` and `random` are near parity. Both lose 10M/1M by 4–6%; the
+  small-size cells are mixed, with C++ generally closer to `std::sort`.
+- The same pivot rule now runs through DNF, Lomuto, and Hoare: first
+  partition and any `hi - lo > 10000` subrange use randomized
+  median-of-3; the rest use plain median-of-3.
+- Franko vs C++ is no longer within 5% on the hot duplicate-heavy rows:
+  C++ is faster by up to about 9% at 10M/1M/99k. Franko is faster on
+  `10k` `0-9` by about 7%.
+- All 30 cells agree across the three modes.
 
 ---
 
@@ -47,36 +49,36 @@ The short version:
 
 | size | dataset | franko-inplace | cpp-inplace | cpp-std-sort |
 | --- | --- | ---: | ---: | ---: |
-| `10M` | `0-9` | 0.121658 | **0.119057** | 0.196514 |
-| `10M` | `0.25pct` | 0.489818 | 0.489713 | **0.478536** |
-| `10M` | `0.5pct` | 0.523238 | 0.509588 | **0.483692** |
-| `10M` | `1pct` | 0.555392 | 0.550987 | **0.514083** |
-| `10M` | `10pct` | 0.615637 | 0.621422 | **0.591825** |
-| `10M` | `random` | 0.632323 | 0.626084 | **0.599399** |
-| `1M` | `0-9` | **0.011466** | 0.012192 | 0.018273 |
-| `1M` | `0.25pct` | **0.036994** | 0.037731 | 0.038648 |
-| `1M` | `0.5pct` | 0.040405 | **0.040302** | 0.041793 |
-| `1M` | `1pct` | **0.043388** | 0.043672 | 0.044361 |
-| `1M` | `10pct` | 0.054087 | 0.053249 | **0.052178** |
-| `1M` | `random` | 0.056527 | **0.054214** | 0.054651 |
-| `99k` | `0-9` | **0.001064** | 0.001093 | 0.001527 |
-| `99k` | `0.25pct` | **0.002375** | 0.002395 | 0.002654 |
-| `99k` | `0.5pct` | 0.002790 | **0.002758** | 0.003056 |
-| `99k` | `1pct` | 0.003183 | **0.003171** | 0.003322 |
-| `99k` | `10pct` | 0.004162 | 0.004180 | **0.004147** |
-| `99k` | `random` | 0.004172 | **0.004121** | 0.004178 |
-| `10k` | `0-9` | **0.000080** | 0.000099 | 0.000126 |
-| `10k` | `0.25pct` | **0.000133** | 0.000145 | 0.000175 |
-| `10k` | `0.5pct` | **0.000169** | 0.000190 | 0.000203 |
-| `10k` | `1pct` | **0.000205** | 0.000221 | 0.000227 |
-| `10k` | `10pct` | 0.000323 | **0.000321** | 0.000325 |
-| `10k` | `random` | 0.000332 | **0.000316** | 0.000336 |
-| `1k` | `0-9` | **0.0000043478** | 0.0000046220 | 0.0000053269 |
-| `1k` | `0.25pct` | **0.0000050928** | 0.0000053022 | 0.0000057434 |
-| `1k` | `0.5pct` | **0.0000051752** | 0.0000052330 | 0.0000060706 |
-| `1k` | `1pct` | **0.0000056143** | 0.0000056501 | 0.0000063090 |
-| `1k` | `10pct` | 0.0000072502 | **0.0000071072** | 0.0000072774 |
-| `1k` | `random` | 0.0000062839 | 0.0000062233 | **0.0000060583** |
+| `10M` | `0-9` | 0.120232 | **0.114584** | 0.194273 |
+| `10M` | `0.25pct` | 0.518950 | 0.480637 | **0.461737** |
+| `10M` | `0.5pct` | 0.541770 | 0.495138 | **0.475294** |
+| `10M` | `1pct` | 0.575541 | 0.536530 | **0.507512** |
+| `10M` | `10pct` | 0.623917 | 0.626242 | **0.596932** |
+| `10M` | `random` | 0.644525 | 0.636813 | **0.607677** |
+| `1M` | `0-9` | **0.011446** | 0.011498 | 0.016859 |
+| `1M` | `0.25pct` | 0.038271 | **0.035043** | 0.036173 |
+| `1M` | `0.5pct` | 0.041809 | **0.038945** | 0.040018 |
+| `1M` | `1pct` | 0.045849 | 0.042929 | **0.042130** |
+| `1M` | `10pct` | 0.051764 | 0.051430 | **0.049608** |
+| `1M` | `random` | 0.052927 | 0.052721 | **0.050873** |
+| `99k` | `0-9` | 0.001105 | **0.001063** | 0.001491 |
+| `99k` | `0.25pct` | 0.002595 | **0.002478** | 0.002703 |
+| `99k` | `0.5pct` | 0.002977 | **0.002754** | 0.002967 |
+| `99k` | `1pct` | 0.003363 | **0.003189** | 0.003264 |
+| `99k` | `10pct` | 0.004242 | **0.004061** | 0.004101 |
+| `99k` | `random` | 0.004252 | 0.004256 | **0.004085** |
+| `10k` | `0-9` | **0.000087** | 0.000094 | 0.000124 |
+| `10k` | `0.25pct` | **0.000135** | 0.000135 | 0.000171 |
+| `10k` | `0.5pct` | **0.000170** | 0.000172 | 0.000197 |
+| `10k` | `1pct` | 0.000202 | **0.000200** | 0.000224 |
+| `10k` | `10pct` | 0.000310 | **0.000303** | 0.000312 |
+| `10k` | `random` | 0.000321 | 0.000319 | **0.000317** |
+| `1k` | `0-9` | 0.0000048369 | **0.0000045426** | 0.0000050362 |
+| `1k` | `0.25pct` | 0.0000055838 | **0.0000053327** | 0.0000056267 |
+| `1k` | `0.5pct` | 0.0000057550 | **0.0000054322** | 0.0000058704 |
+| `1k` | `1pct` | 0.0000060831 | **0.0000058061** | 0.0000062203 |
+| `1k` | `10pct` | 0.0000074031 | 0.0000071717 | **0.0000070199** |
+| `1k` | `random` | 0.0000062225 | **0.0000059072** | 0.0000059150 |
 
 All per-sort means are chunk wall time divided by the repetition count.
 
@@ -84,59 +86,58 @@ All per-sort means are chunk wall time divided by the repetition count.
 
 | size | dataset | franko-inplace | cpp-inplace |
 | --- | --- | ---: | ---: |
-| `10M` | `0-9` | **0.619x** | **0.606x** |
-| `10M` | `0.25pct` | 1.024x | 1.023x |
-| `10M` | `0.5pct` | 1.082x | 1.054x |
-| `10M` | `1pct` | 1.080x | 1.072x |
-| `10M` | `10pct` | 1.040x | 1.050x |
-| `10M` | `random` | 1.055x | 1.045x |
-| `1M` | `0-9` | **0.627x** | **0.667x** |
-| `1M` | `0.25pct` | **0.957x** | **0.976x** |
-| `1M` | `0.5pct` | **0.967x** | **0.964x** |
-| `1M` | `1pct` | **0.978x** | **0.984x** |
-| `1M` | `10pct` | 1.037x | 1.021x |
-| `1M` | `random` | 1.034x | **0.992x** |
-| `99k` | `0-9` | **0.696x** | **0.716x** |
-| `99k` | `0.25pct` | **0.895x** | **0.902x** |
-| `99k` | `0.5pct` | **0.913x** | **0.902x** |
-| `99k` | `1pct` | **0.958x** | **0.955x** |
-| `99k` | `10pct` | 1.003x | 1.008x |
-| `99k` | `random` | **0.998x** | **0.986x** |
-| `10k` | `0-9` | **0.639x** | **0.788x** |
-| `10k` | `0.25pct` | **0.758x** | **0.828x** |
-| `10k` | `0.5pct` | **0.833x** | **0.936x** |
-| `10k` | `1pct` | **0.901x** | **0.974x** |
-| `10k` | `10pct` | **0.994x** | **0.986x** |
-| `10k` | `random` | **0.989x** | **0.941x** |
-| `1k` | `0-9` | **0.816x** | **0.868x** |
-| `1k` | `0.25pct` | **0.887x** | **0.923x** |
-| `1k` | `0.5pct` | **0.853x** | **0.862x** |
-| `1k` | `1pct` | **0.890x** | **0.896x** |
-| `1k` | `10pct` | **0.996x** | **0.977x** |
-| `1k` | `random` | 1.037x | 1.027x |
+| `10M` | `0-9` | 0.619x | 0.590x |
+| `10M` | `0.25pct` | 1.124x | 1.041x |
+| `10M` | `0.5pct` | 1.140x | 1.042x |
+| `10M` | `1pct` | 1.134x | 1.057x |
+| `10M` | `10pct` | 1.045x | 1.049x |
+| `10M` | `random` | 1.061x | 1.048x |
+| `1M` | `0-9` | 0.679x | 0.682x |
+| `1M` | `0.25pct` | 1.058x | 0.969x |
+| `1M` | `0.5pct` | 1.045x | 0.973x |
+| `1M` | `1pct` | 1.088x | 1.019x |
+| `1M` | `10pct` | 1.043x | 1.037x |
+| `1M` | `random` | 1.040x | 1.036x |
+| `99k` | `0-9` | 0.741x | 0.713x |
+| `99k` | `0.25pct` | 0.960x | 0.916x |
+| `99k` | `0.5pct` | 1.004x | 0.928x |
+| `99k` | `1pct` | 1.030x | 0.977x |
+| `99k` | `10pct` | 1.035x | 0.990x |
+| `99k` | `random` | 1.041x | 1.042x |
+| `10k` | `0-9` | 0.701x | 0.757x |
+| `10k` | `0.25pct` | 0.792x | 0.793x |
+| `10k` | `0.5pct` | 0.865x | 0.872x |
+| `10k` | `1pct` | 0.902x | 0.893x |
+| `10k` | `10pct` | 0.995x | 0.970x |
+| `10k` | `random` | 1.012x | 1.006x |
+| `1k` | `0-9` | 0.960x | 0.902x |
+| `1k` | `0.25pct` | 0.992x | 0.948x |
+| `1k` | `0.5pct` | 0.980x | 0.925x |
+| `1k` | `1pct` | 0.978x | 0.933x |
+| `1k` | `10pct` | 1.055x | 1.022x |
+| `1k` | `random` | 1.052x | 0.999x |
 
 A value below `1.00x` means the implementation is faster than
 `std::sort`.
 
 Key points:
 
-- **Duplicate-heavy `0-9` is a clean win at every size.** The custom
-  sorts are 1.27–1.65x faster at 10M–10k and about 1.15–1.23x faster at
-  1k.
-- **The larger probes fix the small-size duplicate rows.** With 60
-  samples at 99k and 27 at 10k, `0.5pct` and `1pct` now find duplicates
-  and switch to DNF instead of losing on Lomuto.
-- **`1M` is the crossover row.** All four duplicate-heavy percentage
-  datasets (`0.25pct` through `1pct`) now beat `std::sort`, while `10pct`
-  and `random` stay within 4%.
-- **`std::sort` remains strongest on 10M high-cardinality data.** The
-  custom sorts are 2–8% slower there.
-- **Randomized Hoare is not a universal 1k win.** It still beats
-  `std::sort` on every duplicate-heavy 1k row, but `random` at 1k is
-  now 1.03x–1.04x slower.
-- **All timing is chunk-based.** The 10M/1M rows reuse one data
-  allocation across 5/10 sorts, so they are not directly comparable to
-  the old separate-process rows.
+- **`0-9` remains a clean win at every size.** The custom sorts are
+  1.04–1.69x faster, with the narrowest margin at 1k.
+- **C++ wins most duplicate-heavy cells outside 10M.** It wins
+  `0.25pct` and `0.5pct` from 1M through 1k, and `1pct` from 99k
+  through 1k.
+- **Franko wins the smaller duplicate-heavy cells.** Its wins are
+  concentrated at 99k/10k/1k for `0.25pct`, 10k/1k for `0.5pct`, and
+  10k/1k for `1pct`.
+- **10M is still the hard row.** Every non-`0-9` dataset loses there:
+  C++ by 4–6%, Franko by 5–14%.
+- **1k is mixed but positive.** Both implementations win 4 of the 6
+  datasets; `10pct` is a small loss for both, and `random` is a Franko
+  loss while C++ is at parity.
+- **The Franko/C++ gap widened.** The generated Franko code emits the
+  pivot-position helpers as separate functions, while the hand-written
+  C++ inlines them; this is visible on the partition-heavy rows.
 
 ---
 
@@ -188,7 +189,7 @@ The preflight is tiered with half-open ranges:
 - **`20000 <= N < 40000`:** the same rule with 38 samples.
 - **`10000 <= N < 20000`:** the same rule with 27 samples.
 - **`5000 <= N < 10000`:** the same rule with 19 samples.
-- **`N < 5000`:** Hoare partitioning with a randomized pivot.
+- **`N < 5000`:** Hoare partitioning.
 
 For the estimator, let `pairs = k(k-1)/2` and let `collisions` be the
 number of equal-key sample pairs. DNF is selected when
@@ -201,10 +202,14 @@ inline; a single adjacent duplicate selects DNF. `RANDOM_PIVOTS` is a
 fixed 128-entry table, so "randomized" means pseudo-random offsets;
 runs are deterministic.
 
-DNF and Lomuto both use a randomized pivot drawn from
-`RANDOM_PIVOTS`. The cursor resets at the start of each sort and
-advances on every partition. Every path, including DNF and Hoare, runs
-with a heapsort backup after `2 * floor_log2(N)` partition levels.
+Every partition scheme uses the same pivot rule: the first partition,
+and any subrange with `hi - lo > 10000`, takes the median of three
+random positions; every other partition takes the median of `lo`,
+`mid`, and `hi`. DNF uses the selected pivot value in place, Lomuto
+swaps it to `hi`, and Hoare swaps it to `lo`. The pivot cursor resets
+at the start of each sort and advances on every random draw. Every
+path, including DNF, Lomuto, and Hoare, runs with a heapsort backup
+after `2 * floor_log2(N)` partition levels.
 
 The DNF choice for this benchmark is:
 
@@ -214,7 +219,7 @@ The DNF choice for this benchmark is:
 | `1M` | `0-9`, `0.25pct`, `0.5pct`, `1pct` | `10pct`, `random` |
 | `99k` | `0-9`, `0.25pct`, `0.5pct`, `1pct` | `10pct`, `random` |
 | `10k` | `0-9`, `0.25pct`, `0.5pct`, `1pct` | `10pct`, `random` |
-| `1k` | none | none — all use Hoare |
+| `1k` | none | none — all use Hoare median-of-3 |
 
 The five benchmark sizes exercise four of the tiers: the `m_hat`
 estimator at 10M/1M, the 60-sample probe at 99k, the 27-sample probe at
@@ -262,36 +267,36 @@ divided by `N`:
 
 | size | dataset | franko-inplace | cpp-inplace | cpp-std-sort |
 | --- | --- | ---: | ---: | ---: |
-| `10M` | `0-9` | 12.17 | **11.91** | 19.65 |
-| `10M` | `0.25pct` | 48.98 | 48.97 | **47.85** |
-| `10M` | `0.5pct` | 52.32 | 50.96 | **48.37** |
-| `10M` | `1pct` | 55.54 | 55.10 | **51.41** |
-| `10M` | `10pct` | 61.56 | 62.14 | **59.18** |
-| `10M` | `random` | 63.23 | 62.61 | **59.94** |
-| `1M` | `0-9` | **11.47** | 12.19 | 18.27 |
-| `1M` | `0.25pct` | **36.99** | 37.73 | 38.65 |
-| `1M` | `0.5pct` | 40.41 | **40.30** | 41.79 |
-| `1M` | `1pct` | **43.39** | 43.67 | 44.36 |
-| `1M` | `10pct` | 54.09 | 53.25 | **52.18** |
-| `1M` | `random` | 56.53 | **54.21** | 54.65 |
-| `99k` | `0-9` | **10.74** | 11.04 | 15.43 |
-| `99k` | `0.25pct` | **23.99** | 24.19 | 26.81 |
-| `99k` | `0.5pct` | 28.18 | **27.86** | 30.87 |
-| `99k` | `1pct` | 32.15 | **32.04** | 33.56 |
-| `99k` | `10pct` | 42.04 | 42.22 | **41.89** |
-| `99k` | `random` | 42.14 | **41.63** | 42.20 |
-| `10k` | `0-9` | **8.02** | 9.89 | 12.55 |
-| `10k` | `0.25pct` | **13.31** | 14.53 | 17.55 |
-| `10k` | `0.5pct` | **16.90** | 19.00 | 20.30 |
-| `10k` | `1pct` | **20.50** | 22.15 | 22.75 |
-| `10k` | `10pct` | 32.32 | **32.08** | 32.53 |
-| `10k` | `random` | 33.20 | **31.59** | 33.57 |
-| `1k` | `0-9` | **4.35** | 4.62 | 5.33 |
-| `1k` | `0.25pct` | **5.09** | 5.30 | 5.74 |
-| `1k` | `0.5pct` | **5.18** | 5.23 | 6.07 |
-| `1k` | `1pct` | **5.61** | 5.65 | 6.31 |
-| `1k` | `10pct` | 7.25 | **7.11** | 7.28 |
-| `1k` | `random` | 6.28 | 6.22 | **6.06** |
+| `10M` | `0-9` | 12.02 | **11.46** | 19.43 |
+| `10M` | `0.25pct` | 51.90 | 48.06 | **46.17** |
+| `10M` | `0.5pct` | 54.18 | 49.51 | **47.53** |
+| `10M` | `1pct` | 57.55 | 53.65 | **50.75** |
+| `10M` | `10pct` | 62.39 | 62.62 | **59.69** |
+| `10M` | `random` | 64.45 | 63.68 | **60.77** |
+| `1M` | `0-9` | **11.45** | 11.50 | 16.86 |
+| `1M` | `0.25pct` | 38.27 | **35.04** | 36.17 |
+| `1M` | `0.5pct` | 41.81 | **38.94** | 40.02 |
+| `1M` | `1pct` | 45.85 | 42.93 | **42.13** |
+| `1M` | `10pct` | 51.76 | 51.43 | **49.61** |
+| `1M` | `random` | 52.93 | 52.72 | **50.87** |
+| `99k` | `0-9` | 11.16 | **10.74** | 15.06 |
+| `99k` | `0.25pct` | 26.21 | **25.03** | 27.31 |
+| `99k` | `0.5pct` | 30.07 | **27.82** | 29.97 |
+| `99k` | `1pct` | 33.97 | **32.22** | 32.97 |
+| `99k` | `10pct` | 42.85 | **41.02** | 41.42 |
+| `99k` | `random` | 42.95 | 42.99 | **41.27** |
+| `10k` | `0-9` | **8.68** | 9.38 | 12.39 |
+| `10k` | `0.25pct` | **13.50** | 13.51 | 17.05 |
+| `10k` | `0.5pct` | **17.03** | 17.15 | 19.67 |
+| `10k` | `1pct` | 20.16 | **19.97** | 22.35 |
+| `10k` | `10pct` | 31.02 | **30.25** | 31.18 |
+| `10k` | `random` | 32.05 | 31.86 | **31.66** |
+| `1k` | `0-9` | 4.84 | **4.54** | 5.04 |
+| `1k` | `0.25pct` | 5.58 | **5.33** | 5.63 |
+| `1k` | `0.5pct` | 5.75 | **5.43** | 5.87 |
+| `1k` | `1pct` | 6.08 | **5.81** | 6.22 |
+| `1k` | `10pct` | 7.40 | 7.17 | **7.02** |
+| `1k` | `random` | 6.22 | **5.91** | 5.91 |
 
 The 10M/1M per-key costs are higher than the 99k/10k rows because the
 80 MB and 8 MB arrays do not fit in the same cache levels; the 1k row
@@ -305,45 +310,44 @@ Full chunk wall times and per-sort means are in Appendix A.
 
 ## 4. Analysis
 
-### 4.1 The larger probes move the DNF boundary
+### 4.1 The shared pivot rule
 
-The probe sizes and the `m_hat > 70` threshold determine the
-duplicate-heavy wins:
+The randomized median-of-3 used on the first pass and on subranges
+above 10000 costs three random draws and a few compare-swaps, but it
+gives a much better pivot than a single random draw. The plain
+median-of-3 used afterwards is cheaper and still avoids the worst
+splits.
 
-- `0-9` is DNF at every size from 10M to 10k and Hoare at 1k. It wins
-  every size, by 1.27–1.65x at 10M–10k and 1.15–1.23x at 1k.
-- `0.25pct` is DNF wherever a probe runs. At 10M it is 1.02x slower
-  than `std::sort`; at 1M it wins at 0.96x, at 99k at 0.90x, at 10k at
-  0.76x–0.83x, and at 1k the Hoare path wins at 0.89x–0.92x.
-- `0.5pct` is DNF at every size from 10M to 10k. The 60-sample probe
-  now finds duplicates at 99k, and the 27-sample probe finds them at
-  10k. That turns the old 99k/10k losses into 0.83x–0.94x wins. Only
-  10M remains a loss (1.05x–1.08x).
-- `1pct` is DNF at every size from 10M to 10k as well. The larger
-  probes find duplicates at 99k and 10k, where it now wins at
-  0.90x–0.98x. At 10M it is 1.07x–1.08x slower.
+The effect is visible in the dataset pattern:
+
+- `0-9` is DNF at 10M–10k and Hoare at 1k. It wins every size, with
+  the narrowest margin at 1k.
+- `0.25pct` is DNF at 10M–10k and Hoare at 1k. C++ wins 1M–1k;
+  Franko wins 99k–1k. The 10M row is a loss for both, and 1M is also a
+  Franko loss.
+- `0.5pct` is DNF at 10M–10k and Hoare at 1k. C++ wins 1M–1k; Franko
+  wins 10k/1k and ties 99k. C++ loses only 10M, while Franko loses
+  10M/1M.
+- `1pct` is DNF at 10M–10k and Hoare at 1k. C++ wins 99k–1k; Franko
+  wins 10k/1k. Both lose 10M/1M, and 99k is a small Franko loss.
 - `10pct` and `random` are Lomuto at 10M–10k and Hoare at 1k. They are
-  close to `std::sort`: 4–6% slower at 10M, within ±6% elsewhere, with
-  the 1k `random` row at 1.03x–1.04x.
-
-The main remaining 10M losses are the high-cardinality rows. At 10M
-there are too many distinct keys for DNF to help, and the depth guard
-keeps Lomuto on its introsort-like path.
+  near parity; the 10M/1M rows are 4–6% slower, and the small-size
+  cells are mixed.
 
 ### 4.2 All-chunk timing and run-to-run variation
 
 The 10M and 1M rows are one process per cell, with 5 or 10 sorts
 inside it and one data-vector allocation. That removes 4/9 process
 starts and repeated 80 MB/8 MB allocations per cell. The 10M `0-9`
-custom time is 0.122 s here, versus roughly 0.136 s in an earlier
+custom time is 0.12 s here, versus roughly 0.136 s in an earlier
 separate-process matrix. The comparison between modes inside this
 report is still valid, but the absolute values should not be compared
 directly to reports that timed each sort in its own process.
 
 The single-chunk design also means the absolute numbers move between
-runs with CPU state. In particular, the 10M/1M `std::sort` times in
-this run differ by a few percent from the previous matrix, which moves
-the slowdown ratios even when the custom code is unchanged.
+runs with CPU state. The 1k row is especially sensitive: its per-sort
+times are 4–7 µs and the `std::sort` reference moved by several percent
+between runs, which shifts the ratios.
 
 ### 4.3 Cache effects
 
@@ -351,45 +355,46 @@ The high-cardinality rows show the expected per-key scaling:
 
 | dataset | 10M | 1M | 99k | 10k | 1k |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `1pct` (Franko) | 55.5 ns | 43.4 ns | 32.2 ns | 20.5 ns | 5.6 ns |
-| `10pct` (Franko) | 61.6 ns | 54.1 ns | 42.0 ns | 32.3 ns | 7.3 ns |
-| `random` (Franko) | 63.2 ns | 56.5 ns | 42.1 ns | 33.2 ns | 6.3 ns |
+| `1pct` (Franko) | 57.6 ns | 45.8 ns | 34.0 ns | 20.2 ns | 6.1 ns |
+| `10pct` (Franko) | 62.4 ns | 51.8 ns | 42.9 ns | 31.0 ns | 7.4 ns |
+| `random` (Franko) | 64.5 ns | 52.9 ns | 43.0 ns | 32.1 ns | 6.2 ns |
 
 At 10M the 80 MB array exceeds L3; at 1M the 8 MB array fits in L3;
 at 99k the 0.8 MB array fits in L2; at 10k and 1k the arrays fit in
-L1/L2. The 1k row is also where the randomized Hoare path starts.
+L1/L2. The 1k row is also where the Hoare path starts.
 
 ### 4.4 Franko versus hand-written C++
 
-Franko and the C++ port stay within about 5% on most cells. The
-largest gaps are:
+The hand-written C++ port is now faster on most partition-heavy cells.
+The largest gaps are:
 
-- `10k` `0-9`: Franko 0.000080 s vs C++ 0.000099 s (Franko 19% faster);
-- `10k` `0.5pct`: Franko 0.000169 s vs C++ 0.000190 s (Franko 11% faster);
-- `10k` `0.25pct`: Franko 0.000133 s vs C++ 0.000145 s (Franko 8.4%
-  faster);
-- `10k` `1pct`: Franko 0.000205 s vs C++ 0.000221 s (Franko 7.4% faster);
-- `1M` `0-9`: Franko 0.011466 s vs C++ 0.012192 s (Franko 6.0% faster);
-- `10k` `random`: Franko 0.000332 s vs C++ 0.000316 s (C++ 4.8% faster);
-- `1M` `random`: Franko 0.056527 s vs C++ 0.054214 s (C++ 4.1% faster).
+- `10M` `0.5pct`: Franko 0.541770 s vs C++ 0.495138 s (C++ 8.6% faster);
+- `1M` `0.25pct`: Franko 0.038271 s vs C++ 0.035043 s (C++ 8.4% faster);
+- `99k` `0.5pct`: Franko 0.002977 s vs C++ 0.002754 s (C++ 7.5% faster);
+- `10M` `0.25pct`: Franko 0.518950 s vs C++ 0.480637 s (C++ 7.4% faster);
+- `1M` `0.5pct`: Franko 0.041809 s vs C++ 0.038945 s (C++ 6.8% faster);
+- `10M` `1pct`: Franko 0.575541 s vs C++ 0.536530 s (C++ 6.8% faster);
+- `10k` `0-9`: Franko 0.000087 s vs C++ 0.000094 s (Franko 7.4% faster);
+- `1k` `0-9`: Franko 0.0000048369 s vs C++ 0.0000045426 s (C++ 6.1% faster).
 
-At 1k, the timer resolution is only 1 µs, so the printed per-sort
-means are coarse; the exact chunk means keep both implementations
-within about 6%.
+The pattern is consistent with code generation: Franko emits the
+pivot-position helpers as separate generated functions, while the
+hand-written C++ inlines its `static inline` helpers. The extra call
+overhead is small per partition but visible on the 10M/1M/99k rows,
+where there are many partitions. The 1k row also shows the effect,
+though its timer resolution is coarse.
 
 ### 4.5 The algorithm versus `std::sort`
 
-- The custom sorts win every `0-9` cell, every `0.25pct`, `0.5pct`,
-  and `1pct` cell at 1M/99k/10k/1k, and are near parity on `10pct`.
-- `std::sort` wins every non-`0-9` 10M row (1.02x–1.08x) and the 1M
-  `10pct` row (1.02x–1.04x); the other high-cardinality cells are close
-  to parity.
-- The only clear small-size loss is `random` at 1k, where randomized
-  Hoare is 1.03x–1.04x slower than `std::sort`'s median-of-3 introsort.
-  The 99k `10pct` rows are within 1%.
-
-The remaining losses are small and concentrated at 10M, the 1M/99k
-`10pct` rows, and `random` at 1k.
+- The custom sorts win every `0-9` cell.
+- C++ wins `0.25pct` and `0.5pct` from 1M through 1k, and `1pct` from
+  99k through 1k.
+- Franko wins `0.25pct` at 99k–1k, `0.5pct` at 10k/1k (and ties 99k),
+  and `1pct` at 10k/1k.
+- Every non-`0-9` 10M row is a loss for both; C++ is 1.04x–1.06x and
+  Franko 1.05x–1.14x.
+- At 1k both win four of six datasets; `10pct` is a small loss for
+  both, and `random` is a Franko loss with C++ at parity.
 
 ### 4.6 Noise
 
@@ -411,6 +416,7 @@ Time:
 | --- | --- |
 | estimator preflight (`N >= 100000`) | `O(k)` sampling + `O(k log k)` index heap sort |
 | static probe (`5000 <= N < 100000`) | `O(s^2)` insertion sort with `s <= 60`, so `O(1)` |
+| pivot selection | `O(1)` per partition |
 | partitioning | `O(N log N)` expected and worst case |
 | small sorts (`<= 32` elements) | `O(1)` per leaf, `O(N)` total |
 | data generation / sortedness check / checksum (harness) | `O(N)` |
@@ -420,8 +426,9 @@ The partition stage is an introsort-style quicksort: the depth limit is
 Every level costs `O(N)` across the live subproblems, there are at most
 `O(log N)` levels, and the heapsorted subproblems are disjoint, so the
 partition stage is `O(N log N)` in the worst case. The same bound holds
-for DNF, Lomuto, and Hoare. With randomized pivots on random input, the
-expected cost is also `O(N log N)`.
+for DNF, Lomuto, and Hoare. With randomized or median-of-3 pivots on
+random input, the expected cost is also `O(N log N)`; median-of-3
+reduces the constant by making the splits more balanced.
 
 Duplicate structure only helps the partition stage. DNF removes the
 whole equal block at each partition. For the uniform-frequency datasets
@@ -430,8 +437,7 @@ depth `O(log d)`, so the partition stage costs `O(N log d)`; when all
 keys are equal it is `O(N)`. The estimator preflight is still paid:
 `O(k log k)`, which is `O(N log N)` with a `1/1000` constant in the
 uncapped range and `O(1)` once `k` hits the 65535 cap. Overall the sort
-is `O(N log N)` expected and worst case; the `0-9` rows show the
-duplicate-heavy constant-factor benefit.
+is `O(N log N)` expected and worst case.
 
 Space:
 
@@ -483,11 +489,15 @@ space.
    Absolute times are host-sensitive.
 9. **Only maximum release builds.** Franko `-Omax` and C++ `-O3`;
    checked/sanitizer builds are not included.
-10. **Binary size includes static runtimes.** Franko is 944 KB;
-    C++ in-place is 158 KB and `std::sort` 154 KB.
+10. **Binary size includes static runtimes.** Franko is 948 KB;
+    C++ in-place is 162 KB and `std::sort` 154 KB.
 11. **Tuned constants.** The estimator threshold, sample-size clamp,
     probe sizes, 32-element cutoff, and `2 * log2(N)` depth factor are
     tuned to this workload.
+12. **Generated-code helper calls.** Franko emits the pivot-position
+    helpers as separate functions; the hand-written C++ inlines them.
+    This contributes to the 4–9% Franko/C++ gap on partition-heavy
+    rows.
 
 ---
 
@@ -523,96 +533,96 @@ The harness uses 5/10/300/3000/30000 repetitions for
 
 | size | dataset | mode | chunk s | reps | mean/sort |
 | --- | --- | --- | ---: | ---: | ---: |
-| `10M` | `0-9` | franko-inplace | 0.608289 | 5 | 0.121658 |
-| `10M` | `0-9` | cpp-inplace | 0.595286 | 5 | 0.119057 |
-| `10M` | `0-9` | cpp-std-sort | 0.982571 | 5 | 0.196514 |
-| `10M` | `0.25pct` | franko-inplace | 2.449091 | 5 | 0.489818 |
-| `10M` | `0.25pct` | cpp-inplace | 2.448567 | 5 | 0.489713 |
-| `10M` | `0.25pct` | cpp-std-sort | 2.392678 | 5 | 0.478536 |
-| `10M` | `0.5pct` | franko-inplace | 2.616190 | 5 | 0.523238 |
-| `10M` | `0.5pct` | cpp-inplace | 2.547938 | 5 | 0.509588 |
-| `10M` | `0.5pct` | cpp-std-sort | 2.418461 | 5 | 0.483692 |
-| `10M` | `1pct` | franko-inplace | 2.776959 | 5 | 0.555392 |
-| `10M` | `1pct` | cpp-inplace | 2.754937 | 5 | 0.550987 |
-| `10M` | `1pct` | cpp-std-sort | 2.570415 | 5 | 0.514083 |
-| `10M` | `10pct` | franko-inplace | 3.078186 | 5 | 0.615637 |
-| `10M` | `10pct` | cpp-inplace | 3.107109 | 5 | 0.621422 |
-| `10M` | `10pct` | cpp-std-sort | 2.959124 | 5 | 0.591825 |
-| `10M` | `random` | franko-inplace | 3.161617 | 5 | 0.632323 |
-| `10M` | `random` | cpp-inplace | 3.130418 | 5 | 0.626084 |
-| `10M` | `random` | cpp-std-sort | 2.996993 | 5 | 0.599399 |
-| `1M` | `0-9` | franko-inplace | 0.114662 | 10 | 0.011466 |
-| `1M` | `0-9` | cpp-inplace | 0.121922 | 10 | 0.012192 |
-| `1M` | `0-9` | cpp-std-sort | 0.182732 | 10 | 0.018273 |
-| `1M` | `0.25pct` | franko-inplace | 0.369936 | 10 | 0.036994 |
-| `1M` | `0.25pct` | cpp-inplace | 0.377309 | 10 | 0.037731 |
-| `1M` | `0.25pct` | cpp-std-sort | 0.386479 | 10 | 0.038648 |
-| `1M` | `0.5pct` | franko-inplace | 0.404051 | 10 | 0.040405 |
-| `1M` | `0.5pct` | cpp-inplace | 0.403016 | 10 | 0.040302 |
-| `1M` | `0.5pct` | cpp-std-sort | 0.417928 | 10 | 0.041793 |
-| `1M` | `1pct` | franko-inplace | 0.433879 | 10 | 0.043388 |
-| `1M` | `1pct` | cpp-inplace | 0.436725 | 10 | 0.043672 |
-| `1M` | `1pct` | cpp-std-sort | 0.443609 | 10 | 0.044361 |
-| `1M` | `10pct` | franko-inplace | 0.540870 | 10 | 0.054087 |
-| `1M` | `10pct` | cpp-inplace | 0.532493 | 10 | 0.053249 |
-| `1M` | `10pct` | cpp-std-sort | 0.521778 | 10 | 0.052178 |
-| `1M` | `random` | franko-inplace | 0.565272 | 10 | 0.056527 |
-| `1M` | `random` | cpp-inplace | 0.542143 | 10 | 0.054214 |
-| `1M` | `random` | cpp-std-sort | 0.546508 | 10 | 0.054651 |
-| `99k` | `0-9` | franko-inplace | 0.319088 | 300 | 0.001064 |
-| `99k` | `0-9` | cpp-inplace | 0.327929 | 300 | 0.001093 |
-| `99k` | `0-9` | cpp-std-sort | 0.458158 | 300 | 0.001527 |
-| `99k` | `0.25pct` | franko-inplace | 0.712480 | 300 | 0.002375 |
-| `99k` | `0.25pct` | cpp-inplace | 0.718538 | 300 | 0.002395 |
-| `99k` | `0.25pct` | cpp-std-sort | 0.796299 | 300 | 0.002654 |
-| `99k` | `0.5pct` | franko-inplace | 0.837088 | 300 | 0.002790 |
-| `99k` | `0.5pct` | cpp-inplace | 0.827320 | 300 | 0.002758 |
-| `99k` | `0.5pct` | cpp-std-sort | 0.916856 | 300 | 0.003056 |
-| `99k` | `1pct` | franko-inplace | 0.954785 | 300 | 0.003183 |
-| `99k` | `1pct` | cpp-inplace | 0.951440 | 300 | 0.003171 |
-| `99k` | `1pct` | cpp-std-sort | 0.996612 | 300 | 0.003322 |
-| `99k` | `10pct` | franko-inplace | 1.248481 | 300 | 0.004162 |
-| `99k` | `10pct` | cpp-inplace | 1.254013 | 300 | 0.004180 |
-| `99k` | `10pct` | cpp-std-sort | 1.244153 | 300 | 0.004147 |
-| `99k` | `random` | franko-inplace | 1.251581 | 300 | 0.004172 |
-| `99k` | `random` | cpp-inplace | 1.236374 | 300 | 0.004121 |
-| `99k` | `random` | cpp-std-sort | 1.253467 | 300 | 0.004178 |
-| `10k` | `0-9` | franko-inplace | 0.240709 | 3000 | 0.000080 |
-| `10k` | `0-9` | cpp-inplace | 0.296687 | 3000 | 0.000099 |
-| `10k` | `0-9` | cpp-std-sort | 0.376609 | 3000 | 0.000126 |
-| `10k` | `0.25pct` | franko-inplace | 0.399219 | 3000 | 0.000133 |
-| `10k` | `0.25pct` | cpp-inplace | 0.435891 | 3000 | 0.000145 |
-| `10k` | `0.25pct` | cpp-std-sort | 0.526485 | 3000 | 0.000175 |
-| `10k` | `0.5pct` | franko-inplace | 0.506939 | 3000 | 0.000169 |
-| `10k` | `0.5pct` | cpp-inplace | 0.569862 | 3000 | 0.000190 |
-| `10k` | `0.5pct` | cpp-std-sort | 0.608912 | 3000 | 0.000203 |
-| `10k` | `1pct` | franko-inplace | 0.615065 | 3000 | 0.000205 |
-| `10k` | `1pct` | cpp-inplace | 0.664373 | 3000 | 0.000221 |
-| `10k` | `1pct` | cpp-std-sort | 0.682365 | 3000 | 0.000227 |
-| `10k` | `10pct` | franko-inplace | 0.969581 | 3000 | 0.000323 |
-| `10k` | `10pct` | cpp-inplace | 0.962495 | 3000 | 0.000321 |
-| `10k` | `10pct` | cpp-std-sort | 0.975783 | 3000 | 0.000325 |
-| `10k` | `random` | franko-inplace | 0.995943 | 3000 | 0.000332 |
-| `10k` | `random` | cpp-inplace | 0.947755 | 3000 | 0.000316 |
-| `10k` | `random` | cpp-std-sort | 1.007136 | 3000 | 0.000336 |
-| `1k` | `0-9` | franko-inplace | 0.130433 | 30000 | 0.0000043478 |
-| `1k` | `0-9` | cpp-inplace | 0.138659 | 30000 | 0.0000046220 |
-| `1k` | `0-9` | cpp-std-sort | 0.159807 | 30000 | 0.0000053269 |
-| `1k` | `0.25pct` | franko-inplace | 0.152785 | 30000 | 0.0000050928 |
-| `1k` | `0.25pct` | cpp-inplace | 0.159065 | 30000 | 0.0000053022 |
-| `1k` | `0.25pct` | cpp-std-sort | 0.172302 | 30000 | 0.0000057434 |
-| `1k` | `0.5pct` | franko-inplace | 0.155256 | 30000 | 0.0000051752 |
-| `1k` | `0.5pct` | cpp-inplace | 0.156990 | 30000 | 0.0000052330 |
-| `1k` | `0.5pct` | cpp-std-sort | 0.182118 | 30000 | 0.0000060706 |
-| `1k` | `1pct` | franko-inplace | 0.168429 | 30000 | 0.0000056143 |
-| `1k` | `1pct` | cpp-inplace | 0.169503 | 30000 | 0.0000056501 |
-| `1k` | `1pct` | cpp-std-sort | 0.189271 | 30000 | 0.0000063090 |
-| `1k` | `10pct` | franko-inplace | 0.217506 | 30000 | 0.0000072502 |
-| `1k` | `10pct` | cpp-inplace | 0.213216 | 30000 | 0.0000071072 |
-| `1k` | `10pct` | cpp-std-sort | 0.218322 | 30000 | 0.0000072774 |
-| `1k` | `random` | franko-inplace | 0.188516 | 30000 | 0.0000062839 |
-| `1k` | `random` | cpp-inplace | 0.186700 | 30000 | 0.0000062233 |
-| `1k` | `random` | cpp-std-sort | 0.181750 | 30000 | 0.0000060583 |
+| `10M` | `0-9` | franko-inplace | 0.601162 | 5 | 0.120232 |
+| `10M` | `0-9` | cpp-inplace | 0.572918 | 5 | 0.114584 |
+| `10M` | `0-9` | cpp-std-sort | 0.971363 | 5 | 0.194273 |
+| `10M` | `0.25pct` | franko-inplace | 2.594752 | 5 | 0.518950 |
+| `10M` | `0.25pct` | cpp-inplace | 2.403187 | 5 | 0.480637 |
+| `10M` | `0.25pct` | cpp-std-sort | 2.308687 | 5 | 0.461737 |
+| `10M` | `0.5pct` | franko-inplace | 2.708850 | 5 | 0.541770 |
+| `10M` | `0.5pct` | cpp-inplace | 2.475691 | 5 | 0.495138 |
+| `10M` | `0.5pct` | cpp-std-sort | 2.376469 | 5 | 0.475294 |
+| `10M` | `1pct` | franko-inplace | 2.877704 | 5 | 0.575541 |
+| `10M` | `1pct` | cpp-inplace | 2.682648 | 5 | 0.536530 |
+| `10M` | `1pct` | cpp-std-sort | 2.537558 | 5 | 0.507512 |
+| `10M` | `10pct` | franko-inplace | 3.119586 | 5 | 0.623917 |
+| `10M` | `10pct` | cpp-inplace | 3.131208 | 5 | 0.626242 |
+| `10M` | `10pct` | cpp-std-sort | 2.984662 | 5 | 0.596932 |
+| `10M` | `random` | franko-inplace | 3.222624 | 5 | 0.644525 |
+| `10M` | `random` | cpp-inplace | 3.184065 | 5 | 0.636813 |
+| `10M` | `random` | cpp-std-sort | 3.038387 | 5 | 0.607677 |
+| `1M` | `0-9` | franko-inplace | 0.114459 | 10 | 0.011446 |
+| `1M` | `0-9` | cpp-inplace | 0.114980 | 10 | 0.011498 |
+| `1M` | `0-9` | cpp-std-sort | 0.168593 | 10 | 0.016859 |
+| `1M` | `0.25pct` | franko-inplace | 0.382708 | 10 | 0.038271 |
+| `1M` | `0.25pct` | cpp-inplace | 0.350431 | 10 | 0.035043 |
+| `1M` | `0.25pct` | cpp-std-sort | 0.361732 | 10 | 0.036173 |
+| `1M` | `0.5pct` | franko-inplace | 0.418087 | 10 | 0.041809 |
+| `1M` | `0.5pct` | cpp-inplace | 0.389446 | 10 | 0.038945 |
+| `1M` | `0.5pct` | cpp-std-sort | 0.400182 | 10 | 0.040018 |
+| `1M` | `1pct` | franko-inplace | 0.458485 | 10 | 0.045848 |
+| `1M` | `1pct` | cpp-inplace | 0.429286 | 10 | 0.042929 |
+| `1M` | `1pct` | cpp-std-sort | 0.421295 | 10 | 0.042129 |
+| `1M` | `10pct` | franko-inplace | 0.517641 | 10 | 0.051764 |
+| `1M` | `10pct` | cpp-inplace | 0.514297 | 10 | 0.051430 |
+| `1M` | `10pct` | cpp-std-sort | 0.496085 | 10 | 0.049608 |
+| `1M` | `random` | franko-inplace | 0.529265 | 10 | 0.052927 |
+| `1M` | `random` | cpp-inplace | 0.527209 | 10 | 0.052721 |
+| `1M` | `random` | cpp-std-sort | 0.508726 | 10 | 0.050873 |
+| `99k` | `0-9` | franko-inplace | 0.331491 | 300 | 0.001105 |
+| `99k` | `0-9` | cpp-inplace | 0.318972 | 300 | 0.001063 |
+| `99k` | `0-9` | cpp-std-sort | 0.447379 | 300 | 0.001491 |
+| `99k` | `0.25pct` | franko-inplace | 0.778371 | 300 | 0.002595 |
+| `99k` | `0.25pct` | cpp-inplace | 0.743252 | 300 | 0.002478 |
+| `99k` | `0.25pct` | cpp-std-sort | 0.811024 | 300 | 0.002703 |
+| `99k` | `0.5pct` | franko-inplace | 0.893118 | 300 | 0.002977 |
+| `99k` | `0.5pct` | cpp-inplace | 0.826245 | 300 | 0.002754 |
+| `99k` | `0.5pct` | cpp-std-sort | 0.889968 | 300 | 0.002967 |
+| `99k` | `1pct` | franko-inplace | 1.008886 | 300 | 0.003363 |
+| `99k` | `1pct` | cpp-inplace | 0.956849 | 300 | 0.003189 |
+| `99k` | `1pct` | cpp-std-sort | 0.979338 | 300 | 0.003264 |
+| `99k` | `10pct` | franko-inplace | 1.272697 | 300 | 0.004242 |
+| `99k` | `10pct` | cpp-inplace | 1.218399 | 300 | 0.004061 |
+| `99k` | `10pct` | cpp-std-sort | 1.230229 | 300 | 0.004101 |
+| `99k` | `random` | franko-inplace | 1.275627 | 300 | 0.004252 |
+| `99k` | `random` | cpp-inplace | 1.276695 | 300 | 0.004256 |
+| `99k` | `random` | cpp-std-sort | 1.225610 | 300 | 0.004085 |
+| `10k` | `0-9` | franko-inplace | 0.260459 | 3000 | 0.000087 |
+| `10k` | `0-9` | cpp-inplace | 0.281336 | 3000 | 0.000094 |
+| `10k` | `0-9` | cpp-std-sort | 0.371606 | 3000 | 0.000124 |
+| `10k` | `0.25pct` | franko-inplace | 0.404950 | 3000 | 0.000135 |
+| `10k` | `0.25pct` | cpp-inplace | 0.405443 | 3000 | 0.000135 |
+| `10k` | `0.25pct` | cpp-std-sort | 0.511530 | 3000 | 0.000171 |
+| `10k` | `0.5pct` | franko-inplace | 0.510750 | 3000 | 0.000170 |
+| `10k` | `0.5pct` | cpp-inplace | 0.514633 | 3000 | 0.000172 |
+| `10k` | `0.5pct` | cpp-std-sort | 0.590239 | 3000 | 0.000197 |
+| `10k` | `1pct` | franko-inplace | 0.604926 | 3000 | 0.000202 |
+| `10k` | `1pct` | cpp-inplace | 0.598951 | 3000 | 0.000200 |
+| `10k` | `1pct` | cpp-std-sort | 0.670622 | 3000 | 0.000224 |
+| `10k` | `10pct` | franko-inplace | 0.930678 | 3000 | 0.000310 |
+| `10k` | `10pct` | cpp-inplace | 0.907581 | 3000 | 0.000303 |
+| `10k` | `10pct` | cpp-std-sort | 0.935330 | 3000 | 0.000312 |
+| `10k` | `random` | franko-inplace | 0.961547 | 3000 | 0.000321 |
+| `10k` | `random` | cpp-inplace | 0.955803 | 3000 | 0.000319 |
+| `10k` | `random` | cpp-std-sort | 0.949778 | 3000 | 0.000317 |
+| `1k` | `0-9` | franko-inplace | 0.145108 | 30000 | 0.0000050000 |
+| `1k` | `0-9` | cpp-inplace | 0.136278 | 30000 | 0.0000050000 |
+| `1k` | `0-9` | cpp-std-sort | 0.151085 | 30000 | 0.0000050000 |
+| `1k` | `0.25pct` | franko-inplace | 0.167514 | 30000 | 0.0000060000 |
+| `1k` | `0.25pct` | cpp-inplace | 0.159982 | 30000 | 0.0000050000 |
+| `1k` | `0.25pct` | cpp-std-sort | 0.168801 | 30000 | 0.0000060000 |
+| `1k` | `0.5pct` | franko-inplace | 0.172650 | 30000 | 0.0000060000 |
+| `1k` | `0.5pct` | cpp-inplace | 0.162966 | 30000 | 0.0000050000 |
+| `1k` | `0.5pct` | cpp-std-sort | 0.176113 | 30000 | 0.0000060000 |
+| `1k` | `1pct` | franko-inplace | 0.182492 | 30000 | 0.0000060000 |
+| `1k` | `1pct` | cpp-inplace | 0.174183 | 30000 | 0.0000060000 |
+| `1k` | `1pct` | cpp-std-sort | 0.186608 | 30000 | 0.0000060000 |
+| `1k` | `10pct` | franko-inplace | 0.222094 | 30000 | 0.0000070000 |
+| `1k` | `10pct` | cpp-inplace | 0.215150 | 30000 | 0.0000070000 |
+| `1k` | `10pct` | cpp-std-sort | 0.210596 | 30000 | 0.0000070000 |
+| `1k` | `random` | franko-inplace | 0.186674 | 30000 | 0.0000060000 |
+| `1k` | `random` | cpp-inplace | 0.177217 | 30000 | 0.0000060000 |
+| `1k` | `random` | cpp-std-sort | 0.177449 | 30000 | 0.0000060000 |
 
 ## Appendix B: checksums
 
