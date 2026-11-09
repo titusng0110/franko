@@ -11,11 +11,14 @@ using i64 = std::int64_t;
 
 static constexpr u32 NETWORK_LIMIT = 8;
 static constexpr u32 SMALL_SORT_LIMIT = 32;
-static constexpr u32 DNF_THRESHOLD = 60;
-static constexpr u32 LOMUTO_MAX_ITEMS = 100000;
-static constexpr u32 SAMPLE31_MIN_ITEMS = 20000;
-static constexpr u32 SAMPLE15_MIN_ITEMS = 2000;
-static constexpr u32 DEPTH_UNLIMITED = 0xFFFFFFFFu;
+static constexpr u32 DNF_THRESHOLD = 70;
+static constexpr u32 MHAT_MIN_ITEMS = 100000;
+static constexpr u32 MHAT_SAMPLE_MIN = 100;
+static constexpr u32 MHAT_SAMPLE_MAX = 65535;
+static constexpr u32 PROBE60_MIN_ITEMS = 40000;
+static constexpr u32 PROBE38_MIN_ITEMS = 20000;
+static constexpr u32 PROBE27_MIN_ITEMS = 10000;
+static constexpr u32 PROBE19_MIN_ITEMS = 5000;
 
 static constexpr u32 RANDOM_PIVOTS[128] = {
     0x5694C774u, 0xBCF2DC90u, 0xC22D6ECFu, 0x82DF89C3u, 0x2E5D3BB4u, 0x11754AC0u, 0x68E420EEu, 0xD2794F96u,
@@ -314,18 +317,13 @@ static u32 partition_lomuto(i64* v, u32 lo, u32 hi) {
     return store;
 }
 
-static u32 partition_hoare_median3(i64* v, u32 lo, u32 hi) {
-    u32 mid = lo + (hi - lo) / 2;
-    if (v[mid] < v[lo]) {
-        std::swap(v[mid], v[lo]);
-    }
-    if (v[hi] < v[mid]) {
-        std::swap(v[hi], v[mid]);
-    }
-    if (v[mid] < v[lo]) {
-        std::swap(v[mid], v[lo]);
-    }
-    std::swap(v[mid], v[lo]);
+static u32 partition_hoare_random(i64* v, u32 lo, u32 hi) {
+    u32 count = hi - lo + 1;
+    u32 sample = RANDOM_PIVOTS[pivot_cursor & 127];
+    u64 scaled = static_cast<u64>(sample) * static_cast<u64>(count);
+    u32 pivot_pos = lo + static_cast<u32>(scaled >> 32);
+    ++pivot_cursor;
+    std::swap(v[pivot_pos], v[lo]);
 
     i64 pivot = v[lo];
     u32 i = lo;
@@ -489,14 +487,14 @@ static u32 floor_log2(u32 n) {
     return r;
 }
 
-// Fixed-size duplicate probes for the 2k-100k ranges.
-static bool sample_has_duplicates_31(const i64* v, u32 count) {
-    i64 sample[31];
-    u32 step = count / 31;
+// Fixed-size randomized static probe: one random offset per equal segment.
+static bool sample_has_duplicates(const i64* v, u32 count, u32 sample_size) {
+    i64 sample[60];
+    u32 step = count / sample_size;
     if (step == 0) {
         step = 1;
     }
-    for (u32 j = 0; j < 31; ++j) {
+    for (u32 j = 0; j < sample_size; ++j) {
         u32 block_start = j * step;
         u32 remaining = count - block_start;
         u32 span = step < remaining ? step : remaining;
@@ -507,43 +505,7 @@ static bool sample_has_duplicates_31(const i64* v, u32 count) {
         u32 offset = static_cast<u32>(scaled >> 32);
         sample[j] = v[block_start + offset];
     }
-    for (u32 i = 1; i < 31; ++i) {
-        i64 key = sample[i];
-        u32 j = i;
-        while (j > 0 && key < sample[j - 1]) {
-            sample[j] = sample[j - 1];
-            --j;
-        }
-        if (j > 0) {
-            i64 prev = sample[j - 1];
-            bool same = !(prev < key) && !(key < prev);
-            if (same) {
-                return true;
-            }
-        }
-        sample[j] = key;
-    }
-    return false;
-}
-
-static bool sample_has_duplicates_15(const i64* v, u32 count) {
-    i64 sample[15];
-    u32 step = count / 15;
-    if (step == 0) {
-        step = 1;
-    }
-    for (u32 j = 0; j < 15; ++j) {
-        u32 block_start = j * step;
-        u32 remaining = count - block_start;
-        u32 span = step < remaining ? step : remaining;
-        u32 r = RANDOM_PIVOTS[j & 127];
-        r ^= j * 0x9E3779B9u;
-        r ^= r >> 16;
-        u64 scaled = static_cast<u64>(r) * static_cast<u64>(span);
-        u32 offset = static_cast<u32>(scaled >> 32);
-        sample[j] = v[block_start + offset];
-    }
-    for (u32 i = 1; i < 15; ++i) {
+    for (u32 i = 1; i < sample_size; ++i) {
         i64 key = sample[i];
         u32 j = i;
         while (j > 0 && key < sample[j - 1]) {
@@ -572,8 +534,10 @@ static inline bool equivalent(i64 a, i64 b) {
 // RANDOM_PIVOTS for cheap stratified offsets.
 static bool estimate_use_dnf(const i64* v, u32 count) {
     u32 k = count / 1000;
-    if (k < 2) {
-        return false;
+    if (k < MHAT_SAMPLE_MIN) {
+        k = MHAT_SAMPLE_MIN;
+    } else if (k > MHAT_SAMPLE_MAX) {
+        k = MHAT_SAMPLE_MAX;
     }
 
     u32* sample = new u32[k];
@@ -628,21 +592,27 @@ static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
         }
 
         if (use_dnf != 0) {
+            if (depth == 0) {
+                heap_sort_values(v, lo, count);
+                return;
+            }
             Bounds bounds = partition_dnf(v, lo, hi);
             u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
             u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    quicksort(v, bounds.gt + 1, hi, depth);
+                    quicksort(v, bounds.gt + 1, hi, depth - 1);
                 }
+                --depth;
                 hi = bounds.lt - 1;
             } else {
                 if (left_count > 0) {
-                    quicksort(v, lo, bounds.lt - 1, depth);
+                    quicksort(v, lo, bounds.lt - 1, depth - 1);
                 }
                 if (right_count == 0) {
                     return;
                 }
+                --depth;
                 lo = bounds.gt + 1;
             }
         } else {
@@ -670,7 +640,7 @@ static void quicksort(i64* v, u32 lo, u32 hi, u32 depth) {
     }
 }
 
-static void quicksort_hoare(i64* v, u32 lo, u32 hi) {
+static void quicksort_hoare(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
         if (count <= SMALL_SORT_LIMIT) {
@@ -681,7 +651,11 @@ static void quicksort_hoare(i64* v, u32 lo, u32 hi) {
             }
             return;
         }
-        u32 split = partition_hoare_median3(v, lo, hi);
+        if (depth == 0) {
+            heap_sort_values(v, lo, count);
+            return;
+        }
+        u32 split = partition_hoare_random(v, lo, hi);
         if (split >= hi) {
             heap_sort_values(v, lo, count);
             return;
@@ -690,15 +664,16 @@ static void quicksort_hoare(i64* v, u32 lo, u32 hi) {
         u32 right_count = hi - split;
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_hoare(v, split + 1, hi);
+                quicksort_hoare(v, split + 1, hi, depth - 1);
             }
             hi = split;
         } else {
             if (left_count > 0) {
-                quicksort_hoare(v, lo, split);
+                quicksort_hoare(v, lo, split, depth - 1);
             }
             lo = split + 1;
         }
+        --depth;
     }
 }
 
@@ -772,25 +747,26 @@ int main(int argc, char** argv) {
 
         bool already_sorted = is_sorted(values.data(), 0, count - 1);
         if (!already_sorted) {
-            use_dnf = 0;
-            if (count >= LOMUTO_MAX_ITEMS) {
-                use_dnf = estimate_use_dnf(values.data(), count) ? 1 : 0;
-            } else if (count >= SAMPLE31_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates_31(values.data(), count) ? 1 : 0;
-            } else if (count >= SAMPLE15_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates_15(values.data(), count) ? 1 : 0;
-            }
             pivot_cursor = 0;
-            if (count < SAMPLE15_MIN_ITEMS) {
-                quicksort_hoare(values.data(), 0, count - 1);
-            } else if (count < SAMPLE31_MIN_ITEMS) {
-                u32 depth = 2 * floor_log2(count);
+            u32 depth = 2 * floor_log2(count);
+            if (count >= MHAT_MIN_ITEMS) {
+                use_dnf = estimate_use_dnf(values.data(), count) ? 1 : 0;
                 quicksort(values.data(), 0, count - 1, depth);
-            } else if (count < LOMUTO_MAX_ITEMS) {
-                u32 depth = (7 * floor_log2(count)) / 4;
+            } else if (count >= PROBE60_MIN_ITEMS) {
+                use_dnf = sample_has_duplicates(values.data(), count, 60) ? 1 : 0;
+                quicksort(values.data(), 0, count - 1, depth);
+            } else if (count >= PROBE38_MIN_ITEMS) {
+                use_dnf = sample_has_duplicates(values.data(), count, 38) ? 1 : 0;
+                quicksort(values.data(), 0, count - 1, depth);
+            } else if (count >= PROBE27_MIN_ITEMS) {
+                use_dnf = sample_has_duplicates(values.data(), count, 27) ? 1 : 0;
+                quicksort(values.data(), 0, count - 1, depth);
+            } else if (count >= PROBE19_MIN_ITEMS) {
+                use_dnf = sample_has_duplicates(values.data(), count, 19) ? 1 : 0;
                 quicksort(values.data(), 0, count - 1, depth);
             } else {
-                quicksort(values.data(), 0, count - 1, DEPTH_UNLIMITED);
+                use_dnf = 0;
+                quicksort_hoare(values.data(), 0, count - 1, depth);
             }
         }
 
