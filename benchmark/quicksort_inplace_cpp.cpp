@@ -10,15 +10,17 @@ using u64 = std::uint64_t;
 using i64 = std::int64_t;
 
 static constexpr u32 NETWORK_LIMIT = 8;
-static constexpr u32 SMALL_SORT_LIMIT = 32;
+static constexpr u32 SMALL_SORT_LIMIT = 24;
 static constexpr u32 DNF_THRESHOLD = 70;
 static constexpr u32 MHAT_MIN_ITEMS = 100000;
 static constexpr u32 MHAT_SAMPLE_MIN = 100;
-static constexpr u32 MHAT_SAMPLE_MAX = 65535;
-static constexpr u32 PROBE60_MIN_ITEMS = 40000;
-static constexpr u32 PROBE38_MIN_ITEMS = 20000;
-static constexpr u32 PROBE27_MIN_ITEMS = 10000;
-static constexpr u32 PROBE19_MIN_ITEMS = 5000;
+static constexpr u32 MHAT_SAMPLE_MAX = 20000;
+static constexpr u32 PROBE22_MIN_ITEMS = 6941;
+static constexpr u32 PROBE16_MIN_ITEMS = 4000;
+static constexpr u32 PROBE64_MIN_ITEMS = 58603;
+static constexpr u32 PROBE49_MIN_ITEMS = 34364;
+static constexpr u32 PROBE37_MIN_ITEMS = 19604;
+static constexpr u32 PROBE29_MIN_ITEMS = 12050;
 
 static constexpr u32 RANDOM_PIVOTS[128] = {
     0x5694C774u, 0xBCF2DC90u, 0xC22D6ECFu, 0x82DF89C3u, 0x2E5D3BB4u, 0x11754AC0u, 0x68E420EEu, 0xD2794F96u,
@@ -43,10 +45,6 @@ static u32 pivot_cursor = 0;
 static u32 use_dnf = 0;
 static i64 sample_pivot = 0;
 static u32 sample_pivot_pos = 0;
-static u32 sample_pivot_low_pos = 0;
-static u32 sample_pivot_high_pos = 0;
-static i64 sample_pivot_low = 0;
-static i64 sample_pivot_high = 0;
 
 static void sort_network(i64* v, u32 lo, u32 n) {
     if (n < 2) {
@@ -302,28 +300,23 @@ struct Bounds {
     u32 gt;
 };
 
-static inline u32 median3_pivot_pos(i64* v, u32 lo, u32 hi);
-static inline u32 random_median3_pivot_pos(i64* v, u32 lo, u32 hi);
-
 static inline u32 next_random_word() {
     u32 r = RANDOM_PIVOTS[pivot_cursor & 127];
     ++pivot_cursor;
     return r;
 }
 
-static __attribute__((noinline)) u32
-median3_partition_lt_5k(i64* v, u32 lo, u32 hi) {
-    u32 mid = lo + (hi - lo) / 2;
-    if (v[lo] < v[mid]) {
-        std::swap(v[lo], v[mid]);
-    }
-    if (v[hi] < v[lo]) {
-        std::swap(v[hi], v[lo]);
-    }
-    if (v[lo] < v[mid]) {
-        std::swap(v[lo], v[mid]);
-    }
+static inline u32 get_random_pivot_pos(u32 lo, u32 hi) {
+    u32 count = hi - lo + 1;
+    u32 offset = static_cast<u32>(
+        (static_cast<u64>(next_random_word()) * count) >> 32);
+    return lo + offset;
+}
 
+static __attribute__((noinline)) u32
+random_partition_lt_4k(i64* v, u32 lo, u32 hi) {
+    u32 pivot_pos = get_random_pivot_pos(lo, hi);
+    std::swap(v[pivot_pos], v[lo]);
     i64 pivot = v[lo];
     u32 i = lo;
     u32 j = hi;
@@ -343,8 +336,7 @@ median3_partition_lt_5k(i64* v, u32 lo, u32 hi) {
     }
 }
 
-static Bounds first_partition_lt_100k_dnf(i64* v, u32 lo, u32 hi,
-                                          i64 pivot) {
+static Bounds partition_dnf_kernel(i64* v, u32 lo, u32 hi, i64 pivot) {
     u32 lt = lo;
     u32 i = lo;
     u32 gt = hi;
@@ -364,212 +356,40 @@ static Bounds first_partition_lt_100k_dnf(i64* v, u32 lo, u32 hi,
     return {lt, gt};
 }
 
-static u32 first_partition_lt_100k_lomuto(i64* v, u32 lo, u32 hi,
-                                          u32 pivot_pos) {
+static u32 partition_lomuto_kernel(i64* v, u32 lo, u32 hi) {
+    i64 pivot_key = v[hi];
+    u32 store = lo;
+    for (u32 i = lo; i < hi; ++i) {
+        if (v[i] < pivot_key) {
+            std::swap(v[store], v[i]);
+            ++store;
+        }
+    }
+    std::swap(v[store], v[hi]);
+    return store;
+}
+
+static u32 partition_lomuto_at(i64* v, u32 lo, u32 hi, u32 pivot_pos) {
     std::swap(v[pivot_pos], v[hi]);
-    i64 pivot_key = v[hi];
-    u32 store = lo;
-    for (u32 i = lo; i < hi; ++i) {
-        if (v[i] < pivot_key) {
-            std::swap(v[store], v[i]);
-            ++store;
-        }
-    }
-    std::swap(v[store], v[hi]);
-    return store;
+    return partition_lomuto_kernel(v, lo, hi);
 }
 
-static Bounds random_partition_lt_100k_dnf(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
-    u32 offset = static_cast<u32>(
-        (static_cast<u64>(next_random_word()) * count) >> 32);
-    i64 pivot = v[lo + offset];
-    u32 lt = lo;
-    u32 i = lo;
-    u32 gt = hi;
-    while (i <= gt) {
-        i64 key = v[i];
-        if (key < pivot) {
-            std::swap(v[lt], v[i]);
-            ++lt;
-            ++i;
-        } else if (pivot < key) {
-            std::swap(v[i], v[gt]);
-            --gt;
-        } else {
-            ++i;
-        }
-    }
-    return {lt, gt};
+static Bounds first_partition_ge_4k_dnf(i64* v, u32 lo, u32 hi,
+                                        i64 pivot) {
+    return partition_dnf_kernel(v, lo, hi, pivot);
 }
 
-static u32 random_partition_lt_100k_lomuto(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
-    u32 offset = static_cast<u32>(
-        (static_cast<u64>(next_random_word()) * count) >> 32);
-    std::swap(v[lo + offset], v[hi]);
-    i64 pivot_key = v[hi];
-    u32 store = lo;
-    for (u32 i = lo; i < hi; ++i) {
-        if (v[i] < pivot_key) {
-            std::swap(v[store], v[i]);
-            ++store;
-        }
-    }
-    std::swap(v[store], v[hi]);
-    return store;
+static u32 first_partition_ge_4k_lomuto(i64* v, u32 lo, u32 hi,
+                                        u32 pivot_pos) {
+    return partition_lomuto_at(v, lo, hi, pivot_pos);
 }
 
-static Bounds first_partition_gt_100k_dnf(i64* v, u32 lo, u32 hi,
-                                          i64 pivot) {
-    u32 lt = lo;
-    u32 i = lo;
-    u32 gt = hi;
-    while (i <= gt) {
-        i64 key = v[i];
-        if (key < pivot) {
-            std::swap(v[lt], v[i]);
-            ++lt;
-            ++i;
-        } else if (pivot < key) {
-            std::swap(v[i], v[gt]);
-            --gt;
-        } else {
-            ++i;
-        }
-    }
-    return {lt, gt};
+static Bounds random_partition_ge_4k_dnf(i64* v, u32 lo, u32 hi) {
+    return partition_dnf_kernel(v, lo, hi, v[get_random_pivot_pos(lo, hi)]);
 }
 
-static u32 first_partition_gt_100k_lomuto(i64* v, u32 lo, u32 hi,
-                                          u32 pivot_pos,
-                                          u32* pos25, u32* pos75) {
-    u32 p25 = *pos25;
-    u32 p75 = *pos75;
-
-    std::swap(v[pivot_pos], v[hi]);
-    if (pivot_pos == p25) {
-        p25 = hi;
-    } else if (hi == p25) {
-        p25 = pivot_pos;
-    }
-    if (pivot_pos == p75) {
-        p75 = hi;
-    } else if (hi == p75) {
-        p75 = pivot_pos;
-    }
-
-    i64 pivot_key = v[hi];
-    u32 store = lo;
-    for (u32 i = lo; i < hi; ++i) {
-        if (v[i] < pivot_key) {
-            std::swap(v[store], v[i]);
-            if (store == p25) {
-                p25 = i;
-            } else if (i == p25) {
-                p25 = store;
-            }
-            if (store == p75) {
-                p75 = i;
-            } else if (i == p75) {
-                p75 = store;
-            }
-            ++store;
-        }
-    }
-
-    std::swap(v[store], v[hi]);
-    if (store == p25) {
-        p25 = hi;
-    } else if (hi == p25) {
-        p25 = store;
-    }
-    if (store == p75) {
-        p75 = hi;
-    } else if (hi == p75) {
-        p75 = store;
-    }
-
-    *pos25 = p25;
-    *pos75 = p75;
-    return store;
-}
-
-static Bounds second_partition_gt_100k_dnf(i64* v, u32 lo, u32 hi,
-                                           i64 pivot) {
-    u32 lt = lo;
-    u32 i = lo;
-    u32 gt = hi;
-    while (i <= gt) {
-        i64 key = v[i];
-        if (key < pivot) {
-            std::swap(v[lt], v[i]);
-            ++lt;
-            ++i;
-        } else if (pivot < key) {
-            std::swap(v[i], v[gt]);
-            --gt;
-        } else {
-            ++i;
-        }
-    }
-    return {lt, gt};
-}
-
-static u32 second_partition_gt_100k_lomuto(i64* v, u32 lo, u32 hi,
-                                           u32 pivot_pos) {
-    std::swap(v[pivot_pos], v[hi]);
-    i64 pivot_key = v[hi];
-    u32 store = lo;
-    for (u32 i = lo; i < hi; ++i) {
-        if (v[i] < pivot_key) {
-            std::swap(v[store], v[i]);
-            ++store;
-        }
-    }
-    std::swap(v[store], v[hi]);
-    return store;
-}
-
-static Bounds random_partition_gt_100k_dnf(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
-    u32 offset = static_cast<u32>(
-        (static_cast<u64>(next_random_word()) * count) >> 32);
-    i64 pivot = v[lo + offset];
-    u32 lt = lo;
-    u32 i = lo;
-    u32 gt = hi;
-    while (i <= gt) {
-        i64 key = v[i];
-        if (key < pivot) {
-            std::swap(v[lt], v[i]);
-            ++lt;
-            ++i;
-        } else if (pivot < key) {
-            std::swap(v[i], v[gt]);
-            --gt;
-        } else {
-            ++i;
-        }
-    }
-    return {lt, gt};
-}
-
-static u32 random_partition_gt_100k_lomuto(i64* v, u32 lo, u32 hi) {
-    u32 count = hi - lo + 1;
-    u32 offset = static_cast<u32>(
-        (static_cast<u64>(next_random_word()) * count) >> 32);
-    std::swap(v[lo + offset], v[hi]);
-    i64 pivot_key = v[hi];
-    u32 store = lo;
-    for (u32 i = lo; i < hi; ++i) {
-        if (v[i] < pivot_key) {
-            std::swap(v[store], v[i]);
-            ++store;
-        }
-    }
-    std::swap(v[store], v[hi]);
-    return store;
+static u32 random_partition_ge_4k_lomuto(i64* v, u32 lo, u32 hi) {
+    return partition_lomuto_at(v, lo, hi, get_random_pivot_pos(lo, hi));
 }
 
 static void insertion_sort_values(i64* v, u32 lo, u32 hi) {
@@ -684,7 +504,7 @@ static u32 floor_log2(u32 n) {
 
 // Fixed-size randomized static probe: one random offset per equal segment.
 static bool sample_has_duplicates(const i64* v, u32 count, u32 sample_size) {
-    u32 sample[60];
+    u32 sample[64];
     u32 step = count / sample_size;
     if (step == 0) {
         step = 1;
@@ -759,10 +579,6 @@ static bool estimate_use_dnf(const i64* v, u32 count) {
     heap_sort_indices(sample, v, 0, k);
     sample_pivot_pos = sample[k / 2];
     sample_pivot = v[sample_pivot_pos];
-    sample_pivot_low_pos = sample[k / 4];
-    sample_pivot_high_pos = sample[(3 * k) / 4];
-    sample_pivot_low = v[sample_pivot_low_pos];
-    sample_pivot_high = v[sample_pivot_high_pos];
 
     u64 collisions = 0;
     u32 run = 1;
@@ -783,7 +599,7 @@ static bool estimate_use_dnf(const i64* v, u32 count) {
     return result;
 }
 
-static void quicksort_lt_5k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort_lt_4k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
         if (count <= SMALL_SORT_LIMIT) {
@@ -798,7 +614,7 @@ static void quicksort_lt_5k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        u32 split = median3_partition_lt_5k(v, lo, hi);
+        u32 split = random_partition_lt_4k(v, lo, hi);
         if (split >= hi) {
             heap_sort_values(v, lo, count);
             return;
@@ -807,12 +623,12 @@ static void quicksort_lt_5k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
         u32 right_count = hi - split;
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_lt_5k_rec(v, split + 1, hi, depth - 1);
+                quicksort_lt_4k_rec(v, split + 1, hi, depth - 1);
             }
             hi = split;
         } else {
             if (left_count > 0) {
-                quicksort_lt_5k_rec(v, lo, split, depth - 1);
+                quicksort_lt_4k_rec(v, lo, split, depth - 1);
             }
             lo = split + 1;
         }
@@ -820,11 +636,11 @@ static void quicksort_lt_5k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     }
 }
 
-static void quicksort_lt_5k(i64* v, u32 lo, u32 hi, u32 depth) {
-    quicksort_lt_5k_rec(v, lo, hi, depth);
+static void quicksort_lt_4k(i64* v, u32 lo, u32 hi, u32 depth) {
+    quicksort_lt_4k_rec(v, lo, hi, depth);
 }
 
-static void quicksort_lt_100k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort_ge_4k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
         if (count <= SMALL_SORT_LIMIT) {
@@ -839,18 +655,18 @@ static void quicksort_lt_100k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        Bounds bounds = random_partition_lt_100k_dnf(v, lo, hi);
+        Bounds bounds = random_partition_ge_4k_dnf(v, lo, hi);
         u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
         u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_lt_100k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
+                quicksort_ge_4k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
             }
             --depth;
             hi = bounds.lt - 1;
         } else {
             if (left_count > 0) {
-                quicksort_lt_100k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
+                quicksort_ge_4k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
             }
             if (right_count == 0) {
                 return;
@@ -861,7 +677,7 @@ static void quicksort_lt_100k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     }
 }
 
-static void quicksort_lt_100k_dnf(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort_ge_4k_dnf(i64* v, u32 lo, u32 hi, u32 depth) {
     if (lo >= hi) {
         return;
     }
@@ -878,19 +694,18 @@ static void quicksort_lt_100k_dnf(i64* v, u32 lo, u32 hi, u32 depth) {
         heap_sort_values(v, lo, count);
         return;
     }
-
-    Bounds bounds = first_partition_lt_100k_dnf(v, lo, hi, sample_pivot);
+    Bounds bounds = first_partition_ge_4k_dnf(v, lo, hi, sample_pivot);
     u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
     u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
     if (left_count > 0) {
-        quicksort_lt_100k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
+        quicksort_ge_4k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
     }
     if (right_count > 0) {
-        quicksort_lt_100k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
+        quicksort_ge_4k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
     }
 }
 
-static void quicksort_lt_100k_lomuto_rec(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort_ge_4k_lomuto_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
         if (count <= SMALL_SORT_LIMIT) {
@@ -905,18 +720,18 @@ static void quicksort_lt_100k_lomuto_rec(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        u32 pivot = random_partition_lt_100k_lomuto(v, lo, hi);
+        u32 pivot = random_partition_ge_4k_lomuto(v, lo, hi);
         u32 left_count = pivot - lo;
         u32 right_count = hi - pivot;
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_lt_100k_lomuto_rec(v, pivot + 1, hi, depth - 1);
+                quicksort_ge_4k_lomuto_rec(v, pivot + 1, hi, depth - 1);
             }
             --depth;
             hi = pivot - 1;
         } else {
             if (left_count > 0) {
-                quicksort_lt_100k_lomuto_rec(v, lo, pivot - 1, depth - 1);
+                quicksort_ge_4k_lomuto_rec(v, lo, pivot - 1, depth - 1);
             }
             --depth;
             lo = pivot + 1;
@@ -924,7 +739,7 @@ static void quicksort_lt_100k_lomuto_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     }
 }
 
-static void quicksort_lt_100k_lomuto(i64* v, u32 lo, u32 hi, u32 depth) {
+static void quicksort_ge_4k_lomuto(i64* v, u32 lo, u32 hi, u32 depth) {
     if (lo >= hi) {
         return;
     }
@@ -941,227 +756,14 @@ static void quicksort_lt_100k_lomuto(i64* v, u32 lo, u32 hi, u32 depth) {
         heap_sort_values(v, lo, count);
         return;
     }
-
-    u32 pivot = first_partition_lt_100k_lomuto(v, lo, hi, sample_pivot_pos);
+    u32 pivot = first_partition_ge_4k_lomuto(v, lo, hi, sample_pivot_pos);
     u32 left_count = pivot - lo;
     u32 right_count = hi - pivot;
     if (left_count > 0) {
-        quicksort_lt_100k_lomuto_rec(v, lo, pivot - 1, depth - 1);
+        quicksort_ge_4k_lomuto_rec(v, lo, pivot - 1, depth - 1);
     }
     if (right_count > 0) {
-        quicksort_lt_100k_lomuto_rec(v, pivot + 1, hi, depth - 1);
-    }
-}
-
-static void quicksort_gt_100k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
-    while (lo < hi) {
-        u32 count = hi - lo + 1;
-        if (count <= SMALL_SORT_LIMIT) {
-            if (count <= NETWORK_LIMIT) {
-                sort_network(v, lo, count);
-            } else {
-                insertion_sort_values(v, lo, hi);
-            }
-            return;
-        }
-        if (depth == 0) {
-            heap_sort_values(v, lo, count);
-            return;
-        }
-        Bounds bounds = random_partition_gt_100k_dnf(v, lo, hi);
-        u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
-        u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
-        if (left_count > right_count) {
-            if (right_count > 0) {
-                quicksort_gt_100k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
-            }
-            --depth;
-            hi = bounds.lt - 1;
-        } else {
-            if (left_count > 0) {
-                quicksort_gt_100k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
-            }
-            if (right_count == 0) {
-                return;
-            }
-            --depth;
-            lo = bounds.gt + 1;
-        }
-    }
-}
-
-static void quicksort_gt_100k_dnf_second(i64* v, u32 lo, u32 hi,
-                                         u32 depth, i64 pivot) {
-    if (lo >= hi) {
-        return;
-    }
-    u32 count = hi - lo + 1;
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(v, lo, count);
-        } else {
-            insertion_sort_values(v, lo, hi);
-        }
-        return;
-    }
-    if (depth == 0) {
-        heap_sort_values(v, lo, count);
-        return;
-    }
-
-    Bounds bounds = second_partition_gt_100k_dnf(v, lo, hi, pivot);
-    u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
-    u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
-    if (left_count > 0) {
-        quicksort_gt_100k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
-    }
-    if (right_count > 0) {
-        quicksort_gt_100k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
-    }
-}
-
-static void quicksort_gt_100k_dnf(i64* v, u32 lo, u32 hi, u32 depth) {
-    if (lo >= hi) {
-        return;
-    }
-    u32 count = hi - lo + 1;
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(v, lo, count);
-        } else {
-            insertion_sort_values(v, lo, hi);
-        }
-        return;
-    }
-    if (depth == 0) {
-        heap_sort_values(v, lo, count);
-        return;
-    }
-
-    Bounds bounds = first_partition_gt_100k_dnf(v, lo, hi, sample_pivot);
-    u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
-    u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
-    if (left_count > 0) {
-        if (sample_pivot_low < sample_pivot) {
-            quicksort_gt_100k_dnf_second(v, lo, bounds.lt - 1, depth - 1,
-                                         sample_pivot_low);
-        } else {
-            quicksort_gt_100k_dnf_rec(v, lo, bounds.lt - 1, depth - 1);
-        }
-    }
-    if (right_count > 0) {
-        if (sample_pivot < sample_pivot_high) {
-            quicksort_gt_100k_dnf_second(v, bounds.gt + 1, hi, depth - 1,
-                                         sample_pivot_high);
-        } else {
-            quicksort_gt_100k_dnf_rec(v, bounds.gt + 1, hi, depth - 1);
-        }
-    }
-}
-
-static void quicksort_gt_100k_lomuto_rec(i64* v, u32 lo, u32 hi, u32 depth) {
-    while (lo < hi) {
-        u32 count = hi - lo + 1;
-        if (count <= SMALL_SORT_LIMIT) {
-            if (count <= NETWORK_LIMIT) {
-                sort_network(v, lo, count);
-            } else {
-                insertion_sort_values(v, lo, hi);
-            }
-            return;
-        }
-        if (depth == 0) {
-            heap_sort_values(v, lo, count);
-            return;
-        }
-        u32 pivot = random_partition_gt_100k_lomuto(v, lo, hi);
-        u32 left_count = pivot - lo;
-        u32 right_count = hi - pivot;
-        if (left_count > right_count) {
-            if (right_count > 0) {
-                quicksort_gt_100k_lomuto_rec(v, pivot + 1, hi, depth - 1);
-            }
-            --depth;
-            hi = pivot - 1;
-        } else {
-            if (left_count > 0) {
-                quicksort_gt_100k_lomuto_rec(v, lo, pivot - 1, depth - 1);
-            }
-            --depth;
-            lo = pivot + 1;
-        }
-    }
-}
-
-static void quicksort_gt_100k_lomuto_second(i64* v, u32 lo, u32 hi,
-                                            u32 depth, u32 pivot_pos) {
-    if (lo >= hi) {
-        return;
-    }
-    u32 count = hi - lo + 1;
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(v, lo, count);
-        } else {
-            insertion_sort_values(v, lo, hi);
-        }
-        return;
-    }
-    if (depth == 0) {
-        heap_sort_values(v, lo, count);
-        return;
-    }
-
-    u32 pivot = second_partition_gt_100k_lomuto(v, lo, hi, pivot_pos);
-    u32 left_count = pivot - lo;
-    u32 right_count = hi - pivot;
-    if (left_count > 0) {
-        quicksort_gt_100k_lomuto_rec(v, lo, pivot - 1, depth - 1);
-    }
-    if (right_count > 0) {
-        quicksort_gt_100k_lomuto_rec(v, pivot + 1, hi, depth - 1);
-    }
-}
-
-static void quicksort_gt_100k_lomuto(i64* v, u32 lo, u32 hi, u32 depth) {
-    if (lo >= hi) {
-        return;
-    }
-    u32 count = hi - lo + 1;
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(v, lo, count);
-        } else {
-            insertion_sort_values(v, lo, hi);
-        }
-        return;
-    }
-    if (depth == 0) {
-        heap_sort_values(v, lo, count);
-        return;
-    }
-
-    u32 pos25 = sample_pivot_low_pos;
-    u32 pos75 = sample_pivot_high_pos;
-    u32 pivot = first_partition_gt_100k_lomuto(
-        v, lo, hi, sample_pivot_pos, &pos25, &pos75);
-    u32 left_count = pivot - lo;
-    u32 right_count = hi - pivot;
-    if (left_count > 0) {
-        if (sample_pivot_low < sample_pivot) {
-            quicksort_gt_100k_lomuto_second(v, lo, pivot - 1, depth - 1,
-                                            pos25);
-        } else {
-            quicksort_gt_100k_lomuto_rec(v, lo, pivot - 1, depth - 1);
-        }
-    }
-    if (right_count > 0) {
-        if (sample_pivot < sample_pivot_high) {
-            quicksort_gt_100k_lomuto_second(v, pivot + 1, hi, depth - 1,
-                                            pos75);
-        } else {
-            quicksort_gt_100k_lomuto_rec(v, pivot + 1, hi, depth - 1);
-        }
+        quicksort_ge_4k_lomuto_rec(v, pivot + 1, hi, depth - 1);
     }
 }
 
@@ -1237,54 +839,30 @@ int main(int argc, char** argv) {
         if (!already_sorted) {
             pivot_cursor = 0;
             u32 depth = 2 * floor_log2(count);
-            if (count >= MHAT_MIN_ITEMS) {
-                use_dnf = estimate_use_dnf(values.data(), count) ? 1 : 0;
-                if (use_dnf != 0) {
-                    quicksort_gt_100k_dnf(values.data(), 0, count - 1,
-                                           depth);
+            if (count >= PROBE16_MIN_ITEMS) {
+                if (count >= MHAT_MIN_ITEMS) {
+                    use_dnf = estimate_use_dnf(values.data(), count) ? 1 : 0;
+                } else if (count >= PROBE64_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(values.data(), count, 64) ? 1 : 0;
+                } else if (count >= PROBE49_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(values.data(), count, 49) ? 1 : 0;
+                } else if (count >= PROBE37_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(values.data(), count, 37) ? 1 : 0;
+                } else if (count >= PROBE29_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(values.data(), count, 29) ? 1 : 0;
+                } else if (count >= PROBE22_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(values.data(), count, 22) ? 1 : 0;
                 } else {
-                    quicksort_gt_100k_lomuto(values.data(), 0, count - 1,
-                                             depth);
+                    use_dnf = sample_has_duplicates(values.data(), count, 16) ? 1 : 0;
                 }
-            } else if (count >= PROBE60_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(values.data(), count, 60) ? 1 : 0;
                 if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(values.data(), 0, count - 1,
-                                          depth);
+                    quicksort_ge_4k_dnf(values.data(), 0, count - 1, depth);
                 } else {
-                    quicksort_lt_100k_lomuto(values.data(), 0, count - 1,
-                                             depth);
-                }
-            } else if (count >= PROBE38_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(values.data(), count, 38) ? 1 : 0;
-                if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(values.data(), 0, count - 1,
-                                          depth);
-                } else {
-                    quicksort_lt_100k_lomuto(values.data(), 0, count - 1,
-                                             depth);
-                }
-            } else if (count >= PROBE27_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(values.data(), count, 27) ? 1 : 0;
-                if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(values.data(), 0, count - 1,
-                                          depth);
-                } else {
-                    quicksort_lt_100k_lomuto(values.data(), 0, count - 1,
-                                             depth);
-                }
-            } else if (count >= PROBE19_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(values.data(), count, 19) ? 1 : 0;
-                if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(values.data(), 0, count - 1,
-                                          depth);
-                } else {
-                    quicksort_lt_100k_lomuto(values.data(), 0, count - 1,
-                                             depth);
+                    quicksort_ge_4k_lomuto(values.data(), 0, count - 1, depth);
                 }
             } else {
                 use_dnf = 0;
-                quicksort_lt_5k(values.data(), 0, count - 1, depth);
+                quicksort_lt_4k(values.data(), 0, count - 1, depth);
             }
         }
 

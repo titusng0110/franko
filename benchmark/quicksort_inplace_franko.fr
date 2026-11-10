@@ -24,23 +24,21 @@ view<[uint32, 128]> RANDOM_PIVOTS = [
 ]
 
 uint32 NETWORK_LIMIT = 8
-uint32 SMALL_SORT_LIMIT = 32
+uint32 SMALL_SORT_LIMIT = 24
 uint32 DNF_THRESHOLD = 70
 uint32 MHAT_MIN_ITEMS = 100000
 uint32 MHAT_SAMPLE_MIN = 100
-uint32 MHAT_SAMPLE_MAX = 65535
-uint32 PROBE60_MIN_ITEMS = 40000
-uint32 PROBE38_MIN_ITEMS = 20000
-uint32 PROBE27_MIN_ITEMS = 10000
-uint32 PROBE19_MIN_ITEMS = 5000
+uint32 MHAT_SAMPLE_MAX = 20000
+uint32 PROBE22_MIN_ITEMS = 6941
+uint32 PROBE16_MIN_ITEMS = 4000
+uint32 PROBE64_MIN_ITEMS = 58603
+uint32 PROBE49_MIN_ITEMS = 34364
+uint32 PROBE37_MIN_ITEMS = 19604
+uint32 PROBE29_MIN_ITEMS = 12050
 uint32 pivot_cursor = 0
 uint8 use_dnf = 0
 int64 sample_pivot = 0
 uint32 sample_pivot_pos = 0
-uint32 sample_pivot_low_pos = 0
-uint32 sample_pivot_high_pos = 0
-int64 sample_pivot_low = 0
-int64 sample_pivot_high = 0
 
 func sort_network(mview<[int64]> values, uint32 lo, uint32 n) -> void {
     if (values == null) {
@@ -574,12 +572,18 @@ func next_random_word() -> uint32 {
     return r
 }
 
+func get_random_pivot_pos(uint32 lo, uint32 hi) -> uint32 {
+    uint32 count = hi - lo + 1
+    uint32 offset = unsafe_cast<uint32>((cast<uint64>(next_random_word()) * cast<uint64>(count)) >> 32)
+    return lo + offset
+}
+
 // Fixed-size randomized static probe: one random offset per equal segment.
 func sample_has_duplicates(view<[int64]> values, uint32 count, uint32 sample_size) -> byte {
-    if (values == null || count < sample_size || sample_size > 60) {
+    if (values == null || count < sample_size || sample_size > 64) {
         return 0
     }
-    [uint32, 60] sample
+    [uint32, 64] sample
     uint32 step = count / sample_size
     if (step == 0) {
         step = 1
@@ -675,10 +679,6 @@ func estimate_use_dnf(view<[int64]> values, uint32 count) -> byte {
     sort_sample_indices(getmview(sample), values, k)
     sample_pivot_pos = sample[k / 2]
     sample_pivot = $(values)[sample_pivot_pos]
-    sample_pivot_low_pos = sample[k / 4]
-    sample_pivot_high_pos = sample[(3 * k) / 4]
-    sample_pivot_low = $(values)[sample_pivot_low_pos]
-    sample_pivot_high = $(values)[sample_pivot_high_pos]
 
     uint64 collisions = 0
     uint32 run = 1
@@ -704,27 +704,14 @@ func estimate_use_dnf(view<[int64]> values, uint32 count) -> byte {
     return result
 }
 
-func median3_partition_lt_5k(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func random_partition_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
     if (values == null) {
         return lo
     }
-    uint32 mid = lo + (hi - lo) / 2
-    if ($(values)[lo] < $(values)[mid]) {
-        int64 tmp = $(values)[lo]
-        $(values)[lo] = $(values)[mid]
-        $(values)[mid] = tmp
-    }
-    if ($(values)[hi] < $(values)[lo]) {
-        int64 tmp = $(values)[hi]
-        $(values)[hi] = $(values)[lo]
-        $(values)[lo] = tmp
-    }
-    if ($(values)[lo] < $(values)[mid]) {
-        int64 tmp = $(values)[lo]
-        $(values)[lo] = $(values)[mid]
-        $(values)[mid] = tmp
-    }
-
+    uint32 pivot_pos = get_random_pivot_pos(lo, hi)
+    int64 tmp_pivot = $(values)[pivot_pos]
+    $(values)[pivot_pos] = $(values)[lo]
+    $(values)[lo] = tmp_pivot
     int64 pivot = $(values)[lo]
     uint32 i = lo
     uint32 j = hi
@@ -747,7 +734,7 @@ func median3_partition_lt_5k(mview<[int64]> values, uint32 lo, uint32 hi) -> uin
     return lo
 }
 
-func first_partition_lt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
+func partition_dnf_kernel(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
     if (values == null) {
         return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
     }
@@ -774,13 +761,10 @@ func first_partition_lt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, in
     return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
 }
 
-func first_partition_lt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
+func partition_lomuto_kernel(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
     if (values == null) {
         return lo
     }
-    int64 tmp_pivot = $(values)[pivot_pos]
-    $(values)[pivot_pos] = $(values)[hi]
-    $(values)[hi] = tmp_pivot
     int64 pivot_key = $(values)[hi]
     uint32 store = lo
     uint32 i = lo
@@ -799,259 +783,33 @@ func first_partition_lt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi,
     return store
 }
 
-func random_partition_lt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi) -> (uint32 lt, uint32 gt) {
-    if (values == null) {
-        return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
-    }
-    uint32 count = hi - lo + 1
-    uint32 offset = unsafe_cast<uint32>((cast<uint64>(next_random_word()) * cast<uint64>(count)) >> 32)
-    int64 pivot = $(values)[lo + offset]
-    uint32 lt = lo
-    uint32 i = lo
-    uint32 gt = hi
-    while (i <= gt) {
-        int64 key = $(values)[i]
-        if (key < pivot) {
-            int64 tmp = $(values)[lt]
-            $(values)[lt] = $(values)[i]
-            $(values)[i] = tmp
-            lt = lt + 1
-            i = i + 1
-        } else if (pivot < key) {
-            int64 tmp = $(values)[i]
-            $(values)[i] = $(values)[gt]
-            $(values)[gt] = tmp
-            gt = gt - 1
-        } else {
-            i = i + 1
-        }
-    }
-    return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
-}
-
-func random_partition_lt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func partition_lomuto_at(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
     if (values == null) {
         return lo
     }
-    uint32 count = hi - lo + 1
-    uint32 offset = unsafe_cast<uint32>((cast<uint64>(next_random_word()) * cast<uint64>(count)) >> 32)
-    uint32 pivot_pos = lo + offset
-    int64 tmp_pivot = $(values)[pivot_pos]
+    int64 tmp = $(values)[pivot_pos]
     $(values)[pivot_pos] = $(values)[hi]
-    $(values)[hi] = tmp_pivot
-    int64 pivot_key = $(values)[hi]
-    uint32 store = lo
-    uint32 i = lo
-    while (i < hi) {
-        if ($(values)[i] < pivot_key) {
-            int64 tmp = $(values)[store]
-            $(values)[store] = $(values)[i]
-            $(values)[i] = tmp
-            store = store + 1
-        }
-        i = i + 1
-    }
-    int64 tmp_last = $(values)[store]
-    $(values)[store] = $(values)[hi]
-    $(values)[hi] = tmp_last
-    return store
+    $(values)[hi] = tmp
+    return partition_lomuto_kernel(values, lo, hi)
 }
 
-func first_partition_gt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
-    if (values == null) {
-        return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
-    }
-    uint32 lt = lo
-    uint32 i = lo
-    uint32 gt = hi
-    while (i <= gt) {
-        int64 key = $(values)[i]
-        if (key < pivot) {
-            int64 tmp = $(values)[lt]
-            $(values)[lt] = $(values)[i]
-            $(values)[i] = tmp
-            lt = lt + 1
-            i = i + 1
-        } else if (pivot < key) {
-            int64 tmp = $(values)[i]
-            $(values)[i] = $(values)[gt]
-            $(values)[gt] = tmp
-            gt = gt - 1
-        } else {
-            i = i + 1
-        }
-    }
-    return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
+func first_partition_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
+    return partition_dnf_kernel(values, lo, hi, pivot)
 }
 
-func first_partition_gt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos, uint32 pos25, uint32 pos75) -> (uint32 pivot, uint32 pos25, uint32 pos75) {
-    if (values == null) {
-        return (uint32 pivot, uint32 pos25, uint32 pos75) { pivot = lo, pos25 = pos25, pos75 = pos75 }
-    }
-    int64 tmp_pivot = $(values)[pivot_pos]
-    $(values)[pivot_pos] = $(values)[hi]
-    $(values)[hi] = tmp_pivot
-    if (pivot_pos == pos25) {
-        pos25 = hi
-    } else if (hi == pos25) {
-        pos25 = pivot_pos
-    }
-    if (pivot_pos == pos75) {
-        pos75 = hi
-    } else if (hi == pos75) {
-        pos75 = pivot_pos
-    }
-
-    int64 pivot_key = $(values)[hi]
-    uint32 store = lo
-    uint32 i = lo
-    while (i < hi) {
-        if ($(values)[i] < pivot_key) {
-            int64 tmp = $(values)[store]
-            $(values)[store] = $(values)[i]
-            $(values)[i] = tmp
-            if (store == pos25) {
-                pos25 = i
-            } else if (i == pos25) {
-                pos25 = store
-            }
-            if (store == pos75) {
-                pos75 = i
-            } else if (i == pos75) {
-                pos75 = store
-            }
-            store = store + 1
-        }
-        i = i + 1
-    }
-
-    int64 tmp_last = $(values)[store]
-    $(values)[store] = $(values)[hi]
-    $(values)[hi] = tmp_last
-    if (store == pos25) {
-        pos25 = hi
-    } else if (hi == pos25) {
-        pos25 = store
-    }
-    if (store == pos75) {
-        pos75 = hi
-    } else if (hi == pos75) {
-        pos75 = store
-    }
-    return (uint32 pivot, uint32 pos25, uint32 pos75) { pivot = store, pos25 = pos25, pos75 = pos75 }
+func first_partition_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
+    return partition_lomuto_at(values, lo, hi, pivot_pos)
 }
 
-func second_partition_gt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
-    if (values == null) {
-        return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
-    }
-    uint32 lt = lo
-    uint32 i = lo
-    uint32 gt = hi
-    while (i <= gt) {
-        int64 key = $(values)[i]
-        if (key < pivot) {
-            int64 tmp = $(values)[lt]
-            $(values)[lt] = $(values)[i]
-            $(values)[i] = tmp
-            lt = lt + 1
-            i = i + 1
-        } else if (pivot < key) {
-            int64 tmp = $(values)[i]
-            $(values)[i] = $(values)[gt]
-            $(values)[gt] = tmp
-            gt = gt - 1
-        } else {
-            i = i + 1
-        }
-    }
-    return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
+func random_partition_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi) -> (uint32 lt, uint32 gt) {
+    return partition_dnf_kernel(values, lo, hi, $(values)[get_random_pivot_pos(lo, hi)])
 }
 
-func second_partition_gt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
-    if (values == null) {
-        return lo
-    }
-    int64 tmp_pivot = $(values)[pivot_pos]
-    $(values)[pivot_pos] = $(values)[hi]
-    $(values)[hi] = tmp_pivot
-    int64 pivot_key = $(values)[hi]
-    uint32 store = lo
-    uint32 i = lo
-    while (i < hi) {
-        if ($(values)[i] < pivot_key) {
-            int64 tmp = $(values)[store]
-            $(values)[store] = $(values)[i]
-            $(values)[i] = tmp
-            store = store + 1
-        }
-        i = i + 1
-    }
-    int64 tmp_last = $(values)[store]
-    $(values)[store] = $(values)[hi]
-    $(values)[hi] = tmp_last
-    return store
+func random_partition_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+    return partition_lomuto_at(values, lo, hi, get_random_pivot_pos(lo, hi))
 }
 
-func random_partition_gt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi) -> (uint32 lt, uint32 gt) {
-    if (values == null) {
-        return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
-    }
-    uint32 count = hi - lo + 1
-    uint32 offset = unsafe_cast<uint32>((cast<uint64>(next_random_word()) * cast<uint64>(count)) >> 32)
-    int64 pivot = $(values)[lo + offset]
-    uint32 lt = lo
-    uint32 i = lo
-    uint32 gt = hi
-    while (i <= gt) {
-        int64 key = $(values)[i]
-        if (key < pivot) {
-            int64 tmp = $(values)[lt]
-            $(values)[lt] = $(values)[i]
-            $(values)[i] = tmp
-            lt = lt + 1
-            i = i + 1
-        } else if (pivot < key) {
-            int64 tmp = $(values)[i]
-            $(values)[i] = $(values)[gt]
-            $(values)[gt] = tmp
-            gt = gt - 1
-        } else {
-            i = i + 1
-        }
-    }
-    return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
-}
-
-func random_partition_gt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
-    if (values == null) {
-        return lo
-    }
-    uint32 count = hi - lo + 1
-    uint32 offset = unsafe_cast<uint32>((cast<uint64>(next_random_word()) * cast<uint64>(count)) >> 32)
-    uint32 pivot_pos = lo + offset
-    int64 tmp_pivot = $(values)[pivot_pos]
-    $(values)[pivot_pos] = $(values)[hi]
-    $(values)[hi] = tmp_pivot
-    int64 pivot_key = $(values)[hi]
-    uint32 store = lo
-    uint32 i = lo
-    while (i < hi) {
-        if ($(values)[i] < pivot_key) {
-            int64 tmp = $(values)[store]
-            $(values)[store] = $(values)[i]
-            $(values)[i] = tmp
-            store = store + 1
-        }
-        i = i + 1
-    }
-    int64 tmp_last = $(values)[store]
-    $(values)[store] = $(values)[hi]
-    $(values)[hi] = tmp_last
-    return store
-}
-
-func quicksort_lt_5k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_lt_4k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -1069,7 +827,7 @@ func quicksort_lt_5k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 dep
             heap_sort_values(values, lo, count)
             return
         }
-        uint32 split = median3_partition_lt_5k(values, lo, hi)
+        uint32 split = random_partition_lt_4k(values, lo, hi)
         if (split >= hi) {
             heap_sort_values(values, lo, count)
             return
@@ -1078,12 +836,12 @@ func quicksort_lt_5k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 dep
         uint32 right_count = hi - split
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_lt_5k_rec(values, split + 1, hi, depth - 1)
+                quicksort_lt_4k_rec(values, split + 1, hi, depth - 1)
             }
             hi = split
         } else {
             if (left_count > 0) {
-                quicksort_lt_5k_rec(values, lo, split, depth - 1)
+                quicksort_lt_4k_rec(values, lo, split, depth - 1)
             }
             lo = split + 1
         }
@@ -1092,12 +850,12 @@ func quicksort_lt_5k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 dep
     return
 }
 
-func quicksort_lt_5k(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
-    quicksort_lt_5k_rec(values, lo, hi, depth)
+func quicksort_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+    quicksort_lt_4k_rec(values, lo, hi, depth)
     return
 }
 
-func quicksort_lt_100k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_ge_4k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -1115,7 +873,7 @@ func quicksort_lt_100k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint
             heap_sort_values(values, lo, count)
             return
         }
-        (uint32 lt, uint32 gt) bounds = random_partition_lt_100k_dnf(values, lo, hi)
+        (uint32 lt, uint32 gt) bounds = random_partition_ge_4k_dnf(values, lo, hi)
         uint32 left_count = 0
         if (bounds.lt > lo) {
             left_count = bounds.lt - lo
@@ -1126,13 +884,13 @@ func quicksort_lt_100k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint
         }
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_lt_100k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
+                quicksort_ge_4k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
             }
             depth = depth - 1
             hi = bounds.lt - 1
         } else {
             if (left_count > 0) {
-                quicksort_lt_100k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
+                quicksort_ge_4k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
             }
             if (right_count == 0) {
                 return
@@ -1144,7 +902,7 @@ func quicksort_lt_100k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint
     return
 }
 
-func quicksort_lt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -1164,7 +922,7 @@ func quicksort_lt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 d
         heap_sort_values(values, lo, count)
         return
     }
-    (uint32 lt, uint32 gt) bounds = first_partition_lt_100k_dnf(values, lo, hi, sample_pivot)
+    (uint32 lt, uint32 gt) bounds = first_partition_ge_4k_dnf(values, lo, hi, sample_pivot)
     uint32 left_count = 0
     if (bounds.lt > lo) {
         left_count = bounds.lt - lo
@@ -1174,15 +932,15 @@ func quicksort_lt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 d
         right_count = hi - bounds.gt
     }
     if (left_count > 0) {
-        quicksort_lt_100k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
+        quicksort_ge_4k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
     }
     if (right_count > 0) {
-        quicksort_lt_100k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
+        quicksort_ge_4k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
     }
     return
 }
 
-func quicksort_lt_100k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_ge_4k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -1200,18 +958,18 @@ func quicksort_lt_100k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, u
             heap_sort_values(values, lo, count)
             return
         }
-        uint32 pivot = random_partition_lt_100k_lomuto(values, lo, hi)
+        uint32 pivot = random_partition_ge_4k_lomuto(values, lo, hi)
         uint32 left_count = pivot - lo
         uint32 right_count = hi - pivot
         if (left_count > right_count) {
             if (right_count > 0) {
-                quicksort_lt_100k_lomuto_rec(values, pivot + 1, hi, depth - 1)
+                quicksort_ge_4k_lomuto_rec(values, pivot + 1, hi, depth - 1)
             }
             depth = depth - 1
             hi = pivot - 1
         } else {
             if (left_count > 0) {
-                quicksort_lt_100k_lomuto_rec(values, lo, pivot - 1, depth - 1)
+                quicksort_ge_4k_lomuto_rec(values, lo, pivot - 1, depth - 1)
             }
             depth = depth - 1
             lo = pivot + 1
@@ -1220,7 +978,7 @@ func quicksort_lt_100k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, u
     return
 }
 
-func quicksort_lt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -1240,256 +998,14 @@ func quicksort_lt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint3
         heap_sort_values(values, lo, count)
         return
     }
-    uint32 pivot = first_partition_lt_100k_lomuto(values, lo, hi, sample_pivot_pos)
+    uint32 pivot = first_partition_ge_4k_lomuto(values, lo, hi, sample_pivot_pos)
     uint32 left_count = pivot - lo
     uint32 right_count = hi - pivot
     if (left_count > 0) {
-        quicksort_lt_100k_lomuto_rec(values, lo, pivot - 1, depth - 1)
+        quicksort_ge_4k_lomuto_rec(values, lo, pivot - 1, depth - 1)
     }
     if (right_count > 0) {
-        quicksort_lt_100k_lomuto_rec(values, pivot + 1, hi, depth - 1)
-    }
-    return
-}
-
-func quicksort_gt_100k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
-    if (values == null) {
-        return
-    }
-    while (lo < hi) {
-        uint32 count = hi - lo + 1
-        if (count <= SMALL_SORT_LIMIT) {
-            if (count <= NETWORK_LIMIT) {
-                sort_network(values, lo, count)
-            } else {
-                insertion_sort_values(values, lo, hi)
-            }
-            return
-        }
-        if (depth == 0) {
-            heap_sort_values(values, lo, count)
-            return
-        }
-        (uint32 lt, uint32 gt) bounds = random_partition_gt_100k_dnf(values, lo, hi)
-        uint32 left_count = 0
-        if (bounds.lt > lo) {
-            left_count = bounds.lt - lo
-        }
-        uint32 right_count = 0
-        if (bounds.gt < hi) {
-            right_count = hi - bounds.gt
-        }
-        if (left_count > right_count) {
-            if (right_count > 0) {
-                quicksort_gt_100k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
-            }
-            depth = depth - 1
-            hi = bounds.lt - 1
-        } else {
-            if (left_count > 0) {
-                quicksort_gt_100k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
-            }
-            if (right_count == 0) {
-                return
-            }
-            depth = depth - 1
-            lo = bounds.gt + 1
-        }
-    }
-    return
-}
-
-func quicksort_gt_100k_dnf_second(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth, int64 pivot) -> void {
-    if (values == null) {
-        return
-    }
-    if (lo >= hi) {
-        return
-    }
-    uint32 count = hi - lo + 1
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(values, lo, count)
-        } else {
-            insertion_sort_values(values, lo, hi)
-        }
-        return
-    }
-    if (depth == 0) {
-        heap_sort_values(values, lo, count)
-        return
-    }
-    (uint32 lt, uint32 gt) bounds = second_partition_gt_100k_dnf(values, lo, hi, pivot)
-    uint32 left_count = 0
-    if (bounds.lt > lo) {
-        left_count = bounds.lt - lo
-    }
-    uint32 right_count = 0
-    if (bounds.gt < hi) {
-        right_count = hi - bounds.gt
-    }
-    if (left_count > 0) {
-        quicksort_gt_100k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
-    }
-    if (right_count > 0) {
-        quicksort_gt_100k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
-    }
-    return
-}
-
-func quicksort_gt_100k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
-    if (values == null) {
-        return
-    }
-    if (lo >= hi) {
-        return
-    }
-    uint32 count = hi - lo + 1
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(values, lo, count)
-        } else {
-            insertion_sort_values(values, lo, hi)
-        }
-        return
-    }
-    if (depth == 0) {
-        heap_sort_values(values, lo, count)
-        return
-    }
-    (uint32 lt, uint32 gt) bounds = first_partition_gt_100k_dnf(values, lo, hi, sample_pivot)
-    uint32 left_count = 0
-    if (bounds.lt > lo) {
-        left_count = bounds.lt - lo
-    }
-    uint32 right_count = 0
-    if (bounds.gt < hi) {
-        right_count = hi - bounds.gt
-    }
-    if (left_count > 0) {
-        if (sample_pivot_low < sample_pivot) {
-            quicksort_gt_100k_dnf_second(values, lo, bounds.lt - 1, depth - 1, sample_pivot_low)
-        } else {
-            quicksort_gt_100k_dnf_rec(values, lo, bounds.lt - 1, depth - 1)
-        }
-    }
-    if (right_count > 0) {
-        if (sample_pivot < sample_pivot_high) {
-            quicksort_gt_100k_dnf_second(values, bounds.gt + 1, hi, depth - 1, sample_pivot_high)
-        } else {
-            quicksort_gt_100k_dnf_rec(values, bounds.gt + 1, hi, depth - 1)
-        }
-    }
-    return
-}
-
-func quicksort_gt_100k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
-    if (values == null) {
-        return
-    }
-    while (lo < hi) {
-        uint32 count = hi - lo + 1
-        if (count <= SMALL_SORT_LIMIT) {
-            if (count <= NETWORK_LIMIT) {
-                sort_network(values, lo, count)
-            } else {
-                insertion_sort_values(values, lo, hi)
-            }
-            return
-        }
-        if (depth == 0) {
-            heap_sort_values(values, lo, count)
-            return
-        }
-        uint32 pivot = random_partition_gt_100k_lomuto(values, lo, hi)
-        uint32 left_count = pivot - lo
-        uint32 right_count = hi - pivot
-        if (left_count > right_count) {
-            if (right_count > 0) {
-                quicksort_gt_100k_lomuto_rec(values, pivot + 1, hi, depth - 1)
-            }
-            depth = depth - 1
-            hi = pivot - 1
-        } else {
-            if (left_count > 0) {
-                quicksort_gt_100k_lomuto_rec(values, lo, pivot - 1, depth - 1)
-            }
-            depth = depth - 1
-            lo = pivot + 1
-        }
-    }
-    return
-}
-
-func quicksort_gt_100k_lomuto_second(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth, uint32 pivot_pos) -> void {
-    if (values == null) {
-        return
-    }
-    if (lo >= hi) {
-        return
-    }
-    uint32 count = hi - lo + 1
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(values, lo, count)
-        } else {
-            insertion_sort_values(values, lo, hi)
-        }
-        return
-    }
-    if (depth == 0) {
-        heap_sort_values(values, lo, count)
-        return
-    }
-    uint32 pivot = second_partition_gt_100k_lomuto(values, lo, hi, pivot_pos)
-    uint32 left_count = pivot - lo
-    uint32 right_count = hi - pivot
-    if (left_count > 0) {
-        quicksort_gt_100k_lomuto_rec(values, lo, pivot - 1, depth - 1)
-    }
-    if (right_count > 0) {
-        quicksort_gt_100k_lomuto_rec(values, pivot + 1, hi, depth - 1)
-    }
-    return
-}
-
-func quicksort_gt_100k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
-    if (values == null) {
-        return
-    }
-    if (lo >= hi) {
-        return
-    }
-    uint32 count = hi - lo + 1
-    if (count <= SMALL_SORT_LIMIT) {
-        if (count <= NETWORK_LIMIT) {
-            sort_network(values, lo, count)
-        } else {
-            insertion_sort_values(values, lo, hi)
-        }
-        return
-    }
-    if (depth == 0) {
-        heap_sort_values(values, lo, count)
-        return
-    }
-    (uint32 pivot, uint32 pos25, uint32 pos75) first = first_partition_gt_100k_lomuto(values, lo, hi, sample_pivot_pos, sample_pivot_low_pos, sample_pivot_high_pos)
-    uint32 pivot_index = first.pivot
-    uint32 left_count = pivot_index - lo
-    uint32 right_count = hi - pivot_index
-    if (left_count > 0) {
-        if (sample_pivot_low < sample_pivot) {
-            quicksort_gt_100k_lomuto_second(values, lo, pivot_index - 1, depth - 1, first.pos25)
-        } else {
-            quicksort_gt_100k_lomuto_rec(values, lo, pivot_index - 1, depth - 1)
-        }
-    }
-    if (right_count > 0) {
-        if (sample_pivot < sample_pivot_high) {
-            quicksort_gt_100k_lomuto_second(values, pivot_index + 1, hi, depth - 1, first.pos75)
-        } else {
-            quicksort_gt_100k_lomuto_rec(values, pivot_index + 1, hi, depth - 1)
-        }
+        quicksort_ge_4k_lomuto_rec(values, pivot + 1, hi, depth - 1)
     }
     return
 }
@@ -1593,44 +1109,30 @@ func main(view<[[byte]]> args) -> int32 {
             use_dnf = 0
             pivot_cursor = 0
             uint32 depth = 2 * floor_log2(count)
-            if (count >= MHAT_MIN_ITEMS) {
-                use_dnf = estimate_use_dnf(getview(values), count)
-                if (use_dnf != 0) {
-                    quicksort_gt_100k_dnf(getmview(values), 0, count - 1, depth)
+            if (count >= PROBE16_MIN_ITEMS) {
+                if (count >= MHAT_MIN_ITEMS) {
+                    use_dnf = estimate_use_dnf(getview(values), count)
+                } else if (count >= PROBE64_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(getview(values), count, 64)
+                } else if (count >= PROBE49_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(getview(values), count, 49)
+                } else if (count >= PROBE37_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(getview(values), count, 37)
+                } else if (count >= PROBE29_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(getview(values), count, 29)
+                } else if (count >= PROBE22_MIN_ITEMS) {
+                    use_dnf = sample_has_duplicates(getview(values), count, 22)
                 } else {
-                    quicksort_gt_100k_lomuto(getmview(values), 0, count - 1, depth)
+                    use_dnf = sample_has_duplicates(getview(values), count, 16)
                 }
-            } else if (count >= PROBE60_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(getview(values), count, 60)
                 if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(getmview(values), 0, count - 1, depth)
+                    quicksort_ge_4k_dnf(getmview(values), 0, count - 1, depth)
                 } else {
-                    quicksort_lt_100k_lomuto(getmview(values), 0, count - 1, depth)
-                }
-            } else if (count >= PROBE38_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(getview(values), count, 38)
-                if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(getmview(values), 0, count - 1, depth)
-                } else {
-                    quicksort_lt_100k_lomuto(getmview(values), 0, count - 1, depth)
-                }
-            } else if (count >= PROBE27_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(getview(values), count, 27)
-                if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(getmview(values), 0, count - 1, depth)
-                } else {
-                    quicksort_lt_100k_lomuto(getmview(values), 0, count - 1, depth)
-                }
-            } else if (count >= PROBE19_MIN_ITEMS) {
-                use_dnf = sample_has_duplicates(getview(values), count, 19)
-                if (use_dnf != 0) {
-                    quicksort_lt_100k_dnf(getmview(values), 0, count - 1, depth)
-                } else {
-                    quicksort_lt_100k_lomuto(getmview(values), 0, count - 1, depth)
+                    quicksort_ge_4k_lomuto(getmview(values), 0, count - 1, depth)
                 }
             } else {
                 use_dnf = 0
-                quicksort_lt_5k(getmview(values), 0, count - 1, depth)
+                quicksort_lt_4k(getmview(values), 0, count - 1, depth)
             }
         }
 
