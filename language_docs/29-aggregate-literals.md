@@ -129,8 +129,8 @@ Buffer b { cap = 20 }
 (int32, int32) partial { 0 }
 ```
 
-This form desugars to a declaration followed by one ordinary field assignment
-per named field:
+This is declaration initialization that behaves as one ordinary field
+assignment per named field:
 
 ```franko
 Literal lit
@@ -296,13 +296,16 @@ point where the enclosing field value is evaluated.
 
 ## 29.8 `OPERATOR_MOV` Interaction
 
-The declaration
+A struct that is value-assignable cannot declare `OPERATOR_MOV`; its
+whole-value assignment is always the built-in field copy. Because aggregate
+literal construction requires the aggregate to be value-assignable, this is
+exactly the set of structs that can appear as a literal. The declaration
 
 ```franko
 Literal lit = Literal { x = 0, def = 1 }
 ```
 
-means exactly:
+therefore means:
 
 ```franko
 Literal lit                 // default-construct lit: defaults applied, pointers null
@@ -310,45 +313,49 @@ Literal lit                 // default-construct lit: defaults applied, pointers
 Literal temp                // temporary literal
 temp.x = 0                  // explicit fields, source order
 temp.def = 1
-                            // literal construction requires Literal to be
-                            // value-assignable, regardless of OPERATOR_MOV
 
-lit = temp                  // ordinary whole-value assignment:
-                            // 1. applicable OPERATOR_MOV, if declared
-                            // 2. otherwise built-in whole-value assignment
+lit = temp                  // built-in whole-value assignment: field copy
 ```
 
-Therefore:
+Pointer-only structs cannot be constructed as literal values at all. They use
+the field-wise declaration form, and may use `OPERATOR_MOV` only for an
+ordinary non-literal whole-value assignment:
 
-- `lit.OPERATOR_MOV` is called when an applicable `OPERATOR_MOV` overload
-  exists;
-- otherwise built-in whole-value assignment is used;
-- in every case, `Literal` must be value-assignable because the literal
-  expression itself creates a temporary value;
-- if `Literal` is not value-assignable, `Literal lit = Literal { ... }` is
-  illegal even when `Literal` declares `OPERATOR_MOV`.
+```franko
+struct Buffer {
+    int32 cap
+    [byte] buf
+
+    func OPERATOR_MOV(ptr<Buffer> self, view<Buffer> other) -> void {
+        // custom copy
+        return
+    }
+}
+
+Buffer b { cap = 20 }                 // field-wise, no temporary
+Buffer source { cap = 10 }            // field-wise, no temporary
+Buffer copy = source                  // ordinary assignment: calls OPERATOR_MOV
+Buffer bad = Buffer { cap = 20 }      // error: Buffer is not value-assignable
+```
 
 Truth table:
 
 | Construct | Temporary aggregate? | Requires aggregate value-assignable? | Uses `OPERATOR_MOV`? |
 |---|---|---|---|
-| `Literal lit = Literal { x = 0 }` | yes | yes | yes, if an applicable overload exists; otherwise built-in |
+| `Literal lit = Literal { x = 0 }` | yes | yes | no — value-assignable structs cannot declare it; built-in field copy |
 | `Literal lit { x = 0 }` | no | no | no — direct field assignments |
 | `Buffer b { cap = 20 }` | no | no | no |
 | `Buffer b = Buffer { cap = 20 }` | yes | yes → **error** | irrelevant; the literal is already illegal |
 | `Buffer b = existing_buffer` | no | depends on the assignment rule | can use `OPERATOR_MOV` if declared/applicable |
 
-Critical distinction:
+Const aggregates follow the same forms:
 
-- `Buffer b = Buffer { ... }` is rejected even when `Buffer` declares
-  `OPERATOR_MOV`, because the right-hand side cannot be constructed as a
-  temporary value;
-- `Buffer b = existing_buffer` does not construct a literal. It is ordinary
-  whole-value assignment and can use `OPERATOR_MOV` under the existing
-  pointer-only-struct rule;
-- `Buffer b { cap = 20 }` is the correct form for direct per-field
-  initialization. It never creates a temporary and never calls
-  `OPERATOR_MOV`.
+```franko
+const Literal lit = Literal { x = 1 }   // one-time const initialization
+const Literal fieldwise { x = 2 }       // field-wise const initialization
+```
+
+See [Declarations](18-declarations.md#188-const-storage).
 
 ## 29.9 Pointer-Only Aggregates and Out-Parameters
 

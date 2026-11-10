@@ -1,0 +1,8 @@
+struct Buffer {
+    [byte] data
+}
+
+func main() -> int32 {
+    const Buffer b { }
+    return 0
+}

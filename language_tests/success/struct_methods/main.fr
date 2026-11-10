@@ -52,11 +52,6 @@ struct Counter {
         $(self).inner.bump()
         return
     }
-    func retarget(ptr<Counter> self, ptr<Counter> other) -> void {
-        self = other
-        $(self).n = 99
-        return
-    }
 }
 
 struct Big {
@@ -93,7 +88,6 @@ func main() -> int32 {
     print(c.get())
     Counter d
     d.n = 1
-    c.retarget(getptr(d))
     print(c.get())
     print(d.get())
     Big b

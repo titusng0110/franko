@@ -43,6 +43,7 @@ final class SastNode {
     List<SastNode> args;
     List<SastNode> fields;
     List<SastNode> update;
+    List<SastNode> initializers;
     List<Symbol> parameterVariables;
 
     BigInteger foldedConstInitializer;
@@ -135,6 +136,17 @@ final class SastNode {
         node.symbol = symbol;
         node.foldedConstInitializer = foldedConstInitializer;
         node.staticInitializer = staticInitializer;
+        return node;
+    }
+
+    static SastNode varDeclInit(
+            SourceSpan span,
+            Symbol symbol,
+            List<SastNode> initializers
+    ) {
+        SastNode node = node(SastKind.VAR_DECL_INIT, span);
+        node.symbol = symbol;
+        node.initializers = copy(initializers);
         return node;
     }
 
@@ -397,9 +409,22 @@ final class SastNode {
         return false;
     }
 
+    Symbol storageSymbol() {
+        if (kind == SastKind.VAR_EXPR) {
+            return symbol;
+        }
+
+        if (kind == SastKind.MEMBER_ACCESS || kind == SastKind.ARRAY_ACCESS) {
+            return target == null ? null : target.storageSymbol();
+        }
+
+        return null;
+    }
+
     boolean isStmt() {
         return kind == SastKind.BLOCK
                 || kind == SastKind.VAR_DECL
+                || kind == SastKind.VAR_DECL_INIT
                 || kind == SastKind.ASSIGN
                 || kind == SastKind.IF
                 || kind == SastKind.WHILE

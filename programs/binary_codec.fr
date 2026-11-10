@@ -15,7 +15,7 @@ import "franko/string"
 
 namespace text {
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -40,7 +40,7 @@ namespace text {
         return 0
     }
 
-    func print_slice(view<[byte]> buf, uint32 start, uint32 count) -> void {
+    func print_slice(view<[byte]> buf, const uint32 start, const uint32 count) -> void {
         if (buf == null || count == 0) {
             return
         }
@@ -55,14 +55,14 @@ namespace text {
         return
     }
 
-    func hex_digit(byte value) -> byte {
+    func hex_digit(const byte value) -> byte {
         if (value < 10) {
             return value + 48
         }
         return value + 55
     }
 
-    func print_hex_byte(byte value) -> void {
+    func print_hex_byte(const byte value) -> void {
         [byte, 2] out
         out[0] = hex_digit(value / 16)
         out[1] = hex_digit(value % 16)
@@ -70,7 +70,7 @@ namespace text {
         return
     }
 
-    func print_hex(view<[byte]> buf, uint32 start, uint32 count) -> void {
+    func print_hex(view<[byte]> buf, const uint32 start, const uint32 count) -> void {
         if (buf == null) {
             return
         }
@@ -118,17 +118,17 @@ struct PacketHeader {
 //   20..23  FNV-1a checksum, big-endian uint32
 //   24..31  reserved, zero
 //   32..63  payload bytes (at most 32)
-uint32 CODEC_MAGIC = 0x46524E4B
-byte CODEC_VERSION = 1
-uint32 CODEC_HEADER_BYTES = 32
-uint32 CODEC_CHECKSUM_OFFSET = 20
-uint32 CODEC_PAYLOAD_OFFSET = 32
-uint32 CODEC_PAYLOAD_CAP = 32
-uint32 CODEC_SEQUENCE = 42
-uint16 CODEC_STREAM_ID = 7
-uint16 CODEC_HOP_COUNT = 3
-uint32 FNV_OFFSET_BASIS = 2166136261
-uint32 FNV_PRIME = 16777619
+const uint32 CODEC_MAGIC = 0x46524E4B
+const byte CODEC_VERSION = 1
+const uint32 CODEC_HEADER_BYTES = 32
+const uint32 CODEC_CHECKSUM_OFFSET = 20
+const uint32 CODEC_PAYLOAD_OFFSET = 32
+const uint32 CODEC_PAYLOAD_CAP = 32
+const uint32 CODEC_SEQUENCE = 42
+const uint16 CODEC_STREAM_ID = 7
+const uint16 CODEC_HOP_COUNT = 3
+const uint32 FNV_OFFSET_BASIS = 2166136261
+const uint32 FNV_PRIME = 16777619
 
 // Compile-time target and layout assertion. The unsupported branch only
 // panics, and both branches select the same declarations on every target
@@ -154,7 +154,7 @@ func empty_header() -> PacketHeader {
     }
 }
 
-func fnv1a_byte(uint32 hash, byte value) -> uint32 {
+func fnv1a_byte(uint32 hash, const byte value) -> uint32 {
     hash ^= cast<uint32>(value)
     hash *= FNV_PRIME
     return hash
@@ -162,7 +162,7 @@ func fnv1a_byte(uint32 hash, byte value) -> uint32 {
 
 // FNV-1a over the header prefix [0, 20) and the payload bytes. The
 // checksum field itself is not part of the covered range.
-func packet_checksum(view<[byte]> raw, uint32 payload_len) -> uint32 {
+func packet_checksum(view<[byte]> raw, const uint32 payload_len) -> uint32 {
     if (raw == null) {
         return 0
     }
@@ -184,7 +184,7 @@ func packet_checksum(view<[byte]> raw, uint32 payload_len) -> uint32 {
     return hash
 }
 
-func build_packet(mview<[byte, 64]> packet, view<[byte]> payload, uint32 payload_len, PacketKind kind, uint32 sequence, uint16 stream_id, uint16 hop_count) -> uint32 {
+func build_packet(mview<[byte, 64]> packet, const view<[byte]> payload, const uint32 payload_len, const PacketKind kind, const uint32 sequence, const uint16 stream_id, const uint16 hop_count) -> uint32 {
     if (packet == null) {
         return 0
     }
@@ -230,7 +230,7 @@ func build_packet(mview<[byte, 64]> packet, view<[byte]> payload, uint32 payload
     return checksum
 }
 
-func decode_header(view<[byte]> bytes) -> PacketHeader {
+func decode_header(const view<[byte]> bytes) -> PacketHeader {
     if (bytes == null) {
         return empty_header()
     }
@@ -252,7 +252,7 @@ func decode_header(view<[byte]> bytes) -> PacketHeader {
     return header
 }
 
-func print_hex_u32(uint32 value) -> void {
+func print_hex_u32(const uint32 value) -> void {
     [byte, 4] raw
     raw.write_uint32_BE(0, value)
     print("0x", null)
@@ -262,7 +262,7 @@ func print_hex_u32(uint32 value) -> void {
     return
 }
 
-func kind_name(PacketKind kind) -> view<[byte]> {
+func kind_name(const PacketKind kind) -> view<[byte]> {
     if (kind == PacketKind::data) {
         return "data"
     }
@@ -275,7 +275,7 @@ func kind_name(PacketKind kind) -> view<[byte]> {
     return "error"
 }
 
-func print_header(PacketHeader header) -> void {
+func print_header(const PacketHeader header) -> void {
     print("magic: ", null)
     print_hex_u32(header.magic)
     print()

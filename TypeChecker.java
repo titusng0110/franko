@@ -793,6 +793,74 @@ public class TypeChecker {
         return false;
     }
 
+    public boolean isFullyDefaultInitialized(SastType t) {
+        return isFullyDefaultInitialized(t, new HashSet<>());
+    }
+
+    private boolean isFullyDefaultInitialized(
+            SastType t,
+            Set<SastType> visited
+    ) {
+        if (t == null) {
+            return false;
+        }
+
+        if (t.kind == SastTypeKind.ENUM
+                || t.kind == SastTypeKind.PTR
+                || t.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            return true;
+        }
+
+        if (t.kind == SastTypeKind.PRIMITIVE) {
+            return false;
+        }
+
+        if (t.kind == SastTypeKind.STATIC_ARRAY) {
+            return isFullyDefaultInitialized(t.elementType, visited);
+        }
+
+        if (t.kind == SastTypeKind.STRUCT) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean fullyDefaulted = true;
+
+            for (FieldSymbol field : t.structSymbol.fields) {
+                if (field.foldedDefault == null
+                        && !isFullyDefaultInitialized(field.type, visited)) {
+                    fullyDefaulted = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return fullyDefaulted;
+        }
+
+        if (t.kind == SastTypeKind.TUPLE) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean fullyDefaulted = true;
+
+            for (FieldSymbol field : t.fields) {
+                if (!isFullyDefaultInitialized(field.type, visited)) {
+                    fullyDefaulted = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return fullyDefaulted;
+        }
+
+        return false;
+    }
+
     public boolean hasDefaultValue(SastType t) {
         return hasDefaultValue(t, new HashSet<>());
     }

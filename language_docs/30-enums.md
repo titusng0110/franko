@@ -70,7 +70,11 @@ States::state2
 ## 30.2 Default Value
 
 The first declared variant is the enum's absolute default value. Enums
-never start as uninitialized or indeterminate memory.
+never start as uninitialized or indeterminate memory. An enum variable may be
+`const` (`const Status s = Status::alive` or `const Status s`), because enum
+types are value-assignable; the const rules then forbid later assignment and
+mutable pointer creation. See
+[Declarations](18-declarations.md#188-const-storage).
 
 - Local variables: `Types t;` initializes to the first variant.
 - Global variables: `Types g;` initializes to the first variant before

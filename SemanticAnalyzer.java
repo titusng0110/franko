@@ -406,7 +406,8 @@ public final class SemanticAnalyzer {
                 Symbol sym = Symbol.global(
                         currentNamespaceName(),
                         item.name,
-                        type
+                        type,
+                        item.isConst
                 );
 
                 if (item.literalBytes != null) {
@@ -728,7 +729,8 @@ public final class SemanticAnalyzer {
             params.add(Symbol.parameter(
                     param.name,
                     typeResolver.analyzeNormalType(param.type),
-                    i
+                    i,
+                    param.isConst
             ));
         }
 
@@ -803,7 +805,9 @@ public final class SemanticAnalyzer {
             params.add(Symbol.parameter(
                     param.name,
                     typeResolver.analyzeNormalType(param.type),
-                    i
+                    i,
+                    param.isConst
+                            || (i == 0 && "self".equals(param.name))
             ));
         }
 
@@ -895,7 +899,8 @@ public final class SemanticAnalyzer {
                 fallbackParams.add(Symbol.parameter(
                         param.name,
                         typeResolver.analyzeNormalType(param.type),
-                        i
+                        i,
+                        param.isConst
                 ));
             }
 
@@ -966,7 +971,9 @@ public final class SemanticAnalyzer {
                 fallbackParams.add(Symbol.parameter(
                         param.name,
                         typeResolver.analyzeNormalType(param.type),
-                        i
+                        i,
+                        param.isConst
+                                || (i == 0 && "self".equals(param.name))
                 ));
             }
 
@@ -1039,7 +1046,12 @@ public final class SemanticAnalyzer {
         }
 
         if (stmt.kind == AstKind.VAR_DECL_INIT) {
-            out.addAll(analyzeVarDeclInitStmtList(stmt));
+            out.add(analyzeVarDeclInitStmt(stmt));
+            return;
+        }
+
+        if (stmt.kind == AstKind.VAR_DECL_FIELDS_INIT) {
+            out.add(analyzeVarDeclFieldsInitStmt(stmt));
             return;
         }
 
@@ -1126,12 +1138,19 @@ public final class SemanticAnalyzer {
         }
 
         if (node.kind == AstKind.VAR_DECL_INIT) {
-
             symbolTable.pushScope();
-            List<SastNode> stmts = analyzeVarDeclInitStmtList(node);
+            SastNode lowered = analyzeVarDeclInitStmt(node);
             symbolTable.popScope();
 
-            return SastNode.block(node.span, stmts);
+            return lowered;
+        }
+
+        if (node.kind == AstKind.VAR_DECL_FIELDS_INIT) {
+            symbolTable.pushScope();
+            SastNode lowered = analyzeVarDeclFieldsInitStmt(node);
+            symbolTable.popScope();
+
+            return lowered;
         }
 
         if (node.kind == AstKind.VAR_DECL) {
@@ -1146,7 +1165,8 @@ public final class SemanticAnalyzer {
             Symbol sym = Symbol.variable(
                     null,
                     node.name,
-                    typeResolver.analyzeNormalType(node.type)
+                    typeResolver.analyzeNormalType(node.type),
+                    node.isConst
             );
 
             symbolTable.declare(sym);
@@ -1305,7 +1325,7 @@ public final class SemanticAnalyzer {
         }
     }
 
-    private List<SastNode> analyzeVarDeclInitStmtList(
+    private SastNode analyzeVarDeclInitStmt(
             AstNode n
     ) {
         symbolTable.diagnostics().push(n.span);
@@ -1315,21 +1335,21 @@ public final class SemanticAnalyzer {
         Symbol sym = Symbol.variable(
                 null,
                 n.name,
-                type
+                type,
+                n.isConst
         );
 
         symbolTable.declare(sym);
 
-        List<SastNode> stmts = new ArrayList<>();
-        stmts.add(SastNode.varDecl(n.span, sym));
+        SastNode target =
+                SastNode.varExpr(n.span, sym.type, sym);
+
+        List<SastNode> initializers = new ArrayList<>();
 
         if (n.init != null) {
-            SastNode target =
-                    SastNode.varExpr(n.span, sym.type, sym);
-
             ExpressionAnalyzer.OperatorAssignmentLowering lowered = null;
 
-            if (target.type.kind == SastTypeKind.STRUCT) {
+            if (target.type.kind == SastTypeKind.STRUCT && !n.isConst) {
                 lowered = exprAnalyzer.tryLowerOperatorAssignment(
                         target,
                         "=",
@@ -1340,26 +1360,84 @@ public final class SemanticAnalyzer {
 
             if (lowered != null) {
                 if (lowered.call != null) {
-                    stmts.add(SastNode.exprStmt(n.span, lowered.call));
-                    return stmts;
+                    initializers.add(SastNode.exprStmt(n.span, lowered.call));
+                    return SastNode.varDeclInit(n.span, sym, initializers);
                 }
 
                 if (lowered.fallbackValue != null) {
-                    stmts.add(SastNode.assign(
+                    initializers.add(SastNode.assign(
                             n.span,
                             target,
                             lowered.fallbackValue));
-                    return stmts;
+                    return SastNode.varDeclInit(n.span, sym, initializers);
                 }
             }
 
             SastNode value =
                     exprAnalyzer.analyzeExprWithExpectedType(n.init, type);
 
-            stmts.add(SastNode.assign(n.span, target, value));
+            initializers.add(SastNode.assign(n.span, target, value));
         }
 
-        return stmts;
+        return SastNode.varDeclInit(n.span, sym, initializers);
+        } finally {
+            symbolTable.diagnostics().pop();
+        }
+    }
+
+    private SastNode analyzeVarDeclFieldsInitStmt(
+            AstNode n
+    ) {
+        symbolTable.diagnostics().push(n.span);
+        try {
+        SastType type = typeResolver.analyzeNormalType(n.type);
+
+        Symbol sym = Symbol.variable(
+                null,
+                n.name,
+                type,
+                n.isConst
+        );
+
+        symbolTable.declare(sym);
+
+        List<SastNode> initializers = new ArrayList<>();
+        int position = 0;
+
+        for (AstNode entry : n.fields) {
+            String fieldName;
+
+            if (entry.positional) {
+                fieldName = "_" + position;
+                position++;
+            } else {
+                fieldName = entry.name;
+            }
+
+            AstNode rawTarget = AstNode.memberAccess(
+                    entry.span,
+                    AstNode.var(n.span, n.name),
+                    fieldName
+            );
+
+            SastNode target = exprAnalyzer.analyzeRequiredLValueExpr(
+                    rawTarget,
+                    "Field initializer target"
+            );
+
+            SastNode value = exprAnalyzer.analyzeExprWithExpectedType(
+                    entry.value,
+                    target.type
+            );
+
+            initializers.add(SastNode.assign(
+                    entry.span,
+                    target,
+                    value
+            ));
+        }
+
+        return SastNode.varDeclInit(n.span, sym, initializers);
         } finally {
             symbolTable.diagnostics().pop();
         }

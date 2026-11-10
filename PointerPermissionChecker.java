@@ -192,6 +192,16 @@ public final class PointerPermissionChecker {
             return;
         }
 
+        if (node.kind == SastKind.VAR_DECL_INIT) {
+            trackIfPointer(node.symbol);
+
+            for (SastNode initializer : node.initializers) {
+                checkStmt(initializer);
+            }
+
+            return;
+        }
+
         if (node.kind == SastKind.ASSIGN) {
             markPath(node.target, PtrPermission.MUTABLE);
             markValue(node.value, requiredLevel(node.target.type));

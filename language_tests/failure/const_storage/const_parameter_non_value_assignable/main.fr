@@ -1,0 +1,7 @@
+func f(const [int32] values) -> int32 {
+    return 0
+}
+
+func main() -> int32 {
+    return 0
+}

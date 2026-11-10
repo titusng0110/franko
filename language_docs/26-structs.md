@@ -55,7 +55,7 @@ Rules:
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](22-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
-- Fields are kept in declaration order; that order is also the generated field order.
+- Fields are kept in declaration order.
 - Field names are ordinary identifiers; keywords cannot be field names. By convention they use `lower_case_snake_case`: a field whose name starts with `_` is private to the struct and warns when accessed from outside it. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](36-naming-conventions.md).
 
 ## 26.3 Field Default Values
@@ -133,7 +133,13 @@ Static arrays and dynamic arrays are not assignable, so a struct or tuple contai
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](16-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](16-assignment.md#167-operator-assignment)).
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](16-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](16-assignment.md#167-operator-assignment)). A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value assignment is always the built-in field copy.
+- **Const structs.** A value-assignable struct may be declared `const`
+  (`const Point p`). Its fields may be read, but not written. Only a
+  `view<X> self` method may be called on a const struct; `ptr<X> self` and
+  `mview<X> self` calls are rejected. Struct fields themselves cannot be
+  `const` (`Struct fields cannot be const`). See
+  [Declarations](18-declarations.md#188-const-storage).
 - **Aggregate literals.** An assignable struct value can be constructed directly with `X { field = value, ... }`; the temporary requires the struct to be value-assignable. For pointer-only structs use the field-wise declaration form `X x { field = value }` instead. See [Aggregate Literals](29-aggregate-literals.md).
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](19-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
@@ -164,12 +170,12 @@ xs[i].field           // element of a static or dynamic array
 ## 26.8 Initialization Semantics
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; enum fields default to their enum's first variant; fields without defaults start with indeterminate values, like ordinary local variables, except pointer fields, which are null (see [Declarations](18-declarations.md)).
-- **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
+- **Declaration initialization.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value as part of the declaration.
 - **Aggregate literals.** `P p = P { field = value, ... };` default-constructs a temporary, assigns the named fields in source order, then assigns the whole temporary to the declaration target. Empty and partial literals are legal. The struct must be value-assignable to be constructed this way, even when it declares `OPERATOR_MOV`. See [Aggregate Literals](29-aggregate-literals.md).
 - **Field-wise declaration initializers.** `P p { field = value, ... }` declares `p` and assigns each named field directly, without a temporary and without invoking `OPERATOR_MOV`. This form works for pointer-only structs.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
-Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration initialization copies a whole tuple value.
 
 ## 26.9 Struct Globals
 

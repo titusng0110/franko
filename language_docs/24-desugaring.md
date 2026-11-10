@@ -1,11 +1,11 @@
-# 24. Desugaring
+# 24. Shorthands and Equivalences
 
 Some Franko source forms are convenient shorthand for simpler forms. The
 shorthand and its equivalent have the same meaning; the normal
 declaration, assignment, array initialization, and type rules apply to
 the equivalent form.
 
-## 24.1 Declaration Initializer Sugar
+## 24.1 Declaration Initialization
 
 This:
 
@@ -13,31 +13,35 @@ This:
 int x = 10;
 ```
 
-is accepted in statement contexts where a declaration followed by an
-assignment is legal, and is shorthand for:
+is a declaration-initialization statement, not shorthand for a separate
+assignment. It declares `x` and initializes it as one construct. The same
+holds for the field-wise form and for `const`:
 
 ```franko
-int x;
-x = 10;
+Literal lit { x = 0 }
+const int32 y = 10
+const Point p { x = 1 }
 ```
 
-At global scope, declaration initializer sugar is currently invalid when
-its equivalent form is an assignment, because executable statements are
-not allowed at global scope.
+Declaration initialization is evaluated once as part of the declaration; a
+`const` variable can therefore be initialized here and nowhere else. At
+global scope only the existing global initializer
+forms are valid (constant initializer, static address, string literal, or an
+array literal through a pointer). See
+[Declarations](18-declarations.md#188-const-storage).
 
-## 24.2 Array Literal Desugaring
+## 24.2 Array and Aggregate Literal Values
 
-Array literals are not assignment sugar: they are `view<[T, N]>` values
-over immutable constant storage, exactly like string literals. An array
-literal is never rewritten into statements; its element type is inferred
-from the surrounding assignment, return, or call-argument context. See
-[Array Literals](21-array-literals.md).
+Array literals are not assignment shorthand: they are `view<[T, N]>` values
+over immutable constant storage, exactly like string literals. Their element
+type is inferred from the surrounding assignment, return, or call-argument
+context. See [Array Literals](21-array-literals.md).
 
-Aggregate literal expressions are likewise never rewritten into statements.
-They remain expressions and are lowered during semantic analysis into a
-temporary struct or tuple value. See [Aggregate Literals](29-aggregate-literals.md).
+Aggregate literals are likewise ordinary values, not statement shorthand: they
+construct a temporary struct or tuple value. See
+[Aggregate Literals](29-aggregate-literals.md).
 
-## 24.3 String Literal Desugaring
+## 24.3 String Literal Values
 
 Every string literal is a read-only `view<[byte, N]>` over immutable
 storage holding its UTF-8 bytes. No null terminator is added, and
@@ -74,7 +78,7 @@ This makes braceless and braced bodies scope identically: a declaration
 inside a braceless body is scoped to that implicit block and is not
 visible after the `if`/`while`/`for`. See [Statements](17-statements.md).
 
-## 24.5 For Loop Desugaring
+## 24.5 For Loop Equivalence
 
 A `for` loop is equivalent to declaration/assignment statements and a
 `while` loop:
@@ -107,8 +111,8 @@ present, `update` runs at the end of every iteration, including the
 last: `continue` runs it, and `break` skips it, matching C's `for`
 semantics. See [Statements](17-statements.md).
 
-The `init` and `update` statements follow the ordinary statement sugar
-rules, so declaration initializer sugar in the header expands normally.
+The `init` and `update` statements follow the ordinary statement rules, so
+declaration initialization in the header is handled normally.
 See [Statements](17-statements.md).
 
 ## 24.6 Inferred Static Array Sizes (`?`)
@@ -179,9 +183,9 @@ Evaluation failures are compile errors:
 Constant expressions inside ordinary code are also folded at compile
 time. See [Constant Folding](08-constant-folding.md).
 
-## 24.8 Increment and Decrement Desugaring
+## 24.8 Increment and Decrement Equivalence
 
-Postfix increment and decrement statements are sugar for compound
+Postfix increment and decrement statements are equivalent to compound
 assignment:
 
 ```franko
@@ -201,16 +205,17 @@ target, operand rules, single evaluation of the target) applies
 identically to `x++` / `x--`. The literal `1` remains a fluid integer
 constant. See [Assignment](16-assignment.md).
 
-## 24.9 Aggregate Field Initializer Desugaring
+## 24.9 Aggregate Field Initialization
 
-A field-wise declaration initializer is sugar for a declaration followed by
-one ordinary field assignment per named field, in source order:
+A field-wise declaration initializer is declaration initialization, not a
+separate assignment statement. It initializes one ordinary field at a time,
+in source order:
 
 ```franko
 Literal lit { def = 1, x = 0 }
 ```
 
-is equivalent to:
+behaves as:
 
 ```franko
 Literal lit
@@ -218,7 +223,9 @@ lit.def = 1
 lit.x = 0
 ```
 
-An all-unnamed tuple declaration accepts positional entries, which are
+but is evaluated as declaration initialization, so it can initialize a
+`const` aggregate and never invokes `OPERATOR_MOV`. An
+all-unnamed tuple declaration accepts positional entries, which are
 written to `_0`, `_1`, … in order and fill the first N elements:
 
 ```franko
@@ -235,8 +242,7 @@ pair._1 = 1
 
 A partial list such as `{ 0 }` writes only `_0`. The brace must immediately
 follow the identifier; a newline ends the declaration. Duplicate field
-initializers and positional lists that exceed the tuple size are rejected
-during desugaring. Positional entries are invalid for structs and named or
+initializers and positional lists that exceed the tuple size are rejected. Positional entries are invalid for structs and named or
 mixed tuple spellings, and positional and named entries cannot be mixed. No
 temporary aggregate value is created, so the form also works for pointer-only
 aggregates; each entry must still obey ordinary assignment rules. See

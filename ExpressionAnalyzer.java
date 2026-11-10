@@ -889,6 +889,12 @@ public final class ExpressionAnalyzer {
             AstNode rawValue,
             SourceSpan span
     ) {
+        Symbol storage = target.storageSymbol();
+
+        if (storage != null && storage.isConst) {
+            return null;
+        }
+
         if (!(target.type.kind == SastTypeKind.STRUCT)) {
             return null;
         }

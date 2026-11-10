@@ -2,6 +2,10 @@
 
 This pack restructures the Franko language reference into smaller Markdown files.
 
+These documents describe the Franko language and its observable behavior. Compiler
+architecture, internal representations, lowering passes, and generated C++ details
+belong in `compiler_docs.md`, not here.
+
 ## Recommended assembly order
 
 Use `SUMMARY.md` as the canonical order.
@@ -31,7 +35,7 @@ The cleaned section ordering is:
 21. Array Literals
 22. Array Intrinsics
 23. String Literals
-24. Desugaring
+24. Shorthands and Equivalences
 25. Pointers
 26. Structs
 27. Methods

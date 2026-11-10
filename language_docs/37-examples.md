@@ -653,3 +653,51 @@ func main() -> int32 {
 See [Aggregate Literals](29-aggregate-literals.md) for the complete rules,
 including the all-named/all-unnamed tuple spelling rule and the
 `OPERATOR_MOV` distinction.
+
+## 37.26 Const Storage
+
+```franko
+import "franko/io"
+
+struct Point {
+    int32 x = 0
+    int32 y = 0
+
+    func sum(view<Point> self) -> int32 {
+        return $(self).x + $(self).y
+    }
+}
+
+const int32 MAX_POINTS = 10
+const Point ORIGIN
+
+func sum(const int32 a, const int32 b) -> int32 {
+    return a + b
+}
+
+func main() -> int32 {
+    const int32 width = 3
+    const Point p = Point { x = 4, y = 5 }
+    const Point q { x = 6 }
+    const (int32, int32) pair = (int32, int32) { 1, 2 }
+
+    int32 value = 7
+    const ptr<int32> link = getptr(value)
+    $(link) = 8                     // pointee write is allowed
+
+    view<Point> v = getview(p)      // const storage: getview only
+
+    print(width)                    // 3
+    print(p.sum())                  // 9
+    print(q.x)                      // 6
+    print(pair._1)                  // 2
+    print($(v).y)                   // 5
+    print(value)                    // 8
+    print(MAX_POINTS)               // 10
+    print(ORIGIN.x)                 // 0
+    print(sum(1, 2))                // 3
+    return 0
+}
+```
+
+See [Declarations](18-declarations.md#188-const-storage).

@@ -38,10 +38,10 @@ struct LifeGrid {
     }
 
     // Count live cells in the eight surrounding positions.
-    func neighbour_count(view<LifeGrid> self, uint32 row, uint32 col) -> uint32 {
+    func neighbour_count(view<LifeGrid> self, const uint32 row, const uint32 col) -> uint32 {
         uint32 count = 0
-        int32 centre_row = unsafe_cast<int32>(row)
-        int32 centre_col = unsafe_cast<int32>(col)
+        const int32 centre_row = unsafe_cast<int32>(row)
+        const int32 centre_col = unsafe_cast<int32>(col)
 
         for (int32 drow = -1; drow <= 1; drow++) {
             for (int32 dcol = -1; dcol <= 1; dcol++) {
@@ -67,7 +67,7 @@ struct LifeGrid {
     func step(mview<LifeGrid> self) -> void {
         for (uint32 row = 0; row < 16; row++) {
             for (uint32 col = 0; col < 16; col++) {
-                uint32 neighbours = $(self).neighbour_count(row, col)
+                const uint32 neighbours = $(self).neighbour_count(row, col)
                 byte alive = 0
 
                 if ($(self).cells[row][col] == Cell::alive) {
@@ -106,7 +106,7 @@ struct LifeGrid {
 
     // Print a generation label, then the 16 rows of '#' (alive) and
     // '.' (dead) cells through a byte row buffer.
-    func print_generation(view<LifeGrid> self, uint32 generation) -> void {
+    func print_generation(view<LifeGrid> self, const uint32 generation) -> void {
         [byte] row_buffer
         row_buffer.init(16)
 

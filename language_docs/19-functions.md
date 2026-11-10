@@ -28,6 +28,17 @@ Function declarations are valid only in global scope.
 
 Function parameters are treated as local variables inside the function body.
 
+A parameter may be declared `const`: `func sum(const int32 a, const int32 b)`
+or `func f(const Point p)`. Const parameters have the same assignment
+restrictions as const locals: the parameter cannot be reassigned, and only
+`getview` may take a mutable pointer to it. A const parameter's type must be
+value-assignable. `const self` is allowed in methods and only makes the
+pointer slot itself immutable; the declared `ptr`/`mview`/`view` permission
+still governs the pointee.
+
+`const` is not part of a parameter type, a function signature, or overload
+identity: `f(const int32)` and `f(int32)` are duplicate declarations.
+
 Duplicate parameter names inside the same function are invalid.
 
 A parameter type must be a **passable type**:

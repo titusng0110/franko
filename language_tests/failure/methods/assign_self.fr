@@ -1,0 +1,15 @@
+struct X {
+    int32 n = 0
+
+    func retarget(ptr<X> self, ptr<X> other) -> void {
+        self = other
+        return
+    }
+}
+
+func main() -> int32 {
+    X a
+    X b
+    a.retarget(getptr(b))
+    return 0
+}

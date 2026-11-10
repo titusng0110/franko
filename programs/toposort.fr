@@ -2,7 +2,7 @@ import "franko/io"
 import "franko/string"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -30,7 +30,7 @@ namespace text {
     }
 
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -55,7 +55,7 @@ namespace text {
         return 0
     }
 
-    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+    func parse_uint32(view<[byte]> buf, const uint32 start, const uint32 count, mview<uint32> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -97,7 +97,7 @@ namespace text {
 // setup/teardown methods need allocation rights (ptr self); the DFS and
 // verification methods use mview/read-only receivers.
 
-uint32 NODE_NIL = 0xFFFFFFFF
+const uint32 NODE_NIL = 0xFFFFFFFF
 
 enum<uint8> Mark {
     white,
@@ -117,7 +117,7 @@ struct TopoSort {
     uint32 order_len = 0
     byte has_cycle = 0
 
-    func setup(ptr<TopoSort> self, uint32 nodes, uint32 edges) -> int32 {
+    func setup(ptr<TopoSort> self, const uint32 nodes, const uint32 edges) -> int32 {
         int32 status = 0
         uint32 node_cap = nodes
         uint32 edge_cap = edges
@@ -182,14 +182,14 @@ struct TopoSort {
         return
     }
 
-    func add_edge(mview<TopoSort> self, uint32 edge_index, uint32 from, uint32 dest) -> void {
+    func add_edge(mview<TopoSort> self, const uint32 edge_index, const uint32 from, const uint32 dest) -> void {
         $(self).to[edge_index] = dest
         $(self).next[edge_index] = $(self).head[from]
         $(self).head[from] = edge_index
         return
     }
 
-    func dfs_visit(mview<TopoSort> self, uint32 node) -> void {
+    func dfs_visit(mview<TopoSort> self, const uint32 node) -> void {
         $(self).mark[node] = Mark::gray
 
         uint32 edge = $(self).head[node]
@@ -238,7 +238,7 @@ struct TopoSort {
         return 1
     }
 
-    func emit_case(mview<TopoSort> self, uint32 case_number) -> void {
+    func emit_case(mview<TopoSort> self, const uint32 case_number) -> void {
         print("case ", null)
 
         if ($(self).has_cycle != 0) {
@@ -265,7 +265,7 @@ struct TopoSort {
 
 namespace topo {
 
-    func skip_ws(view<[byte]> buf, uint32 len, uint32 pos) -> uint32 {
+    func skip_ws(view<[byte]> buf, const uint32 len, const uint32 pos) -> uint32 {
         if (buf == null) {
             return pos
         }
@@ -281,7 +281,7 @@ namespace topo {
         return i
     }
 
-    func parse_one(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
+    func parse_one(view<[byte]> buf, const uint32 len, mview<uint32> out) -> byte {
         if (buf == null) {
             return 0
         }
@@ -305,7 +305,7 @@ namespace topo {
         return text::parse_uint32(buf, start, i - start, out)
     }
 
-    func parse_pair(view<[byte]> buf, uint32 len, mview<uint32> first, mview<uint32> second) -> byte {
+    func parse_pair(view<[byte]> buf, const uint32 len, mview<uint32> first, mview<uint32> second) -> byte {
         if (buf == null) {
             return 0
         }
@@ -347,7 +347,7 @@ namespace topo {
         return text::parse_uint32(buf, start, i - start, second)
     }
 
-    func read_one(mview<[byte]> buf, uint32 cap, mview<uint32> out) -> byte {
+    func read_one(mview<[byte]> buf, const uint32 cap, mview<uint32> out) -> byte {
         if (buf == null) {
             return 0
         }
@@ -362,7 +362,7 @@ namespace topo {
         return parse_one(buf, len, out)
     }
 
-    func read_pair(mview<[byte]> buf, uint32 cap, mview<uint32> first, mview<uint32> second) -> byte {
+    func read_pair(mview<[byte]> buf, const uint32 cap, mview<uint32> first, mview<uint32> second) -> byte {
         if (buf == null) {
             return 0
         }
@@ -380,7 +380,7 @@ namespace topo {
         return parse_pair(buf, len, first, second)
     }
 
-    func solve_case(uint32 nodes, uint32 edges, mview<[byte]> line, uint32 cap, uint32 case_number) -> int32 {
+    func solve_case(const uint32 nodes, const uint32 edges, const mview<[byte]> line, const uint32 cap, const uint32 case_number) -> int32 {
         if (line == null) {
             return -1
         }

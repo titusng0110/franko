@@ -1,0 +1,13 @@
+struct X {
+    int32 n = 0
+
+    func set(mview<X> self, int32 value) -> void {
+        $(self).n = value
+    }
+}
+
+func main() -> int32 {
+    const X x
+    x.set(1)
+    return 0
+}

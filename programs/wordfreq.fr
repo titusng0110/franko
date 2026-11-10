@@ -17,7 +17,7 @@ import "franko/pool"
 import "franko/string"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -45,7 +45,7 @@ namespace text {
     }
 
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -70,7 +70,7 @@ namespace text {
         return 0
     }
 
-    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+    func parse_uint32(view<[byte]> buf, const uint32 start, const uint32 count, mview<uint32> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -88,7 +88,7 @@ namespace text {
         return 1
     }
 
-    func is_alpha(byte b) -> byte {
+    func is_alpha(const byte b) -> byte {
         if (b >= 65 && b <= 90) {
             return 1
         }
@@ -98,14 +98,14 @@ namespace text {
         return 0
     }
 
-    func to_lower(byte b) -> byte {
+    func to_lower(const byte b) -> byte {
         if (b >= 65 && b <= 90) {
             return b + 32
         }
         return b
     }
 
-    func print_slice(view<[byte]> buf, uint32 start, uint32 count) -> void {
+    func print_slice(view<[byte]> buf, const uint32 start, const uint32 count) -> void {
         if (buf == null || count == 0) {
             return
         }
@@ -122,8 +122,8 @@ namespace text {
 }
 
 
-uint32 NIL = 0xFFFFFFFF
-uint32 MAX_NODES = 4096
+const uint32 NIL = 0xFFFFFFFF
+const uint32 MAX_NODES = 4096
 
 struct TrieNode {
     [uint32, 26] child
@@ -139,7 +139,7 @@ struct WordTrie {
     [byte, 512] word
 
     // Allocate the payload and slot table, then take the root node.
-    func init(ptr<WordTrie> self, uint32 capacity) -> int32 {
+    func init(ptr<WordTrie> self, const uint32 capacity) -> int32 {
         int32 status = $(self).nodes.init(capacity)
         if (status != 0) {
             return -1
@@ -190,7 +190,7 @@ struct WordTrie {
     }
 
     // Insert the lowercase word in word[0, count).
-    func insert(mview<WordTrie> self, view<[byte]> word, uint32 count) -> int32 {
+    func insert(mview<WordTrie> self, const view<[byte]> word, const uint32 count) -> int32 {
         if (word == null) {
             return -1
         }
@@ -223,7 +223,7 @@ struct WordTrie {
     }
 
     // Split one input line into ASCII letter runs and insert each word.
-    func process_line(mview<WordTrie> self, view<[byte]> line, uint32 length) -> int32 {
+    func process_line(mview<WordTrie> self, const view<[byte]> line, const uint32 length) -> int32 {
         if (line == null) {
             return -1
         }
@@ -260,7 +260,7 @@ struct WordTrie {
     }
 
     // In-order traversal: print this node's word, then children a..z.
-    func walk(view<WordTrie> self, uint32 node, uint32 depth, mview<[byte]> path) -> void {
+    func walk(view<WordTrie> self, const uint32 node, const uint32 depth, mview<[byte]> path) -> void {
         if (path == null) {
             return
         }

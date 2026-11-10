@@ -175,6 +175,16 @@ public final class PrivateIdentifierLinter {
             return;
         }
 
+        if (node.kind == SastKind.VAR_DECL_INIT) {
+            checkType(node.symbol.type);
+
+            for (SastNode initializer : node.initializers) {
+                checkStmt(initializer);
+            }
+
+            return;
+        }
+
         if (node.kind == SastKind.ASSIGN) {
             checkExpr(node.target);
             checkExpr(node.value);

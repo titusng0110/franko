@@ -31,8 +31,8 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](28-tuples.md));
-- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](27-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value assignment is always the built-in field copy. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](28-tuples.md));
+- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](27-methods.md)); the `self` slot is implicitly const and cannot be reassigned; general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
 - comparison and assignment operators on structs are only those with `OPERATOR_*` methods; arithmetic, bitwise, shift, and logical operators are not overloadable (see [Operators](13-operators.md#1310-struct-operator-overloading)).
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](26-structs.md).
@@ -116,12 +116,12 @@ The unary plus operator does not exist in the language:
 
 Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](16-assignment.md)).
 
-Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. See [Operators](13-operators.md#1310-struct-operator-overloading).
+Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
 
 ## 35.13 String Literals Cannot Initialize Arrays
 
-A string literal is a `view<[byte, N]>` value, not byte-array
-sugar (see [String Literals](23-string-literals.md)). Arrays are not
+A string literal is a `view<[byte, N]>` value, not a byte-array
+value (see [String Literals](23-string-literals.md)). Arrays are not
 assignable, so a string literal cannot initialize or assign an array;
 copy the bytes with `memcpy` instead.
 
@@ -160,10 +160,9 @@ The following forms do not exist in the grammar:
 
 ## 35.17 Operator Overload Lifetime Limitation
 
-Operator operands may be rvalues: the compiler borrows them through a
-temporary whose lifetime is the full expression. This is the C++ `const&`
-temporary model, not Rust-style lifetime tracking. The operator method
-must not retain the borrowed `other` view beyond the call.
+Operator operands may be rvalues: an rvalue operand is borrowed for the
+duration of the full expression. The operator method must not retain the
+borrowed `other` view beyond the call.
 
 The direct escape is closed by the operator signatures (`uint8`/`void`
 returns) and by the dangling-pointer store rule: storing the borrowed

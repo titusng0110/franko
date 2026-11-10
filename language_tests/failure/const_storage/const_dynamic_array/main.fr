@@ -1,0 +1,4 @@
+func main() -> int32 {
+    const [int32] xs
+    return 0
+}

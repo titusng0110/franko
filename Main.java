@@ -193,7 +193,7 @@ public class Main {
                 "legality",
                 SastPhase.LEGALITY,
                 "==== Legality Checking ====",
-                null,
+                "==== Legality Warnings ====",
                 "Legality checking failed:",
                 PassCall.legality(semaResult.document)
         );
@@ -201,8 +201,13 @@ public class Main {
         SastDocument branchPruned = new BranchPruner().prune(legalityResult.document);
         artifacts.writeSast(SastPhase.BRANCH_PRUNED, branchPruned);
 
-        SastDocument inactivePruned =
-                new InactiveDeclarationPruner().prune(branchPruned);
+        SastDocument inactivePruned = branchPruned;
+
+        for (int i = 0; i < 2; i++) {
+            inactivePruned =
+                    new InactiveDeclarationPruner().prune(inactivePruned);
+        }
+
         artifacts.writeSast(SastPhase.INACTIVE_PRUNED, inactivePruned);
 
         MemoryAnalysisContext memoryContext =

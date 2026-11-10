@@ -1,0 +1,5 @@
+func main() -> int32 {
+    const (int32, int32) pair
+    pair._0 = 1
+    return 0
+}

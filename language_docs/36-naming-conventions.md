@@ -161,7 +161,9 @@ Use `bignum::BigInteger` and `os::win32`, not `big_num::BigInteger` or
 
 ## 36.6 Constants
 
-Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`:
+Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`.
+`const` globals follow the same convention; the compiler does not enforce the
+casing, but `const int32 MAX_SIZE = 10` is the recommended style:
 
 ```franko
 byte IS_WINDOWS = 0
@@ -195,23 +197,11 @@ The prefix composes with the base convention for the kind of declaration. For
 example, a private field uses snake case after `_`, while an internal struct
 uses CamelCase after `__`.
 
-Tuple element names are declaration-site aliases, not symbols: `(int32 val,
+Tuple element names are declaration-site aliases: `(int32 val,
 int32 err)` and `(int32 left, int32 right)` are the same tuple type, and the
 names are only used for member access in their own declaration. Unnamed tuple
 elements are accessed as `_0`, `_1`, and so on. These names are not struct
 members, so the `_` private-field warning does not apply to them.
-
-Compiler-generated tuple structs use the C++ type name `TUPLE_<8hex>`.
-Ordinary user structs always emit with the `STRUCT_` prefix
-(`STRUCT_<Name>`), so a user struct whose Franko name begins with `TUPLE_`
-still emits a distinct C++ name and is allowed.
-
-Function and method names use 8 hex digits, e.g. `FUNC_foo_deadbeef`.
-Synthetic tuple structs use `TUPLE_<8hex>`. Hoisted string literals emit as
-`STRLIT_<16hex>` and hoisted array literals emit as `ARRLIT_<16hex>`; these
-are literal storage, not variables, so they do not use the `VAR_` prefix.
-Every generated hash uses the same FNV offset-basis seed and 64-bit FNV
-prime; the 8-hex names keep the low 32 bits.
 
 The compiler currently warns about the following public accesses:
 

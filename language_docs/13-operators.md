@@ -164,6 +164,14 @@ overload; if none applies it falls back to the normal whole-struct
 assignment rules. Compound assignment has no built-in struct fallback:
 `a += b` requires a matching `OPERATOR_ADDMOV`.
 
+A struct that is value-assignable (all fields value-assignable, recursively)
+**cannot declare `OPERATOR_MOV`**: its whole-value assignment is always the
+built-in field copy. This is a declaration error even if the operator is never
+used. Compound assignment methods (`OPERATOR_ADDMOV` … `OPERATOR_XORMOV`)
+remain allowed. Pointer-only structs may still declare `OPERATOR_MOV` to opt
+into custom whole-value assignment; see
+[Operator Assignment](16-assignment.md#167-operator-assignment).
+
 Operator methods may still be called explicitly:
 
 ```franko
@@ -171,16 +179,14 @@ a.OPERATOR_EQ(getview(b))
 ```
 
 Operator operands may be arbitrary value expressions. Lvalue operands use
-their address; rvalue operands are borrowed through a compiler-generated
-temporary whose lifetime is the full expression. User-written `getview`
+their address; rvalue operands are borrowed for the duration of the full
+expression. User-written `getview`
 still requires a storage-backed lvalue, so `getview(5)` and
 `getview(make_x())` remain invalid. The left-hand side of an assignment
 must still be a storage-backed lvalue.
 
 The right-hand operand is always borrowed as `view<T>` where `T` is its
-static type. There is no direct pass for view-valued expressions, string
-literals, or array literals. A view value therefore needs a
-`view<view<...>>` parameter:
+static type. A view value therefore needs a `view<view<...>>` parameter:
 
 ```franko
 OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
@@ -190,14 +196,12 @@ OPERATOR_MOV(ptr<X> self, view<view<[byte]>> other)  // x = "hello"
 When the parameter is itself a view of a view, overload resolution checks
 the parameter's inner referenced type and applies the ordinary pointer
 conversion there. Thus the inner `view<[byte, 10]>` value decays to
-`view<[byte]>` for a `view<view<[byte]>>` parameter. The representation is
-unchanged: both inner types use the same fat-pointer value.
+`view<[byte]>` for a `view<view<[byte]>>` parameter.
 
 Integer constants use the ordinary fluid-constant fitting rules against
 `view<primitive>` parameters: an exact natural-type match wins, otherwise
 the narrowest fitting type wins with signed before unsigned at equal
-width. The selected constant is materialized as a temporary of the
-parameter's referenced primitive type before being borrowed.
+width.
 
 Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
 
@@ -207,4 +211,4 @@ type on both sides. Arithmetic, bitwise, shift, logical, and
 compound-assignment operators reject enum operands. See [Enums](30-enums.md).
 
 See [Assignment](16-assignment.md) and [Methods](27-methods.md) for the
-full lowering, fallback, and lifetime rules.
+full operator rules.

@@ -737,6 +737,16 @@ public class Cpp14Codegen {
             return;
         }
 
+        if (node.kind == SastKind.VAR_DECL_INIT) {
+            emitVarDecl(node);
+
+            for (SastNode initializer : node.initializers) {
+                emitStmt(initializer);
+            }
+
+            return;
+        }
+
         if (node.kind == SastKind.ASSIGN) {
             emitAssign(node);
             return;

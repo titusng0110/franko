@@ -23,24 +23,24 @@ view<[uint32, 128]> RANDOM_PIVOTS = [
     0x3E81243F, 0x5B02B41B, 0x391FFABD, 0x2751AF9F, 0x4071A3F8, 0xC4EC845A, 0xD80970E2, 0x3CBFCC9D
 ]
 
-uint32 NETWORK_LIMIT = 8
-uint32 SMALL_SORT_LIMIT = 24
-uint32 DNF_THRESHOLD = 70
-uint32 MHAT_MIN_ITEMS = 100000
-uint32 MHAT_SAMPLE_MIN = 100
-uint32 MHAT_SAMPLE_MAX = 20000
-uint32 PROBE22_MIN_ITEMS = 6941
-uint32 PROBE16_MIN_ITEMS = 4000
-uint32 PROBE64_MIN_ITEMS = 58603
-uint32 PROBE49_MIN_ITEMS = 34364
-uint32 PROBE37_MIN_ITEMS = 19604
-uint32 PROBE29_MIN_ITEMS = 12050
+const uint32 NETWORK_LIMIT = 8
+const uint32 SMALL_SORT_LIMIT = 24
+const uint32 DNF_THRESHOLD = 70
+const uint32 MHAT_MIN_ITEMS = 100000
+const uint32 MHAT_SAMPLE_MIN = 100
+const uint32 MHAT_SAMPLE_MAX = 20000
+const uint32 PROBE22_MIN_ITEMS = 6941
+const uint32 PROBE16_MIN_ITEMS = 4000
+const uint32 PROBE64_MIN_ITEMS = 58603
+const uint32 PROBE49_MIN_ITEMS = 34364
+const uint32 PROBE37_MIN_ITEMS = 19604
+const uint32 PROBE29_MIN_ITEMS = 12050
 uint32 pivot_cursor = 0
 uint8 use_dnf = 0
 int64 sample_pivot = 0
 uint32 sample_pivot_pos = 0
 
-func sort_network(mview<[int64]> values, uint32 lo, uint32 n) -> void {
+func sort_network(mview<[int64]> values, const uint32 lo, uint32 n) -> void {
     if (values == null) {
         return
     }
@@ -415,7 +415,7 @@ func sort_network(mview<[int64]> values, uint32 lo, uint32 n) -> void {
 
 // Read-only sortedness check. Returns 1 when values[lo .. hi] is
 // nondecreasing. No writes.
-func is_sorted(view<[int64]> values, uint32 lo, uint32 hi) -> byte {
+func is_sorted(view<[int64]> values, const uint32 lo, const uint32 hi) -> byte {
     if (values == null) {
         return 0
     }
@@ -430,7 +430,7 @@ func is_sorted(view<[int64]> values, uint32 lo, uint32 hi) -> byte {
 }
 
 // Heapsort helpers used only for the small distinctness sample.
-func sift_down_indices(mview<[uint32]> sample, view<[int64]> values, uint32 root, uint32 end) -> void {
+func sift_down_indices(mview<[uint32]> sample, view<[int64]> values, uint32 root, const uint32 end) -> void {
     if (sample == null || values == null) {
         return
     }
@@ -451,7 +451,7 @@ func sift_down_indices(mview<[uint32]> sample, view<[int64]> values, uint32 root
     return
 }
 
-func sort_sample_indices(mview<[uint32]> sample, view<[int64]> values, uint32 n) -> void {
+func sort_sample_indices(mview<[uint32]> sample, view<[int64]> values, const uint32 n) -> void {
     if (sample == null || values == null || n < 2) {
         return
     }
@@ -471,7 +471,7 @@ func sort_sample_indices(mview<[uint32]> sample, view<[int64]> values, uint32 n)
     return
 }
 
-func insertion_sort_values(mview<[int64]> values, uint32 lo, uint32 hi) -> void {
+func insertion_sort_values(mview<[int64]> values, const uint32 lo, const uint32 hi) -> void {
     if (values == null) {
         return
     }
@@ -489,7 +489,7 @@ func insertion_sort_values(mview<[int64]> values, uint32 lo, uint32 hi) -> void 
     return
 }
 
-func sift_down_values(mview<[int64]> values, uint32 lo, uint32 root, uint32 end) -> void {
+func sift_down_values(mview<[int64]> values, const uint32 lo, uint32 root, const uint32 end) -> void {
     if (values == null) {
         return
     }
@@ -510,7 +510,7 @@ func sift_down_values(mview<[int64]> values, uint32 lo, uint32 root, uint32 end)
     return
 }
 
-func heap_sort_values(mview<[int64]> values, uint32 lo, uint32 n) -> void {
+func heap_sort_values(mview<[int64]> values, const uint32 lo, const uint32 n) -> void {
     if (values == null || n < 2) {
         return
     }
@@ -572,14 +572,14 @@ func next_random_word() -> uint32 {
     return r
 }
 
-func get_random_pivot_pos(uint32 lo, uint32 hi) -> uint32 {
+func get_random_pivot_pos(const uint32 lo, const uint32 hi) -> uint32 {
     uint32 count = hi - lo + 1
     uint32 offset = unsafe_cast<uint32>((cast<uint64>(next_random_word()) * cast<uint64>(count)) >> 32)
     return lo + offset
 }
 
 // Fixed-size randomized static probe: one random offset per equal segment.
-func sample_has_duplicates(view<[int64]> values, uint32 count, uint32 sample_size) -> byte {
+func sample_has_duplicates(view<[int64]> values, const uint32 count, const uint32 sample_size) -> byte {
     if (values == null || count < sample_size || sample_size > 64) {
         return 0
     }
@@ -637,7 +637,7 @@ func sample_has_duplicates(view<[int64]> values, uint32 count, uint32 sample_siz
 // Estimate the average duplicate-group size from a 0.1% sample.
 // Returns 1 when DNF is preferred, 0 for Lomuto. The sample uses the
 // global RANDOM_PIVOTS table for cheap stratified offsets.
-func estimate_use_dnf(view<[int64]> values, uint32 count) -> byte {
+func estimate_use_dnf(view<[int64]> values, const uint32 count) -> byte {
     if (values == null) {
         return 0
     }
@@ -704,7 +704,7 @@ func estimate_use_dnf(view<[int64]> values, uint32 count) -> byte {
     return result
 }
 
-func median3_partition_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func median3_partition_lt_4k(mview<[int64]> values, const uint32 lo, const uint32 hi) -> uint32 {
     if (values == null) {
         return lo
     }
@@ -746,7 +746,7 @@ func median3_partition_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi) -> uin
     return lo
 }
 
-func partition_dnf_kernel(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
+func partition_dnf_kernel(mview<[int64]> values, const uint32 lo, const uint32 hi, const int64 pivot) -> (uint32 lt, uint32 gt) {
     if (values == null) {
         return (uint32 lt, uint32 gt) { lt = lo, gt = lo }
     }
@@ -773,7 +773,7 @@ func partition_dnf_kernel(mview<[int64]> values, uint32 lo, uint32 hi, int64 piv
     return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
 }
 
-func partition_lomuto_kernel(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
+func partition_lomuto_kernel(mview<[int64]> values, const uint32 lo, const uint32 hi, const uint32 pivot_pos) -> uint32 {
     if (values == null) {
         return lo
     }
@@ -886,7 +886,7 @@ func quicksort_ge_4k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32
     return
 }
 
-func quicksort_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_ge_4k_dnf(mview<[int64]> values, const uint32 lo, const uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }
@@ -962,7 +962,7 @@ func quicksort_ge_4k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, uin
     return
 }
 
-func quicksort_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
+func quicksort_ge_4k_lomuto(mview<[int64]> values, const uint32 lo, const uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
     }

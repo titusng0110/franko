@@ -187,6 +187,10 @@ public class Desugarer {
 
     private AstNode desugarStructMember(AstNode item) {
         if (item.kind == AstKind.STRUCT_FIELD_DECL) {
+            if (item.isConst) {
+                diagnostics.error("Struct fields cannot be const");
+            }
+
             return AstNode.structFieldDecl(
                 item.span,
                 desugarType(item.type),
@@ -335,7 +339,8 @@ public class Desugarer {
             source.span,
             type,
             source.name,
-            init
+            init,
+            source.isConst
         );
         node.compileTimeConstant = source.compileTimeConstant;
         return node;
@@ -366,7 +371,8 @@ public class Desugarer {
         return AstNode.parameter(
             param.span,
             desugarType(param.type),
-            param.name
+            param.name,
+            param.isConst
         );
     }
 
@@ -485,23 +491,12 @@ public class Desugarer {
             loweredType = desugarType(n.type);
         }
 
-        out.add(AstNode.varDecl(
+        out.add(AstNode.varDeclInit(
             n.span,
             loweredType,
-            n.name
-        ));
-
-        if (rawInit == null) {
-            return;
-        }
-
-        AstNode target = AstNode.var(n.span, n.name);
-
-        out.add(AstNode.assign(
-            n.span,
-            "=",
-            target,
-            desugarExpr(rawInit)
+            n.name,
+            rawInit == null ? null : desugarExpr(rawInit),
+            n.isConst
         ));
     }
 
@@ -511,13 +506,13 @@ public class Desugarer {
     ) {
         AstNode type = desugarType(n.type);
 
-        out.add(AstNode.varDecl(n.span, type, n.name));
-
         if (type.kind != AstKind.STRUCT_TYPE
                 && type.kind != AstKind.TUPLE_TYPE) {
             diagnostics.error(
                     "Field initializer requires a struct or tuple declaration"
             );
+
+            out.add(AstNode.varDecl(n.span, type, n.name, n.isConst));
             return;
         }
 
@@ -539,12 +534,28 @@ public class Desugarer {
             if (!unnamedTuple) {
                 diagnostics.error("Positional field initializers are only "
                         + "allowed for all-unnamed tuple declarations");
+
+                out.add(AstNode.varDeclFieldsInit(
+                        n.span,
+                        type,
+                        n.name,
+                        List.of(),
+                        n.isConst
+                ));
                 return;
             }
 
             if (anyNamed) {
                 diagnostics.error("Cannot mix positional and named tuple "
                         + "element initializers");
+
+                out.add(AstNode.varDeclFieldsInit(
+                        n.span,
+                        type,
+                        n.name,
+                        List.of(),
+                        n.isConst
+                ));
                 return;
             }
 
@@ -556,12 +567,21 @@ public class Desugarer {
                         + " entries but the tuple type has only "
                         + type.elements.size()
                         + " elements");
+
+                out.add(AstNode.varDeclFieldsInit(
+                        n.span,
+                        type,
+                        n.name,
+                        List.of(),
+                        n.isConst
+                ));
                 return;
             }
         }
 
         Set<String> seen = new HashSet<>();
         int position = 0;
+        List<AstNode> entries = new ArrayList<>();
 
         for (AstNode init : n.fields) {
             String fieldName;
@@ -582,17 +602,21 @@ public class Desugarer {
                 continue;
             }
 
-            out.add(AstNode.assign(
+            entries.add(AstNode.fieldInit(
                     init.span,
-                    "=",
-                    AstNode.memberAccess(
-                            init.span,
-                            AstNode.var(n.span, n.name),
-                            fieldName
-                    ),
-                    desugarExpr(init.value)
+                    init.name,
+                    desugarExpr(init.value),
+                    init.positional
             ));
         }
+
+        out.add(AstNode.varDeclFieldsInit(
+                n.span,
+                type,
+                n.name,
+                entries,
+                n.isConst
+        ));
     }
 
     private static boolean allUnnamedTupleElements(AstNode tupleType) {
@@ -989,7 +1013,8 @@ public class Desugarer {
             return AstNode.varDecl(
                 stmt.span,
                 desugarType(stmt.type),
-                stmt.name
+                stmt.name,
+                stmt.isConst
             );
         }
 

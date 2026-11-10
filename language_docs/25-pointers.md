@@ -48,10 +48,23 @@ least the requested permission: `getptr` needs owner access,
 prevents laundering a `view` into a `ptr`.
 
 User-written `getview`/`getmview`/`getptr` require a storage-backed
-lvalue. The compiler-generated borrow used to pass an rvalue operand to
-an overloaded struct operator is the only exception: it is internal to
-operator lowering, and `getview(5)` or `getview(make_x())` remains
-invalid in user code. See [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading).
+lvalue. The only exception is the implicit borrow used to pass an rvalue
+operand to an overloaded struct operator; it is not available to user code,
+so `getview(5)` or `getview(make_x())` remains invalid. See [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading).
+
+Const storage allows only `getview`:
+
+```franko
+const int32 x = 1
+view<int32> v = getview(x)    // valid
+ptr<int32> p = getptr(x)      // error
+mview<int32> m = getmview(x)  // error
+```
+
+This limits a const struct receiver to `view<X> self` methods.
+`$(p)` follows the pointee's own type, not the constness of the variable
+holding `p`: when `p` is a const `ptr<int32>`, `$(p) = 5` is valid and
+`p = ...` is not. See [Declarations](18-declarations.md#188-const-storage).
 
 ## 25.2 Dereferencing with `$`
 

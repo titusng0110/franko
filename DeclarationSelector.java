@@ -327,7 +327,9 @@ final class DeclarationSelector {
                 params.add(Symbol.parameter(
                         param.name,
                         typeResolver.analyzeNormalType(param.type),
-                        i
+                        i,
+                        param.isConst
+                                || (i == 0 && "self".equals(param.name))
                 ));
             }
 
@@ -358,7 +360,8 @@ final class DeclarationSelector {
         Symbol symbol = Symbol.global(
                 namespaceName,
                 node.name,
-                type
+                type,
+                node.isConst
         );
 
         ctx.declareGlobalVariable(symbol);

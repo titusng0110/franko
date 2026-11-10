@@ -1,5 +1,6 @@
 struct X {
     view<X> saved
+    [int32, 1] pad
 
     func OPERATOR_MOV(ptr<X> self, view<X> other) -> void {
         $(self).saved = other

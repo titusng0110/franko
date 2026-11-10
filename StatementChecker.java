@@ -33,8 +33,13 @@ public class StatementChecker {
             return;
         }
 
+        if (node.kind == SastKind.VAR_DECL_INIT) {
+            visitVarDeclInit(node);
+            return;
+        }
+
         if (node.kind == SastKind.ASSIGN) {
-            visitAssign(node);
+            visitAssign(node, false);
             return;
         }
 
@@ -82,9 +87,34 @@ public class StatementChecker {
         expressions.checkExpr(node.expr);
     }
 
-    private void visitAssign(SastNode node) {
+    private void visitVarDeclInit(SastNode node) {
+        declarations.checkVarDecl(node);
+
+        for (SastNode initializer : node.initializers) {
+            if (initializer.kind == SastKind.ASSIGN) {
+                visitAssign(initializer, true);
+            } else if (initializer.kind == SastKind.EXPR_STMT) {
+                visitExprStmt(initializer);
+            }
+        }
+    }
+
+    private void visitAssign(
+            SastNode node,
+            boolean declarationInitializer
+    ) {
         expressions.checkExpr(node.target);
         expressions.checkExpr(node.value);
+
+        Symbol storage = node.target.storageSymbol();
+
+        if (!declarationInitializer
+                && storage != null
+                && storage.isConst) {
+            diagnostics.error("Cannot assign to const variable '"
+                    + storage.name
+                    + "'");
+        }
 
         if (!isStorageBackedLValue(node.target)) {
             diagnostics.error("Left-hand side of assignment must be a pointable storage-backed lvalue");

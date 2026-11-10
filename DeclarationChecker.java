@@ -31,6 +31,28 @@ public class DeclarationChecker {
             return;
         }
 
+        if (node.symbol.isConst
+                && !types.isValueAssignableType(node.symbol.type)) {
+            diagnostics.error(constKindName(node.symbol)
+                + " '"
+                + node.symbol.qualifiedName()
+                + "' has type '"
+                + types.describeSafe(node.symbol.type)
+                + "'; const is only allowed for value-assignable types");
+        }
+
+        if (node.symbol.isConst
+                && node.symbol.kind == SymbolKind.VARIABLE
+                && node.kind == SastKind.VAR_DECL
+                && !types.isFullyDefaultInitialized(node.symbol.type)) {
+            diagnostics.warning(constKindName(node.symbol)
+                + " '"
+                + node.symbol.qualifiedName()
+                + "' has no initializer and type '"
+                + types.describeSafe(node.symbol.type)
+                + "' is not fully default-initialized");
+        }
+
         checkDeclaredType(
             node.symbol.type,
             "Variable '" + node.symbol.qualifiedName() + "'"
@@ -43,6 +65,18 @@ public class DeclarationChecker {
         if (node.staticInitializer != null) {
             validateGlobalStaticInitializer(node);
         }
+    }
+
+    private static String constKindName(Symbol symbol) {
+        if (symbol.kind == SymbolKind.GLOBAL) {
+            return "Const global";
+        }
+
+        if (symbol.kind == SymbolKind.PARAMETER) {
+            return "Const parameter";
+        }
+
+        return "Const variable";
     }
 
     private void validateGlobalStaticInitializer(SastNode node) {

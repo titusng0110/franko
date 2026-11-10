@@ -1,0 +1,5 @@
+func main() -> int32 {
+    const int32 x = 1
+    mview<int32> p = getmview(x)
+    return 0
+}

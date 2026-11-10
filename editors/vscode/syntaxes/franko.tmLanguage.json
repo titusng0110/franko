@@ -178,6 +178,10 @@
           "name": "keyword.control.franko"
         },
         {
+          "match": "\\b(const)\\b",
+          "name": "storage.modifier.const.franko"
+        },
+        {
           "match": "\\b(self)\\b",
           "name": "variable.language.self.franko"
         },

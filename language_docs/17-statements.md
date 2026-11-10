@@ -3,6 +3,8 @@
 Franko supports the following statements inside function bodies and blocks:
 
 - variable declarations;
+- declaration initialization (`T x = expr`, `T x { field = expr }`, and the
+  const forms; see [Declarations](18-declarations.md));
 - assignments;
 - compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`);
 - increment and decrement statements (`x++`, `x--`);
@@ -30,13 +32,13 @@ The braces of a function body are an exception: they do not create an additional
 
 The condition must be an integer expression.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `if`. See [Desugaring](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `if`. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 17.3 While Statements
 
 The condition must be an integer expression.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `while`. See [Desugaring](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `while`. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 17.4 For Statements
 
@@ -97,7 +99,7 @@ which behaves as:
 
 The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last; `continue` runs it and `break` skips it. See [Break and Continue](17-statements.md) below.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `for`. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 17.5 Break and Continue
 
@@ -211,6 +213,6 @@ are allowed, and chaining uses `#else #if`.
 A standalone `#else` is a syntax error.
 `#if` also works at declaration level: at global scope, inside a
 namespace, and inside a struct. Selected declarations and statements are
-spliced directly into the enclosing scope, so compile-time branch braces
+inserted directly into the enclosing scope, so compile-time branch braces
 do not create a scope. See
 [Compile-Time Reflection](34-compile-time-reflection.md).

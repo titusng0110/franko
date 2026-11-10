@@ -395,7 +395,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
             constInitializer = visit(ctx.constDeclSuffix().constDeclInitializer());
         }
 
-        return AstNode.structFieldDecl(span(ctx), type, name, constInitializer);
+        return AstNode.structFieldDecl(
+                span(ctx),
+                type,
+                name,
+                constInitializer,
+                ctx.CONST() != null
+        );
     }
 
     @Override
@@ -438,7 +444,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                     visit(ctx.globalVarInitializer().globalVarInitValue());
         }
 
-        return AstNode.globalVarDecl(span(ctx), type, name, constInitializer);
+        return AstNode.globalVarDecl(
+                span(ctx),
+                type,
+                name,
+                constInitializer,
+                ctx.CONST() != null
+        );
     }
 
     @Override
@@ -501,7 +513,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
             name = ctx.IDENTIFIER().getText();
         }
 
-        return AstNode.parameter(span(ctx), type, name);
+        return AstNode.parameter(
+                span(ctx),
+                type,
+                name,
+                ctx.CONST() != null
+        );
     }
 
     @Override
@@ -1093,8 +1110,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
         AstNode type = visit(ctx.type());
         String name = ctx.IDENTIFIER().getText();
 
+        boolean isConst = ctx.CONST() != null;
+
         if (ctx.declSuffix() == null) {
-            return AstNode.varDecl(span(ctx), type, name);
+            return AstNode.varDecl(span(ctx), type, name, isConst);
         }
 
         if (ctx.declSuffix() instanceof FrankoParser.DeclFieldInitContext) {
@@ -1104,7 +1123,8 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                     span(ctx),
                     type,
                     name,
-                    declInits(fieldCtx.declInitList())
+                    declInits(fieldCtx.declInitList()),
+                    isConst
             );
         }
 
@@ -1113,7 +1133,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
 
         AstNode init = visit(initCtx.expr());
 
-        return AstNode.varDeclInit(span(ctx), type, name, init);
+        return AstNode.varDeclInit(span(ctx), type, name, init, isConst);
     }
 
     @Override

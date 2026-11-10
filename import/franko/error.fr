@@ -20,7 +20,7 @@
 
 namespace std {
     // Abort the process with `reason` as the panic message.
-    func panic(view<[byte]> reason) -> void {
+    func panic(const view<[byte]> reason) -> void {
         return
     }
 }

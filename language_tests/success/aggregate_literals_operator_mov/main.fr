@@ -3,36 +3,58 @@ import "franko/io"
 // ============================================================
 // LANGUAGE TEST: Aggregate Literals and OPERATOR_MOV
 // ============================================================
-// Declaration-assignment construction goes through ordinary
-// whole-value assignment, so an applicable OPERATOR_MOV runs.
-// Field-wise declaration initialization assigns each field
-// directly and never invokes OPERATOR_MOV.
+// Value-assignable structs always use built-in whole-value
+// assignment; they cannot declare OPERATOR_MOV. Declaration and
+// assignment construction with aggregate literals therefore copy
+// fields directly.
+//
+// A pointer-only struct keeps custom OPERATOR_MOV for non-literal
+// whole-value assignment.
 // ============================================================
 
-struct Marker {
+struct Literal {
+    int32 x
+    int32 source = 0
+}
+
+struct Buffer {
     int32 v
     int32 source = 0
+    [int32, 1] pad
 
-    func OPERATOR_MOV(ptr<Marker> self, view<Marker> other) -> void {
+    func OPERATOR_MOV(ptr<Buffer> self, view<Buffer> other) -> void {
         $(self).v = $(other).v
         $(self).source = 99
         return
     }
 }
 
+func seed(ptr<Buffer> out, int32 v) -> void {
+    $(out).v = v
+    $(out).source = 3
+    return
+}
+
 func main() -> int32 {
-    Marker a = Marker { v = 5, source = 0 }
-    print(a.v)
+    Literal a = Literal { x = 5, source = 0 }
+    print(a.x)
     print(a.source)
 
-    Marker b { v = 5, source = 0 }
-    print(b.v)
+    Literal b { x = 5, source = 0 }
+    print(b.x)
     print(b.source)
 
-    Marker c
-    c = Marker { v = 6, source = 0 }
-    print(c.v)
+    Literal c
+    c = Literal { x = 6, source = 7 }
+    print(c.x)
     print(c.source)
+
+    Buffer p { v = 1, source = 2 }
+    Buffer q { v = 0, source = 0 }
+    seed(getptr(q), 8)
+    p = q
+    print(p.v)
+    print(p.source)
 
     return 0
 }

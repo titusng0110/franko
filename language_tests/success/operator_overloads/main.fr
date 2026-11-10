@@ -55,19 +55,6 @@ struct Num {
         return 0
     }
 
-    // Detects that plain assignment selected this overload: the stored
-    // value is shifted to distinguish it from a built-in field copy.
-    func OPERATOR_MOV(ptr<Num> self, view<int32> other) -> void {
-        $(self).v = $(other) * 2
-        return
-    }
-
-    // Detects that plain assignment selected the same-type overload.
-    func OPERATOR_MOV(ptr<Num> self, view<Num> other) -> void {
-        $(self).v = $(other).v + 100
-        return
-    }
-
     func OPERATOR_ADDMOV(ptr<Num> self, view<int32> other) -> void {
         $(self).v = $(self).v + $(other)
         return
@@ -120,8 +107,11 @@ struct Blob {
     }
 }
 
+// A dynamic-array field makes TextHolder pointer-only, so its custom
+// whole-value assignment methods remain legal.
 struct TextHolder {
     int32 n = 0
+    [byte] buf
 
     func OPERATOR_MOV(ptr<TextHolder> self, view<[byte]> other) -> void {
         $(self).n = unsafe_cast<int32>($(other).length())
@@ -154,11 +144,6 @@ namespace ops {
             }
             return 0
         }
-
-        func OPERATOR_MOV(ptr<Wrapped> self, view<int32> other) -> void {
-            $(self).v = $(other) + 1
-            return
-        }
     }
 }
 
@@ -182,7 +167,7 @@ func main() -> int32 {
     print(a >= b)
 
     Num n
-    n = 5
+    n.v = 5
     print(n.v)
     n += 4
     print(n.v)
@@ -249,7 +234,7 @@ func main() -> int32 {
 
     ops::Wrapped w1
     ops::Wrapped w2
-    w1 = 9
+    w1.v = 9
     print(w1.v)
     w2 = w1
     print(w2.v)

@@ -11,7 +11,7 @@
 import "franko/pool"
 import "franko/io"
 
-uint32 SIZE = 2000000
+const uint32 SIZE = 2000000
 
 struct Node {
     int32 key = 0
@@ -23,7 +23,7 @@ struct Node {
 
 [Node] nodes
 std::NextAllocator pool
-uint32 NIL = 0xFFFFFFFF
+const uint32 NIL = 0xFFFFFFFF
 uint32 root = 0xFFFFFFFF
 
 int32 gPrev = 0
@@ -31,7 +31,7 @@ uint32 gCount = 0
 int64 gSum = 0
 int32 gBad = 0
 
-func keyAt(int32 i) -> int32 {
+func keyAt(const int32 i) -> int32 {
     if (i % 2 == 0) {
         return -999999 + i / 2
     }
@@ -181,7 +181,7 @@ func rbInsert(int32 key) -> void {
     return
 }
 
-func transplant(uint32 u, uint32 v) -> void {
+func transplant(uint32 u, const uint32 v) -> void {
     uint32 up = nodes[u].parent
     if (up == NIL) {
         root = v
@@ -303,7 +303,7 @@ func deleteFixup(uint32 x, uint32 p) -> void {
     return
 }
 
-func deleteNode(uint32 z) -> void {
+func deleteNode(const uint32 z) -> void {
     byte yWasBlack = 1
     if (nodes[z].red != 0) {
         yWasBlack = 0
@@ -354,7 +354,7 @@ func deleteNode(uint32 z) -> void {
     return
 }
 
-func rbDelete(uint32 n, int32 key) -> uint32 {
+func rbDelete(const uint32 n, int32 key) -> uint32 {
     uint32 z = n
     while (z != NIL) {
         if (key == nodes[z].key) {

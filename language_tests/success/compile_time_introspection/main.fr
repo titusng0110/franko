@@ -5,10 +5,10 @@
 // is_same_type, what_type, strcmp, panic, is_matchable, is_comparable,
 // is_assignable, and is_value_assignable.
 //
-// Point declares OPERATOR_EQ, OPERATOR_LT, and OPERATOR_MOV; Plain has
-// only primitive fields; WithDefault has a field default; HasDyn holds
-// a dynamic array. Pointers, dynamic arrays, and static arrays cover
-// the remaining type shapes.
+// Point declares OPERATOR_EQ and OPERATOR_LT and relies on built-in
+// whole-value assignment; Plain has only primitive fields; WithDefault
+// has a field default; HasDyn holds a dynamic array. Pointers, dynamic
+// arrays, and static arrays cover the remaining type shapes.
 // ============================================================
 
 import "franko/io"
@@ -23,11 +23,6 @@ struct Point {
 
     func OPERATOR_LT(view<Point> self, view<Point> other) -> uint8 {
         return $(self).x < $(other).x
-    }
-
-    func OPERATOR_MOV(ptr<Point> self, view<Point> other) -> void {
-        $(self).x = $(other).x
-        $(self).y = $(other).y
     }
 }
 

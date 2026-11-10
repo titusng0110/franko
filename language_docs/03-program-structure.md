@@ -108,7 +108,7 @@ Invalid global-scope items include:
 - array initializer assignments.
 - expression statements (bare expressions such as `1 + 2`);
 
-Note that some invalid global-scope forms are only invalid in their executable form: declaration initializer sugar is equivalent to an assignment, an expression-statement call, or indexed element assignments, all of which are executable statements.
+Note that some invalid global-scope forms are only invalid in their executable form: a non-constant declaration initializer performs an assignment, an expression-statement call, or indexed element assignments, all of which are executable statements.
 
 Execution should be rooted in a user-defined `main` function.
 

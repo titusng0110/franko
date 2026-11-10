@@ -77,7 +77,7 @@ warnings can be missed.
 
 Loop termination is not proven; the post-loop state is conservative.
 
-`for` loops receive the same treatment as the equivalent block and `while` loop, so they are handled the same way. See [Desugaring](24-desugaring.md).
+`for` loops receive the same treatment as the equivalent block and `while` loop, so they are handled the same way. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 31.6 Guard Refinement
 

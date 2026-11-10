@@ -6,6 +6,7 @@ enum SastKind {
     ENUM_DECL("enumDecl"),
     BLOCK("block"),
     VAR_DECL("varDecl"),
+    VAR_DECL_INIT("varDeclInit"),
     ASSIGN("assign"),
     IF("if"),
     WHILE("while"),

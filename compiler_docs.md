@@ -3,6 +3,9 @@
 This document describes the architecture of the Franko compiler: how the phases
 connect (call graph), what each Java source file does, and the cross-cutting
 design rules that live here instead of as comments in the source files.
+It is an implementation document: user-facing language rules belong in
+`language_docs/`, and this file only records the representation, lowering,
+checking, and emission contracts needed to implement them.
 Do not add comments to the Java source files. All design notes belong here.
 
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
@@ -49,7 +52,7 @@ import-resolved AstDocument             -> <base>.imports.ast.json
 semantic SastDocument                   -> <base>.semantic.sast.json
    │  LegalityChecker                     -> <base>.legality.sast.json
    │  BranchPruner                        -> <base>.branch-pruned.sast.json
-   │  InactiveDeclarationPruner           -> <base>.inactive-pruned.sast.json
+   │  InactiveDeclarationPruner (twice)   -> <base>.inactive-pruned.sast.json
    │  MemoryAnalysisContext.build         (dense IDs, call graph, shapes)
    │  PointerNullStateChecker             -> <base>.null-state.sast.json
    │  DanglingPointerChecker              -> <base>.dangling.sast.json
@@ -74,8 +77,9 @@ Every AST/SAST boundary is represented by `AstDocument` / `SastDocument`.
 `phase` field. Without `--emit-json` the normal path is object-based and never
 parses or serializes JSON.
 
-After inactive-declaration pruning, `Main` builds one `MemoryAnalysisContext`
-from the surviving SAST and passes it to all three memory checkers. The context
+Inactive-declaration pruning runs twice with fresh pruner instances before
+`Main` builds one `MemoryAnalysisContext` from the surviving SAST and passes it
+to all three memory checkers. The context
 assigns dense IDs to functions, variables, call sites, and diagnostic sites,
 builds the exact Franko call graph (including methods), caches recursive
 struct/tuple memory shapes, records block-local declaration lists, and
@@ -319,11 +323,15 @@ forms: `structTypeName { fieldInitList? }` and
 optional trailing comma and separators (newlines) treated as list whitespace
 inside the braces. Positional entries are accepted grammatically everywhere
 an initializer list appears and are restricted semantically to all-unnamed
-tuple types: they fill the first N elements and may be partial. `declSuffix`
-has the labeled alternatives `DeclAssignInit` (`= expr`) and `DeclFieldInit`
-(immediate `{ declInitList? }`), so `T x { field = expr }` is field-wise
-declaration sugar while a newline before `{` leaves an ordinary following
-block untouched. Pointer
+tuple types: they fill the first N elements and may be partial. `const` is a
+storage modifier accepted on `globalVarDecl`, `parameter`, `varDecl`, and
+syntactically on `structFieldDecl` (the latter only so the compiler can report
+`Struct fields cannot be const` instead of a parse error); it is not a type and
+is erased before codegen. `declSuffix` has the labeled alternatives
+`DeclAssignInit` (`= expr`) and `DeclFieldInit` (immediate
+`{ declInitList? }`). Both remain declaration initialization through
+desugaring and semantic analysis; a newline before `{` leaves an ordinary
+following block untouched. Pointer
 permissions are created by the intrinsic
 forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
 by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening,
@@ -363,7 +371,8 @@ and `positional = false`; a bare expression becomes a `AstKind.FIELD_INIT` with
 `name = null` and `positional = true`. `visitVarDecl` distinguishes
 the two `declSuffix` alternatives with `instanceof`, producing
 `AstKind.VAR_DECL_INIT` for `DeclAssignInit` and `AstKind.VAR_DECL_FIELDS_INIT` for
-`DeclFieldInit`. `visitEnumDecl` builds an `AstKind.ENUM_DECL` with its
+`DeclFieldInit`. `visitParameter`, `visitGlobalVarDecl`, `visitVarDecl`, and
+`visitStructFieldDecl` set `AstNode.isConst` from `ctx.CONST()`. `visitEnumDecl` builds an `AstKind.ENUM_DECL` with its
 desugared backing type and `AstKind.ENUM_VARIANT`s, and `visitEnumVariant`
 keeps the raw `constExpr` (or `null` for implicit variants); enum cases
 are dispatched in `visitTopLevelItem`, `visitNamespaceItem`, and
@@ -393,7 +402,7 @@ nullable/empty slots. `AstKind` has one constant per node/type kind:
   deref, cast/unsafe_cast, null, aggregate literal, field init.
 
 Slots are shared by kind: `name`, `text`, `rawContent`, `primitive`, `type`,
-`permission`, `positional`, `unsafe`, `compileTimeConstant`, `target`, `value`,
+`permission`, `positional`, `unsafe`, `compileTimeConstant`, `isConst`, `target`, `value`,
 `condition`, `thenBranch`, `elseBranch`, `body`, `expr`, `left`, `right`,
 `index`, `callee`, `init`, `update`, `level`, `sizeExpr`, the list slots
 (`items`, `parameters`, `fields`, `methods`, `members`, `variants`, `args`,
@@ -408,8 +417,10 @@ nesting is derived from the declared static array shape. The slot layout is
 the ABI between all raw-AST phases.
 
 Lifecycle rules that used to live as comments here:
-- `FOR`, `INC_DEC`, `VAR_DECL_INIT`, and `VAR_DECL_FIELDS_INIT` are
-  **pre-desugaring sugar**: none may reach `SemanticAnalyzer`.
+- `FOR` and `INC_DEC` are **pre-desugaring sugar**: neither may reach
+  `SemanticAnalyzer`. `VAR_DECL_INIT` and `VAR_DECL_FIELDS_INIT` survive
+  desugaring as declaration-initialization statements and are lowered to
+  `SastKind.VAR_DECL_INIT` by semantic analysis (§4.28).
   `IMPORT` survives desugaring and is consumed by `ImportResolver` when it
   splices imported documents. `ARRAY_LITERAL` and `AGGREGATE_LITERAL` are
   deliberately NOT sugar: they survive desugaring and are lowered during
@@ -440,8 +451,11 @@ where each element carries its own span, optional `name`, and `type`.
 Aggregate literals serialize as `"node": "aggregateLiteral"` with `type` and a
 `fields` array of `"node": "fieldInit"` entries (`name`, `positional`, and
 `value`; positional entries have `name: null`); the field-wise declaration
-sugar serializes as `"node": "varDeclFieldsInit"` with `type`, `name`, and
-`fields`. Enum declarations serialize as `"node": "enumDecl"` with `name`,
+initializer serializes as `"node": "varDeclFieldsInit"` with `type`, `name`,
+and `fields`. `parameter`, `globalVarDecl`, `varDecl`, `varDeclInit`,
+`varDeclFieldsInit`, and `structFieldDecl` emit `"const": true` only when the
+modifier was written; deserialization treats it as optional. Enum declarations
+serialize as `"node": "enumDecl"` with `name`,
 `backingType`, and `variants`, and each variant as `"node": "enumVariant"`
 with `name` and `constInitializer`. Unknown node kinds are hard errors.
 
@@ -496,12 +510,13 @@ literals from the compound statement span, inferred `?` sizes from the
 `AstKind.INFERRED_SIZE` span, hoisted string globals and their replacement
 `getview` from the literal span, canonicalized constants from the original
 constant expression). Lowers
-syntactic sugar to a small core AST: declaration initializers → decl +
-assignment, field-wise declaration initializers → decl + per-entry
-assignments (duplicate labels rejected; non-struct/non-tuple declarations
-rejected; positional entries are mapped to `_0`, `_1`, … and are accepted
-only for all-unnamed tuple declarations, with a count check and no mixing
-with named entries), `x++/--` →
+syntactic sugar to a small core AST. Declaration initialization is **not**
+lowered: a plain initializer stays one `AstKind.VAR_DECL_INIT` and a field-wise
+initializer stays one `AstKind.VAR_DECL_FIELDS_INIT`, both carrying `isConst`.
+The field-wise form keeps its validation (duplicate labels rejected;
+non-struct/non-tuple declarations rejected; positional entries are accepted
+only for all-unnamed tuple declarations, with a count check and no mixing with
+named entries) and desugars each field value. `x++/--` →
 `x += 1`, `for` → block + `while` (update as while-epilogue so `continue` is
 C-like), `?` array sizes in `view<[...]>` declarations → concrete
 constants via the rectangle rule (array
@@ -522,8 +537,10 @@ normally, braceless branches are grouped, and nested `#if` nodes survive for
 semantic selection (§4.18). Declaration-level `AstKind.DECL_IF`s are preserved
 and their branch declarations are desugared in place; `SemanticAnalyzer`
 splices the selected branch before registration.
-Tuple types are passed through with their element types recursively
-desugared and their declaration-site names preserved. Aggregate literals are
+A struct field carrying `const` reports `Struct fields cannot be const` and is
+rewritten as an ordinary field for recovery. Tuple types are passed through
+with their element types recursively desugared and their declaration-site
+names preserved. Aggregate literals are
 expressions, not statement sugar: the Desugarer recursively desugars the
 literal's `AstNode` and every field value and leaves the
 `AstKind.AGGREGATE_LITERAL` in place for semantic lowering.
@@ -667,11 +684,16 @@ applies; an already-analyzed RHS value is reused by the built-in
 `SastNode.ASSIGN` fallback, and a raw array literal falls back to the
 normal context-aware path. The RHS is analyzed with `analyzeValueExpr`, so
 an aggregate literal can be constructed before the ordinary assignment (and
-its `OPERATOR_MOV`, when applicable) runs. The same lowering is reused for
-local declaration initializers. Field-wise declaration initialization is
-fully desugared before this pass, so `AstKind.VAR_DECL_FIELDS_INIT` never reaches
-semantic analysis; its expansion creates a plain declaration plus ordinary
-per-field assignments.
+its `OPERATOR_MOV`, when applicable) runs. Declaration initialization is
+lowered to one `SastKind.VAR_DECL_INIT` that carries the declared symbol and an
+ordered list of internal `ASSIGN`/`EXPR_STMT` initializers; the new symbol is
+declared before the initializer is analyzed. A const target skips
+`tryLowerOperatorAssignment` so an assignment to const storage is reported by
+`StatementChecker` instead of a misleading operator/permission diagnostic.
+`AstKind.VAR_DECL_FIELDS_INIT` is lowered directly: each entry builds and
+analyzes a member-access lvalue on the declared variable, analyzes the value
+with the field/element type, and appends an `ASSIGN`; positional entries map
+to `_0`, `_1`, … . Both raw kinds are handled without a synthetic block.
 
 Also determines the entry kind (`NONE`/`NO_ARGS`/`ARGS`), carried on
 `SastDocument` and used by `Main` to select the C++ program template, and owns
@@ -755,17 +777,24 @@ is reported when neither exists.
 #### `SastNode` / `SastKind`
 The lowered AST data model is one final tagged class with a `kind`, a
 `SourceSpan`, and fixed slots. `SastKind` covers program/namespace/block,
-function/struct/enum declarations, local/global variables, assignments,
-if/while/break/continue/return/expression-statement, integer/null/variable/
-enum-variant expressions, unary/binary/array-access/member-access/function-
-call/array-intrinsic-call/getptr/deref/cast, and aggregate literals. An
-internal `AGGREGATE_FIELD_INIT` kind carries each aggregate field/value pair.
+function/struct/enum declarations, local/global variables, declaration
+initialization, assignments, if/while/break/continue/return/expression-
+statement, integer/null/variable/enum-variant expressions,
+unary/binary/array-access/member-access/function-call/array-intrinsic-call/
+getptr/deref/cast, and aggregate literals. An internal
+`AGGREGATE_FIELD_INIT` kind carries each aggregate field/value pair.
+`VAR_DECL_INIT` carries `symbol` plus an ordered `initializers` list of
+ordinary semantic statements (`ASSIGN` or an operator-assignment `EXPR_STMT`).
 
 Statements use `isStmt()`, expressions use `isExpr()`, and lvalue queries use
 `isLValue()`; `isCompound()`/`baseOp()` implement the assignment helpers.
-Every expression carries `type` and `constantValue: BigInteger`; declarations
-carry `symbol` (and `structSymbol`/`enumSymbol` where relevant). Dispatch is
-`switch (node.kind)` throughout the compiler and serializer.
+`storageSymbol()` resolves the storage root of an assignment target:
+`VAR_EXPR` returns its symbol, `MEMBER_ACCESS`/`ARRAY_ACCESS` recurse into the
+target, `DEREF` returns `null` (the pointee is a different storage region), and
+everything else returns `null`. Every expression carries `type` and
+`constantValue: BigInteger`; declarations carry `symbol` (and
+`structSymbol`/`enumSymbol` where relevant). Dispatch is `switch (node.kind)`
+throughout the compiler and serializer.
 
 The array-intrinsic vocabulary is still `SemanticArrayIntrinsicKind`: INIT,
 INIT_ZERO, RESIZE, UNINIT, MEMSET, MEMCPY, MEMMOVE, LENGTH, MEMCMP, MEMCHR,
@@ -840,8 +869,10 @@ level allows a weaker-or-equal one.
 #### `Symbol` / `SymbolKind`
 The symbol model is one final tagged class with `SymbolKind` =
 `VARIABLE`, `PARAMETER`, `GLOBAL`, `FUNCTION`, `METHOD`. Fields: `name`,
-`namespace`, `type`, `parameters`, `isBuiltin`, `owner`, `index`,
-`compileTimeConstantValue`, `literalBytes`, `literalValues`.
+`namespace`, `type`, `parameters`, `isBuiltin`, `isConst`, `owner`, `index`,
+`compileTimeConstantValue`, `literalBytes`, `literalValues`. `isConst` is
+carried only by variables, parameters, and globals; it is not part of the
+type, signature key, mangling, overload identity, or emitted C++ name.
 
 - `VARIABLE` — local variable, optional namespace.
 - `PARAMETER` — `index`, no namespace.
@@ -1161,7 +1192,7 @@ document plus diagnostics. It is invoked by `Main`, *not* by
 Function-level legality: valid return type, valid parameters (no duplicates,
 assignable value types), method `self` shape (`ptr<X>`/`mview<X>`/`view<X>
 self` must be the first parameter and no other parameter may be named
-`self`), return statement rules
+`self`; the `self` symbol is always built const), return statement rules
 (`return;` only in void functions; `return expr;` must be assignable to the
 return type, pointer conversions allowed), and **presence-based
 missing-return detection**: a non-void
@@ -1183,7 +1214,11 @@ Operator method names are validated by dedicated signature checks instead
 of the generic `self` shape: comparison methods require
 `(view<X> self, view<X> other) -> uint8`; assignment methods require
 `(ptr<X> self, view<T> other) -> void` with any non-void `T`. A free
-function with a reserved `OPERATOR_*` name is rejected. Invalid operator
+function with a reserved `OPERATOR_*` name is rejected. A value-assignable
+struct must not declare `OPERATOR_MOV`
+(`Struct 'X' is value-assignable and cannot declare OPERATOR_MOV; built-in
+whole-value assignment is always used for value-assignable structs`); the
+compound `OPERATOR_*MOV` methods remain allowed. Invalid operator
 signatures are declaration errors even when the operator is never used;
 `SemanticAnalyzer.registerMethodSignature` skips its generic diagnostics
 for these names so the dedicated message is the only one.
@@ -1191,8 +1226,13 @@ for these names so the dedicated message is the only one.
 #### `DeclarationChecker`
 Declaration-level legality: declared types must be legal Franko types
 (primitive, enum, array, ptr/mview/view, struct, tuple; void and arrays-as-values
-rejected),
-static array sizes must be constant, positive, and fit `uint32` (zero is
+rejected). Const declarations require `TypeChecker.isValueAssignableType`
+(`Const variable/global/parameter '…' has type '…'; const is only allowed for
+value-assignable types`), and an uninitialized local const whose type is not
+fully default-initialized warns (`Const variable '…' has no initializer and
+type '…' is not fully default-initialized`); parameters and globals never get
+the rule-4 warning because they are initialized before the body runs.
+It also requires static array sizes to be constant, positive, and fit `uint32` (zero is
 rejected — the backend emits `T data[N]`), struct field graphs must not have
 infinite-size **by-value** cycles (cycle detection via `StructWalkState`;
 tuple elements and static array elements are by-value edges; the by-value
@@ -1211,7 +1251,13 @@ Statement-level legality: assignment targets must be storage-backed lvalues
 (storage semantics: variables, derefs, and array/member accesses rooted at
 storage — stronger than `SastNode.isLValue()`), non-void LHS, exact/
 fitting RHS per `TypeChecker.ensureAssignable` (pointer conversions
-allowed); assignment through an lvalue path requires **mutation rights** over
+allowed). An ordinary assignment rejects const storage by resolving
+`node.target.storageSymbol()` (`Cannot assign to const variable 'x'`), which
+covers variables, members, and array elements but not `$(p)` pointees.
+`VAR_DECL_INIT` is checked by reusing the assignment path with
+`declarationInitializer = true`, which skips only that const-target rejection;
+all storage, region, void, assignability, and compound rules still run.
+Assignment through an lvalue path requires **mutation rights** over
 the target's storage region (§4.9 blocks writes through `view`); compound-assign
 rules for all arithmetic and bitwise forms (`+=`, `-=`, `*=`, `/=`, `%=`,
 `&=`, `|=`, `^=`) with constant-zero-divisor rejection for `/=` and `%=`;
@@ -1246,7 +1292,13 @@ conversion with compile-time constant range checks, integer-to-enum and
 enum-to-narrower conversions that are always runtime-checked with no
 constant rejection), creation-intrinsic
 legality (`getptr`/`getmview`/`getview` need an equally strong storage
-region, §4.9), deref legality, and void-in-value-context rules. A
+region, §4.9), deref legality, and void-in-value-context rules. A non-read-only
+creation intrinsic over const storage is rejected via
+`node.target.storageSymbol()` (`Cannot create a mutable pointer to const
+variable 'x'; const storage only allows getview(...)`); `getview` is allowed.
+This also enforces the const-receiver rule: a `ptr<X> self`/`mview<X> self`
+method call synthesizes `getptr`/`getmview(receiver)` and is rejected, while a
+`view<X> self` method synthesizes `getview(receiver)` and is allowed. A
 `SastNode.GET_PTR` with `temporary` set is accepted without the usual
 storage-backed-lvalue requirement: it can only be created by operator
 lowering, and its type is required to be a read-only view. Aggregate
@@ -1287,7 +1339,11 @@ byte-wise (`false` for enums); `isMemcpySafe` — memcpy/memcmp-copied byte-wise
 — the complement of raw-garbage validity: enums, pointers, and dynamic arrays
 return `true`, primitives and static arrays of primitives return `false`,
 and structs/tuples return `true` when at least one part has a defined
-default; separate from `isMemsetSafe`; `isByteType` — the byte/bit
+default; `isFullyDefaultInitialized` — stricter than `hasDefaultValue`:
+primitives return `false`, enums/pointers/dynamic arrays `true`, static arrays
+follow their element type, and structs/tuples require every field/element to be
+fully initialized either by a folded default or by its own type;
+separate from `isMemsetSafe`; `isByteType` — the byte/bit
 intrinsic element type) — recursive with
 path-scoped cycle detection so diamond-shaped field graphs stay fine while
 by-value cycles terminate. Enum helpers: `isEnumType`, `enumBackingKind`,
@@ -2079,10 +2135,12 @@ built by `classify`; there is no separate boolean-expression hierarchy.
 
 #### `InactiveDeclarationPruner`
 Runs on the Semantic AST **immediately after `BranchPruner`** and before
-`PointerNullStateChecker` (invoked by `Main`; prints nothing). It removes
-declarations that nothing in the surviving code uses, so they are never
-emitted into C++ at all. The rule is zero-reference pruning — no liveness or
-dead-store analysis:
+`PointerNullStateChecker` (invoked by `Main`; prints nothing). `Main` runs it
+**twice with fresh instances**; both runs use the `INACTIVE_PRUNED` phase and
+only one artifact is written after the second run. It removes declarations
+that nothing in the surviving code uses, so they are never emitted into C++ at
+all. The rule is zero-reference pruning — no liveness, dead-store, purity, or
+side-effect analysis:
 
 - **Functions**: kept iff reachable via the call graph from the entry point
   `main` (call closure over `SastNode` symbols — includes
@@ -2092,15 +2150,33 @@ dead-store analysis:
   (e.g. `xs[idx()] += 10` keeps `idx`).
 - **Variables**: kept iff referenced anywhere in kept function bodies.
   Assignments count as uses (an initializing assignment keeps its variable),
-  so the only variables pruned are declared-but-never-mentioned ones —
-  including variables whose only uses disappeared with a BranchPruner cut.
-  A kept global additionally keeps alive whatever its static address
-  initializer references (e.g. hoisted string-literal globals), transitively.
+  so plain declared-but-never-mentioned variables are pruned, including
+  variables whose only uses disappeared with a BranchPruner cut.
+  `VAR_DECL_INIT` is special: references are collected from all its
+  initializers into a temporary set, the declared symbol is removed from that
+  set, and only the remaining references are unioned into the use set.
+  Declaration-initialization targets and hidden operator-assignment `self`
+  borrows are therefore not uses. A declaration whose initializer may have
+  effects is always kept: any function/array-intrinsic call, dereference,
+  array access, checked cast, or operator-assignment `EXPR_STMT` marks the
+  initializer as effectful, so its side effects and runtime traps survive.
+  All `OPERATOR_*` methods (comparisons and every assignment variant) are
+  ordinary function calls in the SAST, so they count as effects too.
+  Only effect-free initializers can be pruned with their declaration.
+  Initializer calls still count during that run, so a function used only there
+  is kept with the retained declaration. A kept global additionally keeps
+  alive whatever its static
+  address initializer references (e.g. hoisted string-literal globals),
+  transitively.
 - **Expression walks**: `collectExprCalls`, `collectExprVariables`, and
   `collectExprTypeExprs` recurse into every
   `SastNode.AGGREGATE_LITERAL` field value; the type walk also marks the
   literal's struct or synthetic tuple type, which keeps that declaration
-  alive.
+  alive. `VAR_DECL_INIT` recurses into its initializer statements for calls,
+  variables, and expression types, and contributes the declared symbol's type
+  when the symbol is kept. `rebuildStmt` drops the entire `VAR_DECL_INIT`
+  (declaration plus every initializer) when the symbol is not kept, and keeps
+  it unchanged otherwise.
 - **Structs**: kept iff a `SastType.STRUCT` for them appears in surviving
   code: kept function signatures, kept variable declarations (globals and
   locals), expression types in kept bodies, or the receiver of a called
@@ -2154,7 +2230,10 @@ wrapper's `std::nullptr_t` constructor. Pointer elements of static and
 dynamic arrays are default-constructed by the thin wrapper. All of these
 paths produce null, implementing the guaranteed null-initialization rule.
 Statement lowering assumes dead branches
-were already removed by `BranchPruner`; `while` uses goto-based
+were already removed by `BranchPruner`. `VAR_DECL_INIT` emits the declaration
+with the ordinary `emitVarDecl` path and then emits each stored initializer
+statement, reproducing the old declaration-plus-assignment C++ exactly; const
+is never emitted. `while` uses goto-based
 `L_brk_<id>`/`L_cont_<id>` labels plus
 the desugared for-update epilogue (continue label placed *before* the
 epilogue so `continue` runs the update and `break` skips it).
@@ -2511,6 +2590,7 @@ that branch's statements.
 | `structDecl` | `symbol`, `methods` |
 | `block` | `statements` |
 | `varDecl` | `symbol`, `foldedConstInitializer`, `staticInitializer` |
+| `varDeclInit` | `symbol`, `initializers` |
 | `assign` | `op`, `target`, `value` |
 | `if` | `condition`, `thenBranch`, `elseBranch` |
 | `while` | `condition`, `body`, `update` |
@@ -2546,9 +2626,12 @@ Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
 (`name`, `type`, `foldedDefault`, optional `tupleIndex` when `>= 0`),
 `function` (`name`, `namespace`,
 `parameters`, `returnType`, `isBuiltin`), `method` (function fields plus
-`owner`), `parameter` (`name`, `index`, `type`), `variable` (`name`,
-`namespace`, `type`), `global` (variable fields plus
-`compileTimeConstantValue`, `literalBytes`, `literalValues`). Struct `methods`
+`owner`), `parameter` (`name`, `index`, `type`, optional `const`), `variable`
+(`name`, `namespace`, `type`, optional `const`), `global` (variable fields
+plus `compileTimeConstantValue`, `literalBytes`, `literalValues`, optional
+`const`). Declarations also carry optional `const` in the raw AST JSON for
+`parameter`, `globalVarDecl`, `varDecl`, `varDeclInit`, `varDeclFieldsInit`,
+and `structFieldDecl`. Struct `methods`
 is a name → overload-ID array map. Semantic type kinds: `primitive` (`kind`),
 `void`, `dynamicArray` (`elementType`), `staticArray` (`elementType`, `size`),
 `ptr` (`permission`, `referencedType`), `null`, `struct` (`symbol`), `enum`
@@ -2599,6 +2682,13 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   and `break` skips it — exactly C-like semantics. Codegen places the continue
   label before the epilogue.
 - `x++`/`x--` → `x += 1`/`x -= 1`.
+- Declaration initialization is **not** desugared into declaration +
+  assignment. `T x = e` stays `AstKind.VAR_DECL_INIT`, and
+  `T x { f = v }` stays `AstKind.VAR_DECL_FIELDS_INIT`; both reach semantic
+  analysis and become one `SastKind.VAR_DECL_INIT`. The field-wise form keeps
+  its duplicate/positional/mixing validation and desugars each field value.
+  This is what lets const declarations (and operator-assignment
+  initialization of pointer-only structs) remain one initialization.
 - `view<[...]> x = [a,b,c]` is **not** rewritten: the array literal
   reaches semantic analysis as an expression and is lowered to a hoisted
   literal view (§4.13). Assigning a literal to an array is a checked error
@@ -2618,19 +2708,16 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   suggests `memcpy`.
 
 ### 4.2 Fluid integer constants
-Integer literals and folded constant expressions are **fluid**: a constant is
-checked by its `BigInteger` value against the target type's range, not by the
-type it would have in C++. Consequences:
-- One operand of an arithmetic/bitwise/comparison/compound-assign expression
-  may be a fitting constant; then the result takes the other operand's type
-  (`inferBinaryResultType`).
-- Overflow of a constant in the target range is an error; runtime values are
-  exact-type-checked.
-- `cast<T>(...)` performs only value-preserving integer widening (plain
-  `static_cast`); a conversion that can lose data must be written
-  `unsafe_cast<T>(...)`, whose constants are range-checked at compile time
-  (`ExpressionChecker.visitCast`) and whose runtime values emit the checked
-  `franko_integer_unsafe_cast`.
+Constant values are carried as `BigInteger` on raw-AST `AstKind.INT` nodes and
+semantic expression nodes. `ExpressionAnalyzer.inferBinaryResultType` applies
+the fluid-constant rule, `TypeChecker.ensureSameIntegralTypeOrFit` /
+`ensureMixedIntegralOperandsWithConstantFit` / `requireConstantFitsType` apply
+contextual fit, and `OverloadResolution` scores constants by fit cost. The
+language rules live in `07-fluid-integer-constants.md`; the implementation
+contract is that folding and fit-checking stay arbitrary-precision until a
+concrete type context is applied. `ExpressionChecker.visitCast` range-checks
+constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
+`franko_integer_unsafe_cast` for checked casts (see §4.3 and §4.12).
 
 ### 4.3 Name mangling
 - `FUNC_<name>_<8hex>` / `METH_<name>_OFSTRUCT_<Struct>_<8hex>`,
@@ -2640,7 +2727,9 @@ type it would have in C++. Consequences:
   clash with variable/function names and field names cannot collide with
   generated identifier prefixes. Synthetic tuple structs use `TUPLE_<8hex>`
   directly rather than the `STRUCT_` prefix; ordinary user structs keep
-  `STRUCT_<name>` even if their declared name starts with `TUPLE_`.
+  `STRUCT_<name>` even if their declared name starts with `TUPLE_`. Tuple
+  fields emit as `_0`, `_1`, … (`FieldSymbol.emittedName()`), while ordinary
+  fields emit as `FIELD_<name>`.
 - Hoisted literal storage uses `STRLIT_<16hex>` for strings and
   `ARRLIT_<16hex>` for arrays. These are literal-backed storage objects, not
   variables, so they are emitted without the `VAR_` prefix.
@@ -2655,18 +2744,15 @@ type it would have in C++. Consequences:
   `FfiHandler` (bridge block contains the computed emitted name).
 
 ### 4.4 FFI modules and bridge blocks
-- FFI is module metadata, not a hardcoded os special case. A module opts in
-  with a sibling `<stem>.module.json` descriptor; `ModuleRegistry` loads it
-  when `Frontend` parses the `.fr` file. Importing `franko/os` and importing a
-  user module use exactly the same mechanism.
-- The descriptor lists only `functions`; every entry is bridged. A function
-  may override the module bridge file with the optional `bridgeFile`. There
-  are no variables, structs, target filters, or target-dependent constants in
-  the schema.
-- Target selection is ordinary Franko code: `#if (#IS_WINDOWS)`
-  with the built-in `#IS_*` constants (§4.18). Only the
-  selected branch is analyzed, so off-target functions are never verified,
-  bridged, or emitted and need no descriptor filter.
+- FFI is module metadata, not a hardcoded os special case. `ModuleRegistry`
+  discovers the sibling `<stem>.module.json` when `Frontend` parses a `.fr`
+  file, caches it by canonical source path, and `ModuleValidator` checks listed
+  functions against the parsed AST. The descriptor schema and target-selection
+  rules are language-facing (`33-foreign-function-interface.md`); the compiler
+  consumes only the function list and bridge file names.
+- Because target selection is ordinary `#if` code (§4.18), off-target
+  functions are absent from the selected AST and are never verified, bridged,
+  or emitted; the descriptor needs no target filters.
 - Bridge files use a fixed marker format: `// @@<qualified-name>` opens a
   block, `// @@end` closes it, and `common` is reserved. Block names are the
   Franko qualified names (`os::posix::read`, `os::win32::ReadFile`), never
@@ -2795,141 +2881,102 @@ deeper-than-one-level pointer-cell aliasing remain out of scope.
 
 ### 4.8 Inactive declaration pruning (InactiveDeclarationPruner)
 - Runs right after branch pruning so declarations orphaned by branch cuts
-  become prunable.
+  become prunable. `Main` runs it twice with fresh instances; only the second
+  run's result is written as the single `INACTIVE_PRUNED` artifact.
 - Zero-reference rule, per kind: functions must be call-reachable from
   `main`; variables must be mentioned somewhere in kept bodies (assignments
   are mentions); structs must appear as a type in kept code (signatures,
   kept variable declarations, expression types, method receivers), expanded
   transitively through fields and kept methods.
+- Declaration initialization targets are not uses: for `VAR_DECL_INIT`,
+  references are collected from the initializers, the declared symbol is
+  removed, and only the rest count. Hidden operator-assignment `self` borrows
+  are dropped the same way.
+- Effect rule: a `VAR_DECL_INIT` is kept whenever any initializer may have
+  side effects or trap — function calls, array intrinsics other than
+  `length()`, dereferences, array accesses, checked casts, and
+  operator-assignment `EXPR_STMT`s. All `OPERATOR_*` methods, comparison and
+  assignment alike, lower to ordinary function calls and are therefore
+  effectful. This preserves output, allocation, stores, and runtime aborts.
+  Only effect-free initializers (literals, variables, pure arithmetic,
+  member accesses, `getptr` over pure targets, and pure aggregate literals)
+  are pruned with their declaration.
+- Pure chains still need two rounds: `int32 y = 1; int32 x = y` with both
+  unused removes `x` on the first run and `y` on the second. Longer pure
+  chains may need more rounds; that is accepted.
 - No dead-store elimination: a variable that is only written still counts as
   used. No unused-field pruning. Unused methods of kept structs are pruned.
 - Pruning never flattens blocks and never touches `main`.
 
 ## 4.9 Pointer permissions (capability model)
 
-Franko has one pointer family with three permission levels (`PtrPermission`,
-strongest first): `ptr<T>` (OWNER), `mview<T>` (MUTABLE), and `view<T>`
-(READ_ONLY). Permissions are enforced entirely by the checkers and are
-not represented in the C++ type. A pointer to an array emits
-`Franko_Fat_Pointer<element(T)>`, whose runtime mode records static
-array (2) or dynamic array (3) and whose count records a static array's
-length. A pointer to a scalar, struct, tuple, or another pointer emits
-`Franko_Thin_Pointer<T>`, a one-field wrapper whose default constructor
-sets `data = nullptr`. The split is deliberate: only array pointers need
-the `{data, count, mode}` payload. A non-array pointer has no array mode
-or count to carry, so the thin wrapper adds no storage over a raw pointer
-while making every pointer storage slot deterministically null on
-default construction. This is what extends the null-initialization
-guarantee from pointer variables and fields to pointer tuple elements
-and pointer elements of static and dynamic arrays.
+`PtrPermission` is the compiler-side permission lattice (OWNER `ptr<T>`,
+MUTABLE `mview<T>`, READ_ONLY `view<T>`). Permissions are enforced by the
+checkers and are not represented in the C++ type. `PointerPermissions` is the
+single implementation home: `regionPermission` (the region rule),
+`isPermissionDowngrade`, `isStaticArrayViewDecay`, `isPointerConversion`, and
+`creationIntrinsic`; `ExpressionChecker`, `StatementChecker`,
+`ArrayIntrinsicChecker`, `TypeChecker`, `OverloadResolution`, and
+`PointerPermissionChecker` share it. The user-facing rules are in
+`25-pointers.md`.
 
-**The region rule.** Every storage-backed lvalue access path touches one
-*storage region*. The region's permission is the permission of the operand
-type of the innermost pointer boundary — the **last** `$(...)` dereference
-reached on the way down from the root of the access path (the one nearest the
-leaf). Index and member accesses stay inside the region created
-above them; each dereference **resets** the region from the pointer's own
-type. A bare variable's own storage is always owner-protected. Consequences:
+**Representation.** A pointer whose referent is an array is
+`Franko_Fat_Pointer<element(T)>`: mode 2 (static, with count `N`) or mode 3
+(dynamic, pointing at the `Franko_Dynamic_Array<T>` descriptor). A pointer to
+a scalar, struct, tuple, or another pointer is `Franko_Thin_Pointer<T>`, a
+one-field wrapper whose default constructor sets `data = nullptr`. This split
+gives pointer storage its null-initialization guarantee without adding a
+mode/count payload to non-array pointers.
 
-* writes (assignment, compound assignment), `memset`/`memcpy`/`memmove`
-  targets, and the byte/bit mutators (`write_*`, `write_bit`, `flip_bit`,
-  `bitwise_*_mask`, `shift_bits_*`) need a region allowing MUTABLE;
-* `init`/`init_zero`/`resize`/`uninit` need an OWNER region;
-* reads, `length`, `memcmp`, `memchr`, `memmem`, the `read_*` accessors,
-  `read_bit`, `count_set_bits`, and memcpy/memcmp/memmem *sources* are always
-  fine;
-* `getptr(l)` requires an OWNER region, `getmview(l)` a MUTABLE-or-stronger
-  one, `getview(l)` anything — this is what makes `view` airtight (no
-  laundering through `getptr($(v))`) while `$($(v)[0]).init()` still works
-  when the extracted element is itself a `ptr` (Rule 2).
+**Region rule.** An access path has one current storage region, set by the
+innermost (last) `$(...)` dereference on the path. Member and index accesses
+stay inside that region; each dereference resets it from the pointer's own
+type. A bare variable's region is OWNER. The checkers implement the rule as:
+mutation requires MUTABLE, lifecycle intrinsics require OWNER, reads and
+search/intrinsic sources require no permission, and creation intrinsics
+require the level they create. This is what prevents laundering a `view`
+through `getptr($(v))` while still allowing an extracted inner `ptr` to carry
+its own rights.
 
-**Nested propagation.** Permissions propagate transitively through value
-types (arrays, structs) and stop at pointer boundaries: `view<[[T]]>`
-locks the inner arrays too, while `view<[ptr<[T]>]>` locks only the
-stored pointers (they cannot be overwritten) — the memory behind them follows
-each pointer's own type. Lifecycle intrinsics need an OWNER region at *every*
-level: `$(m)[0].init(...)` through an `mview` is blocked exactly like
-`$(m).init(...)`; only an extracted `ptr` (Rule 2) restores allocation
-rights. `PointerPermissions` is the single home of the permission rules:
-`regionPermission` (the region rule above), `isPermissionDowngrade` (the
-identical-referenced-type downgrade), `isStaticArrayViewDecay` (the
-outermost-dimension static-to-dynamic array decay), `isPointerConversion`
-(their union: the full implicit-conversion predicate), and
-`creationIntrinsic` (which of
-`getptr`/`getmview`/`getview` creates a given permission level, used in
-diagnostics); the checkers, `OverloadResolution`, `TypeChecker`, and
-`PointerPermissionChecker` all share it.
+**Nested propagation.** Permissions propagate through value types and stop at
+pointer boundaries: `view<[[T]]>` locks every array level, while
+`view<[ptr<[T]>]>` locks only the stored pointer slots. Lifecycle intrinsics
+need an OWNER region at every level, so `mview` never grants `init`/`resize`/
+`uninit`, even on an inner array.
 
-**Conversions.** The **only** implicit conversions in all of Franko are
-pointer conversions, allowed in assignments, returns, and argument
-passing (overload resolution prefers exact matches, then pure permission
-downgrades, then decays — see below):
-- a pointer permission downgrade over an identical referenced type
-  (`ptr→mview`, `ptr→view`, `mview→view`);
-- the **static-to-dynamic array pointer view decay**: `mview<[T,N]>`/
-  `view<[T,N]>` (source `mview`/`view`, or a `ptr` source combined
-  with a downgrade) convert to `mview<[T]>`/`view<[T]>`. Only
-  the outermost dimension decays (`T` must match exactly, and `T` may
-  itself be a static or dynamic array), the direction is unidirectional,
-  and the target is never `ptr` (ownership could free storage the
-  static array owns). Explicit form: `cast<mview<[T]>>(m)`.
+**Conversions and decay.** Implicit conversion decisions are centralized in
+`PointerPermissions.isPointerConversion`; overload resolution costs live in
+`OverloadResolution`. Static-to-dynamic array pointer decay is
+representation-preserving: static and decayed values are the same
+`Franko_Fat_Pointer<T>`, and `Cpp14Codegen` emits no conversion code or
+temporary. `DanglingPointerChecker` therefore has no decay origin (§4.14):
+returning a decayed parameter/global view is safe, while a local array decay
+is the ordinary frame escape.
 
-Everything else is exact. Explicit downgrades may be
-written `cast<view<T>>(p)`; casting upwards or across pointee types is an
-error. Integer `cast` is value-preserving widening only; `unsafe_cast`
-carries the checked conversions (`franko_integer_unsafe_cast`).
-
-**Decay implementation.** Decay is representation-preserving.
-`ptr<[T, N]>`/`mview<[T, N]>`/`view<[T, N]>` and their dynamic
-counterparts all emit `Franko_Fat_Pointer<T>`; a static array pointer
-carries mode 2 with count `N`, and a dynamic array pointer mode 3 with
-the `Franko_Dynamic_Array<T>` descriptor address. Pointers whose pointee
-is not an array use `Franko_Thin_Pointer<T>` and are never involved in
-decay. Converting
-`view<[T, N]>` to `view<[T]>` creates no object: the C++ value is copied
-unchanged and remains mode 2/count `N`. `Cpp14Codegen` therefore emits
-nothing for the conversion (no prelude, no `_TMP_VIEW_*`, no temporary
-header), and a decay in a loop condition needs no goto rewrite. The same
-holds for `cast<...>` and for argument/return/assignment conversions.
-Because there is no descriptor, `DanglingPointerChecker` has no decay
-origin (§4.14): returning a decayed parameter or global view is safe,
-while returning a decayed view of local array storage is the ordinary
-frame-storage escape. Lifecycle intrinsics stay blocked on the result
-(the region rule), and `ptr` never decays.
-
-**Method `self`.** `self` may be `ptr<X> self`, `mview<X> self`, or
-`view<X> self`. The hidden self argument at a call site is synthesized as
-`getptr`/`getmview`/`getview(receiver)` matching the declared self type, so
-an under-qualified receiver is rejected by the creation-intrinsic rule above.
-Method overload identity excludes `self`'s type.
+**Method `self`.** The hidden self argument is synthesized as
+`getptr`/`getmview`/`getview(receiver)` matching the method's declared self
+type; an under-qualified receiver then fails the creation-intrinsic rule.
+Method overload identity excludes `self`'s type. The self parameter symbol is
+always const (§4.28).
 
 ## 4.10 String literal hoisting (Desugarer)
 
-A string literal is **not** byte-array sugar: it is a value of type
-`view<[byte, N]>` (N = UTF-8 byte length) over a hoisted, literal-backed
-global `[byte, N]` named `STRLIT_<16hex-content-hash>`. Identical
-literals share one global; empty literals are rejected (`N >= 1`). The C++
-emission is
-a `const uint8_t STRLIT_<hash>[N] = {…}` (constant initialization),
-so declaration order and static-init order never matter. A string
-literal expression is `franko_make_fat_pointer(STRLIT_<hash>, N, 2)`;
-decaying it to `view<[byte]>` copies the same mode-2 fat pointer.
+`Desugarer` hoists each distinct string literal to a literal-backed
+`[byte, N]` global named `STRLIT_<16hex-content-hash>` (the language-facing
+rules are in `23-string-literals.md`). Identical literals share one global;
+empty literals are rejected during decoding. C++ emission is a
+`const uint8_t STRLIT_<hash>[N] = {…}` constant initializer, so declaration
+and static-init order never matter. The literal expression is a mode-2 fat
+pointer over that storage (`franko_make_fat_pointer(STRLIT_<hash>, N, 2)`);
+decaying it to `view<[byte]>` copies the same fat pointer unchanged.
 
-Exception: direct string-literal arguments of any `#<name>` call are
-not hoisted; they remain raw `AstKind.STRING_LITERAL`s so `CompileTimeIntrinsics` can
-inspect them. A `what_type` result consumed by another compile-time intrinsic
-(for example `strcmp` or `panic`) stays a compile-time string and never
-materializes a `STRLIT_<hash>` global.
-
-Consequences of strings being views:
-* `s = "text"` / `[byte, N] s = "text"` are compile errors suggesting
-  `dst.memcpy("text")` — the literal is a valid memcpy source;
-* `?` size inference accepts array literals only (in `view` declarations,
-  §4.13);
-* pointer-typed globals may be initialized with `null` or a
-  `getptr`/`getmview`/`getview` over a global, enabling
-  `view<[byte, 5]> G = "hello";`;
-* `print("hi")` prints the text `hi` through the `franko/io` overload for `view<[uint8]>`.
+Direct string-literal arguments of any `#<name>` call are deliberately not
+hoisted; they remain raw `AstKind.STRING_LITERAL`s so `CompileTimeIntrinsics`
+can inspect them. A `what_type` result consumed by another compile-time
+intrinsic stays a compile-time string and never materializes a
+`STRLIT_<hash>` global. Downstream behavior (array-assignment diagnostics,
+`?` inference, pointer globals, printing) follows from the view
+representation handled by the ordinary expression and array paths.
 
 ## 4.11 Runtime array and allocation semantics
 
@@ -3111,59 +3158,36 @@ no labels, no `goto`, no extra blocks.
 
 ## 4.13 Array literal values (ArrayLiteralLowerer)
 
-An array literal `[e1, …, en]` is **not** assignment sugar: it is a value
-of type `view<[T, N]>` (N = literal length) over a hoisted,
-literal-backed global, exactly like a string literal (§4.10). Nested
-literals type bottom-up to `view<[[T, M], N]>`; they are static
-at every level, so rows must be **perfectly rectangular**. `T` is an
-integer primitive.
+`ArrayLiteralLowerer` lowers `AstKind.ARRAY_LITERAL` into a
+`SastNode.GET_PTR` over a hoisted `ARRLIT_<16hex>` global, which is a
+`view<[T, N]>` value. The language-facing rules are in `21-array-literals.md`.
 
-**Element type inference.** A literal carries no element type; `T` is
-taken from the context `ExpressionAnalyzer` passes down (the inference
-sites are exactly: assignment RHS — including declaration-initializer
-sugar and global initializers —, `return` expressions, and call arguments
-including `memcpy` sources, whose context is the receiver's element type
-inferred by `ArrayLowerer`). No context (bare statement,
-operator operand, `$` operand, …) is the "cannot infer" diagnostic. The
-context may also be an array type (so `arr = [1,2,3]` reports the
-memcpy-suggestion error with a well-typed literal) or a non-`view`
-pointer (the literal types, then the ordinary permission rules reject
-the upgrade). Lengths come from the literal itself and are checked by
-type equality or the outermost static→dynamic decay
-(`view<[T,N]>` → `view<[T]>`); the decay is one-way and
-outermost-only, which is how a parameter like
-`view<[[int32, 13]]>` enforces a maze row width.
+**Context and shape.** A literal carries no element type. `ExpressionAnalyzer`
+passes the expected type down at the inference sites (assignment/declaration
+RHS, return expression, call arguments including `memcpy` sources); the
+lowerer uses it to pick `T`, build the nested `view<[[T, M], N]>` type, and
+enforce a perfectly rectangular static nest. Missing context, nonconstant
+elements, jagged rows, empty literals, and shape mismatches are diagnostics;
+on failure the lowerer hoists a zero-filled fallback so later passes still see
+a well-typed view.
 
-**Constant elements only.** Every element must be a compile-time constant
-expression (fluid-constant fit against `T` applies). Non-constant
-elements are rejected: a literal is hoisted to a `const` global, so it is
-always safe to return one or to return one from a recursive function —
-there is no statement-scoped storage and no dangling case. Hoisting is
-per (element type, row-major values) pair, so identical literals share
-one `ARRLIT_<16hex-hash>` global. C++ emission is a raw C++ array,
-`const int32_t ARRLIT_<hash>[N] = {…}` (outer dimension first, one brace
-level per dimension, e.g. `{{1, 2}, {3, 4}}`); no wrapper struct is
-emitted.
+**Hoisting.** Every literal is hoisted per `(element type, row-major values)`
+so identical contents share one `ARRLIT_<16hex-hash>` global. C++ emission is
+one `const <T> ARRLIT_<hash>[N] = {…}` raw array (outer dimension first, one
+brace level per dimension); no wrapper struct is emitted. Decaying the
+literal to a dynamic view is representation-preserving and reuses the same
+mode-2 fat pointer; there is no `_VIEW` header global and the pruner only
+follows the data global.
 
-**Immediate decay on literals.** A literal is hoisted as one constant
-global `ARRLIT_<hash>`; its expression is a fat pointer over that storage
-(mode 2, count `N`). Decaying it at an inference site
-(`view<[T,N]>` → `view<[T]>`) is representation-preserving: the same
-mode-2 value is used, with no `_VIEW` header global and no
-`Symbol.literalHeaderData`. Returning or keeping such a
-view is safe, including from recursive functions, and
-`InactiveDeclarationPruner` only has to follow the literal data global
-(the expression's `getptr` target).
+**Overload resolution.** Call arguments lower in two phases through
+`CallArg`: a pending literal matches compatible `view<[...]>` parameters
+(exact length = exact match, dynamic outer = decay) before its element type
+is known, and is re-lowered with the selected parameter type. Remaining ties
+are ambiguity errors.
 
-**Overload resolution.** Call arguments lower in two phases
-(`CallArg`): a pending literal matches any `view<[...]>`
-parameter of compatible shape (exact length = exact match, dynamic outer
-= decay), and is re-lowered with the selected parameter type afterwards;
-if several overloads remain it is an ambiguity error.
-
-**Globals.** A pointer-typed global may be initialized with a constant
-array literal (`view<[int32, 4]> G = [1,2,3,4];`); array-typed
-globals may not (memcpy suggestion, §4.10 parity).
+**Globals.** A pointer-typed global may take a constant array literal through
+the same hoisting path; an array-typed global is rejected with the memcpy
+suggestion (§4.10 parity).
 
 ## 4.14 Dangling-pointer model (DanglingPointerChecker)
 
@@ -3403,6 +3427,7 @@ are compiler warnings.
 
 ## 4.17 Operator overloading (structs)
 
+The language-facing rules are in `13-operators.md` and `16-assignment.md`.
 Only struct members participate. The reserved names are the six comparison
 methods (`OPERATOR_EQ`, `OPERATOR_NEQ`, `OPERATOR_GT`, `OPERATOR_LT`,
 `OPERATOR_GTEQ`, `OPERATOR_LTEQ`) and the nine assignment methods
@@ -3418,6 +3443,18 @@ non-void `T` and per-`T` overloads. `FunctionChecker` validates these
 declarations; `SemanticAnalyzer.registerMethodSignature` suppresses the
 generic `self`-shape diagnostics for the reserved names so the dedicated
 message is the only one. Invalid declarations fail even if unused.
+
+**`OPERATOR_MOV` restriction.** Only `OPERATOR_MOV` is banned on
+value-assignable structs (`TypeChecker.isValueAssignableType`); such a
+struct's whole-value assignment is always the built-in field copy. The
+compound assignment methods (`OPERATOR_ADDMOV` … `OPERATOR_XORMOV`) remain
+legal because they provide operations the built-in rules do not. Pointer-only
+structs may still declare `OPERATOR_MOV` to opt into custom whole-value
+assignment; `std::String` is the standard example.
+
+**Effect model.** Every `OPERATOR_*` method, comparison and assignment
+alike, is an ordinary function call in the semantic tree. Pruning and any
+future effect analysis therefore treat operator invocations as effectful.
 
 **Lowering.** Comparison lowering runs in `ExpressionAnalyzer` when either
 `AstKind.BINARY` operand has struct type. It requires both operands to be values
@@ -3469,6 +3506,9 @@ FRAME allowance), and escapes hidden in aggregate stores that are not modeled
 as a direct global/out-parameter sink.
 
 ## 4.18 Compile-time reflection and `#if`
+
+The language-facing rules are in `34-compile-time-reflection.md`; this section
+records the analyzer and selector implementation.
 
 **Surface.** Compile-time reflection is built into the grammar through the
 `HASH` token (`#`). There is no import, namespace lookup, or reserved
@@ -3544,55 +3584,36 @@ unselected one is ignored. Module validation walks both branches of
 declaration conditionals, so a descriptor may list functions that exist on
 different targets.
 
-**Limits.** The intrinsics are not first-class values, are rejected in
-`constExpr`-only slots, and runtime `view<[byte]>` values cannot feed
-`#strcmp`/`#strcat`/`#panic`. `#if` is not allowed in a `for` header and
-declaration-level `#if` cannot wrap imports.
+**Slot restrictions.** `CompileTimeIntrinsics` is reachable only from
+expression lowering; it has no value representation and is rejected in
+`constExpr`-only slots. String consumers accept only compile-time string
+producers (raw literals, `#what_type`, `#strcat`), not runtime views. The
+grammar/selector reject `#if` in a `for` header and declaration-level `#if`
+around imports; see `34-compile-time-reflection.md` for the language rules.
 
 ## 4.19 Tuples
 
-Tuples are ordered, structural aggregate types. Syntax allows optional
-declaration-site element names and requires at least two elements:
+Tuple syntax and semantics are language-facing (`28-tuples.md`); this section
+records the compiler representation.
 
-```franko
-(int32 val, int32 err) res
-(int32, int32) lazy
-```
+`SemanticTypeResolver` walks tuple element types recursively, computes the
+effective element names (declared name or `_<index>`), rejects duplicate
+effective names, and interns one synthetic `StructSymbol` per canonical
+ordered-element-type key. The synthetic symbol is named `TUPLE_<8hex>`, lives
+in the global namespace, has fields `_0`, `_1`, … with `tupleIndex >= 0`, and
+is registered as a pending `SastNode.STRUCT_DECL`. Equality and hashing ignore
+element names and `cppSymbol`, so differently named tuples share one C++ type.
+A generated-name collision between distinct structural keys is an internal
+compiler error. `resetTupleTypes()` clears the intern map at analysis start and
+`pendingTupleDecls()` feeds the declarations into the semantic item list.
 
-Unnamed elements receive the effective names `_0`, `_1`, …; mixed forms are
-allowed (`(int32 val, int32)` gives `val` and `_1`). Element names are
-per-declaration aliases, not part of type identity: `(int32 val, int32 err)`
-equals `(int32, int32)`, and a tuple declared with one set of names can be
-assigned to a tuple with another. Element order does matter, so
-`(int32, uint32)` and `(uint32, int32)` are different types. Access uses the
-declaration's own names (`res.val`, `lazy._0`); names from a different
-declaration of the same structural type are unknown.
-
-There is no tuple literal, construction sugar, destructuring, tuple cast, or
-tuple method/operator overloading. Values come from declarations, whole-tuple
-assignment, field writes, and function returns. Declaration-initializer sugar
-still applies normally: `(int32, int32) x = f();` is a declaration followed
-by an assignment.
-
-A tuple is assignable/passable/returnable iff every element is an assignable
-value type. A tuple containing a static array or dynamic array is
-pointer-only, exactly like a struct with a non-assignable field. `void` is
-return-type-only and cannot appear as a struct field, tuple element, array
-element, or pointer referent. Nested
-tuples, arrays of tuples, pointers to tuples, and tuples containing structs
-compose with the ordinary type rules.
-
-Each distinct canonical ordered element-type sequence is interned as one
-synthetic C++ struct `TUPLE_<8hex>` with fields `_0`, `_1`, ….
-Differently named tuples with the same element types share that C++ type;
-ordinary user structs keep `STRUCT_<Name>`, so a user struct whose declared
-name begins with `TUPLE_` still emits a distinct `STRUCT_TUPLE_…`
-C++ name. Synthetic tuple declarations live in the Semantic AST, are kept
-alive by `InactiveDeclarationPruner` whenever their tuple type is live, and
-participate in the normal topological struct-definition ordering. Tuple JSON
-uses raw `"type": "tuple"` with an `elements` array, SAST `"type": "tuple"`
-with a `symbol` plus element names/types, optional `"tuple": true` on
-synthetic struct symbols, and optional `"tupleIndex"` on tuple field symbols.
+Synthetic tuple declarations live in the Semantic AST, are kept alive by
+`InactiveDeclarationPruner` whenever their tuple type is live, and participate
+in the normal topological struct-definition ordering. Tuple JSON uses raw
+`"type": "tuple"` with an `elements` array; SAST adds a `symbol`, optional
+`"tuple": true` on synthetic struct symbols, and optional `"tupleIndex"` on
+tuple field symbols. `FieldSymbol.emittedName()` emits `_0`, `_1`, … for tuple
+fields and `FIELD_<name>` for ordinary fields.
 
 ## 4.20 Memory shape analysis
 
@@ -3778,31 +3799,27 @@ and named/mixed tuple spellings. All entry values go through the ordinary
 assignment rules, so constants are fitted and pointer conversions are applied
 by `ExpressionChecker`.
 
-**Construction semantics.** A literal creates a temporary value:
-default-construction applies field defaults and null pointer fields, then
-named/positional entries are assigned in source order. Construction itself
-never invokes `OPERATOR_MOV`. It always requires the struct or tuple to be
-value-assignable (`TypeChecker.isValueAssignableType`), even when the struct
-declares `OPERATOR_MOV`; `ExpressionChecker.visitAggregateLiteral` enforces
-this and then calls `ensureAssignable` for every entry. The surrounding
-assignment then follows ordinary whole-value assignment, including an
-applicable `OPERATOR_MOV`.
+**Construction and codegen.** `ExpressionChecker.visitAggregateLiteral`
+requires `TypeChecker.isValueAssignableType` and then calls `ensureAssignable`
+for every entry. `Cpp14ExpressionEmitter.emitAggregateLiteral` emits an
+immediately invoked C++14 lambda that default-constructs a local of the
+resolved type (field defaults and null pointer fields apply), assigns entries
+in source order through `emitAsType`, and returns the value. Nested literals
+become nested lambdas. Construction never invokes `OPERATOR_MOV`, and no
+runtime header support is required. The language-facing rules are in
+`29-aggregate-literals.md`.
 
-**Field-wise declaration initializers.** `AstKind.VAR_DECL_FIELDS_INIT` is
-pre-desugaring sugar and never reaches semantic analysis. The Desugarer emits
-a plain declaration followed by one ordinary assignment per entry, in source
-order. Positional entries map to `_0`, `_1`, … and are accepted only for
-all-unnamed tuple declarations, with the same partial-fill, count, and
-mixing rules as tuple literals. The form creates no temporary and never
+**Field-wise declaration initializers.** `AstKind.VAR_DECL_FIELDS_INIT`
+survives desugaring and is lowered to `SastKind.VAR_DECL_INIT` with one
+internal `ASSIGN` per entry, in source order. The Desugarer keeps the
+duplicate/positional/mixing validation and desugars each field value;
+`SemanticAnalyzer` builds and analyzes each member-access lvalue on the
+declared variable. Positional entries map to `_0`, `_1`, … and are accepted
+only for all-unnamed tuple declarations, with the same partial-fill, count,
+and mixing rules as tuple literals. The form creates no temporary and never
 invokes `OPERATOR_MOV`, so it works for pointer-only aggregates; each named
 field must still be assignable under ordinary assignment rules. It is
 local-only.
-
-**Codegen.** `Cpp14ExpressionEmitter.emitAggregateLiteral` emits an
-immediately invoked C++14 lambda that default-constructs a local of the
-resolved type, assigns the entries in source order through `emitAsType`, and
-returns the value. Nested literals become nested lambdas. No runtime header
-support is required.
 
 **Tooling walks.** `InactiveDeclarationPruner`,
 `MemoryAnalysisContext`, all three memory checkers,
@@ -3813,53 +3830,91 @@ entries.
 
 ## 4.27 Enums
 
-Enums are nominal types backed by one of the eight primitive integer kinds.
-`EnumSymbol` (name, namespace, backing kind, ordered `EnumVariant`s) has
-object identity: two enums with the same backing and variants are distinct.
-`SastType.ENUM` wraps the symbol; `describe()`/`mangleKey()` return the
-qualified name, so `#what_type` yields `"Status"`.
+Enums are nominal types backed by one of the eight primitive integer kinds;
+the language rules are in `30-enums.md`. `EnumSymbol` (name, namespace,
+backing kind, ordered `EnumVariant`s) has object identity, and
+`SastType.ENUM` wraps it. `describe()`/`mangleKey()` return the qualified enum
+name, so `#what_type(Status)` yields `"Status"` and mangling treats the enum
+as a nominal name.
 
-**Declarations.** `enumDecl` is valid at global or namespace scope (including
-inside declaration-level `#if` branches) and invalid inside structs (a parse
-error). `analyzeEnumDecl` requires a primitive backing (otherwise
-`Enum backing type must be one of the eight primitive integer types`),
-at least one variant, unique names, and all-explicit or all-implicit values
-(mixing is rejected). Explicit values are fit-checked; implicit values start
-at `0` and wrap with `TypeChecker.wrapBigIntegerToPrimitive`; duplicate
-numeric values after wrapping are rejected. The symbol is returned even on
-error for recovery.
+**Declarations.** `enumDecl` is accepted at global/namespace scope and inside
+declaration-level `#if` branches; struct scope is a parse error.
+`analyzeEnumDecl` requires a primitive backing (`Enum backing type must be one
+of the eight primitive integer types`), at least one variant, unique names,
+and all-explicit or all-implicit values. Explicit values are fit-checked;
+implicit values start at `0` and wrap with
+`TypeChecker.wrapBigIntegerToPrimitive`; duplicate numeric values after
+wrapping are rejected. The symbol is returned even on error for recovery.
 
 **C++ wrapper.** A plain C++ `enum class` cannot enforce the first-variant
-default: its elements would be indeterminate or zero. Codegen therefore
-emits one wrapper struct per enum (`ENUM_<Name>`, qualified by namespace)
-with a backing `value` field, a `constexpr` default constructor pinned to
-the first variant, an explicit backing constructor, `VARIANT_<name>()`
-accessors, a templated `from_integer_checked` (range-checked via
-`franko_integer_unsafe_cast<Backing>`, membership-switched, panicking with
-the enum name, rejected value, and valid variants), and six comparison
-operators. The wrapper is generated inline in the translation unit; the
-runtime header gains no enum machinery. The non-trivial default constructor
-is what enforces "never indeterminate" for locals, globals, struct fields,
-static array elements, and dynamic array `init`/`init_zero`/`resize` tails;
-`franko_element_lifecycle` already default-constructs such types, so the
-`calloc`ed `init_zero` bytes are safely overwritten. The membership switch
-is generated in every build mode; the backing-range check follows the
-renamed helper's `FRANKO_BOUNDS_UNCHECKED` stripping policy.
+default, so codegen emits one wrapper struct per enum (`ENUM_<Name>`, qualified
+by namespace) with a backing `value` field, a `constexpr` default constructor
+pinned to the first variant, an explicit backing constructor,
+`VARIANT_<name>()` accessors, a templated `from_integer_checked`
+(range-checked via `franko_integer_unsafe_cast<Backing>`, membership-switched,
+panicking with the enum name, rejected value, and valid variants), and six
+comparison operators. The wrapper is generated inline; the runtime header
+gains no enum machinery. Its non-trivial default constructor enforces "never
+indeterminate" for locals, globals, fields, static array elements, and
+dynamic-array init/resize tails; `franko_element_lifecycle` already
+default-constructs such types, so `init_zero`'s `calloc` bytes are safely
+overwritten. The backing-range check follows the runtime's
+`FRANKO_BOUNDS_UNCHECKED` policy.
 
-**Conversions.** `cast` allows enum-to-exact-backing and enum-to-wider
-conversions; everything else needs `unsafe_cast`, which is always
-runtime-checked with no constant rejection: `unsafe_cast<BigState>(999)`
-compiles and aborts. Enum casts never take the constant-value fast path.
-The checked direction emits `franko_integer_unsafe_cast<T>((expr).value)`.
+**Cast emission.** `ExpressionChecker.visitCast` owns the allowed-conversion
+matrix (`30-enums.md` is the language reference). Enum casts never take the
+constant-value fast path: integer-to-enum emits
+`ENUM::from_integer_checked(expr)`, enum-to-primitive checked casts emit
+`franko_integer_unsafe_cast<T>((expr).value)`, and safe enum-to-backing casts
+emit `static_cast<T>((expr).value)`.
 
 **Predicates and literals.** `isValueAssignableType`/`hasDefaultValue` are
-`true` for enums, `isMemcpySafe` is `true`, `isMemsetSafe` is `false`
-(`isIntegral` stays `false`, so arithmetic/bitwise/shifts/logical/conditions
+`true` for enums, `isMemcpySafe` is `true`, `isMemsetSafe` is `false`,
+`isIntegral` stays `false` (so arithmetic/bitwise/shift/logical/conditions
 reject enums naturally), and `is_matchable`/`is_comparable`/`is_assignable`
-are `true` via `CompileTimeIntrinsics`. `#is_enum` accepts types or values,
-including variant references. Enum array literals allow only variant
-references of the same enum and store backing values in `literalValues`,
-so hoisting, mangling, and `memcpy` work unchanged.
+are `true` via `CompileTimeIntrinsics`. Enum array literals accept only
+variant references of the same enum and store backing values in
+`literalValues`, so hoisting, mangling, and `memcpy` work unchanged.
+
+## 4.28 Const storage (legality only)
+
+The language rules for `const` live in `18-declarations.md`; this section
+records how the compiler represents and checks them.
+
+**Representation.** `const` is a compiler-only storage modifier on locals,
+parameters, and globals. `AstNode.isConst` is populated by
+`FrankoASTVisitor`; `Symbol.isConst` is populated by `SemanticAnalyzer` and
+`DeclarationSelector`. The flag is not part of `SastType`, signature keys,
+mangling, `#what_type`, or generated C++. `ASTSerializer`/`SastSerializer`
+emit optional `"const": true` and accept its absence for backward
+compatibility. The grammar accepts `CONST?` on `varDecl`,
+`parameter`, and `globalVarDecl`, and syntactically on `structFieldDecl` so
+the Desugarer can report the field error and continue recovery.
+
+**Checks.** `DeclarationChecker.checkVarDecl` validates the declared type with
+`TypeChecker.isValueAssignableType` and emits the local-only
+`isFullyDefaultInitialized` warning. `StatementChecker` rejects ordinary
+assignments whose `target.storageSymbol()` is const; the same path checks
+`VAR_DECL_INIT` with `declarationInitializer = true`, which skips only the
+const-target rejection. `storageSymbol()` recurses through member/index
+accesses and returns `null` through a `DEREF`. `ExpressionChecker.visitGetPtr`
+rejects non-READ_ONLY creation intrinsics over const storage, which also
+covers `ptr`/`mview` method receivers. Every method's `self` parameter symbol
+is built const regardless of source spelling. `ExpressionAnalyzer` skips
+operator-assignment lowering for a const target so `StatementChecker` owns the
+diagnostic.
+
+**Declaration initialization.** Plain and field-wise forms lower to one
+`SastKind.VAR_DECL_INIT` with internal `ASSIGN`/`EXPR_STMT` entries; a const
+target takes the ordinary assignment path with operator lowering disabled.
+The details are in §3.2 and §4.26.
+
+**Pruning and codegen.** Const declarations participate in the two-run
+inactive pruner exactly like non-const declarations; their own init is not a
+use, but effectful initializers keep the declaration. `Cpp14Codegen` emits the
+same declaration plus initializer statements as a non-const twin, so `const`
+has no C++ or runtime effect. `include/FrankoRuntime.hpp` and both program
+templates are unchanged.
 
 ## 5. Build & test quick reference
 
@@ -3915,6 +3970,16 @@ language_tests/success/aggregate_literals_memory/
 language_tests/failure/aggregate_literals/
 ```
 
+Const-storage fixtures:
+
+```text
+language_tests/success/const_storage/
+language_tests/success/const_defaults/
+language_tests/success/inactive_declaration_init_pruning/
+language_tests/failure/const_storage/
+language_tests/failure/operators/operator_mov_value_assignable.fr
+```
+
 Memory-checker fixtures:
 
 ```text
@@ -3956,7 +4021,7 @@ owner argument.
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `AstNode.java` + `ASTSerializer` |
 | Change aggregate literal syntax or unnamed-tuple positional rules | `Franko.g4` (`aggregateLiteral`/`initItem`/`declSuffix`) + `FrankoASTVisitor` + `Desugarer` (field-wise form) + `ExpressionAnalyzer.lowerAggregateLiteral` + `ExpressionChecker.visitAggregateLiteral` + §4.26 |
-| Change field-wise declaration initialization | `Desugarer` (`appendDesugaredVarDeclFieldsInit`) + §4.26 |
+| Change field-wise declaration initialization | `Desugarer` (`appendDesugaredVarDeclFieldsInit`) + `SemanticAnalyzer.analyzeVarDeclFieldsInitStmt` + §4.26 / §4.28 |
 | Add compile-time branch syntax | `Franko.g4` (`compileTimeIfStmt`) + `AstKind.COMPILE_TIME_IF` + `SemanticAnalyzer.appendCompileTimeIf` (splicing, statement and declaration level) + §4.18 |
 | Add a compile-time intrinsic | `CompileTimeIntrinsics` + `ExpressionAnalyzer` delegation + `TypeChecker` predicate helpers + §4.18 |
 | Add a compile-time declaration conditional | `Franko.g4` declaration `compileTimeDeclIf` + `AstKind.DECL_IF` + `DeclarationSelector` + §4.18 |

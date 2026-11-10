@@ -407,7 +407,8 @@ final class MemoryAnalysisContext {
         List<Integer> directLocals = new ArrayList<>();
 
         for (SastNode statement : block.statements) {
-            if (statement.kind == SastKind.VAR_DECL) {
+            if (statement.kind == SastKind.VAR_DECL
+                    || statement.kind == SastKind.VAR_DECL_INIT) {
                 int variableId = addVariable(
                         statement.symbol,
                         variableIds,
@@ -485,6 +486,23 @@ final class MemoryAnalysisContext {
                     siteIds,
                     siteCount
             );
+            return;
+        }
+
+        if (statement.kind == SastKind.VAR_DECL_INIT) {
+            for (SastNode initializer : statement.initializers) {
+                collectStatement(
+                        initializer,
+                        functionId,
+                        builder,
+                        variableIds,
+                        variables,
+                        siteIds,
+                        siteCount,
+                        blockLocals,
+                        functionLocals
+                );
+            }
             return;
         }
 

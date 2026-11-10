@@ -18,7 +18,7 @@ import "franko/io"
 import "franko/string"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -46,7 +46,7 @@ namespace text {
     }
 
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -71,7 +71,7 @@ namespace text {
         return 0
     }
 
-    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+    func parse_uint32(view<[byte]> buf, const uint32 start, const uint32 count, mview<uint32> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -89,7 +89,7 @@ namespace text {
         return 1
     }
 
-    func parse_int64(view<[byte]> buf, uint32 start, uint32 count, mview<int64> out) -> byte {
+    func parse_int64(view<[byte]> buf, const uint32 start, const uint32 count, mview<int64> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -107,7 +107,7 @@ namespace text {
         return 1
     }
 
-    func match_word(view<[byte]> buf, uint32 start, uint32 count, view<[byte]> word) -> byte {
+    func match_word(view<[byte]> buf, const uint32 start, const uint32 count, const view<[byte]> word) -> byte {
         if (buf == null) {
             return 0
         }
@@ -181,15 +181,6 @@ struct Money {
         return $(self).amount > $(other).amount
     }
 
-    func OPERATOR_MOV(ptr<Money> self, view<Money> other) -> void {
-        if (other == null) {
-            return
-        }
-        mview<int64> target = getptr($(self).amount)
-        $(target) = $(other).amount
-        return
-    }
-
     func OPERATOR_ADDMOV(ptr<Money> self, view<Money> other) -> void {
         if (other == null) {
             return
@@ -222,7 +213,7 @@ struct Txn {
     Money amount
 }
 
-uint32 ACCOUNT_NONE = 0xFFFFFFFF
+const uint32 ACCOUNT_NONE = 0xFFFFFFFF
 
 [Account, 3] accounts
 
@@ -241,7 +232,7 @@ func setup_accounts() -> void {
     return
 }
 
-func find_account(uint32 id) -> uint32 {
+func find_account(const uint32 id) -> uint32 {
     for (uint32 i = 0; i < accounts.length(); i++) {
         if (accounts[i].id == id) {
             return i
@@ -251,7 +242,7 @@ func find_account(uint32 id) -> uint32 {
 }
 
 // Split the next whitespace-delimited token out of buf[0, len).
-func next_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+func next_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
                 mview<uint32> start, mview<uint32> count) -> byte {
     if (buf == null) {
         return 0
@@ -295,7 +286,7 @@ func next_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
     return 1
 }
 
-func parse_uint_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+func parse_uint_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
                       mview<uint32> out) -> byte {
     if (buf == null) {
         return 0
@@ -315,7 +306,7 @@ func parse_uint_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
     return text::parse_uint32(buf, start, count, out)
 }
 
-func parse_money_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+func parse_money_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
                        mview<Money> out) -> byte {
     if (buf == null) {
         return 0
@@ -345,7 +336,7 @@ func parse_money_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
     return 1
 }
 
-func no_more_tokens(view<[byte]> buf, uint32 len, mview<uint32> pos) -> byte {
+func no_more_tokens(view<[byte]> buf, const uint32 len, mview<uint32> pos) -> byte {
     if (buf == null) {
         return 0
     }
@@ -361,7 +352,7 @@ func no_more_tokens(view<[byte]> buf, uint32 len, mview<uint32> pos) -> byte {
     return 0
 }
 
-func parse_count(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
+func parse_count(view<[byte]> buf, const uint32 len, mview<uint32> out) -> byte {
     if (buf == null) {
         return 0
     }
@@ -376,7 +367,7 @@ func parse_count(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
     return no_more_tokens(buf, len, getmview(pos))
 }
 
-func parse_transaction(view<[byte]> buf, uint32 len, mview<Txn> txn) -> LedgerError {
+func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> LedgerError {
     if (buf == null) {
         return LedgerError::invalid_command
     }
@@ -467,7 +458,7 @@ func parse_transaction(view<[byte]> buf, uint32 len, mview<Txn> txn) -> LedgerEr
     return LedgerError::invalid_command
 }
 
-func print_prefix(view<Txn> txn) -> void {
+func print_prefix(const view<Txn> txn) -> void {
     if (txn == null) {
         return
     }
@@ -507,7 +498,7 @@ func print_prefix(view<Txn> txn) -> void {
     return
 }
 
-func run_transaction(view<Txn> txn, ptr<Money> total) -> void {
+func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
     if (txn == null) {
         return
     }

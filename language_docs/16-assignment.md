@@ -16,6 +16,35 @@ Valid assignment targets include:
 - dereferenced pointers;
 - struct field accesses (`obj.field`).
 
+## 16.0 Const Storage
+
+A const variable cannot be assigned after its declaration:
+
+```franko
+const int32 x = 1
+x = 2          // error: Cannot assign to const variable 'x'
+x += 1         // error
+x++            // error: equivalent to x += 1
+```
+
+The restriction follows the storage root. `p.field = 1`, `p[i] = 1`, and
+`p = v` are all rejected when `p` is const, but `$(p) = v` and
+`$(p).field = v` write the pointee and are allowed when `p` is a const
+pointer. `getptr(constValue)` and `getmview(constValue)` are rejected;
+`getview(constValue)` is allowed.
+
+Const storage must be initialized by its declaration:
+
+```franko
+const Point p = Point { x = 10, y = 20 }
+const Point q { x = 30 }
+const (int32, int32) pair = (int32, int32) { 1, 2 }
+```
+
+Plain and field-wise declaration initialization both initialize the const
+target; a later assignment is always an error. See
+[Declarations](18-declarations.md#188-const-storage).
+
 ## 16.1 Primitive Assignment
 
 A primitive integer variable may be assigned:
@@ -75,7 +104,7 @@ See [Array Literals](21-array-literals.md) for literal-source rules.
 
 A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](28-tuples.md#286-assignment).
 
-A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the ordinary rules (including an applicable `OPERATOR_MOV`); see [Aggregate Literals](29-aggregate-literals.md).
+A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be value-assignable, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](29-aggregate-literals.md).
 
 Valid:
 
@@ -227,8 +256,10 @@ rules described in [Struct Assignment](#164-struct-assignment). Compound
 assignment has no built-in struct fallback: if no overload applies, the
 assignment is rejected.
 
-A pointer-only struct can opt into whole-value assignment with
-`OPERATOR_MOV` even though built-in assignment refuses it:
+A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value
+assignment is always the built-in field copy. A pointer-only struct can opt
+into whole-value assignment with `OPERATOR_MOV` even though built-in
+assignment refuses it:
 
 ```franko
 struct Blob {
@@ -246,10 +277,9 @@ b = a          // calls b.OPERATOR_MOV(getview(a))
 ```
 
 The right-hand side is always borrowed as `view<T>` where `T` is its
-static type. An lvalue is passed with `getview`; an rvalue is borrowed
-through a compiler-generated temporary that lives until the end of the
-full expression. There is no direct pass for view values, string literals,
-or array literals:
+static type. An lvalue is passed with `getview`; an rvalue is borrowed for
+the duration of the full expression. A view value needs a `view<view<...>>`
+parameter:
 
 ```franko
 OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr

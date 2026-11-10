@@ -72,7 +72,16 @@ Rules:
 - A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32 self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
 - Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
-- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](25-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
+- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y` and `getptr($(self).y)` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](25-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
+- The `self` slot is **implicitly const**. Reassigning it (`self = other`) is
+  rejected with `Cannot assign to const variable 'self'`. Writing
+  `const self` is allowed but redundant. `const` only makes the pointer slot
+  immutable; the declared `ptr`/`mview`/`view` permission still governs the
+  pointee. It is not part of the method signature or overload identity.
+- A const struct receiver accepts only `view<X> self` methods. The hidden
+  receiver argument is `getptr`/`getmview`/`getview(receiver)` matching the
+  declared `self` type, so `ptr<X> self` and `mview<X> self` calls on a const
+  value fail the const-pointer rule, while `view<X> self` is allowed.
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](22-array-intrinsics.md)).
 
 ## 27.3 Method Calls and Receivers
@@ -162,14 +171,14 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 - Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32 y` inside `increment` is unrelated to `$(self).y`).
 - A method may call other methods on the same object only through an explicit receiver: `$(self).other()`.
-- `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](19-functions.md)).
+- `return` is checked against the enclosing method, so void/non-void return rules apply unchanged (see [Functions](19-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).
 
 ## 27.8 Methods and Pointer Checking
 
 `self` is a pointer parameter with the declared permission:
 
-- The receiver is a storage-backed lvalue, and `self` is non-null at method entry, so dereferencing it without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- The receiver is a storage-backed lvalue, and `self` is non-null at method entry, so dereferencing it without a null guard is valid and produces no warning. Reassigning `self` is rejected by the implicit const rule.
 - Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](31-memory-safety-checking.md)).
 
 ## 27.9 Restrictions Summary
@@ -177,10 +186,11 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
 - Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.
 - `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
+- The `self` slot is implicitly const; reassigning it is an error.
 - Receivers must be struct-valued storage-backed lvalues; `ptr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
-- No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.
+- No method pointers, no virtual dispatch, no inheritance: methods behave like functions with an explicit receiver.
 
 ## 27.10 Operator Methods
 
@@ -221,7 +231,7 @@ Rules:
 - Operator methods are still ordinary methods and remain callable with
   member-call syntax: `a.OPERATOR_EQ(getview(b))`.
 
-The operator syntax is lowering sugar over a method call:
+Operator syntax is shorthand for a method call:
 
 ```franko
 a == b       // a.OPERATOR_EQ(getview(b))
@@ -229,8 +239,8 @@ a = b        // a.OPERATOR_MOV(getview(b))
 a += b       // a.OPERATOR_ADDMOV(getview(b))
 ```
 
-Rvalue operands are borrowed through a compiler-generated temporary whose
-lifetime is the full expression (see [Operators](13-operators.md#1310-struct-operator-overloading)).
+Rvalue operands are borrowed for the duration of the full expression (see
+[Operators](13-operators.md#1310-struct-operator-overloading)).
 
 The `other` parameter is call-scoped: it may only be used during the operator
 call. Storing it into caller-owned or global storage is rejected; storing it

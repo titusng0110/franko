@@ -691,6 +691,10 @@ list.uninit()                 // release the buffer
 ## Operator methods
 
 `std::String` overloads comparison and assignment operators.
+`std::String` is pointer-only because it has a dynamic-array field, so its
+custom `OPERATOR_MOV` overloads are legal. A value-assignable struct cannot
+declare `OPERATOR_MOV`; its whole-value assignment is always the built-in
+field copy.
 
 ### Comparisons
 

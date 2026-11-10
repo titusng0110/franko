@@ -63,7 +63,7 @@ int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 
 `?` array size inference uses the same evaluator quietly: it only needs
 the value when one exists, and reports its own inference diagnostics
-otherwise (see [Desugaring](24-desugaring.md)).
+otherwise (see [Shorthands and Equivalences](24-desugaring.md)).
 
 A static array `length()` call is a compile-time constant, not a runtime
 read (see [Array Intrinsics](22-array-intrinsics.md)).

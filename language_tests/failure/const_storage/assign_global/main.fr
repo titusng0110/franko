@@ -1,0 +1,6 @@
+const int32 GLOBAL = 1
+
+func main() -> int32 {
+    GLOBAL = 2
+    return 0
+}

@@ -24,6 +24,7 @@ final class Symbol {
 
     final List<Symbol> parameters;
     final boolean isBuiltin;
+    final boolean isConst;
     final StructSymbol owner;
     final int index;
 
@@ -38,6 +39,7 @@ final class Symbol {
             SastType type,
             List<Symbol> parameters,
             boolean isBuiltin,
+            boolean isConst,
             StructSymbol owner,
             int index
     ) {
@@ -47,11 +49,21 @@ final class Symbol {
         this.type = Objects.requireNonNull(type);
         this.parameters = parameters == null ? List.of() : List.copyOf(parameters);
         this.isBuiltin = isBuiltin;
+        this.isConst = isConst;
         this.owner = owner;
         this.index = index;
     }
 
     static Symbol variable(String namespace, String name, SastType type) {
+        return variable(namespace, name, type, false);
+    }
+
+    static Symbol variable(
+            String namespace,
+            String name,
+            SastType type,
+            boolean isConst
+    ) {
         return new Symbol(
                 SymbolKind.VARIABLE,
                 name,
@@ -59,12 +71,22 @@ final class Symbol {
                 type,
                 List.of(),
                 false,
+                isConst,
                 null,
                 -1
         );
     }
 
     static Symbol parameter(String name, SastType type, int index) {
+        return parameter(name, type, index, false);
+    }
+
+    static Symbol parameter(
+            String name,
+            SastType type,
+            int index,
+            boolean isConst
+    ) {
         return new Symbol(
                 SymbolKind.PARAMETER,
                 name,
@@ -72,12 +94,22 @@ final class Symbol {
                 type,
                 List.of(),
                 false,
+                isConst,
                 null,
                 index
         );
     }
 
     static Symbol global(String namespace, String name, SastType type) {
+        return global(namespace, name, type, false);
+    }
+
+    static Symbol global(
+            String namespace,
+            String name,
+            SastType type,
+            boolean isConst
+    ) {
         return new Symbol(
                 SymbolKind.GLOBAL,
                 name,
@@ -85,6 +117,7 @@ final class Symbol {
                 type,
                 List.of(),
                 false,
+                isConst,
                 null,
                 -1
         );
@@ -110,6 +143,7 @@ final class Symbol {
                 SastType.functionType(parameterTypes, returnType),
                 parameters,
                 isBuiltin,
+                false,
                 null,
                 -1
         );
@@ -135,6 +169,7 @@ final class Symbol {
                 SastType.functionType(parameterTypes, returnType),
                 parameters,
                 isBuiltin,
+                false,
                 owner,
                 -1
         );

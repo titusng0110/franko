@@ -1,0 +1,2 @@
+Const variable 'uninit' has no initializer
+never exercises allocation or lifecycle permissions

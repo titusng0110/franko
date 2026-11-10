@@ -17,9 +17,9 @@ namespace os {
             // Win32 File API (fileapi.h) standard-handle constants.
             // These are (DWORD)-10/-11/-12, spelled as hex because a
             // negative literal cannot fit a uint32 target.
-            uint32 STD_INPUT_HANDLE = 0xFFFFFFF6
-            uint32 STD_OUTPUT_HANDLE = 0xFFFFFFF5
-            uint32 STD_ERROR_HANDLE = 0xFFFFFFF4
+            const uint32 STD_INPUT_HANDLE = 0xFFFFFFF6
+            const uint32 STD_OUTPUT_HANDLE = 0xFFFFFFF5
+            const uint32 STD_ERROR_HANDLE = 0xFFFFFFF4
 
             // FFI intrinsics, bridged by import/franko/os.ffi.cpp.
             // hFile is a HANDLE widened to 64 bits; obtain one with
@@ -29,30 +29,30 @@ namespace os {
             // read-only for WriteFile (view) and written in place for
             // ReadFile (mview). The stubs report failure (0) so a missing
             // bridge can never look like silent success.
-            func GetStdHandle(uint32 nStdHandle) -> uint64 {
+            func GetStdHandle(const uint32 nStdHandle) -> uint64 {
                 return 0
             }
-            func ReadFile(uint64 hFile, mview<[byte]> buf, uint32 count, mview<uint32> bytesRead) -> int32 {
+            func ReadFile(const uint64 hFile, const mview<[byte]> buf, const uint32 count, const mview<uint32> bytesRead) -> int32 {
                 return 0
             }
-            func WriteFile(uint64 hFile, view<[byte]> buf, uint32 count, mview<uint32> bytesWritten) -> int32 {
+            func WriteFile(const uint64 hFile, const view<[byte]> buf, const uint32 count, const mview<uint32> bytesWritten) -> int32 {
                 return 0
             }
         }
     } #else #if (#IS_LINUX || #IS_MACOS) {
         namespace posix {
-            int32 STDIN_FILENO = 0
-            int32 STDOUT_FILENO = 1
-            int32 STDERR_FILENO = 2
+            const int32 STDIN_FILENO = 0
+            const int32 STDOUT_FILENO = 1
+            const int32 STDERR_FILENO = 2
 
             // FFI intrinsics. When this module is used, the compiler
             // replaces the stubs with the bridge definitions from
             // import/franko/os.ffi.cpp. The stubs report failure (-1) so
             // a missing bridge can never look like silent success.
-            func read(int32 fd, mview<[byte]> buf, uint64 count) -> int64 {
+            func read(const int32 fd, const mview<[byte]> buf, const uint64 count) -> int64 {
                 return -1
             }
-            func write(int32 fd, view<[byte]> buf, uint64 count) -> int64 {
+            func write(const int32 fd, const view<[byte]> buf, const uint64 count) -> int64 {
                 return -1
             }
         }

@@ -411,6 +411,20 @@ final class MemoryDataflowDriver {
             return false;
         }
 
+        if (node.kind == SastKind.VAR_DECL_INIT) {
+            domain.checkVarDecl(node);
+
+            for (SastNode initializer : node.initializers) {
+                if (initializer.kind == SastKind.ASSIGN) {
+                    domain.checkAssign(initializer);
+                } else if (initializer.kind == SastKind.EXPR_STMT) {
+                    domain.checkExpr(initializer.expr);
+                }
+            }
+
+            return false;
+        }
+
         if (node.kind == SastKind.ASSIGN) {
             domain.checkAssign(node);
             return false;

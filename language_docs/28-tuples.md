@@ -160,7 +160,7 @@ The positional field-wise form is available only for all-unnamed tuple
 declarations. See [Aggregate Literals](29-aggregate-literals.md) for both
 forms.
 
-Declaration-initializer sugar works normally:
+Declaration initialization works normally:
 
 ```franko
 (int32, int32) x = f()
@@ -218,6 +218,18 @@ b = a
 ```
 
 The ordered element types must match exactly; names are irrelevant.
+
+A tuple may be declared `const` when every element is value-assignable:
+
+```franko
+const (int32, int32) pair = (int32, int32) { 1, 2 }
+const (int32, int32) defaults
+```
+
+The const rules are the usual ones: no later assignment, no mutable pointer
+through `getptr`/`getmview`, and `getview` only. A tuple containing an array
+is pointer-only and cannot be `const`. See
+[Declarations](18-declarations.md#188-const-storage).
 
 A tuple is assignable as a whole only when every element is an assignable
 value type:

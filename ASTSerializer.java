@@ -83,6 +83,10 @@ public final class ASTSerializer {
                 obj.put("node", node.kind.jsonName());
                 obj.put("type", typeToJson(node.type, sources));
                 obj.put("name", node.name);
+
+                if (node.isConst) {
+                    obj.put("const", true);
+                }
             }
             case STRUCT_DECL -> {
                 obj.put("node", node.kind.jsonName());
@@ -96,6 +100,10 @@ public final class ASTSerializer {
                 obj.put("type", typeToJson(node.type, sources));
                 obj.put("name", node.name);
                 obj.put("constInitializer", nodeToJson(node.value, sources));
+
+                if (node.isConst) {
+                    obj.put("const", true);
+                }
             }
             case ENUM_DECL -> {
                 obj.put("node", node.kind.jsonName());
@@ -115,23 +123,39 @@ public final class ASTSerializer {
                 obj.put("constInitializer", nodeToJson(node.value, sources));
                 obj.put("literalBytes", JsonAstSupport.bigIntegerArray(node.literalBytes));
                 obj.put("compileTimeConstant", node.compileTimeConstant);
+
+                if (node.isConst) {
+                    obj.put("const", true);
+                }
             }
             case VAR_DECL -> {
                 obj.put("node", node.kind.jsonName());
                 obj.put("type", typeToJson(node.type, sources));
                 obj.put("name", node.name);
+
+                if (node.isConst) {
+                    obj.put("const", true);
+                }
             }
             case VAR_DECL_INIT -> {
                 obj.put("node", node.kind.jsonName());
                 obj.put("type", typeToJson(node.type, sources));
                 obj.put("name", node.name);
                 obj.put("init", nodeToJson(node.init, sources));
+
+                if (node.isConst) {
+                    obj.put("const", true);
+                }
             }
             case VAR_DECL_FIELDS_INIT -> {
                 obj.put("node", node.kind.jsonName());
                 obj.put("type", typeToJson(node.type, sources));
                 obj.put("name", node.name);
                 obj.put("fields", nodeArray(node.fields, sources));
+
+                if (node.isConst) {
+                    obj.put("const", true);
+                }
             }
             case FIELD_INIT -> {
                 obj.put("node", node.kind.jsonName());
@@ -329,7 +353,8 @@ public final class ASTSerializer {
             case PARAMETER: return AstNode.parameter(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
-                    obj.requireString("name")
+                    obj.requireString("name"),
+                    obj.has("const") && obj.requireBool("const")
             );
             case STRUCT_DECL: return AstNode.structDecl(
                     span,
@@ -342,7 +367,8 @@ public final class ASTSerializer {
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
-                    nodeFromJson(obj.optObject("constInitializer"), sources)
+                    nodeFromJson(obj.optObject("constInitializer"), sources),
+                    obj.has("const") && obj.requireBool("const")
             );
             case ENUM_DECL: return AstNode.enumDecl(
                     span,
@@ -360,7 +386,8 @@ public final class ASTSerializer {
                         span,
                         typeFromJson(obj.requireObject("type"), sources),
                         obj.requireString("name"),
-                        nodeFromJson(obj.optObject("constInitializer"), sources)
+                        nodeFromJson(obj.optObject("constInitializer"), sources),
+                        obj.has("const") && obj.requireBool("const")
                 );
                 node.literalBytes = bigIntegersFromArray(obj.optArray("literalBytes"));
                 node.compileTimeConstant = obj.has("compileTimeConstant")
@@ -370,19 +397,22 @@ public final class ASTSerializer {
             case VAR_DECL: return AstNode.varDecl(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
-                    obj.requireString("name")
+                    obj.requireString("name"),
+                    obj.has("const") && obj.requireBool("const")
             );
             case VAR_DECL_INIT: return AstNode.varDeclInit(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
-                    nodeFromJson(obj.optObject("init"), sources)
+                    nodeFromJson(obj.optObject("init"), sources),
+                    obj.has("const") && obj.requireBool("const")
             );
             case VAR_DECL_FIELDS_INIT: return AstNode.varDeclFieldsInit(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
-                    nodesFromArray(obj.requireArray("fields"), sources)
+                    nodesFromArray(obj.requireArray("fields"), sources),
+                    obj.has("const") && obj.requireBool("const")
             );
             case FIELD_INIT: return AstNode.fieldInit(
                     span,

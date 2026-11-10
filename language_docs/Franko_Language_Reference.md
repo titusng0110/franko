@@ -20,6 +20,8 @@ Franko is a small statically typed language with:
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
+- `const` storage on locals, parameters, and globals for value-assignable
+  types (see [Declarations](18-declarations.md));
 - assignment;
 - blocks;
 - `if`;
@@ -350,7 +352,7 @@ Invalid global-scope items include:
 - array initializer assignments.
 - expression statements (bare expressions such as `1 + 2`);
 
-Note that some invalid global-scope forms are only invalid in their executable form: declaration initializer sugar is equivalent to an assignment, an expression-statement call, or indexed element assignments, all of which are executable statements.
+Note that some invalid global-scope forms are only invalid in their executable form: a non-constant declaration initializer performs an assignment, an expression-statement call, or indexed element assignments, all of which are executable statements.
 
 Execution should be rooted in a user-defined `main` function.
 
@@ -624,7 +626,7 @@ int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 
 `?` array size inference uses the same evaluator quietly: it only needs
 the value when one exists, and reports its own inference diagnostics
-otherwise (see [Desugaring](24-desugaring.md)).
+otherwise (see [Shorthands and Equivalences](24-desugaring.md)).
 
 A static array `length()` call is a compile-time constant, not a runtime
 read (see [Array Intrinsics](22-array-intrinsics.md)).
@@ -1226,6 +1228,14 @@ overload; if none applies it falls back to the normal whole-struct
 assignment rules. Compound assignment has no built-in struct fallback:
 `a += b` requires a matching `OPERATOR_ADDMOV`.
 
+A struct that is value-assignable (all fields value-assignable, recursively)
+**cannot declare `OPERATOR_MOV`**: its whole-value assignment is always the
+built-in field copy. This is a declaration error even if the operator is never
+used. Compound assignment methods (`OPERATOR_ADDMOV` … `OPERATOR_XORMOV`)
+remain allowed. Pointer-only structs may still declare `OPERATOR_MOV` to opt
+into custom whole-value assignment; see
+[Operator Assignment](16-assignment.md#167-operator-assignment).
+
 Operator methods may still be called explicitly:
 
 ```franko
@@ -1233,16 +1243,14 @@ a.OPERATOR_EQ(getview(b))
 ```
 
 Operator operands may be arbitrary value expressions. Lvalue operands use
-their address; rvalue operands are borrowed through a compiler-generated
-temporary whose lifetime is the full expression. User-written `getview`
+their address; rvalue operands are borrowed for the duration of the full
+expression. User-written `getview`
 still requires a storage-backed lvalue, so `getview(5)` and
 `getview(make_x())` remain invalid. The left-hand side of an assignment
 must still be a storage-backed lvalue.
 
 The right-hand operand is always borrowed as `view<T>` where `T` is its
-static type. There is no direct pass for view-valued expressions, string
-literals, or array literals. A view value therefore needs a
-`view<view<...>>` parameter:
+static type. A view value therefore needs a `view<view<...>>` parameter:
 
 ```franko
 OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
@@ -1252,14 +1260,12 @@ OPERATOR_MOV(ptr<X> self, view<view<[byte]>> other)  // x = "hello"
 When the parameter is itself a view of a view, overload resolution checks
 the parameter's inner referenced type and applies the ordinary pointer
 conversion there. Thus the inner `view<[byte, 10]>` value decays to
-`view<[byte]>` for a `view<view<[byte]>>` parameter. The representation is
-unchanged: both inner types use the same fat-pointer value.
+`view<[byte]>` for a `view<view<[byte]>>` parameter.
 
 Integer constants use the ordinary fluid-constant fitting rules against
 `view<primitive>` parameters: an exact natural-type match wins, otherwise
 the narrowest fitting type wins with signed before unsigned at equal
-width. The selected constant is materialized as a temporary of the
-parameter's referenced primitive type before being borrowed.
+width.
 
 Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
 
@@ -1269,7 +1275,7 @@ type on both sides. Arithmetic, bitwise, shift, logical, and
 compound-assignment operators reject enum operands. See [Enums](30-enums.md).
 
 See [Assignment](16-assignment.md) and [Methods](27-methods.md) for the
-full lowering, fallback, and lifetime rules.
+full operator rules.
 
 ---
 
@@ -1345,6 +1351,14 @@ Current storage-backed lvalues are:
 | function call result | no |
 | `getptr(...)` result | no |
 
+Const storage is storage-backed but **not a mutable assignment target**. If
+the root of an access path is a const variable, `x = ...`, `x += ...`,
+`x.field = ...`, and `x[i] = ...` are rejected. A `$(p)` boundary starts a new
+storage region: `$(p) = ...` and `$(p).field = ...` are allowed even when the
+pointer variable `p` itself is const, because the write targets the pointee,
+not the const pointer slot. `getptr`/`getmview` over const storage are
+rejected; `getview` is allowed.
+
 Struct field lvalue-ness follows the base expression: `s.field` is an lvalue when `s` is a variable, a `$(...)`, a nested member access, or an array element of a storage-backed array (static or dynamic). Field access on a function call result is not storage-backed.
 
 Tuple element access follows exactly the same rule: `t.val` and `t._0` are lvalues when `t` is storage-backed, and tuple elements can be assigned, passed to `getptr`/`getview`/`getmview`, and nested in longer access chains.
@@ -1381,6 +1395,35 @@ Valid assignment targets include:
 - array elements;
 - dereferenced pointers;
 - struct field accesses (`obj.field`).
+
+## 16.0 Const Storage
+
+A const variable cannot be assigned after its declaration:
+
+```franko
+const int32 x = 1
+x = 2          // error: Cannot assign to const variable 'x'
+x += 1         // error
+x++            // error: equivalent to x += 1
+```
+
+The restriction follows the storage root. `p.field = 1`, `p[i] = 1`, and
+`p = v` are all rejected when `p` is const, but `$(p) = v` and
+`$(p).field = v` write the pointee and are allowed when `p` is a const
+pointer. `getptr(constValue)` and `getmview(constValue)` are rejected;
+`getview(constValue)` is allowed.
+
+Const storage must be initialized by its declaration:
+
+```franko
+const Point p = Point { x = 10, y = 20 }
+const Point q { x = 30 }
+const (int32, int32) pair = (int32, int32) { 1, 2 }
+```
+
+Plain and field-wise declaration initialization both initialize the const
+target; a later assignment is always an error. See
+[Declarations](18-declarations.md#188-const-storage).
 
 ## 16.1 Primitive Assignment
 
@@ -1441,7 +1484,7 @@ See [Array Literals](21-array-literals.md) for literal-source rules.
 
 A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](28-tuples.md#286-assignment).
 
-A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the ordinary rules (including an applicable `OPERATOR_MOV`); see [Aggregate Literals](29-aggregate-literals.md).
+A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be value-assignable, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](29-aggregate-literals.md).
 
 Valid:
 
@@ -1593,8 +1636,10 @@ rules described in [Struct Assignment](#164-struct-assignment). Compound
 assignment has no built-in struct fallback: if no overload applies, the
 assignment is rejected.
 
-A pointer-only struct can opt into whole-value assignment with
-`OPERATOR_MOV` even though built-in assignment refuses it:
+A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value
+assignment is always the built-in field copy. A pointer-only struct can opt
+into whole-value assignment with `OPERATOR_MOV` even though built-in
+assignment refuses it:
 
 ```franko
 struct Blob {
@@ -1612,10 +1657,9 @@ b = a          // calls b.OPERATOR_MOV(getview(a))
 ```
 
 The right-hand side is always borrowed as `view<T>` where `T` is its
-static type. An lvalue is passed with `getview`; an rvalue is borrowed
-through a compiler-generated temporary that lives until the end of the
-full expression. There is no direct pass for view values, string literals,
-or array literals:
+static type. An lvalue is passed with `getview`; an rvalue is borrowed for
+the duration of the full expression. A view value needs a `view<view<...>>`
+parameter:
 
 ```franko
 OPERATOR_MOV(ptr<X> self, view<[byte]> other)        // x = arr
@@ -1642,6 +1686,8 @@ complete operator overload rules.
 Franko supports the following statements inside function bodies and blocks:
 
 - variable declarations;
+- declaration initialization (`T x = expr`, `T x { field = expr }`, and the
+  const forms; see [Declarations](18-declarations.md));
 - assignments;
 - compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`);
 - increment and decrement statements (`x++`, `x--`);
@@ -1669,13 +1715,13 @@ The braces of a function body are an exception: they do not create an additional
 
 The condition must be an integer expression.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `if`. See [Desugaring](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `if`. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 17.3 While Statements
 
 The condition must be an integer expression.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `while`. See [Desugaring](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `while`. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 17.4 For Statements
 
@@ -1736,7 +1782,7 @@ which behaves as:
 
 The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last; `continue` runs it and `break` skips it. See [Break and Continue](17-statements.md) below.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `for`. See [Desugaring](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `for`. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 17.5 Break and Continue
 
@@ -1850,7 +1896,7 @@ are allowed, and chaining uses `#else #if`.
 A standalone `#else` is a syntax error.
 `#if` also works at declaration level: at global scope, inside a
 namespace, and inside a struct. Selected declarations and statements are
-spliced directly into the enclosing scope, so compile-time branch braces
+inserted directly into the enclosing scope, so compile-time branch braces
 do not create a scope. See
 [Compile-Time Reflection](34-compile-time-reflection.md).
 
@@ -1882,18 +1928,15 @@ ptr<int32> q;
 ptr<[int]> array_ptr;
 ```
 
-Declaration initializers are syntax sugar:
+Declaration initialization is its own statement form:
 
 ```franko
 int32 x = 1;
 ```
 
-is equivalent to:
-
-```franko
-int32 x;
-x = 1;
-```
+It declares `x` and initializes it once. Declaration initialization is the
+only place a `const` variable can receive its value, and it is evaluated
+exactly once as part of the declaration.
 
 The initializer must obey normal assignment rules and is only valid where the resulting assignment is legal.
 
@@ -1947,7 +1990,7 @@ literal):
 view<[int32, 4]> G = [1, 2, 3, 4]   // valid
 ```
 
-**Ordinary declaration initializer sugar.** The `= expr` form described in this chapter and in [Assignment](16-assignment.md), when the expression is not constant, is equivalent to an executable assignment statement. Executable statements are not allowed at global scope, so this form is invalid on global declarations:
+**Ordinary declaration initialization.** The `= expr` form described in this chapter and in [Assignment](16-assignment.md), when the expression is not constant, performs an executable initialization. Executable statements are not allowed at global scope, so this form is invalid on global declarations:
 
 ```franko
 int32 g = h                     // invalid: the initializer must be constant
@@ -2004,8 +2047,8 @@ Buffer b { cap = 20 }
 (int32, int32) partial { 0 }
 ```
 
-This is declaration sugar for a declaration followed by one ordinary field
-assignment per named or positional entry:
+This is declaration initialization: one ordinary field assignment per named
+or positional entry, kept as part of the declaration:
 
 ```franko
 Literal lit
@@ -2031,6 +2074,76 @@ Rules:
 
 The complete aggregate initialization reference is in
 [Aggregate Literals](29-aggregate-literals.md).
+
+## 18.8 Const Storage
+
+`const` is a storage modifier on variables, parameters, and globals. It is not
+a type: it is not part of a function signature, overload identity, or
+`#what_type`.
+
+Syntax:
+
+```franko
+const T x = expr          // local, plain declaration initialization
+const P p { field = v }   // local, field-wise declaration initialization
+const T G = globalInit    // global
+func f(const T p) -> ...  // parameter, including const self
+```
+
+`const` is legal only when the declared type is value-assignable:
+
+- a primitive integer;
+- an enum;
+- a pointer (`ptr<T>`, `mview<T>`, `view<T>`);
+- a struct all of whose fields are value-assignable, recursively;
+- a tuple all of whose elements are value-assignable, recursively.
+
+It is illegal on static arrays, dynamic arrays, structs or tuples containing
+an array or another non-value-assignable part, `void`, and struct fields.
+Using `const` on an invalid type is an error, for example:
+
+```text
+Const variable 'xs' has type '[int32]'; const is only allowed for value-assignable types
+```
+
+The rules:
+
+1. **No assignment.** A const variable cannot be the target of `=` or a
+   compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`), and
+   `x++`/`x--` are rejected for the same reason. A field or element of a const
+   variable is also const storage. A dereference starts a new storage region:
+   `$(p) = v` is allowed when `p` is a const pointer; only `p = v` is
+   rejected.
+2. **No mutable pointer to const storage.** `getptr(constVar)` and
+   `getmview(constVar)` are rejected; `getview(constVar)` is allowed.
+3. **Declaration initialization only.** A const variable is initialized by
+   its declaration. Both the plain form `const T x = expr` and the field-wise
+   form `const P p { field = v }` are declaration initialization, not a
+   separate assignment; no later assignment is allowed.
+4. **Uninitialized const locals warn when not fully default-initialized.**
+   `const int32 x` warns because `int32` has no default value. `const Point p`
+   does not warn when every field is fully defaulted. Parameters and globals
+   never receive this warning: parameters are initialized by the caller and
+   globals are zero/default-initialized before `main`.
+5. **No const fields.** `const int32 f` inside a struct is rejected:
+   `Struct fields cannot be const`. A value-assignable struct may itself be
+   const.
+6. **Const struct receivers allow only `view<X> self` methods.** The hidden
+   receiver argument uses `getptr`, `getmview`, or `getview` matching the
+   declared `self` type, so `ptr<X> self` and `mview<X> self` calls on a const
+   value are rejected and `view<X> self` is allowed. Direct field reads are
+   allowed; field writes are rejected.
+7. **Const parameters are allowed.** `const int32 a`, `const Point p`, and
+   `const self` are legal when the parameter type is value-assignable.
+   `const` is not part of overload identity or mangling: `f(const int32)` and
+   `f(int32)` are duplicate declarations. A method's `self` slot is always
+   implicitly const; writing `const self` is allowed but redundant.
+8. **Const globals are allowed** for value-assignable types, using the
+   existing global initializer forms (constant initializer, static address,
+   string literal, or array literal through a pointer type). A const global
+   cannot be assigned from any function.
+
+`#is_value_assignable` is exactly the type predicate `const` requires.
 
 ---
 
@@ -2063,6 +2176,17 @@ Function declarations are valid only in global scope.
 ## 19.3 Function Parameters
 
 Function parameters are treated as local variables inside the function body.
+
+A parameter may be declared `const`: `func sum(const int32 a, const int32 b)`
+or `func f(const Point p)`. Const parameters have the same assignment
+restrictions as const locals: the parameter cannot be reassigned, and only
+`getview` may take a mutable pointer to it. A const parameter's type must be
+value-assignable. `const self` is allowed in methods and only makes the
+pointer slot itself immutable; the declared `ptr`/`mview`/`view` permission
+still governs the pointee.
+
+`const` is not part of a parameter type, a function signature, or overload
+identity: `f(const int32)` and `f(int32)` are duplicate declarations.
 
 Duplicate parameter names inside the same function are invalid.
 
@@ -2290,7 +2414,7 @@ Invalid:
 Static arrays cannot use `init`; fill them with `memset` or `memcpy`.
 
 The size may be written as `?` in a `view` declaration with an
-array-literal initializer (see [Desugaring](24-desugaring.md)):
+array-literal initializer (see [Shorthands and Equivalences](24-desugaring.md)):
 
 ```franko
 view<[int32, ?]> a = [0, 1, 2, 3];   // ? = 4
@@ -2637,7 +2761,7 @@ view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
 ```
 
 The rules are the same as for other `?` inference (see
-[Desugaring](24-desugaring.md)): `?` is only allowed in a local
+[Shorthands and Equivalences](24-desugaring.md)): `?` is only allowed in a local
 declaration with an array-literal initializer, the array nest must be
 static at every level, and the fit must be exact when `?` is used.
 
@@ -3288,14 +3412,14 @@ An empty string literal `""` is not supported: a string literal is a
 
 ---
 
-# 24. Desugaring
+# 24. Shorthands and Equivalences
 
 Some Franko source forms are convenient shorthand for simpler forms. The
 shorthand and its equivalent have the same meaning; the normal
 declaration, assignment, array initialization, and type rules apply to
 the equivalent form.
 
-## 24.1 Declaration Initializer Sugar
+## 24.1 Declaration Initialization
 
 This:
 
@@ -3303,31 +3427,35 @@ This:
 int x = 10;
 ```
 
-is accepted in statement contexts where a declaration followed by an
-assignment is legal, and is shorthand for:
+is a declaration-initialization statement, not shorthand for a separate
+assignment. It declares `x` and initializes it as one construct. The same
+holds for the field-wise form and for `const`:
 
 ```franko
-int x;
-x = 10;
+Literal lit { x = 0 }
+const int32 y = 10
+const Point p { x = 1 }
 ```
 
-At global scope, declaration initializer sugar is currently invalid when
-its equivalent form is an assignment, because executable statements are
-not allowed at global scope.
+Declaration initialization is evaluated once as part of the declaration; a
+`const` variable can therefore be initialized here and nowhere else. At
+global scope only the existing global initializer
+forms are valid (constant initializer, static address, string literal, or an
+array literal through a pointer). See
+[Declarations](18-declarations.md#188-const-storage).
 
-## 24.2 Array Literal Desugaring
+## 24.2 Array and Aggregate Literal Values
 
-Array literals are not assignment sugar: they are `view<[T, N]>` values
-over immutable constant storage, exactly like string literals. An array
-literal is never rewritten into statements; its element type is inferred
-from the surrounding assignment, return, or call-argument context. See
-[Array Literals](21-array-literals.md).
+Array literals are not assignment shorthand: they are `view<[T, N]>` values
+over immutable constant storage, exactly like string literals. Their element
+type is inferred from the surrounding assignment, return, or call-argument
+context. See [Array Literals](21-array-literals.md).
 
-Aggregate literal expressions are likewise never rewritten into statements.
-They remain expressions and are lowered during semantic analysis into a
-temporary struct or tuple value. See [Aggregate Literals](29-aggregate-literals.md).
+Aggregate literals are likewise ordinary values, not statement shorthand: they
+construct a temporary struct or tuple value. See
+[Aggregate Literals](29-aggregate-literals.md).
 
-## 24.3 String Literal Desugaring
+## 24.3 String Literal Values
 
 Every string literal is a read-only `view<[byte, N]>` over immutable
 storage holding its UTF-8 bytes. No null terminator is added, and
@@ -3364,7 +3492,7 @@ This makes braceless and braced bodies scope identically: a declaration
 inside a braceless body is scoped to that implicit block and is not
 visible after the `if`/`while`/`for`. See [Statements](17-statements.md).
 
-## 24.5 For Loop Desugaring
+## 24.5 For Loop Equivalence
 
 A `for` loop is equivalent to declaration/assignment statements and a
 `while` loop:
@@ -3397,8 +3525,8 @@ present, `update` runs at the end of every iteration, including the
 last: `continue` runs it, and `break` skips it, matching C's `for`
 semantics. See [Statements](17-statements.md).
 
-The `init` and `update` statements follow the ordinary statement sugar
-rules, so declaration initializer sugar in the header expands normally.
+The `init` and `update` statements follow the ordinary statement rules, so
+declaration initialization in the header is handled normally.
 See [Statements](17-statements.md).
 
 ## 24.6 Inferred Static Array Sizes (`?`)
@@ -3469,9 +3597,9 @@ Evaluation failures are compile errors:
 Constant expressions inside ordinary code are also folded at compile
 time. See [Constant Folding](08-constant-folding.md).
 
-## 24.8 Increment and Decrement Desugaring
+## 24.8 Increment and Decrement Equivalence
 
-Postfix increment and decrement statements are sugar for compound
+Postfix increment and decrement statements are equivalent to compound
 assignment:
 
 ```franko
@@ -3491,16 +3619,17 @@ target, operand rules, single evaluation of the target) applies
 identically to `x++` / `x--`. The literal `1` remains a fluid integer
 constant. See [Assignment](16-assignment.md).
 
-## 24.9 Aggregate Field Initializer Desugaring
+## 24.9 Aggregate Field Initialization
 
-A field-wise declaration initializer is sugar for a declaration followed by
-one ordinary field assignment per named field, in source order:
+A field-wise declaration initializer is declaration initialization, not a
+separate assignment statement. It initializes one ordinary field at a time,
+in source order:
 
 ```franko
 Literal lit { def = 1, x = 0 }
 ```
 
-is equivalent to:
+behaves as:
 
 ```franko
 Literal lit
@@ -3508,7 +3637,9 @@ lit.def = 1
 lit.x = 0
 ```
 
-An all-unnamed tuple declaration accepts positional entries, which are
+but is evaluated as declaration initialization, so it can initialize a
+`const` aggregate and never invokes `OPERATOR_MOV`. An
+all-unnamed tuple declaration accepts positional entries, which are
 written to `_0`, `_1`, … in order and fill the first N elements:
 
 ```franko
@@ -3525,8 +3656,7 @@ pair._1 = 1
 
 A partial list such as `{ 0 }` writes only `_0`. The brace must immediately
 follow the identifier; a newline ends the declaration. Duplicate field
-initializers and positional lists that exceed the tuple size are rejected
-during desugaring. Positional entries are invalid for structs and named or
+initializers and positional lists that exceed the tuple size are rejected. Positional entries are invalid for structs and named or
 mixed tuple spellings, and positional and named entries cannot be mixed. No
 temporary aggregate value is created, so the form also works for pointer-only
 aggregates; each entry must still obey ordinary assignment rules. See
@@ -3584,10 +3714,23 @@ least the requested permission: `getptr` needs owner access,
 prevents laundering a `view` into a `ptr`.
 
 User-written `getview`/`getmview`/`getptr` require a storage-backed
-lvalue. The compiler-generated borrow used to pass an rvalue operand to
-an overloaded struct operator is the only exception: it is internal to
-operator lowering, and `getview(5)` or `getview(make_x())` remains
-invalid in user code. See [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading).
+lvalue. The only exception is the implicit borrow used to pass an rvalue
+operand to an overloaded struct operator; it is not available to user code,
+so `getview(5)` or `getview(make_x())` remains invalid. See [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading).
+
+Const storage allows only `getview`:
+
+```franko
+const int32 x = 1
+view<int32> v = getview(x)    // valid
+ptr<int32> p = getptr(x)      // error
+mview<int32> m = getmview(x)  // error
+```
+
+This limits a const struct receiver to `view<X> self` methods.
+`$(p)` follows the pointee's own type, not the constness of the variable
+holding `p`: when `p` is a const `ptr<int32>`, `$(p) = 5` is valid and
+`p = ...` is not. See [Declarations](18-declarations.md#188-const-storage).
 
 ## 25.2 Dereferencing with `$`
 
@@ -4089,7 +4232,7 @@ Rules:
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](22-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
-- Fields are kept in declaration order; that order is also the generated field order.
+- Fields are kept in declaration order.
 - Field names are ordinary identifiers; keywords cannot be field names. By convention they use `lower_case_snake_case`: a field whose name starts with `_` is private to the struct and warns when accessed from outside it. See [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md) and [Naming Conventions](36-naming-conventions.md).
 
 ## 26.3 Field Default Values
@@ -4167,7 +4310,13 @@ Static arrays and dynamic arrays are not assignable, so a struct or tuple contai
 
 Consequences:
 
-- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](16-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](16-assignment.md#167-operator-assignment)).
+- **Whole-value assignment.** For an assignable struct, `a = b;` copies every field. For a pointer-only struct the built-in assignment is rejected (see [Assignment](16-assignment.md)); share the struct through a pointer (`ptr<X>` when ownership or lifecycle operations are needed, or `mview<X>`/`view<X>` for field access), or opt into custom whole-value assignment with `OPERATOR_MOV` (see [Operator Assignment](16-assignment.md#167-operator-assignment)). A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value assignment is always the built-in field copy.
+- **Const structs.** A value-assignable struct may be declared `const`
+  (`const Point p`). Its fields may be read, but not written. Only a
+  `view<X> self` method may be called on a const struct; `ptr<X> self` and
+  `mview<X> self` calls are rejected. Struct fields themselves cannot be
+  `const` (`Struct fields cannot be const`). See
+  [Declarations](18-declarations.md#188-const-storage).
 - **Aggregate literals.** An assignable struct value can be constructed directly with `X { field = value, ... }`; the temporary requires the struct to be value-assignable. For pointer-only structs use the field-wise declaration form `X x { field = value }` instead. See [Aggregate Literals](29-aggregate-literals.md).
 - **By-value parameters.** A parameter may have an assignable struct type (see [Functions](19-functions.md)); the argument is copied at the call.
 - **By-value returns.** A function may return an assignable struct type.
@@ -4198,12 +4347,12 @@ xs[i].field           // element of a static or dynamic array
 ## 26.8 Initialization Semantics
 
 - **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; enum fields default to their enum's first variant; fields without defaults start with indeterminate values, like ordinary local variables, except pointer fields, which are null (see [Declarations](18-declarations.md)).
-- **Declaration initializer sugar.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value; the sugar is equivalent to a declaration plus a whole-value assignment.
+- **Declaration initialization.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value as part of the declaration.
 - **Aggregate literals.** `P p = P { field = value, ... };` default-constructs a temporary, assigns the named fields in source order, then assigns the whole temporary to the declaration target. Empty and partial literals are legal. The struct must be value-assignable to be constructed this way, even when it declares `OPERATOR_MOV`. See [Aggregate Literals](29-aggregate-literals.md).
 - **Field-wise declaration initializers.** `P p { field = value, ... }` declares `p` and assigns each named field directly, without a temporary and without invoking `OPERATOR_MOV`. This form works for pointer-only structs.
 - **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
-Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration-initializer sugar copies a whole tuple value.
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration initialization copies a whole tuple value.
 
 ## 26.9 Struct Globals
 
@@ -4310,7 +4459,16 @@ Rules:
 - A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32 self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
 - Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
-- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y`, `getptr($(self).y)`, and even `self = other` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](25-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
+- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y` and `getptr($(self).y)` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](25-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
+- The `self` slot is **implicitly const**. Reassigning it (`self = other`) is
+  rejected with `Cannot assign to const variable 'self'`. Writing
+  `const self` is allowed but redundant. `const` only makes the pointer slot
+  immutable; the declared `ptr`/`mview`/`view` permission still governs the
+  pointee. It is not part of the method signature or overload identity.
+- A const struct receiver accepts only `view<X> self` methods. The hidden
+  receiver argument is `getptr`/`getmview`/`getview(receiver)` matching the
+  declared `self` type, so `ptr<X> self` and `mview<X> self` calls on a const
+  value fail the const-pointer rule, while `view<X> self` is allowed.
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](22-array-intrinsics.md)).
 
 ## 27.3 Method Calls and Receivers
@@ -4400,14 +4558,14 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 
 - Parameters (including `self`) are ordinary locals in the method's initial scope; locals may shadow field names (`int32 y` inside `increment` is unrelated to `$(self).y`).
 - A method may call other methods on the same object only through an explicit receiver: `$(self).other()`.
-- `return` attaches to the enclosing method symbol, so void/non-void return rules apply unchanged (see [Functions](19-functions.md)).
+- `return` is checked against the enclosing method, so void/non-void return rules apply unchanged (see [Functions](19-functions.md)).
 - Name lookup inside a method follows ordinary lexical plus namespace rules; there is no implicit `this` field scope (see [Lexical Scoping and Symbols](04-lexical-scoping-and-symbols.md)).
 
 ## 27.8 Methods and Pointer Checking
 
 `self` is a pointer parameter with the declared permission:
 
-- The receiver is a storage-backed lvalue, and `self` is non-null at method entry, so dereferencing it without a null guard is valid and produces no warning. Reassigning `self` (e.g. `self = null`) flows through ordinary assignment state tracking.
+- The receiver is a storage-backed lvalue, and `self` is non-null at method entry, so dereferencing it without a null guard is valid and produces no warning. Reassigning `self` is rejected by the implicit const rule.
 - Pointer dereferences inside methods are tracked normally (see [Memory Safety Checking](31-memory-safety-checking.md)).
 
 ## 27.9 Restrictions Summary
@@ -4415,10 +4573,11 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 - Methods are declared only inside struct bodies; no free-standing method declarations and no nested struct declarations.
 - Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.
 - `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
+- The `self` slot is implicitly const; reassigning it is an error.
 - Receivers must be struct-valued storage-backed lvalues; `ptr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.
-- No method pointers, no virtual dispatch, no inheritance: methods are syntactic sugar for functions with an explicit receiver.
+- No method pointers, no virtual dispatch, no inheritance: methods behave like functions with an explicit receiver.
 
 ## 27.10 Operator Methods
 
@@ -4459,7 +4618,7 @@ Rules:
 - Operator methods are still ordinary methods and remain callable with
   member-call syntax: `a.OPERATOR_EQ(getview(b))`.
 
-The operator syntax is lowering sugar over a method call:
+Operator syntax is shorthand for a method call:
 
 ```franko
 a == b       // a.OPERATOR_EQ(getview(b))
@@ -4467,8 +4626,8 @@ a = b        // a.OPERATOR_MOV(getview(b))
 a += b       // a.OPERATOR_ADDMOV(getview(b))
 ```
 
-Rvalue operands are borrowed through a compiler-generated temporary whose
-lifetime is the full expression (see [Operators](13-operators.md#1310-struct-operator-overloading)).
+Rvalue operands are borrowed for the duration of the full expression (see
+[Operators](13-operators.md#1310-struct-operator-overloading)).
 
 The `other` parameter is call-scoped: it may only be used during the operator
 call. Storing it into caller-owned or global storage is rejected; storing it
@@ -4640,7 +4799,7 @@ The positional field-wise form is available only for all-unnamed tuple
 declarations. See [Aggregate Literals](29-aggregate-literals.md) for both
 forms.
 
-Declaration-initializer sugar works normally:
+Declaration initialization works normally:
 
 ```franko
 (int32, int32) x = f()
@@ -4698,6 +4857,18 @@ b = a
 ```
 
 The ordered element types must match exactly; names are irrelevant.
+
+A tuple may be declared `const` when every element is value-assignable:
+
+```franko
+const (int32, int32) pair = (int32, int32) { 1, 2 }
+const (int32, int32) defaults
+```
+
+The const rules are the usual ones: no later assignment, no mutable pointer
+through `getptr`/`getmview`, and `getview` only. A tuple containing an array
+is pointer-only and cannot be `const`. See
+[Declarations](18-declarations.md#188-const-storage).
 
 A tuple is assignable as a whole only when every element is an assignable
 value type:
@@ -4998,8 +5169,8 @@ Buffer b { cap = 20 }
 (int32, int32) partial { 0 }
 ```
 
-This form desugars to a declaration followed by one ordinary field assignment
-per named field:
+This is declaration initialization that behaves as one ordinary field
+assignment per named field:
 
 ```franko
 Literal lit
@@ -5165,13 +5336,16 @@ point where the enclosing field value is evaluated.
 
 ## 29.8 `OPERATOR_MOV` Interaction
 
-The declaration
+A struct that is value-assignable cannot declare `OPERATOR_MOV`; its
+whole-value assignment is always the built-in field copy. Because aggregate
+literal construction requires the aggregate to be value-assignable, this is
+exactly the set of structs that can appear as a literal. The declaration
 
 ```franko
 Literal lit = Literal { x = 0, def = 1 }
 ```
 
-means exactly:
+therefore means:
 
 ```franko
 Literal lit                 // default-construct lit: defaults applied, pointers null
@@ -5179,45 +5353,49 @@ Literal lit                 // default-construct lit: defaults applied, pointers
 Literal temp                // temporary literal
 temp.x = 0                  // explicit fields, source order
 temp.def = 1
-                            // literal construction requires Literal to be
-                            // value-assignable, regardless of OPERATOR_MOV
 
-lit = temp                  // ordinary whole-value assignment:
-                            // 1. applicable OPERATOR_MOV, if declared
-                            // 2. otherwise built-in whole-value assignment
+lit = temp                  // built-in whole-value assignment: field copy
 ```
 
-Therefore:
+Pointer-only structs cannot be constructed as literal values at all. They use
+the field-wise declaration form, and may use `OPERATOR_MOV` only for an
+ordinary non-literal whole-value assignment:
 
-- `lit.OPERATOR_MOV` is called when an applicable `OPERATOR_MOV` overload
-  exists;
-- otherwise built-in whole-value assignment is used;
-- in every case, `Literal` must be value-assignable because the literal
-  expression itself creates a temporary value;
-- if `Literal` is not value-assignable, `Literal lit = Literal { ... }` is
-  illegal even when `Literal` declares `OPERATOR_MOV`.
+```franko
+struct Buffer {
+    int32 cap
+    [byte] buf
+
+    func OPERATOR_MOV(ptr<Buffer> self, view<Buffer> other) -> void {
+        // custom copy
+        return
+    }
+}
+
+Buffer b { cap = 20 }                 // field-wise, no temporary
+Buffer source { cap = 10 }            // field-wise, no temporary
+Buffer copy = source                  // ordinary assignment: calls OPERATOR_MOV
+Buffer bad = Buffer { cap = 20 }      // error: Buffer is not value-assignable
+```
 
 Truth table:
 
 | Construct | Temporary aggregate? | Requires aggregate value-assignable? | Uses `OPERATOR_MOV`? |
 |---|---|---|---|
-| `Literal lit = Literal { x = 0 }` | yes | yes | yes, if an applicable overload exists; otherwise built-in |
+| `Literal lit = Literal { x = 0 }` | yes | yes | no — value-assignable structs cannot declare it; built-in field copy |
 | `Literal lit { x = 0 }` | no | no | no — direct field assignments |
 | `Buffer b { cap = 20 }` | no | no | no |
 | `Buffer b = Buffer { cap = 20 }` | yes | yes → **error** | irrelevant; the literal is already illegal |
 | `Buffer b = existing_buffer` | no | depends on the assignment rule | can use `OPERATOR_MOV` if declared/applicable |
 
-Critical distinction:
+Const aggregates follow the same forms:
 
-- `Buffer b = Buffer { ... }` is rejected even when `Buffer` declares
-  `OPERATOR_MOV`, because the right-hand side cannot be constructed as a
-  temporary value;
-- `Buffer b = existing_buffer` does not construct a literal. It is ordinary
-  whole-value assignment and can use `OPERATOR_MOV` under the existing
-  pointer-only-struct rule;
-- `Buffer b { cap = 20 }` is the correct form for direct per-field
-  initialization. It never creates a temporary and never calls
-  `OPERATOR_MOV`.
+```franko
+const Literal lit = Literal { x = 1 }   // one-time const initialization
+const Literal fieldwise { x = 2 }       // field-wise const initialization
+```
+
+See [Declarations](18-declarations.md#188-const-storage).
 
 ## 29.9 Pointer-Only Aggregates and Out-Parameters
 
@@ -5440,7 +5618,11 @@ States::state2
 ## 30.2 Default Value
 
 The first declared variant is the enum's absolute default value. Enums
-never start as uninitialized or indeterminate memory.
+never start as uninitialized or indeterminate memory. An enum variable may be
+`const` (`const Status s = Status::alive` or `const Status s`), because enum
+types are value-assignable; the const rules then forbid later assignment and
+mutable pointer creation. See
+[Declarations](18-declarations.md#188-const-storage).
 
 - Local variables: `Types t;` initializes to the first variant.
 - Global variables: `Types g;` initializes to the first variant before
@@ -5746,7 +5928,7 @@ warnings can be missed.
 
 Loop termination is not proven; the post-loop state is conservative.
 
-`for` loops receive the same treatment as the equivalent block and `while` loop, so they are handled the same way. See [Desugaring](24-desugaring.md).
+`for` loops receive the same treatment as the equivalent block and `while` loop, so they are handled the same way. See [Shorthands and Equivalences](24-desugaring.md).
 
 ## 31.6 Guard Refinement
 
@@ -6240,8 +6422,7 @@ Target-specific FFI calls are guarded with `#if`:
 Only the selected branch is compiled. The other platform's functions do
 not need to exist on the current target, so the module does not need
 target filters. `franko/os` itself declares `os::posix` only for
-linux/macos and `os::win32` only for Windows, so off-target FFI functions
-are absent from the symbol table entirely. See
+linux/macos and `os::win32` only for Windows, so off-target FFI functions do not exist on that target at all. See
 [Compile-Time Reflection](34-compile-time-reflection.md).
 
 An unguarded off-target call still fails when building for that target.
@@ -6276,23 +6457,20 @@ Rules:
 - The block name is the function's Franko qualified name:
   - function `mathx::add` → `// @@mathx::add`
 - `common` is reserved for shared includes, helpers, and declarations. It is
-  emitted once when any bridged function from that bridge file is used.
-- Put `#include "FrankoRuntime.hpp"` in the `common` block. Bridge files are
-  spliced into the generated program, which already includes the runtime, but
-  the include keeps each bridge valid for standalone C++ linting and gives the
-  compiler a clear place to expose the runtime types (`Franko_Thin_Pointer`,
-  `Franko_Fat_Pointer`, `franko_panic`, fixed-width integers). The header is
-  `#pragma once`, so the duplicate include is harmless.
+  included once when any bridged function from that bridge file is used.
+- Put `#include "FrankoRuntime.hpp"` in the `common` block. It keeps each
+  bridge valid for standalone C++ linting and exposes the runtime types
+  (`Franko_Thin_Pointer`, `Franko_Fat_Pointer`, `franko_panic`, fixed-width
+  integers). The header is `#pragma once`, so a repeated include is harmless.
 - Bridge ABI: a pointer parameter or return whose pointee is not an array
   (`ptr<T>`, `mview<T>`, or `view<T>`) is `Franko_Thin_Pointer<T>` in C++;
   access its raw pointer through `.data`. A pointer to an array is
   `Franko_Fat_Pointer<element(T)>`.
-- The bridge block must define a function under the exact mangled C++ name the
-  compiler emits for the Franko declaration. The compiler checks this and
-  reports a compile-time error if the block is missing or the name does not
-  match.
-- Merely importing a module with a bridge adds no C++ unless a bridged
-  function is actually used.
+- The bridge block must define a function under the exact C++ name generated
+  for the Franko declaration. The compiler reports an error if the block is
+  missing or the name does not match.
+- Merely importing a module with a bridge adds no bridge code unless a
+  bridged function is actually used.
 
 ## 33.4 The Bundled `franko/os` Module
 
@@ -6309,7 +6487,7 @@ The compiler rejects an FFI module when:
 - the descriptor is malformed or has an unsupported version;
 - a listed function does not exist in the `.fr` file;
 - a bridged function has no bridge file or no matching block;
-- a bridged function block does not contain the expected mangled name.
+- a bridged function block does not contain the expected generated name.
 
 Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.
 
@@ -6341,11 +6519,10 @@ There are two related features:
 - `#name` / `#name(...)` is a compile-time value or function call.
 - `#if` / `#else` chooses which code exists in the compiled program.
 
-Compile-time reflection happens during compilation. By the time the
-program is fully checked and code is generated, every `#if` has already
-chosen one branch, and every `#` expression has folded to an ordinary value
-or declaration. The generated C++ contains none of the compile-time
-machinery.
+Compile-time reflection happens while the program is being checked. By the
+time the program runs, every `#if` has already chosen one branch, and every
+`#` expression has folded to an ordinary value or declaration. None of the
+compile-time machinery remains at run time.
 
 A useful way to read this chapter:
 
@@ -6511,9 +6688,10 @@ Only `#if` uses compile-time splicing.
 
 ### The Unselected Branch
 
-Only the selected branch is compiled, checked, resolved, and emitted. The
-unselected branch may refer to symbols or types that do not exist on the
-current target. Syntax rules still apply to both branches.
+Only the selected branch becomes part of the program; it is the only branch
+checked and resolved. The unselected branch may refer to symbols or types
+that do not exist on the current target. Syntax rules still apply to both
+branches.
 
 Consequences:
 
@@ -6523,7 +6701,7 @@ Consequences:
   dead one is not;
 - `#panic` in a dead branch is ignored;
 - functions, globals, structs, fields, and methods declared in a dead
-  branch do not enter the symbol table.
+  branch are not part of the program.
 
 ### Condition Errors
 
@@ -6584,11 +6762,11 @@ Rules:
   and nested namespaces.
 - It may wrap struct fields and methods.
 - It may not wrap `import` directives. Imports are always unconditional.
-- Selected declarations are spliced into the enclosing scope.
+- Selected declarations are inserted directly into the enclosing scope.
 - Declarations outside any `#if` are visible for reflection throughout
   their scope, including forward references.
 - Declarations inside a selected branch become visible when that branch
-  is spliced; later conditions in the same scope can inspect them.
+  is inserted; later conditions in the same scope can inspect them.
 - Declarations in an unselected branch are never registered.
 
 ---
@@ -6648,7 +6826,7 @@ All introspection calls use `#name(...)`.
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers and enums; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
-| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
+| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists (only pointer-only structs may declare it); for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
 | `#is_value_assignable(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, enums, pointers, structs whose fields are all value-assignable, and tuples whose elements are all value-assignable. Static arrays and dynamic arrays are not. |
 
 The predicates are built-in compile-time functions. They cannot be stored
@@ -6668,7 +6846,7 @@ constant storage. It can be printed, assigned to a byte view, or passed to
 a function accepting a byte view.
 
 When consumed by `#strcmp`, `#panic`, or `#strcat`, it stays a compile-time
-string and no string storage is emitted.
+string and no runtime string is created.
 
 Spellings use canonical Franko type names. Commas are followed directly by
 the next item with no space, so the spelling matches the function signature
@@ -6801,10 +6979,13 @@ print(#has_default_value(b));        // 1: dynamic array field
 print(#is_assignable(b));            // 0: no built-in assignment
 ```
 
-A struct that is not assignable by default can opt in with a same-type
-`OPERATOR_MOV`; `#is_assignable` then returns `1`. Tuples cannot
-declare operator methods, so for a tuple this predicate is exactly built-in
-element assignability.
+A pointer-only struct that is not assignable by default can opt in with an
+applicable `OPERATOR_MOV`; `#is_assignable` then returns `1`. A value-assignable
+struct cannot declare `OPERATOR_MOV` — its whole-value assignment is always
+the built-in field copy — so for it `#is_assignable` and
+`#is_value_assignable` are both `1` for the same reason. Tuples cannot declare
+operator methods, so for a tuple `#is_assignable` is exactly built-in element
+assignability.
 
 `#is_value_assignable` covers primitives, pointers, structs whose fields
 are all value-assignable, and tuples whose elements are all
@@ -6982,8 +7163,8 @@ Structs are supported as user-defined aggregate types with named fields, subject
 
 - struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
 - a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](28-tuples.md));
-- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](27-methods.md)); general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
+- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value assignment is always the built-in field copy. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](28-tuples.md));
+- structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](27-methods.md)); the `self` slot is implicitly const and cannot be reassigned; general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
 - comparison and assignment operators on structs are only those with `OPERATOR_*` methods; arithmetic, bitwise, shift, and logical operators are not overloadable (see [Operators](13-operators.md#1310-struct-operator-overloading)).
 
 The complete struct reference, including the reasoning behind each restriction, is in [Structs](26-structs.md).
@@ -7067,12 +7248,12 @@ The unary plus operator does not exist in the language:
 
 Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](16-assignment.md)).
 
-Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. See [Operators](13-operators.md#1310-struct-operator-overloading).
+Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
 
 ## 35.13 String Literals Cannot Initialize Arrays
 
-A string literal is a `view<[byte, N]>` value, not byte-array
-sugar (see [String Literals](23-string-literals.md)). Arrays are not
+A string literal is a `view<[byte, N]>` value, not a byte-array
+value (see [String Literals](23-string-literals.md)). Arrays are not
 assignable, so a string literal cannot initialize or assign an array;
 copy the bytes with `memcpy` instead.
 
@@ -7111,10 +7292,9 @@ The following forms do not exist in the grammar:
 
 ## 35.17 Operator Overload Lifetime Limitation
 
-Operator operands may be rvalues: the compiler borrows them through a
-temporary whose lifetime is the full expression. This is the C++ `const&`
-temporary model, not Rust-style lifetime tracking. The operator method
-must not retain the borrowed `other` view beyond the call.
+Operator operands may be rvalues: an rvalue operand is borrowed for the
+duration of the full expression. The operator method must not retain the
+borrowed `other` view beyond the call.
 
 The direct escape is closed by the operator signatures (`uint8`/`void`
 returns) and by the dangling-pointer store rule: storing the borrowed
@@ -7311,7 +7491,9 @@ Use `bignum::BigInteger` and `os::win32`, not `big_num::BigInteger` or
 
 ## 36.6 Constants
 
-Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`:
+Values intended to be constants use `ALL_CAPS_WITH_UNDERSCORES`.
+`const` globals follow the same convention; the compiler does not enforce the
+casing, but `const int32 MAX_SIZE = 10` is the recommended style:
 
 ```franko
 byte IS_WINDOWS = 0
@@ -7345,23 +7527,11 @@ The prefix composes with the base convention for the kind of declaration. For
 example, a private field uses snake case after `_`, while an internal struct
 uses CamelCase after `__`.
 
-Tuple element names are declaration-site aliases, not symbols: `(int32 val,
+Tuple element names are declaration-site aliases: `(int32 val,
 int32 err)` and `(int32 left, int32 right)` are the same tuple type, and the
 names are only used for member access in their own declaration. Unnamed tuple
 elements are accessed as `_0`, `_1`, and so on. These names are not struct
 members, so the `_` private-field warning does not apply to them.
-
-Compiler-generated tuple structs use the C++ type name `TUPLE_<8hex>`.
-Ordinary user structs always emit with the `STRUCT_` prefix
-(`STRUCT_<Name>`), so a user struct whose Franko name begins with `TUPLE_`
-still emits a distinct C++ name and is allowed.
-
-Function and method names use 8 hex digits, e.g. `FUNC_foo_deadbeef`.
-Synthetic tuple structs use `TUPLE_<8hex>`. Hoisted string literals emit as
-`STRLIT_<16hex>` and hoisted array literals emit as `ARRLIT_<16hex>`; these
-are literal storage, not variables, so they do not use the `VAR_` prefix.
-Every generated hash uses the same FNV offset-basis seed and 64-bit FNV
-prime; the 8-hex names keep the low 32 bits.
 
 The compiler currently warns about the following public accesses:
 
@@ -8066,3 +8236,51 @@ func main() -> int32 {
 See [Aggregate Literals](29-aggregate-literals.md) for the complete rules,
 including the all-named/all-unnamed tuple spelling rule and the
 `OPERATOR_MOV` distinction.
+
+## 37.26 Const Storage
+
+```franko
+import "franko/io"
+
+struct Point {
+    int32 x = 0
+    int32 y = 0
+
+    func sum(view<Point> self) -> int32 {
+        return $(self).x + $(self).y
+    }
+}
+
+const int32 MAX_POINTS = 10
+const Point ORIGIN
+
+func sum(const int32 a, const int32 b) -> int32 {
+    return a + b
+}
+
+func main() -> int32 {
+    const int32 width = 3
+    const Point p = Point { x = 4, y = 5 }
+    const Point q { x = 6 }
+    const (int32, int32) pair = (int32, int32) { 1, 2 }
+
+    int32 value = 7
+    const ptr<int32> link = getptr(value)
+    $(link) = 8                     // pointee write is allowed
+
+    view<Point> v = getview(p)      // const storage: getview only
+
+    print(width)                    // 3
+    print(p.sum())                  // 9
+    print(q.x)                      // 6
+    print(pair._1)                  // 2
+    print($(v).y)                   // 5
+    print(value)                    // 8
+    print(MAX_POINTS)               // 10
+    print(ORIGIN.x)                 // 0
+    print(sum(1, 2))                // 3
+    return 0
+}
+```
+
+See [Declarations](18-declarations.md#188-const-storage).

@@ -198,6 +198,16 @@ public class FunctionChecker {
     }
 
     private void validateAssignmentOperatorMethod(Symbol method) {
+        if ("OPERATOR_MOV".equals(method.name)
+                && types.isValueAssignableType(
+                        SastType.structType(method.owner))) {
+            diagnostics.error("Struct '"
+                    + method.owner.qualifiedName()
+                    + "' is value-assignable and cannot declare OPERATOR_MOV;"
+                    + " built-in whole-value assignment is always used for"
+                    + " value-assignable structs");
+        }
+
         boolean valid = method.parameters.size() == 2
                 && "self".equals(method.parameters.get(0).name)
                 && isOwnerPtrOfOwner(

@@ -1,0 +1,7 @@
+struct X {
+    const int32 field
+}
+
+func main() -> int32 {
+    return 0
+}

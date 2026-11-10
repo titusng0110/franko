@@ -96,6 +96,13 @@ public final class SastSerializer {
                     registerFromExpr(node.staticInitializer, registry);
                 }
             }
+            case VAR_DECL_INIT -> {
+                registry.register(node.symbol);
+
+                for (SastNode initializer : node.initializers) {
+                    registerFromNode(initializer, registry);
+                }
+            }
             case BLOCK -> {
                 for (SastNode stmt : node.statements) {
                     registerFromNode(stmt, registry);
@@ -249,6 +256,12 @@ public final class SastSerializer {
                         node.foldedConstInitializer));
                 obj.put("staticInitializer", nodeToJson(
                         node.staticInitializer, registry, sources));
+            }
+            case VAR_DECL_INIT -> {
+                obj.put("node", "varDeclInit");
+                obj.put("symbol", registry.idFor(node.symbol));
+                obj.put("initializers", nodeArray(
+                        node.initializers, registry, sources));
             }
             case ASSIGN -> {
                 obj.put("node", "assign");
@@ -471,6 +484,12 @@ public final class SastSerializer {
                     SastSymbolSupport.bigIntegerOrNull(
                             obj.get("foldedConstInitializer")),
                     nodeFromJson(obj.optObject("staticInitializer"), registry, sources)
+            );
+            case "varDeclInit": return SastNode.varDeclInit(
+                    span,
+                    (Symbol) registry.require(obj.requireString("symbol")),
+                    stmtNodesFromArray(
+                            obj.requireArray("initializers"), registry, sources)
             );
             case "assign": return SastNode.assign(
                     span,

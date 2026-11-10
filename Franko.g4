@@ -241,8 +241,11 @@ structMemberElse
     | structMemberBody
     ;
 
+// `const` is a storage modifier, not a type. It is accepted here so the
+// semantic pass can report a clear "Struct fields cannot be const" error
+// instead of a bare parse error.
 structFieldDecl
-    : type IDENTIFIER constDeclSuffix?
+    : CONST? type IDENTIFIER constDeclSuffix?
     ;
 
 // ---------- ENUMS ----------
@@ -313,8 +316,10 @@ enumVariant
 // (string literals desugar to getview over a hoisted global), or an
 // array literal with only constant elements (lowered to getview over a
 // hoisted global).
+// `const` is a storage modifier on globals. It is legal only for
+// value-assignable types; it is erased before code generation.
 globalVarDecl
-    : type IDENTIFIER globalVarInitializer?
+    : CONST? type IDENTIFIER globalVarInitializer?
     ;
 
 globalVarInitializer
@@ -375,8 +380,10 @@ parameterList
     : parameter (COMMA parameter)*
     ;
 
+// `const` is a storage modifier on parameters. It is not part of the
+// parameter type, the function signature, or overload identity.
 parameter
-    : type (IDENTIFIER | SELF)
+    : CONST? type (IDENTIFIER | SELF)
     ;
 
 returnType
@@ -542,21 +549,26 @@ simpleStmt
 //   T x;
 //   x = <expr>;
 //
-// The braced field-wise form is a separate construct:
+// The braced field-wise form is a declaration-initialization construct:
 //
 //   T x { field = <expr>, ... };
 //
-// is declaration sugar for:
+// initializes the declared variable's fields directly:
 //
 //   T x;
 //   x.field = <expr>;
 //   ...
 //
+// It is preserved as declaration initialization, not lowered to separate
+// assignment statements, so const declarations can be initialized this way.
+//
 // The brace must follow the identifier immediately (no newline) so a
 // declaration followed by an ordinary block is never consumed.
 //
+// `const` is a storage modifier, not a type. It is erased before code
+// generation and appears only in the compiler's legality model.
 varDecl
-    : type IDENTIFIER declSuffix?
+    : CONST? type IDENTIFIER declSuffix?
       { if (_input.LA(1) == LPAREN) notifyErrorListeners(_input.LT(1), "unexpected '(' after variable declaration", null); }
     ;
 
@@ -1235,6 +1247,10 @@ CAST    : 'cast' ;
 UNSAFE_CAST : 'unsafe_cast' ;
 SELF    : 'self' ;
 NULL    : 'null' ;
+
+// `const` is a storage modifier on variables, parameters, and globals.
+// It is reserved everywhere and is not a type.
+CONST   : 'const' ;
 
 // 'import' keyword. The import path is always a STRING_LITERAL.
 IMPORT  : 'import' ;

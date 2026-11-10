@@ -20,6 +20,8 @@ Franko is a small statically typed language with:
 - `void` and non-`void` return types;
 - global variable declarations;
 - global function declarations;
+- `const` storage on locals, parameters, and globals for value-assignable
+  types (see [Declarations](18-declarations.md));
 - assignment;
 - blocks;
 - `if`;

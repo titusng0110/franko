@@ -24,11 +24,10 @@ There are two related features:
 - `#name` / `#name(...)` is a compile-time value or function call.
 - `#if` / `#else` chooses which code exists in the compiled program.
 
-Compile-time reflection happens during compilation. By the time the
-program is fully checked and code is generated, every `#if` has already
-chosen one branch, and every `#` expression has folded to an ordinary value
-or declaration. The generated C++ contains none of the compile-time
-machinery.
+Compile-time reflection happens while the program is being checked. By the
+time the program runs, every `#if` has already chosen one branch, and every
+`#` expression has folded to an ordinary value or declaration. None of the
+compile-time machinery remains at run time.
 
 A useful way to read this chapter:
 
@@ -194,9 +193,10 @@ Only `#if` uses compile-time splicing.
 
 ### The Unselected Branch
 
-Only the selected branch is compiled, checked, resolved, and emitted. The
-unselected branch may refer to symbols or types that do not exist on the
-current target. Syntax rules still apply to both branches.
+Only the selected branch becomes part of the program; it is the only branch
+checked and resolved. The unselected branch may refer to symbols or types
+that do not exist on the current target. Syntax rules still apply to both
+branches.
 
 Consequences:
 
@@ -206,7 +206,7 @@ Consequences:
   dead one is not;
 - `#panic` in a dead branch is ignored;
 - functions, globals, structs, fields, and methods declared in a dead
-  branch do not enter the symbol table.
+  branch are not part of the program.
 
 ### Condition Errors
 
@@ -267,11 +267,11 @@ Rules:
   and nested namespaces.
 - It may wrap struct fields and methods.
 - It may not wrap `import` directives. Imports are always unconditional.
-- Selected declarations are spliced into the enclosing scope.
+- Selected declarations are inserted directly into the enclosing scope.
 - Declarations outside any `#if` are visible for reflection throughout
   their scope, including forward references.
 - Declarations inside a selected branch become visible when that branch
-  is spliced; later conditions in the same scope can inspect them.
+  is inserted; later conditions in the same scope can inspect them.
 - Declarations in an unselected branch are never registered.
 
 ---
@@ -331,7 +331,7 @@ All introspection calls use `#name(...)`.
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers and enums; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
-| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
+| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists (only pointer-only structs may declare it); for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
 | `#is_value_assignable(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, enums, pointers, structs whose fields are all value-assignable, and tuples whose elements are all value-assignable. Static arrays and dynamic arrays are not. |
 
 The predicates are built-in compile-time functions. They cannot be stored
@@ -351,7 +351,7 @@ constant storage. It can be printed, assigned to a byte view, or passed to
 a function accepting a byte view.
 
 When consumed by `#strcmp`, `#panic`, or `#strcat`, it stays a compile-time
-string and no string storage is emitted.
+string and no runtime string is created.
 
 Spellings use canonical Franko type names. Commas are followed directly by
 the next item with no space, so the spelling matches the function signature
@@ -484,10 +484,13 @@ print(#has_default_value(b));        // 1: dynamic array field
 print(#is_assignable(b));            // 0: no built-in assignment
 ```
 
-A struct that is not assignable by default can opt in with a same-type
-`OPERATOR_MOV`; `#is_assignable` then returns `1`. Tuples cannot
-declare operator methods, so for a tuple this predicate is exactly built-in
-element assignability.
+A pointer-only struct that is not assignable by default can opt in with an
+applicable `OPERATOR_MOV`; `#is_assignable` then returns `1`. A value-assignable
+struct cannot declare `OPERATOR_MOV` — its whole-value assignment is always
+the built-in field copy — so for it `#is_assignable` and
+`#is_value_assignable` are both `1` for the same reason. Tuples cannot declare
+operator methods, so for a tuple `#is_assignable` is exactly built-in element
+assignability.
 
 `#is_value_assignable` covers primitives, pointers, structs whose fields
 are all value-assignable, and tuples whose elements are all

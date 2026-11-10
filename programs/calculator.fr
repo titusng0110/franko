@@ -13,7 +13,7 @@ import "franko/io"
 import "franko/string"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -41,7 +41,7 @@ namespace text {
     }
 
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -66,7 +66,7 @@ namespace text {
         return 0
     }
 
-    func parse_int64(view<[byte]> buf, uint32 start, uint32 count, mview<int64> out) -> byte {
+    func parse_int64(view<[byte]> buf, const uint32 start, const uint32 count, mview<int64> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -84,7 +84,7 @@ namespace text {
         return 1
     }
 
-    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+    func parse_uint32(view<[byte]> buf, const uint32 start, const uint32 count, mview<uint32> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -122,7 +122,7 @@ namespace text {
         return
     }
 
-    func print_slice(view<[byte]> buf, uint32 start, uint32 count) -> void {
+    func print_slice(view<[byte]> buf, const uint32 start, const uint32 count) -> void {
         if (buf == null || count == 0) {
             return
         }
@@ -176,7 +176,7 @@ struct Parser {
     CalcError error
 
     // Reset the parser and prime the first token.
-    func reset(mview<Parser> self, view<[byte]> line, uint32 line_len) -> void {
+    func reset(mview<Parser> self, const view<[byte]> line, const uint32 line_len) -> void {
         $(self).line = line
         $(self).line_len = line_len
         $(self).pos = 0
@@ -189,7 +189,7 @@ struct Parser {
         return
     }
 
-    func fail(mview<Parser> self, CalcError err) -> void {
+    func fail(mview<Parser> self, const CalcError err) -> void {
         if ($(self).error == CalcError::none) {
             $(self).error = err
         }
@@ -391,7 +391,7 @@ struct Parser {
     }
 }
 
-func evaluate(view<[byte]> line, uint32 line_len) -> (int64 value, CalcError error) {
+func evaluate(const view<[byte]> line, const uint32 line_len) -> (int64 value, CalcError error) {
     Parser parser
     parser.reset(line, line_len)
 
@@ -404,7 +404,7 @@ func evaluate(view<[byte]> line, uint32 line_len) -> (int64 value, CalcError err
     return (int64 value, CalcError error) { value = result, error = err }
 }
 
-func error_text(CalcError err) -> view<[byte]> {
+func error_text(const CalcError err) -> view<[byte]> {
     if (err == CalcError::unexpectedToken) {
         return "unexpected token"
     }

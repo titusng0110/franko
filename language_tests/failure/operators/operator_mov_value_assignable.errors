@@ -1,0 +1,1 @@
+Struct 'Value' is value-assignable and cannot declare OPERATOR_MOV; built-in whole-value assignment is always used for value-assignable structs

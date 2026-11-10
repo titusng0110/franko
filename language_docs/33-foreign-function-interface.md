@@ -71,8 +71,7 @@ Target-specific FFI calls are guarded with `#if`:
 Only the selected branch is compiled. The other platform's functions do
 not need to exist on the current target, so the module does not need
 target filters. `franko/os` itself declares `os::posix` only for
-linux/macos and `os::win32` only for Windows, so off-target FFI functions
-are absent from the symbol table entirely. See
+linux/macos and `os::win32` only for Windows, so off-target FFI functions do not exist on that target at all. See
 [Compile-Time Reflection](34-compile-time-reflection.md).
 
 An unguarded off-target call still fails when building for that target.
@@ -107,23 +106,20 @@ Rules:
 - The block name is the function's Franko qualified name:
   - function `mathx::add` → `// @@mathx::add`
 - `common` is reserved for shared includes, helpers, and declarations. It is
-  emitted once when any bridged function from that bridge file is used.
-- Put `#include "FrankoRuntime.hpp"` in the `common` block. Bridge files are
-  spliced into the generated program, which already includes the runtime, but
-  the include keeps each bridge valid for standalone C++ linting and gives the
-  compiler a clear place to expose the runtime types (`Franko_Thin_Pointer`,
-  `Franko_Fat_Pointer`, `franko_panic`, fixed-width integers). The header is
-  `#pragma once`, so the duplicate include is harmless.
+  included once when any bridged function from that bridge file is used.
+- Put `#include "FrankoRuntime.hpp"` in the `common` block. It keeps each
+  bridge valid for standalone C++ linting and exposes the runtime types
+  (`Franko_Thin_Pointer`, `Franko_Fat_Pointer`, `franko_panic`, fixed-width
+  integers). The header is `#pragma once`, so a repeated include is harmless.
 - Bridge ABI: a pointer parameter or return whose pointee is not an array
   (`ptr<T>`, `mview<T>`, or `view<T>`) is `Franko_Thin_Pointer<T>` in C++;
   access its raw pointer through `.data`. A pointer to an array is
   `Franko_Fat_Pointer<element(T)>`.
-- The bridge block must define a function under the exact mangled C++ name the
-  compiler emits for the Franko declaration. The compiler checks this and
-  reports a compile-time error if the block is missing or the name does not
-  match.
-- Merely importing a module with a bridge adds no C++ unless a bridged
-  function is actually used.
+- The bridge block must define a function under the exact C++ name generated
+  for the Franko declaration. The compiler reports an error if the block is
+  missing or the name does not match.
+- Merely importing a module with a bridge adds no bridge code unless a
+  bridged function is actually used.
 
 ## 33.4 The Bundled `franko/os` Module
 
@@ -140,6 +136,6 @@ The compiler rejects an FFI module when:
 - the descriptor is malformed or has an unsupported version;
 - a listed function does not exist in the `.fr` file;
 - a bridged function has no bridge file or no matching block;
-- a bridged function block does not contain the expected mangled name.
+- a bridged function block does not contain the expected generated name.
 
 Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.

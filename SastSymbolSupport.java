@@ -155,6 +155,10 @@ final class SastSymbolSupport {
                 obj.put("name", sym.name);
                 obj.put("index", sym.index);
                 obj.put("type", typeToJson(sym.type, registry));
+
+                if (sym.isConst) {
+                    obj.put("const", true);
+                }
             } else if (sym.kind == SymbolKind.GLOBAL) {
                 obj.put("kind", "global");
                 obj.put("name", sym.name);
@@ -163,11 +167,19 @@ final class SastSymbolSupport {
                 obj.put("compileTimeConstantValue", stringOrNull(sym.compileTimeConstantValue));
                 obj.put("literalBytes", JsonAstSupport.bigIntegerArray(sym.literalBytes));
                 obj.put("literalValues", JsonAstSupport.bigIntegerArray(sym.literalValues));
+
+                if (sym.isConst) {
+                    obj.put("const", true);
+                }
             } else {
                 obj.put("kind", "variable");
                 obj.put("name", sym.name);
                 obj.put("namespace", sym.namespace);
                 obj.put("type", typeToJson(sym.type, registry));
+
+                if (sym.isConst) {
+                    obj.put("const", true);
+                }
             }
         } else {
             throw new IllegalArgumentException(
@@ -268,7 +280,8 @@ final class SastSymbolSupport {
             Symbol parameter = Symbol.parameter(
                     obj.requireString("name"),
                     typeFromJson(obj.requireObject("type"), registry),
-                    obj.requireInt("index")
+                    obj.requireInt("index"),
+                    obj.has("const") && obj.requireBool("const")
             );
             registry.registerWithId(entry.getKey(), parameter);
         }
@@ -280,8 +293,10 @@ final class SastSymbolSupport {
             String namespace = obj.optString("namespace");
             SastType type = typeFromJson(obj.requireObject("type"), registry);
 
+            boolean isConst = obj.has("const") && obj.requireBool("const");
+
             if ("global".equals(kind)) {
-                Symbol global = Symbol.global(namespace, name, type);
+                Symbol global = Symbol.global(namespace, name, type, isConst);
                 global.compileTimeConstantValue = bigIntegerOrNull(
                         obj.get("compileTimeConstantValue")
                 );
@@ -291,7 +306,7 @@ final class SastSymbolSupport {
             } else {
                 registry.registerWithId(
                         entry.getKey(),
-                        Symbol.variable(namespace, name, type)
+                        Symbol.variable(namespace, name, type, isConst)
                 );
             }
         }

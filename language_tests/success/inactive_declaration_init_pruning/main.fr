@@ -1,0 +1,58 @@
+import "franko/io"
+
+struct Pair {
+    int32 a = 0
+    int32 b = 0
+}
+
+struct Buffer {
+    [int32, 1] pad
+    int32 marker = 0
+
+    func OPERATOR_MOV(ptr<Buffer> self, view<Buffer> other) -> void {
+        print("op")
+        $(self).marker = $(other).marker
+        return
+    }
+}
+
+struct Comparable {
+    int32 n = 0
+
+    func OPERATOR_EQ(view<Comparable> self, view<Comparable> other) -> uint8 {
+        print("eq")
+        return $(self).n == $(other).n
+    }
+}
+
+func noisy(int32 value) -> int32 {
+    print("noisy")
+    return value
+}
+
+func main() -> int32 {
+    int32 unused_primitive = 1
+    Pair unused_struct = Pair { a = 2, b = 3 }
+    Pair unused_fields { a = 4, b = 5 }
+    const int32 unused_const = 6
+
+    int32 y = 1
+    int32 x = y
+
+    int32 effectful = noisy(7)
+    int32 used = noisy(8)
+    print(used)
+
+    Buffer source { marker = 1 }
+    Buffer target = source
+
+    Comparable left { n = 1 }
+    Comparable right { n = 1 }
+    uint8 cmp_unused = left == right
+
+    int32 assigned_later
+    assigned_later = 9
+    print(assigned_later)
+
+    return 0
+}

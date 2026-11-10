@@ -26,7 +26,7 @@ import "franko/pool"
 import "franko/string"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -54,7 +54,7 @@ namespace text {
     }
 
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -79,7 +79,7 @@ namespace text {
         return 0
     }
 
-    func parse_int64(view<[byte]> buf, uint32 start, uint32 count, mview<int64> out) -> byte {
+    func parse_int64(view<[byte]> buf, const uint32 start, const uint32 count, mview<int64> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -97,7 +97,7 @@ namespace text {
         return 1
     }
 
-    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+    func parse_uint32(view<[byte]> buf, const uint32 start, const uint32 count, mview<uint32> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -115,7 +115,7 @@ namespace text {
         return 1
     }
 
-    func match_word(view<[byte]> buf, uint32 start, uint32 count, view<[byte]> word) -> byte {
+    func match_word(view<[byte]> buf, const uint32 start, const uint32 count, const view<[byte]> word) -> byte {
         if (buf == null) {
             return 0
         }
@@ -140,7 +140,7 @@ namespace text {
 }
 
 
-uint32 NIL = 0xFFFFFFFF
+const uint32 NIL = 0xFFFFFFFF
 
 enum<uint8> SlotState {
     empty,
@@ -156,7 +156,7 @@ enum<uint8> PutOutcome {
 }
 
 // Round a positive value up to the next power of two.
-func next_power_of_two(uint32 value) -> uint32 {
+func next_power_of_two(const uint32 value) -> uint32 {
     uint32 result = 1
     while (result < value) {
         result = result * 2
@@ -166,7 +166,7 @@ func next_power_of_two(uint32 value) -> uint32 {
 
 // 64-bit avalanche mix of KEY's sign-masked bits; the low 32 bits
 // select the initial table slot.
-func hash_key(int64 key) -> uint32 {
+func hash_key(const int64 key) -> uint32 {
     int64 magnitude = key & 0x7FFFFFFFFFFFFFFF
     uint64 h = unsafe_cast<uint64>(magnitude)
     if (key < 0) {
@@ -201,7 +201,7 @@ struct LruCache {
 
     // Allocate the pool, payload arrays, and key table. Every allocation
     // failure unwinds the storage already acquired.
-    func init(ptr<LruCache> self, uint32 slot_count) -> int32 {
+    func init(ptr<LruCache> self, const uint32 slot_count) -> int32 {
         if (slot_count == 0 || $(self).capacity != 0) {
             return -1
         }
@@ -323,7 +323,7 @@ struct LruCache {
 
     // Position of KEY in the open-addressed table, or NIL when absent.
     // Tombstones are probed over; an empty slot ends the search.
-    func _table_find_slot(view<LruCache> self, int64 key) -> uint32 {
+    func _table_find_slot(view<LruCache> self, const int64 key) -> uint32 {
         uint32 mask = $(self).table_cap - 1
         uint32 pos = hash_key(key) & mask
         uint32 probes = 0
@@ -343,7 +343,7 @@ struct LruCache {
     }
 
     // Insert an absent KEY into the first non-full slot of its probe run.
-    func _table_insert(mview<LruCache> self, int64 key, uint32 idx) -> void {
+    func _table_insert(mview<LruCache> self, const int64 key, const uint32 idx) -> void {
         uint32 mask = $(self).table_cap - 1
         uint32 pos = hash_key(key) & mask
         uint32 probes = 0
@@ -367,7 +367,7 @@ struct LruCache {
     }
 
     // Mark a known full table position as tombstone.
-    func _table_remove_at(mview<LruCache> self, uint32 pos) -> void {
+    func _table_remove_at(mview<LruCache> self, const uint32 pos) -> void {
         if ($(self).table_states[pos] != SlotState::full) {
             return
         }
@@ -398,7 +398,7 @@ struct LruCache {
     }
 
     // Link IDX at the most-recently-used end of the list.
-    func _link_front(mview<LruCache> self, uint32 idx) -> void {
+    func _link_front(mview<LruCache> self, const uint32 idx) -> void {
         $(self).prev[idx] = NIL
         $(self).next[idx] = $(self).head
         if ($(self).head != NIL) {
@@ -410,7 +410,7 @@ struct LruCache {
         return
     }
 
-    func _unlink(mview<LruCache> self, uint32 idx) -> void {
+    func _unlink(mview<LruCache> self, const uint32 idx) -> void {
         uint32 before = $(self).prev[idx]
         uint32 after = $(self).next[idx]
 
@@ -430,7 +430,7 @@ struct LruCache {
         return
     }
 
-    func _touch(mview<LruCache> self, uint32 idx) -> void {
+    func _touch(mview<LruCache> self, const uint32 idx) -> void {
         if ($(self).head == idx) {
             return
         }
@@ -440,7 +440,7 @@ struct LruCache {
     }
 
     // Look up KEY, update the hit/miss counters, and refresh recency.
-    func get(mview<LruCache> self, int64 key) -> (int64 value, uint8 found) {
+    func get(mview<LruCache> self, const int64 key) -> (int64 value, uint8 found) {
         (int64 value, uint8 found) result
         result.value = 0
         result.found = 0
@@ -460,7 +460,7 @@ struct LruCache {
     }
 
     // Insert or update KEY. When full, the LRU tail is evicted first.
-    func put(mview<LruCache> self, int64 key, int64 value) -> (PutOutcome outcome, int64 evicted_key) {
+    func put(mview<LruCache> self, const int64 key, const int64 value) -> (PutOutcome outcome, int64 evicted_key) {
         (PutOutcome outcome, int64 evicted_key) result
         result.outcome = PutOutcome::inserted
         result.evicted_key = 0
@@ -506,7 +506,7 @@ struct LruCache {
     }
 
     // Remove KEY. Returns 1 when an entry was removed, 0 when absent.
-    func remove(mview<LruCache> self, int64 key) -> uint8 {
+    func remove(mview<LruCache> self, const int64 key) -> uint8 {
         uint32 pos = $(self)._table_find_slot(key)
         if (pos == NIL) {
             return 0
@@ -556,7 +556,7 @@ struct LruCache {
 }
 
 // Split the next whitespace-delimited token out of buf[0, len).
-func next_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+func next_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
                 mview<uint32> start, mview<uint32> count) -> byte {
     if (buf == null) {
         return 0
@@ -599,7 +599,7 @@ func next_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
     return 1
 }
 
-func parse_int_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+func parse_int_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
                      mview<int64> out) -> byte {
     if (buf == null) {
         return 0
@@ -618,7 +618,7 @@ func parse_int_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
     return text::parse_int64(buf, start, count, out)
 }
 
-func parse_uint_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
+func parse_uint_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
                       mview<uint32> out) -> byte {
     if (buf == null) {
         return 0
@@ -637,7 +637,7 @@ func parse_uint_token(view<[byte]> buf, uint32 len, mview<uint32> pos,
     return text::parse_uint32(buf, start, count, out)
 }
 
-func no_more_tokens(view<[byte]> buf, uint32 len, mview<uint32> pos) -> byte {
+func no_more_tokens(view<[byte]> buf, const uint32 len, mview<uint32> pos) -> byte {
     if (buf == null) {
         return 1
     }
@@ -652,7 +652,7 @@ func no_more_tokens(view<[byte]> buf, uint32 len, mview<uint32> pos) -> byte {
     return 0
 }
 
-func parse_count(view<[byte]> buf, uint32 len, mview<uint32> out) -> byte {
+func parse_count(view<[byte]> buf, const uint32 len, mview<uint32> out) -> byte {
     if (buf == null) {
         return 0
     }

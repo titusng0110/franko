@@ -45,7 +45,7 @@ namespace std {
 
         // Allocate `capacity` slots. Returns 0 on success, -1 on failure.
         // A zero capacity is rejected without touching the array.
-        func init(ptr<Vector> self, uint32 capacity) -> int32 {
+        func init(ptr<Vector> self, const uint32 capacity) -> int32 {
             if (capacity == 0) {
                 return -1
             }
@@ -61,7 +61,7 @@ namespace std {
         // Push one value, growing the storage when full (4 slots first,
         // then doubling). Works even if init was never called.
         // Returns 0 on success, -1 on allocation failure.
-        func push(ptr<Vector> self, int32 value) -> int32 {
+        func push(ptr<Vector> self, const int32 value) -> int32 {
             if ($(self).len >= $(self).cap) {
                 uint32 new_cap = 4
                 if ($(self).cap != 0) {
@@ -99,12 +99,12 @@ namespace std {
         }
 
         // Read element `index`. The caller must ensure index < len.
-        func get(view<Vector> self, uint32 index) -> int32 {
+        func get(view<Vector> self, const uint32 index) -> int32 {
             return $(self).data[index]
         }
 
         // Write element `index`. The caller must ensure index < len.
-        func set(mview<Vector> self, uint32 index, int32 value) -> void {
+        func set(mview<Vector> self, const uint32 index, const int32 value) -> void {
             $(self).data[index] = value
             return
         }

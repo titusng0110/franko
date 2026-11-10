@@ -59,7 +59,7 @@ Invalid:
 Static arrays cannot use `init`; fill them with `memset` or `memcpy`.
 
 The size may be written as `?` in a `view` declaration with an
-array-literal initializer (see [Desugaring](24-desugaring.md)):
+array-literal initializer (see [Shorthands and Equivalences](24-desugaring.md)):
 
 ```franko
 view<[int32, ?]> a = [0, 1, 2, 3];   // ? = 4

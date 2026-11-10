@@ -16,6 +16,7 @@ final class AstNode {
     boolean positional;
     boolean unsafe;
     boolean compileTimeConstant;
+    boolean isConst;
 
     AstNode target;
     AstNode value;
@@ -101,9 +102,19 @@ final class AstNode {
     }
 
     static AstNode parameter(SourceSpan span, AstNode type, String name) {
+        return parameter(span, type, name, false);
+    }
+
+    static AstNode parameter(
+            SourceSpan span,
+            AstNode type,
+            String name,
+            boolean isConst
+    ) {
         AstNode node = node(AstKind.PARAMETER, span);
         node.type = type;
         node.name = name;
+        node.isConst = isConst;
         return node;
     }
 
@@ -140,10 +151,21 @@ final class AstNode {
             String name,
             AstNode constInitializer
     ) {
+        return structFieldDecl(span, type, name, constInitializer, false);
+    }
+
+    static AstNode structFieldDecl(
+            SourceSpan span,
+            AstNode type,
+            String name,
+            AstNode constInitializer,
+            boolean isConst
+    ) {
         AstNode node = node(AstKind.STRUCT_FIELD_DECL, span);
         node.type = type;
         node.name = name;
         node.value = constInitializer;
+        node.isConst = isConst;
         return node;
     }
 
@@ -173,25 +195,52 @@ final class AstNode {
             String name,
             AstNode constInitializer
     ) {
+        return globalVarDecl(span, type, name, constInitializer, false);
+    }
+
+    static AstNode globalVarDecl(
+            SourceSpan span,
+            AstNode type,
+            String name,
+            AstNode constInitializer,
+            boolean isConst
+    ) {
         AstNode node = node(AstKind.GLOBAL_VAR_DECL, span);
         node.type = type;
         node.name = name;
         node.value = constInitializer;
+        node.isConst = isConst;
         return node;
     }
 
     static AstNode varDecl(SourceSpan span, AstNode type, String name) {
+        return varDecl(span, type, name, false);
+    }
+
+    static AstNode varDecl(SourceSpan span, AstNode type, String name, boolean isConst) {
         AstNode node = node(AstKind.VAR_DECL, span);
         node.type = type;
         node.name = name;
+        node.isConst = isConst;
         return node;
     }
 
     static AstNode varDeclInit(SourceSpan span, AstNode type, String name, AstNode init) {
+        return varDeclInit(span, type, name, init, false);
+    }
+
+    static AstNode varDeclInit(
+            SourceSpan span,
+            AstNode type,
+            String name,
+            AstNode init,
+            boolean isConst
+    ) {
         AstNode node = node(AstKind.VAR_DECL_INIT, span);
         node.type = type;
         node.name = name;
         node.init = init;
+        node.isConst = isConst;
         return node;
     }
 
@@ -201,10 +250,21 @@ final class AstNode {
             String name,
             List<AstNode> fields
     ) {
+        return varDeclFieldsInit(span, type, name, fields, false);
+    }
+
+    static AstNode varDeclFieldsInit(
+            SourceSpan span,
+            AstNode type,
+            String name,
+            List<AstNode> fields,
+            boolean isConst
+    ) {
         AstNode node = node(AstKind.VAR_DECL_FIELDS_INIT, span);
         node.type = type;
         node.name = name;
         node.fields = copy(fields);
+        node.isConst = isConst;
         return node;
     }
 

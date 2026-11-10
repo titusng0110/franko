@@ -23,7 +23,7 @@
 - [21. Array Literals](21-array-literals.md)
 - [22. Array Intrinsics](22-array-intrinsics.md)
 - [23. String Literals](23-string-literals.md)
-- [24. Desugaring](24-desugaring.md)
+- [24. Shorthands and Equivalences](24-desugaring.md)
 - [25. Pointers](25-pointers.md)
 - [26. Structs](26-structs.md)
 - [27. Methods](27-methods.md)

@@ -1,0 +1,15 @@
+struct Value {
+    int32 n = 0
+
+    func OPERATOR_MOV(ptr<Value> self, view<Value> other) -> void {
+        $(self).n = $(other).n
+        return
+    }
+}
+
+func main() -> int32 {
+    Value a
+    Value b
+    a = b
+    return 0
+}

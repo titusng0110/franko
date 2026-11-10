@@ -87,7 +87,7 @@ namespace std {
         // order starting at slot 0. Returns 0 on success, -1 when the
         // pool is already initialized, when slot_count is 0, or when the slot
         // array cannot be allocated.
-        func init(ptr<NextAllocator> self, uint32 slot_count) -> int32 {
+        func init(ptr<NextAllocator> self, const uint32 slot_count) -> int32 {
             if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
@@ -124,7 +124,7 @@ namespace std {
         // success, -1 when the pool is not initialized, when new_capacity is
         // not greater than the current capacity, or when the slot
         // array cannot be resized.
-        func grow(ptr<NextAllocator> self, uint32 new_capacity) -> int32 {
+        func grow(ptr<NextAllocator> self, const uint32 new_capacity) -> int32 {
             if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
@@ -164,7 +164,7 @@ namespace std {
         // Return slot idx to the head of the free list (LIFO reuse).
         // Returns 0 on success, -1 when idx is not a live slot, which
         // covers unknown indices and double release.
-        func free_index(mview<NextAllocator> self, uint32 idx) -> int32 {
+        func free_index(mview<NextAllocator> self, const uint32 idx) -> int32 {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -176,7 +176,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(view<NextAllocator> self, uint32 idx) -> uint8 {
+        func exist(view<NextAllocator> self, const uint32 idx) -> uint8 {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -234,7 +234,7 @@ namespace std {
         // Prepare slot_count slots (slot_count > 0), all free. Returns 0 on success, -1
         // when the pool is already initialized, when slot_count is 0, or when
         // the tables cannot be allocated.
-        func init(ptr<SparseSetAllocator> self, uint32 slot_count) -> int32 {
+        func init(ptr<SparseSetAllocator> self, const uint32 slot_count) -> int32 {
             if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
@@ -274,7 +274,7 @@ namespace std {
         // success, -1 when the pool is not initialized, when new_capacity is
         // not greater than the current capacity, or when the tables
         // cannot be resized.
-        func grow(ptr<SparseSetAllocator> self, uint32 new_capacity) -> int32 {
+        func grow(ptr<SparseSetAllocator> self, const uint32 new_capacity) -> int32 {
             if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
@@ -317,7 +317,7 @@ namespace std {
         // Release slot idx by swapping it with the last live entry.
         // Returns 0 on success, -1 when idx is not a live slot, which
         // covers unknown indices and double release.
-        func free_index(mview<SparseSetAllocator> self, uint32 idx) -> int32 {
+        func free_index(mview<SparseSetAllocator> self, const uint32 idx) -> int32 {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -336,7 +336,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(view<SparseSetAllocator> self, uint32 idx) -> uint8 {
+        func exist(view<SparseSetAllocator> self, const uint32 idx) -> uint8 {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -392,7 +392,7 @@ namespace std {
         // order starting at slot 0, all generations zero. Returns 0 on
         // success, -1 when the pool is already initialized, when slot_count is
         // 0, or when the storage cannot be allocated.
-        func init(ptr<GenerationalNextAllocator> self, uint32 slot_count) -> int32 {
+        func init(ptr<GenerationalNextAllocator> self, const uint32 slot_count) -> int32 {
             if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
@@ -434,7 +434,7 @@ namespace std {
         // success, -1 when the pool is not initialized, when new_capacity is
         // not greater than the current capacity, or when the storage
         // cannot be resized.
-        func grow(ptr<GenerationalNextAllocator> self, uint32 new_capacity) -> int32 {
+        func grow(ptr<GenerationalNextAllocator> self, const uint32 new_capacity) -> int32 {
             if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
@@ -482,7 +482,7 @@ namespace std {
         // Return slot idx to the free list (LIFO reuse), bumping its
         // generation. Returns 0 on success, -1 when idx is not a live
         // slot, which covers unknown indices and double release.
-        func free_index(mview<GenerationalNextAllocator> self, uint32 idx) -> int32 {
+        func free_index(mview<GenerationalNextAllocator> self, const uint32 idx) -> int32 {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -495,7 +495,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(view<GenerationalNextAllocator> self, uint32 idx) -> uint8 {
+        func exist(view<GenerationalNextAllocator> self, const uint32 idx) -> uint8 {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -509,7 +509,7 @@ namespace std {
         // released, bumped by every release. Returns err = 0 on
         // success and -1 when the pool is not initialized or idx is
         // out of range; gen is 0 when it fails.
-        func generation(view<GenerationalNextAllocator> self, uint32 idx) -> (uint32 gen, int32 err) {
+        func generation(view<GenerationalNextAllocator> self, const uint32 idx) -> (uint32 gen, int32 err) {
             (uint32 gen, int32 err) result
             result.gen = 0
             result.err = -1
@@ -573,7 +573,7 @@ namespace std {
         // Returns 0 on success, -1 when the pool is already
         // initialized, when slot_count is 0, or when the tables cannot be
         // allocated.
-        func init(ptr<GenerationalSparseSetAllocator> self, uint32 slot_count) -> int32 {
+        func init(ptr<GenerationalSparseSetAllocator> self, const uint32 slot_count) -> int32 {
             if ($(self)._capacity != 0 || slot_count == 0) {
                 return -1
             }
@@ -620,7 +620,7 @@ namespace std {
         // when the pool is not initialized, when new_capacity is not greater
         // than the current capacity, or when the tables cannot be
         // resized.
-        func grow(ptr<GenerationalSparseSetAllocator> self, uint32 new_capacity) -> int32 {
+        func grow(ptr<GenerationalSparseSetAllocator> self, const uint32 new_capacity) -> int32 {
             if ($(self)._capacity == 0 || new_capacity <= $(self)._capacity) {
                 return -1
             }
@@ -673,7 +673,7 @@ namespace std {
         // bumping its generation. Returns 0 on success, -1 when idx is
         // not a live slot, which covers unknown indices and double
         // release.
-        func free_index(mview<GenerationalSparseSetAllocator> self, uint32 idx) -> int32 {
+        func free_index(mview<GenerationalSparseSetAllocator> self, const uint32 idx) -> int32 {
             if ($(self).exist(idx) == 0) {
                 return -1
             }
@@ -694,7 +694,7 @@ namespace std {
 
         // 1 when slot idx is live, 0 otherwise (never allocated,
         // already released, or pool not initialized).
-        func exist(view<GenerationalSparseSetAllocator> self, uint32 idx) -> uint8 {
+        func exist(view<GenerationalSparseSetAllocator> self, const uint32 idx) -> uint8 {
             if ($(self)._capacity == 0) {
                 return 0
             }
@@ -709,7 +709,7 @@ namespace std {
         // released, bumped by every release. Returns err = 0 on
         // success and -1 when the pool is not initialized or idx is
         // out of range; gen is 0 when it fails.
-        func generation(view<GenerationalSparseSetAllocator> self, uint32 idx) -> (uint32 gen, int32 err) {
+        func generation(view<GenerationalSparseSetAllocator> self, const uint32 idx) -> (uint32 gen, int32 err) {
             (uint32 gen, int32 err) result
             result.gen = 0
             result.err = -1

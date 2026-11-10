@@ -12,7 +12,7 @@
 import "franko/io"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -68,7 +68,7 @@ struct Sudoku {
     }
 
     // Store one input row. Returns 1 when it is exactly nine valid cells.
-    func load_line(mview<Sudoku> self, uint32 row, view<[byte]> line, uint32 count) -> byte {
+    func load_line(mview<Sudoku> self, const uint32 row, const view<[byte]> line, const uint32 count) -> byte {
         if (line == null) {
             return 0
         }

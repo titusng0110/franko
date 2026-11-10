@@ -589,6 +589,18 @@ public class ExpressionChecker {
             return;
         }
 
+        Symbol storage = node.target.storageSymbol();
+
+        if (storage != null
+                && storage.isConst
+                && PointerPermissions.pointerPermission(node.type)
+                        != PtrPermission.READ_ONLY) {
+            diagnostics.error("Cannot create a mutable pointer to const "
+                    + "variable '"
+                    + storage.name
+                    + "'; const storage only allows getview(...)");
+        }
+
         ensureRegionPermission(
                 node.target,
                 PointerPermissions.pointerPermission(node.type),

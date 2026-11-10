@@ -1,0 +1,37 @@
+import "franko/io"
+
+struct Inner {
+    int32 n = 1
+}
+
+struct AllDefault {
+    int32 a = 2
+    ptr<int32> link
+    Inner inner
+    (Inner item, ptr<int32> link) pair
+}
+
+enum<uint8> Status {
+    idle,
+    busy
+}
+
+struct WithEnum {
+    Status state
+    Inner inner
+}
+
+func main() -> int32 {
+    const AllDefault value
+
+    print(value.a + value.inner.n)
+    print(value.link == null)
+    print(value.pair.item.n)
+    print(value.pair.link == null)
+
+    const WithEnum stateful
+    print(stateful.state == Status::idle)
+    print(stateful.inner.n)
+
+    return 0
+}

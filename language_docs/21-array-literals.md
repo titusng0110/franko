@@ -201,7 +201,7 @@ view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
 ```
 
 The rules are the same as for other `?` inference (see
-[Desugaring](24-desugaring.md)): `?` is only allowed in a local
+[Shorthands and Equivalences](24-desugaring.md)): `?` is only allowed in a local
 declaration with an array-literal initializer, the array nest must be
 static at every level, and the fit must be exact when `?` is used.
 

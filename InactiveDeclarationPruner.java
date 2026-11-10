@@ -282,6 +282,19 @@ final class InactiveDeclarationPruner {
             return;
         }
 
+        if (stmt.kind == SastKind.VAR_DECL_INIT) {
+
+            if (keptVariables.contains(stmt.symbol)) {
+                markType(stmt.symbol.type());
+
+                for (SastNode initializer : stmt.initializers) {
+                    collectExprTypes(initializer);
+                }
+            }
+
+            return;
+        }
+
         if (stmt.kind == SastKind.BLOCK) {
             for (SastNode inner : stmt.statements) {
                 collectStmtVarDeclTypes(inner);
@@ -498,7 +511,8 @@ final class InactiveDeclarationPruner {
 
     private SastNode rebuildStmt(SastNode stmt) {
 
-        if (stmt.kind == SastKind.VAR_DECL) {
+        if (stmt.kind == SastKind.VAR_DECL
+                || stmt.kind == SastKind.VAR_DECL_INIT) {
 
             if (!keptVariables.contains(stmt.symbol)) {
                 return null;
@@ -563,6 +577,14 @@ final class InactiveDeclarationPruner {
         }
 
         if (stmt.kind == SastKind.VAR_DECL) {
+            return;
+        }
+
+        if (stmt.kind == SastKind.VAR_DECL_INIT) {
+            for (SastNode initializer : stmt.initializers) {
+                collectCalls(initializer, out);
+            }
+
             return;
         }
 
@@ -687,6 +709,26 @@ final class InactiveDeclarationPruner {
             for (SastNode inner : stmt.statements) {
                 collectVariables(inner, out);
             }
+
+            return;
+        }
+
+        if (stmt.kind == SastKind.VAR_DECL_INIT) {
+            Set<Symbol> refs = newSet();
+            boolean hasEffects = false;
+
+            for (SastNode initializer : stmt.initializers) {
+                hasEffects |= stmtHasSideEffects(initializer);
+                collectVariables(initializer, refs);
+            }
+
+            refs.remove(stmt.symbol);
+
+            if (hasEffects) {
+                out.add(stmt.symbol);
+            }
+
+            out.addAll(refs);
 
             return;
         }
@@ -829,6 +871,19 @@ final class InactiveDeclarationPruner {
             return;
         }
 
+        if (stmt.kind == SastKind.VAR_DECL_INIT) {
+
+            if (keptVariables.contains(stmt.symbol)) {
+                markType(stmt.symbol.type());
+
+                for (SastNode initializer : stmt.initializers) {
+                    collectExprTypes(initializer);
+                }
+            }
+
+            return;
+        }
+
         if (stmt.kind == SastKind.ASSIGN) {
             markType(stmt.value.type);
             collectExprTypeExprs(stmt.target);
@@ -949,5 +1004,92 @@ final class InactiveDeclarationPruner {
                 collectExprTypeExprs(field.value);
             }
         }
+    }
+
+    private static boolean stmtHasSideEffects(SastNode stmt) {
+        if (stmt == null) {
+            return false;
+        }
+
+        if (stmt.kind == SastKind.ASSIGN) {
+            return exprHasSideEffects(stmt.target)
+                    || exprHasSideEffects(stmt.value);
+        }
+
+        if (stmt.kind == SastKind.VAR_DECL_INIT) {
+            for (SastNode initializer : stmt.initializers) {
+                if (stmtHasSideEffects(initializer)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean exprHasSideEffects(SastNode expr) {
+        if (expr == null) {
+            return false;
+        }
+
+        if (expr.kind == SastKind.INT_LITERAL
+                || expr.kind == SastKind.NULL_LITERAL
+                || expr.kind == SastKind.VAR_EXPR
+                || expr.kind == SastKind.ENUM_VARIANT) {
+            return false;
+        }
+
+        if (expr.kind == SastKind.UNARY_OP) {
+            return exprHasSideEffects(expr.expr);
+        }
+
+        if (expr.kind == SastKind.BIN_OP) {
+            return exprHasSideEffects(expr.left)
+                    || exprHasSideEffects(expr.right);
+        }
+
+        if (expr.kind == SastKind.MEMBER_ACCESS) {
+            return exprHasSideEffects(expr.target);
+        }
+
+        if (expr.kind == SastKind.GET_PTR) {
+            return exprHasSideEffects(expr.target);
+        }
+
+        if (expr.kind == SastKind.CAST) {
+            return expr.checked || exprHasSideEffects(expr.expr);
+        }
+
+        if (expr.kind == SastKind.AGGREGATE_LITERAL) {
+            for (SastNode field : expr.fields) {
+                if (exprHasSideEffects(field.value)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (expr.kind == SastKind.ARRAY_INTRINSIC_CALL) {
+            if (expr.intrinsicKind != SemanticArrayIntrinsicKind.LENGTH) {
+                return true;
+            }
+
+            if (exprHasSideEffects(expr.receiver)) {
+                return true;
+            }
+
+            for (SastNode arg : expr.args) {
+                if (exprHasSideEffects(arg)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
     }
 }

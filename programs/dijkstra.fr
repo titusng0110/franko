@@ -17,7 +17,7 @@ import "franko/limit"
 import "franko/string"
 
 namespace text {
-    func read_line_len(mview<[byte]> buf, uint32 cap, mview<uint32> line_len) -> int32 {
+    func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -45,7 +45,7 @@ namespace text {
     }
 
     // Copy buf[start, start+count) into a std::String.
-    func string_from_slice(view<[byte]> buf, uint32 start, uint32 count, ptr<std::String> out) -> int32 {
+    func string_from_slice(view<[byte]> buf, const uint32 start, const uint32 count, ptr<std::String> out) -> int32 {
         if (buf == null) {
             return -1
         }
@@ -70,7 +70,7 @@ namespace text {
         return 0
     }
 
-    func parse_uint32(view<[byte]> buf, uint32 start, uint32 count, mview<uint32> out) -> byte {
+    func parse_uint32(view<[byte]> buf, const uint32 start, const uint32 count, mview<uint32> out) -> byte {
         if (out == null) {
             return 0
         }
@@ -108,7 +108,7 @@ struct MinHeap {
     uint32 count = 0
 
     // Insert one entry and restore the heap order by sifting up.
-    func push(mview<MinHeap> self, HeapEntry entry) -> void {
+    func push(mview<MinHeap> self, const HeapEntry entry) -> void {
         uint32 i = $(self).count
         $(self).count = i + 1
 
@@ -165,7 +165,7 @@ struct MinHeap {
 
 // Read the next whitespace-separated unsigned decimal from
 // buf[start, start+len). Returns 1 on success and 0 on malformed input.
-func parse_next_uint32(view<[byte]> buf, uint32 len, mview<uint32> pos, mview<uint32> out) -> byte {
+func parse_next_uint32(view<[byte]> buf, const uint32 len, mview<uint32> pos, mview<uint32> out) -> byte {
     if (buf == null) {
         return 0
     }
