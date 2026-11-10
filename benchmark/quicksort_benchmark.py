@@ -15,11 +15,11 @@ highest duplicate concentration to lowest:
 
 Sizes and repetitions:
 
-  10M      10,000,000 keys  one chunk of 5 sorts
-  1M        1,000,000 keys  one chunk of 10 sorts
-  99k          99,000 keys  one chunk of 300 sorts
-  10k          10,000 keys  one chunk of 3,000 sorts
-  1k            1,000 keys  one chunk of 30,000 sorts
+  10M      10,000,000 keys  one chunk of 10 sorts
+  1M        1,000,000 keys  one chunk of 20 sorts
+  99k          99,000 keys  one chunk of 600 sorts
+  10k          10,000 keys  one chunk of 6,000 sorts
+  1k            1,000 keys  one chunk of 60,000 sorts
 
 The binaries accept three arguments: <dataset> <count> <repeat>. Every
 row passes the full repetition count to a single process and divides the
@@ -88,11 +88,11 @@ DATASETS = (
 
 # (label, count argument, repetitions, time-as-one-chunk)
 SIZES = (
-    ("10M", "10000000", 5, True),
-    ("1M", "1000000", 10, True),
-    ("99k", "99000", 300, True),
-    ("10k", "10000", 3000, True),
-    ("1k", "1000", 30000, True),
+    ("10M", "10000000", 10, True),
+    ("1M", "1000000", 20, True),
+    ("99k", "99000", 600, True),
+    ("10k", "10000", 6000, True),
+    ("1k", "1000", 60000, True),
 )
 
 

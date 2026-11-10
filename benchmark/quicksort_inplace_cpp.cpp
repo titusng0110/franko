@@ -314,9 +314,17 @@ static inline u32 get_random_pivot_pos(u32 lo, u32 hi) {
 }
 
 static __attribute__((noinline)) u32
-random_partition_lt_4k(i64* v, u32 lo, u32 hi) {
-    u32 pivot_pos = get_random_pivot_pos(lo, hi);
-    std::swap(v[pivot_pos], v[lo]);
+median3_partition_lt_4k(i64* v, u32 lo, u32 hi) {
+    u32 mid = lo + (hi - lo) / 2;
+    if (v[lo] < v[mid]) {
+        std::swap(v[lo], v[mid]);
+    }
+    if (v[hi] < v[lo]) {
+        std::swap(v[hi], v[lo]);
+    }
+    if (v[lo] < v[mid]) {
+        std::swap(v[lo], v[mid]);
+    }
     i64 pivot = v[lo];
     u32 i = lo;
     u32 j = hi;
@@ -356,7 +364,9 @@ static Bounds partition_dnf_kernel(i64* v, u32 lo, u32 hi, i64 pivot) {
     return {lt, gt};
 }
 
-static u32 partition_lomuto_kernel(i64* v, u32 lo, u32 hi) {
+static u32 partition_lomuto_kernel(i64* v, u32 lo, u32 hi,
+                                   u32 pivot_pos) {
+    std::swap(v[pivot_pos], v[hi]);
     i64 pivot_key = v[hi];
     u32 store = lo;
     for (u32 i = lo; i < hi; ++i) {
@@ -367,29 +377,6 @@ static u32 partition_lomuto_kernel(i64* v, u32 lo, u32 hi) {
     }
     std::swap(v[store], v[hi]);
     return store;
-}
-
-static u32 partition_lomuto_at(i64* v, u32 lo, u32 hi, u32 pivot_pos) {
-    std::swap(v[pivot_pos], v[hi]);
-    return partition_lomuto_kernel(v, lo, hi);
-}
-
-static Bounds first_partition_ge_4k_dnf(i64* v, u32 lo, u32 hi,
-                                        i64 pivot) {
-    return partition_dnf_kernel(v, lo, hi, pivot);
-}
-
-static u32 first_partition_ge_4k_lomuto(i64* v, u32 lo, u32 hi,
-                                        u32 pivot_pos) {
-    return partition_lomuto_at(v, lo, hi, pivot_pos);
-}
-
-static Bounds random_partition_ge_4k_dnf(i64* v, u32 lo, u32 hi) {
-    return partition_dnf_kernel(v, lo, hi, v[get_random_pivot_pos(lo, hi)]);
-}
-
-static u32 random_partition_ge_4k_lomuto(i64* v, u32 lo, u32 hi) {
-    return partition_lomuto_at(v, lo, hi, get_random_pivot_pos(lo, hi));
 }
 
 static void insertion_sort_values(i64* v, u32 lo, u32 hi) {
@@ -614,7 +601,7 @@ static void quicksort_lt_4k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        u32 split = random_partition_lt_4k(v, lo, hi);
+        u32 split = median3_partition_lt_4k(v, lo, hi);
         if (split >= hi) {
             heap_sort_values(v, lo, count);
             return;
@@ -636,10 +623,6 @@ static void quicksort_lt_4k_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     }
 }
 
-static void quicksort_lt_4k(i64* v, u32 lo, u32 hi, u32 depth) {
-    quicksort_lt_4k_rec(v, lo, hi, depth);
-}
-
 static void quicksort_ge_4k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
     while (lo < hi) {
         u32 count = hi - lo + 1;
@@ -655,7 +638,8 @@ static void quicksort_ge_4k_dnf_rec(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        Bounds bounds = random_partition_ge_4k_dnf(v, lo, hi);
+        Bounds bounds = partition_dnf_kernel(v, lo, hi,
+                                           v[get_random_pivot_pos(lo, hi)]);
         u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
         u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
         if (left_count > right_count) {
@@ -694,7 +678,7 @@ static void quicksort_ge_4k_dnf(i64* v, u32 lo, u32 hi, u32 depth) {
         heap_sort_values(v, lo, count);
         return;
     }
-    Bounds bounds = first_partition_ge_4k_dnf(v, lo, hi, sample_pivot);
+    Bounds bounds = partition_dnf_kernel(v, lo, hi, sample_pivot);
     u32 left_count = bounds.lt > lo ? bounds.lt - lo : 0;
     u32 right_count = bounds.gt < hi ? hi - bounds.gt : 0;
     if (left_count > 0) {
@@ -720,7 +704,8 @@ static void quicksort_ge_4k_lomuto_rec(i64* v, u32 lo, u32 hi, u32 depth) {
             heap_sort_values(v, lo, count);
             return;
         }
-        u32 pivot = random_partition_ge_4k_lomuto(v, lo, hi);
+        u32 pivot = partition_lomuto_kernel(
+            v, lo, hi, get_random_pivot_pos(lo, hi));
         u32 left_count = pivot - lo;
         u32 right_count = hi - pivot;
         if (left_count > right_count) {
@@ -756,7 +741,7 @@ static void quicksort_ge_4k_lomuto(i64* v, u32 lo, u32 hi, u32 depth) {
         heap_sort_values(v, lo, count);
         return;
     }
-    u32 pivot = first_partition_ge_4k_lomuto(v, lo, hi, sample_pivot_pos);
+    u32 pivot = partition_lomuto_kernel(v, lo, hi, sample_pivot_pos);
     u32 left_count = pivot - lo;
     u32 right_count = hi - pivot;
     if (left_count > 0) {
@@ -862,7 +847,7 @@ int main(int argc, char** argv) {
                 }
             } else {
                 use_dnf = 0;
-                quicksort_lt_4k(values.data(), 0, count - 1, depth);
+                quicksort_lt_4k_rec(values.data(), 0, count - 1, depth);
             }
         }
 

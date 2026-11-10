@@ -704,14 +704,26 @@ func estimate_use_dnf(view<[int64]> values, uint32 count) -> byte {
     return result
 }
 
-func random_partition_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func median3_partition_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
     if (values == null) {
         return lo
     }
-    uint32 pivot_pos = get_random_pivot_pos(lo, hi)
-    int64 tmp_pivot = $(values)[pivot_pos]
-    $(values)[pivot_pos] = $(values)[lo]
-    $(values)[lo] = tmp_pivot
+    uint32 mid = lo + (hi - lo) / 2
+    if ($(values)[lo] < $(values)[mid]) {
+        int64 tmp = $(values)[lo]
+        $(values)[lo] = $(values)[mid]
+        $(values)[mid] = tmp
+    }
+    if ($(values)[hi] < $(values)[lo]) {
+        int64 tmp = $(values)[hi]
+        $(values)[hi] = $(values)[lo]
+        $(values)[lo] = tmp
+    }
+    if ($(values)[lo] < $(values)[mid]) {
+        int64 tmp = $(values)[lo]
+        $(values)[lo] = $(values)[mid]
+        $(values)[mid] = tmp
+    }
     int64 pivot = $(values)[lo]
     uint32 i = lo
     uint32 j = hi
@@ -761,10 +773,13 @@ func partition_dnf_kernel(mview<[int64]> values, uint32 lo, uint32 hi, int64 piv
     return (uint32 lt, uint32 gt) { lt = lt, gt = gt }
 }
 
-func partition_lomuto_kernel(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
+func partition_lomuto_kernel(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
     if (values == null) {
         return lo
     }
+    int64 tmp_pivot = $(values)[pivot_pos]
+    $(values)[pivot_pos] = $(values)[hi]
+    $(values)[hi] = tmp_pivot
     int64 pivot_key = $(values)[hi]
     uint32 store = lo
     uint32 i = lo
@@ -781,32 +796,6 @@ func partition_lomuto_kernel(mview<[int64]> values, uint32 lo, uint32 hi) -> uin
     $(values)[store] = $(values)[hi]
     $(values)[hi] = tmp_last
     return store
-}
-
-func partition_lomuto_at(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
-    if (values == null) {
-        return lo
-    }
-    int64 tmp = $(values)[pivot_pos]
-    $(values)[pivot_pos] = $(values)[hi]
-    $(values)[hi] = tmp
-    return partition_lomuto_kernel(values, lo, hi)
-}
-
-func first_partition_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, int64 pivot) -> (uint32 lt, uint32 gt) {
-    return partition_dnf_kernel(values, lo, hi, pivot)
-}
-
-func first_partition_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 pivot_pos) -> uint32 {
-    return partition_lomuto_at(values, lo, hi, pivot_pos)
-}
-
-func random_partition_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi) -> (uint32 lt, uint32 gt) {
-    return partition_dnf_kernel(values, lo, hi, $(values)[get_random_pivot_pos(lo, hi)])
-}
-
-func random_partition_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi) -> uint32 {
-    return partition_lomuto_at(values, lo, hi, get_random_pivot_pos(lo, hi))
 }
 
 func quicksort_lt_4k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
@@ -827,7 +816,7 @@ func quicksort_lt_4k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 dep
             heap_sort_values(values, lo, count)
             return
         }
-        uint32 split = random_partition_lt_4k(values, lo, hi)
+        uint32 split = median3_partition_lt_4k(values, lo, hi)
         if (split >= hi) {
             heap_sort_values(values, lo, count)
             return
@@ -850,11 +839,6 @@ func quicksort_lt_4k_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 dep
     return
 }
 
-func quicksort_lt_4k(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
-    quicksort_lt_4k_rec(values, lo, hi, depth)
-    return
-}
-
 func quicksort_ge_4k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32 depth) -> void {
     if (values == null) {
         return
@@ -873,7 +857,7 @@ func quicksort_ge_4k_dnf_rec(mview<[int64]> values, uint32 lo, uint32 hi, uint32
             heap_sort_values(values, lo, count)
             return
         }
-        (uint32 lt, uint32 gt) bounds = random_partition_ge_4k_dnf(values, lo, hi)
+        (uint32 lt, uint32 gt) bounds = partition_dnf_kernel(values, lo, hi, $(values)[get_random_pivot_pos(lo, hi)])
         uint32 left_count = 0
         if (bounds.lt > lo) {
             left_count = bounds.lt - lo
@@ -922,7 +906,7 @@ func quicksort_ge_4k_dnf(mview<[int64]> values, uint32 lo, uint32 hi, uint32 dep
         heap_sort_values(values, lo, count)
         return
     }
-    (uint32 lt, uint32 gt) bounds = first_partition_ge_4k_dnf(values, lo, hi, sample_pivot)
+    (uint32 lt, uint32 gt) bounds = partition_dnf_kernel(values, lo, hi, sample_pivot)
     uint32 left_count = 0
     if (bounds.lt > lo) {
         left_count = bounds.lt - lo
@@ -958,7 +942,7 @@ func quicksort_ge_4k_lomuto_rec(mview<[int64]> values, uint32 lo, uint32 hi, uin
             heap_sort_values(values, lo, count)
             return
         }
-        uint32 pivot = random_partition_ge_4k_lomuto(values, lo, hi)
+        uint32 pivot = partition_lomuto_kernel(values, lo, hi, get_random_pivot_pos(lo, hi))
         uint32 left_count = pivot - lo
         uint32 right_count = hi - pivot
         if (left_count > right_count) {
@@ -998,7 +982,7 @@ func quicksort_ge_4k_lomuto(mview<[int64]> values, uint32 lo, uint32 hi, uint32 
         heap_sort_values(values, lo, count)
         return
     }
-    uint32 pivot = first_partition_ge_4k_lomuto(values, lo, hi, sample_pivot_pos)
+    uint32 pivot = partition_lomuto_kernel(values, lo, hi, sample_pivot_pos)
     uint32 left_count = pivot - lo
     uint32 right_count = hi - pivot
     if (left_count > 0) {
@@ -1132,7 +1116,7 @@ func main(view<[[byte]]> args) -> int32 {
                 }
             } else {
                 use_dnf = 0
-                quicksort_lt_4k(getmview(values), 0, count - 1, depth)
+                quicksort_lt_4k_rec(getmview(values), 0, count - 1, depth)
             }
         }
 
