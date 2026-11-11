@@ -1,81 +1,24 @@
 #!/usr/bin/env python3
 """In-place quicksort benchmark: Franko vs C++ vs std::sort.
 
-Workload: plain int64 keys in six distributions and five sizes.
-
-Datasets (first command-line argument to each binary), ordered from
-highest duplicate concentration to lowest:
-
-  0-9      values uniform in 0..9
-  0.25pct  N/400 distinct values
-  0.5pct   N/200 distinct values
-  1pct     N/100 distinct values
-  10pct    N/10 distinct values
-  random   full 63-bit random values
-
-Sizes and repetitions:
-
-  10M      10,000,000 keys  one chunk of 10 sorts
-  1M        1,000,000 keys  one chunk of 20 sorts
-  99k          99,000 keys  one chunk of 600 sorts
-  10k          10,000 keys  one chunk of 6,000 sorts
-  1k            1,000 keys  one chunk of 60,000 sorts
-
-The binaries accept three arguments: <dataset> <count> <repeat>. Every
-row passes the full repetition count to a single process and divides the
-chunk wall time by the repetition count, so process startup is paid once
-per cell instead of once per sort.
-
-Modes:
-
-  franko-inplace   Franko -Omax, values swapped in place
-  cpp-inplace      Hand-written C++ port, in place
-  cpp-std-sort     Plain C++ std::sort reference
-
-Every mode generates the same splitmix64 stream internally, sorts, and
-prints only `sorted ok` and a checksum. There is no bulk input or output.
-Timings are whole-process wall clock, including generation, sorting,
-verification, and the checksum pass.
-
-Usage:
     uv run python benchmark/quicksort_benchmark.py
     uv run python benchmark/quicksort_benchmark.py --cpu 2
+
+Modes: Franko -Omax, a hand-written C++ -O3 port of the same algorithm,
+and C++ std::sort as the reference. All modes generate the same splitmix64
+stream internally, sort it in place, verify it, and print a checksum.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import random
-import shutil
 import statistics
-import subprocess
-import sys
 import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-BENCH = ROOT / "benchmark"
-EXE = ".exe" if sys.platform == "win32" else ".out"
-STATIC_STDLIBS = [] if sys.platform == "darwin" else [
-    "-static-libstdc++", "-static-libgcc",
-]
-
-
-@dataclass(frozen=True)
-class Mode:
-    label: str
-    kind: str                  # "franko" | "cpp"
-    source: Path
-
-
-MODES = (
-    Mode("franko-inplace", "franko", BENCH / "quicksort_inplace_franko.fr"),
-    Mode("cpp-inplace", "cpp", BENCH / "quicksort_inplace_cpp.cpp"),
-    Mode("cpp-std-sort", "cpp", BENCH / "quicksort_std_cpp.cpp"),
-)
+from _bench_common import BENCH, build_cpp, build_franko, pin_cpu, run_timed
 
 DATASETS = (
     ("0-9", "3"),
@@ -86,7 +29,7 @@ DATASETS = (
     ("random", "0"),
 )
 
-# (label, count argument, repetitions, time-as-one-chunk)
+# (label, count, sorts per chunk, time the whole chunk)
 SIZES = (
     ("10M", "10000000", 10, True),
     ("1M", "1000000", 20, True),
@@ -96,57 +39,123 @@ SIZES = (
 )
 
 
-def build_mode(mode: Mode, out_dir: Path) -> Path:
-    dest = out_dir / f"{mode.label}{EXE}"
+@dataclass(frozen=True)
+class Mode:
+    label: str
+    source: Path
+    kind: str
 
+
+MODES = (
+    Mode("franko-inplace", BENCH / "quicksort_inplace_franko.fr", "franko"),
+    Mode("cpp-inplace", BENCH / "quicksort_inplace_cpp.cpp", "cpp"),
+    Mode("cpp-std-sort", BENCH / "quicksort_std_cpp.cpp", "cpp"),
+)
+
+
+def build(mode: Mode, out_dir: Path) -> Path:
     if mode.kind == "franko":
-        cmd = [sys.executable, str(ROOT / "compile.py"), "-Omax",
-               str(mode.source)]
-        print(f"--- building [{mode.label}]: {' '.join(cmd)} ---", flush=True)
-        proc = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(f"build failed: {' '.join(cmd)}\n"
-                               f"{proc.stdout[-4000:]}")
-        shutil.copy2(mode.source.with_suffix(EXE), dest)
-        return dest
-
-    cmd = ["g++", "-O3", "-std=c++17", *STATIC_STDLIBS,
-           str(mode.source), "-o", str(dest)]
-    print(f"--- building [{mode.label}]: {' '.join(cmd)} ---", flush=True)
-    proc = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"build failed: {' '.join(cmd)}\n"
-                           f"{proc.stdout[-4000:]}")
-    return dest
+        return build_franko(mode.source, mode.label, out_dir, mode="omax")
+    return build_cpp(mode.source, mode.label, out_dir, optimize="3")
 
 
-def run_case(binary: Path, dataset_arg: str, count_arg: str,
-             repeat_arg: str) -> tuple[float, str]:
-    start = time.perf_counter()
-    proc = subprocess.run([str(binary), dataset_arg, count_arg, repeat_arg],
-                          cwd=ROOT, check=False, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT)
-    elapsed = time.perf_counter() - start
-    out = proc.stdout.decode("utf-8", errors="replace")
-    if proc.returncode != 0:
-        raise RuntimeError(f"{binary} exited {proc.returncode}:\n"
-                           f"{out[-2000:]}")
-    return elapsed, out
+def fmt(value: float, places: int = 6, best: bool = False) -> str:
+    text = f"{value:.{places}f}"
+    return f"**{text}**" if best else text
 
 
-def summarize(times: list[float]) -> dict[str, float]:
-    mean = statistics.fmean(times)
-    sd = statistics.stdev(times) if len(times) > 1 else 0.0
-    return {
-        "mean": mean,
-        "median": statistics.median(times),
-        "min": min(times),
-        "max": max(times),
-        "sd": sd,
-        "cv": 100.0 * sd / mean if mean else 0.0,
-    }
+def print_mean_table(results, labels) -> None:
+    print("Mean seconds")
+    print("| size | dataset | " + " | ".join(labels) + " |")
+    print("| --- | --- | " + " | ".join("---" for _ in labels) + " |")
+    for size, count, _reps, _chunk in SIZES:
+        for dataset, _arg in DATASETS:
+            means = {label: statistics.fmean(results[(size, dataset, label)])
+                     for label in labels}
+            best = min(means.values())
+            row = [fmt(means[label], best=means[label] == best) for label in labels]
+            print(f"| {size} | {dataset} | " + " | ".join(row) + " |")
+
+
+def print_slowdown_table(results, labels) -> None:
+    base_label = "cpp-std-sort"
+    print("Slowdown vs cpp-std-sort")
+    print("| size | dataset | franko-inplace | cpp-inplace |")
+    print("| --- | --- | --- | --- |")
+    for size, _count, _reps, _chunk in SIZES:
+        for dataset, _arg in DATASETS:
+            mean = {label: statistics.fmean(results[(size, dataset, label)])
+                    for label in labels}
+            base = mean[base_label]
+            print(
+                f"| {size} | {dataset} | "
+                f"{mean['franko-inplace'] / base:.3f}x | "
+                f"{mean['cpp-inplace'] / base:.3f}x |"
+            )
+
+
+def print_wins(results, labels) -> None:
+    print("Wins by size")
+    print("| size | Franko | C++ |")
+    print("| --- | ---: | ---: |")
+    for size, _count, _reps, _chunk in SIZES:
+        wins = {label: 0 for label in labels}
+        for dataset, _arg in DATASETS:
+            mean = {label: statistics.fmean(results[(size, dataset, label)])
+                    for label in labels}
+            wins[min(mean, key=mean.get)] += 1
+        print(f"| {size} | {wins['franko-inplace']}/6 | {wins['cpp-inplace']}/6 |")
+
+
+def print_per_key_table(results, labels) -> None:
+    print("Per-key nanoseconds")
+    print("| size | dataset | " + " | ".join(labels) + " |")
+    print("| --- | --- | " + " | ".join("---:" for _ in labels) + " |")
+    counts = {size: int(count) for size, count, _reps, _chunk in SIZES}
+    for size, _count, _reps, _chunk in SIZES:
+        for dataset, _arg in DATASETS:
+            values = {
+                label: statistics.fmean(results[(size, dataset, label)])
+                * 1e9 / counts[size]
+                for label in labels
+            }
+            best = min(values.values())
+            row = [fmt(values[label], places=2, best=values[label] == best)
+                   for label in labels]
+            print(f"| {size} | {dataset} | " + " | ".join(row) + " |")
+
+
+def print_chunk_table(chunk_totals, labels) -> None:
+    print("Chunk timings")
+    print("| size | dataset | mode | chunk s | sorts | mean/sort |")
+    print("| --- | --- | --- | ---: | ---: | ---: |")
+    for size, _count, reps, chunk in SIZES:
+        if not chunk:
+            continue
+        for dataset, _arg in DATASETS:
+            for label in labels:
+                total = chunk_totals[(size, dataset, label)]
+                print(f"| {size} | {dataset} | {label} | "
+                      f"{total:.6f} | {reps} | {total / reps:.6f} |")
+
+
+def print_binary_table(sizes, labels) -> None:
+    print("Binaries")
+    print("| mode | bin (KB) |")
+    print("| --- | ---: |")
+    for label in labels:
+        print(f"| {label} | {sizes[label] / 1024:.0f} |")
+
+
+def print_checksums(outputs, labels) -> None:
+    print("Checksums")
+    print("| size | dataset | checksum |")
+    print("| --- | --- | ---: |")
+    for size, _count, _reps, _chunk in SIZES:
+        for dataset, _arg in DATASETS:
+            out = outputs[(size, dataset, labels[0])]
+            checksum = out.strip().splitlines()[-1].split()[-1]
+            print(f"| {size} | {dataset} | {checksum} |")
 
 
 def main() -> int:
@@ -159,139 +168,90 @@ def main() -> int:
                         help="run modes in a fixed order each round")
     args = parser.parse_args()
 
-    if args.cpu is not None:
-        try:
-            os.sched_setaffinity(0, {args.cpu})
-            print(f"Pinned to CPU {args.cpu}.")
-        except (AttributeError, OSError) as exc:
-            print(f"warning: could not pin to CPU {args.cpu}: {exc}")
-
+    pin_cpu(args.cpu)
     labels = [mode.label for mode in MODES]
     rng = random.Random(args.seed)
 
     with tempfile.TemporaryDirectory(prefix="franko-quicksort-") as tmp:
         out_dir = Path(tmp)
-        binaries = {}
-        sizes = {}
-        for mode in MODES:
-            binary = build_mode(mode, out_dir)
-            binaries[mode.label] = binary
-            sizes[mode.label] = binary.stat().st_size
+        binaries = {mode.label: build(mode, out_dir) for mode in MODES}
+        sizes = {label: path.stat().st_size for label, path in binaries.items()}
 
-        # One untimed warm-up per binary, size, and dataset.
-        for size_label, count_arg, _reps, _chunk in SIZES:
+        for size, count, _reps, _chunk in SIZES:
             for dataset, dataset_arg in DATASETS:
                 for label in labels:
-                    print(f"[{size_label}][{dataset}][{label}] warm-up",
-                          flush=True)
-                    run_case(binaries[label], dataset_arg, count_arg, "1")
+                    print(f"[{size}][{dataset}][{label}] warm-up", flush=True)
+                    run_timed(binaries[label], [dataset_arg, count, "1"])
 
-        results = {}
-        outputs = {}
-        chunk_totals = {}
+        results: dict[tuple[str, str, str], list[float]] = {}
+        chunk_totals: dict[tuple[str, str, str], float] = {}
+        outputs: dict[tuple[str, str, str], str] = {}
 
-        for size_label, count_arg, reps, chunk in SIZES:
+        for size, count, reps, chunk in SIZES:
             for dataset, dataset_arg in DATASETS:
                 order = list(labels)
                 if not args.no_shuffle:
                     rng.shuffle(order)
                 for label in order:
                     if chunk:
-                        elapsed, out = run_case(
-                            binaries[label], dataset_arg, count_arg, str(reps))
-                        results[(size_label, dataset, label)] = [elapsed / reps]
-                        chunk_totals[(size_label, dataset, label)] = elapsed
-                        outputs[(size_label, dataset, label)] = out
-                        print(f"[{size_label}][{dataset}][{label}] "
-                              f"chunk {elapsed:.3f}s / {reps} = "
+                        elapsed, out = run_timed(
+                            binaries[label], [dataset_arg, count, str(reps)]
+                        )
+                        results[(size, dataset, label)] = [elapsed / reps]
+                        chunk_totals[(size, dataset, label)] = elapsed
+                        outputs[(size, dataset, label)] = out
+                        print(f"[{size}][{dataset}][{label}] chunk "
+                              f"{elapsed:.3f}s / {reps} = "
                               f"{elapsed / reps:.6f}s", flush=True)
                     else:
                         samples = []
                         for rep in range(reps):
-                            elapsed, out = run_case(
-                                binaries[label], dataset_arg, count_arg, "1")
+                            elapsed, out = run_timed(
+                                binaries[label], [dataset_arg, count, "1"]
+                            )
                             samples.append(elapsed)
-                            outputs[(size_label, dataset, label)] = out
-                            print(f"[{size_label}][{dataset}][{label}] "
-                                  f"rep {rep + 1}/{reps}: {elapsed:.3f}s",
-                                  flush=True)
-                        results[(size_label, dataset, label)] = samples
+                            outputs[(size, dataset, label)] = out
+                            print(f"[{size}][{dataset}][{label}] rep "
+                                  f"{rep + 1}/{reps}: {elapsed:.3f}s", flush=True)
+                        results[(size, dataset, label)] = samples
 
         print()
-        for size_label, _count, _reps, _chunk in SIZES:
-            for dataset, _dataset_arg in DATASETS:
-                unique = {outputs[(size_label, dataset, label)]
-                          for label in labels}
-                print(f"[{size_label}][{dataset}] outputs agree: "
-                      f"{len(unique) == 1}")
+        for size, _count, _reps, _chunk in SIZES:
+            for dataset, _arg in DATASETS:
+                unique = {outputs[(size, dataset, label)] for label in labels}
+                print(f"[{size}][{dataset}] outputs agree: {len(unique) == 1}")
                 for out in sorted(unique):
                     print(f"  {out!r}")
                 if len(unique) != 1:
                     return 1
 
         print()
-        print("Mean seconds")
-        print("| size | dataset | " + " | ".join(labels) + " |")
-        print("| --- | --- | " + " | ".join("---" for _ in labels) + " |")
-        means = {}
-        for size_label, _count, _reps, _chunk in SIZES:
-            for dataset, _dataset_arg in DATASETS:
-                row = []
-                for label in labels:
-                    mean = statistics.fmean(
-                        results[(size_label, dataset, label)])
-                    means[(size_label, dataset, label)] = mean
-                    row.append(f"{mean:.6f}")
-                print(f"| {size_label} | {dataset} | "
-                      + " | ".join(row) + " |")
-
+        print_mean_table(results, labels)
         print()
-        print("Slowdown vs cpp-std-sort")
-        print("| size | dataset | franko-inplace | cpp-inplace |")
-        print("| --- | --- | --- | --- |")
-        for size_label, _count, _reps, _chunk in SIZES:
-            for dataset, _dataset_arg in DATASETS:
-                base = means[(size_label, dataset, "cpp-std-sort")]
-                row = [f"{means[(size_label, dataset, label)] / base:.3f}x"
-                       for label in ("franko-inplace", "cpp-inplace")]
-                print(f"| {size_label} | {dataset} | "
-                      + " | ".join(row) + " |")
-
+        print_slowdown_table(results, labels)
         print()
-        print("Chunk timings")
-        print("| size | dataset | mode | chunk s | reps | mean/sort |")
-        print("| --- | --- | --- | --- | --- | --- |")
-        for size_label, _count, reps, chunk in SIZES:
-            if not chunk:
-                continue
-            for dataset, _dataset_arg in DATASETS:
-                for label in labels:
-                    total = chunk_totals[(size_label, dataset, label)]
-                    print(f"| {size_label} | {dataset} | {label} | "
-                          f"{total:.6f} | {reps} | {total / reps:.6f} |")
-
+        print_wins(results, labels)
         print()
-        print("Binaries")
-        print("| mode | bin (KB) |")
-        print("| --- | --- |")
-        for label in labels:
-            print(f"| {label} | {sizes[label] / 1024:.0f} |")
-
+        print_per_key_table(results, labels)
+        print()
+        print_chunk_table(chunk_totals, labels)
+        print()
+        print_binary_table(sizes, labels)
+        print()
+        print_checksums(outputs, labels)
         print()
         print("Raw runs")
-        for size_label, _count, reps, chunk in SIZES:
-            for dataset, _dataset_arg in DATASETS:
+        for size, _count, reps, chunk in SIZES:
+            for dataset, _arg in DATASETS:
                 for label in labels:
-                    key = (size_label, dataset, label)
+                    key = (size, dataset, label)
                     if chunk:
                         total = chunk_totals[key]
-                        print(f"{size_label}/{dataset}/{label}: "
-                              f"chunk {total:.6f}s / {reps} = "
-                              f"{total / reps:.6f}s")
+                        print(f"{size}/{dataset}/{label}: chunk {total:.6f}s "
+                              f"/ {reps} = {total / reps:.6f}s")
                     else:
-                        print(f"{size_label}/{dataset}/{label}: "
-                              + " ".join(f"{t:.6f}"
-                                         for t in results[key]))
+                        print(f"{size}/{dataset}/{label}: "
+                              + " ".join(f"{t:.6f}" for t in results[key]))
 
     return 0
 
