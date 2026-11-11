@@ -1,98 +1,256 @@
 #!/usr/bin/env python3
 """Compile a Franko program into a native executable.
 
-Replaces compile_linux-x86_64.sh and compile_windows-x64.ps1; the same
-command works on Linux, macOS and Windows:
-
     uv run python compile.py programs/binary_codec.fr
     uv run python compile.py -O programs/binary_codec.fr
+    uv run python compile.py -O --jemalloc programs/binary_codec.fr
     uv run python compile.py -o build/app.cpp -p ./import programs/app.fr
 
--o is optional and defaults to `<source>.cpp`; -p is optional and
-defaults to `./import`. --jemalloc is Linux-only and opts into the
-bundled allocator. Without -O the default is an unoptimised debug build with
-AddressSanitizer using the system allocator (malloc/free):
-GCC/Clang build with -O1 -fsanitize=address, and MSVC cl.exe on
-Windows builds with its default optimization level plus
-/fsanitize=address. The Windows g++/clang++
-fallback cannot use AddressSanitizer, so there the default is the
-optimized build below. With -O it is an optimized build (-O3 on
-GCC/Clang, /O2 on MSVC); with -Omax it is the same optimized build but
-with bounds checking and unsafe_cast range checking stripped for speed
-(out-of-range access is then undefined behavior). ASan builds always use
-the system allocator; -O/-Omax use it too unless --jemalloc is passed on
-Linux. All modes share
-include/FrankoRuntime.hpp; the C++ step selects the mode with
-FRANKO_USE_JEMALLOC and FRANKO_BOUNDS_UNCHECKED.
-
-With --emit-json the Franko stage also writes per-pass AST/SAST snapshots
-and a diagnostic JSON file next to the generated .cpp.
-
-With --target the build target is chosen: --target native builds for
-the host <os>-<arch> and adds -march=native to the C++ step when it is
-GCC/Clang, optimizing for the host CPU (MSVC has no equivalent and
-keeps its baseline ISA); the binary then requires a matching CPU. An explicit <os>-<arch> spec (os
-in {linux, windows, macos}, arch in {x86_64, arm64}) selects that
-Franko target (the built-in #IS_* target constants follow it);
-when it differs from the host, only the Franko -> C++ transpilation
-runs and the C++ compiler is not invoked. Without --target the target
-is the host and the C++ step uses the portable baseline ISA. The Java
-`Main` driver requires an explicit source path, -o, -p, and --target;
-this script supplies all of them, so its CLI remains the single place
-that owns the defaults.
-
-It runs the Franko compiler (Franko -> C++14), then compiles and links
-the generated C++ with the host C++ toolchain (cl.exe on Windows, where
-it is available; g++/clang++ otherwise). Output is written next to the
-source file:
-
-    programs/binary_codec.cpp
-    programs/binary_codec.out     (Linux/macOS)
-    programs/binary_codec.exe     (Windows)
-
-The two build stages are also importable so the test runners share them
-instead of reimplementing them: franko_compile() (Franko -> C++14) and
-native_compile() (C++14 -> executable), both parameterized by build
-mode ("asan" / "opt" / "omax").
-
-The Java toolchain is built automatically when it is missing.
+The default build is ASan with the system allocator. -O/-Omax build with
+the host compiler (-O3 on GCC/Clang, /O2 on MSVC). --jemalloc is a
+Linux-only opt-in for -O/-Omax. Windows uses MSVC cl.exe when available
+and falls back to g++/clang++; the fallback has no ASan, so its default
+is -O. An explicit --target different from the host transpiles only.
+Binaries are left unstripped so they can be inspected with nm/gdb.
 """
 
 import argparse
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import zipfile
 from collections.abc import Sequence
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from franko_tools import (
-    ASAN_OPTIMIZE,
-    IMPORT_DIR,
-    INCLUDE_DIR,
     IS_WINDOWS,
     JAVA_HINT,
     ToolError,
-    cxx_compile_flags,
-    cxx_family,
-    ensure_jemalloc_bundle,
     ensure_toolchain,
     executable_suffix,
-    find_cxx,
     find_tool,
     franko_classpath,
+    host_arch,
     host_os,
     host_target,
-    java_mode_flags,
-    jemalloc_paths,
-    link_flags,
     normalize_target,
     relative,
     run,
 )
+
+IMPORT_DIR = ROOT / "import"
+INCLUDE_DIR = ROOT / "include"
+JEMALLOC_ROOT = ROOT / "third_party" / "jemalloc"
+JEMALLOC_ARCHIVES = ROOT / "third_party" / "artifacts"
+ASAN_OPTIMIZE = "1"
+CXX_HINT = (
+    "Install Visual Studio (or VS Build Tools) with the 'Desktop "
+    "development with C++' workload, or put g++/clang++ on PATH. "
+    "Set CXX to choose a compiler explicitly."
+)
+
+
+def jemalloc_paths() -> tuple[Path, Path]:
+    if host_os() != "linux":
+        raise ToolError("jemalloc is only supported on Linux hosts")
+    bundle = JEMALLOC_ROOT / host_target()
+    include = bundle / "include"
+    library = bundle / "lib" / "libjemalloc.a"
+    if not (include / "jemalloc" / "jemalloc.h").is_file() or not library.is_file():
+        raise ToolError(
+            f"bundled jemalloc not found under {relative(bundle)}\n"
+            "Run the jemalloc workflow and put the resulting zip in "
+            "third_party/artifacts/."
+        )
+    return include, library
+
+
+def ensure_jemalloc_bundle() -> None:
+    if host_os() != "linux":
+        return
+    bundle = JEMALLOC_ROOT / host_target()
+    header = bundle / "include" / "jemalloc" / "jemalloc.h"
+    library = bundle / "lib" / "libjemalloc.a"
+    if header.is_file() and library.is_file():
+        return
+
+    archive = JEMALLOC_ARCHIVES / f"jemalloc-{host_target()}.zip"
+    if not archive.is_file():
+        raise ToolError(f"prebuilt jemalloc bundle not found: {relative(archive)}")
+
+    print(f"extracting {relative(archive)} ...")
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(bundle)
+    if not header.is_file() or not library.is_file():
+        raise ToolError(f"jemalloc bundle has an unexpected layout: {relative(archive)}")
+
+
+def _vswhere() -> Path:
+    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+        base = os.environ.get(variable)
+        if base:
+            candidate = (
+                Path(base) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+            )
+            if candidate.is_file():
+                return candidate
+    found = shutil.which("vswhere")
+    if found:
+        return Path(found)
+    raise ToolError("vswhere.exe not found: install Visual Studio with the C++ workload")
+
+
+@cache
+def _msvc_environment() -> None:
+    """Load the host-architecture MSVC environment from vcvars*.bat."""
+    components = {
+        "x86_64": "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+        "arm64": "Microsoft.VisualStudio.Component.VC.Tools.ARM64",
+    }
+    vcvars_names = {"x86_64": "vcvars64.bat", "arm64": "vcvarsarm64.bat"}
+    arch = host_arch()
+
+    completed = subprocess.run(
+        [
+            str(_vswhere()), "-latest", "-prerelease", "-products", "*",
+            "-requires", components[arch], "-property", "installationPath",
+        ],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    install = completed.stdout.strip()
+    if completed.returncode or not install:
+        raise ToolError(
+            f"Visual Studio with the C++ build tools was not found for "
+            f"Windows {arch}.\nRequired vswhere component: {components[arch]}"
+        )
+
+    vcvars = Path(install) / "VC" / "Auxiliary" / "Build" / vcvars_names[arch]
+    if not vcvars.is_file():
+        raise ToolError(f"Visual Studio environment script not found: {vcvars}")
+
+    env = os.environ.copy()
+    env["VSCMD_SKIP_SENDTELEMETRY"] = "1"
+    completed = subprocess.run(
+        ["cmd.exe", "/d", "/c", "call", str(vcvars), ">nul", "&&", "set"],
+        env=env,
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode:
+        details = (completed.stderr or completed.stdout).strip()
+        raise ToolError(
+            f"failed to initialize the MSVC environment with {vcvars}\n{details}"
+        )
+
+    for line in completed.stdout.splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name:
+            os.environ[name] = value
+
+
+def _find_msvc() -> Path | None:
+    try:
+        _msvc_environment()
+    except ToolError:
+        return None
+    found = shutil.which("cl")
+    return Path(found) if found else None
+
+
+@cache
+def find_cxx() -> Path:
+    override = os.environ.get("CXX")
+    if override:
+        if Path(override).stem.lower() == "cl":
+            _msvc_environment()
+        return find_tool(override, CXX_HINT)
+
+    if IS_WINDOWS and (cl := _find_msvc()):
+        return cl
+
+    names = ("clang++", "g++") if host_os() == "macos" else ("g++", "clang++")
+    for name in names:
+        if found := shutil.which(name):
+            return Path(found)
+
+    if IS_WINDOWS:
+        raise ToolError(
+            "required C++ compiler not found: cl.exe (Visual Studio) or "
+            f"g++/clang++ on PATH\n{CXX_HINT}"
+        )
+    raise ToolError(f"required tool not found on PATH: g++ or clang++\n{CXX_HINT}")
+
+
+@cache
+def cxx_family() -> str:
+    return "msvc" if find_cxx().stem.lower() == "cl" else "gnu"
+
+
+def default_build_mode() -> str:
+    """ASan everywhere it exists; the Windows MinGW fallback uses -O."""
+    return "opt" if IS_WINDOWS and cxx_family() == "gnu" else "asan"
+
+
+def cxx_compile_flags(
+    optimize: str = "3",
+    sanitize: bool = False,
+    target: str | None = None,
+) -> list[str]:
+    if cxx_family() == "msvc":
+        flags = ["/nologo", "/std:c++14", "/utf-8"]
+        if target == "native":
+            pass
+        elif target is not None:
+            normalize_target(target)
+        flags.append("/W4")
+        flags += ["/Zi", "/fsanitize=address", "/MT"] if sanitize else ["/O2", "/MT"]
+        return flags
+
+    if sanitize and IS_WINDOWS:
+        raise ToolError(
+            "AddressSanitizer is not supported by the Windows g++/clang++ "
+            "fallback: install MSVC cl.exe or use -O"
+        )
+
+    flags = [f"-O{optimize}", "-std=c++14"]
+    if target == "native":
+        flags.append("-march=native")
+    elif target is not None:
+        normalize_target(target)
+    flags += ["-Wall", "-Wextra", "-Wpedantic", "-Wshadow"]
+    if sanitize:
+        flags += ["-fsanitize=address", "-g", "-fno-omit-frame-pointer"]
+    return flags
+
+
+def link_flags(sanitize: bool = False) -> list[str]:
+    if cxx_family() == "msvc":
+        return []
+
+    system = host_os()
+    flags: list[str] = []
+    if sanitize:
+        flags.append("-fsanitize=address")
+        if system == "linux":
+            flags.append("-static-libasan")
+    if system in ("linux", "macos"):
+        flags.append("-pthread")
+    if system == "linux":
+        flags.append("-ldl")
+    if system != "macos":
+        flags += ["-static-libstdc++", "-static-libgcc"]
+    return flags
 
 
 def franko_compile(
@@ -108,40 +266,24 @@ def franko_compile(
     echo: bool = False,
     check: bool = False,
 ) -> int:
-    """Run the Franko compiler (Franko -> C++14) for one build MODE.
-
-    MODE is "asan" (no Franko flag; checked, system allocator),
-    "opt" (-O; checked) or "omax" (-Omax; unchecked). The matching
-    C++ defines are added by native_compile(); jemalloc is opt-in via
-    compile.py --jemalloc on Linux.
-    The compiler always runs with `-p IMPORT_DIR --target <target>`,
-    where TARGET is a canonical `<os>-<arch>` spec (the built-in
-    #IS_* target constants follow it) and defaults to the host.
-    `Main` requires the source path, -o, -p, and --target; this helper
-    supplies all of them so test runners and the CLI own the defaults.
-
-    Returns the compiler exit code so test runners can attribute a
-    per-case failure; with CHECK a non-zero exit raises ToolError.
-    """
+    """Run the Franko compiler (Franko -> C++14)."""
     java = find_tool("java", JAVA_HINT)
     return run(
-        [java, "-cp", franko_classpath(), "Main",
-         src, "-o", out_cpp, "-p", import_dir, "--target", target or host_target(),
-         *(["--emit-json"] if emit_json else []),
-         *extra_flags, *java_mode_flags(mode)],
-        log_file=log, echo=echo, check=check,
+        [
+            java, "-cp", franko_classpath(), "Main",
+            src, "-o", out_cpp, "-p", import_dir,
+            "--target", target or host_target(),
+            *(["--emit-json"] if emit_json else []),
+            *extra_flags,
+            *(["-O"] if mode == "opt" else ["-Omax"] if mode == "omax" else []),
+        ],
+        log_file=log,
+        echo=echo,
+        check=check,
     )
 
 
 def _copy_msvc_asan_runtime(cxx: Path, out_bin: Path, *, echo: bool) -> None:
-    """Copy the MSVC ASan runtime and its CRT DLLs next to OUT_BIN.
-
-    Microsoft no longer ships a static ASan runtime on Windows (the
-    /MT runtime thunk still loads clang_rt.asan_dynamic-<arch>.dll), so
-    the DLL has to travel with the executable. That DLL is itself built
-    against the dynamic CRT, so it also needs vcruntime140.dll and
-    vcruntime140_1.dll; the UCRT API sets are part of Windows 10/11.
-    """
     arch = "x86_64" if host_target().endswith("x86_64") else "aarch64"
     for name in (
         f"clang_rt.asan_dynamic-{arch}.dll",
@@ -149,12 +291,11 @@ def _copy_msvc_asan_runtime(cxx: Path, out_bin: Path, *, echo: bool) -> None:
         "vcruntime140_1.dll",
     ):
         source = cxx.parent / name
-        if not source.is_file():
-            continue
-        destination = out_bin.parent / name
-        shutil.copy2(source, destination)
-        if echo:
-            print(f"MSVC runtime: {relative(destination)}")
+        if source.is_file():
+            destination = out_bin.parent / name
+            shutil.copy2(source, destination)
+            if echo:
+                print(f"MSVC runtime: {relative(destination)}")
 
 
 def native_compile(
@@ -169,57 +310,36 @@ def native_compile(
     echo: bool = False,
     check: bool = False,
 ) -> int:
-    """Compile generated C++14 to a native executable for one build MODE.
-
-    "opt"/"omax" optimize with the host compiler (-O3 on GCC/Clang,
-    /O2 on MSVC). JEMALLOC is opt-in and Linux-only: it links the bundled
-    jemalloc and defines FRANKO_USE_JEMALLOC=1. macOS and Windows always
-    use the system allocator. "omax" also defines
-    FRANKO_BOUNDS_UNCHECKED=1. "asan" builds a debug binary with
-    AddressSanitizer (GCC/Clang -O1; MSVC keeps its default /O level),
-    which is only available on Windows through MSVC. Warnings are always
-    on (/W4, or -Wall -Wextra -Wpedantic -Wshadow). TARGET is the
-    compile.py --target value ("native" adds -march=native for
-    GCC/Clang; MSVC uses the portable baseline).
-
-    MSVC object files (and ASan PDBs) are written to a throwaway
-    directory so test suites only leave the .cpp and executable behind.
-    Optimized MSVC builds pass neither /Zi nor /PDB. With
-    COPY_ASAN_RUNTIME, an ASan MSVC build also copies
-    clang_rt.asan_dynamic-<arch>.dll plus vcruntime140.dll and
-    vcruntime140_1.dll next to the executable.
-
-    Returns the driver exit code (CHECK raises instead).
-    """
+    """Compile generated C++14 to a native executable."""
     cxx = find_cxx()
     msvc = cxx_family() == "msvc"
     optimized = mode in ("opt", "omax")
 
+    include = jemalloc_lib = None
     if jemalloc:
         if host_os() != "linux":
             raise ToolError("--jemalloc is only supported on Linux hosts")
-        if mode == "asan":
-            raise ToolError(
-                "--jemalloc requires -O or -Omax: AddressSanitizer builds "
-                "must use the system allocator"
-            )
-    include = jemalloc_lib = None
-    if jemalloc:
+        if not optimized:
+            raise ToolError("--jemalloc requires -O or -Omax")
         ensure_jemalloc_bundle()
         include, jemalloc_lib = jemalloc_paths()
+        if echo:
+            print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
+            print(f"jemalloc static library: {relative(jemalloc_lib)}")
 
-    mode_defines = []
+    defines = []
     if jemalloc:
-        mode_defines.append("-DFRANKO_USE_JEMALLOC=1")
+        defines.append("-DFRANKO_USE_JEMALLOC=1")
     if mode == "omax":
-        mode_defines.append("-DFRANKO_BOUNDS_UNCHECKED=1")
+        defines.append("-DFRANKO_BOUNDS_UNCHECKED=1")
     if msvc:
-        mode_defines = [flag.replace("-D", "/D", 1) for flag in mode_defines]
+        defines = [flag.replace("-D", "/D", 1) for flag in defines]
 
     obj_dir = Path(tempfile.mkdtemp(prefix="franko-msvc-")) if msvc else None
     try:
-        compile_flags = [
-            *mode_defines,
+        cmd = [
+            cxx,
+            *defines,
             *cxx_compile_flags(
                 optimize="3" if optimized else ASAN_OPTIMIZE,
                 sanitize=not optimized,
@@ -228,31 +348,25 @@ def native_compile(
             f"/I{INCLUDE_DIR}" if msvc else f"-I{INCLUDE_DIR}",
         ]
         if include is not None:
-            compile_flags.append(f"/I{include}" if msvc else f"-I{include}")
+            cmd.append(f"/I{include}" if msvc else f"-I{include}")
         if obj_dir is not None:
-            # Keep cl.exe out of the repository. PDBs only exist for the
-            # ASan build, which is the only MSVC mode that passes /Zi.
-            compile_flags.append(f"/Fo{obj_dir}{os.sep}")
+            cmd.append(f"/Fo{obj_dir}{os.sep}")
             if not optimized:
-                compile_flags.append(f"/Fd{obj_dir / 'compile.pdb'}")
+                cmd.append(f"/Fd{obj_dir / 'compile.pdb'}")
 
-        link_flags_and_output = [*link_flags(sanitize=not optimized)]
+        cmd.append(str(out_cpp))
         if jemalloc_lib is not None:
-            link_flags_and_output.append(str(jemalloc_lib))
-        if obj_dir is not None:
-            link_flags_and_output.append(f"/Fe{out_bin}")
-            if not optimized:
-                link_flags_and_output += [
-                    "/link",
-                    f"/PDB:{obj_dir / 'link.pdb'}",
-                ]
-        else:
-            link_flags_and_output += ["-o", str(out_bin)]
+            cmd.append(str(jemalloc_lib))
+        cmd += link_flags(sanitize=not optimized)
 
-        code = run(
-            [cxx, *compile_flags, str(out_cpp), *link_flags_and_output],
-            log_file=log, echo=echo, check=check,
-        )
+        if msvc:
+            cmd.append(f"/Fe{out_bin}")
+            if not optimized:
+                cmd += ["/link", f"/PDB:{obj_dir / 'link.pdb'}"]
+        else:
+            cmd += ["-o", str(out_bin)]
+
+        code = run(cmd, log_file=log, echo=echo, check=check)
         if code == 0 and copy_asan_runtime and msvc and not optimized:
             _copy_msvc_asan_runtime(cxx, Path(out_bin), echo=echo)
         return code
@@ -281,44 +395,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "-O",
+        "--optimize",
         dest="optimize",
         action="store_true",
-        help="optimized build (-O3 with GCC/Clang, /O2 with MSVC); "
-             "use --jemalloc on Linux to link the bundled allocator. "
-             "Without -O the default is AddressSanitizer (except with the "
-             "Windows g++/clang++ fallback, which does not support ASan "
-             "and defaults to this optimized build)",
+        help="optimized build (-O3 on GCC/Clang, /O2 on MSVC)",
     )
     mode.add_argument(
         "-Omax",
         dest="omax",
         action="store_true",
-        help="maximum-speed build like -O but with bounds and unsafe_cast "
-             "checking stripped (out-of-range access is undefined behavior)",
+        help="like -O with bounds and unsafe_cast checks stripped",
     )
     parser.add_argument(
         "--jemalloc",
         action="store_true",
-        help="Linux only, with -O or -Omax: link the bundled jemalloc instead "
-             "of the system allocator (FRANKO_USE_JEMALLOC=1). ASan builds "
-             "must use the system allocator",
+        help="Linux only, with -O or -Omax: link the bundled jemalloc",
     )
     parser.add_argument(
         "--target",
         metavar="TARGET",
-        help='build target: "native" (host <os>-<arch>, and a GCC/Clang '
-             "C++ compiler gets -march=native; MSVC has no equivalent), or "
-             "an explicit <os>-<arch> "
-             "(os in {linux, windows, macos}, arch in {x86_64, arm64}; "
-             "aliases darwin, x64, amd64, aarch64). Defaults to the host "
-             "<os>-<arch>. A target different from the host runs the Franko "
-             "transpilation only and skips the C++ compiler",
+        help='build target: "native" or <os>-<arch> '
+        "(linux/windows/macos, x86_64/arm64; aliases darwin, x64, "
+        "amd64, aarch64). Defaults to the host",
     )
     parser.add_argument(
         "--emit-json",
         action="store_true",
-        help="write per-pass AST/SAST and diagnostic JSON artifacts next to "
-             "the generated .cpp",
+        help="write per-pass AST/SAST and diagnostic JSON next to the .cpp",
     )
     return parser.parse_args(argv)
 
@@ -327,12 +430,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     host = host_target()
-    if args.target is None:
+    if args.target in (None, "native"):
         franko_target = host
-        march_native = False
-    elif args.target == "native":
-        franko_target = host
-        march_native = True
+        march_native = args.target == "native"
     else:
         franko_target = normalize_target(args.target)
         march_native = False
@@ -342,48 +442,32 @@ def main(argv: list[str] | None = None) -> int:
     if not source.is_absolute():
         source = Path.cwd() / source
     source = source.resolve()
-
     if not source.is_file():
         raise ToolError(f"source file not found: {args.source}")
-
-    if args.jemalloc and host_os() != "linux":
-        raise ToolError("--jemalloc is only supported on Linux hosts")
 
     import_dir = Path(args.p).expanduser()
     if not import_dir.is_absolute():
         import_dir = Path.cwd() / import_dir
     import_dir = import_dir.resolve()
 
-    # Tool checks happen before any build step so a missing JDK or compiler
-    # reports the real problem instead of a half-built output (the build
-    # stages below re-resolve the same tools). A cross target only
-    # transpiles, so no C++ compiler is required for it.
+    mode = (
+        "omax" if args.omax
+        else "opt" if args.optimize
+        else "asan" if cross_target
+        else default_build_mode()
+    )
+
+    if args.jemalloc:
+        if host_os() != "linux":
+            raise ToolError("--jemalloc is only supported on Linux hosts")
+        if mode == "asan":
+            raise ToolError("--jemalloc requires -O or -Omax")
+    use_jemalloc = args.jemalloc and not cross_target
+
     find_tool("java", JAVA_HINT)
     if not cross_target:
         find_cxx()
     ensure_toolchain()
-
-    # The default is ASan where it is supported. The Windows g++/clang++
-    # fallback has no MinGW ASan runtime, so it keeps the historical
-    # optimized default instead.
-    msvc = IS_WINDOWS and not cross_target and cxx_family() == "msvc"
-    defaulted_opt = IS_WINDOWS and not cross_target and not msvc
-    if args.omax:
-        mode = "omax"
-    elif args.optimize or defaulted_opt:
-        mode = "opt"
-    else:
-        mode = "asan"
-    if args.jemalloc and mode == "asan":
-        raise ToolError(
-            "--jemalloc requires -O or -Omax: AddressSanitizer builds must "
-            "use the system allocator"
-        )
-    use_jemalloc = args.jemalloc and not cross_target
-    include = jemalloc_lib = None
-    if use_jemalloc:
-        ensure_jemalloc_bundle()
-        include, jemalloc_lib = jemalloc_paths()
 
     base = source.with_suffix("") if source.suffix == ".fr" else source
     if args.o:
@@ -393,14 +477,12 @@ def main(argv: list[str] | None = None) -> int:
         cpp_out = cpp_out.resolve()
     else:
         cpp_out = Path(f"{base}.cpp")
-    # .exe on Windows, .out everywhere else. When -o is given, the binary
-    # follows the output .cpp stem instead of the source stem.
     bin_out = cpp_out.with_suffix(executable_suffix() or ".out")
 
     print(f"Franko target: {franko_target}")
     if march_native:
-        if msvc:
-            print("C++ target: native (MSVC has no -march=native; portable baseline ISA)")
+        if not cross_target and cxx_family() == "msvc":
+            print("C++ target: native (MSVC keeps its baseline ISA)")
         else:
             print("C++ target: native (-march=native)")
     print(f"Source: {relative(source)}")
@@ -410,36 +492,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Binary output: skipped (target {franko_target} differs from host {host})")
     else:
         print(f"Binary output: {relative(bin_out)}")
+
     allocator = "jemalloc" if use_jemalloc else "system allocator"
-    if IS_WINDOWS:
-        if mode == "omax":
-            print("Build mode: max-speed (/O2, system allocator, "
-                  "no bounds/unsafe_cast checks)")
-        elif mode == "opt":
-            if defaulted_opt:
-                print("Build mode: optimized (/O2, system allocator; "
-                      "AddressSanitizer unsupported by the g++/clang++ fallback)")
-            else:
-                print("Build mode: optimized (/O2, system allocator)")
-        else:
-            print("Build mode: debug + AddressSanitizer "
-                  "(default /O + /fsanitize=address, system allocator)")
-    elif mode == "omax":
-        print(f"Build mode: max-speed (-O3, {allocator}, "
-              "no bounds/unsafe_cast checks)")
+    if mode == "omax":
+        print(f"Build mode: max-speed ({allocator}, bounds checks stripped)")
     elif mode == "opt":
-        print(f"Build mode: optimized (-O3, {allocator})")
+        print(f"Build mode: optimized ({allocator})")
     else:
-        print("Build mode: debug + AddressSanitizer "
-              f"(-O1 -fsanitize=address, {allocator})")
-    if include is not None and jemalloc_lib is not None:
-        print(f"jemalloc header: {relative(include / 'jemalloc' / 'jemalloc.h')}")
-        print(f"jemalloc static library: {relative(jemalloc_lib)}")
+        print(f"Build mode: debug + AddressSanitizer ({allocator})")
     print()
 
-    # ------------------------------------------------------------
-    # Franko -> C++14 -> native executable, shared with the test runners.
-    # ------------------------------------------------------------
     franko_compile(
         source,
         cpp_out,
@@ -453,27 +515,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if cross_target:
         print()
-        print(f"Target {franko_target} differs from host {host}: "
-              "Franko -> C++ transpilation only, skipping the C++ build.")
-        print()
         print(f"Successfully transpiled to C++ output: {relative(cpp_out)}")
         return 0
 
     print()
-
-    native_compile(cpp_out, bin_out, mode=mode, jemalloc=use_jemalloc,
-                   copy_asan_runtime=True,
-                   target=args.target, echo=True, check=True)
-
+    native_compile(
+        cpp_out,
+        bin_out,
+        mode=mode,
+        jemalloc=use_jemalloc,
+        copy_asan_runtime=True,
+        target=args.target,
+        echo=True,
+        check=True,
+    )
     print()
     print(f"Successfully compiled to binary output: {relative(bin_out)}")
-    print()
-    if use_jemalloc:
-        print("✅ Compilation finished with statically linked jemalloc.")
-    elif mode == "asan":
-        print("✅ Compilation finished with system allocator + AddressSanitizer.")
-    else:
-        print("✅ Compilation finished with the system allocator.")
     return 0
 
 

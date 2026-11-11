@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
 """-Omax smoke coverage.
 
-The normal language suite exercises only the default build mode. This
-runner covers the third shipping runtime, -Omax, where static-array
-bounds checks (and the other range/bit/offset checks) are intentionally
-stripped:
-
     uv run python language_tests/run_omax_smoke.py
 
-It compiles, runs, and output-compares a representative set of success
-fixtures (static arrays, nested arrays, dynamic arrays of static rows,
-decayed static views, byte intrinsics), then compiles a nested static
-index fixture and checks the generated C++ uses bare indexing instead
-of franko_static_array_at. Runtime-abort fixtures are not run here:
-out-of-range access is undefined behavior in -Omax by design.
+Compiles and runs representative success fixtures with -Omax, then pins
+the bare static-index emission for the nested-array runtime case.
 """
 
 import sys
@@ -23,23 +14,18 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
-from franko_tools import (
+from franko_test import (
     Results,
-    ToolError,
-    compare_output,
+    case_paths,
     dump_file,
-    executable_suffix,
     read_text,
-    relative,
     remove_artifacts,
-    require_toolchain,
-    run_test_binary,
+    run_and_record,
 )
+from franko_tools import ToolError, relative, require_toolchain
 
-from compile import franko_compile, native_compile
+from compile import franko_compile
 
-# Success fixtures covering the emission paths that only -Omax changes
-# or that the new runtime is most sensitive to.
 SUCCESS_CASES = (
     "arr_static_sizes",
     "arr_nested",
@@ -52,112 +38,41 @@ SUCCESS_CASES = (
     "enums_defaults",
 )
 
-# Compiled (not run) to pin the bare static-index emission.
-BARE_STATIC_INDEX_CASE = (
-    ROOT / "language_tests/runtime/arrays/static_nested_index_oob.fr"
-)
-
-
-def out_cpp_for(src: Path) -> Path:
-    return Path(f"{src.with_suffix('')}.omax.cpp")
-
-
-def out_bin_for(src: Path) -> Path:
-    return Path(f"{src.with_suffix('')}.omax.bin{executable_suffix()}")
-
-
-def actual_for(src: Path) -> Path:
-    return Path(f"{src.with_suffix('')}.omax.actual")
-
-
-def log_for(src: Path) -> Path:
-    return Path(f"{src.with_suffix('')}.omax.compile.log")
+BARE_STATIC_INDEX_CASE = ROOT / "language_tests/runtime/arrays/static_nested_index_oob.fr"
 
 
 def main() -> int:
     require_toolchain()
-
     results = Results()
 
     for name in SUCCESS_CASES:
-        src = ROOT / "language_tests/success" / name / "main.fr"
-        expected = Path(f"{src.with_suffix('')}.expected")
-
-        print(f"=== {relative(src)} [omax] ===")
-
-        out_cpp = out_cpp_for(src)
-        out_bin = out_bin_for(src)
-        actual = actual_for(src)
-        log = log_for(src)
-        label = f"{relative(src)} [omax]"
-
-        failed = franko_compile(
-            src, out_cpp, mode="omax", log=log, echo=False,
-        )
-        if failed != 0:
-            print("---- compiler output: ----")
-            dump_file(log)
-            results.fail_case(f"{label} (Franko compile failed)")
-            continue
-
-        failed = native_compile(
-            out_cpp, out_bin, mode="omax",
-            log=log, echo=False,
-        )
-        if failed != 0:
-            print("---- C++ compiler output: ----")
-            dump_file(log)
-            results.fail_case(f"{label} (C++ compile failed)")
-            continue
-
-        if out_bin.stat().st_size == 0:
-            results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
-            continue
-
-        exit_code = run_test_binary(out_bin, [], None, actual)
-        if exit_code != 0:
-            print(f"---- runtime output (exit code {exit_code}): ----")
-            dump_file(actual)
-            results.fail_case(f"{label} (binary exited non-zero)")
-            continue
-
-        if not compare_output(actual, expected):
-            results.fail_case(f"{label} (output mismatch)")
-            continue
-
-        remove_artifacts(out_cpp, out_bin, log, actual)
-        results.pass_case(label)
+        src = ROOT / "language_tests" / "success" / name / "main.fr"
+        run_and_record(results, src, mode="omax", tag=".omax")
 
     src = BARE_STATIC_INDEX_CASE
+    case = case_paths(src, ".omax")
+    label = f"{relative(src)} [omax] (bare static index)"
     print(f"=== {relative(src)} [omax, bare static index] ===")
 
-    out_cpp = out_cpp_for(src)
-    log = log_for(src)
-    label = f"{relative(src)} [omax] (bare static index)"
-
-    failed = franko_compile(
-        src, out_cpp, mode="omax", log=log, echo=False,
-    )
-    if failed != 0:
+    code = franko_compile(src, case.cpp, mode="omax", log=case.log, echo=False)
+    if code != 0:
         print("---- compiler output: ----")
-        dump_file(log)
-        results.fail_case(f"{label} (Franko compile failed)")
+        dump_file(case.log)
+        results.record(label, "Franko compile failed")
     else:
-        generated = read_text(out_cpp)
-
+        generated = read_text(case.cpp)
         if "franko_static_array_at" in generated:
             print("---- generated C++ still calls franko_static_array_at: ----")
-            dump_file(out_cpp)
-            results.fail_case(f"{label} (checked helper emitted)")
+            dump_file(case.cpp)
+            results.record(label, "checked helper emitted")
         elif "VAR_g[VAR_i])[VAR_j]" not in generated:
             print("---- generated C++ does not contain bare VAR_g[VAR_i][VAR_j]: ----")
-            dump_file(out_cpp)
-            results.fail_case(f"{label} (bare indexing missing)")
+            dump_file(case.cpp)
+            results.record(label, "bare indexing missing")
         else:
-            results.pass_case(label)
+            results.record(label)
 
-    remove_artifacts(out_cpp, log)
-
+    remove_artifacts(case.cpp, case.log)
     return results.finish("✅ All -Omax smoke tests passed.")
 
 

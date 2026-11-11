@@ -196,7 +196,7 @@ jobs:
           }
           EOF
 
-          # Mirror the link pattern from compile.py (franko_tools.link_flags):
+          # Mirror the link pattern from compile.py (compile.link_flags):
           # archive by full path, -pthread, and -ldl.
           cc -O2 "$SMOKE" -I"$PREFIX/include" "$ARCHIVE" -pthread -ldl -o "$BIN"
 

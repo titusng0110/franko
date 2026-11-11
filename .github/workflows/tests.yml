@@ -22,6 +22,11 @@ jobs:
           - ubuntu-26.04
           - ubuntu-26.04-arm
 
+    env:
+      # Force MSVC on Windows so a MinGW fallback can never mask a broken
+      # image/toolchain. Empty on the other runners.
+      CXX: ${{ runner.os == 'Windows' && 'cl' || '' }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -94,10 +99,13 @@ jobs:
           python-version: '3.13'
           enable-cache: true
 
-      # Windows runners ship Visual Studio with the C++ workload, including
-      # the native x64/ARM64 tools and MSVC AddressSanitizer. franko_tools
-      # finds cl.exe through vswhere and calls vcvars64.bat/vcvarsarm64.bat,
-      # so no toolchain setup step is needed.
+      # Windows runners ship Visual Studio with the C++ workload; compile.py
+      # finds it through vswhere and loads vcvars64.bat/vcvarsarm64.bat.
+      - name: Verify MSVC cl.exe (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          uv run python -c
+          "import compile; print(compile.find_cxx()); assert compile.cxx_family() == 'msvc'"
 
       - name: Build Franko compiler toolchain
         run: uv run python update_toolchain.py

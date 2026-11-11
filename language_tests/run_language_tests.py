@@ -1,57 +1,22 @@
 #!/usr/bin/env python3
 """Franko language test suite.
 
-Replaces language_tests/run_language_tests.sh and
-language_tests/run_language_tests.ps1; the same command works on every
-platform:
-
     uv run python language_tests/run_language_tests.py
 
-Runs the full language test suite:
+Fixture layout:
 
-  language_tests/failure/<family>/<case>.fr
-    Must be REJECTED by the Franko compiler (non-zero exit).
-    Optional <case>.errors: every non-empty line (lines starting with '#'
-    are comments) must appear as a substring of the compiler output,
-    pinning the expected diagnostics.
-    Optional <case>.flags: every non-empty, non-comment line is
-    word-split and appended to the compiler invocation.
-    Helper files may live deeper (language_tests/failure/<family>/lib/);
-    they are imported by a fixture and are not run standalone.
+  failure/<family>/<case>.fr
+    Must be rejected. Optional <case>.errors pins diagnostics.
 
-  language_tests/success/<concept>/main.fr
-    Must compile, run, and produce stdout matching main.expected.
-    Optional main.warnings: every non-empty line must appear as a
-    substring of the compiler output, pinning expected warnings.
-    Optional main.forbidden: every non-empty line must NOT appear as a
-    substring of the compiler output, pinning warnings that must not
-    be emitted.
-    Optional main.flags: extra compiler flags, same format as above.
-    Optional main.args: each line is one command-line argument passed
-    verbatim to the binary (empty lines pass empty-string arguments; a
-    trailing newline does not add an argument).
+  success/<concept>/main.fr
+    Must compile, run, and match main.expected. Optional main.warnings,
+    main.forbidden, main.flags, and main.args.
 
-  language_tests/runtime/<family>/<case>.fr
-    Must compile, but the binary must EXIT NON-ZERO when run. Used for
-    documented runtime aborts such as uninitialized dynamic array access.
-    Runtime messages are intentionally not pinned: they may change
-    without breaking the suite.
+  runtime/<family>/<case>.fr
+    Must compile, but the binary must exit non-zero.
 
-Success golden outputs must be deterministic. Never put values whose
-rendering varies across runs or platforms (such as live pointers) in a
-.expected file; cover those through the runtime category, which is judged
-by exit status only.
-
-Generated artifacts (.cpp, .bin, .actual, compiler logs) are removed after
-a passing case and kept for inspection after a failure.
-
-Build-backed cases run in the default build mode (see
-franko_tools.default_build_mode): ASan/debug where supported, or the
-optimized mode with the Windows g++/clang++ fallback, which has no
-AddressSanitizer. Test builds use the system allocator; jemalloc is an
-opt-in compile.py flag on Linux. Both stages build through
-compile.franko_compile / compile.native_compile, shared with compile.py
-and the other suites.
+Generated artifacts are removed after a passing case and kept after a
+failure.
 """
 
 import sys
@@ -61,187 +26,25 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
-from franko_tools import (
-    Results,
-    ToolError,
-    check_no_substrings,
-    check_substrings,
-    compare_output,
-    default_build_mode,
-    dump_file,
-    executable_suffix,
-    read_flags,
-    read_run_args,
-    read_text,
-    relative,
-    remove_artifacts,
-    require_toolchain,
-    run_test_binary,
-)
+from franko_test import Results, run_and_record
+from franko_tools import ToolError, require_toolchain
 
-from compile import franko_compile, native_compile
+from compile import default_build_mode
 
 
 def main() -> int:
     require_toolchain()
     mode = default_build_mode()
-
     results = Results()
 
-    # ------------------------------------------------------------
-    # Failure cases: the compiler must reject the program (Java-only).
-    # ------------------------------------------------------------
     for src in sorted(ROOT.glob("language_tests/failure/*/*.fr")):
-        base = src.with_suffix("")
-        errors = Path(f"{base}.errors")
-        out_cpp = Path(f"{base}.cpp")
-        log = Path(f"{base}.compile.log")
-        label = f"{relative(src)} [{mode}]"
+        run_and_record(results, src, mode=mode, kind="failure")
 
-        print(f"=== {relative(src)} ===")
-
-        extra_flags = read_flags(Path(f"{base}.flags"))
-        accepted = franko_compile(
-            src, out_cpp, mode=mode, extra_flags=extra_flags,
-            log=log, echo=False,
-        )
-
-        if accepted == 0:
-            print("---- compiler output (accepted a failure program): ----")
-            dump_file(log)
-            remove_artifacts(out_cpp, log)
-            results.fail_case(label)
-            continue
-
-        if errors.is_file() and not check_substrings(errors, read_text(log)):
-            print("---- compiler output (missing expected diagnostics): ----")
-            dump_file(log)
-            results.fail_case(f"{label} (missing expected diagnostics)")
-            continue
-
-        remove_artifacts(log, out_cpp)
-        results.pass_case(label)
-
-    # ------------------------------------------------------------
-    # Success cases: compile, run, compare stdout with main.expected.
-    # ------------------------------------------------------------
     for src in sorted(ROOT.glob("language_tests/success/*/main.fr")):
-        base = src.with_suffix("")
-        expected = Path(f"{base}.expected")
-        warnings = Path(f"{base}.warnings")
-        forbidden = Path(f"{base}.forbidden")
-        out_cpp = Path(f"{base}.cpp")
-        out_bin = Path(f"{base}.bin{executable_suffix()}")
-        actual = Path(f"{base}.actual")
-        log = Path(f"{base}.compile.log")
-        label = f"{relative(src)} [{mode}]"
+        run_and_record(results, src, mode=mode)
 
-        print(f"=== {relative(src)} ===")
-
-        extra_flags = read_flags(Path(f"{base}.flags"))
-        run_args = read_run_args(Path(f"{base}.args"))
-
-        failed = franko_compile(
-            src, out_cpp, mode=mode, extra_flags=extra_flags,
-            log=log, echo=False,
-        )
-        if failed != 0:
-            print("---- compiler output: ----")
-            dump_file(log)
-            results.fail_case(f"{label} (Franko compile failed)")
-            continue
-
-        if warnings.is_file() and not check_substrings(warnings, read_text(log)):
-            print("---- compiler output (missing expected warnings): ----")
-            dump_file(log)
-            results.fail_case(f"{label} (missing expected warnings)")
-            continue
-
-        if forbidden.is_file() and not check_no_substrings(forbidden, read_text(log)):
-            print("---- compiler output (emitted forbidden warnings): ----")
-            dump_file(log)
-            results.fail_case(f"{label} (emitted forbidden warnings)")
-            continue
-
-        failed = native_compile(
-            out_cpp, out_bin, mode=mode,
-            log=log, echo=False,
-        )
-        if failed != 0:
-            print("---- C++ compiler output: ----")
-            dump_file(log)
-            results.fail_case(f"{label} (C++ compile failed)")
-            continue
-
-        if out_bin.stat().st_size == 0:
-            results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
-            continue
-
-        exit_code = run_test_binary(out_bin, run_args, None, actual)
-        if exit_code != 0:
-            print(f"---- runtime output (exit code {exit_code}): ----")
-            dump_file(actual)
-            results.fail_case(f"{label} (binary exited non-zero)")
-            continue
-
-        if not compare_output(actual, expected):
-            results.fail_case(f"{label} (output mismatch)")
-            continue
-
-        remove_artifacts(out_cpp, out_bin, log, actual)
-        results.pass_case(label)
-
-    # ------------------------------------------------------------
-    # Runtime cases: the program compiles but must abort at run time.
-    # ------------------------------------------------------------
     for src in sorted(ROOT.glob("language_tests/runtime/*/*.fr")):
-        base = src.with_suffix("")
-        out_cpp = Path(f"{base}.cpp")
-        out_bin = Path(f"{base}.bin{executable_suffix()}")
-        actual = Path(f"{base}.actual")
-        log = Path(f"{base}.compile.log")
-        label = f"{relative(src)} [{mode}]"
-
-        print(f"=== {relative(src)} ===")
-
-        extra_flags = read_flags(Path(f"{base}.flags"))
-
-        failed = franko_compile(
-            src, out_cpp, mode=mode, extra_flags=extra_flags,
-            log=log, echo=False,
-        )
-        if failed != 0:
-            print("---- compiler output: ----")
-            dump_file(log)
-            results.fail_case(f"{label} (Franko compile failed; runtime cases must compile)")
-            continue
-
-        failed = native_compile(
-            out_cpp, out_bin, mode=mode,
-            log=log, echo=False,
-        )
-        if failed != 0:
-            print("---- C++ compiler output: ----")
-            dump_file(log)
-            results.fail_case(f"{label} (C++ compile failed)")
-            continue
-
-        if out_bin.stat().st_size == 0:
-            results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
-            continue
-
-        # The abort itself is the assertion: any non-zero exit counts,
-        # including the negative code a signal produces.
-        exit_code = run_test_binary(out_bin, [], None, actual)
-        if exit_code == 0:
-            print("---- program output (expected a runtime failure, got exit 0): ----")
-            dump_file(actual)
-            remove_artifacts(out_cpp, out_bin, log, actual)
-            results.fail_case(f"{label} (expected a runtime failure, exit 0)")
-            continue
-
-        remove_artifacts(out_cpp, out_bin, log, actual)
-        results.pass_case(label)
+        run_and_record(results, src, mode=mode, kind="runtime")
 
     return results.finish("✅ All language tests passed.")
 
