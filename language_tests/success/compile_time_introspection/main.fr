@@ -44,7 +44,7 @@ struct HasStaticArray {
 }
 
 struct Mixed {
-    ptr<int32> link
+    view<int32> link
     int32 value
 }
 

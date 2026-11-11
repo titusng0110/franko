@@ -12,18 +12,16 @@ import "franko/io"
 // ============================================================
 
 func main() -> int32 {
-    // Rule 2: a view of an array of pointers locks the slots, not
+    // Rule 2: a view of an array of mviews locks the slots, not
     // the pointees.
     [byte] a;
-    a.init(4);
-    [ptr<[byte]>] store;
+    a.init(2);
+    [mview<[byte]>] store;
     store.init(1);
-    store[0] = getptr(a);
+    store[0] = getmview(a);
 
-    view<[ptr<[byte]>]> v = getview(store);
+    view<[mview<[byte]>]> v = getview(store);
     $($(v)[0])[0] = 5;
-    $($(v)[0]).uninit();
-    $($(v)[0]).init(2);
     print($(store[0]).length());
 
     // mview can overwrite the pointer slots; the extracted views stay

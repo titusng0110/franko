@@ -13,7 +13,7 @@ import "franko/io"
 //   - guard refinement: deref inside if (p != null) is valid
 //   - loop-guard refinement and provable null after loop exit
 //   - null passed to ptr parameters and returned from ptr functions
-//   - struct fields of pointer type default to null
+//   - struct fields of mview type default to null
 //   - equality-only pointer comparison (== and != only)
 //
 // Expected output is in null.expected.
@@ -21,7 +21,7 @@ import "franko/io"
 
 struct Box {
     int32 v
-    ptr<int32> link
+    mview<int32> link
 }
 
 ptr<int32> g
@@ -102,7 +102,7 @@ func main() -> int32 {
     // Struct field of pointer type defaults to null.
     Box bo
     print(bo.link == null)
-    bo.link = getptr(x)
+    bo.link = getmview(x)
     print(bo.link != null)
     $(bo.link) = 5
     print($(bo.link))

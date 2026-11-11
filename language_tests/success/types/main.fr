@@ -9,7 +9,7 @@ import "franko/io"
 // ============================================================
 
 struct Node {
-    ptr<Node> next
+    view<Node> next
     int32 val
 }
 

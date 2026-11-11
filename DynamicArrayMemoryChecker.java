@@ -1697,12 +1697,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void reportLeakIfNeeded(int arrayIndex, String where) {
-            if (state.escaped[arrayIndex]) {
-                return;
-            }
-
-            if (state.isShadowArray(arrayIndex)
-                    && assumptionMode == ASSUMPTION_INITED) {
+            if (state.escaped[arrayIndex] || state.isShadowArray(arrayIndex)) {
                 return;
             }
 
@@ -1859,26 +1854,6 @@ public final class DynamicArrayMemoryChecker {
                 long[] set = context.templates.newSet();
                 context.templates.set(set, MemoryTemplate.UNKNOWN);
                 exitReturnSets.add(set);
-                return;
-            }
-
-            if (!suppressed) {
-                SastNode decl = context.functionDecl(currentFunctionId);
-                String where = "return from function '"
-                        + functionName(decl == null ? null : decl.symbol)
-                        + "'";
-
-                diagnostics.push(decl == null ? SourceSpan.NONE : decl.span);
-
-                try {
-                    for (int i = state.realArrayCount;
-                            i < state.arrayCount;
-                            i++) {
-                        reportLeakIfNeeded(i, where);
-                    }
-                } finally {
-                    diagnostics.pop();
-                }
             }
         }
 

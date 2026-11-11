@@ -99,6 +99,157 @@ public class TypeChecker {
         return t.kind == SastTypeKind.PTR;
     }
 
+    public boolean containsOwnedPointer(SastType type) {
+        return containsOwnedPointer(type, new HashSet<>());
+    }
+
+    private boolean containsOwnedPointer(
+            SastType type,
+            Set<SastType> visiting
+    ) {
+        if (type == null) {
+            return false;
+        }
+
+        if (!visiting.add(type)) {
+            return false;
+        }
+
+        try {
+            if (type.kind == SastTypeKind.PTR) {
+                if (type.permission == PtrPermission.OWNER) {
+                    return true;
+                }
+
+                return containsOwnedPointer(type.referencedType, visiting);
+            }
+
+            if (type.kind == SastTypeKind.DYNAMIC_ARRAY
+                    || type.kind == SastTypeKind.STATIC_ARRAY) {
+                return containsOwnedPointer(type.elementType, visiting);
+            }
+
+            if (type.kind == SastTypeKind.STRUCT) {
+                if (type.structSymbol == null) {
+                    return false;
+                }
+
+                for (FieldSymbol field : type.structSymbol.fields) {
+                    if (containsOwnedPointer(field.type, visiting)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            if (type.kind == SastTypeKind.TUPLE) {
+                for (FieldSymbol field : type.fields) {
+                    if (containsOwnedPointer(field.type, visiting)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            return false;
+        } finally {
+            visiting.remove(type);
+        }
+    }
+
+    public boolean isForbiddenOwnedPointerAggregate(SastType type) {
+        if (type == null) {
+            return false;
+        }
+
+        if (type.kind == SastTypeKind.PTR) {
+            return isForbiddenOwnedPointerAggregate(type.referencedType);
+        }
+
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY
+                || type.kind == SastTypeKind.STATIC_ARRAY) {
+            return containsOwnedPointer(type.elementType);
+        }
+
+        if (type.kind == SastTypeKind.STRUCT
+                || type.kind == SastTypeKind.TUPLE) {
+            return containsOwnedPointer(type);
+        }
+
+        return false;
+    }
+
+    public boolean isForbiddenAggregateMemberType(SastType type) {
+        return containsOwnedPointer(type);
+    }
+
+    public void ensureNoOwnedPointerInAggregate(
+            SastType type,
+            String where
+    ) {
+        if (type != null && type.kind == SastTypeKind.STRUCT) {
+            return;
+        }
+
+        if (isForbiddenOwnedPointerAggregate(type)) {
+            reportOwnedPointerInAggregate(type, where);
+        }
+    }
+
+    public void ensureNoOwnedPointerAggregateMember(
+            SastType type,
+            String where
+    ) {
+        if (isForbiddenAggregateMemberType(type)) {
+            reportOwnedPointerInAggregate(type, where);
+        }
+    }
+
+    private void reportOwnedPointerInAggregate(
+            SastType type,
+            String where
+    ) {
+        String nestedArrayHint = wantsNestedArrayHint(type)
+                ? " If you mean to build an array of arrays, prefer a nested "
+                        + "dynamic array such as [[T]] over [ptr<[T]>]: a "
+                        + "nested dynamic array owns its inner arrays and "
+                        + "manages their storage and lifetime itself, so it is "
+                        + "safe and cannot leak or dangle the inner storage."
+                : "";
+
+        diagnostics.error(where
+                + " has type '"
+                + describeSafe(type)
+                + "': owning pointer type 'ptr<T>' cannot appear inside an "
+                + "array, struct, or tuple, recursively (including through "
+                + "view<T>/mview<T> referents). Embedded owning pointers let "
+                + "allocation and free responsibility escape into unrelated "
+                + "code, so the storage lifetime cannot be reasoned about. "
+                + "Keep owning pointers in direct variables, parameters, or "
+                + "globals; store view<T>/mview<T> in aggregates; use the "
+                + "pool allocator (franko/pool) for linked or node-like data."
+                + nestedArrayHint);
+    }
+
+    private boolean wantsNestedArrayHint(SastType type) {
+        if (type == null) {
+            return false;
+        }
+
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY
+                || type.kind == SastTypeKind.STATIC_ARRAY) {
+            return true;
+        }
+
+        if (type.kind == SastTypeKind.PTR) {
+            return wantsNestedArrayHint(type.referencedType);
+        }
+
+        return false;
+    }
+
     public boolean isNullType(SastType t) {
         return t.kind == SastTypeKind.NULL;
     }

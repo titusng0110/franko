@@ -6,12 +6,12 @@ import "franko/io"
 // Covers:
 //   - a local ptr<T> declaration is guaranteed null-initialized
 //   - a global ptr<T> variable is null-initialized
-//   - an ptr-typed struct field is null-initialized
+//   - a view-typed struct field is null-initialized
 // ============================================================
 
 struct Box {
     int32 v
-    ptr<int32> link
+    view<int32> link
 }
 
 ptr<int32> g

@@ -1,6 +1,6 @@
 final class MemoryDataflowDriver {
     static final int MAX_BRANCH_DEPTH = MemoryAnalysisContext.MAX_BRANCH_DEPTH;
-    static final int MAX_GUARD_CASE_WORK = 256;
+    static final int MAX_GUARD_CASE_WORK = 8192;
     enum DomainKind {
         NULL_STATE,
         DANGLING,

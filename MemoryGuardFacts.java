@@ -9,7 +9,7 @@ final class MemoryGuardFacts {
     static final byte FACT_LENGTH_NONZERO = 4;
 
     static final int MAX_CASES = 16;
-    static final int MAX_FACTS = 16;
+    static final int MAX_FACTS = 32;
 
     private static final class GuardCase {
         SastNode[] expressions = new SastNode[MAX_FACTS];

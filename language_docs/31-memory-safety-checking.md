@@ -126,8 +126,11 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 Current limitations of the pointer null-state check:
 
 - values of unknown provenance (parameters, field and element reads, and unresolved call results) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain pointer **variables** are tracked. A pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
-- pointers hidden inside returned structs or tuples are not tracked;
+- only plain pointer **variables** are tracked. Owning `ptr<T>` values cannot
+  be stored in struct fields, arrays, or tuples, but `view<T>`/`mview<T>`
+  values can, and a pointer held in a struct field, an array element, or
+  behind a `$(...)` chain is not tracked;
+- view/mview pointers hidden inside returned structs or tuples are not tracked (owning ptrs cannot be stored in aggregates);
 - global null-state writes are not tracked across functions;
 - only one level of pointer-to-pointer writes is followed;
 - deeply nested conditions may reduce precision;
@@ -277,7 +280,7 @@ Forwarding the pointer through a callee that stores it is also caught.
 
 The check intentionally does not detect:
 
-- pointers hidden inside returned structs or tuples;
+- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
 - pointer fields inside structs or other aggregates when the escape does not
   go through a direct global or out-parameter store;
 - global dynamic-array lifecycle;
@@ -326,10 +329,16 @@ uninitialized. A problem that appears only under one assumption is a warning;
 a problem that appears under both is an error. This is what catches
 use-after-`uninit` and double free inside a function even when every caller
 passes a valid array, while caller-side requirements still report passing an
-uninitialized array as an error. A missing `uninit` for a parameter that was
-already initialized at entry is not diagnosed because the caller owns that
-storage; a parameter the function itself initialized must still be released
-before returning.
+uninitialized array as an error.
+
+The two assumptions are used to find lifecycle misuse, not to compare the
+entry and exit states. A function may legitimately initialize an owner-array
+parameter it does not own and leave it initialized for the caller, and it may
+legitimately release caller-owned storage as part of its contract. End-state
+differences for a parameter are therefore not diagnosed. Missing-uninit
+warnings apply only to function-local arrays the function itself owns; a
+method that releases an array reached through `self` is likewise not treated
+as releasing a direct parameter.
 
 It does not yet track:
 
@@ -462,12 +471,17 @@ Intraprocedural: Dynamic array 'd' is still initialized at return from function 
 (missing explicit uninit)
 ```
 
-The warning is suppressed when the array escaped through a global, an
-aggregate store, or a call that may let it escape, because the compiler can no
-longer prove the state. The same audit runs at every explicit `return` and at
-the implicit end of the function. An owner-array parameter that was assumed
-already initialized at entry is exempt, because its storage belongs to the
-caller; a parameter the function itself initialized is not exempt.
+The warning is suppressed when the array escaped through a global or a call
+that may let it escape, because the compiler can no longer prove the state.
+The audit runs at every explicit `return` and at the implicit end of the
+function, but only for function-local arrays the function owns.
+
+Owner-array parameters are not checked for leaks: the function does not own
+their storage. A function may initialize an owner-array parameter it received
+uninitialized and leave it initialized for the caller, or it may release
+caller-owned storage as part of its contract. Entry/exit state differences for
+parameters are not diagnosed. The same applies to arrays reached through
+`self`; they belong to the receiver, not to the function.
 
 ### 31.10.8 Limitations
 

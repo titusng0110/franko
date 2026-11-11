@@ -1,11 +1,12 @@
-// Rule 2: a view of an array of pointers forbids overwriting the
+// Rule 2: a view of an array of mviews forbids overwriting the
 // pointer slots themselves.
 func main() -> int32 {
     [byte] a;
-    a.init(4);
-    [ptr<[byte]>] store;
+    a.init(2);
+    [mview<[byte]>] store;
     store.init(1);
-    view<[ptr<[byte]>]> v = getview(store);
-    $(v)[0] = getptr(a);
+    store[0] = getmview(a);
+    view<[mview<[byte]>]> v = getview(store);
+    $(v)[0] = getmview(a);
     return 0;
 }

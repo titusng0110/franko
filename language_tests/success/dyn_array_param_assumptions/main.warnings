@@ -1,2 +1,1 @@
 Possible use of uninitialized dynamic array 'p'
-Possible invalid free or double free of dynamic array 'p'

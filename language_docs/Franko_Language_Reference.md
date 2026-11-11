@@ -811,6 +811,12 @@ A declared variable type is valid if it is one of:
 - static array of a valid non-`void` type with valid size;
 - pointer of a valid non-`void` type.
 
+An **owning** pointer (`ptr<T>`) may not appear inside an array, struct, or
+tuple, recursively. `mview<T>` and `view<T>` are allowed in aggregates, but
+their referent types may not recursively contain an owning `ptr<T>`. This is a
+type-validity error, not a warning; see
+[Pointers](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+
 Valid:
 
 ```franko
@@ -829,6 +835,8 @@ Status st;
 ptr<int32> p;
 ptr<[int32]> ap;
 ptr<(int32, int32)> tp;
+struct Views { view<int32> a; mview<int32> b }
+[view<int32>] view_array;
 ```
 
 Invalid:
@@ -840,6 +848,11 @@ ptr<void> p;
 (int32, void) pair;      // invalid: void cannot be a tuple element
 struct S { void field }   // invalid: void cannot be a struct field
 T s;                       // invalid when no struct named T is declared
+[ptr<int32>] ptrs;        // invalid: owning ptr inside an array
+struct S { ptr<int32> p } // invalid: owning ptr inside a struct
+(ptr<int32>, int32) pair; // invalid: owning ptr inside a tuple
+[view<ptr<int32>>] nested; // invalid: a view whose referent is an owning ptr
+ptr<[ptr<int32>]> p;       // invalid: pointer to an array of owning ptrs
 ```
 
 Static arrays nest: every level of `[[byte, 20], 12]` must satisfy the static array size rules (see [Arrays](20-arrays.md)).
@@ -1491,7 +1504,7 @@ Valid:
 ```franko
 struct X {
     int32 n
-    ptr<X> next
+    view<X> next
 }
 
 X a;
@@ -2023,7 +2036,7 @@ Struct fields are declared with the same `type name` syntax as variables, inside
 struct X {
     int32 num = 0
     [int32, 4] xs
-    ptr<Y> next
+    view<Y> next
 }
 ```
 
@@ -2194,7 +2207,7 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - a declared enum type (see [Enums](30-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; or
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)); or
 - a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](26-structs.md); or
 - a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](28-tuples.md).
 
@@ -2555,6 +2568,44 @@ The check does not yet cover:
 - global dynamic-array lifecycle;
 - runtime bounds violations for nonconstant indexes;
 - allocation failure status of `init`/`init_zero`.
+
+## 20.7 Owning Pointers in Arrays
+
+An array may not store an owning `ptr<T>` value, directly or recursively:
+
+```franko
+[ptr<int32>] a;           // invalid
+[ptr<int32>, 4] b;        // invalid
+[[ptr<int32>]] c;         // invalid: nested
+[view<ptr<int32>>] d;     // invalid: the view's referent contains a ptr
+```
+
+`view<T>` and `mview<T>` elements are allowed, as long as their referent
+types do not recursively contain an owning pointer. This is a declaration-type
+error:
+
+```text
+owning pointer type 'ptr<T>' cannot appear inside an array, struct, or
+tuple, recursively (including through view<T>/mview<T> referents) ...
+```
+
+The reason is lifetime ownership: an owning pointer carries the right to
+allocate and free storage. Embedding one in an array lets that responsibility
+escape into unrelated code and makes the storage lifetime impossible to
+reason about. Keep owning pointers in direct variables, parameters, or
+globals, and use `view<T>`/`mview<T>` inside arrays. For linked or node-like
+data, use the pool allocator from `franko/pool`.
+
+When the goal is an array of arrays, prefer a nested array:
+
+```franko
+[[int32]] rows;       // good: the outer array owns the inner arrays
+[ptr<[int32]>] rows;  // invalid: ownership of inner arrays is passed around
+```
+
+A nested dynamic array owns its inner arrays, and `init`, `resize`, and
+`uninit` manage their storage and lifetime automatically. It is the safe way
+to represent a dynamically sized matrix or a list of buffers.
 
 ---
 
@@ -3932,10 +3983,9 @@ $($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
 ```
 
 ```franko
-view<[ptr<[byte]>]> v;
-$(v)[0] = getptr(x);         // blocked: the outer view locks its slots
-$($(v)[0])[0] = 5;           // allowed: through the inner ptr
-$($(v)[0]).init(10);         // allowed: full allocation rights on the pointee
+view<[mview<[byte]>]> v;
+$(v)[0] = getmview(x);       // blocked: the outer view locks its slots
+$($(v)[0])[0] = 5;           // allowed: through the inner mview
 ```
 
 Summary: `view` locks down the memory it directly touches. If that
@@ -4108,7 +4158,7 @@ the view refers to the local array itself.
 
 What remains untracked:
 
-- pointers hidden inside returned structs or tuples;
+- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
 - pointer fields inside structs or other aggregates when the escape does not
   go through a direct global or out-parameter store;
 - global dynamic-array lifecycle;
@@ -4121,8 +4171,8 @@ Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
 ## 25.12 Prefer Pool Indices to Linked Nodes
 
 For many programs, pool allocation is a safer and faster alternative to
-linked nodes built from pointers. Instead of storing a `ptr<Node> next`
-link, give each live object an index from a pool allocator, store object
+linked nodes built from pointers. Instead of a `ptr<Node> next` field
+(which is not allowed inside a struct), give each live object an index from a pool allocator, store object
 data in parallel payload arrays, and store links as `uint32` indices.
 The pool recycles indices deterministically, and its generational
 variants detect stale handles. The full API is in
@@ -4172,6 +4222,61 @@ func main() -> int32 {
 A node handle is now the pair of its pool index and (for a generational
 pool) its generation; releasing a slot invalidates stale handles instead
 of leaving a dangling pointer.
+
+## 25.13 Owning Pointers in Aggregates Are Forbidden
+
+An owning pointer `ptr<T>` cannot be stored inside an array, struct, or
+tuple, recursively. The compiler rejects the declaration at the legality
+checking stage:
+
+```franko
+[ptr<int32>] a;              // invalid: array element is an owning pointer
+[ptr<int32>, 8] b;           // invalid: same for a static array
+struct Node { ptr<Node> next } // invalid: owning pointer field
+(ptr<int32>, int32) pair;    // invalid: owning pointer tuple element
+[view<ptr<int32>>] views;    // invalid: the view's referent is a ptr
+ptr<[ptr<int32>]> nested;    // invalid: pointer to an array of owning pointers
+```
+
+These are allowed:
+
+```franko
+view<int32> v;               // views may be aggregate elements
+mview<int32> m;
+[view<int32>] views;
+struct Views { view<int32> a; mview<int32> b }
+ptr<ptr<int32>> pp;          // pointer to a standalone pointer slot
+view<ptr<int32>> vp;         // standalone view of a pointer slot
+```
+
+The distinction is ownership. An owning `ptr<T>` carries the right to
+allocate and free the storage it refers to. If it is embedded in an
+aggregate, that responsibility travels with the aggregate into unrelated
+code. The compiler can no longer tell where the storage is released, and a
+same-looking value may be an owner in one place and an alias in another.
+Keeping owning pointers out of aggregates keeps allocation and free
+responsibility local and makes lifetime reasoning tractable.
+
+Use these alternatives:
+
+- `view<T>` or `mview<T>` inside arrays, structs, and tuples when only
+  access is needed;
+- direct `ptr<T>` variables, parameters, and globals when ownership is
+  needed;
+- the pool allocator from `franko/pool` for linked or node-like structures.
+  Store slot indices, not owning pointers.
+
+For nested arrays, use nested dynamic arrays instead of arrays of owning
+pointers:
+
+```franko
+[[int32]] rows;        // good: the outer array owns the inner arrays
+[ptr<[int32]>] rows;   // rejected: ownership escapes through the array
+```
+
+A nested dynamic array owns its inner arrays. `init`, `resize`, and `uninit`
+manage the inner storage and lifetime as part of the outer array, so there is
+no separate allocation capability to leak or dangle.
 
 ---
 
@@ -4228,7 +4333,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`ptr<T>`, `mview<T>`, `view<T>`), tuple types, and other declared struct types.
+- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`mview<T>`, `view<T>`), tuple types, and other declared struct types. An owning `ptr<T>` field is not allowed, recursively; see [Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](22-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -4292,10 +4397,14 @@ Indirection breaks the cycle and is allowed:
 ```franko
 struct Node {
     int32 v
-    ptr<Node> next        // valid: pointer edge
-    [Node] kids       // valid: dynamic array edge
+    view<Node> next       // valid: view edge
+    [Node] kids           // valid: dynamic array edge
 }
 ```
+
+An owning `ptr<Node>` field would break the by-value cycle too, but it is
+rejected for lifetime reasons; use a view, an mview, a dynamic-array edge, or
+pool indices instead.
 
 ## 26.6 Assignability and Passing by Value
 
@@ -4378,7 +4487,8 @@ int32 scale = 2;
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
 - Aggregate literals construct assignable struct values as expressions; literal construction requires the struct to be value-assignable. Local field-wise declaration initializers initialize any struct, including pointer-only structs, one field at a time.
 - Field defaults are `constExpr` on primitive fields only.
-- A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); `ptr<...>` and dynamic-array fields break the cycle.
+- An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+- A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); a dynamic-array field breaks the cycle.
 - A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](35-unsupported-or-restricted-features.md).
@@ -4489,8 +4599,10 @@ The creation intrinsic enforces the receiver's permission: calling a
 (`getptr(...) requires allocation rights (ptr) over its target`), while
 a `view<X> self` method is callable through any receiver. When the
 receiver is an lvalue reached through an inner pointer (for example
-`$($(v)[0]).increment()` where the element is a `ptr<X>`), that inner
-pointer's own permission applies.
+`$($(v)[0]).increment()` where the element is an `mview<X>`), that inner
+pointer's own permission applies. Owning `ptr<X>` cannot be stored in an
+array, struct, or tuple; see
+[Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
 
 Rules:
 
@@ -4670,7 +4782,8 @@ Rules:
 - each element has a type;
 - each element may carry an optional declaration-site name;
 - tuple types may appear wherever an ordinary declared type is allowed;
-- `void` is not a valid tuple element type.
+- `void` is not a valid tuple element type;
+- an owning `ptr<T>` may not appear in a tuple element, recursively; see [Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
 
 A tuple declaration uses the tuple type followed by the variable name:
 
@@ -4998,7 +5111,8 @@ Tuples are deliberately limited to ordinary aggregate values:
 - no named tuple type aliases; write the tuple type at each declaration or
   signature;
 - at least two elements are required;
-- a tuple containing a static array or dynamic array is pointer-only.
+- a tuple containing a static array or dynamic array is pointer-only;
+- an owning `ptr<T>` cannot be a tuple element, recursively (see [Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)).
 
 Tuple values are produced by declarations, element writes, aggregate
 literals, whole-tuple assignment, and function returns.
@@ -5977,8 +6091,11 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 Current limitations of the pointer null-state check:
 
 - values of unknown provenance (parameters, field and element reads, and unresolved call results) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain pointer **variables** are tracked. A pointer held in a struct field, an array element, or behind a `$(...)` chain is not tracked;
-- pointers hidden inside returned structs or tuples are not tracked;
+- only plain pointer **variables** are tracked. Owning `ptr<T>` values cannot
+  be stored in struct fields, arrays, or tuples, but `view<T>`/`mview<T>`
+  values can, and a pointer held in a struct field, an array element, or
+  behind a `$(...)` chain is not tracked;
+- view/mview pointers hidden inside returned structs or tuples are not tracked (owning ptrs cannot be stored in aggregates);
 - global null-state writes are not tracked across functions;
 - only one level of pointer-to-pointer writes is followed;
 - deeply nested conditions may reduce precision;
@@ -6128,7 +6245,7 @@ Forwarding the pointer through a callee that stores it is also caught.
 
 The check intentionally does not detect:
 
-- pointers hidden inside returned structs or tuples;
+- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
 - pointer fields inside structs or other aggregates when the escape does not
   go through a direct global or out-parameter store;
 - global dynamic-array lifecycle;
@@ -6177,10 +6294,16 @@ uninitialized. A problem that appears only under one assumption is a warning;
 a problem that appears under both is an error. This is what catches
 use-after-`uninit` and double free inside a function even when every caller
 passes a valid array, while caller-side requirements still report passing an
-uninitialized array as an error. A missing `uninit` for a parameter that was
-already initialized at entry is not diagnosed because the caller owns that
-storage; a parameter the function itself initialized must still be released
-before returning.
+uninitialized array as an error.
+
+The two assumptions are used to find lifecycle misuse, not to compare the
+entry and exit states. A function may legitimately initialize an owner-array
+parameter it does not own and leave it initialized for the caller, and it may
+legitimately release caller-owned storage as part of its contract. End-state
+differences for a parameter are therefore not diagnosed. Missing-uninit
+warnings apply only to function-local arrays the function itself owns; a
+method that releases an array reached through `self` is likewise not treated
+as releasing a direct parameter.
 
 It does not yet track:
 
@@ -6313,12 +6436,17 @@ Intraprocedural: Dynamic array 'd' is still initialized at return from function 
 (missing explicit uninit)
 ```
 
-The warning is suppressed when the array escaped through a global, an
-aggregate store, or a call that may let it escape, because the compiler can no
-longer prove the state. The same audit runs at every explicit `return` and at
-the implicit end of the function. An owner-array parameter that was assumed
-already initialized at entry is exempt, because its storage belongs to the
-caller; a parameter the function itself initialized is not exempt.
+The warning is suppressed when the array escaped through a global or a call
+that may let it escape, because the compiler can no longer prove the state.
+The audit runs at every explicit `return` and at the implicit end of the
+function, but only for function-local arrays the function owns.
+
+Owner-array parameters are not checked for leaks: the function does not own
+their storage. A function may initialize an owner-array parameter it received
+uninitialized and leave it initialized for the caller, or it may release
+caller-owned storage as part of its contract. Entry/exit state differences for
+parameters are not diagnosed. The same applies to arrays reached through
+`self`; they belong to the receiver, not to the function.
 
 ### 31.10.8 Limitations
 
@@ -6477,9 +6605,9 @@ static int32_t mathx_bias()
 
 // @@mathx::add
 namespace NS_mathx {
-int32_t FUNC_add_da8ad4dd(int32_t VAR_a, int32_t VAR_b)
+int32_t FUNC_add_da8ad4dd(int32_t PARAM_a, int32_t PARAM_b)
 {
-    return VAR_a + VAR_b + mathx_bias();
+    return PARAM_a + PARAM_b + mathx_bias();
 }
 }
 // @@end
@@ -7260,9 +7388,11 @@ The compiler does not fully track dangling pointers or ownership. It detects
 returning a pointer to the current function's own frame storage, storing a
 pointer to frame or operator-borrowed storage into a global or caller-owned
 location, using a pointer after an inner block or loop body has ended, and
-forwarding a frame pointer through called functions that store it. Pointers hidden
-inside returned structs or tuples and pointer fields inside aggregates remain
-untracked. Decayed static-array views refer to their original array, so they
+forwarding a frame pointer through called functions that store it. Owning
+`ptr<T>` cannot be stored in aggregates, but `view<T>`/`mview<T>` pointers
+hidden inside returned structs or tuples and view/mview fields inside
+aggregates remain untracked. Decayed static-array views refer to their
+original array, so they
 are safe to return when that storage is a parameter or global; a decayed view
 of local array storage is still caught as a normal frame-storage escape.
 Escapes through very deep or recursive call chains may be missed. See
@@ -7359,6 +7489,22 @@ Tuple restrictions are documented in
 - Enums have no methods, no `OPERATOR_*` overloading, and no tuple-style destructuring.
 
 The complete enum reference is in [Enums](30-enums.md).
+
+## 35.20 Owning Pointers in Aggregates Are Rejected
+
+An owning `ptr<T>` cannot be stored inside an array, struct, or tuple,
+recursively. This includes `[ptr<T>]`, `[ptr<T>, N]`, struct fields of type
+`ptr<T>`, tuple elements of type `ptr<T>`, and `view<T>`/`mview<T>` types
+whose referents recursively contain an owning pointer. The declaration is
+rejected by type checking.
+
+The restriction keeps allocation and free responsibility from escaping into
+unrelated code. Use `view<T>`/`mview<T>` inside aggregates, keep owning
+pointers in direct variables, parameters, and globals, or use the pool
+allocator in `franko/pool` for linked or node-like data. For an array of
+arrays, use a nested array such as `[[T]]`; the outer array owns the inner
+arrays and manages their lifetime. See
+[Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
 
 ---
 

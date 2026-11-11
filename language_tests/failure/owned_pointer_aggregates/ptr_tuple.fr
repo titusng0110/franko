@@ -1,0 +1,4 @@
+func main() -> int32 {
+    (ptr<int32>, int32) pair
+    return 0
+}

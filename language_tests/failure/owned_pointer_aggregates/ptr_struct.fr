@@ -1,0 +1,8 @@
+struct Node {
+    ptr<Node> next
+    int32 value
+}
+
+func main() -> int32 {
+    return 0
+}

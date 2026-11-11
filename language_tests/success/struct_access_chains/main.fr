@@ -4,13 +4,13 @@ import "franko/io"
 // LANGUAGE TEST: Struct Member Access Chains
 // ============================================================
 // Covers: s.field on a local, $(p).field (assigned through),
-// $(a.next).field (an ptr-typed field dereferenced then a
+// $(a.next).field (an mview-typed field dereferenced then a
 // field accessed), xs[i].field on a static array of structs, and
 // getptr(s.field) used to write a field through its pointer.
 // ============================================================
 
 struct Link {
-    ptr<Link> next
+    mview<Link> next
     int32 val
 }
 
@@ -30,13 +30,13 @@ func main() -> int32 {
     $(p).v = 10;
     print($(p).v);
 
-    // $(a.next).field: dereference an ptr-typed field, then
+    // $(a.next).field: dereference an mview-typed field, then
     // access a field of the struct it points to.
     Link l1;
     Link l2;
     l1.val = 100;
     l2.val = 200;
-    l1.next = getptr(l2);
+    l1.next = getmview(l2);
     $(l1.next).val = 222;
     print(l1.val, " "); print($(l1.next).val);
 

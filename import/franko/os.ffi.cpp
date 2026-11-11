@@ -28,7 +28,7 @@
 //
 //   - Signatures must match the prototypes Cpp14Codegen emits for the
 //     declarations in ../os.fr, including the NS_os::NS_posix /
-//     NS_os::NS_win32 namespace nesting and the VAR_-prefixed parameter
+//     NS_os::NS_win32 namespace nesting and the PARAM_-prefixed parameter
 //     names. The stub bodies in ../os.fr are never emitted when the bridge
 //     is active; the bridge definitions are the only definitions.
 //
@@ -72,28 +72,28 @@
 // @@os::posix::read
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_read_bee7609e(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
+int64_t FUNC_read_bee7609e(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint64_t PARAM_count)
 {
     uint8_t* buffer;
     uint32_t length;
 
-    if (VAR_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+    if (PARAM_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
             return -1;
         }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
-    } else if (VAR_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(VAR_buf.data);
-        length = VAR_buf.count;
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
+    } else if (PARAM_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(PARAM_buf.data);
+        length = PARAM_buf.count;
     } else {
         return -1;
     }
 
-    if (VAR_count > static_cast<uint64_t>(length)) {
+    if (PARAM_count > static_cast<uint64_t>(length)) {
         franko_panic("os::posix::read: count exceeds buffer length");
     }
-    return static_cast<int64_t>(::read(VAR_fd, buffer, static_cast<size_t>(VAR_count)));
+    return static_cast<int64_t>(::read(PARAM_fd, buffer, static_cast<size_t>(PARAM_count)));
 }
 }
 }
@@ -102,28 +102,28 @@ int64_t FUNC_read_bee7609e(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, 
 // @@os::posix::write
 namespace NS_os {
 namespace NS_posix {
-int64_t FUNC_write_7c35a12f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf, uint64_t VAR_count)
+int64_t FUNC_write_7c35a12f(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint64_t PARAM_count)
 {
     uint8_t* buffer;
     uint32_t length;
 
-    if (VAR_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+    if (PARAM_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
             return -1;
         }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
-    } else if (VAR_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(VAR_buf.data);
-        length = VAR_buf.count;
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
+    } else if (PARAM_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(PARAM_buf.data);
+        length = PARAM_buf.count;
     } else {
         return -1;
     }
 
-    if (VAR_count > static_cast<uint64_t>(length)) {
+    if (PARAM_count > static_cast<uint64_t>(length)) {
         franko_panic("os::posix::write: count exceeds buffer length");
     }
-    return static_cast<int64_t>(::write(VAR_fd, buffer, static_cast<size_t>(VAR_count)));
+    return static_cast<int64_t>(::write(PARAM_fd, buffer, static_cast<size_t>(PARAM_count)));
 }
 }
 }
@@ -132,9 +132,9 @@ int64_t FUNC_write_7c35a12f(int32_t VAR_fd, Franko_Fat_Pointer<uint8_t> VAR_buf,
 // @@os::win32::GetStdHandle
 namespace NS_os {
 namespace NS_win32 {
-uint64_t FUNC_GetStdHandle_882a7740(uint32_t VAR_nStdHandle)
+uint64_t FUNC_GetStdHandle_882a7740(uint32_t PARAM_nStdHandle)
 {
-    HANDLE h = ::GetStdHandle(static_cast<DWORD>(VAR_nStdHandle));
+    HANDLE h = ::GetStdHandle(static_cast<DWORD>(PARAM_nStdHandle));
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(h));
 }
 }
@@ -144,31 +144,31 @@ uint64_t FUNC_GetStdHandle_882a7740(uint32_t VAR_nStdHandle)
 // @@os::win32::ReadFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, Franko_Thin_Pointer<uint32_t> VAR_bytesRead)
+int32_t FUNC_ReadFile_e28eed45(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, Franko_Thin_Pointer<uint32_t> PARAM_bytesRead)
 {
     uint8_t* buffer;
     uint32_t length;
 
-    if (VAR_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+    if (PARAM_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
             return 0;
         }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
-    } else if (VAR_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(VAR_buf.data);
-        length = VAR_buf.count;
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
+    } else if (PARAM_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(PARAM_buf.data);
+        length = PARAM_buf.count;
     } else {
         return 0;
     }
 
-    if (static_cast<uint64_t>(VAR_count) > static_cast<uint64_t>(length)) {
+    if (static_cast<uint64_t>(PARAM_count) > static_cast<uint64_t>(length)) {
         franko_panic("os::win32::ReadFile: count exceeds buffer length");
     }
     DWORD n = 0;
-    BOOL ok = ::ReadFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), buffer, static_cast<DWORD>(VAR_count), &n, nullptr);
-    if (VAR_bytesRead.data != nullptr) {
-        *VAR_bytesRead.data = static_cast<uint32_t>(n);
+    BOOL ok = ::ReadFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(PARAM_hFile)), buffer, static_cast<DWORD>(PARAM_count), &n, nullptr);
+    if (PARAM_bytesRead.data != nullptr) {
+        *PARAM_bytesRead.data = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
 }
@@ -179,31 +179,31 @@ int32_t FUNC_ReadFile_e28eed45(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> V
 // @@os::win32::WriteFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_WriteFile_0f393550(uint64_t VAR_hFile, Franko_Fat_Pointer<uint8_t> VAR_buf, uint32_t VAR_count, Franko_Thin_Pointer<uint32_t> VAR_bytesWritten)
+int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, Franko_Thin_Pointer<uint32_t> PARAM_bytesWritten)
 {
     uint8_t* buffer;
     uint32_t length;
 
-    if (VAR_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data == nullptr) {
+    if (PARAM_buf.mode == 3) {
+        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
             return 0;
         }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(VAR_buf.data)->count;
-    } else if (VAR_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(VAR_buf.data);
-        length = VAR_buf.count;
+        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
+        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
+    } else if (PARAM_buf.mode == 2) {
+        buffer = static_cast<uint8_t*>(PARAM_buf.data);
+        length = PARAM_buf.count;
     } else {
         return 0;
     }
 
-    if (static_cast<uint64_t>(VAR_count) > static_cast<uint64_t>(length)) {
+    if (static_cast<uint64_t>(PARAM_count) > static_cast<uint64_t>(length)) {
         franko_panic("os::win32::WriteFile: count exceeds buffer length");
     }
     DWORD n = 0;
-    BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(VAR_hFile)), buffer, static_cast<DWORD>(VAR_count), &n, nullptr);
-    if (VAR_bytesWritten.data != nullptr) {
-        *VAR_bytesWritten.data = static_cast<uint32_t>(n);
+    BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(PARAM_hFile)), buffer, static_cast<DWORD>(PARAM_count), &n, nullptr);
+    if (PARAM_bytesWritten.data != nullptr) {
+        *PARAM_bytesWritten.data = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
 }

@@ -891,7 +891,7 @@ type, signature key, mangling, overload identity, or emitted C++ name.
   conflict).
 - `METHOD` — adds `owner: StructSymbol`; emitted as
   `METH_<name>_OFSTRUCT_<Struct>_<hex>` free functions taking a
-  `Franko_Thin_Pointer<STRUCT_X>` for `VAR_self` (the self permission is
+  `Franko_Thin_Pointer<STRUCT_X>` for `PARAM_self` (the self permission is
   compile-time only). **Method overload identity excludes the `self`
   parameter's type**: name + the remaining parameter types must be unique, so
   a struct may not carry both a `view<X> self` and an `mview<X> self` method
@@ -906,7 +906,7 @@ field/method clash detection), `EnumVariant`, `EnumSymbol`, and
 - `FieldSymbol.tupleIndex` is `-1` for ordinary fields and the element index
   for tuple fields; `emittedName()` returns `_<index>` for tuple fields and
   `FIELD_<name>` for ordinary fields, keeping emitted member names unambiguous
-  with the other `VAR_`/`STRUCT_`/`FUNC_` prefixes.
+  with the other `VAR_`/`PARAM_`/`STRUCT_`/`FUNC_` prefixes.
 - `StructSymbol.isTuple` marks the synthetic `TUPLE_<hash>` symbols created
   for tuple types (no namespace, no methods).
 - `EnumSymbol` stores name, namespace, backing kind, ordered variants, with
@@ -952,7 +952,7 @@ a `view<[...]>` parameter whose shape matches the literal's
 decay cost 2); raw-decl→symbol registration maps;
 name-clash warnings (struct and enum names live in a separate namespace so clashing
 with variables/functions is legal — the C++ backend's kind prefixes
-`VAR_`/`FUNC_`/`STRUCT_`/`ENUM_` keep generated names unambiguous); and diagnostic
+`VAR_`/`PARAM_`/`FUNC_`/`STRUCT_`/`ENUM_` keep generated names unambiguous); and diagnostic
 delegation to `DiagnosticBag`. `splitNamespacePath` is a static helper also
 used by `Cpp14Codegen`.
 `resolveOperatorMethodWithLiterals` is a separate, operator-only overload
@@ -1230,7 +1230,13 @@ for these names so the dedicated message is the only one.
 #### `DeclarationChecker`
 Declaration-level legality: declared types must be legal Franko types
 (primitive, enum, array, ptr/mview/view, struct, tuple; void and arrays-as-values
-rejected). Const declarations require `TypeChecker.isValueAssignableType`
+rejected). Every declared variable, parameter, return type, struct field, and
+tuple element also passes the aggregate-ownership ban in `TypeChecker`:
+owning `ptr<T>` is rejected recursively inside arrays, structs, and tuples,
+including behind `view<T>`/`mview<T>` referents. `checkDeclaredType` calls
+`ensureNoOwnedPointerInAggregate` at the declaration boundary, and
+`validateStructType` calls `ensureNoOwnedPointerAggregateMember` per field.
+Const declarations require `TypeChecker.isValueAssignableType`
 (`Const variable/global/parameter '…' has type '…'; const is only allowed for
 value-assignable types`), and an uninitialized local const whose type is not
 fully default-initialized warns (`Const variable '…' has no initializer and
@@ -1354,7 +1360,17 @@ by-value cycles terminate. Enum helpers: `isEnumType`, `enumBackingKind`,
 `isValuePreservingEnumToIntegerCast` (exact backing kind or
 `isValuePreservingIntegerWidening`), and `wrapBigIntegerToPrimitive`
 (unsigned modulo `2^bits`, signed modulo `2^bits` then subtract `2^bits`
-in the upper half) for implicit wrapping. `isIntegral` is `false` for
+in the upper half) for implicit wrapping. `TypeChecker` also owns the aggregate-ownership ban:
+`containsOwnedPointer` recursively walks arrays, structs, tuples, and pointer
+referents looking for an owning `ptr<T>`; `isForbiddenOwnedPointerAggregate`
+implements the declaration rule; and
+`ensureNoOwnedPointerInAggregate` / `ensureNoOwnedPointerAggregateMember`
+report the clear lifetime/pool/nested-array diagnostic. The ban rejects
+`[ptr<T>]`, `[ptr<T>, N]`, struct fields of `ptr<T>`, tuple elements of
+`ptr<T>`, and `view<T>`/`mview<T>` referents that recursively contain an
+owning pointer. Standalone `ptr<ptr<T>>` remains legal.
+
+`isIntegral` is `false` for
 enums, which rejects arithmetic, bitwise, shifts, logical operators,
 conditions, and compound assignment naturally.
 Tuple types participate in the same recursive rules: a tuple is a
@@ -1421,7 +1437,7 @@ The snapshot-demand estimate is a recursive statement count: a block sums its
 statements; an `if` reserves 2 slots without an `else` and 3 with one, plus its
 branch bodies; a `while` reserves 2 plus its body and update statements;
 `break`/`continue` reserve 1; other statements reserve 0. `depth` is incremented
-only until `MAX_BRANCH_DEPTH = 12` to bound the estimate walk; the estimate
+only until `MAX_BRANCH_DEPTH = 13` to bound the estimate walk; the estimate
 itself does not stop at the depth limit. Build time may use
 `IdentityHashMap`/`ArrayList`; all checker hot paths use the resulting flat
 arrays and dense indices.
@@ -1437,7 +1453,11 @@ is a static or dynamic array also sets `containsOwnerArrayPointer`. A
 recurses into its element type; a struct recurses through its fields under a
 per-struct `visiting` set (re-entering a struct already on the stack contributes
 no flags, terminating recursive field cycles); a tuple recurses through its
-fields. Results are cached by `SastType`. The cache is coarse: it classifies
+fields. Because owning `ptr<T>` cannot appear inside an array, struct, or
+tuple, `containsOwnerArrayPointer` is always false for struct and tuple
+shapes; the recursive walk still tracks `containsPointer` and
+`containsDynamicArray` for view/mview fields and dynamic-array fields.
+Results are cached by `SastType`. The cache is coarse: it classifies
 values that can carry hidden memory but creates no field-sensitive state.
 
 #### `MemoryCallGraph`
@@ -1495,7 +1515,7 @@ IDs are stable for the lifetime of the context.
 
 #### `MemoryDataflowDriver`
 Shared statement/expression traversal for the three checkers. It owns the
-branch depth (`MAX_BRANCH_DEPTH = 12`), the flat loop-frame stack, the linked
+branch depth (`MAX_BRANCH_DEPTH = 13`), the flat loop-frame stack, the linked
 break/continue snapshot lists, the function exit-slot list, and the
 infeasible-path suppression flag. `MemoryDataflowDriver.Domain` is a tagged
 dispatch class: `DomainKind` selects the null-state, dangling, or dynamic-array
@@ -1523,7 +1543,7 @@ diagnostic is an error only when every analyzed case reports it as an error;
 otherwise it is a warning. Dedup bitsets are restored before each case so one
 case's reported site does not suppress another case's diagnostic. With no
 `else`, every feasible condition-false case becomes a fallthrough state. At
-depth ≥ 12, `checkIfPathInsensitive` keeps the pre-case behavior.
+depth ≥ 13, `checkIfPathInsensitive` keeps the pre-case behavior.
 
 `while` analyzes the body once per feasible true case. Zero-trip exits are all
 feasible false cases; each back-edge forms candidate exits from the feasible
@@ -1548,9 +1568,9 @@ expression traversal in `DiagnosticBag.push/pop`.
 #### `MemoryGuardFacts` / `MemoryDiagnosticMerge`
 `MemoryGuardFacts` is the shared condition normalizer. It converts `!`, `&&`,
 `||`, constants, null comparisons, and `length()` comparisons into a bounded
-DNF: at most 16 cases and 16 facts per case. Contradictory cases are dropped,
+DNF: at most 16 cases and 32 facts per case. Contradictory cases are dropped,
 and overflow falls back to one unconstrained case. The driver also has a
-per-function work budget (`MAX_GUARD_CASE_WORK = 256`): once multi-case
+per-function work budget (`MAX_GUARD_CASE_WORK = 8192`): once multi-case
 expansion would exceed it, the remaining conditions use one unconstrained case,
 bounding nested-condition blow-up. `MemoryDiagnosticMerge`
 merges per-case diagnostics with the all-cases warning rule and rewrites a
@@ -2753,8 +2773,8 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
 ### 4.3 Name mangling
 - `FUNC_<name>_<8hex>` / `METH_<name>_OFSTRUCT_<Struct>_<8hex>`,
   where the 8-hex hash is the low 32 bits of a 64-bit FNV-1a hash of the canonical `signatureKey()`.
-- `STRUCT_<name>`, `VAR_<name>`, `FIELD_<name>`, `NS_<segment>`
-  prefixes/namespaces make kinds unambiguous, so struct names may legally
+- `STRUCT_<name>`, `VAR_<name>`, `PARAM_<name>`, `FIELD_<name>`,
+  `NS_<segment>` prefixes/namespaces make kinds unambiguous, so struct names may legally
   clash with variable/function names and field names cannot collide with
   generated identifier prefixes. Synthetic tuple structs use `TUPLE_<8hex>`
   directly rather than the `STRUCT_` prefix; ordinary user structs keep
@@ -2763,7 +2783,7 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
   fields emit as `FIELD_<name>`.
 - Hoisted literal storage uses `STRLIT_<16hex>` for strings and
   `ARRLIT_<16hex>` for arrays. These are literal-backed storage objects, not
-  variables, so they are emitted without the `VAR_` prefix.
+  variables, so they are emitted without the `VAR_`/`PARAM_` prefix.
 - Every generated hash uses the same `FNV_OFFSET_BASIS` seed and the
   64-bit FNV prime in `Mangler`. Function, method, and tuple names keep the
   low 32 bits as 8 hex digits; string and array literal names keep the full
@@ -2806,7 +2826,9 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
 - Bridge ABI: a thin pointer parameter or return (`ptr<T>`, `mview<T>`, or
   `view<T>` whose pointee is not an array) is `Franko_Thin_Pointer<T>` in
   the C++ bridge; use `.data` for the raw pointer and null checks. A
-  pointer to an array is `Franko_Fat_Pointer<element(T)>`.
+  pointer to an array is `Franko_Fat_Pointer<element(T)>`. Generated
+  prototypes name parameters `PARAM_<name>` (variables and globals stay
+  `VAR_<name>`), so bridge definitions use the same prefix for consistency.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
 
@@ -2882,8 +2904,9 @@ non-variable dereference (for example `$(f())`) is diagnosed as an error when
 the resolved return state is definitely null and as a warning when it is
 possibly null. Concrete deref diagnostics are only produced for a variable,
 call, cast, or nested deref expression. Struct/tuple field and array-element
-nullness, pointers hidden in returned aggregates, global null-state writes, and
-deeper-than-one-level pointer-cell aliasing remain out of scope.
+nullness (for the view/mview pointers that aggregates may still contain),
+view/mview pointers hidden in returned aggregates, global null-state writes,
+and deeper-than-one-level pointer-cell aliasing remain out of scope.
 
 ### 4.6 Analyzer vs checker split
 - `ExpressionAnalyzer` (SemanticAnalyzer phase) **infers**: it resolves
@@ -2973,7 +2996,8 @@ its own rights.
 
 **Nested propagation.** Permissions propagate through value types and stop at
 pointer boundaries: `view<[[T]]>` locks every array level, while
-`view<[ptr<[T]>]>` locks only the stored pointer slots. Lifecycle intrinsics
+`view<[mview<[T]>]>` locks only the stored mview slots. Owning `ptr<T>` cannot
+be stored in an array, struct, or tuple at all (§4.29). Lifecycle intrinsics
 need an OWNER region at every level, so `mview` never grants `init`/`resize`/
 `uninit`, even on an inner array.
 
@@ -3137,8 +3161,9 @@ still compiles):
 ```
 
 Struct definitions are emitted after a forward-declaration block
-(`struct STRUCT_X;` for every declared struct), so `ptr<X>` fields and
-pointer references may name structs declared later in source order.
+(`struct STRUCT_X;` for every declared struct), so `view<X>`/`mview<X>`
+fields and pointer references may name structs declared later in source order.
+Owning `ptr<X>` cannot be stored in a field (§4.29).
 
 **Entry-point wrapper and argv.** The generated C++ entry point is not the
 Franko `main` itself: the Franko `main` emits its mangled name like every
@@ -3333,10 +3358,12 @@ Each pass reuses the existing summaries and BFS, and writes into its own
 `DiagnosticBag`. The two bags are merged per
 `(span, code)`: an error survives only when both runs report an error at that
 site; otherwise the result is a warning. This catches callee-local
-use-after-`uninit`, double free, and possible use-before-init, while
-single-assumption invalid free and missing-uninit become warnings. Shadow
-arrays are excluded from block-local clearing and from the `ASSUME_INITED`
-missing-uninit audit (the caller owns an already-initialized parameter).
+use-after-`uninit`, double free, and possible use-before-init. End-state
+differences for owner-array parameters are not diagnosed: a function may
+legitimately initialize a caller-owned array and leave it initialized, or
+release caller-owned storage as part of its contract. Missing-uninit remains a
+local-array warning (the local destructor owns the buffer). Shadow arrays are
+excluded from block-local clearing and from leak/end-state audits.
 
 **Lifecycle lattice.** One value per tracked local dynamic array:
 `UNINITED`, `INITED`, or `MAYBE_INITED`; a separate `FreedState`
@@ -3683,10 +3710,14 @@ pointer, can it carry a dynamic array, and can it carry an owner pointer to an
 array. Primitives, `void`, `null`, and function types are empty. The walk stops
 at pointer and dynamic-array boundaries, recurses through static-array elements,
 struct fields, and tuple elements, and uses a per-struct visiting set so a
-recursive field cycle contributes no flags instead of looping. This is enough
-to classify direct memory effects and to know whether a value can hide memory,
-without introducing field-sensitive state. It is a build-stage cache keyed by
-`SastType`; the checkers never mutate it.
+recursive field cycle contributes no flags instead of looping. The
+aggregate-ownership ban makes `containsOwnerArrayPointer` false for every struct
+and tuple shape, because an owner pointer cannot be stored inside an aggregate;
+view/mview fields and dynamic-array fields still contribute `containsPointer`
+and `containsDynamicArray`. This is enough to classify direct memory effects and
+to know whether a value can hide memory, without introducing field-sensitive
+state. It is a build-stage cache keyed by `SastType`; the checkers never mutate
+it.
 
 ## 4.21 Interprocedural summaries and bounded BFS
 
@@ -3790,7 +3821,7 @@ bugs.
 | Dynamic use after uninit | error `Intraprocedural: Use of dynamic array 'd' after uninit` | warning `Intraprocedural: Dynamic array 'd' may be uninitialized or freed` |
 | Invalid free | error `Intraprocedural: Invalid free of dynamic array 'd' (uninit before init)` | warning `Intraprocedural: Possible invalid free or double free of dynamic array 'd'` |
 | Double free | error `Intraprocedural: Double free of dynamic array 'd' (uninit called twice)` | warning `Intraprocedural: Possible invalid free or double free of dynamic array 'd'` |
-| Missing explicit uninit | — | warning `Intraprocedural: Dynamic array 'd' is still initialized at <where> (missing explicit uninit)` / `... may still be initialized ...` |
+| Missing explicit uninit | — | warning `Intraprocedural: Dynamic array 'd' is still initialized at <where> (missing explicit uninit)` / `... may still be initialized ...`; local arrays only, never owner-array parameters |
 | Callee requires initialized | error `Interprocedural: Passing uninitialized dynamic array 'd' to function 'f' which requires initialized storage` / `Passing freed dynamic array ...` | warning `Interprocedural: Passing possibly uninitialized dynamic array 'd' to function 'f' which requires initialized storage` |
 | Buffer invalidation | error `Intraprocedural: Pointer 'e' was invalidated by resize of dynamic array 'd'` | warning `Intraprocedural: Pointer 'e' may have been invalidated by resize or uninit of dynamic array 'd'` |
 | Cross-parameter alias | — | warning `Interprocedural: Call to 'f' may invalidate array 'd' while using element pointer 'e' into it` |
@@ -3813,7 +3844,8 @@ Deliberately out of scope:
 
 - scalar definite assignment / uninitialized primitive reads;
 - nullness of struct fields and array elements;
-- pointers hidden inside returned structs or tuples;
+- view/mview pointers hidden inside returned structs or tuples (owning ptrs
+  cannot be stored in aggregates);
 - full field-sensitive tracking of struct fields;
 - nested dynamic-array path tracking below the outermost tracked array;
 - global dynamic-array lifecycle tracking;
@@ -3991,6 +4023,41 @@ same declaration plus initializer statements as a non-const twin, so `const`
 has no C++ or runtime effect. `include/FrankoRuntime.hpp` and both program
 templates are unchanged.
 
+## 4.29 Owned pointers in aggregates (legality ban)
+
+Franko forbids an owning `ptr<T>` anywhere inside an array, struct, or tuple,
+recursively. The check is implemented in `TypeChecker.containsOwnedPointer`
+and `TypeChecker.isForbiddenOwnedPointerAggregate`; reporting is centralized in
+`TypeChecker.reportOwnedPointerInAggregate`.
+
+The recursion follows array element types, struct fields, tuple elements, and
+the referents of `view<T>`/`mview<T>`/`ptr<T>`. It therefore rejects:
+
+- `[ptr<T>]`, `[ptr<T>, N]`, and any nested array whose elements reach a ptr;
+- `struct S { ptr<T> field }`, and fields or tuple elements whose type is a
+  `view<T>`/`mview<T>` over a type that recursively contains a ptr;
+- tuple elements of owning pointer type;
+- `ptr<[...]>` and `ptr<Struct>` when the referent aggregate contains a ptr.
+
+It deliberately still allows standalone `ptr<ptr<T>>`, `ptr<view<ptr<T>>>`,
+and direct `view<T>`/`mview<T>` variables, parameters, and returns. A direct
+`ptr<T>` field of an aggregate is rejected because the field is inside the
+aggregate; a standalone `ptr<T>` is not.
+
+`DeclarationChecker.checkDeclaredType` invokes
+`ensureNoOwnedPointerInAggregate` for every declared variable, parameter, and
+return type; `DeclarationChecker.validateStructType` invokes
+`ensureNoOwnedPointerAggregateMember` per field. Tuple types are validated at
+their real declaration/use sites because synthetic tuple struct declarations
+are skipped. The diagnostic explains the lifetime/allocation philosophy,
+suggests `view<T>`/`mview<T>` or `franko/pool`, and points out that an array of
+arrays should use `[[T]]` rather than `[ptr<[T]>]` because a nested dynamic
+array owns and manages its inner arrays.
+
+`MemoryShapeIndex` relies on this invariant: `containsOwnerArrayPointer` is
+always false for struct and tuple shapes, so those shapes no longer OR that
+flag from their fields.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -4071,9 +4138,16 @@ language_tests/failure/dyn_array_interprocedural/
 language_tests/success/dyn_array_interprocedural/
 language_tests/failure/dyn_array_param_assumptions/
 language_tests/success/dyn_array_param_assumptions/
+language_tests/success/dyn_array_self_uninit/
 language_tests/success/dyn_array_compound_guards/
 language_tests/failure/dyn_array_buffer/
 language_tests/success/dyn_array_buffer/
+```
+
+Owned-pointer aggregate fixtures:
+
+```text
+language_tests/failure/owned_pointer_aggregates/
 ```
 
 Enum fixtures:
@@ -4119,6 +4193,7 @@ owner argument.
 | Add or change an enum | `Franko.g4` (`enumDecl`/`enumVariant`) + `FrankoASTVisitor` + `AstNode.java` (`AstKind.ENUM_DECL`/`AstKind.ENUM_VARIANT`) + `ASTSerializer` + `Desugarer` (`desugarEnumDecl`) + `Symbol.java` (`EnumSymbol`/`EnumVariant`) + `SastType.java` (`SastType.ENUM`) + `SymbolTable`/`NamespaceSymbol` (enum tables, shared type-name namespace) + `SemanticTypeResolver.analyzeEnumDecl` + `DeclarationSelector` (quiet pre-registration) + `SemanticAnalyzer` (registration/lowering) + `ExpressionAnalyzer` (variant access, enum casts) + `TypeChecker`/`ExpressionChecker` (assignment, comparison, cast matrix) + `ArrayLiteralLowerer`/`OverloadResolution` (enum literals) + `CompileTimeIntrinsics` (`#is_enum`) + `Cpp14Codegen`/`Cpp14ExpressionEmitter` (wrapper emission, `from_integer_checked`, casts, enum literals) + `SastSerializer` + `InactiveDeclarationPruner`/`MemoryShapeIndex`/`PrivateIdentifierLinter` + §4.27 |
 | Change overload applicability/cost rules | `OverloadResolution` + `SymbolTable` |
 | Add a type rule shared by checks | `TypeChecker` |
+| Change the owned-pointer-in-aggregate ban | `TypeChecker.containsOwnedPointer`/`isForbiddenOwnedPointerAggregate` + `DeclarationChecker.checkDeclaredType`/`validateStructType` + §4.29 |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
 | Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
 | Add or change a guard fact | `MemoryGuardFacts` + the domain `guardCaseFeasible`/`applyGuardCase` hooks + `MemoryDataflowDriver` case analysis |

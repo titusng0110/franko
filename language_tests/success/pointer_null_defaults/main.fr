@@ -9,7 +9,7 @@
 import "franko/io"
 
 struct Holder {
-    ptr<int32> p
+    view<int32> p
     mview<int32> m
     view<int32> v
 }
@@ -27,15 +27,15 @@ func main() -> int32 {
     print(h.m == null)
     print(h.v == null)
 
-    (ptr<int32> link, int32 value) t
+    (view<int32> link, int32 value) t
     print(t.link == null)
 
-    [ptr<int32>, 3] ps
+    [view<int32>, 3] ps
     print(ps[0] == null)
     print(ps[1] == null)
     print(ps[2] == null)
 
-    [ptr<int32>] dps
+    [view<int32>] dps
     dps.init(2)
     dps.resize(4)
     print(dps[0] == null)

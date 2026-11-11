@@ -119,7 +119,7 @@ Struct fields are declared with the same `type name` syntax as variables, inside
 struct X {
     int32 num = 0
     [int32, 4] xs
-    ptr<Y> next
+    view<Y> next
 }
 ```
 

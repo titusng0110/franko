@@ -1,0 +1,19 @@
+import "franko/io"
+
+struct Buffer {
+    [int32] data
+
+    func release(ptr<Buffer> self) -> void {
+        $(self).data.uninit()
+    }
+}
+
+func main() -> int32 {
+    Buffer b
+    b.data.init(1)
+    b.data[0] = 9
+    print(b.data[0])
+    b.release()
+    print(b.data.length())
+    return 0
+}

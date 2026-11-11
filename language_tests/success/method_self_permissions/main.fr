@@ -45,13 +45,5 @@ func main() -> int32 {
     b.bump();
     print($(v).peek());
 
-    // A pointer extracted from a view region owns its pointee again.
-    [ptr<Box>] arr;
-    arr.init(1);
-    arr[0] = getptr(b);
-    view<[ptr<Box>]> av = getview(arr);
-    $($(av)[0]).bump();
-    print(b.x);
-
     return 0;
 }

@@ -94,9 +94,11 @@ The compiler does not fully track dangling pointers or ownership. It detects
 returning a pointer to the current function's own frame storage, storing a
 pointer to frame or operator-borrowed storage into a global or caller-owned
 location, using a pointer after an inner block or loop body has ended, and
-forwarding a frame pointer through called functions that store it. Pointers hidden
-inside returned structs or tuples and pointer fields inside aggregates remain
-untracked. Decayed static-array views refer to their original array, so they
+forwarding a frame pointer through called functions that store it. Owning
+`ptr<T>` cannot be stored in aggregates, but `view<T>`/`mview<T>` pointers
+hidden inside returned structs or tuples and view/mview fields inside
+aggregates remain untracked. Decayed static-array views refer to their
+original array, so they
 are safe to return when that storage is a parameter or global; a decayed view
 of local array storage is still caught as a normal frame-storage escape.
 Escapes through very deep or recursive call chains may be missed. See
@@ -193,3 +195,19 @@ Tuple restrictions are documented in
 - Enums have no methods, no `OPERATOR_*` overloading, and no tuple-style destructuring.
 
 The complete enum reference is in [Enums](30-enums.md).
+
+## 35.20 Owning Pointers in Aggregates Are Rejected
+
+An owning `ptr<T>` cannot be stored inside an array, struct, or tuple,
+recursively. This includes `[ptr<T>]`, `[ptr<T>, N]`, struct fields of type
+`ptr<T>`, tuple elements of type `ptr<T>`, and `view<T>`/`mview<T>` types
+whose referents recursively contain an owning pointer. The declaration is
+rejected by type checking.
+
+The restriction keeps allocation and free responsibility from escaping into
+unrelated code. Use `view<T>`/`mview<T>` inside aggregates, keep owning
+pointers in direct variables, parameters, and globals, or use the pool
+allocator in `franko/pool` for linked or node-like data. For an array of
+arrays, use a nested array such as `[[T]]`; the outer array owns the inner
+arrays and manages their lifetime. See
+[Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).

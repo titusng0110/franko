@@ -1337,6 +1337,10 @@ public class Cpp14Codegen {
             );
         }
 
+        if (symbol.kind == SymbolKind.PARAMETER) {
+            return "PARAM_" + symbol.name;
+        }
+
         if (symbol.kind == SymbolKind.GLOBAL) {
             if (symbol.literalBytes != null || symbol.literalValues != null) {
                 return qualify(symbol.namespace, symbol.name);

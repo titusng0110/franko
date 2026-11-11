@@ -5,8 +5,8 @@ import "franko/io"
 // ============================================================
 // Covers struct and tuple literal expressions, shuffled field
 // order, defaults, partial and empty literals, nested literals,
-// view fields initialized from array literals, and pointer fields
-// initialized with getptr(...).
+// view fields initialized from array literals, and view fields
+// initialized with getview(...).
 // ============================================================
 
 struct Literal {
@@ -29,7 +29,7 @@ struct ViewHolder {
 }
 
 struct PtrHolder {
-    ptr<int32> value
+    view<int32> value
 }
 
 func main() -> int32 {
@@ -86,7 +86,7 @@ func main() -> int32 {
     print($(h.values)[2] + h.ok)
 
     int32 n = 9
-    PtrHolder ph = PtrHolder { value = getptr(n) }
+    PtrHolder ph = PtrHolder { value = getview(n) }
     print(ph.value != null)
 
     return 0

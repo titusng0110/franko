@@ -8,31 +8,31 @@ static int32_t mathx_bias()
 
 // @@mathx::add
 namespace NS_mathx {
-int32_t FUNC_add_da8ad4dd(int32_t VAR_a, int32_t VAR_b)
+int32_t FUNC_add_da8ad4dd(int32_t PARAM_a, int32_t PARAM_b)
 {
-    return VAR_a + VAR_b + mathx_bias();
+    return PARAM_a + PARAM_b + mathx_bias();
 }
 }
 // @@end
 
 // @@mathx::scale
 namespace NS_mathx {
-int32_t FUNC_scale_da8ad4dd(int32_t VAR_value, int32_t VAR_factor)
+int32_t FUNC_scale_da8ad4dd(int32_t PARAM_value, int32_t PARAM_factor)
 {
-    return VAR_value * VAR_factor + mathx_bias();
+    return PARAM_value * PARAM_factor + mathx_bias();
 }
 }
 // @@end
 
 // @@mathx::bump
 namespace NS_mathx {
-int32_t FUNC_bump_a0a001d7(Franko_Thin_Pointer<int32_t> VAR_value)
+int32_t FUNC_bump_a0a001d7(Franko_Thin_Pointer<int32_t> PARAM_value)
 {
-    if (VAR_value.data == nullptr) {
+    if (PARAM_value.data == nullptr) {
         return -1;
     }
-    *VAR_value.data = *VAR_value.data + 1;
-    return *VAR_value.data;
+    *PARAM_value.data = *PARAM_value.data + 1;
+    return *PARAM_value.data;
 }
 }
 // @@end

@@ -4,7 +4,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 
 final class MemoryAnalysisContext {
-    static final int MAX_BRANCH_DEPTH = 12;
+    static final int MAX_BRANCH_DEPTH = 13;
 
     final SastNode root;
     final MemoryCallGraph callGraph;

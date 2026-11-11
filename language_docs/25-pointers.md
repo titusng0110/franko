@@ -266,10 +266,9 @@ $($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
 ```
 
 ```franko
-view<[ptr<[byte]>]> v;
-$(v)[0] = getptr(x);         // blocked: the outer view locks its slots
-$($(v)[0])[0] = 5;           // allowed: through the inner ptr
-$($(v)[0]).init(10);         // allowed: full allocation rights on the pointee
+view<[mview<[byte]>]> v;
+$(v)[0] = getmview(x);       // blocked: the outer view locks its slots
+$($(v)[0])[0] = 5;           // allowed: through the inner mview
 ```
 
 Summary: `view` locks down the memory it directly touches. If that
@@ -442,7 +441,7 @@ the view refers to the local array itself.
 
 What remains untracked:
 
-- pointers hidden inside returned structs or tuples;
+- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
 - pointer fields inside structs or other aggregates when the escape does not
   go through a direct global or out-parameter store;
 - global dynamic-array lifecycle;
@@ -455,8 +454,8 @@ Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
 ## 25.12 Prefer Pool Indices to Linked Nodes
 
 For many programs, pool allocation is a safer and faster alternative to
-linked nodes built from pointers. Instead of storing a `ptr<Node> next`
-link, give each live object an index from a pool allocator, store object
+linked nodes built from pointers. Instead of a `ptr<Node> next` field
+(which is not allowed inside a struct), give each live object an index from a pool allocator, store object
 data in parallel payload arrays, and store links as `uint32` indices.
 The pool recycles indices deterministically, and its generational
 variants detect stale handles. The full API is in
@@ -506,3 +505,58 @@ func main() -> int32 {
 A node handle is now the pair of its pool index and (for a generational
 pool) its generation; releasing a slot invalidates stale handles instead
 of leaving a dangling pointer.
+
+## 25.13 Owning Pointers in Aggregates Are Forbidden
+
+An owning pointer `ptr<T>` cannot be stored inside an array, struct, or
+tuple, recursively. The compiler rejects the declaration at the legality
+checking stage:
+
+```franko
+[ptr<int32>] a;              // invalid: array element is an owning pointer
+[ptr<int32>, 8] b;           // invalid: same for a static array
+struct Node { ptr<Node> next } // invalid: owning pointer field
+(ptr<int32>, int32) pair;    // invalid: owning pointer tuple element
+[view<ptr<int32>>] views;    // invalid: the view's referent is a ptr
+ptr<[ptr<int32>]> nested;    // invalid: pointer to an array of owning pointers
+```
+
+These are allowed:
+
+```franko
+view<int32> v;               // views may be aggregate elements
+mview<int32> m;
+[view<int32>] views;
+struct Views { view<int32> a; mview<int32> b }
+ptr<ptr<int32>> pp;          // pointer to a standalone pointer slot
+view<ptr<int32>> vp;         // standalone view of a pointer slot
+```
+
+The distinction is ownership. An owning `ptr<T>` carries the right to
+allocate and free the storage it refers to. If it is embedded in an
+aggregate, that responsibility travels with the aggregate into unrelated
+code. The compiler can no longer tell where the storage is released, and a
+same-looking value may be an owner in one place and an alias in another.
+Keeping owning pointers out of aggregates keeps allocation and free
+responsibility local and makes lifetime reasoning tractable.
+
+Use these alternatives:
+
+- `view<T>` or `mview<T>` inside arrays, structs, and tuples when only
+  access is needed;
+- direct `ptr<T>` variables, parameters, and globals when ownership is
+  needed;
+- the pool allocator from `franko/pool` for linked or node-like structures.
+  Store slot indices, not owning pointers.
+
+For nested arrays, use nested dynamic arrays instead of arrays of owning
+pointers:
+
+```franko
+[[int32]] rows;        // good: the outer array owns the inner arrays
+[ptr<[int32]>] rows;   // rejected: ownership escapes through the array
+```
+
+A nested dynamic array owns its inner arrays. `init`, `resize`, and `uninit`
+manage the inner storage and lifetime as part of the outer array, so there is
+no separate allocation capability to leak or dangle.

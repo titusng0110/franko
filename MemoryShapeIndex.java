@@ -85,16 +85,14 @@ final class MemoryShapeIndex {
         if (type.kind == SastTypeKind.TUPLE) {
             boolean pointer = false;
             boolean dynamic = false;
-            boolean ownerArray = false;
 
             for (FieldSymbol field : type.fields) {
                 Shape fieldShape = shapeOf(field.type);
                 pointer |= fieldShape.containsPointer;
                 dynamic |= fieldShape.containsDynamicArray;
-                ownerArray |= fieldShape.containsOwnerArrayPointer;
             }
 
-            return new Shape(pointer, dynamic, ownerArray);
+            return new Shape(pointer, dynamic, false);
         }
 
         return NONE;
@@ -107,17 +105,15 @@ final class MemoryShapeIndex {
 
         boolean pointer = false;
         boolean dynamic = false;
-        boolean ownerArray = false;
 
         for (FieldSymbol field : symbol.fields) {
             Shape fieldShape = shapeOf(field.type);
             pointer |= fieldShape.containsPointer;
             dynamic |= fieldShape.containsDynamicArray;
-            ownerArray |= fieldShape.containsOwnerArrayPointer;
         }
 
         visiting.remove(symbol);
 
-        return new Shape(pointer, dynamic, ownerArray);
+        return new Shape(pointer, dynamic, false);
     }
 }

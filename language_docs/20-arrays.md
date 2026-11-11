@@ -200,3 +200,41 @@ The check does not yet cover:
 - global dynamic-array lifecycle;
 - runtime bounds violations for nonconstant indexes;
 - allocation failure status of `init`/`init_zero`.
+
+## 20.7 Owning Pointers in Arrays
+
+An array may not store an owning `ptr<T>` value, directly or recursively:
+
+```franko
+[ptr<int32>] a;           // invalid
+[ptr<int32>, 4] b;        // invalid
+[[ptr<int32>]] c;         // invalid: nested
+[view<ptr<int32>>] d;     // invalid: the view's referent contains a ptr
+```
+
+`view<T>` and `mview<T>` elements are allowed, as long as their referent
+types do not recursively contain an owning pointer. This is a declaration-type
+error:
+
+```text
+owning pointer type 'ptr<T>' cannot appear inside an array, struct, or
+tuple, recursively (including through view<T>/mview<T> referents) ...
+```
+
+The reason is lifetime ownership: an owning pointer carries the right to
+allocate and free storage. Embedding one in an array lets that responsibility
+escape into unrelated code and makes the storage lifetime impossible to
+reason about. Keep owning pointers in direct variables, parameters, or
+globals, and use `view<T>`/`mview<T>` inside arrays. For linked or node-like
+data, use the pool allocator from `franko/pool`.
+
+When the goal is an array of arrays, prefer a nested array:
+
+```franko
+[[int32]] rows;       // good: the outer array owns the inner arrays
+[ptr<[int32]>] rows;  // invalid: ownership of inner arrays is passed around
+```
+
+A nested dynamic array owns its inner arrays, and `init`, `resize`, and
+`uninit` manage their storage and lifetime automatically. It is the safe way
+to represent a dynamically sized matrix or a list of buffers.

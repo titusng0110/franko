@@ -3,18 +3,17 @@ import "franko/io"
 // ============================================================
 // LANGUAGE TEST: Mixed Pointer Fields in a Struct
 // ============================================================
-// Covers: a struct may mix plain value fields, a scalar pointer
-// field, a dynamic-array pointer field, and a static-array view
-// field. Copying the struct copies the non-owning pointers; writes
-// through the copies reach the original storage. The scalar pointer
-// is a raw C++ pointer, the array pointers are fat pointers, and
-// both default-initialize to null.
+// Covers: a struct may mix plain value fields, a scalar mview field,
+// a dynamic-array mview field, and a static-array view field. Copying
+// the struct copies the non-owning pointers; writes through the copies
+// reach the original storage. The scalar mview is a thin pointer, the
+// array mview is a fat pointer, and both default-initialize to null.
 // ============================================================
 
 struct Holder {
     int32 id
-    ptr<int32> single
-    ptr<[int32]> dyn
+    mview<int32> single
+    mview<[int32]> dyn
     view<[int32, 3]> fixed
 }
 
@@ -38,8 +37,8 @@ func main() -> int32 {
 
     Holder h
     h.id = 5
-    h.single = getptr(x)
-    h.dyn = getptr(d)
+    h.single = getmview(x)
+    h.dyn = getmview(d)
     h.fixed = getview(s)
 
     Holder h2 = h

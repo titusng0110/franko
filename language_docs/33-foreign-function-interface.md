@@ -92,9 +92,9 @@ static int32_t mathx_bias()
 
 // @@mathx::add
 namespace NS_mathx {
-int32_t FUNC_add_da8ad4dd(int32_t VAR_a, int32_t VAR_b)
+int32_t FUNC_add_da8ad4dd(int32_t PARAM_a, int32_t PARAM_b)
 {
-    return VAR_a + VAR_b + mathx_bias();
+    return PARAM_a + PARAM_b + mathx_bias();
 }
 }
 // @@end

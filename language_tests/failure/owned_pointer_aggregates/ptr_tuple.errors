@@ -1,0 +1,2 @@
+owning pointer type 'ptr<T>' cannot appear inside an
+pool allocator

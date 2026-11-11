@@ -1,0 +1,5 @@
+func main() -> int32 {
+    [ptr<int32>] a
+    [ptr<int32>, 2] b
+    return 0
+}

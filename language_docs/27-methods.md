@@ -102,8 +102,10 @@ The creation intrinsic enforces the receiver's permission: calling a
 (`getptr(...) requires allocation rights (ptr) over its target`), while
 a `view<X> self` method is callable through any receiver. When the
 receiver is an lvalue reached through an inner pointer (for example
-`$($(v)[0]).increment()` where the element is a `ptr<X>`), that inner
-pointer's own permission applies.
+`$($(v)[0]).increment()` where the element is an `mview<X>`), that inner
+pointer's own permission applies. Owning `ptr<X>` cannot be stored in an
+array, struct, or tuple; see
+[Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
 
 Rules:
 

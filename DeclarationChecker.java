@@ -154,6 +154,7 @@ public class DeclarationChecker {
         SastType type,
         String where
     ) {
+        types.ensureNoOwnedPointerInAggregate(type, where);
         checkDeclaredType(type, where, new HashMap<>(), new HashSet<>());
     }
 
@@ -325,6 +326,8 @@ public class DeclarationChecker {
                 diagnostics.error(fieldWhere + " cannot have void type");
                 continue;
             }
+
+            types.ensureNoOwnedPointerAggregateMember(field.type, fieldWhere);
 
             checkDeclaredType(
                 field.type,

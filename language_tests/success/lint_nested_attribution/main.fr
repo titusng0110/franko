@@ -7,18 +7,18 @@ import "franko/io"
 // path crosses another dereference, the operation belongs to the
 // extracted inner pointer, and the outer variable is credited
 // read-only. v is declared ptr but only ever read from (the
-// lifecycle work happens on the extracted inner ptr), so the
+// writes happen through the extracted inner mview), so the
 // linter tells it to become a view (see main.warnings).
 // ============================================================
 
 func main() -> int32 {
     [byte] d;
-    [ptr<[byte]>] store;
+    d.init(2);
+    [mview<[byte]>] store;
     store.init(1);
-    store[0] = getptr(d);
+    store[0] = getmview(d);
 
-    ptr<[ptr<[byte]>]> v = getptr(store);
-    $($(v)[0]).init(2);
+    ptr<[mview<[byte]>]> v = getptr(store);
     $($(v)[0])[0] = 9;
     print($(store[0]).length());
     print($(store[0])[0]);

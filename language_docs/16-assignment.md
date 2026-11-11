@@ -111,7 +111,7 @@ Valid:
 ```franko
 struct X {
     int32 n
-    ptr<X> next
+    view<X> next
 }
 
 X a;

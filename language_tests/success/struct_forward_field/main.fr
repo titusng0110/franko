@@ -7,14 +7,14 @@ import "franko/io"
 // program, including structs declared later in the file (doc 25.4);
 // the backend forward-declares every struct and orders definitions
 // topologically over by-value field dependencies (doc 25.11), so both
-// a by-value field of a later struct and an ptr field of a later
+// a by-value field of a later struct and an mview field of a later
 // struct compile and work.
 // ============================================================
 
 struct Outer {
     Inner inner
     int32 v
-    ptr<Later> link
+    mview<Later> link
 }
 
 struct Inner {
@@ -31,7 +31,7 @@ func main() -> int32 {
     o.inner.x = 5
 
     Later l
-    o.link = getptr(l)
+    o.link = getmview(l)
     $(o.link).tag = 8
 
     print(o.inner.x)

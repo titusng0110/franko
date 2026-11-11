@@ -6,9 +6,9 @@ struct Inner {
 
 struct AllDefault {
     int32 a = 2
-    ptr<int32> link
+    view<int32> link
     Inner inner
-    (Inner item, ptr<int32> link) pair
+    (Inner item, view<int32> link) pair
 }
 
 enum<uint8> Status {
