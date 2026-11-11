@@ -1,0 +1,2 @@
+Use of dynamic array 'p' after uninit
+Double free of dynamic array 'p' (uninit called twice)

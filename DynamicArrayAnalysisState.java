@@ -31,6 +31,9 @@ final class DynamicArrayAnalysisState {
     final MemoryTemplateRegistry templates;
 
     final int arrayCount;
+    final int realArrayCount;
+    final int shadowParamCount;
+    final Symbol[] shadowParameters;
     final int[] arrayVariableIds;
     final int[] arrayIndexByVariable;
 
@@ -60,6 +63,8 @@ final class DynamicArrayAnalysisState {
     int[] aliasEpoch;
 
     byte[] paramPost;
+    byte[] paramAssume;
+    boolean[] paramInited;
     long[] requireMust;
     long[] requireMay;
     long[] invalidateMust;
@@ -82,6 +87,8 @@ final class DynamicArrayAnalysisState {
     private int[] aliasRootSnapshots = new int[0];
     private int[] aliasEpochSnapshots = new int[0];
     private byte[] paramPostSnapshots = new byte[0];
+    private byte[] paramAssumeSnapshots = new byte[0];
+    private boolean[] paramInitedSnapshots = new boolean[0];
     private long[] requireMustSnapshots = new long[0];
     private long[] requireMaySnapshots = new long[0];
     private long[] invalidateMustSnapshots = new long[0];
@@ -106,6 +113,7 @@ final class DynamicArrayAnalysisState {
         int arrayTotal = 0;
         int ownerTotal = 0;
         int pointerTotal = 0;
+        int shadowTotal = 0;
 
         for (int i = 0; i < context.variables.length; i++) {
             Symbol symbol = context.variables[i];
@@ -122,6 +130,10 @@ final class DynamicArrayAnalysisState {
                     && symbol.type.permission == PtrPermission.OWNER
                     && symbol.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 ownerTotal++;
+
+                if (symbol.kind == SymbolKind.PARAMETER) {
+                    shadowTotal++;
+                }
             }
 
             if (symbol.type.kind == SastTypeKind.PTR) {
@@ -129,10 +141,13 @@ final class DynamicArrayAnalysisState {
             }
         }
 
-        arrayCount = arrayTotal;
+        arrayCount = arrayTotal + shadowTotal;
+        realArrayCount = arrayTotal;
+        shadowParamCount = shadowTotal;
         ownerCount = ownerTotal;
         pointerCount = pointerTotal;
         arrayVariableIds = new int[arrayCount];
+        shadowParameters = new Symbol[shadowTotal];
         ownerVariableIds = new int[ownerCount];
         pointerVariableIds = new int[pointerCount];
         arrayIndexByVariable = new int[context.variables.length];
@@ -171,6 +186,23 @@ final class DynamicArrayAnalysisState {
             }
         }
 
+        int shadowIndex = 0;
+
+        for (int i = 0; i < context.variables.length; i++) {
+            Symbol symbol = context.variables[i];
+
+            if (symbol.kind != SymbolKind.PARAMETER
+                    || symbol.type.kind != SastTypeKind.PTR
+                    || symbol.type.permission != PtrPermission.OWNER
+                    || symbol.type.referencedType.kind != SastTypeKind.DYNAMIC_ARRAY) {
+                continue;
+            }
+
+            arrayVariableIds[realArrayCount + shadowIndex] = -1;
+            shadowParameters[shadowIndex] = symbol;
+            shadowIndex++;
+        }
+
         arrayWords = Math.max(1, (arrayCount + 63) >>> 6);
         paramCount = context.templates.paramCount;
         paramWords = Math.max(1, (paramCount + 63) >>> 6);
@@ -189,6 +221,8 @@ final class DynamicArrayAnalysisState {
         aliasEpoch = new int[pointerCount];
 
         paramPost = new byte[paramCount];
+        paramAssume = new byte[paramCount];
+        paramInited = new boolean[paramCount];
         requireMust = new long[paramWords];
         requireMay = new long[paramWords];
         invalidateMust = new long[paramWords];
@@ -213,6 +247,8 @@ final class DynamicArrayAnalysisState {
         Arrays.fill(aliasRoot, ALIAS_NONE);
         Arrays.fill(aliasEpoch, 0);
         Arrays.fill(paramPost, POST_UNCHANGED);
+        Arrays.fill(paramAssume, POST_UNCHANGED);
+        Arrays.fill(paramInited, false);
         Arrays.fill(requireMust, 0L);
         Arrays.fill(requireMay, 0L);
         Arrays.fill(invalidateMust, 0L);
@@ -235,6 +271,28 @@ final class DynamicArrayAnalysisState {
         }
 
         return arrayIndexByVariable[variableId];
+    }
+
+    int shadowArrayOf(Symbol parameter) {
+        for (int i = 0; i < shadowParamCount; i++) {
+            if (shadowParameters[i] == parameter) {
+                return realArrayCount + i;
+            }
+        }
+
+        return -1;
+    }
+
+    boolean isShadowArray(int arrayIndex) {
+        return arrayIndex >= realArrayCount;
+    }
+
+    Symbol shadowParameterOf(int arrayIndex) {
+        if (!isShadowArray(arrayIndex)) {
+            return null;
+        }
+
+        return shadowParameters[arrayIndex - realArrayCount];
     }
 
     int ownerIndexOf(Symbol symbol) {
@@ -475,6 +533,20 @@ final class DynamicArrayAnalysisState {
                 paramCount
         );
         System.arraycopy(
+                paramAssume,
+                0,
+                paramAssumeSnapshots,
+                slot * paramCount,
+                paramCount
+        );
+        System.arraycopy(
+                paramInited,
+                0,
+                paramInitedSnapshots,
+                slot * paramCount,
+                paramCount
+        );
+        System.arraycopy(
                 requireMust,
                 0,
                 requireMustSnapshots,
@@ -631,6 +703,20 @@ final class DynamicArrayAnalysisState {
                 paramCount
         );
         System.arraycopy(
+                paramAssumeSnapshots,
+                slot * paramCount,
+                paramAssume,
+                0,
+                paramCount
+        );
+        System.arraycopy(
+                paramInitedSnapshots,
+                slot * paramCount,
+                paramInited,
+                0,
+                paramCount
+        );
+        System.arraycopy(
                 requireMustSnapshots,
                 slot * paramWords,
                 requireMust,
@@ -743,6 +829,14 @@ final class DynamicArrayAnalysisState {
         );
         paramPostSnapshots = grow(
                 paramPostSnapshots,
+                newCapacity * paramCount
+        );
+        paramAssumeSnapshots = grow(
+                paramAssumeSnapshots,
+                newCapacity * paramCount
+        );
+        paramInitedSnapshots = grow(
+                paramInitedSnapshots,
                 newCapacity * paramCount
         );
         requireMustSnapshots = grow(
@@ -958,6 +1052,19 @@ final class DynamicArrayAnalysisState {
                     paramPost[i] = POST_MAYBE;
                 }
             }
+
+            incoming = paramAssumeSnapshots[slot * paramCount + i];
+
+            if (paramAssume[i] != incoming) {
+                if (paramAssume[i] == POST_HAVOC
+                        || incoming == POST_HAVOC) {
+                    paramAssume[i] = POST_HAVOC;
+                } else {
+                    paramAssume[i] = POST_MAYBE;
+                }
+            }
+
+            paramInited[i] &= paramInitedSnapshots[slot * paramCount + i];
         }
 
         for (int i = 0; i < paramWords; i++) {

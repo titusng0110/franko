@@ -55,11 +55,28 @@ another path does not repeat the warning.
 
 ## 31.4 Branch Handling
 
-`if` / `else` is checked branch by branch. Only branches that continue past the
-statement affect later checks. A branch that **definitely returns** does not
-affect the code following the `if`, because that path never continues there.
-A branch whose condition contradicts a known state cannot execute and produces
-no diagnostics.
+`if` / `else` is checked branch by branch. Conditions may be combined with
+`!`, `&&`, and `||`; the compiler splits a condition into the alternative
+states it allows and follows each feasible alternative through the branch. Only
+branches that continue past the statement affect later checks. A branch that
+**definitely returns** does not affect the code following the `if`, because that
+path never continues there. A branch whose condition contradicts a known state
+cannot execute and produces no diagnostics.
+
+Because alternatives are followed separately, a compound guard such as
+`p != null && q != null` refines both pointers inside the branch, and a guard
+such as `p == null || q == null` refines one pointer on each alternative. A
+diagnostic is an error only when every alternative that reaches it finds a
+definite violation; a violation on only some alternatives is a warning.
+
+```franko
+func guarded(ptr<int32> p, ptr<int32> q) -> int32 {
+    if (p == null || q == null) {
+        return -1
+    }
+    return $(p) + $(q)     // valid: both are non-null on every continuing path
+}
+```
 
 Very deeply nested conditions may be handled more conservatively, so some
 warnings can be missed.
@@ -68,7 +85,7 @@ warnings can be missed.
 
 `while` loops are checked without proving termination:
 
-- the body is checked once;
+- the body is checked once per feasible condition alternative;
 - the state after the loop accounts for zero iterations, normal exits, and
   `break`;
 - `break` and `continue` paths are handled separately;
@@ -81,7 +98,7 @@ Loop termination is not proven; the post-loop state is conservative.
 
 ## 31.6 Guard Refinement
 
-Inside `if (p == null)` / `if (p != null)` (either operand order), the compiler refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null.
+Inside `if (p == null)` / `if (p != null)` (either operand order), the compiler refines `p`'s state per path: the then-branch of `p != null` sees `p` as pointing, and the code after the loop/branch of a failed guard sees `p` as null. The same applies to `!`, `&&`, and `||` combinations, and to `d.length()` comparisons for dynamic arrays.
 
 ```franko
 ptr<int32> p;
@@ -102,7 +119,7 @@ if (p != null) {
 $(p);          // valid: p is still pointing; the else path was infeasible
 ```
 
-The same refinement runs for loop conditions, so `while (p != null) { ... }` sees `p` as pointing inside the body and as null after the loop.
+The same refinement runs for loop conditions, so `while (p != null) { ... }` sees `p` as pointing inside the body and as null after the loop. A compound loop guard such as `while (p != null && q != null)` refines both pointers in the body and applies the corresponding alternatives to the exits.
 
 ## 31.7 Limitations
 
@@ -303,6 +320,17 @@ The check covers function-local dynamic array variables and owner
 `ptr<[T]>` values obtained from `getptr(localArray)`, including pointer
 copies, casts, and `getptr($(p))` aliases.
 
+Owner-array parameters are checked twice inside the callee: once assuming the
+parameter was already initialized by the caller, and once assuming it was
+uninitialized. A problem that appears only under one assumption is a warning;
+a problem that appears under both is an error. This is what catches
+use-after-`uninit` and double free inside a function even when every caller
+passes a valid array, while caller-side requirements still report passing an
+uninitialized array as an error. A missing `uninit` for a parameter that was
+already initialized at entry is not diagnosed because the caller owns that
+storage; a parameter the function itself initialized must still be released
+before returning.
+
 It does not yet track:
 
 - dynamic arrays stored in struct fields;
@@ -366,8 +394,11 @@ each path:
 | `d.length() <= 0`, `< 1` | `UNINITED` | `INITED` |
 
 Nonzero constant comparisons also certify the nonzero side as `INITED`.
-A branch that contradicts the known state cannot execute, so it produces no
-diagnostics:
+Guards may be combined with `!`, `&&`, and `||`; each feasible alternative
+refines the state independently, so
+`if (d.length() == 0 || c == 0)` treats the zero-length alternative as
+`UNINITED` and the `c == 0` alternative as unconstrained. A branch that
+contradicts the known state cannot execute, so it produces no diagnostics:
 
 ```franko
 [int32] d;
@@ -433,7 +464,10 @@ Intraprocedural: Dynamic array 'd' is still initialized at return from function 
 
 The warning is suppressed when the array escaped through a global, an
 aggregate store, or a call that may let it escape, because the compiler can no
-longer prove the state.
+longer prove the state. The same audit runs at every explicit `return` and at
+the implicit end of the function. An owner-array parameter that was assumed
+already initialized at entry is exempt, because its storage belongs to the
+caller; a parameter the function itself initialized is not exempt.
 
 ### 31.10.8 Limitations
 

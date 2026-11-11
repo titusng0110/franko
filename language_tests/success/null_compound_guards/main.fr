@@ -1,0 +1,35 @@
+import "franko/io"
+
+func guarded(ptr<int32> p, ptr<int32> q) -> int32 {
+    if (p == null || q == null) {
+        return -1
+    }
+    return $(p) + $(q)
+}
+
+func nested(ptr<int32> p, ptr<int32> q) -> int32 {
+    if (!(p != null && q != null)) {
+        return -2
+    }
+    return $(p) + $(q)
+}
+
+func while_guarded(ptr<int32> p, ptr<int32> q, int32 n) -> int32 {
+    int32 total = 0
+    while (p != null && q != null && n != 0) {
+        total = total + $(p) + $(q)
+        n = n - 1
+    }
+    return total
+}
+
+func main() -> int32 {
+    int32 a = 1
+    int32 b = 2
+    print(guarded(getptr(a), getptr(b)))
+    print(guarded(null, getptr(b)))
+    print(nested(getptr(a), getptr(b)))
+    print(nested(getptr(a), null))
+    print(while_guarded(getptr(a), getptr(b), 2))
+    return 0
+}

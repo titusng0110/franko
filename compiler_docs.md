@@ -11,7 +11,7 @@ Do not add comments to the Java source files. All design notes belong here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, tuples, enums, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: 84 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: 86 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain. Enums lower to generated
@@ -86,12 +86,14 @@ struct/tuple memory shapes, records block-local declaration lists, and
 estimates per-function snapshot demand. The context itself is not a SAST phase
 and produces no JSON artifact.
 
-Each of the three memory checkers now runs two phases internally: a
-**direct-summary pass** with symbolic parameter states (no diagnostics) and a
-**summary-aware check pass** that resolves call effects through a bounded
-call-graph BFS. The pass order, `SastPhase` names, `PassResult` API, and JSON
-artifacts are unchanged; summary data is internal analysis state. Intraprocedural
-warnings and interprocedural diagnostics are additive.
+Each of the memory checkers runs a **direct-summary pass** with symbolic
+parameter states (no diagnostics) followed by a **summary-aware check pass** that
+resolves call effects through a bounded call-graph BFS. `DynamicArrayMemoryChecker` adds two owner-parameter assumption passes (assume
+`INITED`, assume `UNINITED`) after the normal check pass and merges their
+diagnostics; only functions with owner-array parameters are re-walked. The pass order,
+`SastPhase` names, `PassResult` API, and JSON artifacts are unchanged; summary and
+assumption data are internal analysis state. Intraprocedural warnings and
+interprocedural diagnostics are additive.
 
 Raw AST nodes and semantic AST nodes carry a `SourceSpan` (stable display
 path + 1-based line/column range). `DiagnosticBag` stores structured
@@ -246,7 +248,9 @@ flowchart TD
 | `MemoryAnalysisContext` | `MemoryCallGraph`, `MemoryShapeIndex`, `MemoryTemplateRegistry`, semantic AST/symbols |
 | `MemoryShapeIndex` | `SastType`, `StructSymbol`, `FieldSymbol` |
 | `MemoryCallGraph` | `Symbol`, `SastNode`, `SastNode` |
-| `MemoryDataflowDriver` | `MemoryAnalysisContext`, `DiagnosticBag`, a `MemoryDataflowDriver.Domain` |
+| `MemoryDataflowDriver` | `MemoryAnalysisContext`, `DiagnosticBag`, `MemoryGuardFacts`, `MemoryDiagnosticMerge`, a `MemoryDataflowDriver.Domain` |
+| `MemoryGuardFacts` | semantic AST value objects (no diagnostics) |
+| `MemoryDiagnosticMerge` | `DiagnosticBag`, `Diagnostic`, `SourceSpan` |
 | `MemorySummaryBfs` | `MemoryAnalysisContext`, a `MemorySummaryBfs.NodeProcessor` |
 | `MemoryTemplate` | `MemoryTemplateRegistry`/`MemoryTemplateSetPool` value data only |
 | `PointerPermissionChecker` | `DiagnosticBag`, `PointerPermissions` (deliberately standalone) |
@@ -1507,37 +1511,51 @@ driver counters, calls `beginFunction`, checks the body, and adds a fallthrough
 exit when the body did not terminate; explicit returns add an exit snapshot
 after `onReturn`. A declaration-only function still gets one fallthrough exit.
 
-`if` below the depth limit is path-sensitive: it snapshots the pre-branch
-state, tests guard feasibility and refines before each branch, analyzes an
-infeasible branch with suppression enabled, snapshots each continuing branch,
-then restores and calls `mergeAfterIf`. Only branches that continue past the
-`if` contribute state; a branch that returns or is infeasible does not. With no
-`else`, a feasible condition-false path is snapshotted as the fallthrough state.
-At depth ≥ 12, `checkIfPathInsensitive` skips feasibility and refinement,
-analyzes both branches from the same pre-state, and merges the continuing
-results (or falls back to the pre-state).
+`if` below the depth limit is case-sensitive. `MemoryGuardFacts.prepare`
+normalizes the condition into bounded DNF cases; each case is a conjunction of
+`NULL`/`NONNULL` and `LENGTH_ZERO`/`LENGTH_NONZERO` facts. The driver tests each
+case for feasibility, applies its facts, analyzes the branch body under that
+case, and merges only the continuing case states. `||` therefore splits into
+alternatives instead of being ignored, and `!(a && b)` becomes the expected
+false-path alternatives. Per-case diagnostics are collected with
+`DiagnosticBag.mark/drainFrom` and merged by `MemoryDiagnosticMerge`: a
+diagnostic is an error only when every analyzed case reports it as an error;
+otherwise it is a warning. Dedup bitsets are restored before each case so one
+case's reported site does not suppress another case's diagnostic. With no
+`else`, every feasible condition-false case becomes a fallthrough state. At
+depth ≥ 12, `checkIfPathInsensitive` keeps the pre-case behavior.
 
-`while` analyzes the body once. It snapshots the feasible zero-trip exit
-(condition false), analyzes the body from the refined true state, runs the
-update epilogue for the normal body path and for each `continue` snapshot, and
-treats each resulting back-edge state as a candidate loop exit only when the
-condition-false guard is feasible for it. `break` snapshots are merged
-separately after the normal exit merge. A body that is infeasible is still
-walked with suppression enabled so nested expressions are checked without
-emitting diagnostics. After the merge, the loop body's direct locals are marked
-dead on every post-loop path. The loop does not fall through when there is no
-feasible exit and no feasible `break`.
+`while` analyzes the body once per feasible true case. Zero-trip exits are all
+feasible false cases; each back-edge forms candidate exits from the feasible
+false cases; `break` snapshots merge separately. The `continue` list is reset
+per body case so a continue recorded in one alternative is not replayed in the
+next. A body with no feasible true case contributes no diagnostics. After the
+merge, the loop body's direct locals are marked dead on every post-loop path.
+The loop does not fall through when there is no feasible exit and no feasible
+`break`.
 
 `break N` and `continue` snapshot the current state, mark every direct local
 from the current block down to the target loop body's block as dead in that
 snapshot, and push the snapshot onto the target loop frame's linked list. The
 target index is `loopDepth - levels`, clamped to the outermost loop;
 `continue` always targets the innermost loop. A terminating update statement
-produces no back edge. The per-loop exit/back-edge arrays are sized
-`max(16, maxSnapshotDemand + MAX_BRANCH_DEPTH + 4)`. Jump slots and exit slots
-grow on demand; loop frames are a fixed 64-entry stack. The driver wraps every
-statement traversal and each checker wraps its expression traversal in
-`DiagnosticBag.push/pop`.
+produces no back edge. The per-loop exit/back-edge arrays start at
+`max(16, maxSnapshotDemand + MAX_BRANCH_DEPTH + 4)` and grow on demand. Jump
+slots and exit slots grow on demand; loop frames are a fixed 64-entry stack.
+The driver wraps every statement traversal and each checker wraps its
+expression traversal in `DiagnosticBag.push/pop`.
+
+#### `MemoryGuardFacts` / `MemoryDiagnosticMerge`
+`MemoryGuardFacts` is the shared condition normalizer. It converts `!`, `&&`,
+`||`, constants, null comparisons, and `length()` comparisons into a bounded
+DNF: at most 16 cases and 16 facts per case. Contradictory cases are dropped,
+and overflow falls back to one unconstrained case. The driver also has a
+per-function work budget (`MAX_GUARD_CASE_WORK = 256`): once multi-case
+expansion would exceed it, the remaining conditions use one unconstrained case,
+bounding nested-condition blow-up. `MemoryDiagnosticMerge`
+merges per-case diagnostics with the all-cases warning rule and rewrites a
+definite error phrase into its possible warning phrase when a diagnostic is
+downgraded.
 
 #### `MemorySummaryBfs`
 Bounded call-graph BFS shared by the checkers. A node is
@@ -1823,7 +1841,9 @@ unions both bitsets, ORs `unknown`, and ANDs `nonNull`. `definitelyNull` is
 Two-phase, summary-aware dynamic-array lifecycle and buffer-invalidation
 checker, run after the dangling checker. The summary pass records per-parameter
 requirements and effects; the check pass applies them to concrete local arrays,
-owner `ptr<[T]>` values, and element aliases.
+owner `ptr<[T]>` values, and element aliases. Two additional assumption passes
+then re-run the check pass with every owner-array parameter's shadow array
+seeded `INITED` and `UNINITED`, merging the two diagnostic sets.
 
 **Seeds.** Every pointer parameter starts with `symAlias =
 {ALIAS_OF_POINTER(i)}`; owner-array parameters also start with
@@ -1888,14 +1908,15 @@ guard; a binary comparison with a length call on one side and a constant on the
 other uses the reversed operator when the length is on the right. The assertion
 is derived from the constant's sign: `== 0` / `<= 0` / `< 1` are zero
 assertions, `!= 0` / `== positive` / `> non-negative` / `>= 1` are nonzero
-assertions, and other forms assert nothing. In the summary pass an owner
-parameter's `paramPost` is feasible under zero unless it is `INITED` and under
-nonzero unless it is `UNINITED`; refinement sets `POST_UNINITED` for zero and
-`POST_INITED` for nonzero. A local array is feasible under zero unless
-`INITED` and under nonzero unless `UNINITED`; refinement stores
-`UNINITED`/`FREED_MAYBE` for zero and `INITED`/`FREED_NEVER` for nonzero. The
-check pass applies the same rule only when the receiver resolves to exactly one
-known array.
+assertions, and other forms assert nothing. `MemoryGuardFacts` decomposes
+`&&`/`||`/`!` into per-case length facts. In the summary pass an owner
+parameter's `paramAssume` is feasible under zero unless it is `INITED` and
+under nonzero unless it is `UNINITED`; refinement sets `POST_UNINITED` for zero
+and `POST_INITED` for nonzero, and updates `paramInited` with the same
+certainty. A local array is feasible under zero unless `INITED` and under
+nonzero unless `UNINITED`; refinement stores `UNINITED`/`FREED_MAYBE` for zero
+and `INITED`/`FREED_NEVER` for nonzero. The check pass applies the same rule
+only when the receiver resolves to exactly one known array.
 
 **Calls.** Each argument's alias is checked for staleness first. The root
 binding carries, per parameter, `(arrayIndex, lifecycle, freed, aliasRoot,
@@ -1960,31 +1981,37 @@ Flat lifecycle/alias/snapshot layer for the dynamic checker. It owns dense
 array, owner-pointer, and pointer-variable indices over all *non-global*
 variables; globals are excluded from these tables (global owners are still
 represented as unknown and global pointer aliases are cleared by the checker).
+The array table adds one shadow entry per owner-array parameter; shadow entries
+have `arrayVariableIds == -1` and map back to their `Symbol` via
+`shadowParameterOf`.
 State arrays are `lifecycle`/`freed`/`escaped`, `epochMin`/`epochMax`,
 `ownerArrayBits`/`ownerUnknown`, and per-pointer `aliasRoot`/`aliasEpoch`.
-Summary state is `paramPost`, requirement/invalidate/free/use/escape must/may
-parameter bitsets, and `symAlias` template bitsets. `ALIAS_NONE = -1` and
+Summary state is `paramPost` (real mutation effects), `paramAssume` (guard
+assumptions), `paramInited` (a definitely-initialized-on-this-path flag,
+merged with AND), requirement/invalidate/free/use/escape must/may parameter
+bitsets, and `symAlias` template bitsets. `ALIAS_NONE = -1` and
 `ALIAS_UNKNOWN = -2`; `singleOwner` returns `-1` when the owner is unknown or
 has anything other than exactly one array. BFS bindings use stride 7: array
 index, lifecycle, freed, alias root, alias epoch, epoch, root-argument index.
 
 `reset` fills lifecycle `UNINITED`, freed `FREED_NEVER`, clears escaped and all
-bitsets/aliases, resets epochs, sets every parameter post-state `UNCHANGED`,
-and clears snapshots. `enterBlock` stores the block's direct local IDs.
-`leaveBlock` clears state for every array directly declared in the block
+bitsets/aliases, resets epochs, sets every parameter post/assume state
+`UNCHANGED`, and clears snapshots. `enterBlock` stores the block's direct local
+IDs. `leaveBlock` clears state for every array directly declared in the block
 regardless of termination: aliases rooted at those arrays and owner bits that
-reference them are removed, and lifecycle/freed/escaped/epochs are reset. The
-block slot is then cleared.
+reference them are removed, and lifecycle/freed/escaped/epochs are reset; shadow
+parameter arrays are never block locals and are never cleared here. The block
+slot is then cleared.
 
-Snapshots copy every mutable state array including `paramPost` and all
-must/may/source bitsets. Branch merge degrades differing lifecycle values to
-`MAYBE_INITED` and differing freed values to `FREED_MAYBE`, ORs `escaped`,
-takes the minimum/maximum epochs, unions owner bits and unknown flags, turns
-differing alias root/epoch pairs into `ALIAS_UNKNOWN`/epoch 0, maps differing
-parameter post-states to `POST_MAYBE` (or `POST_HAVOC` if either side is
-`HAVOC`), intersects every must-bitset, unions every may-bitset, and unions
-`symAlias`. `POST_HAVOC` is currently reserved for merging; ordinary transfers
-do not produce it.
+Snapshots copy every mutable state array including `paramPost`, `paramAssume`,
+and all must/may/source bitsets. Branch merge degrades differing lifecycle
+values to `MAYBE_INITED` and differing freed values to `FREED_MAYBE`, ORs
+`escaped`, takes the minimum/maximum epochs, unions owner bits and unknown
+flags, turns differing alias root/epoch pairs into `ALIAS_UNKNOWN`/epoch 0,
+maps differing parameter post/assume states to `POST_MAYBE` (or `POST_HAVOC` if
+either side is `HAVOC`), intersects every must-bitset, unions every may-bitset,
+and unions `symAlias`. `POST_HAVOC` is currently reserved for merging; ordinary
+transfers do not produce it.
 
 #### `PointerPermissionChecker`
 The capability linter: run after branch/declaration pruning (so only
@@ -2400,15 +2427,19 @@ share the same enum/big-integer decoding.
 #### `DiagnosticBag`
 Phase-agnostic structured error/warning accumulator with a span stack.
 `error(String)` / `warning(String)` inherit the current span; pass dispatch
-code pushes the node span and pops it after traversal. `diagnostics()` exposes
+code pushes the node span and pops it after traversal. `mark()` /
+`drainFrom(int)` let the memory driver collect the diagnostics of one guard
+alternative, merge them, and re-add the merged result. `diagnostics()` exposes
 `Diagnostic` objects, and the static `formatErrors(header, diagnostics)`
 helper renders numbered errors for `Main` and other pass runners. Used by `SymbolTable`, `Desugarer`, every
 checker, and `Frontend`'s parse collectors.
 
 #### `Diagnostic` / `DiagnosticLog`
-`Diagnostic` is a final class carrying `(Severity, message, SourceSpan)`;
-`SourceSpan` is also a final class with `source`, start/end line and column
-fields. Both expose field accessor methods.
+`Diagnostic` is a final class carrying `(Severity, message, SourceSpan)` plus an
+optional internal `code` used by the memory checkers to merge per-case and
+per-assumption diagnostics; the code is not serialized. `SourceSpan` is also a
+final class with `source`, start/end line and column fields. Both expose field
+accessor methods.
 `DiagnosticLog.Entry` is a final class with `phase` and `diagnostic`.
 `DiagnosticLog` accumulates diagnostics from every pass with a phase label and
 is the source of `<base>.diagnostic.json`. `Main` prints warnings, writes the
@@ -2808,13 +2839,15 @@ sets; `$(c) = value` strong-updates local cell variables and records
 unioned RHS source set. The source sets come from the live per-site state, not
 from each exit snapshot; must/may certainty comes from exit snapshots.
 
-Guard refinement rewrites `PARAM_VALUE(i, ANY)` to its `NONNULL`/`NULL`
-variant, so a dereference under `p != null` is not recorded as a requirement
-(it is self-satisfied). `markDeref`/`markPointeeDeref` set both the must and may
-bit; a requirement is `MUST_DEREF` when the must bit holds on every exit and
-`MAY_DEREF` when the may bit holds on any exit. The same intersection/union
-rule builds slot-write certainty. Return alternatives from all explicit returns
-are unioned; fallthrough contributes `UNKNOWN`. Call edges carry, per callee
+Guard refinement runs through the shared DNF cases: every `NULL`/`NONNULL` fact
+rewrites `PARAM_VALUE(i, ANY)` to its `NONNULL`/`NULL` variant, so a dereference
+under a compound guard such as `p != null && q != null` is not recorded as a
+requirement. `markDeref`/`markPointeeDeref` set both the must and may bit; a
+requirement is `MUST_DEREF` when the must bit holds on every exit and
+`MAY_DEREF` when the may bit holds on any exit. Per-case diagnostics are merged
+with the all-cases warning rule. The same intersection/union rule builds
+slot-write certainty. Return alternatives from all explicit returns are
+unioned; fallthrough contributes `UNKNOWN`. Call edges carry, per callee
 parameter, the unioned argument value/pointee template sets and a single cell
 target when present.
 
@@ -3247,13 +3280,15 @@ the call result so a later return/store/deref can diagnose it. TOP returns
 reachable from the actual arguments, silently. Every call applies that
 invalidation, not only TOP.
 
-**Guards.** A `==`/`!=` comparison against `null` refines state. Summary
-feasibility tests the symbolic value set; the null branch replaces the set with
-`{NULL}` and the non-null branch keeps the current set and adds `{NONNULL}`.
-Concrete `p == null` is infeasible when the origin is definitely non-null, and
-`p != null` is infeasible when it is definitely null. The null branch stores
-`EMPTY` when the current origin is not non-null; the non-null branch stores the
-same origins with `nonNull` set unless the origin is definitely null.
+**Guards.** Null facts come from the shared DNF normalizer, so compound
+`&&`/`||`/`!` conditions refine state per feasible case. Summary feasibility
+tests the symbolic value set; a `NULL` fact replaces the set with `{NULL}` in
+the null alternative and a `NONNULL` fact keeps the current set and adds
+`{NONNULL}`. Concrete `p == null` is infeasible when the origin is definitely
+non-null, and `p != null` is infeasible when it is definitely null. The null
+branch stores `EMPTY` when the current origin is not non-null; the non-null
+branch stores the same origins with `nonNull` set unless the origin is
+definitely null. Per-case diagnostics use the all-cases warning rule.
 
 **Frame liveness.** Declaring a local marks it alive. Leaving a block normally
 marks its direct locals dead (`mustDead |=`, `mayDead |=`); a terminated block
@@ -3287,6 +3322,21 @@ analysis. It tracks function-local dynamic arrays, owner `ptr<[T]>` aliases,
 element buffer aliases, and callee effects. Pointer element construction
 (including null initialization) is a runtime detail: the lifecycle lattice
 tracks storage and aliases, not element values.
+
+**Owner-parameter assumptions.** `DynamicArrayAnalysisState` allocates one
+shadow array per owner-array parameter (`ptr<[T]>` where `T` is a dynamic
+array). After the normal summary and check passes, the checker runs two
+additional passes over the functions that have owner-array parameters:
+`ASSUME_INITED` seeds every owner-array parameter's shadow
+`INITED`/`FREED_NEVER`; `ASSUME_UNINITED` seeds it `UNINITED`/`FREED_NEVER`.
+Each pass reuses the existing summaries and BFS, and writes into its own
+`DiagnosticBag`. The two bags are merged per
+`(span, code)`: an error survives only when both runs report an error at that
+site; otherwise the result is a warning. This catches callee-local
+use-after-`uninit`, double free, and possible use-before-init, while
+single-assumption invalid free and missing-uninit become warnings. Shadow
+arrays are excluded from block-local clearing and from the `ASSUME_INITED`
+missing-uninit audit (the caller owns an already-initialized parameter).
 
 **Lifecycle lattice.** One value per tracked local dynamic array:
 `UNINITED`, `INITED`, or `MAYBE_INITED`; a separate `FreedState`
@@ -3339,9 +3389,11 @@ invalidate, must/may free, and escape. Per pointer parameter it records
 may-use. Return aliases are `ELEMENT_OF(i)`, `ALIAS_OF_POINTER(i)`,
 `WHOLE_ARRAY(i)`, `NULL`, `UNKNOWN`, `LOCAL`, or `CALL_RESULT(site)`. Call
 edges carry alias templates for every parameter. `markSummaryRequireParam`
-skips a requirement when the parameter post-state is already `INITED`, so a
-callee that initializes before using its output parameter does not require the
-caller to pre-initialize it. Must/may bitsets use the same intersection/union
+skips a requirement when the parameter is definitely initialized on the current
+path (`paramInited`, set by `init`/`resize` and by a nonzero `length()` guard),
+so a callee that initializes before using its output parameter does not require
+the caller to pre-initialize it, and a `length() != 0` branch does not produce a
+spurious requirement. Must/may bitsets use the same intersection/union
 exit rule as the other domains. Escape is recorded only for
 `ALIAS_OF_POINTER`/`WHOLE_ARRAY` templates.
 
@@ -3355,11 +3407,13 @@ possible to `MUST_REQUIRE_INITED` is a warning; definite uninitialized/freed to
 frees mark the array freed, and escapes set the escaped flag.
 `init`/`init_zero`, `resize`, and `uninit` are **strong** post-state updates
 within a path: the summary post-state is set directly, not merged with the
-pre-call state. Length guards refine owner-parameter post-states (`length() ==
-0` → `UNINITED`, nonzero → `INITED`), so a callee that initializes an output
-array on one path and resizes it on the other does not require the caller to
-pre-initialize it. A returned element alias installs a caller alias at the
-current epoch and marks the returned array escaped. The cross-parameter rule
+pre-call state. Length guards refine the separate `paramAssume` state and the
+`paramInited` certainty (`length() == 0` → `UNINITED`, nonzero → `INITED`), so
+a callee that initializes an output array on one path and resizes it on the
+other does not require the caller to pre-initialize it, and guard refinement
+never changes the caller's post-call lifecycle. A returned element alias
+installs a caller alias at the current epoch and marks the returned array
+escaped. The cross-parameter rule
 warns when a callee may invalidate array parameter `i` and may use
 element-pointer parameter `j`, and the caller's actual `j` is an element alias
 of actual `i`. Only one cross-parameter warning is emitted per call. TOP sets
@@ -3367,19 +3421,26 @@ the call result to `UNKNOWN`, marks every argument with a tracked array origin
 `MAYBE_INITED`/`FREED_MAYBE`/escaped, invalidates global owners, and emits no
 new diagnostic.
 
-**Guard refinement.** `length()` truthiness is a `!= 0` guard; `!` negates a
-guard; a comparison with a constant uses the reversed operator when the length
-is on the right. The constant determines a zero or nonzero assertion
-(`== 0`, `<= 0`, `< 1` = zero; `!= 0`, `== positive`, `> non-negative`, `>= 1`
-= nonzero). In the summary pass an owner parameter's post-state is feasible
-under zero unless `INITED` and under nonzero unless `UNINITED`; refinement sets
-`POST_UNINITED`/`POST_INITED`. In the check pass the same refinement applies
-only when the receiver resolves to exactly one known array.
+**Guard refinement.** Length facts come from the shared DNF normalizer, so
+compound `&&`/`||`/`!` conditions refine state per feasible case.
+`length()` truthiness is a `!= 0` guard; a comparison with a constant uses the
+reversed operator when the length is on the right. The constant determines a
+zero or nonzero assertion (`== 0`, `<= 0`, `< 1` = zero; `!= 0`, `== positive`,
+`> non-negative`, `>= 1` = nonzero). In the summary pass the refinement writes
+the separate `paramAssume` state, not the mutation post-state, so guard
+refinement never changes what the caller's array looks like after the call. An
+owner parameter is feasible under zero unless `paramAssume` is `INITED` and
+under nonzero unless it is `UNINITED`; refinement stores
+`POST_UNINITED`/`POST_INITED` there. In the check pass the same refinement
+applies only when the receiver resolves to exactly one known array.
 
 **Remaining limits.** Struct-field arrays, nested dynamic-array elements below
 the outermost tracked array, global dynamic-array lifecycle, and allocation
 failure status are not tracked. `mview`/`view` parameters carry may-use but no
-lifecycle post-state. Loops are analyzed once, not to a fixed point.
+lifecycle post-state. Loops are analyzed once, not to a fixed point. The two
+owner-parameter assumption runs treat distinct parameters as distinct arrays,
+so intraprocedural cross-parameter aliasing is not modeled; the call-site
+cross-parameter warning still covers the concrete aliasing case.
 
 ## 4.16 Identifier visibility (PrivateIdentifierLinter)
 
@@ -3629,7 +3690,7 @@ without introducing field-sensitive state. It is a build-stage cache keyed by
 
 ## 4.21 Interprocedural summaries and bounded BFS
 
-Every memory checker has the same two-phase shape:
+Every memory checker starts with the same two-phase shape:
 
 1. **Direct summary pass** — run the intraprocedural traversal with symbolic
    parameter states. Emit no diagnostics. Record requirements, direct
@@ -3642,6 +3703,11 @@ Every memory checker has the same two-phase shape:
    callee and its transitive call edges with `MemorySummaryBfs`, apply
    preconditions/diagnostics, apply post-state (returns, pointer-cell writes,
    captures, lifecycle, epochs), and continue with the updated caller state.
+
+`DynamicArrayMemoryChecker` adds two more whole-program traversals after the
+normal check pass (`ASSUME_INITED` and `ASSUME_UNINITED` for owner-array
+parameters). They reuse the summaries and BFS, and their diagnostics are merged
+with the all-feasible-assumptions rule.
 
 A BFS node is `(functionId, binding)`. The budget is
 `MAX_BFS_VISITED = 2048` dequeues per call site per checker. Each dequeue
@@ -3700,6 +3766,15 @@ return/store rules.
 Every diagnostic emitted by the three memory checkers is prefixed with
 `Intraprocedural:` or `Interprocedural:` so the source of the fact is visible
 at the diagnostic site.
+
+Diagnostics are merged across guard alternatives and across the two
+owner-parameter assumption runs. A per-case diagnostic is an error only when
+every analyzed alternative reports it as an error; otherwise it is a warning.
+A dynamic-array assumption diagnostic is an error only when both the
+`ASSUME_INITED` and `ASSUME_UNINITED` runs report an error; a problem that only
+one assumption exposes is a warning. This keeps the documented
+definite-versus-possible split while still catching callee-local lifecycle
+bugs.
 
 | Check | Definite | Possible |
 |---|---|---|
@@ -3985,12 +4060,18 @@ Memory-checker fixtures:
 ```text
 language_tests/failure/null_interprocedural/
 language_tests/success/null_interprocedural/
+language_tests/success/null_compound_guards/
+language_tests/success/null_compound_guard_warning/
 language_tests/failure/dangling_interprocedural/
 language_tests/success/dangling_interprocedural/
+language_tests/success/dangling_compound_guards/
 language_tests/failure/dangling_lifetime/
 language_tests/success/dangling_lifetime/
 language_tests/failure/dyn_array_interprocedural/
 language_tests/success/dyn_array_interprocedural/
+language_tests/failure/dyn_array_param_assumptions/
+language_tests/success/dyn_array_param_assumptions/
+language_tests/success/dyn_array_compound_guards/
 language_tests/failure/dyn_array_buffer/
 language_tests/success/dyn_array_buffer/
 ```
@@ -4040,6 +4121,7 @@ owner argument.
 | Add a type rule shared by checks | `TypeChecker` |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
 | Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
+| Add or change a guard fact | `MemoryGuardFacts` + the domain `guardCaseFeasible`/`applyGuardCase` hooks + `MemoryDataflowDriver` case analysis |
 | Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker`; origin algebra/formatting in `DanglingPointerState` |
 | Detect dynamic-array lifecycle misuse | `DynamicArrayMemoryChecker`; symbol/state/snapshot substrate in `DynamicArrayAnalysisState` |
 | Detect private-member / namespace-internal access | `PrivateIdentifierLinter` (§3.3, §4.16), invoked by `Main` after pruning |

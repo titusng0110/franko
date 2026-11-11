@@ -865,11 +865,13 @@ public final class PointerNullStateChecker {
                             INTRA
                                     + "Cannot dereference null variable '"
                                     + deref.expr.symbol.qualifiedName()
-                                    + "'"
+                                    + "'",
+                            "null.deref." + deref.expr.symbol.qualifiedName()
                     );
                 } else {
                     diagnostics.error(
-                            INTRA + "Cannot dereference a null pointer"
+                            INTRA + "Cannot dereference a null pointer",
+                            "null.deref.expression"
                     );
                 }
 
@@ -889,7 +891,8 @@ public final class PointerNullStateChecker {
                             INTRA
                                     + "Deref of possibly null variable '"
                                     + deref.expr.symbol.qualifiedName()
-                                    + "'"
+                                    + "'",
+                            "null.deref." + deref.expr.symbol.qualifiedName()
                     );
                 }
             } else {
@@ -897,7 +900,8 @@ public final class PointerNullStateChecker {
 
                 if (site >= 0 && addBit(warnedSites, site)) {
                     diagnostics.warning(
-                            INTRA + "Deref of a possibly null pointer"
+                            INTRA + "Deref of a possibly null pointer",
+                            "null.deref.expression"
                     );
                 }
             }
@@ -1095,6 +1099,101 @@ public final class PointerNullStateChecker {
             );
         }
 
+        public boolean guardCaseFeasible(
+                MemoryGuardFacts facts,
+                int guardCase
+        ) {
+            int start = facts.caseFactStart(guardCase);
+            int count = facts.caseFactCount(guardCase);
+
+            for (int i = 0; i < count; i++) {
+                byte kind = facts.kindAt(start + i);
+
+                if (kind != MemoryGuardFacts.FACT_NULL
+                        && kind != MemoryGuardFacts.FACT_NONNULL) {
+                    continue;
+                }
+
+                SastNode variable = facts.expressionAt(start + i);
+                int pointerIndex = pointerIndexOfExpression(variable);
+
+                if (pointerIndex < 0) {
+                    continue;
+                }
+
+                boolean assertedNull = kind == MemoryGuardFacts.FACT_NULL;
+
+                if (summaryMode) {
+                    long[] set = Arrays.copyOfRange(
+                            state.symValue,
+                            state.symValueOffset(pointerIndex),
+                            state.symValueOffset(pointerIndex)
+                                    + context.templates.words
+                    );
+
+                    if (assertedNull ? !mayBeNull(set) : !mayBeNonNull(set)) {
+                        return false;
+                    }
+                } else {
+                    byte current = state.stateOf(pointerIndex);
+
+                    if (assertedNull
+                            ? current == PointerNullAnalysisState.POINTING
+                            : current == PointerNullAnalysisState.NULL) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        public void applyGuardCase(
+                MemoryGuardFacts facts,
+                int guardCase
+        ) {
+            int start = facts.caseFactStart(guardCase);
+            int count = facts.caseFactCount(guardCase);
+
+            for (int i = 0; i < count; i++) {
+                byte kind = facts.kindAt(start + i);
+
+                if (kind != MemoryGuardFacts.FACT_NULL
+                        && kind != MemoryGuardFacts.FACT_NONNULL) {
+                    continue;
+                }
+
+                SastNode variable = facts.expressionAt(start + i);
+                int pointerIndex = pointerIndexOfExpression(variable);
+
+                if (pointerIndex < 0) {
+                    continue;
+                }
+
+                boolean assertedNull = kind == MemoryGuardFacts.FACT_NULL;
+
+                if (summaryMode) {
+                    refineSummaryGuard(pointerIndex, assertedNull);
+                } else {
+                    byte current = state.stateOf(pointerIndex);
+
+                    if (assertedNull) {
+                        if (current != PointerNullAnalysisState.POINTING) {
+                            state.setState(
+                                    pointerIndex,
+                                    PointerNullAnalysisState.NULL
+                            );
+                        }
+                    } else if (current != PointerNullAnalysisState.NULL) {
+                        state.setState(
+                                pointerIndex,
+                                PointerNullAnalysisState.POINTING
+                        );
+                    }
+                }
+            }
+        }
+
         public int snapshot() {
             return state.snapshot();
         }
@@ -1129,6 +1228,30 @@ public final class PointerNullStateChecker {
 
         public void mergeStateIntoCurrent(int slot) {
             state.mergeStateIntoCurrent(slot);
+        }
+
+        long[][] diagnosticDedup() {
+            return new long[][] {
+                    Arrays.copyOf(warnedVariables, warnedVariables.length),
+                    Arrays.copyOf(warnedSites, warnedSites.length)
+            };
+        }
+
+        void restoreDiagnosticDedup(long[][] saved) {
+            System.arraycopy(
+                    saved[0],
+                    0,
+                    warnedVariables,
+                    0,
+                    warnedVariables.length
+            );
+            System.arraycopy(
+                    saved[1],
+                    0,
+                    warnedSites,
+                    0,
+                    warnedSites.length
+            );
         }
 
         public void markLocalsDeadForJump(int targetBlockDepth, int snapshotSlot) {
@@ -1741,6 +1864,8 @@ public final class PointerNullStateChecker {
                 return;
             }
 
+            String code = "null.arg." + functionName + "." + parameterName;
+
             if (requirement == REQUIRE_MUST) {
                 if (value == PointerNullAnalysisState.NULL) {
                     diagnostics.error(
@@ -1749,7 +1874,8 @@ public final class PointerNullStateChecker {
                                     + parameterName
                                     + "' of '"
                                     + functionName
-                                    + "' which is dereferenced"
+                                    + "' which is dereferenced",
+                            code
                     );
                 } else {
                     diagnostics.warning(
@@ -1758,7 +1884,8 @@ public final class PointerNullStateChecker {
                                     + parameterName
                                     + "' of '"
                                     + functionName
-                                    + "' which may be dereferenced"
+                                    + "' which may be dereferenced",
+                            code
                     );
                 }
 
@@ -1772,7 +1899,8 @@ public final class PointerNullStateChecker {
                                 + parameterName
                                 + "' of '"
                                 + functionName
-                                + "' which may be dereferenced"
+                                + "' which may be dereferenced",
+                        code
                 );
             } else {
                 diagnostics.warning(
@@ -1781,7 +1909,8 @@ public final class PointerNullStateChecker {
                                 + parameterName
                                 + "' of '"
                                 + functionName
-                                + "' which may be dereferenced"
+                                + "' which may be dereferenced",
+                        code
                 );
             }
         }

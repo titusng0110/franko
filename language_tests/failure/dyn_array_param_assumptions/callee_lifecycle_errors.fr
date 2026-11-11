@@ -1,0 +1,17 @@
+func use_after_uninit(ptr<[int32]> p) -> int32 {
+    $(p).uninit()
+    return $(p)[0]
+}
+
+func double_uninit(ptr<[int32]> p) -> void {
+    $(p).uninit()
+    $(p).uninit()
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    int32 v = use_after_uninit(getptr(d))
+    double_uninit(getptr(d))
+    return v
+}

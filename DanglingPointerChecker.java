@@ -599,7 +599,8 @@ public final class DanglingPointerChecker {
                     diagnostics.error(
                             INTRA
                             + "Cannot store a view of frame or operator-borrowed"
-                            + " storage into a global or caller-owned location"
+                            + " storage into a global or caller-owned location",
+                            "dangling.store"
                     );
                 }
             }
@@ -735,7 +736,8 @@ public final class DanglingPointerChecker {
                             INTRA
                             + "Cannot dereference pointer to "
                             + formatDeadOrigins(origins, state.mustDead)
-                            + " after its scope ended"
+                            + " after its scope ended",
+                            "dangling.deref"
                     );
                 }
             } else if (origins.hasPossibleDead(state.mayDead)) {
@@ -744,7 +746,8 @@ public final class DanglingPointerChecker {
                             INTRA
                             + "Pointer may refer to "
                             + formatDeadOrigins(origins, state.mayDead)
-                            + " after its scope ended"
+                            + " after its scope ended",
+                            "dangling.deref"
                     );
                 }
             }
@@ -767,7 +770,8 @@ public final class DanglingPointerChecker {
                             INTRA
                             + "Cannot use pointer to "
                             + formatDeadOrigins(origins, state.mustDead)
-                            + " after its scope ended"
+                            + " after its scope ended",
+                            "dangling.use"
                     );
                 }
             } else if (origins.hasPossibleDead(state.mayDead)) {
@@ -776,7 +780,8 @@ public final class DanglingPointerChecker {
                             INTRA
                             + "Pointer may refer to "
                             + formatDeadOrigins(origins, state.mayDead)
-                            + " after its scope ended"
+                            + " after its scope ended",
+                            "dangling.use"
                     );
                 }
             }
@@ -844,7 +849,8 @@ public final class DanglingPointerChecker {
                         + formatDeadOrigins(origins, state.mustDead)
                         + " from function '"
                         + functionName(node.function)
-                        + "' (dangling after return)"
+                        + "' (dangling after return)",
+                        "dangling.return"
                 );
                 return;
             }
@@ -856,7 +862,8 @@ public final class DanglingPointerChecker {
                         + formatDeadOrigins(origins, state.mayDead)
                         + " from function '"
                         + functionName(node.function)
-                        + "' (possibly dangling after return)"
+                        + "' (possibly dangling after return)",
+                        "dangling.return"
                 );
                 return;
             }
@@ -868,7 +875,8 @@ public final class DanglingPointerChecker {
                         + formatFrameOrigins(origins)
                         + " from function '"
                         + functionName(node.function)
-                        + "' (dangling after return)"
+                        + "' (dangling after return)",
+                        "dangling.return"
                 );
             } else if (origins.hasFrame()) {
                 diagnostics.warning(
@@ -877,7 +885,8 @@ public final class DanglingPointerChecker {
                         + formatFrameOrigins(origins)
                         + " from function '"
                         + functionName(node.function)
-                        + "' (possibly dangling after return)"
+                        + "' (possibly dangling after return)",
+                        "dangling.return"
                 );
             }
         }
@@ -971,6 +980,110 @@ public final class DanglingPointerChecker {
             }
         }
 
+        public boolean guardCaseFeasible(
+                MemoryGuardFacts facts,
+                int guardCase
+        ) {
+            int start = facts.caseFactStart(guardCase);
+            int count = facts.caseFactCount(guardCase);
+
+            for (int i = 0; i < count; i++) {
+                byte kind = facts.kindAt(start + i);
+
+                if (kind != MemoryGuardFacts.FACT_NULL
+                        && kind != MemoryGuardFacts.FACT_NONNULL) {
+                    continue;
+                }
+
+                SastNode variable = facts.expressionAt(start + i);
+                int pointerIndex = pointerIndexOfExpression(variable);
+
+                if (pointerIndex < 0) {
+                    continue;
+                }
+
+                boolean assertedNull = kind == MemoryGuardFacts.FACT_NULL;
+
+                if (summaryMode) {
+                    long[] set = state.symValueOf(pointerIndex);
+                    boolean feasible = assertedNull
+                            ? mayBeNull(set)
+                            : mayBeNonNull(set);
+
+                    if (!feasible) {
+                        return false;
+                    }
+                } else {
+                    DanglingOrigin current = state.pointerOrigin(pointerIndex);
+                    boolean feasible = assertedNull
+                            ? !current.nonNull
+                            : !current.definitelyNull();
+
+                    if (!feasible) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        public void applyGuardCase(
+                MemoryGuardFacts facts,
+                int guardCase
+        ) {
+            int start = facts.caseFactStart(guardCase);
+            int count = facts.caseFactCount(guardCase);
+
+            for (int i = 0; i < count; i++) {
+                byte kind = facts.kindAt(start + i);
+
+                if (kind != MemoryGuardFacts.FACT_NULL
+                        && kind != MemoryGuardFacts.FACT_NONNULL) {
+                    continue;
+                }
+
+                SastNode variable = facts.expressionAt(start + i);
+                int pointerIndex = pointerIndexOfExpression(variable);
+
+                if (pointerIndex < 0) {
+                    continue;
+                }
+
+                boolean assertedNull = kind == MemoryGuardFacts.FACT_NULL;
+
+                if (summaryMode) {
+                    long[] refined = templates().newSet();
+
+                    if (assertedNull) {
+                        templates().set(refined, MemoryTemplate.NULL);
+                    } else {
+                        long[] current = state.symValueOf(pointerIndex);
+
+                        for (int word = 0;
+                                word < context.templates.words;
+                                word++) {
+                            refined[word] = current[word];
+                        }
+
+                        templates().set(refined, MemoryTemplate.NONNULL);
+                    }
+
+                    state.setSymValue(pointerIndex, refined);
+                } else {
+                    DanglingOrigin current = state.pointerOrigin(pointerIndex);
+
+                    if (assertedNull) {
+                        if (!current.nonNull) {
+                            state.setPointer(pointerIndex, originEmpty());
+                        }
+                    } else if (!current.definitelyNull()) {
+                        state.setPointer(pointerIndex, current.withNonNull());
+                    }
+                }
+            }
+        }
+
         public int snapshot() {
             return state.snapshot();
         }
@@ -1005,6 +1118,69 @@ public final class DanglingPointerChecker {
 
         public void mergeStateIntoCurrent(int slot) {
             state.mergeStateIntoCurrent(slot);
+        }
+
+        long[][] diagnosticDedup() {
+            return new long[][] {
+                    java.util.Arrays.copyOf(
+                            reportedReturnSites,
+                            reportedReturnSites.length
+                    ),
+                    java.util.Arrays.copyOf(
+                            reportedStoreSites,
+                            reportedStoreSites.length
+                    ),
+                    java.util.Arrays.copyOf(
+                            reportedDerefSites,
+                            reportedDerefSites.length
+                    ),
+                    java.util.Arrays.copyOf(
+                            reportedUseSites,
+                            reportedUseSites.length
+                    ),
+                    java.util.Arrays.copyOf(
+                            reportedCallSites,
+                            reportedCallSites.length
+                    )
+            };
+        }
+
+        void restoreDiagnosticDedup(long[][] saved) {
+            System.arraycopy(
+                    saved[0],
+                    0,
+                    reportedReturnSites,
+                    0,
+                    reportedReturnSites.length
+            );
+            System.arraycopy(
+                    saved[1],
+                    0,
+                    reportedStoreSites,
+                    0,
+                    reportedStoreSites.length
+            );
+            System.arraycopy(
+                    saved[2],
+                    0,
+                    reportedDerefSites,
+                    0,
+                    reportedDerefSites.length
+            );
+            System.arraycopy(
+                    saved[3],
+                    0,
+                    reportedUseSites,
+                    0,
+                    reportedUseSites.length
+            );
+            System.arraycopy(
+                    saved[4],
+                    0,
+                    reportedCallSites,
+                    0,
+                    reportedCallSites.length
+            );
         }
 
         public boolean isSuppressed() {
@@ -1159,14 +1335,16 @@ public final class DanglingPointerChecker {
                     diagnostics.error(
                             INTER
                             + "Call to '" + function + "' stores a view of frame"
-                            + " storage into " + sink
+                            + " storage into " + sink,
+                            "dangling.capture"
                     );
                 }
             } else if (addBit(reportedCallSites, callSiteId)) {
                 diagnostics.warning(
                         INTER
                         + "Call to '" + function + "' may store a view of frame"
-                        + " storage into " + sink
+                        + " storage into " + sink,
+                        "dangling.capture"
                 );
             }
         }

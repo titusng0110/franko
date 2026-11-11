@@ -35,8 +35,38 @@ public final class DiagnosticBag {
         diagnostics.add(Diagnostic.error(currentSpan(), msg));
     }
 
+    public void error(String msg, String code) {
+        diagnostics.add(Diagnostic.error(currentSpan(), msg, code));
+    }
+
     public void warning(String msg) {
         diagnostics.add(Diagnostic.warning(currentSpan(), msg));
+    }
+
+    public void warning(String msg, String code) {
+        diagnostics.add(Diagnostic.warning(currentSpan(), msg, code));
+    }
+
+    public void add(Diagnostic diagnostic) {
+        if (diagnostic != null) {
+            diagnostics.add(diagnostic);
+        }
+    }
+
+    public int mark() {
+        return diagnostics.size();
+    }
+
+    public List<Diagnostic> drainFrom(int mark) {
+        if (mark < 0 || mark >= diagnostics.size()) {
+            return List.of();
+        }
+
+        List<Diagnostic> drained = new ArrayList<>(
+                diagnostics.subList(mark, diagnostics.size())
+        );
+        diagnostics.subList(mark, diagnostics.size()).clear();
+        return List.copyOf(drained);
     }
 
     public List<Diagnostic> diagnostics() {

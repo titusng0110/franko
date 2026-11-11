@@ -1,6 +1,6 @@
 final class MemoryDataflowDriver {
     static final int MAX_BRANCH_DEPTH = MemoryAnalysisContext.MAX_BRANCH_DEPTH;
-
+    static final int MAX_GUARD_CASE_WORK = 256;
     enum DomainKind {
         NULL_STATE,
         DANGLING,
@@ -42,6 +42,14 @@ final class MemoryDataflowDriver {
             } else {
                 dynamicArray.beginFunction(functionId);
             }
+        }
+
+        boolean shouldCheckFunction(SastNode function) {
+            if (kind == DomainKind.DYNAMIC_ARRAY) {
+                return dynamicArray.shouldCheckFunction(function);
+            }
+
+            return true;
         }
 
         void endFunction(int exitCount, boolean fallthrough) {
@@ -143,6 +151,60 @@ final class MemoryDataflowDriver {
                 dangling.refineFromGuard(condition, guardHolds);
             } else {
                 dynamicArray.refineFromGuard(condition, guardHolds);
+            }
+        }
+
+        boolean guardCaseFeasible(MemoryGuardFacts facts, int guardCase) {
+            if (kind == DomainKind.NULL_STATE) {
+                return nullState.guardCaseFeasible(facts, guardCase);
+            }
+
+            if (kind == DomainKind.DANGLING) {
+                return dangling.guardCaseFeasible(facts, guardCase);
+            }
+
+            return dynamicArray.guardCaseFeasible(facts, guardCase);
+        }
+
+        void applyGuardCase(MemoryGuardFacts facts, int guardCase) {
+            if (kind == DomainKind.NULL_STATE) {
+                nullState.applyGuardCase(facts, guardCase);
+            } else if (kind == DomainKind.DANGLING) {
+                dangling.applyGuardCase(facts, guardCase);
+            } else {
+                dynamicArray.applyGuardCase(facts, guardCase);
+            }
+        }
+
+        void mergeStates(int[] slots, int count) {
+            if (kind == DomainKind.NULL_STATE) {
+                nullState.mergeLoopExitStates(slots, count);
+            } else if (kind == DomainKind.DANGLING) {
+                dangling.mergeLoopExitStates(slots, count);
+            } else {
+                dynamicArray.mergeLoopExitStates(slots, count);
+            }
+        }
+
+        long[][] diagnosticDedup() {
+            if (kind == DomainKind.NULL_STATE) {
+                return nullState.diagnosticDedup();
+            }
+
+            if (kind == DomainKind.DANGLING) {
+                return dangling.diagnosticDedup();
+            }
+
+            return dynamicArray.diagnosticDedup();
+        }
+
+        void restoreDiagnosticDedup(long[][] state) {
+            if (kind == DomainKind.NULL_STATE) {
+                nullState.restoreDiagnosticDedup(state);
+            } else if (kind == DomainKind.DANGLING) {
+                dangling.restoreDiagnosticDedup(state);
+            } else {
+                dynamicArray.restoreDiagnosticDedup(state);
             }
         }
 
@@ -286,6 +348,7 @@ final class MemoryDataflowDriver {
     private int branchDepth;
     private int blockDepth;
     private int loopDepth;
+    private int guardCaseWork;
 
     private final LoopFrame[] loopFrames = new LoopFrame[64];
     private int[] jumpSlots = new int[256];
@@ -348,11 +411,16 @@ final class MemoryDataflowDriver {
     }
 
     private void checkFunction(SastNode function) {
+        if (!domain.shouldCheckFunction(function)) {
+            return;
+        }
+
         int functionId = context.functionId(function.symbol);
 
         branchDepth = 0;
         blockDepth = 0;
         loopDepth = 0;
+        guardCaseWork = MAX_GUARD_CASE_WORK;
         jumpCount = 0;
         exitCount = 0;
 
@@ -494,60 +562,132 @@ final class MemoryDataflowDriver {
         int before = domain.snapshot();
         branchDepth++;
 
-        boolean thenFeasible = domain.guardPathFeasible(node.condition, true);
-        domain.restore(before);
+        MemoryGuardFacts trueFacts =
+                prepareGuard(node.condition, true);
+        int[] continuing = new int[16];
+        int continuingCount = 0;
+        java.util.List<java.util.List<Diagnostic>> thenDiagnostics =
+                new java.util.ArrayList<>();
+        int thenCases = 0;
+        long[][] caseDedup = domain.diagnosticDedup();
 
-        if (thenFeasible) {
-            domain.refineFromGuard(node.condition, true);
-        }
+        for (int guardCase = 0;
+                guardCase < trueFacts.caseCount();
+                guardCase++) {
+            domain.restore(before);
 
-        boolean savedSuppression = domain.isSuppressed();
-        domain.setSuppressed(savedSuppression || !thenFeasible);
-        boolean thenLeaves = checkStmt(node.thenBranch);
-        domain.setSuppressed(savedSuppression);
-
-        int thenState = thenFeasible ? domain.snapshot() : -1;
-        domain.restore(before);
-
-        boolean elseFeasible = domain.guardPathFeasible(node.condition, false);
-        boolean elseLeaves = false;
-        int elseState = -1;
-        int fallthroughState = -1;
-
-        if (node.elseBranch != null) {
-            if (elseFeasible) {
-                domain.refineFromGuard(node.condition, false);
+            if (!domain.guardCaseFeasible(trueFacts, guardCase)) {
+                continue;
             }
 
-            domain.setSuppressed(savedSuppression || !elseFeasible);
-            elseLeaves = checkStmt(node.elseBranch);
-            domain.setSuppressed(savedSuppression);
+            domain.restoreDiagnosticDedup(caseDedup);
+            thenCases++;
+            domain.applyGuardCase(trueFacts, guardCase);
+            int mark = diagnostics.mark();
+            boolean leaves = checkStmt(node.thenBranch);
+            thenDiagnostics.add(diagnostics.drainFrom(mark));
 
-            elseState = elseFeasible ? domain.snapshot() : -1;
-        } else if (elseFeasible) {
-            domain.refineFromGuard(node.condition, false);
-            fallthroughState = domain.snapshot();
+            if (!leaves) {
+                continuing = ensureSlotCapacity(continuing, continuingCount + 1);
+                continuing[continuingCount++] = domain.snapshot();
+            }
+        }
+
+        MemoryDiagnosticMerge.mergeInto(
+                diagnostics,
+                thenDiagnostics,
+                thenCases
+        );
+
+        MemoryGuardFacts falseFacts =
+                prepareGuard(node.condition, false);
+        java.util.List<java.util.List<Diagnostic>> elseDiagnostics =
+                new java.util.ArrayList<>();
+        int elseCases = 0;
+
+        if (node.elseBranch != null) {
+            for (int guardCase = 0;
+                    guardCase < falseFacts.caseCount();
+                    guardCase++) {
+                domain.restore(before);
+
+                if (!domain.guardCaseFeasible(falseFacts, guardCase)) {
+                    continue;
+                }
+
+                domain.restoreDiagnosticDedup(caseDedup);
+                elseCases++;
+                domain.applyGuardCase(falseFacts, guardCase);
+                int mark = diagnostics.mark();
+                boolean leaves = checkStmt(node.elseBranch);
+                elseDiagnostics.add(diagnostics.drainFrom(mark));
+
+                if (!leaves) {
+                    continuing = ensureSlotCapacity(
+                            continuing,
+                            continuingCount + 1
+                    );
+                    continuing[continuingCount++] = domain.snapshot();
+                }
+            }
+
+            MemoryDiagnosticMerge.mergeInto(
+                    diagnostics,
+                    elseDiagnostics,
+                    elseCases
+            );
+        } else {
+            for (int guardCase = 0;
+                    guardCase < falseFacts.caseCount();
+                    guardCase++) {
+                domain.restore(before);
+
+                if (!domain.guardCaseFeasible(falseFacts, guardCase)) {
+                    continue;
+                }
+
+                domain.applyGuardCase(falseFacts, guardCase);
+                continuing = ensureSlotCapacity(continuing, continuingCount + 1);
+                continuing[continuingCount++] = domain.snapshot();
+            }
         }
 
         domain.restore(before);
         branchDepth--;
 
-        boolean thenActuallyLeaves = thenLeaves || !thenFeasible;
-        boolean elseActuallyLeaves = node.elseBranch != null
-                ? elseLeaves || !elseFeasible
-                : !elseFeasible;
+        if (continuingCount > 0) {
+            domain.mergeStates(continuing, continuingCount);
+        }
 
-        domain.mergeAfterIf(
-                before,
-                thenState,
-                thenActuallyLeaves,
-                elseState,
-                elseActuallyLeaves,
-                node.elseBranch != null,
-                fallthroughState
+        return continuingCount == 0;
+    }
+
+    private static int[] ensureSlotCapacity(int[] slots, int required) {
+        if (required <= slots.length) {
+            return slots;
+        }
+
+        return java.util.Arrays.copyOf(
+                slots,
+                Math.max(required, slots.length * 2)
         );
+    }
 
-        return thenActuallyLeaves && elseActuallyLeaves;
+    private MemoryGuardFacts prepareGuard(SastNode condition, boolean holds) {
+        MemoryGuardFacts facts = MemoryGuardFacts.prepare(condition, holds);
+        int count = facts.caseCount();
+
+        if (count <= 1) {
+            return facts;
+        }
+
+        if (count > guardCaseWork) {
+            guardCaseWork = 0;
+            return MemoryGuardFacts.unconstrained();
+        }
+
+        guardCaseWork -= count;
+        return facts;
     }
 
     private boolean checkIfPathInsensitive(SastNode node) {
@@ -584,7 +724,10 @@ final class MemoryDataflowDriver {
         domain.checkExpr(node.condition);
 
         int before = domain.snapshot();
-        boolean bodyFeasible = domain.guardPathFeasible(node.condition, true);
+        MemoryGuardFacts trueFacts =
+                prepareGuard(node.condition, true);
+        MemoryGuardFacts falseFacts =
+                prepareGuard(node.condition, false);
 
         int frameIndex = loopDepth++;
         LoopFrame frame = loopFrames[frameIndex];
@@ -603,15 +746,41 @@ final class MemoryDataflowDriver {
         int exitCountLocal = 0;
         int backEdgeCount = 0;
 
-        if (domain.guardPathFeasible(node.condition, false)) {
+        for (int guardCase = 0;
+                guardCase < falseFacts.caseCount();
+                guardCase++) {
             domain.restore(before);
-            domain.refineFromGuard(node.condition, false);
+
+            if (!domain.guardCaseFeasible(falseFacts, guardCase)) {
+                continue;
+            }
+
+            domain.applyGuardCase(falseFacts, guardCase);
+            loopExitSlots = ensureSlotCapacity(loopExitSlots, exitCountLocal + 1);
             loopExitSlots[exitCountLocal++] = domain.snapshot();
         }
 
-        if (bodyFeasible) {
+        boolean bodyFeasible = false;
+        java.util.List<java.util.List<Diagnostic>> bodyDiagnostics =
+                new java.util.ArrayList<>();
+        int bodyCases = 0;
+        long[][] bodyDedup = domain.diagnosticDedup();
+
+        for (int guardCase = 0;
+                guardCase < trueFacts.caseCount();
+                guardCase++) {
             domain.restore(before);
-            domain.refineFromGuard(node.condition, true);
+
+            if (!domain.guardCaseFeasible(trueFacts, guardCase)) {
+                continue;
+            }
+
+            domain.restoreDiagnosticDedup(bodyDedup);
+            bodyFeasible = true;
+            bodyCases++;
+            domain.applyGuardCase(trueFacts, guardCase);
+            int mark = diagnostics.mark();
+            int previousContinueHead = frame.continueHead;
 
             boolean bodyTerminates = checkStmt(node.body);
             int afterBody = bodyTerminates ? -1 : domain.snapshot();
@@ -621,45 +790,76 @@ final class MemoryDataflowDriver {
                     domain.restore(afterBody);
 
                     if (checkUpdates(node.update)) {
+                        backEdgeSlots = ensureSlotCapacity(
+                                backEdgeSlots,
+                                backEdgeCount + 1
+                        );
                         backEdgeSlots[backEdgeCount++] = domain.snapshot();
                     }
                 }
 
-                for (int i = frame.continueHead; i >= 0; i = jumpNext[i]) {
+                for (int i = frame.continueHead;
+                        i != previousContinueHead;
+                        i = jumpNext[i]) {
                     domain.restore(jumpSlots[i]);
 
                     if (checkUpdates(node.update)) {
+                        backEdgeSlots = ensureSlotCapacity(
+                                backEdgeSlots,
+                                backEdgeCount + 1
+                        );
                         backEdgeSlots[backEdgeCount++] = domain.snapshot();
                     }
                 }
             } else {
                 if (!bodyTerminates) {
+                    backEdgeSlots = ensureSlotCapacity(
+                            backEdgeSlots,
+                            backEdgeCount + 1
+                    );
                     backEdgeSlots[backEdgeCount++] = afterBody;
                 }
 
-                for (int i = frame.continueHead; i >= 0; i = jumpNext[i]) {
+                for (int i = frame.continueHead;
+                        i != previousContinueHead;
+                        i = jumpNext[i]) {
+                    backEdgeSlots = ensureSlotCapacity(
+                            backEdgeSlots,
+                            backEdgeCount + 1
+                    );
                     backEdgeSlots[backEdgeCount++] = jumpSlots[i];
                 }
             }
 
-            for (int i = 0; i < backEdgeCount; i++) {
-                domain.restore(backEdgeSlots[i]);
+            frame.continueHead = previousContinueHead;
+            bodyDiagnostics.add(diagnostics.drainFrom(mark));
+        }
 
-                if (domain.guardPathFeasible(node.condition, false)) {
-                    domain.refineFromGuard(node.condition, false);
-                    loopExitSlots[exitCountLocal++] = domain.snapshot();
+        MemoryDiagnosticMerge.mergeInto(
+                diagnostics,
+                bodyDiagnostics,
+                bodyCases
+        );
+
+        for (int i = 0; i < backEdgeCount; i++) {
+            int backEdge = backEdgeSlots[i];
+
+            for (int guardCase = 0;
+                    guardCase < falseFacts.caseCount();
+                    guardCase++) {
+                domain.restore(backEdge);
+
+                if (!domain.guardCaseFeasible(falseFacts, guardCase)) {
+                    continue;
                 }
-            }
-        } else {
-            boolean savedSuppression = domain.isSuppressed();
-            domain.setSuppressed(true);
-            checkStmt(node.body);
 
-            for (SastNode update : node.update) {
-                checkStmt(update);
+                domain.applyGuardCase(falseFacts, guardCase);
+                loopExitSlots = ensureSlotCapacity(
+                        loopExitSlots,
+                        exitCountLocal + 1
+                );
+                loopExitSlots[exitCountLocal++] = domain.snapshot();
             }
-
-            domain.setSuppressed(savedSuppression);
         }
 
         loopDepth--;

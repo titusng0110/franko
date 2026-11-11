@@ -383,7 +383,7 @@ if (cond != 0) {
 $(p);                   // warning: possibly null
 ```
 
-Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard.
+Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard. Compound guards work the same way: `if (p == null || q == null) { return }` proves both pointers non-null on the continuation path, and `if (p != null && q != null)` proves both non-null inside the branch. A dereference that is only possibly null on some alternatives is a warning; a definite null dereference on every reaching alternative is an error.
 
 ## 25.10 Capability Linter
 

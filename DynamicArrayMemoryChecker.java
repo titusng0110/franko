@@ -158,7 +158,11 @@ public final class DynamicArrayMemoryChecker {
 
     }
 
-    private final DiagnosticBag diagnostics;
+    private static final int ASSUMPTION_NONE = 0;
+    private static final int ASSUMPTION_INITED = 1;
+    private static final int ASSUMPTION_UNINITED = 2;
+
+    private DiagnosticBag diagnostics;
 
     private MemoryAnalysisContext context;
     private DynamicArrayAnalysisState state;
@@ -167,6 +171,7 @@ public final class DynamicArrayMemoryChecker {
     private DynamicSummary[] summaries;
 
     private boolean summaryMode;
+    private int assumptionMode = ASSUMPTION_NONE;
     private int currentFunctionId = -1;
     private DynamicSummaryBuilder builder;
     private final List<long[]> exitReturnSets = new ArrayList<>();
@@ -212,6 +217,7 @@ public final class DynamicArrayMemoryChecker {
 
         runSummaryPass();
         runCheckPass();
+        runAssumptionPasses();
 
         return new PassResult(
                 document.withPhase(SastPhase.DYN_ARRAY),
@@ -252,16 +258,128 @@ public final class DynamicArrayMemoryChecker {
 
     private void runCheckPass() {
         summaryMode = false;
+        assumptionMode = ASSUMPTION_NONE;
         driver = new MemoryDataflowDriver(context, diagnostics, new MemoryDataflowDriver.Domain(new DynamicDomain()));
         driver.run(context.root);
+    }
+
+    private void runAssumptionPasses() {
+        if (state.shadowParamCount == 0) {
+            return;
+        }
+
+        DiagnosticBag inited = new DiagnosticBag();
+        runAssumptionPass(ASSUMPTION_INITED, inited);
+        DiagnosticBag uninited = new DiagnosticBag();
+        runAssumptionPass(ASSUMPTION_UNINITED, uninited);
+        mergeAssumptionDiagnostics(inited, uninited);
+    }
+
+    private void runAssumptionPass(
+            int mode,
+            DiagnosticBag bag
+    ) {
+        DiagnosticBag savedDiagnostics = diagnostics;
+        int savedMode = assumptionMode;
+        diagnostics = bag;
+        assumptionMode = mode;
+
+        try {
+            summaryMode = false;
+            driver = new MemoryDataflowDriver(
+                    context,
+                    diagnostics,
+                    new MemoryDataflowDriver.Domain(new DynamicDomain())
+            );
+            driver.run(context.root);
+        } finally {
+            diagnostics = savedDiagnostics;
+            assumptionMode = savedMode;
+        }
+    }
+
+    private void mergeAssumptionDiagnostics(
+            DiagnosticBag inited,
+            DiagnosticBag uninited
+    ) {
+        java.util.Map<String, Diagnostic[]> entries =
+                new java.util.LinkedHashMap<>();
+
+        for (Diagnostic diagnostic : inited.diagnostics()) {
+            entries.computeIfAbsent(
+                    assumptionKey(diagnostic),
+                    unused -> new Diagnostic[2]
+            )[0] = diagnostic;
+        }
+
+        for (Diagnostic diagnostic : uninited.diagnostics()) {
+            entries.computeIfAbsent(
+                    assumptionKey(diagnostic),
+                    unused -> new Diagnostic[2]
+            )[1] = diagnostic;
+        }
+
+        java.util.Set<String> existing = new java.util.HashSet<>();
+
+        for (Diagnostic diagnostic : diagnostics.diagnostics()) {
+            existing.add(
+                    diagnostic.span.format() + "|" + diagnostic.message
+            );
+        }
+
+        for (Diagnostic[] pair : entries.values()) {
+            Diagnostic first = pair[0];
+            Diagnostic second = pair[1];
+            Diagnostic chosen;
+
+            if (first != null && second != null
+                    && first.isError() && second.isError()) {
+                chosen = first;
+            } else {
+                Diagnostic warning = first != null && !first.isError()
+                        ? first
+                        : second != null && !second.isError()
+                                ? second
+                                : null;
+
+                if (warning != null) {
+                    chosen = warning;
+                } else {
+                    Diagnostic source = first != null ? first : second;
+
+                    chosen = Diagnostic.warning(
+                            source.span,
+                            MemoryDiagnosticMerge.possibleMessage(
+                                    source.message
+                            ),
+                            source.code
+                    );
+                }
+            }
+
+            String key = chosen.span.format() + "|" + chosen.message;
+
+            if (existing.add(key)) {
+                diagnostics.add(chosen);
+            }
+        }
+    }
+
+    private static String assumptionKey(Diagnostic diagnostic) {
+        String code = diagnostic.code;
+
+        if (code == null || code.isEmpty()) {
+            code = diagnostic.message;
+        }
+
+        return diagnostic.span.format() + "|" + code;
     }
 
     final class DynamicDomain {
         private boolean suppressed;
 
         public void beginFunction(int functionId) {
-            currentFunctionId = functionId;
-            state.reset();
+            currentFunctionId = functionId;            state.reset();
             exitReturnSets.clear();
             Arrays.fill(callResultAliases, null);
             Arrays.fill(callResultResolving, false);
@@ -288,8 +406,57 @@ public final class DynamicArrayMemoryChecker {
             } else {
                 builder = null;
                 seedCheckParameters(decl);
+                seedAssumptionParameters(decl);
                 seedGlobalOwners();
             }
+        }
+
+        private void seedAssumptionParameters(SastNode decl) {
+            if (assumptionMode == ASSUMPTION_NONE) {
+                return;
+            }
+
+            for (Symbol parameter : decl.parameterVariables) {
+                int shadow = state.shadowArrayOf(parameter);
+
+                if (shadow < 0) {
+                    continue;
+                }
+
+                int ownerIndex = state.ownerIndexOf(parameter);
+                int pointerIndex = state.pointerIndexOf(parameter);
+
+                if (ownerIndex >= 0) {
+                    state.clearOwner(ownerIndex);
+                    state.addOwner(ownerIndex, shadow);
+                }
+
+                if (pointerIndex >= 0) {
+                    state.clearAlias(pointerIndex);
+                }
+
+                state.lifecycle[shadow] = assumptionMode == ASSUMPTION_INITED
+                        ? DynamicArrayAnalysisState.INITED
+                        : DynamicArrayAnalysisState.UNINITED;
+                state.freed[shadow] = DynamicArrayAnalysisState.FREED_NEVER;
+                state.escaped[shadow] = false;
+                state.epochMin[shadow] = 0;
+                state.epochMax[shadow] = 0;
+            }
+        }
+
+        boolean shouldCheckFunction(SastNode function) {
+            if (assumptionMode == ASSUMPTION_NONE) {
+                return true;
+            }
+
+            for (Symbol parameter : function.parameterVariables) {
+                if (state.shadowArrayOf(parameter) >= 0) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void seedGlobalOwners() {
@@ -923,6 +1090,10 @@ public final class DynamicArrayMemoryChecker {
             if (epoch < state.epochMin[root]) {
                 reportAliasError(
                         site,
+                        "dyn.invalidate."
+                                + pointerName(pointerIndex)
+                                + "."
+                                + arrayName(root),
                         "Pointer '" + pointerName(pointerIndex)
                                 + "' was invalidated by resize of dynamic array '"
                                 + arrayName(root)
@@ -931,6 +1102,10 @@ public final class DynamicArrayMemoryChecker {
             } else if (epoch < state.epochMax[root]) {
                 reportAliasWarning(
                         site,
+                        "dyn.invalidate."
+                                + pointerName(pointerIndex)
+                                + "."
+                                + arrayName(root),
                         "Pointer '" + pointerName(pointerIndex)
                                 + "' may have been invalidated by resize or"
                                 + " uninit of dynamic array '"
@@ -956,7 +1131,11 @@ public final class DynamicArrayMemoryChecker {
             return -1;
         }
 
-        private void reportAliasError(SastNode site, String message) {
+        private void reportAliasError(
+                SastNode site,
+                String code,
+                String message
+        ) {
             if (suppressed) {
                 return;
             }
@@ -964,11 +1143,15 @@ public final class DynamicArrayMemoryChecker {
             int siteId = context.siteId(site);
 
             if (siteId < 0 || addBit(reportedErrorSites, siteId)) {
-                diagnostics.error(INTRA + message);
+                diagnostics.error(INTRA + message, code);
             }
         }
 
-        private void reportAliasWarning(SastNode site, String message) {
+        private void reportAliasWarning(
+                SastNode site,
+                String code,
+                String message
+        ) {
             if (suppressed) {
                 return;
             }
@@ -976,7 +1159,7 @@ public final class DynamicArrayMemoryChecker {
             int siteId = context.siteId(site);
 
             if (siteId < 0 || addBit(reportedWarningSites, siteId)) {
-                diagnostics.warning(INTRA + message);
+                diagnostics.warning(INTRA + message, code);
             }
         }
 
@@ -1101,6 +1284,14 @@ public final class DynamicArrayMemoryChecker {
                         if (newPost
                                 != DynamicArrayAnalysisState.POST_UNCHANGED) {
                             state.paramPost[param] = newPost;
+
+                            if (newPost
+                                    == DynamicArrayAnalysisState.POST_INITED) {
+                                state.paramInited[param] = true;
+                            } else if (newPost
+                                    == DynamicArrayAnalysisState.POST_UNINITED) {
+                                state.paramInited[param] = false;
+                            }
                         }
                     } else {
                         int localVariable =
@@ -1171,8 +1362,7 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void markSummaryRequireParam(int param) {
-            if (state.paramPost[param]
-                    == DynamicArrayAnalysisState.POST_INITED) {
+            if (state.paramInited[param]) {
                 return;
             }
 
@@ -1399,6 +1589,7 @@ public final class DynamicArrayMemoryChecker {
             if (lifecycle == DynamicArrayAnalysisState.MAYBE_INITED) {
                 reportWarningOnce(
                         site,
+                        "dyn.free." + arrayName(arrayIndex),
                         "Possible invalid free or double free of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "'"
@@ -1415,6 +1606,7 @@ public final class DynamicArrayMemoryChecker {
                     == DynamicArrayAnalysisState.FREED_YES) {
                 reportErrorOnce(
                         site,
+                        "dyn.free." + arrayName(arrayIndex),
                         "Double free of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' (uninit called twice)"
@@ -1423,6 +1615,7 @@ public final class DynamicArrayMemoryChecker {
                     == DynamicArrayAnalysisState.FREED_NEVER) {
                 reportErrorOnce(
                         site,
+                        "dyn.free." + arrayName(arrayIndex),
                         "Invalid free of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' (uninit before init)"
@@ -1430,6 +1623,7 @@ public final class DynamicArrayMemoryChecker {
             } else {
                 reportWarningOnce(
                         site,
+                        "dyn.free." + arrayName(arrayIndex),
                         "Possible invalid free or double free of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "'"
@@ -1456,6 +1650,7 @@ public final class DynamicArrayMemoryChecker {
             if (lifecycle == DynamicArrayAnalysisState.MAYBE_INITED) {
                 reportWarningOnce(
                         site,
+                        "dyn.use." + arrayName(arrayIndex),
                         "Possible use of uninitialized dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "'"
@@ -1467,6 +1662,7 @@ public final class DynamicArrayMemoryChecker {
                     == DynamicArrayAnalysisState.FREED_YES) {
                 reportErrorOnce(
                         site,
+                        "dyn.use." + arrayName(arrayIndex),
                         "Use of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' after uninit"
@@ -1475,6 +1671,7 @@ public final class DynamicArrayMemoryChecker {
                     == DynamicArrayAnalysisState.FREED_NEVER) {
                 reportErrorOnce(
                         site,
+                        "dyn.use." + arrayName(arrayIndex),
                         "Use of uninitialized dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' before init"
@@ -1482,6 +1679,7 @@ public final class DynamicArrayMemoryChecker {
             } else {
                 reportWarningOnce(
                         site,
+                        "dyn.use." + arrayName(arrayIndex),
                         "Dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' may be uninitialized or freed"
@@ -1503,6 +1701,11 @@ public final class DynamicArrayMemoryChecker {
                 return;
             }
 
+            if (state.isShadowArray(arrayIndex)
+                    && assumptionMode == ASSUMPTION_INITED) {
+                return;
+            }
+
             if (state.lifecycle[arrayIndex]
                     == DynamicArrayAnalysisState.INITED) {
                 diagnostics.warning(
@@ -1511,7 +1714,8 @@ public final class DynamicArrayMemoryChecker {
                         + arrayName(arrayIndex)
                         + "' is still initialized at "
                         + where
-                        + " (missing explicit uninit)"
+                        + " (missing explicit uninit)",
+                        "dyn.leak." + arrayName(arrayIndex)
                 );
             } else if (state.lifecycle[arrayIndex]
                     == DynamicArrayAnalysisState.MAYBE_INITED) {
@@ -1521,7 +1725,8 @@ public final class DynamicArrayMemoryChecker {
                         + arrayName(arrayIndex)
                         + "' may still be initialized at "
                         + where
-                        + " (missing explicit uninit)"
+                        + " (missing explicit uninit)",
+                        "dyn.leak." + arrayName(arrayIndex)
                 );
             }
         }
@@ -1538,6 +1743,14 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void reportErrorOnce(SastNode site, String message) {
+            reportErrorOnce(site, null, message);
+        }
+
+        private void reportErrorOnce(
+                SastNode site,
+                String code,
+                String message
+        ) {
             if (suppressed) {
                 return;
             }
@@ -1545,11 +1758,19 @@ public final class DynamicArrayMemoryChecker {
             int siteId = context.siteId(site);
 
             if (siteId < 0 || addBit(reportedErrorSites, siteId)) {
-                diagnostics.error(INTRA + message);
+                diagnostics.error(INTRA + message, code);
             }
         }
 
         private void reportWarningOnce(SastNode site, String message) {
+            reportWarningOnce(site, null, message);
+        }
+
+        private void reportWarningOnce(
+                SastNode site,
+                String code,
+                String message
+        ) {
             if (suppressed) {
                 return;
             }
@@ -1557,7 +1778,7 @@ public final class DynamicArrayMemoryChecker {
             int siteId = context.siteId(site);
 
             if (siteId < 0 || addBit(reportedWarningSites, siteId)) {
-                diagnostics.warning(INTRA + message);
+                diagnostics.warning(INTRA + message, code);
             }
         }
 
@@ -1565,6 +1786,14 @@ public final class DynamicArrayMemoryChecker {
                 SastNode site,
                 String message
         ) {
+            reportInterErrorOnce(site, null, message);
+        }
+
+        private void reportInterErrorOnce(
+                SastNode site,
+                String code,
+                String message
+        ) {
             if (suppressed) {
                 return;
             }
@@ -1572,12 +1801,20 @@ public final class DynamicArrayMemoryChecker {
             int siteId = context.siteId(site);
 
             if (siteId < 0 || addBit(reportedErrorSites, siteId)) {
-                diagnostics.error(INTER + message);
+                diagnostics.error(INTER + message, code);
             }
         }
 
         private void reportInterWarningOnce(
                 SastNode site,
+                String message
+        ) {
+            reportInterWarningOnce(site, null, message);
+        }
+
+        private void reportInterWarningOnce(
+                SastNode site,
+                String code,
                 String message
         ) {
             if (suppressed) {
@@ -1587,7 +1824,7 @@ public final class DynamicArrayMemoryChecker {
             int siteId = context.siteId(site);
 
             if (siteId < 0 || addBit(reportedWarningSites, siteId)) {
-                diagnostics.warning(INTER + message);
+                diagnostics.warning(INTER + message, code);
             }
         }
 
@@ -1622,6 +1859,26 @@ public final class DynamicArrayMemoryChecker {
                 long[] set = context.templates.newSet();
                 context.templates.set(set, MemoryTemplate.UNKNOWN);
                 exitReturnSets.add(set);
+                return;
+            }
+
+            if (!suppressed) {
+                SastNode decl = context.functionDecl(currentFunctionId);
+                String where = "return from function '"
+                        + functionName(decl == null ? null : decl.symbol)
+                        + "'";
+
+                diagnostics.push(decl == null ? SourceSpan.NONE : decl.span);
+
+                try {
+                    for (int i = state.realArrayCount;
+                            i < state.arrayCount;
+                            i++) {
+                        reportLeakIfNeeded(i, where);
+                    }
+                } finally {
+                    diagnostics.pop();
+                }
             }
         }
 
@@ -1753,6 +2010,133 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
+        public boolean guardCaseFeasible(
+                MemoryGuardFacts facts,
+                int guardCase
+        ) {
+            int start = facts.caseFactStart(guardCase);
+            int count = facts.caseFactCount(guardCase);
+
+            for (int i = 0; i < count; i++) {
+                byte kind = facts.kindAt(start + i);
+
+                if (kind != MemoryGuardFacts.FACT_LENGTH_ZERO
+                        && kind != MemoryGuardFacts.FACT_LENGTH_NONZERO) {
+                    continue;
+                }
+
+                if (!lengthFeasible(
+                        facts.expressionAt(start + i),
+                        kind == MemoryGuardFacts.FACT_LENGTH_ZERO
+                )) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private boolean lengthFeasible(
+                SastNode receiver,
+                boolean zero
+        ) {
+            LengthAssertion assertion = zero
+                    ? LengthAssertion.ZERO
+                    : LengthAssertion.NONZERO;
+
+            if (summaryMode) {
+                int param = summaryOwnerParam(receiver);
+
+                if (param >= 0) {
+                    byte post = state.paramAssume[param];
+
+                    if (assertion == LengthAssertion.ZERO) {
+                        return post != DynamicArrayAnalysisState.POST_INITED;
+                    }
+
+                    return post != DynamicArrayAnalysisState.POST_UNINITED;
+                }
+
+                int arrayIndex = summaryLocalArray(receiver);
+
+                if (arrayIndex >= 0) {
+                    return lifecycleFeasible(arrayIndex, assertion);
+                }
+
+                return true;
+            }
+
+            ArrayOrigins origins = storageArrayOrigins(receiver);
+
+            if (origins.unknown || origins.count() != 1) {
+                return true;
+            }
+
+            return lifecycleFeasible(origins.first(), assertion);
+        }
+
+        public void applyGuardCase(
+                MemoryGuardFacts facts,
+                int guardCase
+        ) {
+            int start = facts.caseFactStart(guardCase);
+            int count = facts.caseFactCount(guardCase);
+
+            for (int i = 0; i < count; i++) {
+                byte kind = facts.kindAt(start + i);
+
+                if (kind != MemoryGuardFacts.FACT_LENGTH_ZERO
+                        && kind != MemoryGuardFacts.FACT_LENGTH_NONZERO) {
+                    continue;
+                }
+
+                applyLengthFact(
+                        facts.expressionAt(start + i),
+                        kind == MemoryGuardFacts.FACT_LENGTH_ZERO
+                );
+            }
+        }
+
+        private void applyLengthFact(SastNode receiver, boolean zero) {
+            LengthAssertion assertion = zero
+                    ? LengthAssertion.ZERO
+                    : LengthAssertion.NONZERO;
+
+            if (summaryMode) {
+                int param = summaryOwnerParam(receiver);
+
+                if (param >= 0) {
+                    if (assertion == LengthAssertion.ZERO) {
+                        state.paramAssume[param] =
+                                DynamicArrayAnalysisState.POST_UNINITED;
+                        state.paramInited[param] = false;
+                    } else {
+                        state.paramAssume[param] =
+                                DynamicArrayAnalysisState.POST_INITED;
+                        state.paramInited[param] = true;
+                    }
+
+                    return;
+                }
+
+                int arrayIndex = summaryLocalArray(receiver);
+
+                if (arrayIndex >= 0) {
+                    refineLocalArray(arrayIndex, assertion);
+                }
+
+                return;
+            }
+
+            ArrayOrigins origins = storageArrayOrigins(receiver);
+
+            if (origins.unknown || origins.count() != 1) {
+                return;
+            }
+
+            refineLocalArray(origins.first(), assertion);
+        }
+
         public int snapshot() {
             return state.snapshot();
         }
@@ -1787,6 +2171,36 @@ public final class DynamicArrayMemoryChecker {
 
         public void mergeStateIntoCurrent(int slot) {
             state.mergeStateIntoCurrent(slot);
+        }
+
+        long[][] diagnosticDedup() {
+            return new long[][] {
+                    Arrays.copyOf(
+                            reportedErrorSites,
+                            reportedErrorSites.length
+                    ),
+                    Arrays.copyOf(
+                            reportedWarningSites,
+                            reportedWarningSites.length
+                    )
+            };
+        }
+
+        void restoreDiagnosticDedup(long[][] saved) {
+            System.arraycopy(
+                    saved[0],
+                    0,
+                    reportedErrorSites,
+                    0,
+                    reportedErrorSites.length
+            );
+            System.arraycopy(
+                    saved[1],
+                    0,
+                    reportedWarningSites,
+                    0,
+                    reportedWarningSites.length
+            );
         }
 
         public boolean isSuppressed() {
@@ -1978,6 +2392,10 @@ public final class DynamicArrayMemoryChecker {
             String arrayName = arrayName(arrayIndex);
             String functionName = call.function.qualifiedName();
             SastNode site = call;
+            String code = "dyn.require."
+                    + functionName
+                    + "."
+                    + arrayName;
 
             if (lifecycle == DynamicArrayAnalysisState.UNINITED) {
                 String message = freed == DynamicArrayAnalysisState.FREED_YES
@@ -1989,13 +2407,14 @@ public final class DynamicArrayMemoryChecker {
                                 + "' which requires initialized storage";
 
                 if (requirement == REQUIRE_MUST) {
-                    reportInterErrorOnce(site, message);
+                    reportInterErrorOnce(site, code, message);
                 } else {
-                    reportInterWarningOnce(site, message);
+                    reportInterWarningOnce(site, code, message);
                 }
             } else if (lifecycle == DynamicArrayAnalysisState.MAYBE_INITED) {
                 reportInterWarningOnce(
                         site,
+                        code,
                         "Passing possibly uninitialized dynamic array '"
                                 + arrayName
                                 + "' to function '"
@@ -2111,6 +2530,10 @@ public final class DynamicArrayMemoryChecker {
                     String pointerName = pointerExpressionName(argument);
                     reportInterWarningOnce(
                             call,
+                            "dyn.cross."
+                                    + call.function.qualifiedName()
+                                    + "."
+                                    + arrayName(arrayIndex),
                             "Call to '" + call.function.qualifiedName()
                                     + "' may invalidate array '"
                                     + arrayName(arrayIndex)
@@ -2974,6 +3397,14 @@ public final class DynamicArrayMemoryChecker {
 
         private String arrayName(int arrayIndex) {
             int variableId = state.arrayVariableIds[arrayIndex];
+
+            if (variableId < 0) {
+                Symbol parameter = state.shadowParameterOf(arrayIndex);
+                return parameter == null
+                        ? "<array>"
+                        : parameter.qualifiedName();
+            }
+
             Symbol symbol = context.variable(variableId);
             return symbol == null ? "<array>" : symbol.qualifiedName();
         }

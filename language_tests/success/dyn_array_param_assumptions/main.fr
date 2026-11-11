@@ -1,0 +1,26 @@
+import "franko/io"
+
+func fill(ptr<[int32]> p) -> void {
+    $(p)[0] = 1
+}
+
+func teardown(ptr<[int32]> p) -> void {
+    $(p).uninit()
+}
+
+func init_use_free(ptr<[int32]> p) -> void {
+    $(p).init(2)
+    $(p)[0] = 5
+    $(p).uninit()
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    fill(getptr(d))
+    print(d[0])
+    teardown(getptr(d))
+    [int32] e
+    init_use_free(getptr(e))
+    return 0
+}

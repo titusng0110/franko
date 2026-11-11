@@ -1,0 +1,23 @@
+import "franko/io"
+
+func choose(ptr<int32> p, ptr<int32> q) -> ptr<int32> {
+    if (p == null || q == null) {
+        return null
+    }
+    if (p == null) {
+        return p
+    }
+    return q
+}
+
+func main() -> int32 {
+    int32 a = 1
+    int32 b = 2
+    ptr<int32> r = choose(getptr(a), getptr(b))
+    ptr<int32> n = choose(null, getptr(b))
+    if (r == null || n != null) {
+        return 1
+    }
+    print($(r))
+    return 0
+}

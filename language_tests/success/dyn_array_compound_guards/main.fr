@@ -1,0 +1,39 @@
+import "franko/io"
+
+func use_when_inited(ptr<[int32]> d, int32 c) -> int32 {
+    if ($(d).length() == 0 || c == 0) {
+        return -1
+    }
+    return $(d)[0]
+}
+
+func use_when_nonzero(ptr<[int32]> d, int32 c) -> int32 {
+    if ($(d).length() != 0 && c != 0) {
+        return $(d)[0]
+    }
+    return -1
+}
+
+func loop_guard(ptr<[int32]> d, uint32 n) -> int32 {
+    uint32 i = 0
+    int32 total = 0
+    while ($(d).length() != 0 && i < n) {
+        total = total + $(d)[0]
+        i = i + 1
+    }
+    return total
+}
+
+func main() -> int32 {
+    [int32] d
+    d.init(2)
+    d[0] = 7
+    d[1] = 9
+    print(use_when_inited(getptr(d), 1))
+    print(use_when_inited(getptr(d), 0))
+    print(use_when_nonzero(getptr(d), 1))
+    print(use_when_nonzero(getptr(d), 0))
+    print(loop_guard(getptr(d), 2))
+    d.uninit()
+    return 0
+}
