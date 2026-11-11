@@ -6,9 +6,9 @@ This report compares in-place sorting only: Franko `-Omax`, a
 hand-written C++ `-O3` port of the same algorithm, and C++ `std::sort`
 as the reference. Every binary uses the same host compiler and the
 `compile.py` flag set, the system allocator, and is left unstripped; on
-Linux the C++ runtime is static, so the binary-size comparison is
-controlled. The run used `g++ 15.2.0`, OpenJDK `25.0.5`, and one pinned
-CPU under WSL2 on an Intel i5-12600K.
+Linux the C++ runtime is static. Franko output is compiled with
+exceptions and RTTI disabled. The run used `g++ 15.2.0`, OpenJDK
+`25.0.5`, and one pinned CPU under WSL2 on an Intel i5-12600K.
 
 Distributions, highest duplicate concentration first:
 
@@ -21,20 +21,19 @@ Distributions, highest duplicate concentration first:
 
 ## Short version
 
-- `0-9` wins every size. Franko is **0.654x–0.749x** of `std::sort`;
-  the C++ port is **0.676x–0.971x**.
-- `1k`: Franko wins five of six datasets (**0.890x–0.976x**); C++ wins
-  only `random` (0.950x).
-- `10k`: Franko wins four of six (**0.810x–0.920x** on the duplicate
+- `0-9` wins every size. Franko is **0.662x–0.879x** of `std::sort`;
+  the C++ port is **0.687x–0.956x**.
+- `1k`: Franko wins all six datasets (**0.879x–0.924x**); the C++
+  port loses all six.
+- `10k`: Franko wins four of six (**0.662x–0.885x** on the duplicate
   datasets); C++ wins `10pct` and `random`.
-- `99k`: C++ wins four of six; Franko wins `0-9`; `random` goes to
-  `std::sort`.
-- `1M`: Franko wins only `0-9`; C++ wins only `1pct` by a hair; the
-  other four go to `std::sort`.
-- `10M`: only `0-9` wins for the custom implementations, with C++
-  slightly ahead of Franko; `std::sort` wins the other five.
+- `99k`: C++ wins five of six; Franko wins `0-9`; the C++ port also
+  edges out `std::sort` on `random`.
+- `1M`: C++ wins `0-9` and `0.25pct` by tiny margins; `std::sort` wins
+  the other four.
+- `10M`: Franko wins `0-9`; `std::sort` wins the other five.
 - All 30 cells agree on `sorted ok` and checksum.
-- Binary sizes: Franko **205 KB**, C++ port **162 KB**, `std::sort`
+- Binary sizes: Franko **60 KB**, C++ port **162 KB**, `std::sort`
   **154 KB**. All are unstripped and use the system allocator.
 - `<4k` uses median-of-3 Hoare. At `4k–100k` a fixed probe selects DNF
   or Lomuto; above `100k` the `m_hat` estimator selects the partition
@@ -46,71 +45,71 @@ Distributions, highest duplicate concentration first:
 
 | size | dataset | franko-inplace | cpp-inplace | cpp-std-sort |
 | --- | --- | ---: | ---: | ---: |
-| `10M` | `0-9` | 0.129415 | **0.128781** | 0.190501 |
-| `10M` | `0.25pct` | 0.496381 | 0.473648 | **0.457753** |
-| `10M` | `0.5pct` | 0.529675 | 0.508040 | **0.476505** |
-| `10M` | `1pct` | 0.563987 | 0.545671 | **0.512050** |
-| `10M` | `10pct` | 0.615054 | 0.616998 | **0.603708** |
-| `10M` | `random` | 0.645519 | 0.630979 | **0.613843** |
-| `1M` | `0-9` | **0.011810** | 0.012141 | 0.016977 |
-| `1M` | `0.25pct` | 0.037442 | 0.038089 | **0.036502** |
-| `1M` | `0.5pct` | 0.040922 | 0.040494 | **0.039136** |
-| `1M` | `1pct` | 0.045192 | **0.042772** | 0.042812 |
-| `1M` | `10pct` | 0.051620 | 0.052199 | **0.050722** |
-| `1M` | `random` | 0.054124 | 0.053313 | **0.051989** |
-| `99k` | `0-9` | **0.001114** | 0.001125 | 0.001487 |
-| `99k` | `0.25pct` | 0.002603 | **0.002527** | 0.002687 |
-| `99k` | `0.5pct` | 0.002946 | **0.002811** | 0.003005 |
-| `99k` | `1pct` | 0.003319 | **0.003197** | 0.003268 |
-| `99k` | `10pct` | 0.004108 | **0.004089** | 0.004127 |
-| `99k` | `random` | 0.004386 | 0.004290 | **0.004237** |
-| `10k` | `0-9` | **0.000085** | 0.000101 | 0.000130 |
-| `10k` | `0.25pct` | **0.000144** | 0.000152 | 0.000178 |
-| `10k` | `0.5pct` | **0.000184** | 0.000189 | 0.000204 |
-| `10k` | `1pct` | **0.000214** | 0.000216 | 0.000232 |
-| `10k` | `10pct` | 0.000315690 | **0.000315792** | 0.000324070 |
-| `10k` | `random` | 0.000343787 | **0.000330262** | 0.000330824 |
-| `1k` | `0-9` | **0.000004627** | 0.000005048 | 0.000005199 |
-| `1k` | `0.25pct` | **0.000005419** | 0.000005991 | 0.000005819 |
-| `1k` | `0.5pct` | **0.000005877** | 0.000006294 | 0.000006133 |
-| `1k` | `1pct` | **0.000005874** | 0.000006217 | 0.000006461 |
-| `1k` | `10pct` | **0.000007149** | 0.000007415 | 0.000007446 |
-| `1k` | `random` | 0.000006207 | **0.000006042** | 0.000006360 |
+| `10M` | `0-9` | **0.128364** | 0.130350 | 0.189753 |
+| `10M` | `0.25pct` | 0.485530 | 0.467795 | **0.455922** |
+| `10M` | `0.5pct` | 0.525696 | 0.506830 | **0.476090** |
+| `10M` | `1pct` | 0.554060 | 0.533529 | **0.507886** |
+| `10M` | `10pct` | 0.609394 | 0.612647 | **0.599649** |
+| `10M` | `random` | 0.631046 | 0.625719 | **0.609161** |
+| `1M` | `0-9` | 0.011776 | **0.011760** | 0.017064 |
+| `1M` | `0.25pct` | 0.036694 | **0.036203** | 0.036339 |
+| `1M` | `0.5pct` | 0.040892 | 0.040388 | **0.038693** |
+| `1M` | `1pct` | 0.043896 | 0.042626 | **0.042039** |
+| `1M` | `10pct` | 0.051058 | 0.051287 | **0.050223** |
+| `1M` | `random` | 0.053944 | 0.053149 | **0.051531** |
+| `99k` | `0-9` | **0.001073** | 0.001104 | 0.001495 |
+| `99k` | `0.25pct` | 0.002529 | **0.002520** | 0.002664 |
+| `99k` | `0.5pct` | 0.002837 | **0.002794** | 0.002990 |
+| `99k` | `1pct` | 0.003231 | **0.003186** | 0.003281 |
+| `99k` | `10pct` | 0.004086 | **0.004068** | 0.004128 |
+| `99k` | `random` | 0.004376 | **0.004273** | 0.004283 |
+| `10k` | `0-9` | **0.000085** | 0.000100 | 0.000128 |
+| `10k` | `0.25pct` | **0.000143** | 0.000151 | 0.000176 |
+| `10k` | `0.5pct` | **0.000176** | 0.000186 | 0.000202 |
+| `10k` | `1pct` | **0.000206** | 0.000215 | 0.000233 |
+| `10k` | `10pct` | 0.000315 | **0.000314** | 0.000324 |
+| `10k` | `random` | 0.000341 | **0.000331** | 0.000331 |
+| `1k` | `0-9` | **0.000004557** | 0.000004956 | 0.000005184 |
+| `1k` | `0.25pct` | **0.000005256** | 0.000005774 | 0.000005763 |
+| `1k` | `0.5pct` | **0.000005574** | 0.000006009 | 0.000006067 |
+| `1k` | `1pct` | **0.000005705** | 0.000006246 | 0.000006400 |
+| `1k` | `10pct` | **0.000006765** | 0.000007303 | 0.000007344 |
+| `1k` | `random` | **0.000005709** | 0.000005867 | 0.000006179 |
 
 ### 1.2 Slowdown vs `std::sort`
 
 | size | dataset | franko-inplace | cpp-inplace |
 | --- | --- | ---: | ---: |
-| `10M` | `0-9` | 0.679x | 0.676x |
-| `10M` | `0.25pct` | 1.084x | 1.035x |
-| `10M` | `0.5pct` | 1.112x | 1.066x |
-| `10M` | `1pct` | 1.101x | 1.066x |
-| `10M` | `10pct` | 1.019x | 1.022x |
-| `10M` | `random` | 1.052x | 1.028x |
-| `1M` | `0-9` | 0.696x | 0.715x |
-| `1M` | `0.25pct` | 1.026x | 1.043x |
-| `1M` | `0.5pct` | 1.046x | 1.035x |
-| `1M` | `1pct` | 1.056x | 0.999x |
-| `1M` | `10pct` | 1.018x | 1.029x |
-| `1M` | `random` | 1.041x | 1.025x |
-| `99k` | `0-9` | 0.749x | 0.757x |
-| `99k` | `0.25pct` | 0.968x | 0.941x |
-| `99k` | `0.5pct` | 0.980x | 0.935x |
-| `99k` | `1pct` | 1.015x | 0.978x |
-| `99k` | `10pct` | 0.995x | 0.991x |
-| `99k` | `random` | 1.035x | 1.012x |
-| `10k` | `0-9` | 0.654x | 0.778x |
-| `10k` | `0.25pct` | 0.810x | 0.853x |
-| `10k` | `0.5pct` | 0.903x | 0.924x |
-| `10k` | `1pct` | 0.920x | 0.930x |
-| `10k` | `10pct` | 0.976x | 0.974x |
-| `10k` | `random` | 1.039x | 0.998x |
-| `1k` | `0-9` | 0.890x | 0.971x |
-| `1k` | `0.25pct` | 0.931x | 1.030x |
-| `1k` | `0.5pct` | 0.958x | 1.026x |
-| `1k` | `1pct` | 0.909x | 0.962x |
-| `1k` | `10pct` | 0.960x | 0.996x |
-| `1k` | `random` | 0.976x | 0.950x |
+| `10M` | `0-9` | 0.676x | 0.687x |
+| `10M` | `0.25pct` | 1.065x | 1.026x |
+| `10M` | `0.5pct` | 1.104x | 1.065x |
+| `10M` | `1pct` | 1.091x | 1.050x |
+| `10M` | `10pct` | 1.016x | 1.022x |
+| `10M` | `random` | 1.036x | 1.027x |
+| `1M` | `0-9` | 0.690x | 0.689x |
+| `1M` | `0.25pct` | 1.010x | 0.996x |
+| `1M` | `0.5pct` | 1.057x | 1.044x |
+| `1M` | `1pct` | 1.044x | 1.014x |
+| `1M` | `10pct` | 1.017x | 1.021x |
+| `1M` | `random` | 1.047x | 1.031x |
+| `99k` | `0-9` | 0.718x | 0.739x |
+| `99k` | `0.25pct` | 0.949x | 0.946x |
+| `99k` | `0.5pct` | 0.949x | 0.934x |
+| `99k` | `1pct` | 0.985x | 0.971x |
+| `99k` | `10pct` | 0.990x | 0.985x |
+| `99k` | `random` | 1.022x | 0.998x |
+| `10k` | `0-9` | 0.662x | 0.785x |
+| `10k` | `0.25pct` | 0.811x | 0.859x |
+| `10k` | `0.5pct` | 0.872x | 0.922x |
+| `10k` | `1pct` | 0.885x | 0.922x |
+| `10k` | `10pct` | 0.972x | 0.969x |
+| `10k` | `random` | 1.031x | 1.000x |
+| `1k` | `0-9` | 0.879x | 0.956x |
+| `1k` | `0.25pct` | 0.912x | 1.002x |
+| `1k` | `0.5pct` | 0.919x | 0.990x |
+| `1k` | `1pct` | 0.891x | 0.976x |
+| `1k` | `10pct` | 0.921x | 0.994x |
+| `1k` | `random` | 0.924x | 0.950x |
 
 A value below `1.00x` is faster than `std::sort`.
 
@@ -118,24 +117,22 @@ A value below `1.00x` is faster than `std::sort`.
 
 | size | Franko | C++ |
 | --- | ---: | ---: |
-| `10M` | 0/6 | 1/6 |
-| `1M` | 1/6 | 1/6 |
-| `99k` | 1/6 | 4/6 |
+| `10M` | 1/6 | 0/6 |
+| `1M` | 0/6 | 2/6 |
+| `99k` | 1/6 | 5/6 |
 | `10k` | 4/6 | 2/6 |
-| `1k` | 5/6 | 1/6 |
+| `1k` | 6/6 | 0/6 |
 
 Key observations:
 
-- `0-9` is the only dataset that wins at every size for both custom
-  implementations.
-- `1k` favors Franko: five wins, with the C++ port winning only
-  `random`.
+- `0-9` is the only dataset that wins at every size for Franko.
+- `1k` is a Franko sweep: six wins, with margins of 8–12%.
 - `10k` favors Franko on the duplicate-heavy rows; C++ takes `10pct`
   and `random`.
-- `99k` is mixed: C++ wins four rows, Franko takes `0-9`, and
-  `std::sort` takes `random`.
-- `1M` and `10M` are dominated by `std::sort`; only `0-9` goes to a
-  custom implementation, and at `10M` the C++ port edges out Franko.
+- `99k` is mixed: C++ wins five rows, Franko takes `0-9`, and C++ also
+  edges out `std::sort` on `random`.
+- `1M` and `10M` are dominated by `std::sort`; only `0-9` goes to
+  Franko, and at `10M` it does so with a clear margin.
 
 ## 2. Algorithm
 
@@ -219,36 +216,36 @@ is pinned to CPU 2.
 
 | size | dataset | franko-inplace | cpp-inplace | cpp-std-sort |
 | --- | --- | ---: | ---: | ---: |
-| `10M` | `0-9` | 12.94 | **12.88** | 19.05 |
-| `10M` | `0.25pct` | 49.64 | 47.36 | **45.78** |
-| `10M` | `0.5pct` | 52.97 | 50.80 | **47.65** |
-| `10M` | `1pct` | 56.40 | 54.57 | **51.21** |
-| `10M` | `10pct` | 61.51 | 61.70 | **60.37** |
-| `10M` | `random` | 64.55 | 63.10 | **61.38** |
-| `1M` | `0-9` | **11.81** | 12.14 | 16.98 |
-| `1M` | `0.25pct` | 37.44 | 38.09 | **36.50** |
-| `1M` | `0.5pct` | 40.92 | 40.49 | **39.14** |
-| `1M` | `1pct` | 45.19 | **42.77** | 42.81 |
-| `1M` | `10pct` | 51.62 | 52.20 | **50.72** |
-| `1M` | `random` | 54.12 | 53.31 | **51.99** |
-| `99k` | `0-9` | **11.25** | 11.37 | 15.02 |
-| `99k` | `0.25pct` | 26.29 | **25.53** | 27.14 |
-| `99k` | `0.5pct` | 29.76 | **28.39** | 30.36 |
-| `99k` | `1pct` | 33.53 | **32.29** | 33.01 |
-| `99k` | `10pct` | 41.49 | **41.30** | 41.69 |
-| `99k` | `random` | 44.31 | 43.33 | **42.80** |
-| `10k` | `0-9` | **8.50** | 10.12 | 13.01 |
-| `10k` | `0.25pct` | **14.44** | 15.20 | 17.82 |
-| `10k` | `0.5pct` | **18.44** | 18.87 | 20.43 |
-| `10k` | `1pct` | **21.37** | 21.60 | 23.24 |
-| `10k` | `10pct` | 31.62 | **31.58** | 32.41 |
-| `10k` | `random` | 34.38 | **33.03** | 33.08 |
-| `1k` | `0-9` | **4.63** | 5.05 | 5.20 |
-| `1k` | `0.25pct` | **5.42** | 5.99 | 5.82 |
-| `1k` | `0.5pct` | **5.88** | 6.29 | 6.13 |
-| `1k` | `1pct` | **5.87** | 6.22 | 6.46 |
-| `1k` | `10pct` | **7.15** | 7.42 | 7.45 |
-| `1k` | `random` | 6.21 | **6.04** | 6.36 |
+| `10M` | `0-9` | **12.84** | 13.03 | 18.98 |
+| `10M` | `0.25pct` | 48.55 | 46.78 | **45.59** |
+| `10M` | `0.5pct` | 52.57 | 50.68 | **47.61** |
+| `10M` | `1pct` | 55.41 | 53.35 | **50.79** |
+| `10M` | `10pct` | 60.94 | 61.26 | **59.96** |
+| `10M` | `random` | 63.10 | 62.57 | **60.92** |
+| `1M` | `0-9` | 11.78 | **11.76** | 17.06 |
+| `1M` | `0.25pct` | 36.69 | **36.20** | 36.34 |
+| `1M` | `0.5pct` | 40.89 | 40.39 | **38.69** |
+| `1M` | `1pct` | 43.90 | 42.63 | **42.04** |
+| `1M` | `10pct` | 51.06 | 51.29 | **50.22** |
+| `1M` | `random` | 53.94 | 53.15 | **51.53** |
+| `99k` | `0-9` | **10.84** | 11.15 | 15.10 |
+| `99k` | `0.25pct` | 25.54 | **25.45** | 26.90 |
+| `99k` | `0.5pct` | 28.66 | **28.23** | 30.20 |
+| `99k` | `1pct` | 32.64 | **32.18** | 33.14 |
+| `99k` | `10pct` | 41.28 | **41.10** | 41.70 |
+| `99k` | `random` | 44.20 | **43.16** | 43.26 |
+| `10k` | `0-9` | **8.46** | 10.03 | 12.78 |
+| `10k` | `0.25pct` | **14.30** | 15.14 | 17.63 |
+| `10k` | `0.5pct` | **17.61** | 18.61 | 20.20 |
+| `10k` | `1pct` | **20.63** | 21.49 | 23.30 |
+| `10k` | `10pct` | 31.50 | **31.39** | 32.41 |
+| `10k` | `random` | 34.12 | **33.07** | 33.08 |
+| `1k` | `0-9` | **4.56** | 4.96 | 5.18 |
+| `1k` | `0.25pct` | **5.26** | 5.77 | 5.76 |
+| `1k` | `0.5pct` | **5.57** | 6.01 | 6.07 |
+| `1k` | `1pct` | **5.71** | 6.25 | 6.40 |
+| `1k` | `10pct` | **6.77** | 7.30 | 7.34 |
+| `1k` | `random` | **5.71** | 5.87 | 6.18 |
 
 ## 4. Analysis
 
@@ -268,42 +265,40 @@ The 10k tier uses 22 samples; the 99k tier uses 64.
 
 ### 4.2 Median-of-3 below 4k
 
-The `<4k` median-of-3 Hoare path gives Franko five wins at 1k:
-`0-9` (0.890x), `0.25pct` (0.931x), `0.5pct` (0.958x), `1pct`
-(0.909x), and `10pct` (0.960x). The C++ port wins only `random` at
-0.950x, while `std::sort` is fastest on none of the six rows.
+The `<4k` median-of-3 Hoare path gives Franko all six 1k wins:
+`0-9` (0.879x), `0.25pct` (0.912x), `0.5pct` (0.919x), `1pct`
+(0.891x), `10pct` (0.921x), and `random` (0.924x). The C++ port
+beats `std::sort` on five of six, losing only `0.25pct` (1.002x).
 
 At this size the per-key cost is close to the timer floor, so the
-absolute differences are small; the consistent direction across five
-rows is more meaningful than any single 1k number.
+absolute differences are small; the consistent direction across all
+six rows is more meaningful than any single 1k number.
 
 ### 4.3 Large sizes
 
-At 10M and 1M, `std::sort` wins every row except `0-9`. For duplicate
-heavy rows the custom implementations lose 1.02x–1.11x; for `random`
-the loss is 1.03x–1.05x. At 1M the C++ port is essentially tied with
-`std::sort` on `1pct` (0.999x) and is within 4.3% on the other
-non-`0-9` rows.
+At 10M and 1M, `std::sort` wins almost everything. At 10M Franko loses
+1.016x–1.104x on the non-`0-9` rows, while the C++ port loses
+1.022x–1.065x. At 1M the C++ port takes `0-9` and `0.25pct` by margins
+under 1.4%, and `std::sort` takes the remaining four rows.
 
-The `0-9` exception is large and repeatable: both custom
-implementations beat `std::sort` by roughly 28–34% at 10M/1M and by
-23–25% at 99k, because the DNF partition removes the equal block in one
-pass.
+The `0-9` exception is large and repeatable: Franko beats `std::sort`
+by 32% at 10M, 31% at 1M, and 28% at 99k, because the DNF partition
+removes the equal block in one pass.
 
 ### 4.4 Franko versus C++
 
 The two custom implementations are usually close. Largest gaps:
 
 - `10k` `0-9`: Franko is about 16% faster than the C++ port.
-- `10k` `0.25pct`: Franko is about 5% faster.
-- `99k` `0.25pct` / `0.5pct`: C++ is about 3–5% faster.
-- `10M` `0.25pct`: C++ is about 5% faster than Franko.
-- `1k` `0.25pct`: Franko is about 10% faster.
+- `10k` `0.25pct`: Franko is about 6% faster.
+- `10k` `0.5pct`: Franko is about 5% faster.
+- `10M` `0.25pct`: C++ is about 4% faster than Franko.
+- `1k` `0.25pct`: Franko is about 9% faster.
 
-On `random` the two implementations are within about 4% at every size.
-The remaining gaps are consistent with code layout, call overhead, and
-the different amount of generated runtime support, not with a different
-asymptotic algorithm.
+On `random` the two implementations are within about 3.2% at every
+size. The remaining gaps are consistent with code layout, call
+overhead, and the different amount of generated runtime support, not
+with a different asymptotic algorithm.
 
 ## 5. Complexity
 
@@ -344,9 +339,9 @@ Total space is `O(N)` for the in-place `8N`-byte input array.
 8. One machine, WSL2, i5-12600K, CPU 2.
 9. Only `-Omax`/`-O3` release builds; no PGO, LTO, or clang variants.
 10. Binary sizes are unstripped and system-allocator builds: Franko
-    205 KB, C++ port 162 KB, `std::sort` 154 KB. The Franko binary
-    includes the Franko runtime; the C++ binaries include static
-    libstdc++/libgcc.
+    60 KB, C++ port 162 KB, `std::sort` 154 KB. Franko output is
+    compiled with exceptions and RTTI disabled, which removes the C++
+    exception/unwind runtime from the binary.
 
 ## 7. Reproduce
 
@@ -362,96 +357,96 @@ Arguments: `3`=`0-9`, `5`=`0.25pct`, `4`=`0.5pct`, `2`=`1pct`,
 
 | size | dataset | mode | chunk s | reps | mean/sort |
 | --- | --- | --- | ---: | ---: | ---: |
-| `10M` | `0-9` | franko-inplace | 1.294152 | 10 | 0.129415 |
-| `10M` | `0-9` | cpp-inplace | 1.287808 | 10 | 0.128781 |
-| `10M` | `0-9` | cpp-std-sort | 1.905005 | 10 | 0.190500 |
-| `10M` | `0.25pct` | franko-inplace | 4.963805 | 10 | 0.496381 |
-| `10M` | `0.25pct` | cpp-inplace | 4.736482 | 10 | 0.473648 |
-| `10M` | `0.25pct` | cpp-std-sort | 4.577530 | 10 | 0.457753 |
-| `10M` | `0.5pct` | franko-inplace | 5.296753 | 10 | 0.529675 |
-| `10M` | `0.5pct` | cpp-inplace | 5.080397 | 10 | 0.508040 |
-| `10M` | `0.5pct` | cpp-std-sort | 4.765048 | 10 | 0.476505 |
-| `10M` | `1pct` | franko-inplace | 5.639865 | 10 | 0.563987 |
-| `10M` | `1pct` | cpp-inplace | 5.456714 | 10 | 0.545671 |
-| `10M` | `1pct` | cpp-std-sort | 5.120505 | 10 | 0.512050 |
-| `10M` | `10pct` | franko-inplace | 6.150537 | 10 | 0.615054 |
-| `10M` | `10pct` | cpp-inplace | 6.169978 | 10 | 0.616998 |
-| `10M` | `10pct` | cpp-std-sort | 6.037080 | 10 | 0.603708 |
-| `10M` | `random` | franko-inplace | 6.455192 | 10 | 0.645519 |
-| `10M` | `random` | cpp-inplace | 6.309789 | 10 | 0.630979 |
-| `10M` | `random` | cpp-std-sort | 6.138431 | 10 | 0.613843 |
-| `1M` | `0-9` | franko-inplace | 0.236204 | 20 | 0.011810 |
-| `1M` | `0-9` | cpp-inplace | 0.242822 | 20 | 0.012141 |
-| `1M` | `0-9` | cpp-std-sort | 0.339531 | 20 | 0.016977 |
-| `1M` | `0.25pct` | franko-inplace | 0.748842 | 20 | 0.037442 |
-| `1M` | `0.25pct` | cpp-inplace | 0.761784 | 20 | 0.038089 |
-| `1M` | `0.25pct` | cpp-std-sort | 0.730039 | 20 | 0.036502 |
-| `1M` | `0.5pct` | franko-inplace | 0.818438 | 20 | 0.040922 |
-| `1M` | `0.5pct` | cpp-inplace | 0.809885 | 20 | 0.040494 |
-| `1M` | `0.5pct` | cpp-std-sort | 0.782729 | 20 | 0.039136 |
-| `1M` | `1pct` | franko-inplace | 0.903839 | 20 | 0.045192 |
-| `1M` | `1pct` | cpp-inplace | 0.855435 | 20 | 0.042772 |
-| `1M` | `1pct` | cpp-std-sort | 0.856233 | 20 | 0.042812 |
-| `1M` | `10pct` | franko-inplace | 1.032406 | 20 | 0.051620 |
-| `1M` | `10pct` | cpp-inplace | 1.043984 | 20 | 0.052199 |
-| `1M` | `10pct` | cpp-std-sort | 1.014436 | 20 | 0.050722 |
-| `1M` | `random` | franko-inplace | 1.082485 | 20 | 0.054124 |
-| `1M` | `random` | cpp-inplace | 1.066269 | 20 | 0.053313 |
-| `1M` | `random` | cpp-std-sort | 1.039784 | 20 | 0.051989 |
-| `99k` | `0-9` | franko-inplace | 0.668364 | 600 | 0.001114 |
-| `99k` | `0-9` | cpp-inplace | 0.675257 | 600 | 0.001125 |
-| `99k` | `0-9` | cpp-std-sort | 0.892084 | 600 | 0.001487 |
-| `99k` | `0.25pct` | franko-inplace | 1.561510 | 600 | 0.002603 |
-| `99k` | `0.25pct` | cpp-inplace | 1.516490 | 600 | 0.002527 |
-| `99k` | `0.25pct` | cpp-std-sort | 1.612387 | 600 | 0.002687 |
-| `99k` | `0.5pct` | franko-inplace | 1.767461 | 600 | 0.002946 |
-| `99k` | `0.5pct` | cpp-inplace | 1.686424 | 600 | 0.002811 |
-| `99k` | `0.5pct` | cpp-std-sort | 1.803172 | 600 | 0.003005 |
-| `99k` | `1pct` | franko-inplace | 1.991399 | 600 | 0.003319 |
-| `99k` | `1pct` | cpp-inplace | 1.918136 | 600 | 0.003197 |
-| `99k` | `1pct` | cpp-std-sort | 1.961054 | 600 | 0.003268 |
-| `99k` | `10pct` | franko-inplace | 2.464561 | 600 | 0.004108 |
-| `99k` | `10pct` | cpp-inplace | 2.453381 | 600 | 0.004089 |
-| `99k` | `10pct` | cpp-std-sort | 2.476284 | 600 | 0.004127 |
-| `99k` | `random` | franko-inplace | 2.631740 | 600 | 0.004386 |
-| `99k` | `random` | cpp-inplace | 2.573982 | 600 | 0.004290 |
-| `99k` | `random` | cpp-std-sort | 2.542377 | 600 | 0.004237 |
-| `10k` | `0-9` | franko-inplace | 0.510178 | 6000 | 0.000085 |
-| `10k` | `0-9` | cpp-inplace | 0.607177 | 6000 | 0.000101 |
-| `10k` | `0-9` | cpp-std-sort | 0.780535 | 6000 | 0.000130 |
-| `10k` | `0.25pct` | franko-inplace | 0.866320 | 6000 | 0.000144 |
-| `10k` | `0.25pct` | cpp-inplace | 0.911770 | 6000 | 0.000152 |
-| `10k` | `0.25pct` | cpp-std-sort | 1.069481 | 6000 | 0.000178 |
-| `10k` | `0.5pct` | franko-inplace | 1.106586 | 6000 | 0.000184 |
-| `10k` | `0.5pct` | cpp-inplace | 1.132303 | 6000 | 0.000189 |
-| `10k` | `0.5pct` | cpp-std-sort | 1.225958 | 6000 | 0.000204 |
-| `10k` | `1pct` | franko-inplace | 1.282329 | 6000 | 0.000214 |
-| `10k` | `1pct` | cpp-inplace | 1.295985 | 6000 | 0.000216 |
-| `10k` | `1pct` | cpp-std-sort | 1.394168 | 6000 | 0.000232 |
-| `10k` | `10pct` | franko-inplace | 1.897140 | 6000 | 0.000316 |
-| `10k` | `10pct` | cpp-inplace | 1.894752 | 6000 | 0.000316 |
-| `10k` | `10pct` | cpp-std-sort | 1.944421 | 6000 | 0.000324 |
-| `10k` | `random` | franko-inplace | 2.062720 | 6000 | 0.000344 |
-| `10k` | `random` | cpp-inplace | 1.981572 | 6000 | 0.000330 |
-| `10k` | `random` | cpp-std-sort | 1.984945 | 6000 | 0.000331 |
-| `1k` | `0-9` | franko-inplace | 0.277607 | 60000 | 0.000005 |
-| `1k` | `0-9` | cpp-inplace | 0.302880 | 60000 | 0.000005 |
-| `1k` | `0-9` | cpp-std-sort | 0.311933 | 60000 | 0.000005 |
-| `1k` | `0.25pct` | franko-inplace | 0.325154 | 60000 | 0.000005 |
-| `1k` | `0.25pct` | cpp-inplace | 0.359447 | 60000 | 0.000006 |
-| `1k` | `0.25pct` | cpp-std-sort | 0.349146 | 60000 | 0.000006 |
-| `1k` | `0.5pct` | franko-inplace | 0.352649 | 60000 | 0.000006 |
-| `1k` | `0.5pct` | cpp-inplace | 0.377619 | 60000 | 0.000006 |
-| `1k` | `0.5pct` | cpp-std-sort | 0.367955 | 60000 | 0.000006 |
-| `1k` | `1pct` | franko-inplace | 0.352428 | 60000 | 0.000006 |
-| `1k` | `1pct` | cpp-inplace | 0.372996 | 60000 | 0.000006 |
-| `1k` | `1pct` | cpp-std-sort | 0.387674 | 60000 | 0.000006 |
-| `1k` | `10pct` | franko-inplace | 0.428965 | 60000 | 0.000007 |
-| `1k` | `10pct` | cpp-inplace | 0.444928 | 60000 | 0.000007 |
-| `1k` | `10pct` | cpp-std-sort | 0.446773 | 60000 | 0.000007 |
-| `1k` | `random` | franko-inplace | 0.372440 | 60000 | 0.000006 |
-| `1k` | `random` | cpp-inplace | 0.362502 | 60000 | 0.000006 |
-| `1k` | `random` | cpp-std-sort | 0.381607 | 60000 | 0.000006 |
+| `10M` | `0-9` | franko-inplace | 1.283635 | 10 | 0.128364 |
+| `10M` | `0-9` | cpp-inplace | 1.303496 | 10 | 0.130350 |
+| `10M` | `0-9` | cpp-std-sort | 1.897528 | 10 | 0.189753 |
+| `10M` | `0.25pct` | franko-inplace | 4.855303 | 10 | 0.485530 |
+| `10M` | `0.25pct` | cpp-inplace | 4.677952 | 10 | 0.467795 |
+| `10M` | `0.25pct` | cpp-std-sort | 4.559224 | 10 | 0.455922 |
+| `10M` | `0.5pct` | franko-inplace | 5.256958 | 10 | 0.525696 |
+| `10M` | `0.5pct` | cpp-inplace | 5.068301 | 10 | 0.506830 |
+| `10M` | `0.5pct` | cpp-std-sort | 4.760901 | 10 | 0.476090 |
+| `10M` | `1pct` | franko-inplace | 5.540601 | 10 | 0.554060 |
+| `10M` | `1pct` | cpp-inplace | 5.335293 | 10 | 0.533529 |
+| `10M` | `1pct` | cpp-std-sort | 5.078861 | 10 | 0.507886 |
+| `10M` | `10pct` | franko-inplace | 6.093943 | 10 | 0.609394 |
+| `10M` | `10pct` | cpp-inplace | 6.126470 | 10 | 0.612647 |
+| `10M` | `10pct` | cpp-std-sort | 5.996489 | 10 | 0.599649 |
+| `10M` | `random` | franko-inplace | 6.310455 | 10 | 0.631046 |
+| `10M` | `random` | cpp-inplace | 6.257187 | 10 | 0.625719 |
+| `10M` | `random` | cpp-std-sort | 6.091609 | 10 | 0.609161 |
+| `1M` | `0-9` | franko-inplace | 0.235521 | 20 | 0.011776 |
+| `1M` | `0-9` | cpp-inplace | 0.235204 | 20 | 0.011760 |
+| `1M` | `0-9` | cpp-std-sort | 0.341284 | 20 | 0.017064 |
+| `1M` | `0.25pct` | franko-inplace | 0.733877 | 20 | 0.036694 |
+| `1M` | `0.25pct` | cpp-inplace | 0.724058 | 20 | 0.036203 |
+| `1M` | `0.25pct` | cpp-std-sort | 0.726776 | 20 | 0.036339 |
+| `1M` | `0.5pct` | franko-inplace | 0.817834 | 20 | 0.040892 |
+| `1M` | `0.5pct` | cpp-inplace | 0.807755 | 20 | 0.040388 |
+| `1M` | `0.5pct` | cpp-std-sort | 0.773865 | 20 | 0.038693 |
+| `1M` | `1pct` | franko-inplace | 0.877920 | 20 | 0.043896 |
+| `1M` | `1pct` | cpp-inplace | 0.852514 | 20 | 0.042626 |
+| `1M` | `1pct` | cpp-std-sort | 0.840776 | 20 | 0.042039 |
+| `1M` | `10pct` | franko-inplace | 1.021155 | 20 | 0.051058 |
+| `1M` | `10pct` | cpp-inplace | 1.025736 | 20 | 0.051287 |
+| `1M` | `10pct` | cpp-std-sort | 1.004460 | 20 | 0.050223 |
+| `1M` | `random` | franko-inplace | 1.078881 | 20 | 0.053944 |
+| `1M` | `random` | cpp-inplace | 1.062982 | 20 | 0.053149 |
+| `1M` | `random` | cpp-std-sort | 1.030621 | 20 | 0.051531 |
+| `99k` | `0-9` | franko-inplace | 0.644040 | 600 | 0.001073 |
+| `99k` | `0-9` | cpp-inplace | 0.662564 | 600 | 0.001104 |
+| `99k` | `0-9` | cpp-std-sort | 0.897055 | 600 | 0.001495 |
+| `99k` | `0.25pct` | franko-inplace | 1.517189 | 600 | 0.002529 |
+| `99k` | `0.25pct` | cpp-inplace | 1.511873 | 600 | 0.002520 |
+| `99k` | `0.25pct` | cpp-std-sort | 1.598137 | 600 | 0.002664 |
+| `99k` | `0.5pct` | franko-inplace | 1.702141 | 600 | 0.002837 |
+| `99k` | `0.5pct` | cpp-inplace | 1.676584 | 600 | 0.002794 |
+| `99k` | `0.5pct` | cpp-std-sort | 1.794138 | 600 | 0.002990 |
+| `99k` | `1pct` | franko-inplace | 1.938669 | 600 | 0.003231 |
+| `99k` | `1pct` | cpp-inplace | 1.911402 | 600 | 0.003186 |
+| `99k` | `1pct` | cpp-std-sort | 1.968633 | 600 | 0.003281 |
+| `99k` | `10pct` | franko-inplace | 2.451776 | 600 | 0.004086 |
+| `99k` | `10pct` | cpp-inplace | 2.441062 | 600 | 0.004068 |
+| `99k` | `10pct` | cpp-std-sort | 2.477039 | 600 | 0.004128 |
+| `99k` | `random` | franko-inplace | 2.625777 | 600 | 0.004376 |
+| `99k` | `random` | cpp-inplace | 2.563555 | 600 | 0.004273 |
+| `99k` | `random` | cpp-std-sort | 2.569673 | 600 | 0.004283 |
+| `10k` | `0-9` | franko-inplace | 0.507791 | 6000 | 0.000085 |
+| `10k` | `0-9` | cpp-inplace | 0.601833 | 6000 | 0.000100 |
+| `10k` | `0-9` | cpp-std-sort | 0.766769 | 6000 | 0.000128 |
+| `10k` | `0.25pct` | franko-inplace | 0.858040 | 6000 | 0.000143 |
+| `10k` | `0.25pct` | cpp-inplace | 0.908532 | 6000 | 0.000151 |
+| `10k` | `0.25pct` | cpp-std-sort | 1.058021 | 6000 | 0.000176 |
+| `10k` | `0.5pct` | franko-inplace | 1.056470 | 6000 | 0.000176 |
+| `10k` | `0.5pct` | cpp-inplace | 1.116685 | 6000 | 0.000186 |
+| `10k` | `0.5pct` | cpp-std-sort | 1.211707 | 6000 | 0.000202 |
+| `10k` | `1pct` | franko-inplace | 1.238043 | 6000 | 0.000206 |
+| `10k` | `1pct` | cpp-inplace | 1.289400 | 6000 | 0.000215 |
+| `10k` | `1pct` | cpp-std-sort | 1.398158 | 6000 | 0.000233 |
+| `10k` | `10pct` | franko-inplace | 1.890158 | 6000 | 0.000315 |
+| `10k` | `10pct` | cpp-inplace | 1.883168 | 6000 | 0.000314 |
+| `10k` | `10pct` | cpp-std-sort | 1.944377 | 6000 | 0.000324 |
+| `10k` | `random` | franko-inplace | 2.046958 | 6000 | 0.000341 |
+| `10k` | `random` | cpp-inplace | 1.984333 | 6000 | 0.000331 |
+| `10k` | `random` | cpp-std-sort | 1.984806 | 6000 | 0.000331 |
+| `1k` | `0-9` | franko-inplace | 0.273422 | 60000 | 0.000005 |
+| `1k` | `0-9` | cpp-inplace | 0.297379 | 60000 | 0.000005 |
+| `1k` | `0-9` | cpp-std-sort | 0.311065 | 60000 | 0.000005 |
+| `1k` | `0.25pct` | franko-inplace | 0.315367 | 60000 | 0.000005 |
+| `1k` | `0.25pct` | cpp-inplace | 0.346463 | 60000 | 0.000006 |
+| `1k` | `0.25pct` | cpp-std-sort | 0.345791 | 60000 | 0.000006 |
+| `1k` | `0.5pct` | franko-inplace | 0.334461 | 60000 | 0.000006 |
+| `1k` | `0.5pct` | cpp-inplace | 0.360525 | 60000 | 0.000006 |
+| `1k` | `0.5pct` | cpp-std-sort | 0.364024 | 60000 | 0.000006 |
+| `1k` | `1pct` | franko-inplace | 0.342305 | 60000 | 0.000006 |
+| `1k` | `1pct` | cpp-inplace | 0.374747 | 60000 | 0.000006 |
+| `1k` | `1pct` | cpp-std-sort | 0.384026 | 60000 | 0.000006 |
+| `1k` | `10pct` | franko-inplace | 0.405928 | 60000 | 0.000007 |
+| `1k` | `10pct` | cpp-inplace | 0.438180 | 60000 | 0.000007 |
+| `1k` | `10pct` | cpp-std-sort | 0.440611 | 60000 | 0.000007 |
+| `1k` | `random` | franko-inplace | 0.342524 | 60000 | 0.000006 |
+| `1k` | `random` | cpp-inplace | 0.352037 | 60000 | 0.000006 |
+| `1k` | `random` | cpp-std-sort | 0.370737 | 60000 | 0.000006 |
 
 ## Appendix B: checksums
 

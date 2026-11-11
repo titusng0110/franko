@@ -11,9 +11,21 @@ Its defining features are:
 - **Pointer capabilities.** `ptr<T>` owns, `mview<T>` mutates, and `view<T>`
   reads. The permission lattice is enforced by the compiler, with no raw
   pointer arithmetic or ownership annotations.
-- **Interprocedural memory safety checkers.** The compiler follows pointer
-  values across calls and checks null state, dangling frame pointers, and
-  dynamic-array lifecycle.
+- **Whole-program memory safety, not just local checks.** The compiler builds
+  an exact call graph and runs three summary-aware interprocedural analyzers:
+  - **Null state:** tracks pointer values, pointee cells, argument
+    requirements, and call results across function boundaries; refines
+    `null` and compound guards; reports dereferences that may be null.
+  - **Dangling pointers:** tracks frame liveness through blocks, loops,
+    `break`/`continue`, returns, and calls; follows captures into globals,
+    fields, and dereferences; catches use-after-scope, returning a local
+    pointer, and storing a local pointer into caller-owned storage.
+  - **Dynamic-array lifecycle:** tracks aliases, element pointers, owner
+    arrays, and `init`/`resize`/`uninit` state across calls; catches
+    use-before-init, double-free, use-after-uninit, stale element aliases,
+    cross-parameter invalidation, and leaks.
+  The analyses use must/may certainty, SCC-aware recursion handling, and
+  bounded call-graph BFS summaries. No ownership annotations are required.
 - **Compile-time `#if` / `#else` splices.** Select statements or declarations
   at function, global, namespace, and struct scope. The selected branch is
   ordinary code; the other branch does not exist. No trait solver, SFINAE, or
@@ -34,8 +46,10 @@ Its defining features are:
 - **FFI without binding generators.** Small JSON sidecars plus C++ bridge
   blocks; target selection uses the same `#if`.
 - **Native performance, readable output.** Ahead-of-time C++14 with no VM or
-  GC; the [red-black benchmark](benchmark/redblack.md) is competitive with C++
-  and beats `std::set` at `-Omax`, and the generated source is ordinary C++14.
+  GC. The [red-black benchmark](benchmark/redblack.md) is within about 7% of
+  a same-data-structure C++ control and beats `std::set` at `-Omax`; the
+  [in-place quicksort benchmark](benchmark/quicksort.md) is competitive on
+  duplicate-heavy inputs. Generated source is ordinary C++14.
 
 ## A taste
 
@@ -144,6 +158,11 @@ Build modes:
   bundled jemalloc instead of the system allocator. It is never used on
   macOS or Windows, and it cannot be combined with the ASan default build.
 
+Generated C++ is compiled with C++ exceptions and RTTI disabled:
+`-fno-exceptions -fno-rtti` with GCC/Clang, `/EHs-c- /GR-` with MSVC.
+Runtime violations go through `franko_panic`, which prints and aborts
+instead of throwing.
+
 Debug binaries carry their sanitizer runtime where the toolchain allows
 it: MSVC builds copy `clang_rt.asan_dynamic-<arch>.dll` and the
 `vcruntime140*.dll` files next to the executable (Microsoft no longer
@@ -194,11 +213,16 @@ C++14 output can be inspected; they are git-ignored.
 Run the same suites as CI:
 
 ```bash
+uv run python programs/run_programs.py
 uv run python language_tests/run_language_tests.py
 uv run python language_tests/run_omax_smoke.py
 uv run python library_tests/run_library_tests.py
-uv run python programs/run_programs.py
 ```
+
+The suites use the default build mode. On Windows, CI forces MSVC
+`cl.exe` (`CXX=cl`) and verifies that the selected compiler family is
+MSVC; the MinGW fallback remains available for local builds but is not
+used by CI.
 
 ## Editor support
 

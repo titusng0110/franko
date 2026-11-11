@@ -11,7 +11,8 @@ the host compiler (-O3 on GCC/Clang, /O2 on MSVC). --jemalloc is a
 Linux-only opt-in for -O/-Omax. Windows uses MSVC cl.exe when available
 and falls back to g++/clang++; the fallback has no ASan, so its default
 is -O. An explicit --target different from the host transpiles only.
-Binaries are left unstripped so they can be inspected with nm/gdb.
+Generated C++ is compiled with exceptions and RTTI disabled, and binaries
+are left unstripped so they can be inspected with nm/gdb.
 """
 
 import argparse
@@ -310,7 +311,7 @@ def native_compile(
     echo: bool = False,
     check: bool = False,
 ) -> int:
-    """Compile generated C++14 to a native executable."""
+    """Compile generated C++14 to a native executable with exceptions off."""
     cxx = find_cxx()
     msvc = cxx_family() == "msvc"
     optimized = mode in ("opt", "omax")
@@ -335,16 +336,22 @@ def native_compile(
     if msvc:
         defines = [flag.replace("-D", "/D", 1) for flag in defines]
 
+    flags = cxx_compile_flags(
+        optimize="3" if optimized else ASAN_OPTIMIZE,
+        sanitize=not optimized,
+        target=target,
+    )
+    if msvc:
+        flags += ["/EHs-c-", "/GR-"]
+    else:
+        flags += ["-fno-exceptions", "-fno-rtti"]
+
     obj_dir = Path(tempfile.mkdtemp(prefix="franko-msvc-")) if msvc else None
     try:
         cmd = [
             cxx,
             *defines,
-            *cxx_compile_flags(
-                optimize="3" if optimized else ASAN_OPTIMIZE,
-                sanitize=not optimized,
-                target=target,
-            ),
+            *flags,
             f"/I{INCLUDE_DIR}" if msvc else f"-I{INCLUDE_DIR}",
         ]
         if include is not None:

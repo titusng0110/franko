@@ -3106,7 +3106,10 @@ fixed-size arrays, and zero-length C++ arrays are not standard. Static and
 dynamic arrays runtime-check indexes and intrinsics and abort through
 `franko_panic` (`std::abort`) on violations such as out-of-bounds
 access, use of an uninitialized dynamic array, double initialization,
-or zero-size allocation. No C++ exception handling is involved.
+or zero-size allocation. No C++ exception handling or RTTI is involved:
+generated Franko C++ is compiled with exceptions and RTTI disabled
+(`-fno-exceptions -fno-rtti` on GCC/Clang, `/EHs-c- /GR-` on MSVC), and
+`franko_panic` aborts instead of throwing.
 
 The byte-array intrinsics (`memchr`/`memmem`, the endian accessors, the bit
 intrinsics) share one kernel layer (`franko_byte_arrays`) of free templates
