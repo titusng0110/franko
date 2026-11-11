@@ -55,15 +55,13 @@ by exit status only.
 Generated artifacts (main.cpp, main.bin, main.actual, compiler logs) are
 removed after a passing case and kept for inspection after a failure.
 
-Every build-backed case runs in each active build mode (see
-franko_tools.active_build_modes): ASan/system-allocator mode (Franko
-without -O, C++ -O1 + AddressSanitizer) and optimized mode (Franko -O,
-C++ -O3 + jemalloc) on Linux/macOS; optimized mode only on Windows,
-where AddressSanitizer is unsupported. Both stages build through
-compile.franko_compile / compile.native_compile, shared with
-compile.py and the other suites. The optimized build keeps the
-historical artifact names; the ASan build uses .asan-suffixed ones so
-the modes never share failure evidence.
+Build-backed cases run in the default build mode (see
+franko_tools.default_build_mode): ASan/debug where supported, or the
+optimized mode with the Windows g++/clang++ fallback, which has no
+AddressSanitizer. Test builds use the system allocator; jemalloc is an
+opt-in compile.py flag on Linux. Both stages build through
+compile.franko_compile / compile.native_compile, shared with compile.py
+and the other suites.
 """
 
 import sys
@@ -73,17 +71,15 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
-from compile import franko_compile, native_compile
 from franko_tools import (
     IS_WINDOWS,
     Results,
     ToolError,
-    active_build_modes,
     check_substrings,
     compare_output,
+    default_build_mode,
     dump_file,
     executable_suffix,
-    mode_artifact,
     read_flags,
     read_run_args,
     read_stdin_bytes,
@@ -93,6 +89,8 @@ from franko_tools import (
     require_toolchain,
     run_test_binary,
 )
+
+from compile import franko_compile, native_compile
 
 
 def suite_name(src: Path) -> str:
@@ -115,21 +113,14 @@ def skip_platform_suite(src: Path, results: Results) -> bool:
     return False
 
 
-def case_paths(src: Path, mode: str = "opt") -> dict[str, Path]:
-    """All artifact/fixture paths of a library test case.
-
-    MODE selects the build artifacts: "opt" keeps the historical names,
-    "asan" uses .asan-suffixed ones (main.asan.cpp, ...) so the two modes
-    never share failure evidence. Fixture inputs (expected/errors/flags/
-    args/stdin) are mode-independent.
-    """
+def case_paths(src: Path) -> dict[str, Path]:
+    """All artifact/fixture paths of a library test case."""
     base = src.with_suffix("")
     return {
-        "base": base,
-        "cpp": mode_artifact(Path(f"{base}.cpp"), mode),
-        "bin": mode_artifact(Path(f"{base}.bin{executable_suffix()}"), mode),
-        "actual": mode_artifact(Path(f"{base}.actual"), mode),
-        "log": mode_artifact(Path(f"{base}.compile.log"), mode),
+        "cpp": Path(f"{base}.cpp"),
+        "bin": Path(f"{base}.bin{executable_suffix()}"),
+        "actual": Path(f"{base}.actual"),
+        "log": Path(f"{base}.compile.log"),
         "expected": Path(f"{base}.expected"),
         "errors": Path(f"{base}.errors"),
         "warnings": Path(f"{base}.warnings"),
@@ -141,13 +132,12 @@ def case_paths(src: Path, mode: str = "opt") -> dict[str, Path]:
 
 def main() -> int:
     require_toolchain()
-    modes = active_build_modes()
+    mode = default_build_mode()
 
     results = Results()
 
     # ------------------------------------------------------------
-    # Failure cases: the compiler must reject the program, in both modes
-    # (Java-only; -O must not alter diagnostics).
+    # Failure cases: the compiler must reject the program (Java-only).
     # ------------------------------------------------------------
     for src in sorted(ROOT.glob("library_tests/*/*/failure/*/main.fr")):
         print(f"=== {relative(src)} ===")
@@ -155,33 +145,31 @@ def main() -> int:
         if skip_platform_suite(src, results):
             continue
 
-        for mode in modes:
-            paths = case_paths(src, mode)
-            label = f"{relative(src)} [{mode}]"
+        paths = case_paths(src)
+        label = f"{relative(src)} [{mode}]"
+        extra_flags = read_flags(paths["flags"])
+        accepted = franko_compile(
+            src, paths["cpp"], mode=mode, extra_flags=extra_flags,
+            log=paths["log"], echo=False,
+        )
 
-            extra_flags = read_flags(paths["flags"])
-            accepted = franko_compile(
-                src, paths["cpp"], mode=mode, extra_flags=extra_flags,
-                log=paths["log"], echo=False,
-            )
+        if accepted == 0:
+            print("---- compiler output (accepted a failure program): ----")
+            dump_file(paths["log"])
+            remove_artifacts(paths["cpp"], paths["log"])
+            results.fail_case(label)
+            continue
 
-            if accepted == 0:
-                print("---- compiler output (accepted a failure program): ----")
-                dump_file(paths["log"])
-                remove_artifacts(paths["cpp"], paths["log"])
-                results.fail_case(label)
-                continue
+        if paths["errors"].is_file() and not check_substrings(
+            paths["errors"], read_text(paths["log"])
+        ):
+            print("---- compiler output (missing expected diagnostics): ----")
+            dump_file(paths["log"])
+            results.fail_case(f"{label} (missing expected diagnostics)")
+            continue
 
-            if paths["errors"].is_file() and not check_substrings(
-                paths["errors"], read_text(paths["log"])
-            ):
-                print("---- compiler output (missing expected diagnostics): ----")
-                dump_file(paths["log"])
-                results.fail_case(f"{label} (missing expected diagnostics)")
-                continue
-
-            remove_artifacts(paths["log"], paths["cpp"])
-            results.pass_case(label)
+        remove_artifacts(paths["log"], paths["cpp"])
+        results.pass_case(label)
 
     # ------------------------------------------------------------
     # Success cases: compile, run, compare stdout with main.expected.
@@ -192,59 +180,57 @@ def main() -> int:
         if skip_platform_suite(src, results):
             continue
 
-        for mode in modes:
-            paths = case_paths(src, mode)
-            label = f"{relative(src)} [{mode}]"
+        paths = case_paths(src)
+        label = f"{relative(src)} [{mode}]"
+        extra_flags = read_flags(paths["flags"])
+        run_args = read_run_args(paths["args"])
+        stdin_bytes = read_stdin_bytes(paths["stdin"])
 
-            extra_flags = read_flags(paths["flags"])
-            run_args = read_run_args(paths["args"])
-            stdin_bytes = read_stdin_bytes(paths["stdin"])
+        failed = franko_compile(
+            src, paths["cpp"], mode=mode, extra_flags=extra_flags,
+            log=paths["log"], echo=False,
+        )
+        if failed != 0:
+            print("---- compiler output: ----")
+            dump_file(paths["log"])
+            results.fail_case(f"{label} (Franko compile failed)")
+            continue
 
-            failed = franko_compile(
-                src, paths["cpp"], mode=mode, extra_flags=extra_flags,
-                log=paths["log"], echo=False,
-            )
-            if failed != 0:
-                print("---- compiler output: ----")
-                dump_file(paths["log"])
-                results.fail_case(f"{label} (Franko compile failed)")
-                continue
+        if paths["warnings"].is_file() and not check_substrings(
+            paths["warnings"], read_text(paths["log"])
+        ):
+            print("---- compiler output (missing expected warnings): ----")
+            dump_file(paths["log"])
+            results.fail_case(f"{label} (missing expected warnings)")
+            continue
 
-            if paths["warnings"].is_file() and not check_substrings(
-                paths["warnings"], read_text(paths["log"])
-            ):
-                print("---- compiler output (missing expected warnings): ----")
-                dump_file(paths["log"])
-                results.fail_case(f"{label} (missing expected warnings)")
-                continue
+        failed = native_compile(
+            paths["cpp"], paths["bin"], mode=mode,
+            log=paths["log"], echo=False,
+        )
+        if failed != 0:
+            print("---- C++ compiler output: ----")
+            dump_file(paths["log"])
+            results.fail_case(f"{label} (C++ compile failed)")
+            continue
 
-            failed = native_compile(
-                paths["cpp"], paths["bin"], mode=mode, warnings=True,
-                log=paths["log"], echo=False,
-            )
-            if failed != 0:
-                print("---- g++ output: ----")
-                dump_file(paths["log"])
-                results.fail_case(f"{label} (C++ compile failed)")
-                continue
+        if paths["bin"].stat().st_size == 0:
+            results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
+            continue
 
-            if paths["bin"].stat().st_size == 0:
-                results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
-                continue
+        exit_code = run_test_binary(paths["bin"], run_args, stdin_bytes, paths["actual"])
+        if exit_code != 0:
+            print(f"---- runtime output (exit code {exit_code}): ----")
+            dump_file(paths["actual"])
+            results.fail_case(f"{label} (binary exited non-zero)")
+            continue
 
-            exit_code = run_test_binary(paths["bin"], run_args, stdin_bytes, paths["actual"])
-            if exit_code != 0:
-                print(f"---- runtime output (exit code {exit_code}): ----")
-                dump_file(paths["actual"])
-                results.fail_case(f"{label} (binary exited non-zero)")
-                continue
+        if not compare_output(paths["actual"], paths["expected"]):
+            results.fail_case(f"{label} (output mismatch)")
+            continue
 
-            if not compare_output(paths["actual"], paths["expected"]):
-                results.fail_case(f"{label} (output mismatch)")
-                continue
-
-            remove_artifacts(paths["cpp"], paths["bin"], paths["log"], paths["actual"])
-            results.pass_case(label)
+        remove_artifacts(paths["cpp"], paths["bin"], paths["log"], paths["actual"])
+        results.pass_case(label)
 
     # ------------------------------------------------------------
     # Runtime cases: the program compiles but must abort at run time.
@@ -255,54 +241,52 @@ def main() -> int:
         if skip_platform_suite(src, results):
             continue
 
-        for mode in modes:
-            paths = case_paths(src, mode)
-            label = f"{relative(src)} [{mode}]"
+        paths = case_paths(src)
+        label = f"{relative(src)} [{mode}]"
+        extra_flags = read_flags(paths["flags"])
+        run_args = read_run_args(paths["args"])
+        stdin_bytes = read_stdin_bytes(paths["stdin"])
 
-            extra_flags = read_flags(paths["flags"])
-            run_args = read_run_args(paths["args"])
-            stdin_bytes = read_stdin_bytes(paths["stdin"])
-
-            failed = franko_compile(
-                src, paths["cpp"], mode=mode, extra_flags=extra_flags,
-                log=paths["log"], echo=False,
+        failed = franko_compile(
+            src, paths["cpp"], mode=mode, extra_flags=extra_flags,
+            log=paths["log"], echo=False,
+        )
+        if failed != 0:
+            print("---- compiler output: ----")
+            dump_file(paths["log"])
+            results.fail_case(
+                f"{label} (Franko compile failed; runtime cases must compile)"
             )
-            if failed != 0:
-                print("---- compiler output: ----")
-                dump_file(paths["log"])
-                results.fail_case(
-                    f"{label} (Franko compile failed; runtime cases must compile)"
-                )
-                continue
+            continue
 
-            failed = native_compile(
-                paths["cpp"], paths["bin"], mode=mode, warnings=False,
-                log=paths["log"], echo=False,
+        failed = native_compile(
+            paths["cpp"], paths["bin"], mode=mode,
+            log=paths["log"], echo=False,
+        )
+        if failed != 0:
+            print("---- C++ compiler output: ----")
+            dump_file(paths["log"])
+            results.fail_case(f"{label} (C++ compile failed)")
+            continue
+
+        if paths["bin"].stat().st_size == 0:
+            results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
+            continue
+
+        # The abort itself is the assertion: any non-zero exit counts,
+        # including the negative code a signal produces.
+        exit_code = run_test_binary(paths["bin"], run_args, stdin_bytes, paths["actual"])
+        if exit_code == 0:
+            print("---- program output (expected a runtime failure, got exit 0): ----")
+            dump_file(paths["actual"])
+            remove_artifacts(
+                paths["cpp"], paths["bin"], paths["log"], paths["actual"]
             )
-            if failed != 0:
-                print("---- g++ output: ----")
-                dump_file(paths["log"])
-                results.fail_case(f"{label} (C++ compile failed)")
-                continue
+            results.fail_case(f"{label} (expected a runtime failure, exit 0)")
+            continue
 
-            if paths["bin"].stat().st_size == 0:
-                results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
-                continue
-
-            # The abort itself is the assertion: any non-zero exit counts,
-            # including the negative code a signal produces.
-            exit_code = run_test_binary(paths["bin"], run_args, stdin_bytes, paths["actual"])
-            if exit_code == 0:
-                print("---- program output (expected a runtime failure, got exit 0): ----")
-                dump_file(paths["actual"])
-                remove_artifacts(
-                    paths["cpp"], paths["bin"], paths["log"], paths["actual"]
-                )
-                results.fail_case(f"{label} (expected a runtime failure, exit 0)")
-                continue
-
-            remove_artifacts(paths["cpp"], paths["bin"], paths["log"], paths["actual"])
-            results.pass_case(label)
+        remove_artifacts(paths["cpp"], paths["bin"], paths["log"], paths["actual"])
+        results.pass_case(label)
 
     return results.finish("✅ All library tests passed.")
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """-Omax smoke coverage.
 
-The normal language suite exercises only the "asan" and "opt" build
-modes. This runner covers the third shipping runtime, -Omax, where
-static-array bounds checks (and the other range/bit/offset checks) are
-intentionally stripped:
+The normal language suite exercises only the default build mode. This
+runner covers the third shipping runtime, -Omax, where static-array
+bounds checks (and the other range/bit/offset checks) are intentionally
+stripped:
 
     uv run python language_tests/run_omax_smoke.py
 
@@ -23,7 +23,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
-from compile import franko_compile, native_compile
 from franko_tools import (
     Results,
     ToolError,
@@ -36,6 +35,8 @@ from franko_tools import (
     require_toolchain,
     run_test_binary,
 )
+
+from compile import franko_compile, native_compile
 
 # Success fixtures covering the emission paths that only -Omax changes
 # or that the new runtime is most sensitive to.
@@ -100,11 +101,11 @@ def main() -> int:
             continue
 
         failed = native_compile(
-            out_cpp, out_bin, mode="omax", warnings=True,
+            out_cpp, out_bin, mode="omax",
             log=log, echo=False,
         )
         if failed != 0:
-            print("---- g++ output: ----")
+            print("---- C++ compiler output: ----")
             dump_file(log)
             results.fail_case(f"{label} (C++ compile failed)")
             continue

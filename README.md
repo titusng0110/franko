@@ -81,25 +81,23 @@ func main() -> int32 {
 
 - [Java 25](https://adoptium.net/) (`java` and `javac` on `PATH`).
   On Windows ARM64, use JDK 23 and set `FRANKO_JAVA_RELEASE=23`.
-- A C++14 compiler: `g++` or `clang++` on `PATH` (set `CXX` to choose
-  one explicitly).
+- A C++14 compiler.
+  * **Windows x86_64 / ARM64**: Visual Studio (or VS Build Tools) with
+    the **Desktop development with C++** workload. The scripts find
+    `cl.exe` with `vswhere` and load the host-appropriate
+    `vcvars64.bat` / `vcvarsarm64.bat` environment automatically. A
+    MinGW `g++` or `clang++` on `PATH` is still accepted as a fallback
+    (set `CXX` to choose one explicitly); it does not support
+    AddressSanitizer, so those builds default to `-O`.
+  * **Linux x86_64 / arm64**: `g++` (default) or `clang++` on `PATH`
+    (set `CXX` to choose one explicitly).
+  * **macOS (x86_64 / arm64)**: `clang++` (default) or `g++` on `PATH`
+    (set `CXX` to choose one explicitly).
 - [uv](https://docs.astral.sh/uv/) with Python 3.13+.
 
-Platform notes:
-
-* **Linux x86_64 / arm64**: `g++` or `clang++`
-* **Windows x86_64**: MinGW-w64 `g++` (recommended: [x86_64 POSIX SEH
-  UCRT MinGW-w64](https://github.com/niXman/mingw-builds-binaries/releases));
-  add its `bin` directory (for example
-  `C:\x86_64-16.2.0-release-posix-seh-ucrt-rt_v14-rev1\mingw64\bin`) to
-  `PATH` before running the scripts
-* **Windows ARM64**: MSYS2 `clangarm64` `clang++` (install
-  `mingw-w64-clang-aarch64-clang`, add `C:\msys64\clangarm64\bin` to
-  `PATH`)
-* **macOS (x86_64 / arm64)**: Apple clang or `g++`
-
 The repository already ships the ANTLR jar, the Franko runtime headers,
-and bundled jemalloc for every supported platform.
+and a bundled jemalloc for Linux. macOS and Windows use the system
+allocator; on Linux, jemalloc is opt-in with `--jemalloc`.
 
 ## Install
 
@@ -124,25 +122,48 @@ This writes `programs/binary_codec.cpp` and a native executable next to the
 source (`programs/binary_codec.out` on Linux/macOS,
 `programs/binary_codec.exe` on Windows).
 
+`-o` overrides the generated `.cpp` path, and the executable follows that
+stem. `-p` overrides the import search directory (default `./import`):
+
+```bash
+uv run python compile.py -o build/app.cpp -p ./import programs/app.fr
+```
+
 Build modes:
 
-* **Default**: on Linux/macOS, `-O1` with AddressSanitizer and leak
-  checking. On Windows, AddressSanitizer is unsupported, so the default
-  is `-O`.
-* **`-O`**: optimized (`-O3`) with bundled jemalloc, no sanitizer.
+* **Default**: AddressSanitizer with the system allocator (`-O1
+  -fsanitize=address` on GCC/Clang, cl.exe with no `/O` option plus
+  `/fsanitize=address` on Windows). The Windows g++/clang++ fallback has
+  no ASan runtime, so it defaults to `-O` instead.
+* **`-O`**: optimized (`-O3` on GCC/Clang, `/O2` on MSVC), no
+  sanitizer.
 * **`-Omax`**: like `-O`, but with bounds, bit/offset, and
   `unsafe_cast` range checks stripped. Out-of-range access is undefined
   behavior; null and uninitialized-state checks remain.
+* **`--jemalloc`**: Linux only, and only with `-O` or `-Omax`; links the
+  bundled jemalloc instead of the system allocator. It is never used on
+  macOS or Windows, and it cannot be combined with the ASan default build.
+
+Debug binaries carry their sanitizer runtime where the toolchain allows
+it: MSVC builds copy `clang_rt.asan_dynamic-<arch>.dll` and the
+`vcruntime140*.dll` files next to the executable (Microsoft no longer
+ships a static ASan runtime, and the ASan DLL itself uses the dynamic
+CRT), and Linux links `-static-libasan`. Apple clang only provides the
+dynamic ASan runtime, so macOS ASan binaries use the toolchain's dylib.
+Linux also links the C++ runtime statically; macOS has no static libc++.
+Release MSVC builds use `/MT`, so they depend only on `KERNEL32.dll`.
 
 ```bash
 uv run python compile.py -O programs/binary_codec.fr
+uv run python compile.py -O --jemalloc programs/binary_codec.fr
 uv run python compile.py -Omax programs/binary_codec.fr
 uv run python compile.py --target native programs/binary_codec.fr
 ```
 
-`--target native` adds `-march=native`; an explicit `<os>-<arch>` target
-(for example `linux-x86_64`) transpiles without building a native binary
-on a different host.
+`--target native` adds `-march=native` with GCC/Clang (MSVC has no
+equivalent); an explicit `<os>-<arch>` target (for example
+`linux-x86_64`) transpiles without building a native binary on a
+different host.
 
 ## Example programs
 

@@ -27,14 +27,13 @@ Generated C++ sources are kept for inspection after a passing case (they
 are git-ignored); only the test binaries and captured .actual output are
 removed. All artifacts are kept for inspection after a failure.
 
-Every program builds and runs in each active build mode (see
-franko_tools.active_build_modes): ASan/system-allocator mode (Franko
-without -O) and optimized mode (Franko -O with jemalloc) on
-Linux/macOS; optimized mode only on Windows, where AddressSanitizer is
-unsupported. Both stages build through compile.franko_compile /
-compile.native_compile, shared with compile.py and the other suites.
-The optimized build keeps the historical artifact names; the ASan
-build uses .asan-suffixed ones.
+Every program builds and runs in the default build mode (see
+franko_tools.default_build_mode): ASan/debug where supported, or the
+optimized mode with the Windows g++/clang++ fallback, which has no
+AddressSanitizer. Test builds use the system allocator; jemalloc is an
+opt-in compile.py flag on Linux. Both stages build through
+compile.franko_compile / compile.native_compile, shared with compile.py
+and the other suites.
 """
 
 import sys
@@ -44,15 +43,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
-from compile import franko_compile, native_compile
 from franko_tools import (
     Results,
     ToolError,
-    active_build_modes,
     compare_output,
+    default_build_mode,
     dump_file,
     executable_suffix,
-    mode_artifact,
     read_run_args,
     read_stdin_bytes,
     relative,
@@ -61,10 +58,12 @@ from franko_tools import (
     run_test_binary,
 )
 
+from compile import franko_compile, native_compile
+
 
 def main() -> int:
     require_toolchain()
-    modes = active_build_modes()
+    mode = default_build_mode()
 
     programs = sorted(ROOT.glob("programs/*.fr"))
     if not programs:
@@ -75,6 +74,10 @@ def main() -> int:
     for src in programs:
         base = src.with_suffix("")
         expected = Path(f"{base}.expected")
+        out_cpp = Path(f"{base}.cpp")
+        out_bin = Path(f"{base}.testbin{executable_suffix()}")
+        actual = Path(f"{base}.actual")
+        label = f"{relative(src)} [{mode}]"
 
         print()
         print(f"=== {relative(src)} ===")
@@ -83,41 +86,34 @@ def main() -> int:
         run_args = read_run_args(Path(f"{base}.args"))
         stdin_bytes = read_stdin_bytes(Path(f"{base}.stdin"))
 
-        for mode in modes:
-            out_cpp = mode_artifact(Path(f"{base}.cpp"), mode)
-            out_bin = mode_artifact(Path(f"{base}.testbin{executable_suffix()}"), mode)
-            actual = mode_artifact(Path(f"{base}.actual"), mode)
-            label = f"{relative(src)} [{mode}]"
+        if franko_compile(src, out_cpp, mode=mode, echo=True) != 0:
+            results.fail_case(f"{label} (Franko compile failed)")
+            continue
 
-            if franko_compile(src, out_cpp, mode=mode, echo=True) != 0:
-                results.fail_case(f"{label} (Franko compile failed)")
-                continue
+        if native_compile(out_cpp, out_bin, mode=mode, echo=True) != 0:
+            results.fail_case(f"{label} (C++ compile failed)")
+            continue
 
-            if native_compile(out_cpp, out_bin, mode=mode, warnings=True,
-                               echo=True) != 0:
-                results.fail_case(f"{label} (C++ compile failed)")
-                continue
+        if out_bin.stat().st_size == 0:
+            results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
+            continue
 
-            if out_bin.stat().st_size == 0:
-                results.fail_case(f"{label} (linked binary is empty, 0 bytes)")
-                continue
+        exit_code = run_test_binary(out_bin, run_args, stdin_bytes, actual)
+        if exit_code != 0:
+            print(f"---- runtime output (exit code {exit_code}): ----")
+            dump_file(actual)
+            results.fail_case(f"{label} (binary exited non-zero)")
+            continue
 
-            exit_code = run_test_binary(out_bin, run_args, stdin_bytes, actual)
-            if exit_code != 0:
-                print(f"---- runtime output (exit code {exit_code}): ----")
-                dump_file(actual)
-                results.fail_case(f"{label} (binary exited non-zero)")
-                continue
+        print(f"Comparing output against {relative(expected)}:")
+        if not compare_output(actual, expected):
+            results.fail_case(f"{label} (output mismatch)")
+            continue
 
-            print(f"Comparing output against {relative(expected)}:")
-            if not compare_output(actual, expected):
-                results.fail_case(f"{label} (output mismatch)")
-                continue
-
-            remove_artifacts(out_bin, actual)
-            results.pass_case(
-                f"{label} ran successfully, output matches {relative(expected)}"
-            )
+        remove_artifacts(out_bin, actual)
+        results.pass_case(
+            f"{label} ran successfully, output matches {relative(expected)}"
+        )
 
     return results.finish("✅ All programs passed.")
 

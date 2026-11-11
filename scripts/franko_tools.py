@@ -4,8 +4,10 @@ This module is the single implementation of behaviour that used to be
 duplicated (and had already drifted apart) in the Linux shell scripts and
 the Windows PowerShell scripts:
 
-* host target detection and bundled-jemalloc lookup,
-* tool discovery (``java``, ``javac``, ``g++``/``clang++``),
+* host target detection and bundled-jemalloc lookup (Linux only),
+* tool discovery (``java``, ``javac``, MSVC ``cl.exe`` via vswhere on
+  Windows, or ``g++``/``clang++`` as the Windows fallback and the
+  Linux/macOS default),
 * running subprocesses with a printable command line,
 * reading per-case fixture files (``.flags`` / ``.args`` / ``.stdin`` / ...),
 * newline-safe comparison of actual vs expected output,
@@ -149,10 +151,23 @@ def executable_suffix() -> str:
 
 
 def jemalloc_paths() -> tuple[Path, Path]:
-    """Return (include dir, static library) for the host's jemalloc bundle."""
+    """Return (include dir, static library) for the host's jemalloc bundle.
+
+    jemalloc is only used by optimized builds on Linux. macOS keeps the
+    system allocator (its malloc is already a strong general-purpose
+    allocator), and Windows does too, which keeps every Windows C++
+    toolchain (MSVC or the g++/clang++ fallback) on the same allocation
+    path and needs no per-toolchain jemalloc archive.
+    """
+    if host_os() != "linux":
+        raise ToolError(
+            "jemalloc is only used by optimized Linux builds: macOS and "
+            "Windows optimized builds use the system allocator"
+        )
+
     bundle = ROOT / "third_party" / "jemalloc" / host_target()
     include = bundle / "include"
-    library = bundle / "lib" / ("jemalloc.lib" if IS_WINDOWS else "libjemalloc.a")
+    library = bundle / "lib" / "libjemalloc.a"
     header = include / "jemalloc" / "jemalloc.h"
 
     if not header.is_file():
@@ -168,8 +183,7 @@ def jemalloc_paths() -> tuple[Path, Path]:
             "bundled jemalloc static library not found:\n"
             f"  {library}\n"
             "\nExpected layout:\n"
-            f"  third_party/jemalloc/{host_target()}/lib/"
-            + ("jemalloc.lib" if IS_WINDOWS else "libjemalloc.a")
+            f"  third_party/jemalloc/{host_target()}/lib/libjemalloc.a"
         )
 
     return include, library
@@ -186,11 +200,15 @@ def ensure_jemalloc_bundle() -> None:
     Skips extraction when the header and static library are already in
     place. Produces exactly the layout jemalloc_paths() consumes:
     third_party/jemalloc/<target>/{include/jemalloc/jemalloc.h,
-    lib/libjemalloc.a | lib/jemalloc.lib}.
+    lib/libjemalloc.a}. Only Linux has a jemalloc bundle; macOS and
+    Windows use the system allocator.
     """
+    if host_os() != "linux":
+        return
+
     bundle = ROOT / "third_party" / "jemalloc" / host_target()
     include = bundle / "include" / "jemalloc" / "jemalloc.h"
-    library = bundle / "lib" / ("jemalloc.lib" if IS_WINDOWS else "libjemalloc.a")
+    library = bundle / "lib" / "libjemalloc.a"
 
     if include.is_file() and library.is_file():
         return
@@ -218,86 +236,105 @@ def ensure_jemalloc_bundle() -> None:
 
 
 def cxx_compile_flags(
-    warnings: bool = True,
     optimize: str = "3",
     sanitize: bool = False,
     target: str | None = None,
 ) -> list[str]:
     """Common C++ compile flags for Franko output and test programs.
 
-    WARNINGS toggles the warning set -Wall -Wextra -Wpedantic -Wshadow;
-    pass False for warning-free builds (test runtime-abort cases).
+    The flag dialect follows the compiler chosen by find_cxx(): MSVC
+    (cl.exe) gets ``/std:c++14``, ``/O2`` (or no /O option for sanitizer
+    builds), ``/MT``, and ``/W4``; GCC/Clang get the historical
+    ``-O*``/``-Wall -Wextra -Wpedantic -Wshadow``/``-fsanitize=address``
+    set. Warnings are always on.
 
-    OPTIMIZE is the -O level ("3" for optimized builds, ASAN_OPTIMIZE
-    for sanitizer builds). SANITIZE adds AddressSanitizer
-    (-fsanitize=address plus debug info) for debug builds; the
-    matching link flags come from link_flags(sanitize=True), since the
-    suites and compile.py build and link in a single driver invocation.
+    OPTIMIZE is the GCC/Clang -O level ("3" for optimized builds,
+    ASAN_OPTIMIZE for sanitizer builds). MSVC always uses /O2 for
+    optimized builds and no /O option for sanitizer builds. SANITIZE
+    adds AddressSanitizer plus debug info for debug builds; the matching
+    link flags come from link_flags(sanitize=True), since the suites and
+    compile.py build and link in a single driver invocation. ASan is
+    only requested with MSVC on Windows; the Windows g++/clang++
+    fallback does not support it.
 
     TARGET is the compile.py ``--target`` value: "native" adds
-    ``-march=native``, optimizing for the host CPU (wider SIMD; the
-    binary then requires a matching CPU). An explicit ``<os>-<arch>``
-    is validated but does not change the C++ flags — it selects the
-    Franko target, and a host-different target never reaches the C++
-    step. None keeps the portable baseline ISA.
+    ``-march=native`` for GCC/Clang, optimizing for the host CPU (wider
+    SIMD; the binary then requires a matching CPU). MSVC has no
+    -march=native equivalent, so it keeps the portable baseline ISA.
+    An explicit ``<os>-<arch>`` is validated but does not change the
+    C++ flags — it selects the Franko target, and a host-different
+    target never reaches the C++ step. None keeps the portable
+    baseline ISA.
     """
+    msvc = cxx_family() == "msvc"
+
+    if msvc:
+        flags = ["/nologo", "/std:c++14", "/utf-8"]
+        if target == "native":
+            pass  # cl.exe has no portable "native" CPU switch.
+        elif target is not None:
+            normalize_target(target)
+        flags.append("/W4")
+        if sanitize:
+            flags += ["/Zi", "/fsanitize=address", "/MT"]
+        else:
+            flags += ["/O2", "/MT"]
+        return flags
+
+    if sanitize and IS_WINDOWS:
+        raise ToolError(
+            "AddressSanitizer is not supported by the Windows g++/clang++ "
+            "fallback: install Visual Studio with the C++ workload (cl.exe) "
+            "or use an optimized build (-O)"
+        )
+
     flags = [f"-O{optimize}", "-std=c++14"]
     if target == "native":
         flags += ["-march=native"]
     elif target is not None:
         normalize_target(target)
-    if warnings:
-        flags += ["-Wall", "-Wextra", "-Wpedantic", "-Wshadow"]
+    flags += ["-Wall", "-Wextra", "-Wpedantic", "-Wshadow"]
     if sanitize:
         flags += ["-fsanitize=address", "-g", "-fno-omit-frame-pointer"]
     return flags
 
 
 # ------------------------------------------------------------
-# Dual-mode (ASan / optimized) builds
+# Default test build mode
 # ------------------------------------------------------------
 
-BUILD_MODES = ("asan", "opt")
-"""Build modes exercised by the test runners.
-
-"asan" is the debug mode: the Franko compiler runs without -O
-(selecting the system-allocator runtime header) and the C++ step uses
--O1 + AddressSanitizer with no jemalloc. "opt" is the optimized mode:
-the compiler runs with -O (jemalloc header) and the C++ step uses -O3
-with the bundled jemalloc.
-
-This is the full matrix; runners iterate active_build_modes(), which
-drops "asan" on Windows where AddressSanitizer is unsupported.
-"""
-
-
-def active_build_modes() -> tuple[str, ...]:
-    """Modes the test runners actually iterate.
-
-    The full BUILD_MODES matrix on Linux/macOS; just ("opt",) on
-    Windows, where AddressSanitizer is unsupported (compile.py's
-    default build is "opt" there for the same reason). One platform
-    branch, shared by every runner.
-    """
-    return ("opt",) if IS_WINDOWS else BUILD_MODES
-
-
 ASAN_OPTIMIZE = "1"
-"""-O level for the default ASan/debug builds.
+"""-O level for the default GCC/Clang ASan/debug builds.
 
 -O1 (not -O0) keeps full sanitizer coverage while recovering most of
 -O0's overhead; -g -fno-omit-frame-pointer (added by cxx_compile_flags
-with sanitize=True) keep the reports readable.
+with sanitize=True) keep the reports readable. MSVC passes no /O
+option (its default) plus /Zi instead.
 """
 
 
-def java_mode_flags(mode: str) -> list[str]:
-    """Extra Franko-compiler flags for MODE.
+def _cxx_family_quiet() -> str:
+    """cxx_family() without raising when no compiler is installed."""
+    try:
+        return cxx_family()
+    except ToolError:
+        return "gnu"
 
-    [] for "asan", ["-O"] for "opt", ["-Omax"] for "omax" (compile.py's
-    max-speed build; the test matrix in BUILD_MODES exercises just
-    "asan" and "opt").
+
+def default_build_mode() -> str:
+    """The build mode the test suites run.
+
+    "asan" everywhere except the Windows g++/clang++ fallback, whose
+    MinGW runtimes do not support AddressSanitizer; that fallback uses
+    the same optimized default as compile.py ("opt").
     """
+    if IS_WINDOWS and _cxx_family_quiet() != "msvc":
+        return "opt"
+    return "asan"
+
+
+def java_mode_flags(mode: str) -> list[str]:
+    """Extra Franko-compiler flags for MODE (used by the -Omax smoke)."""
     if mode == "opt":
         return ["-O"]
     if mode == "omax":
@@ -307,51 +344,44 @@ def java_mode_flags(mode: str) -> list[str]:
     raise ValueError(f"unknown build mode: {mode!r}")
 
 
-def mode_artifact(path: Path, mode: str) -> Path:
-    """Map a status-quo artifact PATH to its per-mode path.
-
-    "opt" keeps the path unchanged; "asan" inserts ".asan" after the
-    filename stem, before all suffixes (main.cpp -> main.asan.cpp,
-    main.compile.log -> main.asan.compile.log), so the two modes never
-    share - and can never clobber - build artifacts or failure evidence.
-    Splitting at the first dot (not the last) keeps the infix position
-    identical on every platform: main.bin -> main.asan.bin on POSIX and
-    main.asan.bin.exe (not main.bin.asan.exe) on Windows.
-    """
-    if mode == "opt":
-        return path
-    if mode == "asan":
-        head, dot, tail = path.name.partition(".")
-        if not dot:
-            return path.with_name(f"{path.name}.asan")
-        return path.with_name(f"{head}.asan.{tail}")
-    raise ValueError(f"unknown build mode: {mode!r}")
-
-
 def link_flags(sanitize: bool = False) -> list[str]:
-    """Link flags for a native binary, per host OS.
+    """Link flags for a native binary, per host OS and compiler family.
 
-    Linux keeps pthread/dl and macOS keeps pthread in every mode: the
-    statically linked jemalloc references both symbol groups on Linux
-    (they only matter for glibc < 2.34, where libdl and libpthread are
-    not merged into libc yet; dl lives in libSystem on macOS), and the
-    AddressSanitizer runtime wants pthread too, so sanitize builds keep
-    the same thread flags even though they link no jemalloc. MinGW needs
-    neither. The static libstdc++/libgcc pair (Linux/Windows only) keeps
-    binaries independent of the system's GCC runtimes; Apple's clang
-    has no libstdc++ to link.
+    MSVC links through cl.exe: no separate link flags are needed.
+    ``/MT`` (in cxx_compile_flags) statically links the C runtime, so
+    Windows binaries need neither the VC++ redistributable nor a static
+    libstdc++ equivalent. ASan is selected by the compile-side
+    /fsanitize=address; the ASan runtime itself is always the MSVC DLL,
+    so compile.py copies it and the vcruntime DLLs next to debug
+    binaries.
+
+    GCC/Clang keep the historical flags. Linux keeps pthread/dl and
+    macOS keeps pthread in every mode: the optional statically linked
+    jemalloc references both symbol groups on Linux (they only matter for glibc <
+    2.34, where libdl and libpthread are not merged into libc yet; dl
+    lives in libSystem on macOS), and the AddressSanitizer runtime wants
+    pthread too, so sanitize builds keep the same thread flags even
+    though they link no jemalloc. The static libstdc++/libgcc pair
+    (Linux and the Windows MinGW fallback only) keeps binaries
+    independent of the system's GCC runtimes; Apple's clang has no
+    libstdc++ to link statically.
 
     SANITIZE adds -fsanitize=address (required at link time as well as
-    compile time). It also drops -s: stripping a sanitizer build would
-    discard the symbols its reports need. AddressSanitizer is always
-    linked dynamically (no -static-libasan): the flag does not exist on
-    every supported toolchain (e.g. Windows MinGW-w64), and the shared
-    runtime is found automatically on all three platforms.
+    compile time). On Linux it also adds -static-libasan, so the debug
+    binary carries the ASan runtime instead of depending on libasan.so.
+    Apple clang has no static ASan runtime, so macOS keeps the usual
+    dynamic toolchain dylib. SANITIZE also drops -s: stripping a
+    sanitizer build would discard the symbols its reports need.
     """
+    if cxx_family() == "msvc":
+        return []
+
     flags: list[str] = []
     system = host_os()
     if sanitize:
         flags.append("-fsanitize=address")
+        if system == "linux":
+            flags.append("-static-libasan")
     if system in ("linux", "macos"):
         flags.append("-pthread")
     if system == "linux":
@@ -371,10 +401,25 @@ def link_flags(sanitize: bool = False) -> list[str]:
 
 JAVA_HINT = "Install a JDK (Java 25) and make sure java/javac are on PATH."
 CXX_HINT = (
-    "Install a C++14 compiler (g++ or clang++; MinGW-w64 g++ on Windows, "
-    "with its bin directory such as C:\\msys64\\ucrt64\\bin on PATH) and "
-    "make sure the compiler is on PATH."
+    "Install Visual Studio (or VS Build Tools) with the 'Desktop "
+    "development with C++' workload (cl.exe is found through vswhere), or "
+    "put g++/clang++ on PATH. Set CXX to choose a compiler explicitly."
 )
+
+# vswhere component ids and the matching native vcvars script for each
+# Windows host architecture. The ARM64 component is the native ARM64
+# toolset, so vcvarsarm64.bat produces a native ARM64 cl.exe.
+_MSVC_COMPONENTS = {
+    "x86_64": "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+    "arm64": "Microsoft.VisualStudio.Component.VC.Tools.ARM64",
+}
+_MSVC_VCVARS = {
+    "x86_64": "vcvars64.bat",
+    "arm64": "vcvarsarm64.bat",
+}
+
+_msvc_environment_loaded = False
+_cxx_family_name: str | None = None
 
 
 def find_tool(name: str, hint: str = "") -> Path:
@@ -389,23 +434,153 @@ def find_tool(name: str, hint: str = "") -> Path:
     return Path(found)
 
 
-def find_cxx() -> Path:
-    """Locate the host C++ compiler: $CXX if set, else g++, else clang++.
+def _vswhere() -> Path:
+    """Locate vswhere.exe in the standard Visual Studio installer paths."""
+    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+        base = os.environ.get(variable)
+        if not base:
+            continue
+        candidate = (
+            Path(base) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+        )
+        if candidate.is_file():
+            return candidate
 
-    The compiler must be a GCC-compatible driver (MinGW-w64 g++, Apple
-    clang, Linux clang): the compile/link flags are GCC-style. On Windows
-    the compiler's bin directory must be on PATH for its own pieces (and
-    the runtime DLLs of test binaries, e.g. libwinpthread-1.dll) to be
-    found - which it is, since that is where we found the compiler.
+    found = shutil.which("vswhere")
+    if found is not None:
+        return Path(found)
+
+    raise ToolError(
+        "vswhere.exe not found: Visual Studio (or VS Build Tools) with the "
+        "'Desktop development with C++' workload is required for cl.exe"
+    )
+
+
+def _visual_studio_install() -> Path:
+    """Return the VS installation that has the host's C++ build tools."""
+    component = _MSVC_COMPONENTS[host_arch()]
+    completed = subprocess.run(
+        [str(_vswhere()), "-latest", "-prerelease", "-products", "*",
+         "-requires", component, "-property", "installationPath"],
+        capture_output=True, text=True, errors="replace", check=False,
+    )
+    install = next(
+        (line.strip() for line in completed.stdout.splitlines() if line.strip()),
+        "",
+    )
+    if completed.returncode != 0 or not install:
+        raise ToolError(
+            "Visual Studio with the C++ build tools was not found for "
+            f"Windows {host_arch()}.\n"
+            f"Required vswhere component: {component}\n"
+            "Install the 'Desktop development with C++' workload and retry."
+        )
+    return Path(install)
+
+
+def msvc_environment() -> None:
+    """Load the MSVC environment for the host architecture, once.
+
+    The Visual Studio ``vcvars*.bat`` scripts only affect the cmd.exe
+    process that runs them, so one cmd.exe calls the host-appropriate
+    script (vcvars64.bat for x86_64, vcvarsarm64.bat for arm64), then
+    dumps the resulting environment. The variables are applied to this
+    Python process, so cl.exe and the linked test binaries (which need
+    the AddressSanitizer runtime DLL) inherit them.
     """
+    global _msvc_environment_loaded
+    if _msvc_environment_loaded:
+        return
+
+    install = _visual_studio_install()
+    vcvars = install / "VC" / "Auxiliary" / "Build" / _MSVC_VCVARS[host_arch()]
+    if not vcvars.is_file():
+        raise ToolError(
+            f"Visual Studio environment script not found:\n  {vcvars}\n"
+            "Install the 'Desktop development with C++' workload for "
+            f"Windows {host_arch()} and retry."
+        )
+
+    env = os.environ.copy()
+    env["VSCMD_SKIP_SENDTELEMETRY"] = "1"
+    completed = subprocess.run(
+        ["cmd.exe", "/d", "/c", "call", str(vcvars), ">nul", "&&", "set"],
+        env=env, capture_output=True, text=True, errors="replace", check=False,
+    )
+    if completed.returncode != 0:
+        details = (completed.stderr or completed.stdout).strip()
+        raise ToolError(
+            f"failed to initialize the MSVC environment with {vcvars} "
+            f"(exit code {completed.returncode})\n{details}"
+        )
+
+    for line in completed.stdout.splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name:
+            os.environ[name] = value
+
+    _msvc_environment_loaded = True
+
+
+def _is_msvc_name(name: str) -> bool:
+    return Path(name).name.lower() in ("cl", "cl.exe")
+
+
+def find_cxx() -> Path:
+    """Locate the host C++ compiler and cache its flag family.
+
+    Windows: $CXX if set; otherwise MSVC cl.exe from a Visual Studio
+    installation found through vswhere; otherwise g++, then clang++ on
+    PATH (the MinGW/MSYS2 fallback). macOS defaults to clang++ (then
+    g++); Linux defaults to g++ (then clang++).
+
+    MSVC gets MSVC-style flags and the environment loaded by
+    msvc_environment(); everything else keeps the GCC-style flags.
+    """
+    global _cxx_family_name
+
     override = os.environ.get("CXX")
     if override:
-        return find_tool(override, CXX_HINT)
-    for candidate in ("g++", "clang++"):
+        msvc = _is_msvc_name(override)
+        if msvc:
+            msvc_environment()
+        found = find_tool(override, CXX_HINT)
+        _cxx_family_name = "msvc" if msvc else "gnu"
+        return found
+
+    if IS_WINDOWS:
+        try:
+            msvc_environment()
+        except ToolError:
+            pass
+        else:
+            found = shutil.which("cl")
+            if found is not None:
+                _cxx_family_name = "msvc"
+                return Path(found)
+
+    candidates = (
+        ("clang++", "g++") if host_os() == "macos" else ("g++", "clang++")
+    )
+    for candidate in candidates:
         found = shutil.which(candidate)
         if found is not None:
+            _cxx_family_name = "gnu"
             return Path(found)
+
+    if IS_WINDOWS:
+        raise ToolError(
+            "required C++ compiler not found: cl.exe (Visual Studio, detected "
+            "with vswhere) or g++/clang++ on PATH\n" + CXX_HINT
+        )
     raise ToolError(f"required tool not found on PATH: g++ or clang++\n{CXX_HINT}")
+
+
+def cxx_family() -> str:
+    """Return "msvc" or "gnu" for the compiler find_cxx() selected."""
+    if _cxx_family_name is None:
+        find_cxx()
+    return _cxx_family_name or "gnu"
 
 
 def format_command(cmd: list[str]) -> str:

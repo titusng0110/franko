@@ -13,6 +13,16 @@ programs/*.cpp
 programs/*.testbin
 programs/*.actual
 
+# MSVC scratch outputs (native_compile redirects /Fo and /Fd to a temp
+# directory; these also catch leftovers from manual cl.exe runs).
+*.obj
+*.pdb
+*.ilk
+*.exp
+# ASan/CRT runtime DLLs copied next to MSVC debug binaries by compile.py.
+clang_rt.asan_dynamic-*.dll
+vcruntime140*.dll
+
 # Language test artifacts (success fixtures keep only main.fr +
 # main.expected; failure fixtures keep only their .fr sources).
 language_tests/**/*.cpp
@@ -40,14 +50,6 @@ benchmark/**/*.exe
 benchmark/**/*.bin
 benchmark/**/*.actual
 benchmark/**/*.compile.log
-
-# Dual-mode ASan build artifacts (the .asan-suffixed parallels of the
-# blocks above; kept after a failing case for inspection).
-**/*.asan.cpp
-**/*.asan.bin
-**/*.asan.testbin
-**/*.asan.actual
-**/*.asan.compile.log
 
 # JSON compiler artifacts (--emit-json; opt-in and never checked in).
 *.raw.ast.json

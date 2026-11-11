@@ -23,9 +23,11 @@ Do not add comments to the Java source files. All design notes belong here.
   null by default), `Franko_Fat_Pointer<T>` (pointers to arrays), the byte
   intrinsics, and `franko_integer_unsafe_cast`. Two C++ defines select the mode:
   `FRANKO_USE_JEMALLOC=1` links the bundled jemalloc (`third_party/`)
-  instead of the system allocator, and `FRANKO_BOUNDS_UNCHECKED=1`
-  strips bounds/range/bit/offset checks. Defaults (no defines) are the
-  checked system-allocator ASan build.
+  instead of the system allocator on Linux; it is opt-in through
+  `compile.py --jemalloc`. macOS and Windows builds always use the
+  system allocator. `FRANKO_BOUNDS_UNCHECKED=1` strips
+  bounds/range/bit/offset checks. Defaults (no defines) are the checked
+  system-allocator ASan build.
 
 ---
 
@@ -3043,8 +3045,20 @@ The C++ build flags select the mode:
 | Build | Defines | Allocator | Checks |
 |---|---|---|---|
 | ASan/default | none | system `malloc`/`calloc`/`realloc`/`free` | full |
-| `-O` | `FRANKO_USE_JEMALLOC=1` | bundled jemalloc (`je_*`) | full |
-| `-Omax` | `FRANKO_USE_JEMALLOC=1` `FRANKO_BOUNDS_UNCHECKED=1` | bundled jemalloc | bounds/range/bit/offset/unsafe_cast stripped |
+| `-O` | `FRANKO_BOUNDS_UNCHECKED` unset; `FRANKO_USE_JEMALLOC=1` only with `--jemalloc` | bundled jemalloc (`je_*`) on Linux with `--jemalloc`; system allocator otherwise | full |
+| `-Omax` | `FRANKO_BOUNDS_UNCHECKED=1`; `FRANKO_USE_JEMALLOC=1` only with `--jemalloc` | bundled jemalloc on Linux with `--jemalloc`; system allocator otherwise | bounds/range/bit/offset/unsafe_cast stripped |
+
+`--jemalloc` is rejected on non-Linux hosts and when combined with the ASan
+default build, because ASan relies on the system allocator.
+`FRANKO_USE_JEMALLOC` is never set on macOS or Windows: those builds use the
+system allocator with MSVC cl.exe, clang++, or the g++ fallback.
+
+Debug builds bundle the sanitizer runtime where possible: Linux links
+`-static-libasan`; MSVC copies `clang_rt.asan_dynamic-<arch>.dll`,
+`vcruntime140.dll`, and `vcruntime140_1.dll` next to the executable (the
+current MSVC toolset has no static ASan runtime, and that DLL uses the
+dynamic CRT); macOS keeps Apple clang's dynamic ASan dylib. Release MSVC
+builds use `/MT` and import only `KERNEL32.dll`.
 
 All modes share the same array semantics (`Franko_Dynamic_Array`,
 `Franko_Fat_Pointer`, static-array helpers, byte kernels); only the
@@ -3089,10 +3103,10 @@ and ranged forms; the whole-array form compares the shared prefix with
 `std::memcmp` and orders by length on a tie, returning `int32`.
 Static array sizes must be greater than zero because generated C++ uses
 fixed-size arrays, and zero-length C++ arrays are not standard. Static and
-dynamic arrays runtime-check indexes and intrinsics and raise
-`std::runtime_error` (via `franko_panic`) on violations such as
-out-of-bounds access, use of an uninitialized dynamic array, double
-initialization, or zero-size allocation.
+dynamic arrays runtime-check indexes and intrinsics and abort through
+`franko_panic` (`std::abort`) on violations such as out-of-bounds
+access, use of an uninitialized dynamic array, double initialization,
+or zero-size allocation. No C++ exception handling is involved.
 
 The byte-array intrinsics (`memchr`/`memmem`, the endian accessors, the bit
 intrinsics) share one kernel layer (`franko_byte_arrays`) of free templates
@@ -4073,7 +4087,8 @@ uv run python compile.py path/to/test.fr          # wraps java -cp build/classes
 uv run python compile.py --emit-json path/to/test.fr
 #   writes <base>.*.ast.json / <base>.*.sast.json / <base>.diagnostic.json
 # Main itself requires: <source> -o <out.cpp> -p <import-dir> --target <os>-<arch>
-# compile.py supplies all four (target defaults to the host).
+# compile.py supplies all four: -o defaults to <source>.cpp, -p to ./import,
+# and --target to the host. --jemalloc is the Linux-only opt-in allocator.
 
 # Validate one emitted artifact by deserializing and re-serializing it:
 java -cp build/classes CompilerJsonSelfTest <artifact.json>
@@ -4085,9 +4100,13 @@ uv run python language_tests/run_omax_smoke.py
 uv run python library_tests/run_library_tests.py
 ```
 
-The build mode defaults to the ASan debug build on Linux/macOS; Windows has no
-AddressSanitizer support, so its default is the optimized `-O` build. Windows
-ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
+The test suites run only the default build mode: the ASan debug build on
+Linux/macOS and on Windows through MSVC cl.exe (found with vswhere; the
+matching vcvars64.bat or vcvarsarm64.bat loads the environment). The Windows
+g++/clang++ fallback does not support ASan, so its default is the optimized
+`-O` build. `compile.py -O`/`-Omax` are normal user builds; `-Omax` has its
+own smoke runner. Windows ARM64 uses JDK 23 and needs
+`FRANKO_JAVA_RELEASE=23` (CI sets it).
 
 - Success fixtures: compiled binary must exit 0 and stdout must exactly match
   `main.expected` (optional `main.warnings` substring checks and
@@ -4095,10 +4114,12 @@ ARM64 uses JDK 23 and needs `FRANKO_JAVA_RELEASE=23` (CI sets it).
 - Failure fixtures: compiler must exit non-zero; optional `.errors` substrings
   must appear.
 - Runtime fixtures: compiler succeeds, binary exits non-zero.
-- `-Omax` is intentionally outside the normal asan/opt matrix (out-of-range
+- `-Omax` is intentionally outside the normal default-mode run (out-of-range
   access is undefined behavior there); `language_tests/run_omax_smoke.py`
   compiles and runs representative success fixtures with `-Omax` and pins the
   bare static-index emission in the generated C++.
+- `--jemalloc` is only accepted on Linux hosts; the test suites use the system
+  allocator.
 - `build/` and `.antlr/` are generated and gitignored; never edit them.
 
 Aggregate-literal fixtures:
