@@ -1,0 +1,15 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: compile-time void introspection
+// ============================================================
+// #warning and #panic have compile-time type void. Predicates see
+// void as non-matching, while #what_type spells it "void".
+// ============================================================
+
+func main() -> int32 {
+    print(#is_primitive(#warning("void predicate")));
+    print(#is_same_type(#warning("void left"), #warning("void right")));
+    print(#what_type(#warning("void spelling")));
+    return 0;
+}

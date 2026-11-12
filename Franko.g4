@@ -373,7 +373,12 @@ constDeclInitializer
 //   ptr<void> p.
 //
 functionDecl
-    : FUNC IDENTIFIER LPAREN parameterList? RPAREN ARROW returnType separators* block
+    : functionModifier? FUNC IDENTIFIER LPAREN parameterList? RPAREN ARROW returnType separators* block
+    ;
+
+functionModifier
+    : HASH_INLINE
+    | HASH_NOINLINE
     ;
 
 parameterList
@@ -1307,6 +1312,8 @@ CARET   : '^' ;
 DOT     : '.' ;
 COMMA   : ',' ;
 SEMI    : ';' ;
+HASH_INLINE   : '#inline' ;
+HASH_NOINLINE : '#noinline' ;
 HASH    : '#' ;
 LT      : '<' ;
 GT      : '>' ;

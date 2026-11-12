@@ -18,6 +18,8 @@ final class AstNode {
     boolean compileTimeConstant;
     boolean isConst;
 
+    InlineMode inlineMode = InlineMode.DEFAULT;
+
     AstNode target;
     AstNode value;
     AstNode condition;
@@ -91,13 +93,15 @@ final class AstNode {
             String name,
             List<AstNode> parameters,
             AstNode returnType,
-            AstNode body
+            AstNode body,
+            InlineMode inlineMode
     ) {
         AstNode node = node(AstKind.FUNCTION_DECL, span);
         node.name = name;
         node.parameters = copy(parameters);
         node.type = returnType;
         node.body = body;
+        node.inlineMode = inlineMode;
         return node;
     }
 

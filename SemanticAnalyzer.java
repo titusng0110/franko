@@ -749,6 +749,8 @@ public final class SemanticAnalyzer {
                 false
         );
 
+        symbol.inlineMode = fn.inlineMode;
+
         if ("main".equals(fn.name) && currentNamespaceName() == null) {
             boolean returnsInt32 = symbol.returnType().kind == SastTypeKind.PRIMITIVE
                     && symbol.returnType().primitive == SemanticPrimitiveKind.INT32;
@@ -822,6 +824,7 @@ public final class SemanticAnalyzer {
                     false
             );
 
+            symbol.inlineMode = methodNode.inlineMode;
             symbolTable.declareMethod(owner, methodNode, symbol);
             return;
         }
@@ -881,6 +884,7 @@ public final class SemanticAnalyzer {
                 false
         );
 
+        symbol.inlineMode = methodNode.inlineMode;
         symbolTable.declareMethod(owner, methodNode, symbol);
     }
 
@@ -911,6 +915,8 @@ public final class SemanticAnalyzer {
                     typeResolver.analyzeReturnType(fn.type),
                     false
             );
+
+            symbol.inlineMode = fn.inlineMode;
         }
 
         Symbol savedFunction = currentFunction;
@@ -984,6 +990,8 @@ public final class SemanticAnalyzer {
                     typeResolver.analyzeReturnType(methodNode.type),
                     false
             );
+
+            symbol.inlineMode = methodNode.inlineMode;
         }
 
         Symbol savedFunction = currentFunction;
@@ -1055,11 +1063,29 @@ public final class SemanticAnalyzer {
             return;
         }
 
+        if (isUserCompileTimeDirective(stmt)) {
+            exprAnalyzer.analyzeCompileTimeDirective(stmt.expr);
+            return;
+        }
+
         SastNode lowered = analyzeStmt(stmt);
 
         if (lowered != null) {
             out.add(lowered);
         }
+    }
+
+    private static boolean isUserCompileTimeDirective(AstNode stmt) {
+        if (stmt.kind != AstKind.EXPR_STMT || stmt.expr == null) {
+            return false;
+        }
+
+        if (stmt.expr.kind != AstKind.COMPILE_TIME_CALL) {
+            return false;
+        }
+
+        return "panic".equals(stmt.expr.name)
+                || "warning".equals(stmt.expr.name);
     }
 
     private void appendCompileTimeIf(

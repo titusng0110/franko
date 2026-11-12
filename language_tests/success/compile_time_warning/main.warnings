@@ -1,0 +1,5 @@
+======== User-defined Compiler Warnings ========
+1. language_tests/success/compile_time_warning/main.fr:11:5:
+2. language_tests/success/compile_time_warning/main.fr:17:5:
+declaration warning
+statement warning

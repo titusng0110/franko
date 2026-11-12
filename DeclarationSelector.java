@@ -458,9 +458,15 @@ final class DeclarationSelector {
 
         try {
             if (item.kind == AstKind.COMPILE_TIME_CALL
-                    && !"panic".equals(item.name)) {
-                diagnostics.error("Only #panic is allowed as a "
+                    && !"panic".equals(item.name)
+                    && !"warning".equals(item.name)) {
+                diagnostics.error("Only #panic and #warning are allowed as a "
                         + "declaration-level compile-time item");
+                return;
+            }
+
+            if (item.kind == AstKind.COMPILE_TIME_CALL) {
+                analyzer.analyzeCompileTimeDirective(item);
                 return;
             }
 

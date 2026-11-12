@@ -75,6 +75,91 @@ public final class DiagnosticLog {
         return out;
     }
 
+    public List<Diagnostic> compilerErrors() {
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            if (entry.diagnostic().isCompilerError()) {
+                out.add(entry.diagnostic());
+            }
+        }
+
+        return out;
+    }
+
+    public List<Diagnostic> userPanics() {
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            if (entry.diagnostic().isUserPanic()) {
+                out.add(entry.diagnostic());
+            }
+        }
+
+        return out;
+    }
+
+    public List<Diagnostic> compilerWarnings() {
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            if (entry.diagnostic().isCompilerWarning()) {
+                out.add(entry.diagnostic());
+            }
+        }
+
+        return out;
+    }
+
+    public List<Diagnostic> userWarnings() {
+        List<Diagnostic> out = new ArrayList<>();
+
+        for (Entry entry : entries) {
+            if (entry.diagnostic().isUserWarning()) {
+                out.add(entry.diagnostic());
+            }
+        }
+
+        return out;
+    }
+
+    public String formatReport() {
+        StringBuilder sb = new StringBuilder();
+
+        appendSection(sb, "======== Franko Compiler Errors ========", compilerErrors());
+        appendSection(sb, "======== User-defined Compiler Panics ========", userPanics());
+        appendSection(sb, "======== Franko Compiler Warnings ========", compilerWarnings());
+        appendSection(sb, "======== User-defined Compiler Warnings ========", userWarnings());
+
+        return sb.toString();
+    }
+
+    private static void appendSection(
+            StringBuilder sb,
+            String heading,
+            List<Diagnostic> diagnostics
+    ) {
+        if (diagnostics.isEmpty()) {
+            return;
+        }
+
+        if (sb.length() > 0) {
+            sb.append('\n');
+        }
+
+        sb.append(heading).append('\n');
+
+        int index = 0;
+
+        for (Diagnostic diagnostic : diagnostics) {
+            index++;
+            sb.append(index)
+                    .append(". ")
+                    .append(diagnostic.format())
+                    .append('\n');
+        }
+    }
+
     public boolean hasErrors() {
         for (Entry entry : entries) {
             if (entry.diagnostic().isError()) {

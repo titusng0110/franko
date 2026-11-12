@@ -28,6 +28,8 @@ final class Symbol {
     final StructSymbol owner;
     final int index;
 
+    InlineMode inlineMode = InlineMode.DEFAULT;
+
     BigInteger compileTimeConstantValue;
     List<BigInteger> literalBytes;
     List<BigInteger> literalValues;

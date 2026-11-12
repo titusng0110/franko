@@ -499,7 +499,22 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
         AstNode returnType = visit(ctx.returnType());
         AstNode body = visit(ctx.block());
 
-        return AstNode.functionDecl(span(ctx), name, parameters, returnType, body);
+        InlineMode inlineMode = InlineMode.DEFAULT;
+
+        if (ctx.functionModifier() != null) {
+            inlineMode = ctx.functionModifier().HASH_INLINE() != null
+                    ? InlineMode.INLINE
+                    : InlineMode.NOINLINE;
+        }
+
+        return AstNode.functionDecl(
+                span(ctx),
+                name,
+                parameters,
+                returnType,
+                body,
+                inlineMode
+        );
     }
 
     @Override

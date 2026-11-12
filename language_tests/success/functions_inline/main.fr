@@ -1,0 +1,50 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: Function Inlining Modifiers
+// ============================================================
+// Covers: #inline and #noinline on free functions, namespace
+// functions, struct methods, and main; inline calls into
+// non-inlined helpers; recursive #noinline functions.
+// ============================================================
+
+namespace math {
+    #inline func triple(int32 x) -> int32 {
+        return x * 3;
+    }
+}
+
+#noinline func inc(int32 x) -> int32 {
+    return x + 1;
+}
+
+#noinline func sum_to(int32 n) -> int32 {
+    if (n <= 0) {
+        return 0;
+    }
+
+    return n + sum_to(n - 1);
+}
+
+#inline func compute(int32 x) -> int32 {
+    return inc(math::triple(x));
+}
+
+struct Box {
+    int32 v
+
+    #inline func bumped(view<Box> self) -> int32 {
+        return $(self).v + 1;
+    }
+}
+
+#inline func main() -> int32 {
+    Box b;
+    b.v = 4;
+
+    print(compute(5));
+    print(sum_to(4));
+    print(b.bumped());
+
+    return 0;
+}

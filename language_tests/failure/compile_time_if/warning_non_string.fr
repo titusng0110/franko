@@ -1,0 +1,8 @@
+// Failure fixture: compile_time_if/warning_non_string
+// #warning requires a compile-time string argument.
+
+func main() -> int32 {
+    int32 x = 1;
+    #warning(x);
+    return 0;
+}

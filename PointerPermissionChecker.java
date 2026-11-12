@@ -123,7 +123,7 @@ public final class PointerPermissionChecker {
             SastType type = symbol.type;
 
             if (exercised == PtrPermission.READ_ONLY) {
-                diagnostics.warning("Warning: '"
+                diagnostics.warning("'"
                         + type.describe()
                         + " "
                         + symbol.name
@@ -136,7 +136,7 @@ public final class PointerPermissionChecker {
 
             if (exercised == PtrPermission.MUTABLE
                     && type.permission == PtrPermission.OWNER) {
-                diagnostics.warning("Warning: '"
+                diagnostics.warning("'"
                         + type.describe()
                         + " "
                         + symbol.name

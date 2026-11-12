@@ -97,6 +97,7 @@ public final class JsonArtifacts {
             Diagnostic diagnostic = entry.diagnostic();
             JsonValue obj = JsonValue.object();
             obj.put("phase", entry.phase());
+            obj.put("kind", diagnostic.origin().label());
             obj.put("severity", diagnostic.severity().label());
             obj.put("message", diagnostic.message());
             obj.put("span", ASTSerializer.spanToJson(diagnostic.span(), sources));

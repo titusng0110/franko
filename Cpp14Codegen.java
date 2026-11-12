@@ -699,6 +699,7 @@ public class Cpp14Codegen {
 
         StringBuilder sb = new StringBuilder();
 
+        sb.append(inlineModePrefix(node));
         sb.append(emitType(node.symbol.returnType()));
         sb.append(" ");
         sb.append(emitFunctionName(node.symbol));
@@ -718,6 +719,26 @@ public class Cpp14Codegen {
         sb.append(")");
 
         return sb.toString();
+    }
+
+    private String inlineModePrefix(SastNode node) {
+        if (node.symbol == null) {
+            return "";
+        }
+
+        if (ffiHandler != null && ffiHandler.matchFunction(node.symbol) != null) {
+            return "";
+        }
+
+        if (node.symbol.inlineMode == InlineMode.INLINE) {
+            return "FRANKO_ALWAYS_INLINE ";
+        }
+
+        if (node.symbol.inlineMode == InlineMode.NOINLINE) {
+            return "FRANKO_NOINLINE ";
+        }
+
+        return "";
     }
 
     private void emitStmt(SastNode node) {

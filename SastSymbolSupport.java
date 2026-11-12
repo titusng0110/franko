@@ -143,6 +143,10 @@ final class SastSymbolSupport {
                 obj.put("parameters", parameterIds(sym.parameters, registry));
                 obj.put("returnType", typeToJson(sym.returnType(), registry));
                 obj.put("isBuiltin", sym.isBuiltin);
+
+                if (sym.inlineMode != InlineMode.DEFAULT) {
+                    obj.put("inlineMode", sym.inlineMode.name());
+                }
             } else if (sym.kind == SymbolKind.FUNCTION) {
                 obj.put("kind", "function");
                 obj.put("name", sym.name);
@@ -150,6 +154,10 @@ final class SastSymbolSupport {
                 obj.put("parameters", parameterIds(sym.parameters, registry));
                 obj.put("returnType", typeToJson(sym.returnType(), registry));
                 obj.put("isBuiltin", sym.isBuiltin);
+
+                if (sym.inlineMode != InlineMode.DEFAULT) {
+                    obj.put("inlineMode", sym.inlineMode.name());
+                }
             } else if (sym.kind == SymbolKind.PARAMETER) {
                 obj.put("kind", "parameter");
                 obj.put("name", sym.name);
@@ -324,26 +332,36 @@ final class SastSymbolSupport {
                     registry
             );
             boolean isBuiltin = obj.requireBool("isBuiltin");
+            InlineMode inlineMode = obj.has("inlineMode")
+                    ? JsonAstSupport.requireEnumName(
+                            obj.requireString("inlineMode"),
+                            InlineMode.class
+                    )
+                    : InlineMode.DEFAULT;
 
             if ("method".equals(kind)) {
                 StructSymbol owner = (StructSymbol) registry.require(
                         obj.requireString("owner")
                 );
-                registry.registerWithId(
-                        entry.getKey(),
-                        Symbol.method(owner, name, parameters, returnType, isBuiltin)
+                Symbol method = Symbol.method(
+                        owner,
+                        name,
+                        parameters,
+                        returnType,
+                        isBuiltin
                 );
+                method.inlineMode = inlineMode;
+                registry.registerWithId(entry.getKey(), method);
             } else {
-                registry.registerWithId(
-                        entry.getKey(),
-                        Symbol.function(
-                                obj.optString("namespace"),
-                                name,
-                                parameters,
-                                returnType,
-                                isBuiltin
-                        )
+                Symbol function = Symbol.function(
+                        obj.optString("namespace"),
+                        name,
+                        parameters,
+                        returnType,
+                        isBuiltin
                 );
+                function.inlineMode = inlineMode;
+                registry.registerWithId(entry.getKey(), function);
             }
         }
 

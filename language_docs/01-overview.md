@@ -16,6 +16,8 @@ Franko is a small statically typed language with:
 - user-defined functions;
 - function overloading;
 - function calls inside function bodies;
+- function inlining modifiers `#inline` and `#noinline` (see
+  [Functions](19-functions.md));
 - struct methods with explicit `self` receivers (`ptr<X> self`, `mview<X> self`, `view<X> self`, see [Methods](27-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations;
@@ -62,7 +64,8 @@ Franko is a small statically typed language with:
   - type predicates such as `#has_default_value`, `#is_memcpy_safe`,
     `#is_same_type`, and `#is_enum`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
-  - compile-time strings with `#strcat`, `#strcmp`, and `#panic`
+  - compile-time strings with `#strcat`, `#strcmp`, `#panic`, and
+    `#warning`
     (see [Compile-Time Reflection](34-compile-time-reflection.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));

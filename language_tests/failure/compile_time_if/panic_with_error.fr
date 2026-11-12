@@ -1,0 +1,8 @@
+// Failure fixture: compile_time_if/panic_with_error
+// Compiler errors and user-defined panics are grouped separately.
+
+func main() -> int32 {
+    int32 x = missing;
+    #panic("stop now");
+    return x;
+}

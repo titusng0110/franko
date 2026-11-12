@@ -29,9 +29,6 @@ final class CompileTimeIntrinsics {
     private static final SastType INT32_TYPE =
             SastType.primitive(SemanticPrimitiveKind.INT32);
 
-    private static final SastType VOID_TYPE =
-            SemanticTypeResolver.VOID_TYPE;
-
     private final SymbolTable ctx;
     private final TypeChecker typeChecker;
     private final StaticStringHoister stringHoister;
@@ -52,7 +49,21 @@ final class CompileTimeIntrinsics {
     }
 
     SastNode analyzeCall(AstNode call) {
-        return materialize(evaluateCall(call.name, call.args, call.span), call.span);
+        StaticValue value = evaluateCall(call.name, call.args, call.span);
+
+        if (value != null && value.kind == StaticValueKind.VOID) {
+            ctx.error("#"
+                    + call.name
+                    + " is only valid as an expression statement or "
+                    + "declaration-level item");
+            return fallback(call.span);
+        }
+
+        return materialize(value, call.span);
+    }
+
+    void analyzeDirective(AstNode call) {
+        evaluateCall(call.name, call.args, call.span);
     }
 
     SastNode analyzeName(AstNode name) {
@@ -102,6 +113,10 @@ final class CompileTimeIntrinsics {
 
         if ("panic".equals(name)) {
             return evaluatePanic(name, args);
+        }
+
+        if ("warning".equals(name)) {
+            return evaluateWarning(name, args);
         }
 
         if ("is_matchable".equals(name)) {
@@ -319,7 +334,27 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        ctx.error(decodeText(message));
+        ctx.diagnostics().panic(decodeText(message));
+
+        return StaticValue.voidValue();
+    }
+
+    private StaticValue evaluateWarning(String name, List<AstNode> args) {
+        if (!requireArity(name, args, 1)) {
+            return null;
+        }
+
+        List<BigInteger> message = evaluateStaticStringArgument(
+                args.get(0),
+                name,
+                1
+        );
+
+        if (message == null) {
+            return null;
+        }
+
+        ctx.diagnostics().userWarning(decodeText(message));
 
         return StaticValue.voidValue();
     }
@@ -337,7 +372,7 @@ final class CompileTimeIntrinsics {
             AstNode call = arg;
             StaticValue value = evaluateCall(call.name, call.args, call.span);
 
-            if (value == null || value.kind == StaticValueKind.VOID) {
+            if (value == null) {
                 return null;
             }
 
@@ -395,15 +430,6 @@ final class CompileTimeIntrinsics {
 
         if (value.kind == StaticValueKind.STRING) {
             return materializeStaticString(value.bytes, span);
-        }
-
-        if (value.kind == StaticValueKind.VOID) {
-            return SastNode.intLiteral(
-                    span,
-                    VOID_TYPE,
-                    BigInteger.ZERO,
-                    "0"
-            );
         }
 
         return fallback(span);
@@ -488,6 +514,29 @@ final class CompileTimeIntrinsics {
 
         if (arg.kind == AstKind.STRUCT_TYPE) {
             return resolveStructOrValue(arg, name);
+        }
+
+        if (arg.kind == AstKind.COMPILE_TIME_CALL) {
+            AstNode call = arg;
+            StaticValue value = evaluateCall(call.name, call.args, call.span);
+
+            if (value == null) {
+                return null;
+            }
+
+            if (value.kind == StaticValueKind.VOID) {
+                return SastType.voidType();
+            }
+
+            if (value.kind == StaticValueKind.INT) {
+                return value.type;
+            }
+
+            ctx.error("#"
+                    + name
+                    + " argument must be a variable identifier or a type, got "
+                    + describeStaticValue(value));
+            return null;
         }
 
         if (arg.isType()) {

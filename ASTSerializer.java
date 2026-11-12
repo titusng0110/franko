@@ -78,6 +78,10 @@ public final class ASTSerializer {
                 obj.put("returnType", typeToJson(node.type, sources));
                 obj.put("parameters", nodeArray(node.parameters, sources));
                 obj.put("body", nodeToJson(node.body, sources));
+
+                if (node.inlineMode != InlineMode.DEFAULT) {
+                    obj.put("inlineMode", node.inlineMode.name());
+                }
             }
             case PARAMETER -> {
                 obj.put("node", node.kind.jsonName());
@@ -343,13 +347,23 @@ public final class ASTSerializer {
                     span,
                     nodesFromArray(obj.requireArray("statements"), sources)
             );
-            case FUNCTION_DECL: return AstNode.functionDecl(
-                    span,
-                    obj.requireString("name"),
-                    nodesFromArray(obj.requireArray("parameters"), sources),
-                    typeFromJson(obj.requireObject("returnType"), sources),
-                    nodeFromJson(obj.optObject("body"), sources)
-            );
+            case FUNCTION_DECL: {
+                InlineMode inlineMode = obj.has("inlineMode")
+                        ? JsonAstSupport.requireEnumName(
+                                obj.requireString("inlineMode"),
+                                InlineMode.class
+                        )
+                        : InlineMode.DEFAULT;
+
+                return AstNode.functionDecl(
+                        span,
+                        obj.requireString("name"),
+                        nodesFromArray(obj.requireArray("parameters"), sources),
+                        typeFromJson(obj.requireObject("returnType"), sources),
+                        nodeFromJson(obj.optObject("body"), sources),
+                        inlineMode
+                );
+            }
             case PARAMETER: return AstNode.parameter(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),

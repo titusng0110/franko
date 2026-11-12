@@ -11,7 +11,7 @@ Do not add comments to the Java source files. All design notes belong here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, tuples, enums, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: 86 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: 88 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain. Enums lower to generated
@@ -100,14 +100,20 @@ interprocedural diagnostics are additive.
 Raw AST nodes and semantic AST nodes carry a `SourceSpan` (stable display
 path + 1-based line/column range). `DiagnosticBag` stores structured
 `Diagnostic` objects; `Diagnostic.format()` yields `file:line:column: message`
-when a span is available. `Main` is the only abort point: passes return diagnostics, `Main`
-prints warnings, writes `<base>.diagnostic.json`, and aborts on errors.
+when a span is available. Each diagnostic also carries an origin:
+`COMPILER`, `USER_PANIC`, or `USER_WARNING`. `Main` is the only abort point:
+passes return diagnostics, `DiagnosticLog` accumulates them across phases,
+and `Main` prints one grouped report, writes `<base>.diagnostic.json`, and
+aborts on errors.
 
-Non-fatal warnings (semantic warnings, pointer maybe-null warnings,
-dangling-pointer warnings, dynamic-array lifecycle warnings, pointer
-permission warnings, and identifier visibility warnings) are printed between
-phases; errors abort with a `RuntimeException` carrying the formatted
-`DiagnosticBag` contents.
+The report has four sections, in order: `Franko Compiler Errors`,
+`User-defined Compiler Panics`, `Franko Compiler Warnings`, and
+`User-defined Compiler Warnings`. Empty sections are omitted. Entries are
+numbered from 1 within their section and use `Diagnostic.format()`.
+Compiler-generated warnings are no longer printed per phase. A blank line
+separates the ordered `==== ... ====` pass headings from the report. Errors
+abort through `Main.Abort`; the top-level driver prints the report and exits
+without a Java stack trace.
 
 ---
 
@@ -165,6 +171,7 @@ flowchart TD
     LegalityChecker --> StatementChecker
     LegalityChecker --> DeclarationChecker
     LegalityChecker --> FunctionChecker
+    LegalityChecker --> CompileTimeLegalityChecker
     FunctionChecker --> StatementChecker
     FunctionChecker --> ExpressionChecker
     FunctionChecker --> DeclarationChecker
@@ -233,7 +240,7 @@ flowchart TD
 | `ArrayLowerer` | `ExpressionAnalyzer`, `SymbolTable` |
 | `ArrayLiteralLowerer` | `ExpressionAnalyzer` (element lowering), `TypeChecker` (static `fitsBigIntegerToPrimitive`), `SemanticAnalyzer` (via `ArrayLiteralHoister`) |
 | `ConstExpressionEvaluator` | `SymbolTable` (diagnostics only) |
-| `LegalityChecker` | `FunctionChecker`, `DeclarationChecker`, `StatementChecker`, `ExpressionChecker` |
+| `LegalityChecker` | `FunctionChecker`, `DeclarationChecker`, `StatementChecker`, `ExpressionChecker`, `CompileTimeLegalityChecker` |
 | `BranchPruner` | reads/writes `SastNode` trees only (called by `Main`); no other compiler classes |
 | `InactiveDeclarationPruner` | reads/writes `SastNode` trees only (called by `Main`); no other compiler classes |
 | `FunctionChecker` | `StatementChecker`, `ExpressionChecker`, `DeclarationChecker`, `TypeChecker` |
@@ -305,7 +312,8 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
 The single source of truth for Franko syntax: combined ANTLR4 lexer+parser
 grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
-`program`/`topLevelItem`, namespace/import/struct/enum/function declarations,
+`program`/`topLevelItem`, namespace/import/struct/enum/function declarations
+(`functionDecl` accepts an optional `#inline`/`#noinline` modifier),
 declaration-level `compileTimeDeclIf` in top-level, namespace, and struct
 member positions, a labeled-alternative `statement` rule (including the
 `#if` statement form), `hashExpr` (`#name` and `#name(...)`) with
@@ -383,7 +391,9 @@ desugared backing type and `AstKind.ENUM_VARIANT`s, and `visitEnumVariant`
 keeps the raw `constExpr` (or `null` for implicit variants); enum cases
 are dispatched in `visitTopLevelItem`, `visitNamespaceItem`, and
 `visitDeclarationItem`, with no `visitStructMember` case since enums are
-not valid inside structs. `visitUnsafeCastExpr` visits the full `type`
+not valid inside structs. `visitFunctionDecl` maps the optional
+`functionModifier` rule to `AstNode.inlineMode` (`INLINE`, `NOINLINE`, or
+`DEFAULT`). `visitUnsafeCastExpr` visits the full `type`
 target so `unsafe_cast<Enum>` parses.
 Every rule/statement/declaration/type/literal construction attaches a
 `SourceSpan`; postfix and lvalue suffix chains merge the base span with the
@@ -408,7 +418,8 @@ nullable/empty slots. `AstKind` has one constant per node/type kind:
   deref, cast/unsafe_cast, null, aggregate literal, field init.
 
 Slots are shared by kind: `name`, `text`, `rawContent`, `primitive`, `type`,
-`permission`, `positional`, `unsafe`, `compileTimeConstant`, `isConst`, `target`, `value`,
+`permission`, `positional`, `unsafe`, `compileTimeConstant`, `isConst`,
+`inlineMode`, `target`, `value`,
 `condition`, `thenBranch`, `elseBranch`, `body`, `expr`, `left`, `right`,
 `index`, `callee`, `init`, `update`, `level`, `sizeExpr`, the list slots
 (`items`, `parameters`, `fields`, `methods`, `members`, `variants`, `args`,
@@ -460,7 +471,9 @@ Aggregate literals serialize as `"node": "aggregateLiteral"` with `type` and a
 initializer serializes as `"node": "varDeclFieldsInit"` with `type`, `name`,
 and `fields`. `parameter`, `globalVarDecl`, `varDecl`, `varDeclInit`,
 `varDeclFieldsInit`, and `structFieldDecl` emit `"const": true` only when the
-modifier was written; deserialization treats it as optional. Enum declarations
+modifier was written; deserialization treats it as optional. `functionDecl`
+emits `"inlineMode"` (`"INLINE"` or `"NOINLINE"`) only when the modifier was
+written, and deserialization defaults it to `DEFAULT`. Enum declarations
 serialize as `"node": "enumDecl"` with `name`,
 `backingType`, and `variants`, and each variant as `"node": "enumVariant"`
 with `name` and `constInitializer`. Unknown node kinds are hard errors.
@@ -537,7 +550,8 @@ backing `AstNode` is desugared and every explicit variant `constExpr` is
 folded to a canonical `AstKind.INT` (`null` is preserved for implicit
 variants); top-level and namespace enum declarations flow through the same
 top-level item list, so selected `#if` branches are desugared
-automatically. `ImportResolver` needs no special handling; it splices
+automatically. `desugarFunctionDecl` rebuilds each function declaration with
+its `inlineMode` unchanged. `ImportResolver` needs no special handling; it splices
 top-level items generically. `AstKind.COMPILE_TIME_IF` is preserved: its condition is desugared
 normally, braceless branches are grouped, and nested `#if` nodes survive for
 semantic selection (§4.18). Declaration-level `AstKind.DECL_IF`s are preserved
@@ -666,6 +680,10 @@ order, evaluates each condition with `ExpressionAnalyzer`, splices the
 selected declarations into the enclosing scope, and registers newly
 selected declarations (including selected conditional enums) for later conditions. Unselected branches never enter
 the symbol table. Selection diagnostics are merged into the semantic pass.
+Declaration-level compile-time items are restricted to `#panic` and
+`#warning`; both are evaluated through
+`ExpressionAnalyzer.analyzeCompileTimeDirective`, so they report into the
+diagnostic bag without creating a declaration or SAST node.
 
 #### `SemanticAnalyzer`
 The lowering hub: converts the desugared raw AST into the typed,
@@ -727,7 +745,9 @@ list (branch braces introduce no scope). `DeclarationSelector` performs the
 analogous splice for declaration-level `#if` before the six registration
 phases. Dead branches never enter the SAST, so they receive no name
 resolution, type checking, FFI verification, memory-safety diagnostics, or
-codegen (§4.18).
+codegen (§4.18). `#panic` and `#warning` expression statements are evaluated
+and dropped before ordinary statement lowering, so they also never enter the
+SAST (§4.18).
 It also owns semantic static-string hoisting for `#what_type`
 (`hoistStaticStringGlobal`, wired into `CompileTimeIntrinsics` through its
 `StaticStringHoister`): when a `what_type` result is used as an ordinary
@@ -740,6 +760,11 @@ string and no global is hoisted.
 The entry-point signature must remain exactly `view<[[byte]]>`
 (read-only) for the raw-args `main`; the template marshals argv behind a
 const pointer, so the program cannot mutate its arguments.
+
+Function and method registration copies `AstNode.inlineMode` onto the
+`Symbol`; the fallback symbols created when registration failed during
+recovery receive the same mode. The mode survives branch and inactive
+pruning unchanged because it belongs to the symbol, not the declaration node.
 
 #### `SemanticTypeResolver`
 The type-resolution helper used throughout analysis. It maps raw `AstNode`s
@@ -875,10 +900,13 @@ level allows a weaker-or-equal one.
 #### `Symbol` / `SymbolKind`
 The symbol model is one final tagged class with `SymbolKind` =
 `VARIABLE`, `PARAMETER`, `GLOBAL`, `FUNCTION`, `METHOD`. Fields: `name`,
-`namespace`, `type`, `parameters`, `isBuiltin`, `isConst`, `owner`, `index`,
+`namespace`, `type`, `parameters`, `isBuiltin`, `isConst`, `inlineMode`, `owner`, `index`,
 `compileTimeConstantValue`, `literalBytes`, `literalValues`. `isConst` is
 carried only by variables, parameters, and globals; it is not part of the
 type, signature key, mangling, overload identity, or emitted C++ name.
+`inlineMode` (`DEFAULT`, `INLINE`, `NOINLINE`) is carried only by functions
+and methods and is likewise not part of any identity or mangling; it is
+copied from the declaration during semantic registration.
 
 - `VARIABLE` — local variable, optional namespace.
 - `PARAMETER` — `index`, no namespace.
@@ -1094,27 +1122,43 @@ and `bytes`. Evaluation owns all intrinsic semantics:
 - `strcat` → `StaticValueKind.STRING` containing the concatenated bytes;
 - `strcmp` → `StaticValueKind.INT` `int32` (lexicographic UTF-8 byte
   comparison);
-- `panic` → reports `ctx.error(message)` and returns `StaticValueKind.VOID`.
+- `panic` → reports a `USER_PANIC` diagnostic through
+  `DiagnosticBag.panic` and returns `StaticValueKind.VOID`;
+- `warning` → reports a `USER_WARNING` diagnostic through
+  `DiagnosticBag.userWarning` and returns `StaticValueKind.VOID`.
 
 String consumers call `evaluateStaticStringArgument`, which accepts a raw
 `AstKind.STRING_LITERAL` (decoded through `StringLiteralDecoder`), `#what_type`,
 or a nested `#strcat` result. Other compile-time results
 and runtime expressions are rejected as not being compile-time strings.
-`strcmp`, `strcat`, and `panic` share this path, so any future string
-producer is accepted without consumer-specific logic. Empty strings are
+`strcmp`, `strcat`, `panic`, and `warning` share this path, so any future
+string producer is accepted without consumer-specific logic. Empty strings are
 rejected with the same `N >= 1` rule as ordinary strings. Type and value
 arguments are resolved through `resolveTypeOrValueArgument`: variables are
 resolved first, bare struct names fall back to struct types and then enum
 types, qualified names fall back to variable/struct/enum types with enum
-variant references (`Status::alive`) resolving to the enum type, and composite
-types resolve through the wired `SemanticTypeResolver`. `materialize`
-turns a `StaticValueKind.INT` into `SastNode.INT_LITERAL`, a `StaticValueKind.STRING`
-into the hoisted `STRLIT_<hash>` `[byte, N]` global wrapped in a read-only
-`SastNode.GET_PTR` of type `view<[byte, N]>` via the `StaticStringHoister`
-class owned by `SemanticAnalyzer`, a `StaticValueKind.VOID` into the void-typed
-fallback, and a null value into the ordinary integer fallback. Because
+variant references (`Status::alive`) resolving to the enum type, composite
+types resolve through the wired `SemanticTypeResolver`, and a nested
+compile-time call resolves by its static value kind (`INT` contributes the
+value's type, `VOID` contributes `SastType.voidType()`, and strings are
+rejected). `materialize`
+turns a `StaticValueKind.INT` into `SastNode.INT_LITERAL`, a
+`StaticValueKind.STRING` into the hoisted `STRLIT_<hash>` `[byte, N]` global
+wrapped in a read-only `SastNode.GET_PTR` of type `view<[byte, N]>` via the
+`StaticStringHoister` class owned by `SemanticAnalyzer`, and a null value into
+the ordinary integer fallback. Because
 materialization happens only for the outer call, a `what_type` consumed by
 `strcmp` or `panic` never hoists a global.
+
+`#panic` and `#warning` never become semantic nodes. `ExpressionAnalyzer`
+exposes `analyzeCompileTimeDirective`, which calls
+`CompileTimeIntrinsics.analyzeDirective` to evaluate the directive and discard
+its static result. `SemanticAnalyzer.appendAnalyzedStmt` intercepts
+`#panic`/`#warning` expression statements before ordinary statement lowering,
+and `DeclarationSelector` uses the same path for declaration-level directives,
+so no void value reaches the SAST. If a directive appears in a value position,
+`analyzeCall` reports that it is only valid as an expression statement or
+declaration-level item and returns the ordinary integer fallback.
 
 Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
 `isValueAssignableType`, `hasDefaultValue`) and
@@ -1181,18 +1225,50 @@ strings.
 
 ### 3.3 Legality checkers
 
-All five run under `LegalityChecker` on the already-lowered Semantic AST, each
-reporting into a shared `DiagnosticBag`. `SemanticAnalyzer` deliberately
-pre-establishes symbols/types so the checkers can focus on rules.
+The legality cluster runs under `LegalityChecker` on the already-lowered
+Semantic AST, each reporting into a shared `DiagnosticBag`.
+`SemanticAnalyzer` deliberately pre-establishes symbols/types so the checkers
+can focus on rules.
 
 #### `LegalityChecker`
 The orchestrator ("master checker"): constructs `TypeChecker`,
 `ExpressionChecker`, `DeclarationChecker`, `StatementChecker`,
-`FunctionChecker` in that dependency order, then `check(SastDocument)`
-dispatches each node (`checkFunction` / `checkStructDecl` / `checkStmt` /
-defensive `checkExpr`) and returns a `PassResult` with the `legality` phase
-document plus diagnostics. It is invoked by `Main`, *not* by
+`FunctionChecker`, and `CompileTimeLegalityChecker` in that dependency order,
+then `check(SastDocument)` dispatches each node (`checkFunction` /
+`checkStructDecl` / `checkStmt` / defensive `checkExpr`), runs the
+document-wide compile-time check, and returns a `PassResult` with the
+`legality` phase document plus diagnostics. It is invoked by `Main`, *not* by
 `SemanticAnalyzer`; `Main` aborts on errors.
+
+#### `CompileTimeLegalityChecker`
+Document-scoped legality for compile-time declaration attributes, currently
+the `#inline` / `#noinline` modifiers. It runs once at the end of
+`LegalityChecker.check`, before branch and inactive-declaration pruning, and
+reports into the shared `DiagnosticBag`.
+
+It collects every free function and struct method from the semantic AST,
+builds an identity map from `Symbol` to declaration, and records each
+function body's `SastNode.FUNCTION_CALL.function` edges. The traversal
+recurses through all statement and expression containers, including
+`VAR_DECL_INIT.initializers`, aggregate-literal field values, temporary
+operator borrows, and method calls lowered from operators. It deliberately
+does not reuse `MemoryCallGraph`: that graph is built later from the pruned
+SAST for the memory checkers.
+
+For each function whose symbol has `InlineMode.INLINE`, the checker runs a
+DFS over the full Franko call graph (returning to the start symbol is the
+failure condition). Direct recursion yields `f -> f`; indirect recursion
+yields the full path. Any cycle containing an inline function is rejected,
+including cycles that pass through a `#noinline` function; `#noinline` only
+suppresses the codegen hint and does not exempt the cycle. The diagnostic is
+reported on the inline declaration's span:
+
+```text
+Inline function 'f' cannot participate in call-graph recursion: f -> g -> f
+```
+
+FFI-bridged declarations are present in the graph like ordinary functions,
+but they emit no hint and their bridge bodies are invisible to the compiler.
 
 #### `FunctionChecker`
 Function-level legality: valid return type, valid parameters (no duplicates,
@@ -2262,7 +2338,12 @@ wrapper's default constructor applies the first variant) → global forward decl
 per global, reopening each `NS_<segment>`) → global definitions → function
 prototypes →
 function definitions, all under mangled names and inside `NS_<segment>`
-namespaces where applicable. Enums emit as `ENUM_<Name>` wrapper structs
+namespaces where applicable. `emitFunctionHeader` prefixes a declaration or
+definition with `FRANKO_ALWAYS_INLINE ` for `InlineMode.INLINE` and
+`FRANKO_NOINLINE ` for `InlineMode.NOINLINE`; the same helper emits the
+forward declarations, so both spellings carry the hint. FFI-matched symbols
+are skipped, matching the definition-suppression rule. Default functions
+emit no prefix. Enums emit as `ENUM_<Name>` wrapper structs
 (`emittedEnumTypeName`, qualified by namespace in `emitType`) before any
 struct definition, since struct fields may use them. Ordinary structs emit
 as `STRUCT_<Name>` and their ordinary fields as `FIELD_<name>`; synthetic
@@ -2449,23 +2530,27 @@ share the same enum/big-integer decoding.
 #### `DiagnosticBag`
 Phase-agnostic structured error/warning accumulator with a span stack.
 `error(String)` / `warning(String)` inherit the current span; pass dispatch
-code pushes the node span and pops it after traversal. `mark()` /
-`drainFrom(int)` let the memory driver collect the diagnostics of one guard
-alternative, merge them, and re-add the merged result. `diagnostics()` exposes
-`Diagnostic` objects, and the static `formatErrors(header, diagnostics)`
-helper renders numbered errors for `Main` and other pass runners. Used by `SymbolTable`, `Desugarer`, every
-checker, and `Frontend`'s parse collectors.
+code pushes the node span and pops it after traversal. `panic(String)` and
+`userWarning(String)` create the same span-scoped entries with
+`USER_PANIC` / `USER_WARNING` origins and are used only by the compile-time
+directives. `mark()` / `drainFrom(int)` let the memory driver collect the
+diagnostics of one guard alternative, merge them, and re-add the merged
+result. `diagnostics()` exposes `Diagnostic` objects. Used by `SymbolTable`,
+`Desugarer`, every checker, and `Frontend`'s parse collectors.
 
 #### `Diagnostic` / `DiagnosticLog`
-`Diagnostic` is a final class carrying `(Severity, message, SourceSpan)` plus an
-optional internal `code` used by the memory checkers to merge per-case and
-per-assumption diagnostics; the code is not serialized. `SourceSpan` is also a
-final class with `source`, start/end line and column fields. Both expose field
-accessor methods.
+`Diagnostic` is a final class carrying `(Severity, Origin, message,
+SourceSpan)` plus an optional internal `code` used by the memory checkers to
+merge per-case and per-assumption diagnostics; the code is not serialized.
+`Origin` is `COMPILER`, `USER_PANIC`, or `USER_WARNING`. Predicates
+`isCompilerError`, `isUserPanic`, `isCompilerWarning`, and `isUserWarning`
+drive report grouping. `SourceSpan` is also a final class with `source`,
+start/end line and column fields. Both expose field accessor methods.
 `DiagnosticLog.Entry` is a final class with `phase` and `diagnostic`.
-`DiagnosticLog` accumulates diagnostics from every pass with a phase label and
-is the source of `<base>.diagnostic.json`. `Main` prints warnings, writes the
-diagnostic artifact, and aborts only on errors.
+`DiagnosticLog` accumulates diagnostics from every pass with a phase label,
+is the source of `<base>.diagnostic.json`, and owns `formatReport()`, which
+emits only non-empty numbered sections in the fixed order described in §1.
+`Main` prints that report and aborts only on errors.
 
 #### `Json` / `JsonValue` / `JsonKind` / `JsonArtifacts`
 `Json` is the dependency-free JSON DOM/parser/writer. `JsonValue` is one
@@ -2503,8 +2588,14 @@ stdout. The phase sequence uses a tagged `Main.PassCall` (`PassKind` =
 `SEMANTIC`, `LEGALITY`, `NULL_STATE`, `DANGLING`, `DYNAMIC_ARRAY`,
 `PERMISSIONS`, `PRIVATE_ID`); the semantic call carries an `AstDocument`,
 while every later call carries a `SastDocument` plus the shared
-`MemoryAnalysisContext` where needed. One dispatch path keeps warnings,
-artifacts, and abort handling in `runPass`.
+`MemoryAnalysisContext` where needed. `runPass` collects diagnostics into the
+log and aborts on errors; it does not print warnings. `runPipeline` prints a
+`==== <phase> ====` heading before parsing, desugaring, import resolution,
+semantic analysis, each pruning stage, each checker, and FFI verification.
+On success it prints `DiagnosticLog.formatReport()` before the final success
+message. On failure, `abort` writes the diagnostic artifact and throws
+`Main.Abort`; the top-level `main` prints the same report and exits 1 instead
+of leaking a stack trace.
 
 ---
 
@@ -2536,8 +2627,9 @@ extension):
 
 `compile.py --emit-json` passes the flag through. Stale known artifacts are
 deleted at the start of a run, and `.diagnostic.json` is written on success
-(warnings) and on failure (errors). Diagnostics are still printed with
-`file:line:column:` prefixes. Without the flag, no JSON is parsed or written.
+(warnings) and on failure (errors). The compiler's printed report and the
+JSON `kind` field distinguish compiler diagnostics from `#panic` and
+`#warning`. Without the flag, no JSON is parsed or written.
 
 AST document skeleton (`phase` is `raw`, `desugared`, or
 `import-resolved`):
@@ -2583,7 +2675,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `namespace` | `name`, `items` |
 | `import` | `path` |
 | `block` | `statements` |
-| `functionDecl` | `name`, `returnType`, `parameters`, `body` |
+| `functionDecl` | `name`, `returnType`, `parameters`, `body`, optional `inlineMode` (`INLINE` or `NOINLINE`) |
 | `parameter` | `type`, `name` |
 | `structDecl` | `name`, `fields`, `methods`, `members` |
 | `structFieldDecl` | `type`, `name`, `constInitializer` |
@@ -2678,7 +2770,7 @@ Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
 `backing`, `variants` with `{name, value}` decimal strings), `field`
 (`name`, `type`, `foldedDefault`, optional `tupleIndex` when `>= 0`),
 `function` (`name`, `namespace`,
-`parameters`, `returnType`, `isBuiltin`), `method` (function fields plus
+`parameters`, `returnType`, `isBuiltin`, optional `inlineMode`), `method` (function fields plus
 `owner`), `parameter` (`name`, `index`, `type`, optional `const`), `variable`
 (`name`, `namespace`, `type`, optional `const`), `global` (variable fields
 plus `compileTimeConstantValue`, `literalBytes`, `literalValues`, optional
@@ -2702,6 +2794,7 @@ Diagnostic document:
   "diagnostics": [
     {
       "phase": "legality",
+      "kind": "compiler",
       "severity": "error",
       "message": "Left-hand side of assignment must be a pointable storage-backed lvalue",
       "span": {"src": 0, "line": 12, "column": 5,
@@ -2711,8 +2804,9 @@ Diagnostic document:
 }
 ```
 
-`span` is `null` when a diagnostic has no source location. On success the file
-contains warnings; on failure it contains errors.
+`span` is `null` when a diagnostic has no source location. `kind` is
+`compiler`, `user-panic`, or `user-warning`. On success the file contains
+warnings; on failure it contains errors (including user panics).
 
 Every AST/SAST node carries `"node"` and `"span"`; SAST expression nodes also
 carry `"type"` and `"constantValue"` (decimal string or `null`). Symbol references
@@ -3062,7 +3156,12 @@ builds use `/MT` and import only `KERNEL32.dll`.
 
 All modes share the same array semantics (`Franko_Dynamic_Array`,
 `Franko_Fat_Pointer`, static-array helpers, byte kernels); only the
-allocator and the checked blocks differ.
+allocator and the checked blocks differ. The header also defines the
+function-emission hints: `FRANKO_ALWAYS_INLINE` maps to
+`__attribute__((always_inline)) inline` on GCC/Clang and `__forceinline` on
+MSVC; `FRANKO_NOINLINE` maps to `__attribute__((noinline))` and
+`__declspec(noinline)` respectively. Function declarations with no inlining
+modifier emit neither macro.
 
 Dynamic array element buffers are allocated by the array runtime methods
 and freed by `uninit()` or by the array object's destructor. Static
@@ -3173,8 +3272,8 @@ with a declared struct, semantic analysis emits a warning (the program
 still compiles):
 
 ```text
-==== Warnings ====
-  - Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
+======== Franko Compiler Warnings ========
+1. main.fr:8:1: Variable 'X' shares its name with struct 'X'; generated C++ uses VAR_X for the variable and STRUCT_X for the struct type
 ```
 
 Struct definitions are emitted after a forward-declaration block
@@ -3621,7 +3720,10 @@ module path. `#name` evaluates a built-in constant (`#IS_LINUX`,
 `#IS_WINDOWS`, `#IS_MACOS`, `#IS_X86_64`, `#IS_ARM64`), and
 `#name(args...)` evaluates a built-in compile-time function. Target
 constants are produced directly from `TargetInfo`; they are not globals and
-are never emitted. Unknown `#` names are diagnostics.
+are never emitted. Unknown `#` names are diagnostics. The separate
+`HASH_INLINE` / `HASH_NOINLINE` lexer tokens belong to `functionDecl` as
+declaration modifiers; they never enter `CompileTimeIntrinsics` and produce
+no semantic expression node.
 
 **Parsing.** `compileTimeIfStmt` is a statement alternative and
 `compileTimeDeclIf` is accepted by `topLevelItem`, `namespaceItem`, and
@@ -3641,7 +3743,9 @@ and splices the selected branch's statements directly into the current
 statement list. Branch braces and braceless bodies therefore introduce no
 compile-time scope; nested `#if` repeats the same splice. Dead branches
 never enter the SAST, so they receive no name resolution, type checking,
-FFI verification, memory-safety diagnostics, or code generation.
+FFI verification, memory-safety diagnostics, or code generation. The same
+statement walk drops `#panic` and `#warning` expression statements after
+evaluating them, so neither directive becomes a SAST node.
 
 **Declaration selection.** `DeclarationSelector` runs before the normal
 semantic registration phases. It builds a provisional symbol environment
@@ -3667,8 +3771,8 @@ arguments of every `#` call so the evaluator can inspect them; nested `#`
 calls remain evaluable. `materialize` turns only the outer result into a
 semantic node: integers become folded semantic literals, strings become a
 hoisted `STRLIT_<hash>` literal global wrapped in a read-only
-`SastNode.GET_PTR`, and `#panic` reports an error and returns a
-void-typed fallback. String consumers accept raw literals, `#what_type`,
+`SastNode.GET_PTR`, and `#panic`/`#warning` report into the diagnostic bag and
+are discarded. String consumers accept raw literals, `#what_type`,
 and `#strcat`; runtime views are rejected.
 
 **Intrinsic set.** The type predicates are `is_primitive`,
@@ -3679,12 +3783,16 @@ canonical `SastType.mangleKey()` spelling (no spaces after commas,
 matching function signature hashing keys). `#strcat` accepts one or more
 compile-time strings and concatenates their decoded UTF-8 bytes.
 `#strcmp` compares decoded UTF-8 bytes lexicographically. `#panic` reports
-its compile-time string as an error. Empty strings are rejected with the
-ordinary `N >= 1` rule.
+its compile-time string as a user-defined panic; `#warning` reports it as a
+user-defined warning and continues. Empty strings are rejected with the
+ordinary `N >= 1` rule. A nested `#panic`/`#warning` argument has compile-time
+type `void`: predicates over it return `0`, `#is_same_type` treats two void
+arguments as equal, and `#what_type` spells `void`.
 
-`#panic` is also accepted as a declaration-level item inside a `AstKind.DECL_IF`
-branch. `DeclarationSelector` evaluates it during selection, so a selected
-`#panic` is reported during semantic analysis before legality checking; an
+`#panic` and `#warning` are also accepted as declaration-level items inside
+a `AstKind.DECL_IF`
+branch. `DeclarationSelector` evaluates them during selection, so a selected
+directive is reported during semantic analysis before legality checking; an
 unselected one is ignored. Module validation walks both branches of
 declaration conditionals, so a descriptor may list functions that exist on
 different targets.
@@ -4075,6 +4183,37 @@ array owns and manages its inner arrays.
 always false for struct and tuple shapes, so those shapes no longer OR that
 flag from their fields.
 
+## 4.30 Inlining modifiers (`#inline` / `#noinline`)
+
+**Representation.** `InlineMode` is `DEFAULT`, `INLINE`, or `NOINLINE`. The raw
+declaration carries it on `AstNode.inlineMode`; desugaring preserves it;
+semantic registration copies it to `Symbol.inlineMode`. It is declaration
+metadata only: it is not in `SastType.FUNCTION`, the signature key, the
+mangled name, or overload identity. Two declarations that differ only in
+their inline mode are duplicates. Keeping it on `Symbol` means the branch and
+inactive-declaration pruners preserve it without rebuilding function nodes.
+
+**Checking.** `CompileTimeLegalityChecker` runs inside the legality phase
+before any pruning and therefore rejects a recursive `#inline` declaration
+even if the function would later be removed as unused. The check walks the
+complete Franko call graph, including methods and calls introduced by
+operator lowering; it does not treat `#noinline` as a cycle cut. The failure
+condition is reachability from the inline function back to itself, so the
+reported path is a simple cycle through that declaration. The graph is
+legality-local and intentionally separate from `MemoryCallGraph`, which is
+built later from the pruned SAST with dense IDs and memory summaries.
+
+**Emission.** `Cpp14Codegen.emitFunctionHeader` adds
+`FRANKO_ALWAYS_INLINE ` or `FRANKO_NOINLINE ` from the symbol mode. The
+runtime header defines the macros portably: GNU/Clang use
+`__attribute__((always_inline)) inline` and `__attribute__((noinline))`;
+MSVC uses `__forceinline` and `__declspec(noinline)`. The `inline` keyword is
+part of the GNU always-inline spelling to avoid GCC's “might not be
+inlinable” warning. Forward declarations and definitions share
+`emitFunctionHeader`, so both carry the same hint. FFI-matched declarations
+emit no prefix because the bridge supplies the definition. Default functions
+emit no attribute at all.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -4119,8 +4258,9 @@ own smoke runner. Windows ARM64 uses JDK 23 and needs
 - Runtime fixtures: compiler succeeds, binary exits non-zero.
 - `-Omax` is intentionally outside the normal default-mode run (out-of-range
   access is undefined behavior there); `language_tests/run_omax_smoke.py`
-  compiles and runs representative success fixtures with `-Omax` and pins the
-  bare static-index emission in the generated C++.
+  compiles and runs representative success fixtures with `-Omax`, pins the
+  bare static-index emission, and pins the generated always-inline/no-inline
+  prefixes.
 - `--jemalloc` is only accepted on Linux hosts; the test suites use the system
   allocator.
 - `build/` and `.antlr/` are generated and gitignored; never edit them.
@@ -4194,15 +4334,38 @@ language_tests/failure/enums/
 now: the callee only writes elements, so it does not require `INITED` on the
 owner argument.
 
+Inline-modifier fixtures:
+
+```text
+language_tests/success/functions_inline/
+language_tests/failure/functions/inline_self_recursion.fr
+language_tests/failure/functions/inline_mutual_recursion.fr
+language_tests/failure/functions/inline_method_recursion.fr
+language_tests/failure/functions/inline_recursion_through_noinline.fr
+```
+
+Compile-time directive fixtures:
+
+```text
+language_tests/success/compile_time_warning/
+language_tests/success/compile_time_void_introspection/
+language_tests/success/compile_time_panic_dead/
+language_tests/failure/compile_time_if/panic_with_error.fr
+language_tests/failure/compile_time_if/warning_non_string.fr
+language_tests/failure/compile_time_if/warning_value_context.fr
+```
+
 ## 6. Adding a new phase or check — where things go
 
 | You want to… | Put it in |
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `AstNode.java` + `ASTSerializer` |
+| Add a function declaration modifier | `Franko.g4` (`functionModifier`) + `FrankoASTVisitor` + `InlineMode`/`AstNode.inlineMode` + `ASTSerializer` + `Desugarer` + `Symbol.inlineMode`/`SemanticAnalyzer` + `CompileTimeLegalityChecker` + `Cpp14Codegen.emitFunctionHeader` + §4.30 |
 | Change aggregate literal syntax or unnamed-tuple positional rules | `Franko.g4` (`aggregateLiteral`/`initItem`/`declSuffix`) + `FrankoASTVisitor` + `Desugarer` (field-wise form) + `ExpressionAnalyzer.lowerAggregateLiteral` + `ExpressionChecker.visitAggregateLiteral` + §4.26 |
 | Change field-wise declaration initialization | `Desugarer` (`appendDesugaredVarDeclFieldsInit`) + `SemanticAnalyzer.analyzeVarDeclFieldsInitStmt` + §4.26 / §4.28 |
 | Add compile-time branch syntax | `Franko.g4` (`compileTimeIfStmt`) + `AstKind.COMPILE_TIME_IF` + `SemanticAnalyzer.appendCompileTimeIf` (splicing, statement and declaration level) + §4.18 |
 | Add a compile-time intrinsic | `CompileTimeIntrinsics` + `ExpressionAnalyzer` delegation + `TypeChecker` predicate helpers + §4.18 |
+| Add a user-defined compile-time diagnostic | `CompileTimeIntrinsics` (`panic`/`warning`) + `DiagnosticBag.panic`/`userWarning` + `Diagnostic.Origin` + `DiagnosticLog.formatReport` + §4.18 |
 | Add a compile-time declaration conditional | `Franko.g4` declaration `compileTimeDeclIf` + `AstKind.DECL_IF` + `DeclarationSelector` + §4.18 |
 | Add/rename a semantic node | `SastNode.java` + `SemanticAnalyzer`/`ExpressionAnalyzer` + `SastSerializer` |
 | Add/change operator overloading | `OperatorMethods` + `ExpressionAnalyzer` (comparison/assignment lowering) + `SemanticAnalyzer` (assignment hook) + `SymbolTable.resolveOperatorMethodWithLiterals` + `FunctionChecker` (signatures) + `DanglingPointerChecker` (borrowed-`other` seed/store rule) + docs §4.17 |

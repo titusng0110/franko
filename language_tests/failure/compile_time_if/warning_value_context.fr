@@ -1,0 +1,7 @@
+// Failure fixture: compile_time_if/warning_value_context
+// #warning is compile-time-only and cannot be used as a value.
+
+func main() -> int32 {
+    int32 x = #warning("not a value");
+    return x;
+}

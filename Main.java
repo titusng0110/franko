@@ -1,7 +1,6 @@
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 public class Main {
 
@@ -112,12 +111,14 @@ public class Main {
                     log
             );
         } catch (Abort abort) {
-            throw abort;
+            printDiagnosticReport(log);
+            System.exit(1);
         } catch (RuntimeException e) {
             log.add("internal", Diagnostic.error(
                     e.getMessage() == null ? e.getClass().getName() : e.getMessage()
             ));
             artifacts.writeDiagnostics(log);
+            printDiagnosticReport(log);
             throw e;
         }
     }
@@ -136,44 +137,47 @@ public class Main {
         ModuleRegistry modules = new ModuleRegistry();
         Frontend frontend = new Frontend(artifacts, modules);
 
+        System.out.println("==== Parsing ====");
         Result<AstDocument> rawResult = frontend.parseFile(sourceFile);
         log.add("parse", rawResult.diagnostics);
 
         if (rawResult.value == null) {
-            abort(log, artifacts, "Parse failed:", rawResult.diagnostics);
+            abort(log, artifacts);
         }
 
         AstDocument raw = rawResult.value;
         artifacts.writeAst(AstPhase.RAW, raw);
 
         if (rawResult.hasErrors()) {
-            abort(log, artifacts, "Module binding failed:", rawResult.diagnostics);
+            abort(log, artifacts);
         }
 
+        System.out.println("==== Desugaring ====");
         Result<AstDocument> desugaredResult = frontend.desugar(raw);
         log.add("desugar", desugaredResult.diagnostics);
 
         if (desugaredResult.value == null) {
-            abort(log, artifacts, "Desugaring failed:", desugaredResult.diagnostics);
+            abort(log, artifacts);
         }
 
         AstDocument desugared = desugaredResult.value;
         artifacts.writeAst(AstPhase.DESUGARED, desugared);
 
         if (desugaredResult.hasErrors()) {
-            abort(log, artifacts, "Desugaring failed:", desugaredResult.diagnostics);
+            abort(log, artifacts);
         }
 
         ImportResolver importResolver = new ImportResolver(
                 importSearchDir,
                 frontend
         );
+        System.out.println("==== Resolving Imports ====");
         ImportResult importResult = importResolver.resolve(desugared, sourceFile);
         log.add("imports", importResult.diagnostics);
         artifacts.writeAst(AstPhase.IMPORT_RESOLVED, importResult.document);
 
         if (importResult.hasErrors()) {
-            abort(log, artifacts, "Import resolution failed:", importResult.diagnostics);
+            abort(log, artifacts);
         }
 
         PassResult semaResult = runPass(
@@ -181,9 +185,7 @@ public class Main {
                 artifacts,
                 "semantic",
                 SastPhase.SEMANTIC,
-                null,
-                "==== Warnings ====",
-                "Semantic analysis failed:",
+                "==== Semantic Analyzing ====",
                 PassCall.semantic(target, importResult.document)
         );
 
@@ -193,16 +195,16 @@ public class Main {
                 "legality",
                 SastPhase.LEGALITY,
                 "==== Legality Checking ====",
-                "==== Legality Warnings ====",
-                "Legality checking failed:",
                 PassCall.legality(semaResult.document)
         );
 
+        System.out.println("==== Branch Pruning ====");
         SastDocument branchPruned = new BranchPruner().prune(legalityResult.document);
         artifacts.writeSast(SastPhase.BRANCH_PRUNED, branchPruned);
 
         SastDocument inactivePruned = branchPruned;
 
+        System.out.println("==== Inactive Declaration Pruning ====");
         for (int i = 0; i < 2; i++) {
             inactivePruned =
                     new InactiveDeclarationPruner().prune(inactivePruned);
@@ -219,8 +221,6 @@ public class Main {
                 "null-state",
                 SastPhase.NULL_STATE,
                 "==== Pointer Null-State Checking ====",
-                "==== Pointer Null-State Warnings ====",
-                "Pointer null-state checking failed:",
                 PassCall.nullState(inactivePruned, memoryContext)
         );
 
@@ -230,8 +230,6 @@ public class Main {
                 "dangling",
                 SastPhase.DANGLING,
                 "==== Dangling Pointer Checking ====",
-                "==== Dangling Pointer Warnings ====",
-                "Dangling pointer checking failed:",
                 PassCall.dangling(pointerStateResult.document, memoryContext)
         );
 
@@ -241,8 +239,6 @@ public class Main {
                 "dyn-array",
                 SastPhase.DYN_ARRAY,
                 "==== Dynamic Array Memory Checking ====",
-                "==== Dynamic Array Memory Warnings ====",
-                "Dynamic array memory checking failed:",
                 PassCall.dynamicArray(danglingResult.document, memoryContext)
         );
 
@@ -252,8 +248,6 @@ public class Main {
                 "permissions",
                 SastPhase.PERMISSIONS,
                 "==== Pointer Permission Linting ====",
-                "==== Pointer Permission Warnings ====",
-                "Pointer permission linting failed:",
                 PassCall.permissions(dynamicArrayResult.document)
         );
 
@@ -263,8 +257,6 @@ public class Main {
                 "private-id",
                 SastPhase.PRIVATE_ID,
                 "==== Private Identifier Linting ====",
-                "==== Private Identifier Warnings ====",
-                "Private identifier linting failed:",
                 PassCall.privateIdentifiers(permissionResult.document)
         );
 
@@ -272,12 +264,13 @@ public class Main {
         SastDocument checkedDocument = privateIdentifierResult.document;
 
         if (modules.hasFfiEntities()) {
+            System.out.println("==== FFI Verifying ====");
             PassResult ffiResult = ffiHandler.verify(privateIdentifierResult.document);
             log.add("ffi-verified", ffiResult.diagnostics);
             artifacts.writeSast(SastPhase.FFI_VERIFIED, ffiResult.document);
 
             if (ffiResult.hasErrors()) {
-                abort(log, artifacts, "FFI verification failed:", ffiResult.diagnostics);
+                abort(log, artifacts);
             }
 
             checkedDocument = ffiResult.document;
@@ -285,8 +278,6 @@ public class Main {
 
         checkedDocument = checkedDocument.withPhase(SastPhase.CHECKED);
         artifacts.writeSast(SastPhase.CHECKED, checkedDocument);
-
-        System.out.println("All checks passed.");
 
         FfiHandler activeFfiHandler = modules.hasFfiEntities()
                 ? ffiHandler
@@ -348,6 +339,7 @@ public class Main {
 
         Files.writeString(outPath, finalCpp, StandardCharsets.UTF_8);
         artifacts.writeDiagnostics(log);
+        printDiagnosticReport(log);
 
         System.out.println("Successfully compiled to C++14: " + outPath);
     }
@@ -463,8 +455,6 @@ public class Main {
             String logName,
             SastPhase phase,
             String heading,
-            String warningHeading,
-            String failureHeader,
             PassCall pass
     ) {
         if (heading != null) {
@@ -475,12 +465,8 @@ public class Main {
         log.add(logName, result.diagnostics);
         artifacts.writeSast(phase, result.document);
 
-        if (warningHeading != null) {
-            printWarnings(warningHeading, result.diagnostics);
-        }
-
         if (result.hasErrors()) {
-            abort(log, artifacts, failureHeader, result.diagnostics);
+            abort(log, artifacts);
         }
 
         return result;
@@ -488,29 +474,19 @@ public class Main {
 
     private static void abort(
             DiagnosticLog log,
-            JsonArtifacts artifacts,
-            String header,
-            List<Diagnostic> diagnostics
+            JsonArtifacts artifacts
     ) {
         artifacts.writeDiagnostics(log);
-
-        throw new Abort(DiagnosticBag.formatErrors(header, diagnostics));
+        throw new Abort("");
     }
 
-    private static void printWarnings(String heading, List<Diagnostic> diagnostics) {
-        boolean printed = false;
+    private static void printDiagnosticReport(DiagnosticLog log) {
+        String report = log.formatReport();
 
-        for (Diagnostic diagnostic : diagnostics) {
-            if (diagnostic.isError()) {
-                continue;
-            }
-
-            if (!printed) {
-                System.out.println(heading);
-                printed = true;
-            }
-
-            System.out.println("  - " + diagnostic.format());
+        if (!report.isEmpty()) {
+            System.out.println();
+            System.out.print(report);
+            System.out.println();
         }
     }
 

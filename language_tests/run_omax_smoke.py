@@ -36,9 +36,12 @@ SUCCESS_CASES = (
     "byte_memchr_memmem",
     "byte_static_views",
     "enums_defaults",
+    "functions_inline",
 )
 
 BARE_STATIC_INDEX_CASE = ROOT / "language_tests/runtime/arrays/static_nested_index_oob.fr"
+
+INLINE_MODIFIER_CASE = ROOT / "language_tests/success/functions_inline/main.fr"
 
 
 def main() -> int:
@@ -69,6 +72,31 @@ def main() -> int:
             print("---- generated C++ does not contain bare VAR_g[VAR_i][VAR_j]: ----")
             dump_file(case.cpp)
             results.record(label, "bare indexing missing")
+        else:
+            results.record(label)
+
+    remove_artifacts(case.cpp, case.log)
+
+    src = INLINE_MODIFIER_CASE
+    case = case_paths(src, ".omax")
+    label = f"{relative(src)} [omax] (inline attributes)"
+    print(f"=== {relative(src)} [omax, inline attributes] ===")
+
+    code = franko_compile(src, case.cpp, mode="omax", log=case.log, echo=False)
+    if code != 0:
+        print("---- compiler output: ----")
+        dump_file(case.log)
+        results.record(label, "Franko compile failed")
+    else:
+        generated = read_text(case.cpp)
+        if "FRANKO_ALWAYS_INLINE int32_t FUNC_" not in generated:
+            print("---- generated C++ lacks the always-inline prefix: ----")
+            dump_file(case.cpp)
+            results.record(label, "always-inline prefix missing")
+        elif "FRANKO_NOINLINE int32_t FUNC_" not in generated:
+            print("---- generated C++ lacks the noinline prefix: ----")
+            dump_file(case.cpp)
+            results.record(label, "noinline prefix missing")
         else:
             results.record(label)
 

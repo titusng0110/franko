@@ -1,0 +1,25 @@
+import "franko/io"
+
+// ============================================================
+// LANGUAGE TEST: #warning
+// ============================================================
+// Covers: statement-level and declaration-level #warning,
+// dead-branch suppression, and the unified warning report.
+// ============================================================
+
+#if (1) {
+    #warning("declaration warning")
+} #else {
+    #warning("dead declaration warning")
+}
+
+func main() -> int32 {
+    #warning("statement warning");
+
+    #if (0) {
+        #warning("dead statement warning");
+    }
+
+    print(7);
+    return 0;
+}

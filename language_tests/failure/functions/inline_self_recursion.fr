@@ -1,0 +1,10 @@
+// Failure fixture: functions/inline_self_recursion
+// An #inline function may not call itself.
+
+#inline func f(int32 n) -> int32 {
+    return f(n - 1);
+}
+
+func main() -> int32 {
+    return f(1);
+}

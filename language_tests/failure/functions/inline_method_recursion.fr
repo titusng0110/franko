@@ -1,0 +1,16 @@
+// Failure fixture: functions/inline_method_recursion
+// Methods participate in the #inline recursion check.
+
+struct S {
+    int32 n
+
+    #inline func f(view<S> self) -> int32 {
+        return $(self).f();
+    }
+}
+
+func main() -> int32 {
+    S s;
+    s.n = 0;
+    return s.f();
+}

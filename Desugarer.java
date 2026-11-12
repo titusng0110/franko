@@ -363,7 +363,8 @@ public class Desugarer {
             fn.name,
             parameters,
             desugarType(fn.type),
-            body
+            body,
+            fn.inlineMode
         );
     }
 

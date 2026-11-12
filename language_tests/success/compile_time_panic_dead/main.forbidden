@@ -1,0 +1,8 @@
+dead declaration panic must never appear
+dead declaration warning must never appear
+this panic must never appear
+this warning must never appear
+======== Franko Compiler Errors ========
+======== User-defined Compiler Panics ========
+======== Franko Compiler Warnings ========
+======== User-defined Compiler Warnings ========

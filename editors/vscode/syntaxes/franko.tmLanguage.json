@@ -87,11 +87,15 @@
           "name": "keyword.control.compile-time.franko"
         },
         {
+          "match": "#(inline|noinline)\\b",
+          "name": "storage.modifier.inline.franko"
+        },
+        {
           "match": "#(IS_LINUX|IS_WINDOWS|IS_MACOS|IS_X86_64|IS_ARM64)\\b",
           "name": "support.constant.compile-time.franko"
         },
         {
-          "match": "#(is_primitive|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|what_type|strcat|strcmp|panic|is_matchable|is_comparable|is_assignable|is_value_assignable)\\b",
+          "match": "#(is_primitive|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|what_type|strcat|strcmp|panic|warning|is_matchable|is_comparable|is_assignable|is_value_assignable)\\b",
           "name": "support.function.builtin.compile-time.franko"
         },
         {

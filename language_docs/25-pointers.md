@@ -397,11 +397,11 @@ meaningful):
   (no `init`/`init_zero`/`resize`/`uninit`, no use where a `ptr<T>` is
   expected):
 
-  > *Warning: 'ptr<T> p' never exercises allocation or lifecycle permissions. Consider downgrading to 'mview<T>' for tighter security.*
+  > *'ptr<T> p' never exercises allocation or lifecycle permissions. Consider downgrading to 'mview<T>' for tighter security.*
 
 - a `ptr<T>` or `mview<T>` that is only ever read from:
 
-  > *Warning: 'mview<T> v' is only ever read from. Consider downgrading to 'view<T>' for maximum safety.*
+  > *'mview<T> v' is only ever read from. Consider downgrading to 'view<T>' for maximum safety.*
 
 Exercising *allocation* means lifecycle intrinsics, `getptr` over the
 variable's region, or using it where a `ptr<T>` is expected (argument,

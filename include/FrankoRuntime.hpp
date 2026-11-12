@@ -33,6 +33,14 @@
 #define FRANKO_BOUNDS_UNCHECKED 0
 #endif
 
+#if defined(_MSC_VER)
+#define FRANKO_ALWAYS_INLINE __forceinline
+#define FRANKO_NOINLINE __declspec(noinline)
+#else
+#define FRANKO_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define FRANKO_NOINLINE __attribute__((noinline))
+#endif
+
 #include <cstddef>   // for size_t, std::nullptr_t
 #include <cstdint>   // for uint8_t, uint32_t, int32_t
 #include <cstdlib>   // for std::malloc/calloc/realloc/free (non-jemalloc builds) _byteswap_* (MSVC byte_swap fallback) std::abort()

@@ -1,1 +1,2 @@
-selected declaration panic message
+======== User-defined Compiler Panics ========
+1. language_tests/failure/compile_time_if/declaration_panic.fr:6:5: selected declaration panic message

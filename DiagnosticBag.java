@@ -47,6 +47,14 @@ public final class DiagnosticBag {
         diagnostics.add(Diagnostic.warning(currentSpan(), msg, code));
     }
 
+    public void panic(String msg) {
+        diagnostics.add(Diagnostic.panic(currentSpan(), msg));
+    }
+
+    public void userWarning(String msg) {
+        diagnostics.add(Diagnostic.userWarning(currentSpan(), msg));
+    }
+
     public void add(Diagnostic diagnostic) {
         if (diagnostic != null) {
             diagnostics.add(diagnostic);
@@ -78,33 +86,4 @@ public final class DiagnosticBag {
             diagnostics.addAll(incoming);
         }
     }
-
-    public static String formatErrors(
-            String header,
-            List<Diagnostic> diagnostics
-    ) {
-        StringBuilder sb = new StringBuilder(header);
-
-        if (!header.endsWith("\n")) {
-            sb.append('\n');
-        }
-
-        int index = 0;
-
-        for (Diagnostic diagnostic : diagnostics) {
-            if (!diagnostic.isError()) {
-                continue;
-            }
-
-            index++;
-            sb.append("  ")
-                    .append(index)
-                    .append(". ")
-                    .append(diagnostic.format())
-                    .append('\n');
-        }
-
-        return sb.toString();
-    }
-
 }

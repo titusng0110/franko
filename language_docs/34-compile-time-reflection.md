@@ -10,8 +10,14 @@ Compile-time reflection covers:
 - type predicates over declared types and variables;
 - canonical type spelling with `#what_type`;
 - compile-time string comparison, concatenation, and panic;
+- compile-time user-defined warnings with `#warning`;
 - `#if` branch selection inside functions, at global scope, inside
   namespaces, and inside structs.
+
+`#inline` and `#noinline` also begin with `#`, but they are function
+declaration modifiers rather than compile-time reflection values; see
+[Functions](19-functions.md). They are not part of the `#name` expression
+family and cannot be used as expressions.
 
 ---
 
@@ -205,6 +211,7 @@ Consequences:
 - a selected `break`/`continue` is checked against the enclosing loop; a
   dead one is not;
 - `#panic` in a dead branch is ignored;
+- `#warning` in a dead branch is ignored;
 - functions, globals, structs, fields, and methods declared in a dead
   branch are not part of the program.
 
@@ -329,6 +336,7 @@ All introspection calls use `#name(...)`.
 | `#strcat(a, b, ...)` | one or more compile-time strings | compile-time string | concatenates all arguments |
 | `#strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
+| `#warning(message)` | one compile-time string | `void` | emits a compiler warning and continues |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers and enums; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
 | `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists (only pointer-only structs may declare it); for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
@@ -374,11 +382,15 @@ hashing key:
 
 `byte` is an alias for `uint8`, so canonical spellings use `uint8`.
 
+A compile-time directive has the compile-time type `void`. It is not a
+runtime value type and cannot be used in declarations or expressions, but
+`#what_type` spells it as `"void"`.
+
 ---
 
 ## 34.7 Compile-Time Strings
 
-`#strcmp`, `#panic`, and `#strcat` accept compile-time strings:
+`#strcmp`, `#panic`, `#warning`, and `#strcat` accept compile-time strings:
 
 - raw string literals;
 - `#what_type(...)`;
@@ -418,8 +430,17 @@ int32 i = 1;
 #panic(#what_type(i));   // reports: int32
 ```
 
-`#panic` may also be used as a declaration-level item inside an `#if`
-branch:
+`#warning` reports its message as a compiler warning and compilation
+continues:
+
+```franko
+#warning("this fallback path is deprecated");
+#warning(#what_type(i));   // reports: int32
+```
+
+`#panic` and `#warning` are compile-time-only. They may be used as
+expression statements or as declaration-level items inside an `#if` branch,
+and they never produce runtime code:
 
 ```franko
 #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
@@ -429,8 +450,40 @@ branch:
 }
 ```
 
-The selected `#panic` is reported during compilation, before other checks.
-In a dead `#if` branch it is ignored.
+The selected directive runs during compilation, before the main legality
+checks. In a dead `#if` branch it is ignored.
+
+### Compilation Report
+
+Compiler diagnostics are printed in four grouped sections. A section is
+only shown when it contains at least one entry:
+
+```text
+======== Franko Compiler Errors ========
+======== User-defined Compiler Panics ========
+======== Franko Compiler Warnings ========
+======== User-defined Compiler Warnings ========
+```
+
+Pass progress is printed as `==== <phase> ====` headings, and a blank line
+separates those headings from the diagnostic report.
+`#panic` entries appear under **User-defined Compiler Panics**, and
+`#warning` entries appear under **User-defined Compiler Warnings**.
+Compiler-generated diagnostics appear under the two **Franko Compiler**
+sections. Entries are numbered within their section and start with the
+source file, line, and column:
+
+```text
+======== User-defined Compiler Warnings ========
+1. main.fr:12:5: this fallback path is deprecated
+```
+
+`#panic`/`#warning` are also accepted as compile-time arguments to the
+compile-time predicates. Their result is `void`: predicates such as
+`#is_primitive`, `#is_memcpy_safe`, and `#has_default_value` return `0`,
+`#is_same_type` returns `1` when both arguments are void directives, and
+`#what_type` spells `"void"`.
+They cannot be used as runtime values.
 
 ---
 
@@ -579,9 +632,13 @@ An unguarded off-target FFI call still fails when building for that target.
 - `#` reflection functions are built-in compile-time functions, not
   callable values.
 - A runtime `view<[byte]>` variable cannot be passed to `#strcmp`,
-  `#strcat`, or `#panic`; those arguments must be compile-time strings.
-- Empty string literals are rejected in `#strcmp`, `#strcat`, and
-  `#panic`.
+  `#strcat`, `#panic`, or `#warning`; those arguments must be compile-time
+  strings.
+- Empty string literals are rejected in `#strcmp`, `#strcat`, `#panic`,
+  and `#warning`.
+- `#panic` and `#warning` cannot be used as runtime values; they are only
+  valid as expression statements, declaration-level items, or compile-time
+  arguments to other `#` intrinsics.
 - Declaration-level `#if` cannot wrap imports.
 
 ## 34.11 Common Mistakes
@@ -627,6 +684,7 @@ A runtime view is not a compile-time string:
 ```franko
 view<[byte, 5]> spelling = #what_type(int32)
 #strcmp(spelling, "int32")    // invalid: not a compile-time string
+#warning(spelling)            // invalid: not a compile-time string
 #strcmp(#what_type(int32), "int32") // valid
 ```
 

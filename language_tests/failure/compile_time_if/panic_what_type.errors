@@ -1,1 +1,2 @@
-a::b::Point
+======== User-defined Compiler Panics ========
+1. language_tests/failure/compile_time_if/panic_what_type.fr:20:5: a::b::Point

@@ -1,0 +1,1 @@
+Inline function 'f' cannot participate in call-graph recursion: f -> f

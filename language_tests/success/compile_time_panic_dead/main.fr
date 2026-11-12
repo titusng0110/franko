@@ -1,19 +1,21 @@
 // ============================================================
-// LANGUAGE TEST: #panic in a dead #if branch
+// LANGUAGE TEST: #panic and #warning in dead #if branches
 // ============================================================
 // The unselected branch is never semantically analyzed, so its
-// #panic call must not abort compilation.
+// #panic and #warning calls must not do anything.
 // ============================================================
 
 import "franko/io"
 
 #if (0) {
     #panic("dead declaration panic must never appear")
+    #warning("dead declaration warning must never appear")
 }
 
 func main() -> int32 {
     #if (0) {
-        #panic("this message must never appear");
+        #panic("this panic must never appear");
+        #warning("this warning must never appear");
     } #else {
         print("alive");
     }

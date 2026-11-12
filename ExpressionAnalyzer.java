@@ -76,6 +76,21 @@ public final class ExpressionAnalyzer {
         return analyzeExpr(node, false);
     }
 
+    public void analyzeCompileTimeDirective(AstNode call) {
+        ctx.diagnostics().push(call.span);
+        try {
+            if (staticIntrinsics == null) {
+                ctx.error("Internal compiler error: no compile-time "
+                        + "intrinsics wired into ExpressionAnalyzer");
+                return;
+            }
+
+            staticIntrinsics.analyzeDirective(call);
+        } finally {
+            ctx.diagnostics().pop();
+        }
+    }
+
     private SastNode analyzeExpr(
             AstNode node,
             boolean allowAggregateLiteral

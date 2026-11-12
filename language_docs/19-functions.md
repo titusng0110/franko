@@ -201,3 +201,50 @@ The built-in `#name(...)` functions (`#is_primitive`, `#what_type`,
 callable values. They are resolved at compile time; they cannot be stored
 in a variable, passed as a function argument, or referred to without a
 call. See [Compile-Time Reflection](34-compile-time-reflection.md).
+
+## 19.13 Inlining Modifiers
+
+A function declaration may carry exactly one inlining modifier before
+`func`:
+
+```franko
+#inline func add_one(int32 x) -> int32 {
+    return x + 1;
+}
+
+#noinline func trace(int32 x) -> void {
+    print(x);
+    return;
+}
+```
+
+`#inline` asks the compiler to always inline the function. `#noinline`
+asks it never to inline the function. With no modifier, the backend decides
+using its normal heuristics. The modifiers apply to free functions,
+namespace functions, and struct methods, including declarations selected
+by `#if`.
+
+Inlining modifiers do not change behavior or call syntax. They are not part
+of the function name, type, signature, call resolution, or overload identity:
+`#inline func f(int32 x)` and `func f(int32 x)` are duplicate declarations.
+
+An always-inlined function cannot participate in recursion. The compiler
+checks the function call graph and rejects `#inline` when the function can
+reach itself:
+
+```franko
+#inline func f(int32 n) -> int32 {
+    return f(n - 1);       // invalid: #inline function is directly recursive
+}
+
+#inline func a(int32 n) -> int32 { return b(n); }
+func b(int32 n) -> int32 { return a(n); }   // invalid: a -> b -> a
+```
+
+The check covers direct self-recursion, mutual recursion, and recursion
+through methods. It uses the whole Franko call graph: marking a function in
+the cycle `#noinline` does not exempt an `#inline` function from the rule.
+`#noinline` functions may be recursive normally.
+
+The modifiers only describe functions that the Franko compiler emits.
+FFI-bridged functions are provided by their bridge and ignore them.

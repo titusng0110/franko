@@ -9,6 +9,7 @@ public class LegalityChecker {
     private final DeclarationChecker declarationChecker;
     private final StatementChecker statementChecker;
     private final FunctionChecker functionChecker;
+    private final CompileTimeLegalityChecker compileTimeChecker;
 
     public LegalityChecker() {
         this(new DiagnosticBag());
@@ -45,6 +46,9 @@ public class LegalityChecker {
                         expressionChecker,
                         typeChecker
                 );
+
+        this.compileTimeChecker =
+                new CompileTimeLegalityChecker(diagnostics);
     }
 
     public void check(SastNode node) {
@@ -55,6 +59,7 @@ public class LegalityChecker {
         diagnostics.clear();
 
         checkNode(node);
+        compileTimeChecker.checkDocument(node);
     }
 
     public PassResult check(SastDocument document) {

@@ -1,0 +1,9 @@
+======== User-defined Compiler Warnings ========
+1. language_tests/success/compile_time_void_introspection/main.fr:11:
+2. language_tests/success/compile_time_void_introspection/main.fr:12:
+3. language_tests/success/compile_time_void_introspection/main.fr:12:
+4. language_tests/success/compile_time_void_introspection/main.fr:13:
+void predicate
+void left
+void right
+void spelling
