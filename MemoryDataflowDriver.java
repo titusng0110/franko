@@ -1,6 +1,10 @@
+import java.util.Locale;
+
 final class MemoryDataflowDriver {
     static final int MAX_BRANCH_DEPTH = MemoryAnalysisContext.MAX_BRANCH_DEPTH;
     static final int MAX_GUARD_CASE_WORK = 8192;
+    static final boolean DEBUG = false;
+
     enum DomainKind {
         NULL_STATE,
         DANGLING,
@@ -333,6 +337,42 @@ final class MemoryDataflowDriver {
                 dynamicArray.setSuppressed(value);
             }
         }
+
+        int snapshotCapacity() {
+            if (kind == DomainKind.NULL_STATE) {
+                return nullState.snapshotCapacity();
+            }
+
+            if (kind == DomainKind.DANGLING) {
+                return dangling.snapshotCapacity();
+            }
+
+            return dynamicArray.snapshotCapacity();
+        }
+
+        int snapshotCount() {
+            if (kind == DomainKind.NULL_STATE) {
+                return nullState.snapshotCount();
+            }
+
+            if (kind == DomainKind.DANGLING) {
+                return dangling.snapshotCount();
+            }
+
+            return dynamicArray.snapshotCount();
+        }
+
+        long snapshotRowBytes() {
+            if (kind == DomainKind.NULL_STATE) {
+                return nullState.snapshotRowBytes();
+            }
+
+            if (kind == DomainKind.DANGLING) {
+                return dangling.snapshotRowBytes();
+            }
+
+            return dynamicArray.snapshotRowBytes();
+        }
     }
 
     private static final class LoopFrame {
@@ -349,6 +389,16 @@ final class MemoryDataflowDriver {
     private int blockDepth;
     private int loopDepth;
     private int guardCaseWork;
+
+    private int maxBranchDepthSeen;
+    private int maxBlockDepthSeen;
+    private int maxGuardCasesSeen;
+    private int maxGuardFactsSeen;
+    private int maxGuardWorkUsed;
+    private int guardOverflowCount;
+    private int workExhaustedCount;
+    private int checkedFunctionCount;
+    private boolean limitExceeded;
 
     private final LoopFrame[] loopFrames = new LoopFrame[64];
     private int[] jumpSlots = new int[256];
@@ -373,7 +423,21 @@ final class MemoryDataflowDriver {
     }
 
     void run(SastNode root) {
+        maxBranchDepthSeen = 0;
+        maxBlockDepthSeen = 0;
+        maxGuardCasesSeen = 0;
+        maxGuardFactsSeen = 0;
+        maxGuardWorkUsed = 0;
+        guardOverflowCount = 0;
+        workExhaustedCount = 0;
+        checkedFunctionCount = 0;
+        limitExceeded = false;
+
         checkTopLevel(root);
+
+        if (DEBUG) {
+            printDebugSummary();
+        }
     }
 
     private void checkTopLevel(SastNode node) {
@@ -411,12 +475,17 @@ final class MemoryDataflowDriver {
     }
 
     private void checkFunction(SastNode function) {
+        if (limitExceeded) {
+            return;
+        }
+
         if (!domain.shouldCheckFunction(function)) {
             return;
         }
 
         int functionId = context.functionId(function.symbol);
 
+        checkedFunctionCount++;
         branchDepth = 0;
         blockDepth = 0;
         loopDepth = 0;
@@ -427,18 +496,116 @@ final class MemoryDataflowDriver {
         domain.setSuppressed(false);
         domain.beginFunction(functionId);
 
-        boolean terminated = false;
+        try {
+            boolean terminated = false;
 
-        if (function.body != null) {
-            terminated = checkStmt(function.body);
+            if (function.body != null) {
+                terminated = checkStmt(function.body);
+            }
+
+            if (!terminated) {
+                domain.onFallthrough();
+                addExit();
+            }
+
+            domain.endFunction(exitCount, !terminated);
+        } catch (MemoryAnalysisContext.SnapshotLimitExceeded limit) {
+            reportSnapshotLimit(function, limit);
+            limitExceeded = true;
+            return;
         }
 
-        if (!terminated) {
-            domain.onFallthrough();
-            addExit();
+        if (DEBUG) {
+            String name = function.symbol == null
+                    ? "<unknown>"
+                    : function.symbol.qualifiedName();
+            System.err.println(
+                    "[memory-debug] "
+                            + domain.kind
+                            + " function="
+                            + name
+                            + " snapshots="
+                            + domain.snapshotCount()
+            );
         }
 
-        domain.endFunction(exitCount, !terminated);
+        int workUsed = MAX_GUARD_CASE_WORK - guardCaseWork;
+
+        if (workUsed > maxGuardWorkUsed) {
+            maxGuardWorkUsed = workUsed;
+        }
+
+        if (guardCaseWork == 0) {
+            workExhaustedCount++;
+        }
+    }
+
+    boolean limitExceeded() {
+        return limitExceeded;
+    }
+
+    private void reportSnapshotLimit(
+            SastNode function,
+            MemoryAnalysisContext.SnapshotLimitExceeded limit
+    ) {
+        String name = function.symbol == null
+                ? "<unknown>"
+                : function.symbol.qualifiedName();
+        String checker = checkerLabel(domain.kind);
+
+        diagnostics.push(function.span);
+
+        try {
+            diagnostics.error(
+                    "Memory analysis limit exceeded in function '"
+                            + name
+                            + "' ("
+                            + checker
+                            + " checker): the function needs "
+                            + formatNumber(limit.requiredSlots)
+                            + " snapshot slots and has "
+                            + limit.complexity
+                            + ", totalling "
+                            + formatNumber(limit.projectedBytes)
+                            + " bytes, which is too much for the 1.5 GiB ("
+                            + formatNumber(
+                                    MemoryAnalysisContext.MAX_SNAPSHOT_ARENA_BYTES
+                            )
+                            + " bytes) limit."
+                            + (limit.rowOwners.isEmpty()
+                                    ? ""
+                                    : " The snapshot row is also sized by"
+                                            + " other functions: "
+                                            + limit.rowOwners
+                                            + ".")
+                            + " Split "
+                            + (limit.rowOwners.isEmpty()
+                                    ? "'" + name + "'"
+                                    : "'" + name
+                                            + "' and the named functions")
+                            + " into smaller functions, or reduce deeply"
+                            + " nested branches and loops.",
+                    "memory.snapshot_limit"
+            );
+        } finally {
+            diagnostics.pop();
+        }
+    }
+
+    private static String checkerLabel(DomainKind kind) {
+        if (kind == DomainKind.NULL_STATE) {
+            return "null-state";
+        }
+
+        if (kind == DomainKind.DANGLING) {
+            return "dangling-pointer";
+        }
+
+        return "dynamic-array";
+    }
+
+    private static String formatNumber(long value) {
+        return String.format(Locale.ROOT, "%,d", value);
     }
 
     private void addExit() {
@@ -533,6 +700,11 @@ final class MemoryDataflowDriver {
 
     private boolean checkBlock(SastNode block) {
         int depth = ++blockDepth;
+
+        if (depth > maxBlockDepthSeen) {
+            maxBlockDepthSeen = depth;
+        }
+
         domain.enterBlock(block, depth);
 
         boolean terminated = false;
@@ -561,6 +733,10 @@ final class MemoryDataflowDriver {
 
         int before = domain.snapshot();
         branchDepth++;
+
+        if (branchDepth > maxBranchDepthSeen) {
+            maxBranchDepthSeen = branchDepth;
+        }
 
         MemoryGuardFacts trueFacts =
                 prepareGuard(node.condition, true);
@@ -677,6 +853,18 @@ final class MemoryDataflowDriver {
         MemoryGuardFacts facts = MemoryGuardFacts.prepare(condition, holds);
         int count = facts.caseCount();
 
+        if (count > maxGuardCasesSeen) {
+            maxGuardCasesSeen = count;
+        }
+
+        if (facts.maxFactCount() > maxGuardFactsSeen) {
+            maxGuardFactsSeen = facts.maxFactCount();
+        }
+
+        if (facts.overflowed()) {
+            guardOverflowCount++;
+        }
+
         if (count <= 1) {
             return facts;
         }
@@ -688,6 +876,29 @@ final class MemoryDataflowDriver {
 
         guardCaseWork -= count;
         return facts;
+    }
+
+    private void printDebugSummary() {
+        System.err.println("[memory-debug] "
+                + domain.kind
+                + " functions=" + checkedFunctionCount
+                + " branch-depth=" + maxBranchDepthSeen
+                + "/" + MAX_BRANCH_DEPTH
+                + " block-depth=" + maxBlockDepthSeen
+                + " guard-cases=" + maxGuardCasesSeen
+                + "/" + MemoryGuardFacts.MAX_CASES
+                + " guard-facts=" + maxGuardFactsSeen
+                + "/" + MemoryGuardFacts.MAX_FACTS
+                + " guard-work=" + maxGuardWorkUsed
+                + "/" + MAX_GUARD_CASE_WORK
+                + " guard-overflows=" + guardOverflowCount
+                + " work-exhausted=" + workExhaustedCount
+                + " snapshot-demand=" + context.maxSnapshotDemand
+                + " snapshot-capacity=" + domain.snapshotCapacity()
+                + " snapshot-row-bytes=" + domain.snapshotRowBytes()
+                + " snapshot-bytes="
+                + ((long) domain.snapshotCapacity()
+                        * domain.snapshotRowBytes()));
     }
 
     private boolean checkIfPathInsensitive(SastNode node) {
@@ -737,10 +948,9 @@ final class MemoryDataflowDriver {
                 ? blockDepth + 1
                 : blockDepth;
 
-        int capacity = Math.max(
-                16,
-                context.maxSnapshotDemand + MAX_BRANCH_DEPTH + 4
-        );
+        int capacity = context.maxSnapshotDemand
+                + MAX_BRANCH_DEPTH
+                + 4;
         int[] loopExitSlots = new int[capacity];
         int[] backEdgeSlots = new int[capacity];
         int exitCountLocal = 0;

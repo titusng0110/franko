@@ -5,6 +5,28 @@ import java.util.List;
 
 final class MemoryAnalysisContext {
     static final int MAX_BRANCH_DEPTH = 13;
+    static final long MAX_SNAPSHOT_ARENA_BYTES = 1_610_612_736L;
+
+    static final class SnapshotLimitExceeded extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        final int requiredSlots;
+        final long projectedBytes;
+        final String complexity;
+        final String rowOwners;
+
+        SnapshotLimitExceeded(
+                int requiredSlots,
+                long projectedBytes,
+                String complexity,
+                String rowOwners
+        ) {
+            this.requiredSlots = requiredSlots;
+            this.projectedBytes = projectedBytes;
+            this.complexity = complexity;
+            this.rowOwners = rowOwners;
+        }
+    }
 
     final SastNode root;
     final MemoryCallGraph callGraph;
@@ -35,6 +57,20 @@ final class MemoryAnalysisContext {
 
     private final IdentityHashMap<SastNode, int[]> blockLocals;
     private final int[][] functionLocalIds;
+    final int[][] functionVariableIds;
+    final int[][] functionPointerIndices;
+    final int[][] functionVariableWordIds;
+    final int[][] functionAssignmentSiteIds;
+    final int[][] functionAssignmentSiteWordIds;
+    final int maxActiveVariableCount;
+    final int maxActivePointerCount;
+    final int maxActiveVariableWordCount;
+    final int maxActiveAssignmentSiteCount;
+    final int maxActiveAssignmentSiteWordCount;
+    final int maxActivePointerFunctionId;
+    final int maxActiveVariableWordFunctionId;
+    final int maxActiveAssignmentSiteFunctionId;
+    final int maxActiveAssignmentSiteWordFunctionId;
 
     private MemoryAnalysisContext(
             SastNode root,
@@ -56,7 +92,21 @@ final class MemoryAnalysisContext {
             int siteCount,
             IdentityHashMap<SastNode, Integer> siteIds,
             IdentityHashMap<SastNode, int[]> blockLocals,
-            int[][] functionLocalIds
+            int[][] functionLocalIds,
+            int[][] functionVariableIds,
+            int[][] functionPointerIndices,
+            int[][] functionVariableWordIds,
+            int[][] functionAssignmentSiteIds,
+            int[][] functionAssignmentSiteWordIds,
+            int maxActiveVariableCount,
+            int maxActivePointerCount,
+            int maxActiveVariableWordCount,
+            int maxActiveAssignmentSiteCount,
+            int maxActiveAssignmentSiteWordCount,
+            int maxActivePointerFunctionId,
+            int maxActiveVariableWordFunctionId,
+            int maxActiveAssignmentSiteFunctionId,
+            int maxActiveAssignmentSiteWordFunctionId
     ) {
         this.root = root;
         this.callGraph = callGraph;
@@ -81,6 +131,21 @@ final class MemoryAnalysisContext {
         this.siteIds = siteIds;
         this.blockLocals = blockLocals;
         this.functionLocalIds = functionLocalIds;
+        this.functionVariableIds = functionVariableIds;
+        this.functionPointerIndices = functionPointerIndices;
+        this.functionVariableWordIds = functionVariableWordIds;
+        this.functionAssignmentSiteIds = functionAssignmentSiteIds;
+        this.functionAssignmentSiteWordIds = functionAssignmentSiteWordIds;
+        this.maxActiveVariableCount = maxActiveVariableCount;
+        this.maxActivePointerCount = maxActivePointerCount;
+        this.maxActiveVariableWordCount = maxActiveVariableWordCount;
+        this.maxActiveAssignmentSiteCount = maxActiveAssignmentSiteCount;
+        this.maxActiveAssignmentSiteWordCount = maxActiveAssignmentSiteWordCount;
+        this.maxActivePointerFunctionId = maxActivePointerFunctionId;
+        this.maxActiveVariableWordFunctionId = maxActiveVariableWordFunctionId;
+        this.maxActiveAssignmentSiteFunctionId = maxActiveAssignmentSiteFunctionId;
+        this.maxActiveAssignmentSiteWordFunctionId =
+                maxActiveAssignmentSiteWordFunctionId;
     }
 
     static MemoryAnalysisContext build(SastNode root) {
@@ -185,6 +250,143 @@ final class MemoryAnalysisContext {
             }
         }
 
+        int variableWords = Math.max(1, (variableCount + 63) >>> 6);
+        int siteWords = Math.max(1, (siteCount[0] + 63) >>> 6);
+
+        int[][] functionVariableIds = new int[functionCount][];
+        int[][] functionPointerIndices = new int[functionCount][];
+        int[][] functionVariableWordIds = new int[functionCount][];
+        int[][] functionAssignmentSiteIds = new int[functionCount][];
+        int[][] functionAssignmentSiteWordIds = new int[functionCount][];
+
+        int maxActiveVariableCount = 0;
+        int maxActivePointerCount = 0;
+        int maxActiveVariableWordCount = 0;
+        int maxActiveAssignmentSiteCount = 0;
+        int maxActiveAssignmentSiteWordCount = 0;
+        int maxActivePointerFunctionId = -1;
+        int maxActiveVariableWordFunctionId = -1;
+        int maxActiveAssignmentSiteFunctionId = -1;
+        int maxActiveAssignmentSiteWordFunctionId = -1;
+
+        for (int i = 0; i < functionCount; i++) {
+            boolean[] activeVariables = new boolean[variableCount];
+
+            for (int variableId : globalVariableIds) {
+                activeVariables[variableId] = true;
+            }
+
+            int[] parameterVariableIds = callGraph.parameterVariableIds[i];
+
+            if (parameterVariableIds != null) {
+                for (int variableId : parameterVariableIds) {
+                    if (variableId >= 0) {
+                        activeVariables[variableId] = true;
+                    }
+                }
+            }
+
+            List<Integer> localVariables = functionLocals.get(i);
+
+            for (int variableId : localVariables) {
+                activeVariables[variableId] = true;
+            }
+
+            List<Integer> activeVariableList = new ArrayList<>();
+            boolean[] variableWordActive = new boolean[variableWords];
+
+            for (int variableId = 0; variableId < variableCount; variableId++) {
+                if (!activeVariables[variableId]) {
+                    continue;
+                }
+
+                activeVariableList.add(variableId);
+                variableWordActive[variableId >>> 6] = true;
+            }
+
+            List<Integer> activePointerList = new ArrayList<>();
+
+            for (int pointerIndex = 0;
+                    pointerIndex < pointerVariableIds.length;
+                    pointerIndex++) {
+                int variableId = pointerVariableIds[pointerIndex];
+
+                if (activeVariables[variableId]) {
+                    activePointerList.add(pointerIndex);
+                }
+            }
+
+            List<Integer> activeVariableWordList = new ArrayList<>();
+
+            for (int word = 0; word < variableWords; word++) {
+                if (variableWordActive[word]) {
+                    activeVariableWordList.add(word);
+                }
+            }
+
+            List<Integer> assignmentSiteList = new ArrayList<>();
+            SastNode declaration = callGraph.decls[i];
+
+            if (declaration != null) {
+                collectAssignmentSites(
+                        declaration.body,
+                        siteIds,
+                        assignmentSiteList
+                );
+            }
+
+            boolean[] assignmentSiteWordActive = new boolean[siteWords];
+
+            for (int site : assignmentSiteList) {
+                assignmentSiteWordActive[site >>> 6] = true;
+            }
+
+            List<Integer> assignmentSiteWordList = new ArrayList<>();
+
+            for (int word = 0; word < siteWords; word++) {
+                if (assignmentSiteWordActive[word]) {
+                    assignmentSiteWordList.add(word);
+                }
+            }
+
+            functionVariableIds[i] = toIntArray(activeVariableList);
+            functionPointerIndices[i] = toIntArray(activePointerList);
+            functionVariableWordIds[i] = toIntArray(activeVariableWordList);
+            functionAssignmentSiteIds[i] = toIntArray(assignmentSiteList);
+            functionAssignmentSiteWordIds[i] =
+                    toIntArray(assignmentSiteWordList);
+
+            maxActiveVariableCount = Math.max(
+                    maxActiveVariableCount,
+                    functionVariableIds[i].length
+            );
+
+            if (functionPointerIndices[i].length > maxActivePointerCount) {
+                maxActivePointerCount = functionPointerIndices[i].length;
+                maxActivePointerFunctionId = i;
+            }
+
+            if (functionVariableWordIds[i].length > maxActiveVariableWordCount) {
+                maxActiveVariableWordCount =
+                        functionVariableWordIds[i].length;
+                maxActiveVariableWordFunctionId = i;
+            }
+
+            if (functionAssignmentSiteIds[i].length
+                    > maxActiveAssignmentSiteCount) {
+                maxActiveAssignmentSiteCount =
+                        functionAssignmentSiteIds[i].length;
+                maxActiveAssignmentSiteFunctionId = i;
+            }
+
+            if (functionAssignmentSiteWordIds[i].length
+                    > maxActiveAssignmentSiteWordCount) {
+                maxActiveAssignmentSiteWordCount =
+                        functionAssignmentSiteWordIds[i].length;
+                maxActiveAssignmentSiteWordFunctionId = i;
+            }
+        }
+
         MemoryTemplateRegistry templates = new MemoryTemplateRegistry(
                 maxParameters,
                 globalVariableIds.length,
@@ -223,7 +425,21 @@ final class MemoryAnalysisContext {
                 siteCount[0],
                 siteIds,
                 blockLocals,
-                localIds
+                localIds,
+                functionVariableIds,
+                functionPointerIndices,
+                functionVariableWordIds,
+                functionAssignmentSiteIds,
+                functionAssignmentSiteWordIds,
+                maxActiveVariableCount,
+                maxActivePointerCount,
+                maxActiveVariableWordCount,
+                maxActiveAssignmentSiteCount,
+                maxActiveAssignmentSiteWordCount,
+                maxActivePointerFunctionId,
+                maxActiveVariableWordFunctionId,
+                maxActiveAssignmentSiteFunctionId,
+                maxActiveAssignmentSiteWordFunctionId
         );
     }
 
@@ -846,6 +1062,124 @@ final class MemoryAnalysisContext {
         }
 
         siteIds.put(node, siteCount[0]++);
+    }
+
+    private static int[] toIntArray(List<Integer> values) {
+        int[] result = new int[values.size()];
+
+        for (int i = 0; i < result.length; i++) {
+            result[i] = values.get(i);
+        }
+
+        return result;
+    }
+
+    private static void collectAssignmentSites(
+            SastNode node,
+            IdentityHashMap<SastNode, Integer> siteIds,
+            List<Integer> out
+    ) {
+        if (node == null) {
+            return;
+        }
+
+        if (node.kind == SastKind.ASSIGN) {
+            Integer site = siteIds.get(node);
+
+            if (site != null) {
+                out.add(site);
+            }
+        }
+
+        switch (node.kind) {
+            case PROGRAM -> {
+                for (SastNode item : node.topLevelItems) {
+                    collectAssignmentSites(item, siteIds, out);
+                }
+            }
+            case NAMESPACE -> {
+                for (SastNode item : node.items) {
+                    collectAssignmentSites(item, siteIds, out);
+                }
+            }
+            case STRUCT_DECL -> {
+                for (SastNode method : node.methods) {
+                    collectAssignmentSites(method, siteIds, out);
+                }
+            }
+            case FUNCTION_DECL -> collectAssignmentSites(node.body, siteIds, out);
+            case BLOCK -> {
+                for (SastNode statement : node.statements) {
+                    collectAssignmentSites(statement, siteIds, out);
+                }
+            }
+            case VAR_DECL -> collectAssignmentSites(
+                    node.staticInitializer,
+                    siteIds,
+                    out
+            );
+            case VAR_DECL_INIT -> {
+                for (SastNode initializer : node.initializers) {
+                    collectAssignmentSites(initializer, siteIds, out);
+                }
+            }
+            case ASSIGN -> {
+                collectAssignmentSites(node.target, siteIds, out);
+                collectAssignmentSites(node.value, siteIds, out);
+            }
+            case IF -> {
+                collectAssignmentSites(node.condition, siteIds, out);
+                collectAssignmentSites(node.thenBranch, siteIds, out);
+                collectAssignmentSites(node.elseBranch, siteIds, out);
+            }
+            case WHILE -> {
+                collectAssignmentSites(node.condition, siteIds, out);
+                collectAssignmentSites(node.body, siteIds, out);
+
+                for (SastNode update : node.update) {
+                    collectAssignmentSites(update, siteIds, out);
+                }
+            }
+            case RETURN -> collectAssignmentSites(node.value, siteIds, out);
+            case EXPR_STMT -> collectAssignmentSites(node.expr, siteIds, out);
+            case UNARY_OP -> collectAssignmentSites(node.expr, siteIds, out);
+            case BIN_OP -> {
+                collectAssignmentSites(node.left, siteIds, out);
+                collectAssignmentSites(node.right, siteIds, out);
+            }
+            case ARRAY_ACCESS -> {
+                collectAssignmentSites(node.target, siteIds, out);
+                collectAssignmentSites(node.index, siteIds, out);
+            }
+            case MEMBER_ACCESS -> collectAssignmentSites(node.target, siteIds, out);
+            case FUNCTION_CALL -> {
+                for (SastNode arg : node.args) {
+                    collectAssignmentSites(arg, siteIds, out);
+                }
+            }
+            case ARRAY_INTRINSIC_CALL -> {
+                collectAssignmentSites(node.receiver, siteIds, out);
+
+                for (SastNode arg : node.args) {
+                    collectAssignmentSites(arg, siteIds, out);
+                }
+            }
+            case GET_PTR -> collectAssignmentSites(node.target, siteIds, out);
+            case DEREF -> collectAssignmentSites(node.expr, siteIds, out);
+            case CAST -> collectAssignmentSites(node.expr, siteIds, out);
+            case AGGREGATE_LITERAL -> {
+                for (SastNode field : node.fields) {
+                    collectAssignmentSites(field, siteIds, out);
+                }
+            }
+            case AGGREGATE_FIELD_INIT -> collectAssignmentSites(
+                    node.value,
+                    siteIds,
+                    out
+            );
+            default -> {
+            }
+        }
     }
 
     private static int estimateSnapshotDemand(

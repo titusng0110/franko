@@ -39,6 +39,8 @@ final class MemoryGuardFacts {
     private int[] caseLength = new int[0];
     private int caseCount;
     private int factCount;
+    private int maxFactCount;
+    private boolean overflowed;
 
     private MemoryGuardFacts() {
     }
@@ -49,6 +51,7 @@ final class MemoryGuardFacts {
         List<GuardCase> cases = collect(condition, holds, budget);
 
         if (budget.overflow || cases.size() > MAX_CASES) {
+            result.overflowed = true;
             result.clearToEmptyCase();
             return result;
         }
@@ -57,6 +60,7 @@ final class MemoryGuardFacts {
             if (result.caseCount >= MAX_CASES
                     || result.factCount + guardCase.count
                     > MAX_CASES * MAX_FACTS) {
+                result.overflowed = true;
                 result.clearToEmptyCase();
                 return result;
             }
@@ -69,6 +73,7 @@ final class MemoryGuardFacts {
 
     static MemoryGuardFacts unconstrained() {
         MemoryGuardFacts result = new MemoryGuardFacts();
+        result.overflowed = true;
         result.clearToEmptyCase();
         return result;
     }
@@ -80,6 +85,7 @@ final class MemoryGuardFacts {
         caseLength = new int[] { 0 };
         caseCount = 1;
         factCount = 0;
+        maxFactCount = 0;
     }
 
     private void appendCase(GuardCase guardCase) {
@@ -120,10 +126,22 @@ final class MemoryGuardFacts {
         caseLength[caseCount] = guardCase.count;
         caseCount++;
         factCount = needed;
+
+        if (guardCase.count > maxFactCount) {
+            maxFactCount = guardCase.count;
+        }
     }
 
     int caseCount() {
         return caseCount;
+    }
+
+    int maxFactCount() {
+        return maxFactCount;
+    }
+
+    boolean overflowed() {
+        return overflowed;
     }
 
     int caseFactStart(int guardCase) {

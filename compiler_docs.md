@@ -1506,10 +1506,31 @@ After the walk the context flattens:
 - `snapshotDemand`/`maxSnapshotDemand`: the per-function snapshot-slot
   estimate. `snapshotDemand(functionId)` currently returns
   `max(perFunction, maxSnapshotDemand)`, which is effectively the global
-  maximum; the driver sizes loop arrays from `maxSnapshotDemand`.
+  maximum; the driver sizes loop arrays from `maxSnapshotDemand`. The estimate
+  is only an allocation hint: each state grows exactly to the required capacity
+  if an analyzed path needs more slots.
+- Per-function active layouts: `functionVariableIds` (globals, parameters, and
+  locals), `functionPointerIndices`, `functionVariableWordIds`,
+  `functionAssignmentSiteIds` (every `SastKind.ASSIGN` in the function), and
+  `functionAssignmentSiteWordIds`. The context also records the maximum active
+  counts/word counts across all functions; the three state classes size their
+  snapshot arenas from those maxima and switch to the current function's lists
+  at `beginFunction` (`setFunction`). Globals are included in every function
+  layout; assignment-site lists are the active width for `slotSource` and
+  `captureSource`. The context also records the owner function for each maximum
+  active pointer/variable-word/assignment-site/assignment-site-word width, so a
+  limit diagnostic can name the function responsible for the row size.
 - `templates`/`templateSets`: a `MemoryTemplateRegistry` sized from the maximum
   parameter count of any function, the global count, the call-site count, and
   the variable count.
+- `MAX_SNAPSHOT_ARENA_BYTES` is a hard per-checker arena budget of 1.5 GiB
+  (`1_610_612_736` bytes). Each state throws
+  `MemoryAnalysisContext.SnapshotLimitExceeded` before an allocation that would
+  exceed it. The exception carries the required slot, projected total bytes,
+  and a ready-to-read summary of the triggering function's active assignment
+  sites and pointers (or active arrays/owners/pointers for the dynamic checker).
+  It is caught by `MemoryDataflowDriver`, reported as a compiler error, and the
+  pass stops.
 
 The snapshot-demand estimate is a recursive statement count: a block sums its
 statements; an `if` reserves 2 slots without an `else` and 3 with one, plus its
@@ -1600,7 +1621,33 @@ dispatch class: `DomainKind` selects the null-state, dangling, or dynamic-array
 domain, and every hook forwards to the selected domain. The hooks cover
 function begin/end, block enter/leave, variable/assignment/expression
 transfer, return/fallthrough collection, guard feasibility/refinement,
-snapshot/restore/merge, jump liveness, and suppression.
+snapshot/restore/merge, jump liveness, and suppression. `beginFunction`
+forwards the dense function ID to the active domain; each state then calls
+`setFunction(functionId)` to select the current function's active pointer,
+variable-word, and assignment-site layout before clearing state.
+
+`MemoryDataflowDriver.DEBUG` is a source constant (default `false`). Flip it to
+`true` to print one `[memory-debug]` line per domain pass with function count,
+maximum branch/block depth, guard-case/fact/work usage, overflow counts, the
+snapshot-demand hint, final snapshot-arena capacity, row bytes, and total arena
+bytes. It also prints one `function=... snapshots=N` line per checked function;
+`N` is that function's actual snapshot capacity `C`. It is a local debugging
+aid, not a compiler flag.
+
+`checkFunction` catches `MemoryAnalysisContext.SnapshotLimitExceeded`, reports
+one `memory.snapshot_limit` compiler error at the function declaration, sets a
+driver stop flag, and does not build a summary for that function. The checker
+then returns the current `PassResult`; `Main` aborts normally. The message names
+the function, checker, required snapshot slots, the function's active
+assignment-site/pointer counts (or array/owner counts for the dynamic checker),
+the projected total bytes, and the 1.5 GiB limit. If a row maximum belongs to a
+different function, the message also names that function and the count it owns,
+and the remedy names both the triggering function and those functions. The
+message template is:
+
+```text
+Memory analysis limit exceeded in function '<name>' (<checker> checker): the function needs <slots> snapshot slots and has <counts>, totalling <projected> bytes, which is too much for the 1.5 GiB (1,610,612,736 bytes) limit.[ The snapshot row is also sized by other functions: <owner-counts>.] Split '<name>'[ and the named functions] into smaller functions, or reduce deeply nested branches and loops.
+```
 
 `run` walks program and namespace items in source order and checks each free
 function and struct method. Global initializer expressions are not traversed;
@@ -1638,10 +1685,10 @@ snapshot, and push the snapshot onto the target loop frame's linked list. The
 target index is `loopDepth - levels`, clamped to the outermost loop;
 `continue` always targets the innermost loop. A terminating update statement
 produces no back edge. The per-loop exit/back-edge arrays start at
-`max(16, maxSnapshotDemand + MAX_BRANCH_DEPTH + 4)` and grow on demand. Jump
-slots and exit slots grow on demand; loop frames are a fixed 64-entry stack.
-The driver wraps every statement traversal and each checker wraps its
-expression traversal in `DiagnosticBag.push/pop`.
+`maxSnapshotDemand + MAX_BRANCH_DEPTH + 4` and grow on demand. Jump slots and
+exit slots grow on demand; loop frames are a fixed 64-entry stack. The driver
+wraps every statement traversal and each checker wraps its expression traversal
+in `DiagnosticBag.push/pop`.
 
 #### `MemoryGuardFacts` / `MemoryDiagnosticMerge`
 `MemoryGuardFacts` is the shared condition normalizer. It converts `!`, `&&`,
@@ -1774,14 +1821,23 @@ Summary state is `long[] symValue`, `symPointee`, and `symCell`
 `derefMust`/`derefMay` and `pointeeDerefMust`/`pointeeDerefMay` (parameter
 bitsets), `slotMust`/`slotMay` (site bitsets), `slotSource`
 (`siteCount * templateWords`), and `slotTargetParam` (one parameter index per
-site, or `-1`/invalid). Snapshots are preallocated flat arrays copied with
-`System.arraycopy`; capacity doubles from 16. `reset` fills null state with
-`MAYBE_NULL`, clears every bitset and cell target, and resets the snapshot
-count. `markDeref`/`markPointeeDeref` set both the must and may bit. Branch
-merge keeps equal null states, turns differing states into `MAYBE_NULL`, unions
-cell targets and symbolic bitsets, intersects must-bitsets, and unions
-may-bitsets (`slotSource` is unioned). `singleCellTarget` returns `-1` unless
-exactly one variable ID is present.
+site, or `-1`/invalid). The live arrays stay globally indexed; snapshots store
+only the current function's active pointers, active variable words, and active
+assignment sites. `setFunction` selects those lists and builds the active
+assignment-word index used by `slotMustAt`/`slotMayAt`. The arena is allocated
+once at the exact `maxSnapshotDemand` capacity with widths
+`maxActivePointerCount`, `maxActiveVariableWordCount`, and
+`maxActiveAssignmentSiteCount`; `ensureCapacity` grows exactly to the required
+capacity only if a path exceeds the estimate, and throws
+`SnapshotLimitExceeded` if the required slot would push the arena over
+`MAX_SNAPSHOT_ARENA_BYTES`. `reset` fills active null state
+with `MAYBE_NULL`, clears active cell targets and symbolic bitsets, clears
+`slotTargetParam` for active assignment sites, and resets the snapshot count;
+other functions' entries are never read. `markDeref`/`markPointeeDeref` set both
+the must and may bit. Branch merge keeps equal null states, turns differing
+states into `MAYBE_NULL`, unions cell targets and symbolic bitsets, intersects
+must-bitsets, and unions may-bitsets (`slotSource` is unioned). `singleCellTarget`
+returns `-1` unless exactly one variable ID is present.
 
 #### `DanglingPointerChecker`
 Two-phase, summary-aware dangling-pointer and frame-lifetime checker, run after
@@ -1923,8 +1979,15 @@ locals dead only when the block did not terminate, then clears the slot.
 live state. `markAlive` clears both dead bits; `markDead` sets both. Branch
 merge unions frame/global bits, ORs `unknown`, ANDs `nonNull`, intersects
 `mustDead`, unions `mayDead`, intersects capture-must, and unions capture-may
-and capture-source. Snapshots copy every mutable array except the sink
-descriptors, with capacity doubling from 16.
+and capture-source. The live arrays stay globally indexed; snapshots store only
+the current function's active pointers, active variable words, and active
+assignment sites, using the same exact-capacity arena as the null checker
+(`maxSnapshotDemand` × the maximum active widths). `setFunction` selects the
+active lists and the word-index maps used by `captureMustAt`/`captureMayAt` and
+`markLocalsDeadForJump`; `ensureCapacity` grows exactly to the required capacity
+only if a path exceeds the estimate, and throws `SnapshotLimitExceeded` when the
+next slot would exceed `MAX_SNAPSHOT_ARENA_BYTES`. Capture sink descriptors are
+syntactic and are cleared for active assignment sites, not snapshotted.
 
 `DanglingOrigin.EMPTY` (no origins, not unknown, not non-null) means definitely
 null; `UNKNOWN` (no bits, unknown) means caller-owned/untracked. `frame(id)` /
@@ -2101,8 +2164,15 @@ reference them are removed, and lifecycle/freed/escaped/epochs are reset; shadow
 parameter arrays are never block locals and are never cleared here. The block
 slot is then cleared.
 
-Snapshots copy every mutable state array including `paramPost`, `paramAssume`,
-and all must/may/source bitsets. Branch merge degrades differing lifecycle
+Snapshots use the same exact-capacity arena, but store only the current
+function's active arrays, owners, owner/array-word bits, and pointers, plus the
+global parameter post/assume/inited arrays and parameter bitsets. The maximum
+active widths are computed once from the context's per-function variable
+layouts, including shadow arrays for active owner-array parameters.
+`setFunction` selects the active array/owner/pointer/array-word lists;
+`ensureCapacity` grows exactly to the required capacity only if a path exceeds
+the estimate, and throws `SnapshotLimitExceeded` when the next slot would exceed
+`MAX_SNAPSHOT_ARENA_BYTES`. Branch merge degrades differing lifecycle
 values to `MAYBE_INITED` and differing freed values to `FREED_MAYBE`, ORs
 `escaped`, takes the minimum/maximum epochs, unions owner bits and unknown
 flags, turns differing alias root/epoch pairs into `ALIAS_UNKNOWN`/epoch 0,
@@ -3865,6 +3935,19 @@ normal check pass (`ASSUME_INITED` and `ASSUME_UNINITED` for owner-array
 parameters). They reuse the summaries and BFS, and their diagnostics are merged
 with the all-feasible-assumptions rule.
 
+All passes share one snapshot arena per checker state. At `beginFunction` the
+state selects the function's active layout; the pass builds its per-function
+summary into `summaries[functionId]`, then the next function reuses the same
+arena. The arena is allocated once at the exact `maxSnapshotDemand` capacity and
+sized by the maximum active pointer/variable-word/assignment-site (and, for the
+dynamic checker, array/owner) widths across all functions. A snapshot therefore
+contains only the current function's useful state: globals, parameters, locals,
+and assignment sites; other functions' sites and pointers are never copied. If
+the estimate is exceeded, capacity grows exactly to the required slot count as a
+correctness fallback. A hard `MAX_SNAPSHOT_ARENA_BYTES` (1.5 GiB) budget is
+enforced before every growth; exceeding it reports a compiler error at the
+triggering function and aborts instead of degrading the analysis.
+
 A BFS node is `(functionId, binding)`. The budget is
 `MAX_BFS_VISITED = 2048` dequeues per call site per checker. Each dequeue
 consumes one unit; a memo hit returns the existing node without enqueueing and
@@ -4256,6 +4339,10 @@ own smoke runner. Windows ARM64 uses JDK 23 and needs
 - Failure fixtures: compiler must exit non-zero; optional `.errors` substrings
   must appear.
 - Runtime fixtures: compiler succeeds, binary exits non-zero.
+- Library tests: each library's free functions share one success fixture, each
+  struct's methods share one success fixture, and only `error/panic` is a
+  runtime fixture. There are no library failure fixtures; a library that fails
+  to compile is a compiler bug.
 - `-Omax` is intentionally outside the normal default-mode run (out-of-range
   access is undefined behavior there); `language_tests/run_omax_smoke.py`
   compiles and runs representative success fixtures with `-Omax`, pins the
@@ -4426,6 +4513,8 @@ Allowed inheritance boundary:
 - `Main.Abort`, `Desugarer.InferenceFailure`, and
   `ConstExpressionEvaluator.UnevaluableConstant` — JVM checked/control-flow
   exceptions whose class names are also part of compiler stderr output;
+- `MemoryAnalysisContext.SnapshotLimitExceeded` — internal control-flow
+  exception caught by `MemoryDataflowDriver` and converted into a diagnostic;
 - `Frontend.ParseErrorCollector extends BaseErrorListener` — the ANTLR error
   listener API requires a listener class.
 

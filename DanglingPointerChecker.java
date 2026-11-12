@@ -141,6 +141,14 @@ public final class DanglingPointerChecker {
         ensureContext(document.root);
 
         runSummaryPass();
+
+        if (driver.limitExceeded()) {
+            return new PassResult(
+                    document.withPhase(SastPhase.DANGLING),
+                    diagnostics.diagnostics()
+            );
+        }
+
         runCheckPass();
 
         return new PassResult(
@@ -199,6 +207,7 @@ public final class DanglingPointerChecker {
 
         public void beginFunction(int functionId) {
             currentFunctionId = functionId;
+            state.setFunction(functionId);
             state.reset();
             exitReturnSets.clear();
             Arrays.fill(callResultOrigins, null);
@@ -359,7 +368,11 @@ public final class DanglingPointerChecker {
             List<Integer> captureSites = new ArrayList<>();
             List<Byte> certainties = new ArrayList<>();
 
-            for (int site = 0; site < state.siteCount; site++) {
+            for (int index = 0;
+                    index < state.activeAssignmentSiteCount();
+                    index++) {
+                int site = state.activeAssignmentSiteId(index);
+
                 if (state.captureSinkKind[site] < 0) {
                     continue;
                 }
@@ -1189,6 +1202,18 @@ public final class DanglingPointerChecker {
 
         public void setSuppressed(boolean value) {
             suppressed = value;
+        }
+
+        int snapshotCapacity() {
+            return state.capacity;
+        }
+
+        int snapshotCount() {
+            return state.snapshotCount;
+        }
+
+        long snapshotRowBytes() {
+            return state.snapshotRowBytes();
         }
 
         private void recordSummaryCall(SastNode call) {

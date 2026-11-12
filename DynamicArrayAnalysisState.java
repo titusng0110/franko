@@ -1,4 +1,7 @@
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 
 final class DynamicArrayAnalysisState {
     static final byte UNINITED = 0;
@@ -103,6 +106,29 @@ final class DynamicArrayAnalysisState {
 
     int capacity;
     int snapshotCount;
+    final long snapshotRowBytes;
+    final int snapshotLimitSlots;
+
+    private int[] activeArrayIndices = new int[0];
+    private int[] activeOwnerIndices = new int[0];
+    private int[] activePointerIndices = new int[0];
+    private int[] activeArrayWordIds = new int[0];
+    private int[] activeArrayWordIndexByWord = new int[0];
+
+    private int activeArrayCount;
+    private int activeOwnerCount;
+    private int activePointerCount;
+    private int activeArrayWordCount;
+
+    private int maxActiveArrayCount;
+    private int maxActiveOwnerCount;
+    private int maxActivePointerCount;
+    private int maxActiveArrayWordCount;
+    private int maxActiveArrayFunctionId = -1;
+    private int maxActiveOwnerFunctionId = -1;
+    private int maxActivePointerFunctionId = -1;
+    private int maxActiveArrayWordFunctionId = -1;
+    private int currentFunctionId = -1;
 
     private int[][] blockLocals = new int[32][];
 
@@ -234,18 +260,271 @@ final class DynamicArrayAnalysisState {
         escapeMust = new long[paramWords];
         escapeMay = new long[paramWords];
         symAlias = new long[pointerCount * templateWords];
+
+        computeMaxActiveLayouts();
+        this.snapshotRowBytes =
+                11L * maxActiveArrayCount
+                + 8L
+                        * maxActiveOwnerCount
+                        * maxActiveArrayWordCount
+                + maxActiveOwnerCount
+                + 8L * maxActivePointerCount
+                + 3L * paramCount
+                + 80L * paramWords
+                + 8L * maxActivePointerCount * templateWords;
+        this.snapshotLimitSlots = snapshotLimitSlots(snapshotRowBytes);
+        allocateSnapshots(Math.min(
+                Math.max(1, context.maxSnapshotDemand),
+                snapshotLimitSlots
+        ));
+    }
+
+    private static int snapshotLimitSlots(long snapshotRowBytes) {
+        if (snapshotRowBytes <= 0) {
+            return Integer.MAX_VALUE;
+        }
+
+        long slots = MemoryAnalysisContext.MAX_SNAPSHOT_ARENA_BYTES
+                / snapshotRowBytes;
+        return (int) Math.min(Integer.MAX_VALUE, slots);
+    }
+
+    long snapshotRowBytes() {
+        return snapshotRowBytes;
+    }
+
+    private String snapshotComplexity() {
+        return count(activeArrayCount, "active array")
+                + ", "
+                + count(activeOwnerCount, "owner pointer")
+                + ", and "
+                + count(activePointerCount, "tracked pointer");
+    }
+
+    private static String count(int value, String noun) {
+        return String.format(Locale.ROOT, "%,d %s%s",
+                value, noun, value == 1 ? "" : "s");
+    }
+
+    private String snapshotRowOwners() {
+        StringBuilder result = new StringBuilder();
+
+        appendOwner(
+                result,
+                "active array",
+                maxActiveArrayCount,
+                maxActiveArrayFunctionId
+        );
+        appendOwner(
+                result,
+                "owner pointer",
+                maxActiveOwnerCount,
+                maxActiveOwnerFunctionId
+        );
+        appendOwner(
+                result,
+                "tracked pointer",
+                maxActivePointerCount,
+                maxActivePointerFunctionId
+        );
+        appendOwner(
+                result,
+                "array word",
+                maxActiveArrayWordCount,
+                maxActiveArrayWordFunctionId
+        );
+
+        return result.toString();
+    }
+
+    private void appendOwner(
+            StringBuilder result,
+            String noun,
+            int value,
+            int functionId
+    ) {
+        if (value <= 0 || functionId < 0 || functionId == currentFunctionId) {
+            return;
+        }
+
+        if (result.length() > 0) {
+            result.append(", ");
+        }
+
+        result.append("function '")
+                .append(functionName(functionId))
+                .append("' with ")
+                .append(count(value, noun));
+    }
+
+    private String functionName(int functionId) {
+        if (functionId < 0
+                || functionId >= context.callGraph.functions.length) {
+            return "<unknown>";
+        }
+
+        Symbol symbol = context.callGraph.functions[functionId];
+        return symbol == null ? "<unknown>" : symbol.qualifiedName();
+    }
+
+    void setFunction(int functionId) {
+        currentFunctionId = functionId;
+        int[] activeVariableIds = context.functionVariableIds[functionId];
+        boolean[] activeVariables = new boolean[context.variables.length];
+
+        for (int variableId : activeVariableIds) {
+            activeVariables[variableId] = true;
+        }
+
+        List<Integer> arrays = new ArrayList<>();
+        List<Integer> owners = new ArrayList<>();
+        List<Integer> pointers = new ArrayList<>();
+
+        for (int i = 0; i < realArrayCount; i++) {
+            int variableId = arrayVariableIds[i];
+
+            if (variableId >= 0 && activeVariables[variableId]) {
+                arrays.add(i);
+            }
+        }
+
+        for (int i = 0; i < shadowParamCount; i++) {
+            int variableId = context.variableId(shadowParameters[i]);
+
+            if (variableId >= 0 && activeVariables[variableId]) {
+                arrays.add(realArrayCount + i);
+            }
+        }
+
+        for (int i = 0; i < ownerCount; i++) {
+            int variableId = ownerVariableIds[i];
+
+            if (activeVariables[variableId]) {
+                owners.add(i);
+            }
+        }
+
+        for (int i = 0; i < pointerCount; i++) {
+            int variableId = pointerVariableIds[i];
+
+            if (activeVariables[variableId]) {
+                pointers.add(i);
+            }
+        }
+
+        activeArrayIndices = toIntArray(arrays);
+        activeOwnerIndices = toIntArray(owners);
+        activePointerIndices = toIntArray(pointers);
+        activeArrayCount = activeArrayIndices.length;
+        activeOwnerCount = activeOwnerIndices.length;
+        activePointerCount = activePointerIndices.length;
+
+        boolean[] arrayWordActive = new boolean[arrayWords];
+
+        for (int index : activeArrayIndices) {
+            arrayWordActive[index >>> 6] = true;
+        }
+
+        List<Integer> arrayWordList = new ArrayList<>();
+
+        for (int word = 0; word < arrayWords; word++) {
+            if (arrayWordActive[word]) {
+                arrayWordList.add(word);
+            }
+        }
+
+        activeArrayWordIds = toIntArray(arrayWordList);
+        activeArrayWordCount = activeArrayWordIds.length;
+
+        if (activeArrayWordIndexByWord.length != arrayWords) {
+            activeArrayWordIndexByWord = new int[arrayWords];
+        }
+
+        Arrays.fill(activeArrayWordIndexByWord, -1);
+
+        for (int i = 0; i < activeArrayWordIds.length; i++) {
+            activeArrayWordIndexByWord[activeArrayWordIds[i]] = i;
+        }
+    }
+
+    private static int[] toIntArray(List<Integer> values) {
+        int[] result = new int[values.size()];
+
+        for (int i = 0; i < result.length; i++) {
+            result[i] = values.get(i);
+        }
+
+        return result;
+    }
+
+    int activeArrayCount() {
+        return activeArrayCount;
+    }
+
+    int activeArrayIndex(int index) {
+        return activeArrayIndices[index];
+    }
+
+    private void computeMaxActiveLayouts() {
+        for (int functionId = 0;
+                functionId < context.callGraph.functionCount();
+                functionId++) {
+            setFunction(functionId);
+
+            if (activeArrayCount > maxActiveArrayCount) {
+                maxActiveArrayCount = activeArrayCount;
+                maxActiveArrayFunctionId = functionId;
+            }
+
+            if (activeOwnerCount > maxActiveOwnerCount) {
+                maxActiveOwnerCount = activeOwnerCount;
+                maxActiveOwnerFunctionId = functionId;
+            }
+
+            if (activePointerCount > maxActivePointerCount) {
+                maxActivePointerCount = activePointerCount;
+                maxActivePointerFunctionId = functionId;
+            }
+
+            if (activeArrayWordCount > maxActiveArrayWordCount) {
+                maxActiveArrayWordCount = activeArrayWordCount;
+                maxActiveArrayWordFunctionId = functionId;
+            }
+        }
+
+        if (context.callGraph.functionCount() > 0) {
+            setFunction(0);
+        }
     }
 
     void reset() {
-        Arrays.fill(lifecycle, UNINITED);
-        Arrays.fill(freed, FREED_NEVER);
-        Arrays.fill(escaped, false);
-        Arrays.fill(epochMin, 0);
-        Arrays.fill(epochMax, 0);
-        Arrays.fill(ownerArrayBits, 0L);
-        Arrays.fill(ownerUnknown, false);
-        Arrays.fill(aliasRoot, ALIAS_NONE);
-        Arrays.fill(aliasEpoch, 0);
+        for (int index : activeArrayIndices) {
+            lifecycle[index] = UNINITED;
+            freed[index] = FREED_NEVER;
+            escaped[index] = false;
+            epochMin[index] = 0;
+            epochMax[index] = 0;
+        }
+
+        for (int owner : activeOwnerIndices) {
+            for (int word = 0; word < arrayWords; word++) {
+                ownerArrayBits[owner * arrayWords + word] = 0L;
+            }
+
+            ownerUnknown[owner] = false;
+        }
+
+        for (int pointer : activePointerIndices) {
+            aliasRoot[pointer] = ALIAS_NONE;
+            aliasEpoch[pointer] = 0;
+            Arrays.fill(
+                    symAlias,
+                    pointer * templateWords,
+                    pointer * templateWords + templateWords,
+                    0L
+            );
+        }
+
         Arrays.fill(paramPost, POST_UNCHANGED);
         Arrays.fill(paramAssume, POST_UNCHANGED);
         Arrays.fill(paramInited, false);
@@ -259,7 +538,6 @@ final class DynamicArrayAnalysisState {
         Arrays.fill(useMay, 0L);
         Arrays.fill(escapeMust, 0L);
         Arrays.fill(escapeMay, 0L);
-        Arrays.fill(symAlias, 0L);
         snapshotCount = 0;
     }
 
@@ -462,166 +740,144 @@ final class DynamicArrayAnalysisState {
 
         int slot = snapshotCount++;
 
-        System.arraycopy(
-                lifecycle,
-                0,
-                lifecycleSnapshots,
-                slot * arrayCount,
-                arrayCount
-        );
-        System.arraycopy(
-                freed,
-                0,
-                freedSnapshots,
-                slot * arrayCount,
-                arrayCount
-        );
-        System.arraycopy(
-                escaped,
-                0,
-                escapedSnapshots,
-                slot * arrayCount,
-                arrayCount
-        );
-        System.arraycopy(
-                epochMin,
-                0,
-                epochMinSnapshots,
-                slot * arrayCount,
-                arrayCount
-        );
-        System.arraycopy(
-                epochMax,
-                0,
-                epochMaxSnapshots,
-                slot * arrayCount,
-                arrayCount
-        );
-        System.arraycopy(
-                ownerArrayBits,
-                0,
-                ownerBitsSnapshots,
-                slot * ownerCount * arrayWords,
-                ownerCount * arrayWords
-        );
-        System.arraycopy(
-                ownerUnknown,
-                0,
-                ownerUnknownSnapshots,
-                slot * ownerCount,
-                ownerCount
-        );
-        System.arraycopy(
-                aliasRoot,
-                0,
-                aliasRootSnapshots,
-                slot * pointerCount,
-                pointerCount
-        );
-        System.arraycopy(
-                aliasEpoch,
-                0,
-                aliasEpochSnapshots,
-                slot * pointerCount,
-                pointerCount
-        );
+        int arrayBase = slot * activeArrayCount;
+        int ownerBase = slot
+                * activeOwnerCount
+                * activeArrayWordCount;
+        int ownerUnknownBase = slot * activeOwnerCount;
+        int pointerBase = slot * activePointerCount;
+        int parameterBase = slot * paramCount;
+        int parameterWordBase = slot * paramWords;
+        int symbolBase = slot * activePointerCount * templateWords;
+
+        for (int i = 0; i < activeArrayCount; i++) {
+            int array = activeArrayIndices[i];
+            lifecycleSnapshots[arrayBase + i] = lifecycle[array];
+            freedSnapshots[arrayBase + i] = freed[array];
+            escapedSnapshots[arrayBase + i] = escaped[array];
+            epochMinSnapshots[arrayBase + i] = epochMin[array];
+            epochMaxSnapshots[arrayBase + i] = epochMax[array];
+        }
+
+        for (int i = 0; i < activeOwnerCount; i++) {
+            int owner = activeOwnerIndices[i];
+            int ownerOffset = owner * arrayWords;
+            int snapshotOffset = ownerBase + i * activeArrayWordCount;
+
+            for (int j = 0; j < activeArrayWordCount; j++) {
+                int word = activeArrayWordIds[j];
+                ownerBitsSnapshots[snapshotOffset + j] =
+                        ownerArrayBits[ownerOffset + word];
+            }
+
+            ownerUnknownSnapshots[ownerUnknownBase + i] =
+                    ownerUnknown[owner];
+        }
+
+        for (int i = 0; i < activePointerCount; i++) {
+            int pointer = activePointerIndices[i];
+            aliasRootSnapshots[pointerBase + i] = aliasRoot[pointer];
+            aliasEpochSnapshots[pointerBase + i] = aliasEpoch[pointer];
+
+            System.arraycopy(
+                    symAlias,
+                    pointer * templateWords,
+                    symAliasSnapshots,
+                    symbolBase + i * templateWords,
+                    templateWords
+            );
+        }
+
         System.arraycopy(
                 paramPost,
                 0,
                 paramPostSnapshots,
-                slot * paramCount,
+                parameterBase,
                 paramCount
         );
         System.arraycopy(
                 paramAssume,
                 0,
                 paramAssumeSnapshots,
-                slot * paramCount,
+                parameterBase,
                 paramCount
         );
         System.arraycopy(
                 paramInited,
                 0,
                 paramInitedSnapshots,
-                slot * paramCount,
+                parameterBase,
                 paramCount
         );
         System.arraycopy(
                 requireMust,
                 0,
                 requireMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 requireMay,
                 0,
                 requireMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 invalidateMust,
                 0,
                 invalidateMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 invalidateMay,
                 0,
                 invalidateMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 freeMust,
                 0,
                 freeMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 freeMay,
                 0,
                 freeMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 useMust,
                 0,
                 useMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 useMay,
                 0,
                 useMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 escapeMust,
                 0,
                 escapeMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
         );
         System.arraycopy(
                 escapeMay,
                 0,
                 escapeMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 paramWords
-        );
-        System.arraycopy(
-                symAlias,
-                0,
-                symAliasSnapshots,
-                slot * pointerCount * templateWords,
-                pointerCount * templateWords
         );
 
         return slot;
@@ -632,166 +888,145 @@ final class DynamicArrayAnalysisState {
             return;
         }
 
-        System.arraycopy(
-                lifecycleSnapshots,
-                slot * arrayCount,
-                lifecycle,
-                0,
-                arrayCount
-        );
-        System.arraycopy(
-                freedSnapshots,
-                slot * arrayCount,
-                freed,
-                0,
-                arrayCount
-        );
-        System.arraycopy(
-                escapedSnapshots,
-                slot * arrayCount,
-                escaped,
-                0,
-                arrayCount
-        );
-        System.arraycopy(
-                epochMinSnapshots,
-                slot * arrayCount,
-                epochMin,
-                0,
-                arrayCount
-        );
-        System.arraycopy(
-                epochMaxSnapshots,
-                slot * arrayCount,
-                epochMax,
-                0,
-                arrayCount
-        );
-        System.arraycopy(
-                ownerBitsSnapshots,
-                slot * ownerCount * arrayWords,
-                ownerArrayBits,
-                0,
-                ownerCount * arrayWords
-        );
-        System.arraycopy(
-                ownerUnknownSnapshots,
-                slot * ownerCount,
-                ownerUnknown,
-                0,
-                ownerCount
-        );
-        System.arraycopy(
-                aliasRootSnapshots,
-                slot * pointerCount,
-                aliasRoot,
-                0,
-                pointerCount
-        );
-        System.arraycopy(
-                aliasEpochSnapshots,
-                slot * pointerCount,
-                aliasEpoch,
-                0,
-                pointerCount
-        );
+        int arrayBase = slot * activeArrayCount;
+        int ownerBase = slot
+                * activeOwnerCount
+                * activeArrayWordCount;
+        int ownerUnknownBase = slot * activeOwnerCount;
+        int pointerBase = slot * activePointerCount;
+        int parameterBase = slot * paramCount;
+        int parameterWordBase = slot * paramWords;
+        int symbolBase = slot * activePointerCount * templateWords;
+
+        for (int i = 0; i < activeArrayCount; i++) {
+            int array = activeArrayIndices[i];
+            lifecycle[array] = lifecycleSnapshots[arrayBase + i];
+            freed[array] = freedSnapshots[arrayBase + i];
+            escaped[array] = escapedSnapshots[arrayBase + i];
+            epochMin[array] = epochMinSnapshots[arrayBase + i];
+            epochMax[array] = epochMaxSnapshots[arrayBase + i];
+        }
+
+        for (int i = 0; i < activeOwnerCount; i++) {
+            int owner = activeOwnerIndices[i];
+            int ownerOffset = owner * arrayWords;
+            int snapshotOffset = ownerBase + i * activeArrayWordCount;
+
+            for (int j = 0; j < activeArrayWordCount; j++) {
+                int word = activeArrayWordIds[j];
+                ownerArrayBits[ownerOffset + word] =
+                        ownerBitsSnapshots[snapshotOffset + j];
+            }
+
+            ownerUnknown[owner] = ownerUnknownSnapshots[
+                    ownerUnknownBase + i
+            ];
+        }
+
+        for (int i = 0; i < activePointerCount; i++) {
+            int pointer = activePointerIndices[i];
+            aliasRoot[pointer] = aliasRootSnapshots[pointerBase + i];
+            aliasEpoch[pointer] = aliasEpochSnapshots[pointerBase + i];
+
+            System.arraycopy(
+                    symAliasSnapshots,
+                    symbolBase + i * templateWords,
+                    symAlias,
+                    pointer * templateWords,
+                    templateWords
+            );
+        }
+
         System.arraycopy(
                 paramPostSnapshots,
-                slot * paramCount,
+                parameterBase,
                 paramPost,
                 0,
                 paramCount
         );
         System.arraycopy(
                 paramAssumeSnapshots,
-                slot * paramCount,
+                parameterBase,
                 paramAssume,
                 0,
                 paramCount
         );
         System.arraycopy(
                 paramInitedSnapshots,
-                slot * paramCount,
+                parameterBase,
                 paramInited,
                 0,
                 paramCount
         );
         System.arraycopy(
                 requireMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 requireMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 requireMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 requireMay,
                 0,
                 paramWords
         );
         System.arraycopy(
                 invalidateMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 invalidateMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 invalidateMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 invalidateMay,
                 0,
                 paramWords
         );
         System.arraycopy(
                 freeMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 freeMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 freeMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 freeMay,
                 0,
                 paramWords
         );
         System.arraycopy(
                 useMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 useMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 useMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 useMay,
                 0,
                 paramWords
         );
         System.arraycopy(
                 escapeMustSnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 escapeMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 escapeMaySnapshots,
-                slot * paramWords,
+                parameterWordBase,
                 escapeMay,
                 0,
                 paramWords
-        );
-        System.arraycopy(
-                symAliasSnapshots,
-                slot * pointerCount * templateWords,
-                symAlias,
-                0,
-                pointerCount * templateWords
         );
     }
 
@@ -800,32 +1035,57 @@ final class DynamicArrayAnalysisState {
             return;
         }
 
-        int newCapacity = Math.max(16, capacity);
-
-        while (newCapacity < required) {
-            newCapacity *= 2;
+        if (required > snapshotLimitSlots) {
+            long projectedBytes = (long) required * snapshotRowBytes;
+            throw new MemoryAnalysisContext.SnapshotLimitExceeded(
+                    required,
+                    projectedBytes,
+                    snapshotComplexity(),
+                    snapshotRowOwners()
+            );
         }
 
-        lifecycleSnapshots = grow(lifecycleSnapshots, newCapacity * arrayCount);
-        freedSnapshots = grow(freedSnapshots, newCapacity * arrayCount);
-        escapedSnapshots = grow(escapedSnapshots, newCapacity * arrayCount);
-        epochMinSnapshots = grow(epochMinSnapshots, newCapacity * arrayCount);
-        epochMaxSnapshots = grow(epochMaxSnapshots, newCapacity * arrayCount);
+        allocateSnapshots(required);
+    }
+
+    private void allocateSnapshots(int newCapacity) {
+        lifecycleSnapshots = grow(
+                lifecycleSnapshots,
+                newCapacity * maxActiveArrayCount
+        );
+        freedSnapshots = grow(
+                freedSnapshots,
+                newCapacity * maxActiveArrayCount
+        );
+        escapedSnapshots = grow(
+                escapedSnapshots,
+                newCapacity * maxActiveArrayCount
+        );
+        epochMinSnapshots = grow(
+                epochMinSnapshots,
+                newCapacity * maxActiveArrayCount
+        );
+        epochMaxSnapshots = grow(
+                epochMaxSnapshots,
+                newCapacity * maxActiveArrayCount
+        );
         ownerBitsSnapshots = grow(
                 ownerBitsSnapshots,
-                newCapacity * ownerCount * arrayWords
+                newCapacity
+                        * maxActiveOwnerCount
+                        * maxActiveArrayWordCount
         );
         ownerUnknownSnapshots = grow(
                 ownerUnknownSnapshots,
-                newCapacity * ownerCount
+                newCapacity * maxActiveOwnerCount
         );
         aliasRootSnapshots = grow(
                 aliasRootSnapshots,
-                newCapacity * pointerCount
+                newCapacity * maxActivePointerCount
         );
         aliasEpochSnapshots = grow(
                 aliasEpochSnapshots,
-                newCapacity * pointerCount
+                newCapacity * maxActivePointerCount
         );
         paramPostSnapshots = grow(
                 paramPostSnapshots,
@@ -881,7 +1141,7 @@ final class DynamicArrayAnalysisState {
         );
         symAliasSnapshots = grow(
                 symAliasSnapshots,
-                newCapacity * pointerCount * templateWords
+                newCapacity * maxActivePointerCount * templateWords
         );
 
         capacity = newCapacity;
@@ -1000,50 +1260,78 @@ final class DynamicArrayAnalysisState {
     }
 
     private void mergeFromSnapshot(int slot) {
-        for (int i = 0; i < arrayCount; i++) {
-            byte incomingLifecycle = lifecycleSnapshots[slot * arrayCount + i];
-            byte incomingFreed = freedSnapshots[slot * arrayCount + i];
+        int arrayBase = slot * activeArrayCount;
+        int ownerBase = slot
+                * activeOwnerCount
+                * activeArrayWordCount;
+        int ownerUnknownBase = slot * activeOwnerCount;
+        int pointerBase = slot * activePointerCount;
+        int parameterBase = slot * paramCount;
+        int parameterWordBase = slot * paramWords;
+        int symbolBase = slot * activePointerCount * templateWords;
 
-            if (lifecycle[i] != incomingLifecycle) {
-                lifecycle[i] = MAYBE_INITED;
+        for (int i = 0; i < activeArrayCount; i++) {
+            int array = activeArrayIndices[i];
+            byte incomingLifecycle = lifecycleSnapshots[arrayBase + i];
+            byte incomingFreed = freedSnapshots[arrayBase + i];
+
+            if (lifecycle[array] != incomingLifecycle) {
+                lifecycle[array] = MAYBE_INITED;
             }
 
-            if (freed[i] != incomingFreed) {
-                freed[i] = FREED_MAYBE;
+            if (freed[array] != incomingFreed) {
+                freed[array] = FREED_MAYBE;
             }
 
-            escaped[i] |= escapedSnapshots[slot * arrayCount + i];
-            epochMin[i] = Math.min(
-                    epochMin[i],
-                    epochMinSnapshots[slot * arrayCount + i]
+            escaped[array] |= escapedSnapshots[arrayBase + i];
+            epochMin[array] = Math.min(
+                    epochMin[array],
+                    epochMinSnapshots[arrayBase + i]
             );
-            epochMax[i] = Math.max(
-                    epochMax[i],
-                    epochMaxSnapshots[slot * arrayCount + i]
+            epochMax[array] = Math.max(
+                    epochMax[array],
+                    epochMaxSnapshots[arrayBase + i]
             );
         }
 
-        for (int i = 0; i < ownerCount * arrayWords; i++) {
-            ownerArrayBits[i] |= ownerBitsSnapshots[
-                    slot * ownerCount * arrayWords + i];
+        for (int i = 0; i < activeOwnerCount; i++) {
+            int owner = activeOwnerIndices[i];
+            int ownerOffset = owner * arrayWords;
+            int snapshotOffset = ownerBase + i * activeArrayWordCount;
+
+            for (int j = 0; j < activeArrayWordCount; j++) {
+                int word = activeArrayWordIds[j];
+                ownerArrayBits[ownerOffset + word] |=
+                        ownerBitsSnapshots[snapshotOffset + j];
+            }
+
+            ownerUnknown[owner] |= ownerUnknownSnapshots[
+                    ownerUnknownBase + i
+            ];
         }
 
-        for (int i = 0; i < ownerCount; i++) {
-            ownerUnknown[i] |= ownerUnknownSnapshots[slot * ownerCount + i];
-        }
+        for (int i = 0; i < activePointerCount; i++) {
+            int pointer = activePointerIndices[i];
+            int incomingRoot = aliasRootSnapshots[pointerBase + i];
+            int incomingEpoch = aliasEpochSnapshots[pointerBase + i];
 
-        for (int i = 0; i < pointerCount; i++) {
-            int incomingRoot = aliasRootSnapshots[slot * pointerCount + i];
-            int incomingEpoch = aliasEpochSnapshots[slot * pointerCount + i];
+            if (aliasRoot[pointer] != incomingRoot
+                    || aliasEpoch[pointer] != incomingEpoch) {
+                aliasRoot[pointer] = ALIAS_UNKNOWN;
+                aliasEpoch[pointer] = 0;
+            }
 
-            if (aliasRoot[i] != incomingRoot || aliasEpoch[i] != incomingEpoch) {
-                aliasRoot[i] = ALIAS_UNKNOWN;
-                aliasEpoch[i] = 0;
+            int stateOffset = pointer * templateWords;
+            int snapshotOffset = symbolBase + i * templateWords;
+
+            for (int word = 0; word < templateWords; word++) {
+                symAlias[stateOffset + word] |=
+                        symAliasSnapshots[snapshotOffset + word];
             }
         }
 
         for (int i = 0; i < paramCount; i++) {
-            byte incoming = paramPostSnapshots[slot * paramCount + i];
+            byte incoming = paramPostSnapshots[parameterBase + i];
 
             if (paramPost[i] != incoming) {
                 if (paramPost[i] == POST_HAVOC || incoming == POST_HAVOC) {
@@ -1053,7 +1341,7 @@ final class DynamicArrayAnalysisState {
                 }
             }
 
-            incoming = paramAssumeSnapshots[slot * paramCount + i];
+            incoming = paramAssumeSnapshots[parameterBase + i];
 
             if (paramAssume[i] != incoming) {
                 if (paramAssume[i] == POST_HAVOC
@@ -1064,25 +1352,22 @@ final class DynamicArrayAnalysisState {
                 }
             }
 
-            paramInited[i] &= paramInitedSnapshots[slot * paramCount + i];
+            paramInited[i] &= paramInitedSnapshots[parameterBase + i];
         }
 
         for (int i = 0; i < paramWords; i++) {
-            requireMust[i] &= requireMustSnapshots[slot * paramWords + i];
-            requireMay[i] |= requireMaySnapshots[slot * paramWords + i];
-            invalidateMust[i] &= invalidateMustSnapshots[slot * paramWords + i];
-            invalidateMay[i] |= invalidateMaySnapshots[slot * paramWords + i];
-            freeMust[i] &= freeMustSnapshots[slot * paramWords + i];
-            freeMay[i] |= freeMaySnapshots[slot * paramWords + i];
-            useMust[i] &= useMustSnapshots[slot * paramWords + i];
-            useMay[i] |= useMaySnapshots[slot * paramWords + i];
-            escapeMust[i] &= escapeMustSnapshots[slot * paramWords + i];
-            escapeMay[i] |= escapeMaySnapshots[slot * paramWords + i];
-        }
-
-        for (int i = 0; i < pointerCount * templateWords; i++) {
-            symAlias[i] |= symAliasSnapshots[
-                    slot * pointerCount * templateWords + i];
+            requireMust[i] &= requireMustSnapshots[parameterWordBase + i];
+            requireMay[i] |= requireMaySnapshots[parameterWordBase + i];
+            invalidateMust[i] &=
+                    invalidateMustSnapshots[parameterWordBase + i];
+            invalidateMay[i] |=
+                    invalidateMaySnapshots[parameterWordBase + i];
+            freeMust[i] &= freeMustSnapshots[parameterWordBase + i];
+            freeMay[i] |= freeMaySnapshots[parameterWordBase + i];
+            useMust[i] &= useMustSnapshots[parameterWordBase + i];
+            useMay[i] |= useMaySnapshots[parameterWordBase + i];
+            escapeMust[i] &= escapeMustSnapshots[parameterWordBase + i];
+            escapeMay[i] |= escapeMaySnapshots[parameterWordBase + i];
         }
     }
 }

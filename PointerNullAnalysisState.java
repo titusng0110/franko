@@ -1,4 +1,5 @@
 import java.util.Arrays;
+import java.util.Locale;
 
 final class PointerNullAnalysisState {
     static final byte NULL = 0;
@@ -56,6 +57,20 @@ final class PointerNullAnalysisState {
 
     int capacity;
     int snapshotCount;
+    final long snapshotRowBytes;
+    final int snapshotLimitSlots;
+
+    private int[] activePointerIndices = new int[0];
+    private int[] activeVariableWordIds = new int[0];
+    private int[] activeAssignmentSiteIds = new int[0];
+    private int[] activeAssignmentSiteWordIds = new int[0];
+    private int[] activeAssignmentSiteWordIndexByWord = new int[0];
+
+    private int activePointerCount;
+    private int activeVariableWordCount;
+    private int activeAssignmentSiteCount;
+    private int activeAssignmentSiteWordCount;
+    private int currentFunctionId = -1;
 
     PointerNullAnalysisState(MemoryAnalysisContext context) {
         this.context = context;
@@ -70,8 +85,147 @@ final class PointerNullAnalysisState {
         this.siteCount = context.siteCount;
         this.siteWords = Math.max(1, (siteCount + 63) >>> 6);
         this.templateWords = templates.words;
+        this.snapshotRowBytes =
+                (long) context.maxActivePointerCount
+                + 8L
+                        * context.maxActivePointerCount
+                        * context.maxActiveVariableWordCount
+                + 24L
+                        * context.maxActivePointerCount
+                        * templateWords
+                + 32L * paramWords
+                + 16L * context.maxActiveAssignmentSiteWordCount
+                + 8L
+                        * context.maxActiveAssignmentSiteCount
+                        * templateWords;
+        this.snapshotLimitSlots = snapshotLimitSlots(snapshotRowBytes);
 
         allocateState();
+
+        int initialCapacity = Math.min(
+                Math.max(1, context.maxSnapshotDemand),
+                snapshotLimitSlots
+        );
+        allocateSnapshots(initialCapacity);
+    }
+
+    private static int snapshotLimitSlots(long snapshotRowBytes) {
+        if (snapshotRowBytes <= 0) {
+            return Integer.MAX_VALUE;
+        }
+
+        long slots = MemoryAnalysisContext.MAX_SNAPSHOT_ARENA_BYTES
+                / snapshotRowBytes;
+        return (int) Math.min(Integer.MAX_VALUE, slots);
+    }
+
+    long snapshotRowBytes() {
+        return snapshotRowBytes;
+    }
+
+    private String snapshotComplexity() {
+        return count(activeAssignmentSiteCount, "assignment site")
+                + " and "
+                + count(activePointerCount, "active pointer");
+    }
+
+    private static String count(int value, String noun) {
+        return String.format(Locale.ROOT, "%,d %s%s",
+                value, noun, value == 1 ? "" : "s");
+    }
+
+    private String snapshotRowOwners() {
+        StringBuilder result = new StringBuilder();
+
+        appendOwner(
+                result,
+                "assignment site",
+                context.maxActiveAssignmentSiteCount,
+                context.maxActiveAssignmentSiteFunctionId
+        );
+        appendOwner(
+                result,
+                "active pointer",
+                context.maxActivePointerCount,
+                context.maxActivePointerFunctionId
+        );
+        appendOwner(
+                result,
+                "variable word",
+                context.maxActiveVariableWordCount,
+                context.maxActiveVariableWordFunctionId
+        );
+        appendOwner(
+                result,
+                "assignment-site word",
+                context.maxActiveAssignmentSiteWordCount,
+                context.maxActiveAssignmentSiteWordFunctionId
+        );
+
+        return result.toString();
+    }
+
+    private void appendOwner(
+            StringBuilder result,
+            String noun,
+            int value,
+            int functionId
+    ) {
+        if (value <= 0 || functionId < 0 || functionId == currentFunctionId) {
+            return;
+        }
+
+        if (result.length() > 0) {
+            result.append(", ");
+        }
+
+        result.append("function '")
+                .append(functionName(functionId))
+                .append("' with ")
+                .append(count(value, noun));
+    }
+
+    private String functionName(int functionId) {
+        if (functionId < 0
+                || functionId >= context.callGraph.functions.length) {
+            return "<unknown>";
+        }
+
+        Symbol symbol = context.callGraph.functions[functionId];
+        return symbol == null ? "<unknown>" : symbol.qualifiedName();
+    }
+
+    void setFunction(int functionId) {
+        currentFunctionId = functionId;
+        activePointerIndices = context.functionPointerIndices[functionId];
+        activeVariableWordIds = context.functionVariableWordIds[functionId];
+        activeAssignmentSiteIds = context.functionAssignmentSiteIds[functionId];
+        activeAssignmentSiteWordIds =
+                context.functionAssignmentSiteWordIds[functionId];
+        activePointerCount = activePointerIndices.length;
+        activeVariableWordCount = activeVariableWordIds.length;
+        activeAssignmentSiteCount = activeAssignmentSiteIds.length;
+        activeAssignmentSiteWordCount = activeAssignmentSiteWordIds.length;
+
+        if (activeAssignmentSiteWordIndexByWord.length != siteWords) {
+            activeAssignmentSiteWordIndexByWord = new int[siteWords];
+        }
+
+        Arrays.fill(activeAssignmentSiteWordIndexByWord, -1);
+
+        for (int i = 0; i < activeAssignmentSiteWordIds.length; i++) {
+            activeAssignmentSiteWordIndexByWord[
+                    activeAssignmentSiteWordIds[i]
+            ] = i;
+        }
+    }
+
+    int activeAssignmentSiteCount() {
+        return activeAssignmentSiteCount;
+    }
+
+    int activeAssignmentSiteId(int index) {
+        return activeAssignmentSiteIds[index];
     }
 
     private void allocateState() {
@@ -92,19 +246,54 @@ final class PointerNullAnalysisState {
     }
 
     void reset() {
-        Arrays.fill(nullState, MAYBE_NULL);
-        Arrays.fill(cellTargets, 0L);
-        Arrays.fill(symValue, 0L);
-        Arrays.fill(symPointee, 0L);
-        Arrays.fill(symCell, 0L);
+        for (int pointer : activePointerIndices) {
+            nullState[pointer] = MAYBE_NULL;
+            Arrays.fill(
+                    cellTargets,
+                    pointer * varWords,
+                    pointer * varWords + varWords,
+                    0L
+            );
+            Arrays.fill(
+                    symValue,
+                    pointer * templateWords,
+                    pointer * templateWords + templateWords,
+                    0L
+            );
+            Arrays.fill(
+                    symPointee,
+                    pointer * templateWords,
+                    pointer * templateWords + templateWords,
+                    0L
+            );
+            Arrays.fill(
+                    symCell,
+                    pointer * templateWords,
+                    pointer * templateWords + templateWords,
+                    0L
+            );
+        }
+
         Arrays.fill(derefMust, 0L);
         Arrays.fill(derefMay, 0L);
         Arrays.fill(pointeeDerefMust, 0L);
         Arrays.fill(pointeeDerefMay, 0L);
-        Arrays.fill(slotMust, 0L);
-        Arrays.fill(slotMay, 0L);
-        Arrays.fill(slotSource, 0L);
-        Arrays.fill(slotTargetParam, -1);
+
+        for (int word : activeAssignmentSiteWordIds) {
+            slotMust[word] = 0L;
+            slotMay[word] = 0L;
+        }
+
+        for (int site : activeAssignmentSiteIds) {
+            Arrays.fill(
+                    slotSource,
+                    site * templateWords,
+                    site * templateWords + templateWords,
+                    0L
+            );
+            slotTargetParam[site] = -1;
+        }
+
         snapshotCount = 0;
     }
 
@@ -260,11 +449,29 @@ final class PointerNullAnalysisState {
     }
 
     boolean slotMustAt(int slot, int siteId) {
-        return bitAt(slotMustSnapshots, slot * siteWords, siteId);
+        int word = siteId >>> 6;
+        int localWord = activeAssignmentSiteWordIndexByWord[word];
+
+        if (localWord < 0) {
+            return false;
+        }
+
+        return (slotMustSnapshots[
+                slot * activeAssignmentSiteWordCount + localWord
+        ] & (1L << (siteId & 63))) != 0L;
     }
 
     boolean slotMayAt(int slot, int siteId) {
-        return bitAt(slotMaySnapshots, slot * siteWords, siteId);
+        int word = siteId >>> 6;
+        int localWord = activeAssignmentSiteWordIndexByWord[word];
+
+        if (localWord < 0) {
+            return false;
+        }
+
+        return (slotMaySnapshots[
+                slot * activeAssignmentSiteWordCount + localWord
+        ] & (1L << (siteId & 63))) != 0L;
     }
 
     private static boolean bitAt(long[] bits, int offset, int index) {
@@ -276,90 +483,97 @@ final class PointerNullAnalysisState {
 
         int slot = snapshotCount++;
 
-        System.arraycopy(
-                nullState,
-                0,
-                nullSnapshots,
-                slot * pointerCount,
-                pointerCount
-        );
-        System.arraycopy(
-                cellTargets,
-                0,
-                cellSnapshots,
-                slot * pointerCount * varWords,
-                pointerCount * varWords
-        );
-        System.arraycopy(
-                symValue,
-                0,
-                symValueSnapshots,
-                slot * pointerCount * templateWords,
-                pointerCount * templateWords
-        );
-        System.arraycopy(
-                symPointee,
-                0,
-                symPointeeSnapshots,
-                slot * pointerCount * templateWords,
-                pointerCount * templateWords
-        );
-        System.arraycopy(
-                symCell,
-                0,
-                symCellSnapshots,
-                slot * pointerCount * templateWords,
-                pointerCount * templateWords
-        );
+        int pointerBase = slot * activePointerCount;
+        int cellBase = slot
+                * activePointerCount
+                * activeVariableWordCount;
+        int symbolBase = slot * activePointerCount * templateWords;
+        int parameterBase = slot * paramWords;
+        int siteWordBase = slot * activeAssignmentSiteWordCount;
+        int sourceBase = slot
+                * activeAssignmentSiteCount
+                * templateWords;
+
+        for (int i = 0; i < activePointerCount; i++) {
+            int pointer = activePointerIndices[i];
+            nullSnapshots[pointerBase + i] = nullState[pointer];
+
+            for (int j = 0; j < activeVariableWordCount; j++) {
+                int word = activeVariableWordIds[j];
+                cellSnapshots[cellBase + i * activeVariableWordCount + j] =
+                        cellTargets[pointer * varWords + word];
+            }
+
+            int symbolOffset = symbolBase + i * templateWords;
+            int stateOffset = pointer * templateWords;
+            System.arraycopy(
+                    symValue,
+                    stateOffset,
+                    symValueSnapshots,
+                    symbolOffset,
+                    templateWords
+            );
+            System.arraycopy(
+                    symPointee,
+                    stateOffset,
+                    symPointeeSnapshots,
+                    symbolOffset,
+                    templateWords
+            );
+            System.arraycopy(
+                    symCell,
+                    stateOffset,
+                    symCellSnapshots,
+                    symbolOffset,
+                    templateWords
+            );
+        }
+
         System.arraycopy(
                 derefMust,
                 0,
                 derefMustSnapshots,
-                slot * paramWords,
+                parameterBase,
                 paramWords
         );
         System.arraycopy(
                 derefMay,
                 0,
                 derefMaySnapshots,
-                slot * paramWords,
+                parameterBase,
                 paramWords
         );
         System.arraycopy(
                 pointeeDerefMust,
                 0,
                 pointeeDerefMustSnapshots,
-                slot * paramWords,
+                parameterBase,
                 paramWords
         );
         System.arraycopy(
                 pointeeDerefMay,
                 0,
                 pointeeDerefMaySnapshots,
-                slot * paramWords,
+                parameterBase,
                 paramWords
         );
-        System.arraycopy(
-                slotMust,
-                0,
-                slotMustSnapshots,
-                slot * siteWords,
-                siteWords
-        );
-        System.arraycopy(
-                slotMay,
-                0,
-                slotMaySnapshots,
-                slot * siteWords,
-                siteWords
-        );
-        System.arraycopy(
-                slotSource,
-                0,
-                slotSourceSnapshots,
-                slot * siteCount * templateWords,
-                siteCount * templateWords
-        );
+
+        for (int i = 0; i < activeAssignmentSiteWordCount; i++) {
+            int word = activeAssignmentSiteWordIds[i];
+            slotMustSnapshots[siteWordBase + i] = slotMust[word];
+            slotMaySnapshots[siteWordBase + i] = slotMay[word];
+        }
+
+        for (int i = 0; i < activeAssignmentSiteCount; i++) {
+            int site = activeAssignmentSiteIds[i];
+            System.arraycopy(
+                    slotSource,
+                    site * templateWords,
+                    slotSourceSnapshots,
+                    sourceBase + i * templateWords,
+                    templateWords
+            );
+        }
 
         return slot;
     }
@@ -369,90 +583,99 @@ final class PointerNullAnalysisState {
             return;
         }
 
-        System.arraycopy(
-                nullSnapshots,
-                slot * pointerCount,
-                nullState,
-                0,
-                pointerCount
-        );
-        System.arraycopy(
-                cellSnapshots,
-                slot * pointerCount * varWords,
-                cellTargets,
-                0,
-                pointerCount * varWords
-        );
-        System.arraycopy(
-                symValueSnapshots,
-                slot * pointerCount * templateWords,
-                symValue,
-                0,
-                pointerCount * templateWords
-        );
-        System.arraycopy(
-                symPointeeSnapshots,
-                slot * pointerCount * templateWords,
-                symPointee,
-                0,
-                pointerCount * templateWords
-        );
-        System.arraycopy(
-                symCellSnapshots,
-                slot * pointerCount * templateWords,
-                symCell,
-                0,
-                pointerCount * templateWords
-        );
+        int pointerBase = slot * activePointerCount;
+        int cellBase = slot
+                * activePointerCount
+                * activeVariableWordCount;
+        int symbolBase = slot * activePointerCount * templateWords;
+        int parameterBase = slot * paramWords;
+        int siteWordBase = slot * activeAssignmentSiteWordCount;
+        int sourceBase = slot
+                * activeAssignmentSiteCount
+                * templateWords;
+
+        for (int i = 0; i < activePointerCount; i++) {
+            int pointer = activePointerIndices[i];
+            nullState[pointer] = nullSnapshots[pointerBase + i];
+
+            for (int j = 0; j < activeVariableWordCount; j++) {
+                int word = activeVariableWordIds[j];
+                cellTargets[pointer * varWords + word] =
+                        cellSnapshots[
+                                cellBase + i * activeVariableWordCount + j
+                        ];
+            }
+
+            int symbolOffset = symbolBase + i * templateWords;
+            int stateOffset = pointer * templateWords;
+            System.arraycopy(
+                    symValueSnapshots,
+                    symbolOffset,
+                    symValue,
+                    stateOffset,
+                    templateWords
+            );
+            System.arraycopy(
+                    symPointeeSnapshots,
+                    symbolOffset,
+                    symPointee,
+                    stateOffset,
+                    templateWords
+            );
+            System.arraycopy(
+                    symCellSnapshots,
+                    symbolOffset,
+                    symCell,
+                    stateOffset,
+                    templateWords
+            );
+        }
+
         System.arraycopy(
                 derefMustSnapshots,
-                slot * paramWords,
+                parameterBase,
                 derefMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 derefMaySnapshots,
-                slot * paramWords,
+                parameterBase,
                 derefMay,
                 0,
                 paramWords
         );
         System.arraycopy(
                 pointeeDerefMustSnapshots,
-                slot * paramWords,
+                parameterBase,
                 pointeeDerefMust,
                 0,
                 paramWords
         );
         System.arraycopy(
                 pointeeDerefMaySnapshots,
-                slot * paramWords,
+                parameterBase,
                 pointeeDerefMay,
                 0,
                 paramWords
         );
-        System.arraycopy(
-                slotMustSnapshots,
-                slot * siteWords,
-                slotMust,
-                0,
-                siteWords
-        );
-        System.arraycopy(
-                slotMaySnapshots,
-                slot * siteWords,
-                slotMay,
-                0,
-                siteWords
-        );
-        System.arraycopy(
-                slotSourceSnapshots,
-                slot * siteCount * templateWords,
-                slotSource,
-                0,
-                siteCount * templateWords
-        );
+
+        for (int i = 0; i < activeAssignmentSiteWordCount; i++) {
+            int word = activeAssignmentSiteWordIds[i];
+            slotMust[word] = slotMustSnapshots[siteWordBase + i];
+            slotMay[word] = slotMaySnapshots[siteWordBase + i];
+        }
+
+        for (int i = 0; i < activeAssignmentSiteCount; i++) {
+            int site = activeAssignmentSiteIds[i];
+            System.arraycopy(
+                    slotSourceSnapshots,
+                    sourceBase + i * templateWords,
+                    slotSource,
+                    site * templateWords,
+                    templateWords
+            );
+        }
     }
 
     private void ensureCapacity(int required) {
@@ -460,28 +683,41 @@ final class PointerNullAnalysisState {
             return;
         }
 
-        int newCapacity = Math.max(16, capacity);
-
-        while (newCapacity < required) {
-            newCapacity *= 2;
+        if (required > snapshotLimitSlots) {
+            long projectedBytes = (long) required * snapshotRowBytes;
+            throw new MemoryAnalysisContext.SnapshotLimitExceeded(
+                    required,
+                    projectedBytes,
+                    snapshotComplexity(),
+                    snapshotRowOwners()
+            );
         }
 
-        nullSnapshots = grow(nullSnapshots, newCapacity * pointerCount);
+        allocateSnapshots(required);
+    }
+
+    private void allocateSnapshots(int newCapacity) {
+        nullSnapshots = grow(
+                nullSnapshots,
+                newCapacity * context.maxActivePointerCount
+        );
         cellSnapshots = grow(
                 cellSnapshots,
-                newCapacity * pointerCount * varWords
+                newCapacity
+                        * context.maxActivePointerCount
+                        * context.maxActiveVariableWordCount
         );
         symValueSnapshots = grow(
                 symValueSnapshots,
-                newCapacity * pointerCount * templateWords
+                newCapacity * context.maxActivePointerCount * templateWords
         );
         symPointeeSnapshots = grow(
                 symPointeeSnapshots,
-                newCapacity * pointerCount * templateWords
+                newCapacity * context.maxActivePointerCount * templateWords
         );
         symCellSnapshots = grow(
                 symCellSnapshots,
-                newCapacity * pointerCount * templateWords
+                newCapacity * context.maxActivePointerCount * templateWords
         );
         derefMustSnapshots = grow(
                 derefMustSnapshots,
@@ -501,15 +737,17 @@ final class PointerNullAnalysisState {
         );
         slotMustSnapshots = grow(
                 slotMustSnapshots,
-                newCapacity * siteWords
+                newCapacity * context.maxActiveAssignmentSiteWordCount
         );
         slotMaySnapshots = grow(
                 slotMaySnapshots,
-                newCapacity * siteWords
+                newCapacity * context.maxActiveAssignmentSiteWordCount
         );
         slotSourceSnapshots = grow(
                 slotSourceSnapshots,
-                newCapacity * siteCount * templateWords
+                newCapacity
+                        * context.maxActiveAssignmentSiteCount
+                        * templateWords
         );
 
         capacity = newCapacity;
@@ -576,45 +814,71 @@ final class PointerNullAnalysisState {
     }
 
     private void mergeFromSnapshot(int slot) {
-        for (int p = 0; p < pointerCount; p++) {
-            byte current = nullState[p];
-            byte incoming = nullSnapshots[slot * pointerCount + p];
+        int pointerBase = slot * activePointerCount;
+        int cellBase = slot
+                * activePointerCount
+                * activeVariableWordCount;
+        int symbolBase = slot * activePointerCount * templateWords;
+        int parameterBase = slot * paramWords;
+        int siteWordBase = slot * activeAssignmentSiteWordCount;
+        int sourceBase = slot
+                * activeAssignmentSiteCount
+                * templateWords;
+
+        for (int i = 0; i < activePointerCount; i++) {
+            int pointer = activePointerIndices[i];
+            byte current = nullState[pointer];
+            byte incoming = nullSnapshots[pointerBase + i];
 
             if (current != incoming) {
-                nullState[p] = MAYBE_NULL;
+                nullState[pointer] = MAYBE_NULL;
+            }
+
+            for (int j = 0; j < activeVariableWordCount; j++) {
+                int word = activeVariableWordIds[j];
+                cellTargets[pointer * varWords + word] |=
+                        cellSnapshots[
+                                cellBase + i * activeVariableWordCount + j
+                        ];
+            }
+
+            int symbolOffset = symbolBase + i * templateWords;
+            int stateOffset = pointer * templateWords;
+
+            for (int word = 0; word < templateWords; word++) {
+                symValue[stateOffset + word] |=
+                        symValueSnapshots[symbolOffset + word];
+                symPointee[stateOffset + word] |=
+                        symPointeeSnapshots[symbolOffset + word];
+                symCell[stateOffset + word] |=
+                        symCellSnapshots[symbolOffset + word];
             }
         }
 
-        for (int i = 0; i < pointerCount * varWords; i++) {
-            cellTargets[i] |= cellSnapshots[slot * pointerCount * varWords + i];
-        }
-
-        for (int i = 0; i < pointerCount * templateWords; i++) {
-            symValue[i] |= symValueSnapshots[
-                    slot * pointerCount * templateWords + i];
-            symPointee[i] |= symPointeeSnapshots[
-                    slot * pointerCount * templateWords + i];
-            symCell[i] |= symCellSnapshots[
-                    slot * pointerCount * templateWords + i];
-        }
-
         for (int i = 0; i < paramWords; i++) {
-            derefMust[i] &= derefMustSnapshots[slot * paramWords + i];
-            derefMay[i] |= derefMaySnapshots[slot * paramWords + i];
+            derefMust[i] &= derefMustSnapshots[parameterBase + i];
+            derefMay[i] |= derefMaySnapshots[parameterBase + i];
             pointeeDerefMust[i] &=
-                    pointeeDerefMustSnapshots[slot * paramWords + i];
+                    pointeeDerefMustSnapshots[parameterBase + i];
             pointeeDerefMay[i] |=
-                    pointeeDerefMaySnapshots[slot * paramWords + i];
+                    pointeeDerefMaySnapshots[parameterBase + i];
         }
 
-        for (int i = 0; i < siteWords; i++) {
-            slotMust[i] &= slotMustSnapshots[slot * siteWords + i];
-            slotMay[i] |= slotMaySnapshots[slot * siteWords + i];
+        for (int i = 0; i < activeAssignmentSiteWordCount; i++) {
+            int word = activeAssignmentSiteWordIds[i];
+            slotMust[word] &= slotMustSnapshots[siteWordBase + i];
+            slotMay[word] |= slotMaySnapshots[siteWordBase + i];
         }
 
-        for (int i = 0; i < siteCount * templateWords; i++) {
-            slotSource[i] |= slotSourceSnapshots[
-                    slot * siteCount * templateWords + i];
+        for (int i = 0; i < activeAssignmentSiteCount; i++) {
+            int site = activeAssignmentSiteIds[i];
+            int snapshotOffset = sourceBase + i * templateWords;
+            int stateOffset = site * templateWords;
+
+            for (int word = 0; word < templateWords; word++) {
+                slotSource[stateOffset + word] |=
+                        slotSourceSnapshots[snapshotOffset + word];
+            }
         }
     }
 }

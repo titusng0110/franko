@@ -216,7 +216,23 @@ public final class DynamicArrayMemoryChecker {
         ensureContext(document.root);
 
         runSummaryPass();
+
+        if (driver.limitExceeded()) {
+            return new PassResult(
+                    document.withPhase(SastPhase.DYN_ARRAY),
+                    diagnostics.diagnostics()
+            );
+        }
+
         runCheckPass();
+
+        if (driver.limitExceeded()) {
+            return new PassResult(
+                    document.withPhase(SastPhase.DYN_ARRAY),
+                    diagnostics.diagnostics()
+            );
+        }
+
         runAssumptionPasses();
 
         return new PassResult(
@@ -269,13 +285,31 @@ public final class DynamicArrayMemoryChecker {
         }
 
         DiagnosticBag inited = new DiagnosticBag();
-        runAssumptionPass(ASSUMPTION_INITED, inited);
+
+        if (!runAssumptionPass(ASSUMPTION_INITED, inited)) {
+            copyLimitDiagnostics(inited);
+            return;
+        }
+
         DiagnosticBag uninited = new DiagnosticBag();
-        runAssumptionPass(ASSUMPTION_UNINITED, uninited);
+
+        if (!runAssumptionPass(ASSUMPTION_UNINITED, uninited)) {
+            copyLimitDiagnostics(uninited);
+            return;
+        }
+
         mergeAssumptionDiagnostics(inited, uninited);
     }
 
-    private void runAssumptionPass(
+    private void copyLimitDiagnostics(DiagnosticBag bag) {
+        for (Diagnostic diagnostic : bag.diagnostics()) {
+            if ("memory.snapshot_limit".equals(diagnostic.code)) {
+                diagnostics.add(diagnostic);
+            }
+        }
+    }
+
+    private boolean runAssumptionPass(
             int mode,
             DiagnosticBag bag
     ) {
@@ -292,6 +326,7 @@ public final class DynamicArrayMemoryChecker {
                     new MemoryDataflowDriver.Domain(new DynamicDomain())
             );
             driver.run(context.root);
+            return !driver.limitExceeded();
         } finally {
             diagnostics = savedDiagnostics;
             assumptionMode = savedMode;
@@ -379,7 +414,9 @@ public final class DynamicArrayMemoryChecker {
         private boolean suppressed;
 
         public void beginFunction(int functionId) {
-            currentFunctionId = functionId;            state.reset();
+            currentFunctionId = functionId;
+            state.setFunction(functionId);
+            state.reset();
             exitReturnSets.clear();
             Arrays.fill(callResultAliases, null);
             Arrays.fill(callResultResolving, false);
@@ -1727,7 +1764,9 @@ public final class DynamicArrayMemoryChecker {
         }
 
         private void havocEscapedArrays() {
-            for (int i = 0; i < state.arrayCount; i++) {
+            for (int index = 0; index < state.activeArrayCount(); index++) {
+                int i = state.activeArrayIndex(index);
+
                 if (state.escaped[i]) {
                     state.lifecycle[i] =
                             DynamicArrayAnalysisState.MAYBE_INITED;
@@ -1834,7 +1873,10 @@ public final class DynamicArrayMemoryChecker {
             }
 
             if (!suppressed) {
-                for (int i = 0; i < state.arrayCount; i++) {
+                for (int index = 0;
+                        index < state.activeArrayCount();
+                        index++) {
+                    int i = state.activeArrayIndex(index);
                     reportLeakIfNeeded(
                             i,
                             "return from function '"
@@ -2184,6 +2226,18 @@ public final class DynamicArrayMemoryChecker {
 
         public void setSuppressed(boolean value) {
             suppressed = value;
+        }
+
+        int snapshotCapacity() {
+            return state.capacity;
+        }
+
+        int snapshotCount() {
+            return state.snapshotCount;
+        }
+
+        long snapshotRowBytes() {
+            return state.snapshotRowBytes();
         }
 
         private void recordSummaryCall(SastNode call) {

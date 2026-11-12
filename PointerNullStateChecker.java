@@ -136,6 +136,14 @@ public final class PointerNullStateChecker {
         ensureContext(document.root);
 
         runSummaryPass();
+
+        if (driver.limitExceeded()) {
+            return new PassResult(
+                    document.withPhase(SastPhase.NULL_STATE),
+                    diagnostics.diagnostics()
+            );
+        }
+
         runCheckPass();
 
         return new PassResult(
@@ -186,6 +194,7 @@ public final class PointerNullStateChecker {
 
         public void beginFunction(int functionId) {
             currentFunctionId = functionId;
+            state.setFunction(functionId);
             state.reset();
             exitReturnSets.clear();
             Arrays.fill(callResultStates, (byte) -1);
@@ -405,7 +414,11 @@ public final class PointerNullStateChecker {
             List<Byte> slotCertainties = new ArrayList<>();
             List<Integer> slotSites = new ArrayList<>();
 
-            for (int site = 0; site < state.siteCount; site++) {
+            for (int index = 0;
+                    index < state.activeAssignmentSiteCount();
+                    index++) {
+                int site = state.activeAssignmentSiteId(index);
+
                 if (state.slotTargetParam[site] < 0) {
                     continue;
                 }
@@ -1266,6 +1279,18 @@ public final class PointerNullStateChecker {
 
         public void setSuppressed(boolean value) {
             suppressed = value;
+        }
+
+        int snapshotCapacity() {
+            return state.capacity;
+        }
+
+        int snapshotCount() {
+            return state.snapshotCount;
+        }
+
+        long snapshotRowBytes() {
+            return state.snapshotRowBytes();
         }
 
         private void recordSummaryCall(SastNode call) {
