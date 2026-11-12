@@ -1,0 +1,44 @@
+// ============================================================
+// LIBRARY TEST: franko/os — Win32 free functions
+// ============================================================
+// Covers os::win32::GetStdHandle, ReadFile, WriteFile, and the stdio
+// handle constants. Runs only on Windows targets.
+// ============================================================
+
+import "franko/os"
+import "franko/io"
+
+func main() -> int32 {
+    uint64 hin = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
+    [byte] buf;
+    buf.init(8);
+    buf.memset(0);
+
+    uint32 read_count = 0;
+    int32 read_ok = os::win32::ReadFile(
+            hin,
+            getmview(buf),
+            8,
+            getmview(read_count)
+    );
+    print(read_ok);
+    print(read_count);
+    print(buf[0]);
+    print(buf[1]);
+    print(buf[2]);
+    print(buf[3]);
+
+    uint64 hout = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
+    uint32 written_count = 0;
+    int32 write_ok = os::win32::WriteFile(
+            hout,
+            getview(buf),
+            3,
+            getmview(written_count)
+    );
+    print(write_ok);
+    print(written_count);
+
+    buf.uninit();
+    return 0;
+}

@@ -798,15 +798,6 @@ func main() -> int32 {
 ## Tests
 
 ```text
-library_tests/string/basic/success/from_to/               // from/to overloads, views, static arrays
-library_tests/string/basic/success/reserve/               // 63/64/65-byte growth boundaries, clear/reuse, shrink_to_fit
-library_tests/string/basic/success/utf8/                  // valid and invalid UTF-8 sequences
-library_tests/string/operators/success/comparisons/       // all six comparators, prefixes, empties
-library_tests/string/operators/success/assign_append_multiply/ // =, +=, *=, clear
-library_tests/string/methods/success/from_integer/        // all eight integer widths, signs, min/max
-library_tests/string/methods/success/to_integer/          // decimal/binary/hex parsing, minus signs, overflow
-library_tests/string/methods/success/find_count/          // find/find_next/count/count_from, all needle forms
-library_tests/string/methods/success/slice_edit/          // append/get_slice/insert/erase, aliasing, bounds
-library_tests/string/methods/success/split_join/          // split/join, empty and aliased separators
-library_tests/string/stringlist/success/basic/            // StringList from/append/find/get/set/insert/erase/clear/shrink/odd-regrow
+library_tests/string/string/       // String: every method, overload, operator, and UTF-8 case
+library_tests/string/string_list/  // StringList: every method and overload
 ```

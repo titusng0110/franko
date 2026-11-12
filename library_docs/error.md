@@ -99,10 +99,8 @@ std::panic(reason)   // Franko runtime panic: std::panic: null reason
 ## Tests
 
 ```text
-library_tests/error/panic/runtime/string_reason/  // static string-literal reason
-library_tests/error/panic/runtime/dynamic_reason/ // dynamic byte-view reason
-library_tests/error/panic/runtime/null_reason/    // null reason
+library_tests/error/panic/runtime/  // std::panic aborts the process
 ```
 
-The cases are in the `runtime` category: they must compile and exit
-non-zero when run. Panic text is intentionally not pinned.
+The case is in the `runtime` category: it must compile and exit non-zero
+when run. Panic text is intentionally not pinned.

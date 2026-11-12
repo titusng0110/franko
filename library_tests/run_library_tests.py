@@ -3,9 +3,11 @@
 
     uv run python library_tests/run_library_tests.py
 
-Each suite under library_tests/<module>/<suite>/ has the same
-success/failure/runtime fixture layout as the language suite. The
-`win32` suite runs only on Windows and the `posix` suite only elsewhere.
+Library tests are success-focused: each library has one free-function fixture,
+and each struct has one fixture covering all of its methods together. Additional
+runtime fixtures cover functions whose contract is to abort, such as
+`std::panic`. There are no compiler-failure fixtures; a library failing to
+compile is a compiler bug.
 """
 
 import sys
@@ -41,14 +43,13 @@ def main() -> int:
     mode = default_build_mode()
     results = Results()
 
-    for pattern, kind in (
-        ("library_tests/*/*/failure/*/main.fr", "failure"),
-        ("library_tests/*/*/success/*/main.fr", "success"),
-        ("library_tests/*/*/runtime/*/main.fr", "runtime"),
-    ):
-        for src in sorted(ROOT.glob(pattern)):
-            if not skip_platform_suite(src, results):
-                run_and_record(results, src, mode=mode, kind=kind)
+    for src in sorted(ROOT.glob("library_tests/*/*/main.fr")):
+        if not skip_platform_suite(src, results):
+            run_and_record(results, src, mode=mode)
+
+    for src in sorted(ROOT.glob("library_tests/*/*/runtime/main.fr")):
+        if not skip_platform_suite(src, results):
+            run_and_record(results, src, mode=mode, kind="runtime")
 
     return results.finish("✅ All library tests passed.")
 

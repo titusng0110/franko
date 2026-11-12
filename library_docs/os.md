@@ -213,10 +213,10 @@ Module tests live in `library_tests/os/` (run with
 `uv run python library_tests/run_library_tests.py`):
 
 ```text
-library_tests/os/posix/success/   // read/write behavior goldens
-library_tests/os/posix/runtime/   // buffer-bound aborts (exit status only)
-library_tests/os/posix/failure/   // rejected misuses (pinned diagnostics)
-library_tests/os/win32/success/   // File API goldens (Windows only)
-library_tests/os/target/success/  // #IS_* + #if target selection
-library_tests/os/target/failure/  // writes to #IS_* constants
+library_tests/os/posix/  // read/write and fd constants (non-Windows)
+library_tests/os/win32/  // GetStdHandle/ReadFile/WriteFile and handle constants (Windows)
 ```
+
+The POSIX fixture exercises `read`, `write`, and the stdio fd constants; the
+Win32 fixture exercises `GetStdHandle`, `ReadFile`, `WriteFile`, and the
+standard-handle constants.

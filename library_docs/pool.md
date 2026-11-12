@@ -360,14 +360,13 @@ Module tests live in `library_tests/pool/` (run with
 `uv run python library_tests/run_library_tests.py`):
 
 ```text
-library_tests/pool/next/success/              // free-list pool goldens
-library_tests/pool/sparse_set/success/        // sparse-set pool goldens
-library_tests/pool/gen_next/success/          // generational free-list goldens
-library_tests/pool/gen_sparse_set/success/    // generational sparse-set goldens
+library_tests/pool/next_allocator/                      // NextAllocator, all methods
+library_tests/pool/sparse_set_allocator/                // SparseSetAllocator, all methods
+library_tests/pool/generational_next_allocator/         // GenerationalNextAllocator, all methods
+library_tests/pool/generational_sparse_set_allocator/   // GenerationalSparseSetAllocator, all methods
 ```
 
-Each suite covers one method — `init`, `uninit`, `grow`, `new_index`,
-`free_index`, `exist`, `write_active_indices`, `used`, `capacity`, and
-`generation` for the generational pools — with the success paths and
-the failure paths (double release, out-of-range index, wrong state)
-asserted line by line.
+Each fixture covers every method of its struct — `init`, `uninit`, `grow`,
+`new_index`, `free_index`, `exist`, `write_active_indices`, `used`,
+`capacity`, and `generation` for the generational pools — with success and
+failure paths asserted line by line within that one program.

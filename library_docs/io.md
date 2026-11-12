@@ -289,15 +289,5 @@ func main() -> int32 {
 ## Tests
 
 ```text
-library_tests/io/print/success/decimal/   // integer formatting per width
-library_tests/io/print/success/string/    // text, custom end, bare newline
-library_tests/io/print/success/text_end/  // print(text, end), null text/end
-library_tests/io/print/success/std_string/ // print(std::String), String/byte ends
-library_tests/io/print/success/err_overloads/ // every print_err overload, merged streams
-library_tests/io/read/success/read_bytes/      // chunked reads, EOF
-library_tests/io/read/success/read_bytes_large/ // >8192-byte request, leftovers
-library_tests/io/read/success/read_line/       // lines, empty line, EOF
-library_tests/io/read/success/read_line_long/  // buffer growth, long line
-library_tests/io/read/success/read_line_limit/ // 81920-byte limit, -2, resync
-library_tests/io/read/success/read_errors/     // null buffers, bad count, EOF
+library_tests/io/free_functions/  // every print/print_err overload, read_bytes, read_line
 ```

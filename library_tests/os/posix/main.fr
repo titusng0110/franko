@@ -1,0 +1,32 @@
+// ============================================================
+// LIBRARY TEST: franko/os — POSIX free functions
+// ============================================================
+// Covers os::posix::read, os::posix::write, and the stdio fd
+// constants. Runs only on non-Windows targets.
+// ============================================================
+
+import "franko/os"
+import "franko/io"
+
+func main() -> int32 {
+    [byte] buf;
+    buf.init(8);
+    buf.memset(0);
+
+    int64 n = os::posix::read(os::posix::STDIN_FILENO, getmview(buf), 8);
+    print(n);
+    print(buf[0]);
+    print(buf[1]);
+    print(buf[2]);
+    print(buf[3]);
+
+    int64 written = os::posix::write(
+            os::posix::STDOUT_FILENO,
+            getview(buf),
+            3
+    );
+    print(written);
+
+    buf.uninit();
+    return 0;
+}

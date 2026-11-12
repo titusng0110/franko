@@ -1,0 +1,1183 @@
+// ============================================================
+// LIBRARY TEST (string/basic): from and to
+// ============================================================
+// Covers both from() overloads, both to() overloads, static and
+// dynamic byte-array sources, null sources, length, and the
+// exact-length byte-array output produced by to(ptr<[byte]>).
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_from_to() -> int32 {
+    std::String s
+    print(s.length())
+    print(s.from("hello"))
+    print(s.length())
+    ptr<[byte]> nil_out = null
+    print(s.to(nil_out))
+
+    [byte] out
+    print(s.to(getptr(out)))
+    print(out.length())
+    print(getview(out))
+    out.uninit()
+
+    std::String t
+    print(t.from(getview(s)))
+    print(t.length())
+    print(t == s)
+
+    std::String u
+    print(s.to(getptr(u)))
+    print(u == s)
+
+    [byte, 3] fixed
+    fixed[0] = 120
+    fixed[1] = 121
+    fixed[2] = 122
+    std::String w
+    print(w.from(getview(fixed)))
+    print(w.length())
+    print(w.to(getptr(out)))
+    print(getview(out))
+    out.uninit()
+
+    view<[byte]> nil = null
+    print(s.from(nil))
+    print(s.length())
+    print(s.to(nil_out))
+
+    s.uninit()
+    t.uninit()
+    u.uninit()
+    w.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/basic): growth and clearing
+// ============================================================
+// Covers from() at the 63/64/65-byte boundary, append/multiply growth,
+// clearing with *= 0 and clear(), reuse after clearing, shrink_to_fit(),
+// and UTF-8 validity across those transitions. Capacity is internal and
+// is not inspected.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_reserve() -> int32 {
+    std::String s
+    print(s.length())
+
+    [byte] p63
+    p63.init_zero(63)
+    std::String a
+    print(a.from(getview(p63)))
+    print(a.length())
+    print(a.is_utf8_compliant())
+
+    [byte] p64
+    p64.init_zero(64)
+    std::String b
+    print(b.from(getview(p64)))
+    print(b.length())
+    print(b.is_utf8_compliant())
+
+    [byte] p65
+    p65.init_zero(65)
+    std::String d
+    print(d.from(getview(p65)))
+    print(d.length())
+    print(d.is_utf8_compliant())
+
+    std::String c
+    print(c.from("ab"))
+    c += "cd"
+    c *= 2
+    print(c.length())
+    print(c.is_utf8_compliant())
+    c *= 0
+    print(c.length())
+    print(c.is_utf8_compliant())
+    print(c.from(getview(p65)))
+    print(c.length())
+    print(c.is_utf8_compliant())
+
+    c.clear()
+    print(c.length())
+    print(c.is_utf8_compliant())
+    print(c.from("reuse"))
+    print(c.length())
+    print(getview(c))
+    print(c.shrink_to_fit())
+    print(c.length())
+    print(getview(c))
+    c.clear()
+    print(c.shrink_to_fit())
+    print(c.length())
+    print(c.from("again"))
+    print(getview(c))
+
+    p63.uninit()
+    p64.uninit()
+    p65.uninit()
+    s.uninit()
+    a.uninit()
+    b.uninit()
+    c.uninit()
+    d.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/basic): UTF-8 validation
+// ============================================================
+// Covers ASCII, valid 2/3/4-byte sequences and their boundaries,
+// overlong encodings, UTF-16 surrogates, code points above U+10FFFF,
+// invalid lead bytes, stray continuation bytes, and truncation.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func check_2(view<[byte]> bytes) -> void {
+    std::String s
+    s.from(bytes)
+    print(s.is_utf8_compliant())
+    s.uninit()
+    return
+}
+
+func test_utf8() -> int32 {
+    std::String empty
+    print(empty.length())
+    print(empty.is_utf8_compliant())
+    empty.uninit()
+
+    std::String ascii
+    ascii.from("hello")
+    print(ascii.is_utf8_compliant())
+    ascii.uninit()
+
+    std::String unicode
+    unicode.from("你好, Franko 😭😍")
+    print(unicode.length())
+    print(unicode.is_utf8_compliant())
+    unicode.uninit()
+
+    [byte, 2] two
+    two[0] = 0xC2
+    two[1] = 0xA2
+    check_2(getview(two))
+
+    [byte, 3] three
+    three[0] = 0xE4
+    three[1] = 0xBD
+    three[2] = 0xA0
+    check_2(getview(three))
+
+    [byte, 4] four
+    four[0] = 0xF0
+    four[1] = 0x9F
+    four[2] = 0x98
+    four[3] = 0xAD
+    check_2(getview(four))
+
+    [byte, 2] two_min
+    two_min[0] = 0xC2
+    two_min[1] = 0x80
+    check_2(getview(two_min))
+
+    [byte, 2] two_max
+    two_max[0] = 0xDF
+    two_max[1] = 0xBF
+    check_2(getview(two_max))
+
+    [byte, 3] three_min
+    three_min[0] = 0xE0
+    three_min[1] = 0xA0
+    three_min[2] = 0x80
+    check_2(getview(three_min))
+
+    [byte, 3] three_surrogate_max
+    three_surrogate_max[0] = 0xED
+    three_surrogate_max[1] = 0x9F
+    three_surrogate_max[2] = 0xBF
+    check_2(getview(three_surrogate_max))
+
+    [byte, 3] three_private
+    three_private[0] = 0xEE
+    three_private[1] = 0x80
+    three_private[2] = 0x80
+    check_2(getview(three_private))
+
+    [byte, 3] three_max
+    three_max[0] = 0xEF
+    three_max[1] = 0xBF
+    three_max[2] = 0xBF
+    check_2(getview(three_max))
+
+    [byte, 4] four_min
+    four_min[0] = 0xF0
+    four_min[1] = 0x90
+    four_min[2] = 0x80
+    four_min[3] = 0x80
+    check_2(getview(four_min))
+
+    [byte, 4] four_max
+    four_max[0] = 0xF4
+    four_max[1] = 0x8F
+    four_max[2] = 0xBF
+    four_max[3] = 0xBF
+    check_2(getview(four_max))
+
+    [byte, 1] continuation
+    continuation[0] = 0x80
+    check_2(getview(continuation))
+
+    [byte, 2] overlong_two
+    overlong_two[0] = 0xC0
+    overlong_two[1] = 0x80
+    check_2(getview(overlong_two))
+
+    [byte, 3] overlong_three
+    overlong_three[0] = 0xE0
+    overlong_three[1] = 0x9F
+    overlong_three[2] = 0xBF
+    check_2(getview(overlong_three))
+
+    [byte, 3] surrogate
+    surrogate[0] = 0xED
+    surrogate[1] = 0xA0
+    surrogate[2] = 0x80
+    check_2(getview(surrogate))
+
+    [byte, 4] overlong_four
+    overlong_four[0] = 0xF0
+    overlong_four[1] = 0x8F
+    overlong_four[2] = 0xBF
+    overlong_four[3] = 0xBF
+    check_2(getview(overlong_four))
+
+    [byte, 4] above_max
+    above_max[0] = 0xF4
+    above_max[1] = 0x90
+    above_max[2] = 0x80
+    above_max[3] = 0x80
+    check_2(getview(above_max))
+
+    [byte, 4] bad_lead_five
+    bad_lead_five[0] = 0xF5
+    bad_lead_five[1] = 0x80
+    bad_lead_five[2] = 0x80
+    bad_lead_five[3] = 0x80
+    check_2(getview(bad_lead_five))
+
+    [byte, 1] truncated_two
+    truncated_two[0] = 0xC2
+    check_2(getview(truncated_two))
+
+    [byte, 2] truncated_three
+    truncated_three[0] = 0xE0
+    truncated_three[1] = 0xA0
+    check_2(getview(truncated_three))
+
+    [byte, 3] truncated_four
+    truncated_four[0] = 0xF0
+    truncated_four[1] = 0x90
+    truncated_four[2] = 0x80
+    check_2(getview(truncated_four))
+
+    [byte, 2] bad_second
+    bad_second[0] = 0xE0
+    bad_second[1] = 0x80
+    check_2(getview(bad_second))
+
+    [byte, 1] bad_lead_fe
+    bad_lead_fe[0] = 0xFE
+    check_2(getview(bad_lead_fe))
+
+    [byte, 1] bad_lead_ff
+    bad_lead_ff[0] = 0xFF
+    check_2(getview(bad_lead_ff))
+
+    [byte, 3] embedded_nul
+    embedded_nul[0] = 0x41
+    embedded_nul[1] = 0x00
+    embedded_nul[2] = 0x42
+    check_2(getview(embedded_nul))
+
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/methods): find, find_next, count, count_from
+// ============================================================
+// Covers byte, byte-view, and String needles; found/not-found;
+// start indices past the end; empty needles; overlapping substring
+// counts; null String views; and get/set bounds behavior.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_find_count() -> int32 {
+    std::String s
+    s.from("a,b,,c,")
+    std::String needle
+    needle.from(",,")
+    view<[byte]> empty = null
+
+    (uint32 idx, int32 err) hit = s.find(44)
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find("c,")
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find(getview(needle))
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find("zz")
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find(empty)
+    print(hit.idx)
+    print(hit.err)
+
+    hit = s.find_next(44, 2)
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find_next("c", 0)
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find_next(getview(needle), 4)
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find_next(44, 99)
+    print(hit.idx)
+    print(hit.err)
+    hit = s.find_next(empty, 7)
+    print(hit.idx)
+    print(hit.err)
+
+    print(s.count(44))
+    print(s.count("c"))
+    print(s.count(getview(needle)))
+    print(s.count(empty))
+    print(s.count_from(44, 4))
+    print(s.count_from("c", 0))
+    print(s.count_from(getview(needle), 0))
+    print(s.count_from(empty, 7))
+    print(s.count_from(empty, 99))
+
+    std::String repeated
+    repeated.from("aaa")
+    print(repeated.count("aa"))
+    print(repeated.count_from("aa", 1))
+
+    print(s.get(0))
+    print(s.get(99))
+    s.set(0, 65)
+    print(s.get(0))
+    s.set(99, 66)
+    print(s.get(0))
+
+    repeated.uninit()
+    needle.uninit()
+    s.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/methods): from_integer
+// ============================================================
+// Covers all eight from_integer overloads with zero, positive,
+// negative, minimum, and maximum values, plus replacement of a
+// longer existing string.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_from_integer() -> int32 {
+    std::String s
+
+    int8 a = -128
+    print(s.from_integer(a))
+    print(getview(s))
+    a = 0
+    print(s.from_integer(a))
+    print(getview(s))
+    a = 127
+    print(s.from_integer(a))
+    print(getview(s))
+
+    int16 b = -32768
+    print(s.from_integer(b))
+    print(getview(s))
+    b = 32767
+    print(s.from_integer(b))
+    print(getview(s))
+
+    int32 c = -2147483648
+    print(s.from_integer(c))
+    print(getview(s))
+    c = 2147483647
+    print(s.from_integer(c))
+    print(getview(s))
+
+    int64 d = -9223372036854775808
+    print(s.from_integer(d))
+    print(getview(s))
+    d = 9223372036854775807
+    print(s.from_integer(d))
+    print(getview(s))
+
+    uint8 e = 0
+    print(s.from_integer(e))
+    print(getview(s))
+    e = 255
+    print(s.from_integer(e))
+    print(getview(s))
+
+    uint16 f = 0
+    print(s.from_integer(f))
+    print(getview(s))
+    f = 65535
+    print(s.from_integer(f))
+    print(getview(s))
+
+    uint32 g = 0
+    print(s.from_integer(g))
+    print(getview(s))
+    g = 4294967295
+    print(s.from_integer(g))
+    print(getview(s))
+
+    uint64 h = 0
+    print(s.from_integer(h))
+    print(getview(s))
+    h = 18446744073709551615
+    print(s.from_integer(h))
+    print(getview(s))
+
+    s.from("long text")
+    int32 small = 7
+    print(s.from_integer(small))
+    print(s.length())
+    print(getview(s))
+
+    s.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/methods): append, get_slice, insert, erase
+// ============================================================
+// Covers all append, get_slice, insert, and erase overloads,
+// self-append/self-insert/self-slice, invalid indices and ranges,
+// and get/set bounds behavior.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_slice_edit() -> int32 {
+    [byte] out
+    std::String s
+    s.from("abc")
+    print(s.append(100))
+    print(s.append("ef"))
+    std::String tail
+    tail.from("gh")
+    print(s.append(getview(tail)))
+    print(s.length())
+    print(s.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    std::String d
+    d.from("xy")
+    print(d.append(getview(d)))
+    print(d.length())
+    print(d.append("xy"))
+    print(d.length())
+
+    [byte] arr
+    arr.init(2)
+    arr[0] = 90
+    arr[1] = 87
+    std::String e
+    e.from("ab")
+    print(e.append(getview(arr)))
+    print(e.length())
+    print(e.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    arr.uninit()
+
+    std::String part
+    print(s.get_slice(1, 4, getptr(part)))
+    print(part.length())
+    print(part.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    print(s.get_slice(4, 1, getptr(part)))
+    print(s.get_slice(1, 99, getptr(part)))
+    print(s.get_slice(0, 0, getptr(part)))
+    print(part.length())
+
+    std::String selfs
+    selfs.from("abcdef")
+    print(selfs.get_slice(2, 5, getptr(selfs)))
+    print(selfs.length())
+    print(selfs.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    [byte] bslice
+    bslice.init(1)
+    print(selfs.get_slice(0, 2, getptr(bslice)))
+    print(bslice.length())
+    print(getview(bslice))
+    if (bslice.length() != 0) {
+        bslice.uninit()
+    }
+
+    std::String ins
+    ins.from("abcd")
+    print(ins.insert(45, 2))
+    print(ins.insert("XY", 0))
+    print(ins.insert(getview(tail), 7))
+    print(ins.length())
+    print(ins.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    print(ins.insert(33, 99))
+    print(ins.insert("z", 9))
+    print(ins.length())
+    print(ins.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    std::String si
+    si.from("ab")
+    print(si.insert(getview(si), 1))
+    print(si.length())
+    print(si.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    print(si.erase(0))
+    print(si.erase(1, 2))
+    print(si.length())
+    print(si.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    print(si.erase(99))
+    print(si.erase(1, 0))
+    print(si.erase(0, 99))
+
+    print(si.get(0))
+    print(si.get(99))
+    si.set(0, 65)
+    print(si.get(0))
+    si.set(99, 66)
+    print(si.get(0))
+
+    s.uninit()
+    tail.uninit()
+    d.uninit()
+    e.uninit()
+    part.uninit()
+    selfs.uninit()
+    ins.uninit()
+    si.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/methods): split and join
+// ============================================================
+// Covers all split and join overloads, empty/leading/trailing/
+// consecutive segments, empty and null splitters, null lists,
+// null joiners, joining a string that is a list element, and a
+// joiner that aliases the destination string.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_split_join() -> int32 {
+    [byte] out
+    std::String text
+    text.from("a,b,,c,")
+    std::StringList parts
+
+    print(text.split(44, getptr(parts)))
+    print(parts.length())
+    for (uint32 i = 0; i < parts.length(); i++) {
+        std::String item
+        print(parts.get(i, getptr(item)))
+        print(item.length())
+        if (item.length() != 0) {
+            print(item.to(getptr(out)))
+            print(getview(out))
+            if (out.length() != 0) {
+                out.uninit()
+            }
+        } else {
+            print(0)
+        }
+        item.uninit()
+    }
+
+    print(text.split(",,", getptr(parts)))
+    print(parts.length())
+    for (uint32 i = 0; i < parts.length(); i++) {
+        std::String item
+        print(parts.get(i, getptr(item)))
+        print(item.length())
+        print(item.to(getptr(out)))
+        print(getview(out))
+        if (out.length() != 0) {
+            out.uninit()
+        }
+        item.uninit()
+    }
+
+    std::String sep
+    sep.from(",,")
+    print(text.split(getview(sep), getptr(parts)))
+    print(parts.length())
+
+    view<[byte]> empty = null
+    print(text.split(empty, getptr(parts)))
+    print(parts.length())
+    std::String whole
+    print(parts.get(0, getptr(whole)))
+    print(whole.length())
+    print(whole.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    whole.uninit()
+
+    print(text.split("zz", getptr(parts)))
+    print(parts.length())
+
+    std::StringList words
+    words.append("cc")
+    words.append("aa")
+    std::String joined
+    print(joined.join(44, getview(words)))
+    print(joined.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    print(joined.join(getview(words)))
+    print(joined.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    std::String sep2
+    sep2.from("--")
+    print(joined.join(getview(sep2), getview(words)))
+    print(joined.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    std::String sep3
+    sep3.from("|")
+    print(joined.join(getview(sep3), getview(words)))
+    print(joined.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    view<[byte]> nojoiner = null
+    print(joined.join(nojoiner, getview(words)))
+    print(joined.length())
+
+    std::StringList empty_list
+    print(joined.join(44, getview(empty_list)))
+    print(joined.length())
+
+    view<std::StringList> nil_list = null
+    print(joined.join(44, nil_list))
+    print(joined.length())
+
+    std::String js
+    js.from("X")
+    std::StringList jl
+    jl.append("a")
+    jl.append("b")
+    print(js.join(getview(js), getview(jl)))
+    print(js.to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    std::StringList selflist
+    selflist.append("ab")
+    selflist.append("cd")
+    print(selflist._data[0].join(44, getview(selflist)))
+    print(selflist._data[0].to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+    print(selflist._data[1].to(getptr(out)))
+    print(getview(out))
+    if (out.length() != 0) {
+        out.uninit()
+    }
+
+    text.uninit()
+    sep.uninit()
+    sep2.uninit()
+    sep3.uninit()
+    joined.uninit()
+    js.uninit()
+    parts.uninit()
+    words.uninit()
+    empty_list.uninit()
+    jl.uninit()
+    selflist.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/methods): to_<integer> conversions
+// ============================================================
+// Covers all eight to_<type> methods, decimal minus signs, rejected
+// plus signs, binary and hexadecimal prefixes, min/max boundaries,
+// overflow, malformed input, and empty strings.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_to_integer() -> int32 {
+    std::String s
+
+    (int8 val, int32 err) r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+
+    s.from("127")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("+127")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("-128")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("128")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("-129")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0b101")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0B101")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0x7F")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0X7f")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0x80")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("-0x80")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("+0b101")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+
+    s.from("--1")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("++1")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("+-1")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("-+1")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0b2")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0xG")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0x")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("0b")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("+")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("-")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("12a")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from(" 12")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("12 ")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+    s.from("007")
+    r8 = s.to_int8()
+    print(r8.val)
+    print(r8.err)
+
+    (int16 val, int32 err) r16 = s.to_int16()
+    s.from("-32768")
+    r16 = s.to_int16()
+    print(r16.val)
+    print(r16.err)
+    s.from("32767")
+    r16 = s.to_int16()
+    print(r16.val)
+    print(r16.err)
+    s.from("32768")
+    r16 = s.to_int16()
+    print(r16.val)
+    print(r16.err)
+    s.from("-0x8000")
+    r16 = s.to_int16()
+    print(r16.val)
+    print(r16.err)
+
+    (int32 val, int32 err) r32 = s.to_int32()
+    s.from("-2147483648")
+    r32 = s.to_int32()
+    print(r32.val)
+    print(r32.err)
+    s.from("2147483647")
+    r32 = s.to_int32()
+    print(r32.val)
+    print(r32.err)
+    s.from("2147483648")
+    r32 = s.to_int32()
+    print(r32.val)
+    print(r32.err)
+    s.from("0x7FFFFFFF")
+    r32 = s.to_int32()
+    print(r32.val)
+    print(r32.err)
+    s.from("-0x80000000")
+    r32 = s.to_int32()
+    print(r32.val)
+    print(r32.err)
+
+    (int64 val, int32 err) r64 = s.to_int64()
+    s.from("-9223372036854775808")
+    r64 = s.to_int64()
+    print(r64.val)
+    print(r64.err)
+    s.from("9223372036854775807")
+    r64 = s.to_int64()
+    print(r64.val)
+    print(r64.err)
+    s.from("9223372036854775808")
+    r64 = s.to_int64()
+    print(r64.val)
+    print(r64.err)
+    s.from("0x7FFFFFFFFFFFFFFF")
+    r64 = s.to_int64()
+    print(r64.val)
+    print(r64.err)
+    s.from("-0x8000000000000000")
+    r64 = s.to_int64()
+    print(r64.val)
+    print(r64.err)
+
+    (uint8 val, int32 err) u8 = s.to_uint8()
+    s.from("0")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("255")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("+255")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("256")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("-1")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("-0")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("0xFF")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("0b11111111")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+    s.from("0x100")
+    u8 = s.to_uint8()
+    print(u8.val)
+    print(u8.err)
+
+    (uint16 val, int32 err) u16 = s.to_uint16()
+    s.from("65535")
+    u16 = s.to_uint16()
+    print(u16.val)
+    print(u16.err)
+    s.from("65536")
+    u16 = s.to_uint16()
+    print(u16.val)
+    print(u16.err)
+    s.from("0xFFFF")
+    u16 = s.to_uint16()
+    print(u16.val)
+    print(u16.err)
+
+    (uint32 val, int32 err) u32 = s.to_uint32()
+    s.from("4294967295")
+    u32 = s.to_uint32()
+    print(u32.val)
+    print(u32.err)
+    s.from("4294967296")
+    u32 = s.to_uint32()
+    print(u32.val)
+    print(u32.err)
+    s.from("0xFFFFFFFF")
+    u32 = s.to_uint32()
+    print(u32.val)
+    print(u32.err)
+
+    (uint64 val, int32 err) u64 = s.to_uint64()
+    s.from("18446744073709551615")
+    u64 = s.to_uint64()
+    print(u64.val)
+    print(u64.err)
+    s.from("18446744073709551616")
+    u64 = s.to_uint64()
+    print(u64.val)
+    print(u64.err)
+    s.from("0xFFFFFFFFFFFFFFFF")
+    u64 = s.to_uint64()
+    print(u64.val)
+    print(u64.err)
+    s.from("0b1111111111111111111111111111111111111111111111111111111111111111")
+    u64 = s.to_uint64()
+    print(u64.val)
+    print(u64.err)
+
+    s.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/operators): assign, append, multiply
+// ============================================================
+// Covers = with string literals, String values, and byte arrays;
+// += with literals, String values, and byte arrays; *= with 1, 2,
+// and 0 (clear). Every result is inspected through to(ptr<[byte]>).
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_assign_append_multiply() -> int32 {
+    [byte] out
+    std::String a
+    a = "ab"
+    std::String b
+    b = "cd"
+    a += b
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a += "ef"
+    print(a.to(getptr(out)))
+    print(getview(out))
+    print(a.length())
+
+    [byte] arr
+    arr.init(2)
+    arr[0] = 88
+    arr[1] = 89
+    a = arr
+    print(a.to(getptr(out)))
+    print(getview(out))
+    print(a.length())
+
+    a += arr
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a *= 2
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a *= 1
+    print(a.to(getptr(out)))
+    print(getview(out))
+
+    a *= 0
+    print(a.length())
+    print(a.to(getptr(out)))
+    print(out.length())
+
+    std::String c
+    c = a
+    print(c.length())
+
+    std::String dup
+    dup = "xy"
+    print(dup.from(getview(dup)))
+    print(dup.length())
+    print(dup.to(getptr(out)))
+    print(getview(out))
+    out.uninit()
+    dup += dup
+    print(dup.to(getptr(out)))
+    print(getview(out))
+    out.uninit()
+
+    a.uninit()
+    b.uninit()
+    c.uninit()
+    dup.uninit()
+    arr.uninit()
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (string/operators): comparisons
+// ============================================================
+// Covers all six comparators, equal strings, differing bytes,
+// prefixes, and empty strings. Comparisons are lexicographic over
+// the byte contents; the shorter string is less on a shared prefix.
+// ============================================================
+
+import "franko/io"
+import "franko/string"
+
+func test_comparisons() -> int32 {
+    std::String a
+    a = "abc"
+    std::String b
+    b = "abd"
+    std::String c
+    c = "abc"
+    std::String p
+    p = "ab"
+    std::String e1
+    std::String e2
+
+    print(a == c)
+    print(a != b)
+    print(a < b)
+    print(a > b)
+    print(a <= c)
+    print(a >= c)
+    print(p < a)
+    print(a > p)
+    print(e1 == e2)
+    print(e1 < a)
+    print(a > e1)
+    print(b < a)
+    print(b > a)
+
+    a.uninit()
+    b.uninit()
+    c.uninit()
+    p.uninit()
+    e1.uninit()
+    e2.uninit()
+    return 0
+}
+
+func main() -> int32 {
+    test_from_to();
+    test_reserve();
+    test_utf8();
+    test_find_count();
+    test_from_integer();
+    test_slice_edit();
+    test_split_join();
+    test_to_integer();
+    test_assign_append_multiply();
+    test_comparisons();
+    return 0;
+}

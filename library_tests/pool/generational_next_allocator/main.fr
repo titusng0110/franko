@@ -1,0 +1,483 @@
+// ============================================================
+// LIBRARY TEST (pool/gen_next): capacity
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: capacity() follows init(C) and grow(new_c)
+//   failure paths: grow to the same size and grow smaller both
+//     return -1 without changing capacity, and capacity() is 0
+//     before init and after uninit
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func test_capacity() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.capacity());
+    print(a.init(3));
+    print(a.capacity());
+    print(a.grow(7));
+    print(a.capacity());
+    print(a.grow(7));
+    print(a.capacity());
+    print(a.grow(2));
+    print(a.capacity());
+    print(a.uninit());
+    print(a.capacity());
+    print(a.init(1));
+    print(a.capacity());
+    print(a.uninit());
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): exist
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: exist(idx) returns 1 exactly while the slot is
+//     live (0 before allocation, 1 after new_index, 0 after
+//     free_index)
+//   failure paths: exist on an out-of-range index returns 0 and
+//     exist before init or after uninit returns 0
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_1((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_exist() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.exist(0));
+    print(a.init(2));
+    print(a.exist(0));
+    print(a.exist(5));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    print(a.exist(i));
+    print(a.exist(1));
+    print(a.free_index(i));
+    print(a.exist(i));
+    print(a.uninit());
+    print(a.exist(0));
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): free_index
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: free_index(idx) returns 0 and the slot comes
+//     back from new_index()
+//   failure paths: free_index before init returns -1, a double
+//     release returns -1, a never-allocated index returns -1, an
+//     out-of-range index returns -1, and release after uninit
+//     returns -1
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_2((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_free_index() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.free_index(0));
+    print(a.init(3));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    print(a.free_index(i));
+    print(a.free_index(i));
+    print(a.free_index(2));
+    print(a.free_index(9));
+    print(a.used());
+    print(a.exist(i));
+    show_new_2(a.new_index());
+    print(a.used());
+    print(a.uninit());
+    print(a.free_index(0));
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): generation
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: generation(idx) starts at 0 and is bumped by
+//     every free_index; the counter follows the slot across
+//     reuse, so (index, generation) identifies one allocation
+//   failure paths: generation before init or after uninit returns
+//     err -1, an out-of-range index returns err -1, and
+//     a failed double release leaves the counter unchanged
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_3((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+func show_gen_3((uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.gen)
+    }
+}
+
+func test_generation() -> int32 {
+    std::GenerationalNextAllocator a;
+    show_gen_3(a.generation(0));
+    print(a.init(3));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    show_gen_3(a.generation(i));
+    show_gen_3(a.generation(2));
+    show_gen_3(a.generation(9));
+    print(a.free_index(i));
+    show_gen_3(a.generation(i));
+    print(a.free_index(i));
+    show_gen_3(a.generation(i));
+    (uint32 idx, uint32 gen, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
+    print(j);
+    show_gen_3(a.generation(j));
+    print(a.free_index(j));
+    show_gen_3(a.generation(j));
+    print(a.uninit());
+    show_gen_3(a.generation(0));
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): grow
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: grow(new_c) returns 0 for new_c > capacity, old
+//     slots keep their indices, new slots are allocatable
+//   failure paths: grow before init returns -1, grow to the same
+//     capacity returns -1, grow smaller returns -1, and an
+//     exhausted grown pool reports err -1
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_4((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_grow() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.grow(8));
+    print(a.init(2));
+    print(a.grow(2));
+    print(a.grow(1));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    (uint32 idx, uint32 gen, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
+    print(a.grow(5));
+    print(a.capacity());
+    print(a.used());
+    print(a.exist(i));
+    print(a.exist(j));
+    show_new_4(a.new_index());
+    show_new_4(a.new_index());
+    show_new_4(a.new_index());
+    show_new_4(a.new_index());
+    print(a.grow(6));
+    show_new_4(a.new_index());
+    print(a.uninit());
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): init
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: init(C) returns 0, sets capacity C, leaves used 0
+//   failure paths: init(0) returns -1 (zero capacity), a second
+//     init on a live pool returns -1, and init after uninit works
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func test_init() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.used());
+    print(a.capacity());
+    print(a.init(0));
+    print(a.init(4));
+    print(a.init(8));
+    print(a.capacity());
+    print(a.used());
+    print(a.uninit());
+    print(a.init(2));
+    print(a.capacity());
+    print(a.uninit());
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): new_index
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: new_index() returns 0, 1, 2 ... and reuses a
+//     released slot
+//   failure paths: new_index() before init returns err -1;
+//     an exhausted pool returns err -1, and a pool
+//     that ran out again after reuse returns err -1
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_6((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_new_index() -> int32 {
+    std::GenerationalNextAllocator a;
+    show_new_6(a.new_index());
+    print(a.init(3));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    (uint32 idx, uint32 gen, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
+    (uint32 idx, uint32 gen, int32 err) k_result = a.new_index();
+    uint32 k = k_result.idx;
+    print(i, " "); print(j, " "); print(k);
+    print(i_result.gen, " "); print(j_result.gen, " "); print(k_result.gen);
+    show_new_6(a.new_index());
+    print(a.used());
+    print(a.free_index(j));
+    (uint32 idx, uint32 gen, int32 err) reused = a.new_index();
+    print(reused.idx);
+    print(reused.gen);
+    show_new_6(a.new_index());
+    print(a.used());
+    print(a.uninit());
+    show_new_6(a.new_index());
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): uninit
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: uninit() returns 0 and resets capacity/used
+//   failure paths: uninit() before init returns -1, a second
+//     uninit returns -1, and slots are gone after teardown
+//     (exist 0, new_index err -1)
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_7((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_uninit() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.uninit());
+    print(a.init(3));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    print(a.used());
+    print(a.uninit());
+    print(a.used());
+    print(a.capacity());
+    print(a.exist(i));
+    show_new_7(a.new_index());
+    print(a.init(1));
+    print(a.uninit());
+    print(a.uninit());
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): used
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: used() grows with new_index and shrinks with
+//     free_index
+//   failure path: used() reports 0 on an uninitialized pool and
+//     after uninit
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_8((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_used() -> int32 {
+    std::GenerationalNextAllocator a;
+    print(a.used());
+    print(a.init(4));
+    print(a.used());
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    (uint32 idx, uint32 gen, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
+    print(a.used());
+    print(a.free_index(i));
+    print(a.used());
+    print(a.free_index(j));
+    print(a.used());
+    show_new_8(a.new_index());
+    print(a.used());
+    print(a.uninit());
+    print(a.used());
+    return 0
+}
+
+// ============================================================
+// LIBRARY TEST (pool/gen_next): write_active_indices
+// ============================================================
+// Allocator: std::GenerationalNextAllocator
+//
+// Covers:
+//   success path: write_active_indices(out) returns 0 and fills
+//     out with the live indices (ascending index order)
+//   failure paths: an uninitialized pool returns -1, a buffer
+//     shorter than used() returns -1, a null buffer returns -1,
+//     and an uninitialized pool after uninit returns -1
+//
+// Every line below is asserted exactly: status codes are int32
+// 0 (success) / -1 (failure), and failures are reported by err = -1.
+// ============================================================
+
+import "franko/pool"
+import "franko/io"
+
+func show_new_9((uint32 idx, uint32 gen, int32 err) result) -> void {
+    if (result.err != 0) {
+        print(result.err)
+    } else {
+        print(result.idx)
+    }
+}
+
+func test_write_active_indices() -> int32 {
+    std::GenerationalNextAllocator a;
+    [uint32] out;
+    out.init(4);
+    print(a.write_active_indices(getptr(out)));
+    print(a.init(4));
+    (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
+    uint32 i = i_result.idx;
+    (uint32 idx, uint32 gen, int32 err) j_result = a.new_index();
+    uint32 j = j_result.idx;
+    (uint32 idx, uint32 gen, int32 err) k_result = a.new_index();
+    uint32 k = k_result.idx;
+    print(a.write_active_indices(getptr(out)));
+    print(out[0], " "); print(out[1], " "); print(out[2]);
+    print(a.free_index(i));
+    print(a.write_active_indices(getptr(out)));
+    print(out[0], " "); print(out[1]);
+    [uint32] small;
+    small.init(1);
+    print(a.write_active_indices(getptr(small)));
+    print(a.write_active_indices(null));
+    print(a.uninit());
+    print(a.write_active_indices(getptr(out)));
+    out.uninit();
+    small.uninit();
+    return 0
+}
+
+func main() -> int32 {
+    test_capacity();
+    test_exist();
+    test_free_index();
+    test_generation();
+    test_grow();
+    test_init();
+    test_new_index();
+    test_uninit();
+    test_used();
+    test_write_active_indices();
+    return 0;
+}
