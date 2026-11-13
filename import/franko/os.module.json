@@ -7,8 +7,12 @@
   "functions": [
     {"namespace": "os::posix", "name": "read"},
     {"namespace": "os::posix", "name": "write"},
+    {"namespace": "os::posix", "name": "clock_gettime"},
     {"namespace": "os::win32", "name": "GetStdHandle"},
     {"namespace": "os::win32", "name": "ReadFile"},
-    {"namespace": "os::win32", "name": "WriteFile"}
+    {"namespace": "os::win32", "name": "WriteFile"},
+    {"namespace": "os::win32", "name": "QueryPerformanceCounter"},
+    {"namespace": "os::win32", "name": "QueryPerformanceFrequency"},
+    {"namespace": "os::win32", "name": "GetSystemTimePreciseAsFileTime"}
   ]
 }

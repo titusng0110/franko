@@ -20,6 +20,7 @@
 //       redblack_cpp_pool.cpp -o redblack_cpp_pool_O3.out
 //   add -march=native for the native builds.
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -449,6 +450,7 @@ int main() {
         return 1;
     }
 
+    const auto bench_start = std::chrono::steady_clock::now();
     for (uint32_t i = 0; i < SIZE; ++i) {
         rbInsert(keyAt(static_cast<int32_t>(i)));
     }
@@ -467,8 +469,13 @@ int main() {
         root = rbDelete(root, keyAt(static_cast<int32_t>(i)));
     }
 
+    const auto bench_end = std::chrono::steady_clock::now();
+    const auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                bench_end - bench_start)
+                                .count();
     std::printf("empty=\n%d\n", root == NIL ? 1 : 0);
     std::printf("used=\n%u\n", pool.used);
+    std::printf("elapsed_ns %lld\n", static_cast<long long>(elapsed_ns));
 
     std::vector<Node>().swap(nodes);
     pool.uninit();

@@ -3,6 +3,7 @@
 // index-sorting version, but swaps int128 values directly.
 
 import "franko/stdio"
+import "franko/time"
 
 view<[uint32, 128]> RANDOM_PIVOTS = [
     0x5694C774, 0xBCF2DC90, 0xC22D6ECF, 0x82DF89C3, 0x2E5D3BB4, 0x11754AC0, 0x68E420EE, 0xD2794F96,
@@ -1070,6 +1071,7 @@ func main(view<[[byte]]> args) -> int32 {
     byte sorted_ok = 1
     uint64 total_checksum = 0
     uint32 rep = 0
+    int64 sort_total_ns = 0
     while (rep < repeat) {
         uint64 state = 0x9E3779B97F4A7C15
         for (uint32 i = 0; i < count; i++) {
@@ -1088,6 +1090,7 @@ func main(view<[[byte]]> args) -> int32 {
             }
         }
 
+        int64 sort_start_ns = std::mono_time()
         byte already_sorted = is_sorted(getview(values), 0, count - 1)
         if (already_sorted == 0) {
             use_dnf = 0
@@ -1120,6 +1123,8 @@ func main(view<[[byte]]> args) -> int32 {
             }
         }
 
+        sort_total_ns = sort_total_ns + (std::mono_time() - sort_start_ns)
+
         uint64 checksum = 0
         for (uint32 i = 0; i < count; i++) {
             if (i != 0 && values[i] < values[i - 1]) {
@@ -1131,6 +1136,8 @@ func main(view<[[byte]]> args) -> int32 {
         rep = rep + 1
     }
 
+    int64 elapsed_ns = sort_total_ns
+
     stdout("sorted ", end = null)
     if (sorted_ok != 0) {
         stdout("ok")
@@ -1139,6 +1146,8 @@ func main(view<[[byte]]> args) -> int32 {
     }
     stdout("checksum ", end = null)
     stdout(total_checksum)
+    stdout("elapsed_ns ", end = null)
+    stdout(elapsed_ns)
 
     values.uninit()
     return 0

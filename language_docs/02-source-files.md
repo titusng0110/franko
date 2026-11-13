@@ -107,6 +107,7 @@ those standard modules:
 import "franko/stdio"
 import "franko/os"
 import "franko/pool"
+import "franko/time"
 ```
 
 User code must not add files under the compiler's `import/franko/` directory

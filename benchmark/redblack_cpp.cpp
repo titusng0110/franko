@@ -14,6 +14,7 @@
 //   g++ -O1 -std=c++14 -static-libstdc++ -static-libgcc redblack_cpp.cpp -o redblack_cpp_O1.out
 //   g++ -O3 -std=c++14 -static-libstdc++ -static-libgcc redblack_cpp.cpp -o redblack_cpp_O3.out
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <set>
@@ -29,6 +30,7 @@ static int32_t keyAt(int32_t i) {
 
 int main() {
     std::set<int32_t> tree;
+    const auto bench_start = std::chrono::steady_clock::now();
 
     for (uint32_t i = 0; i < SIZE; ++i) {
         tree.insert(keyAt(static_cast<int32_t>(i)));
@@ -47,6 +49,10 @@ int main() {
         ++count;
         sum += k;
     }
+    const auto bench_end = std::chrono::steady_clock::now();
+    const auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                bench_end - bench_start)
+                                .count();
     printf("count=\n%u\n", count);
     printf("sum=\n%lld\n", static_cast<long long>(sum));
     printf("bad=\n%d\n", bad);
@@ -56,5 +62,6 @@ int main() {
     }
     printf("empty=\n%d\n", tree.empty() ? 1 : 0);
     printf("size=\n%u\n", static_cast<unsigned>(tree.size()));
+    printf("elapsed_ns %lld\n", static_cast<long long>(elapsed_ns));
     return 0;
 }

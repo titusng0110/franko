@@ -4,12 +4,13 @@
 // slot indices come from std::SparseSetAllocator. Insert is iterative CLRS
 // insertion; delete is CLRS deletion with fixup. An in-order audit walk
 // (order + count + sum + red-red + black-height) verifies the tree after
-// inserts. Timed externally by benchmark.py; stdout is a small
-// deterministic summary used to check that every build mode computes
-// the same result.
+// inserts. The workload is timed internally with std::mono_time();
+// stdout is a small deterministic summary used to check that every
+// build mode computes the same result.
 
 import "franko/pool"
 import "franko/stdio"
+import "franko/time"
 
 const uint32 SIZE = 2000000
 
@@ -413,6 +414,7 @@ func main() -> int32 {
     nodes.init(SIZE)
     pool.init(SIZE)
 
+    int64 bench_start = std::mono_time()
     for (uint32 i = 0; i < SIZE; i = i + 1) {
         rbInsert(keyAt(unsafe_cast<int32>(i)))
     }
@@ -431,6 +433,9 @@ func main() -> int32 {
         root = rbDelete(root, keyAt(unsafe_cast<int32>(i)))
     }
 
+    int64 elapsed_ns = std::mono_time() - bench_start
+    stdout("elapsed_ns ", end = null)
+    stdout(elapsed_ns)
     stdout("empty=")
     if (root == NIL) {
         stdout(1)

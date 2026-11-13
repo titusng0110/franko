@@ -4496,16 +4496,16 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
 # Test suites (same order as CI):
 uv run python programs/run_programs.py
 uv run python language_tests/run_language_tests.py
-uv run python language_tests/run_omax_smoke.py
 uv run python library_tests/run_library_tests.py
 ```
 
-The test suites run only the default build mode: the ASan debug build on
+The test suites run the default build mode: the ASan debug build on
 Linux/macOS and on Windows through MSVC cl.exe (found with vswhere; the
 matching vcvars64.bat or vcvarsarm64.bat loads the environment). The Windows
 g++/clang++ fallback does not support ASan, so its default is the optimized
-`-O` build. `compile.py -O`/`-Omax` are normal user builds; `-Omax` has its
-own smoke runner. Windows ARM64 uses JDK 23 and needs
+`-O` build. `programs/run_programs.py` additionally builds and runs every
+program with `-Omax` and checks the same expected output. `compile.py
+-O`/`-Omax` are normal user builds. Windows ARM64 uses JDK 23 and needs
 `FRANKO_JAVA_RELEASE=23` (CI sets it).
 
 - Success fixtures: compiled binary must exit 0 and stdout must exactly match
@@ -4518,11 +4518,10 @@ own smoke runner. Windows ARM64 uses JDK 23 and needs
   struct's methods share one success fixture, and only `error/panic` is a
   runtime fixture. There are no library failure fixtures; a library that fails
   to compile is a compiler bug.
-- `-Omax` is intentionally outside the normal default-mode run (out-of-range
-  access is undefined behavior there); `language_tests/run_omax_smoke.py`
-  compiles and runs representative success fixtures with `-Omax`, pins the
-  bare static-index emission, and pins the generated always-inline/no-inline
-  prefixes.
+- `-Omax` programs are compiled and run by `programs/run_programs.py` in the
+  same pass as the default builds; out-of-range access remains undefined
+  behavior there. The always-inline/no-inline prefix emission is covered by
+  the normal program builds.
 - `--jemalloc` is only accepted on Linux hosts; the test suites use the system
   allocator.
 - `build/` and `.antlr/` are generated and gitignored; never edit them.

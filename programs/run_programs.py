@@ -3,10 +3,10 @@
 
     uv run python programs/run_programs.py
 
-Compiles every programs/*.fr, runs it, and compares stdout with the
-matching .expected file. A program may provide .args and .stdin files.
-Generated C++ is kept after a passing case; binaries and captured output
-are removed.
+Compiles every programs/*.fr in both the default build mode and -Omax,
+runs both binaries, and compares stdout with the matching .expected file.
+A program may provide .args and .stdin files. Generated C++ is kept for
+the default build; binaries and captured output are removed.
 """
 
 import sys
@@ -40,6 +40,15 @@ def main() -> int:
             bin_name=".testbin",
             capture=False,
             keep_cpp=True,
+        )
+        run_and_record(
+            results,
+            src,
+            mode="omax",
+            tag=".omax",
+            bin_name=".omaxbin",
+            capture=False,
+            keep_cpp=False,
         )
 
     return results.finish("✅ All programs passed.")

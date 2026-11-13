@@ -1,5 +1,6 @@
 // Hand-written C++ port of the in-place Franko quicksort (10M benchmark).
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -802,6 +803,7 @@ int main(int argc, char** argv) {
 
     bool sorted_ok = true;
     u64 total_checksum = 0;
+    std::chrono::nanoseconds sort_total{0};
     for (u32 rep = 0; rep < repeat; ++rep) {
         u64 state = 0x9E3779B97F4A7C15ULL;
         for (u32 i = 0; i < count; ++i) {
@@ -820,6 +822,7 @@ int main(int argc, char** argv) {
             }
         }
 
+        const auto sort_start = std::chrono::steady_clock::now();
         bool already_sorted = is_sorted(values.data(), 0, count - 1);
         if (!already_sorted) {
             pivot_cursor = 0;
@@ -851,6 +854,9 @@ int main(int argc, char** argv) {
             }
         }
 
+        sort_total += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::steady_clock::now() - sort_start);
+
         u64 checksum = 0;
         for (u32 i = 0; i < count; ++i) {
             if (i != 0 && values[i] < values[i - 1]) {
@@ -861,7 +867,9 @@ int main(int argc, char** argv) {
         total_checksum += checksum;
     }
 
+    const auto elapsed_ns = sort_total.count();
     std::printf("sorted %s\nchecksum %llu\n", sorted_ok ? "ok" : "FAILED",
                 static_cast<unsigned long long>(total_checksum));
+    std::printf("elapsed_ns %lld\n", static_cast<long long>(elapsed_ns));
     return 0;
 }

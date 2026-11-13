@@ -1,5 +1,6 @@
 // Plain C++ std::sort reference for the 10M quicksort benchmark.
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
 
     bool sorted_ok = true;
     std::uint64_t total_checksum = 0;
+    std::chrono::nanoseconds sort_total{0};
     for (std::uint32_t rep = 0; rep < repeat; ++rep) {
         std::uint64_t state = 0x9E3779B97F4A7C15ULL;
         for (std::uint32_t i = 0; i < count; ++i) {
@@ -73,7 +75,10 @@ int main(int argc, char** argv) {
             }
         }
 
+        const auto sort_start = std::chrono::steady_clock::now();
         std::sort(values.begin(), values.end());
+        sort_total += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::steady_clock::now() - sort_start);
 
         std::uint64_t checksum = 0;
         for (std::uint32_t i = 0; i < count; ++i) {
@@ -87,5 +92,6 @@ int main(int argc, char** argv) {
 
     std::printf("sorted %s\nchecksum %llu\n", sorted_ok ? "ok" : "FAILED",
                 static_cast<unsigned long long>(total_checksum));
+    std::printf("elapsed_ns %lld\n", static_cast<long long>(sort_total.count()));
     return 0;
 }

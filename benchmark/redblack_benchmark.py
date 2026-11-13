@@ -22,8 +22,10 @@ from _bench_common import (
     BENCH,
     build_cpp,
     build_franko,
+    elapsed_seconds,
     pin_cpu,
-    run_timed,
+    run_capture,
+    strip_elapsed,
     summarize,
 )
 
@@ -203,7 +205,7 @@ def main() -> int:
 
         for label in labels:
             print(f"[{label}] warm-up", flush=True)
-            run_timed(binaries[label])
+            run_capture(binaries[label])
 
         times: dict[str, list[float]] = {label: [] for label in labels}
         outputs: dict[str, str] = {}
@@ -211,7 +213,8 @@ def main() -> int:
             if not args.no_shuffle:
                 rng.shuffle(run_order)
             for label in run_order:
-                elapsed, out = run_timed(binaries[label])
+                out = run_capture(binaries[label])
+                elapsed = elapsed_seconds(out)
                 times[label].append(elapsed)
                 outputs[label] = out
                 print(f"[{label}] rep {rep + 1}/{args.reps}: "
@@ -220,7 +223,7 @@ def main() -> int:
         print()
         print("program outputs (must agree within each group):")
         group_outputs = {
-            group: {outputs[label] for label in REPORT_ORDER[group]}
+            group: {strip_elapsed(outputs[label]) for label in REPORT_ORDER[group]}
             for group in REPORT_ORDER
         }
         for group, outs in group_outputs.items():

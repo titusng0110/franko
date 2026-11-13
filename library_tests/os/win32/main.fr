@@ -1,8 +1,8 @@
 // ============================================================
 // LIBRARY TEST: franko/os — Win32 free functions
 // ============================================================
-// Covers os::win32::GetStdHandle, ReadFile, WriteFile, and the stdio
-// handle constants. Runs only on Windows targets.
+// Covers os::win32::GetStdHandle, ReadFile, WriteFile, the timing
+// primitives, and the stdio handle constants. Runs only on Windows targets.
 // ============================================================
 
 import "franko/os"
@@ -38,6 +38,27 @@ func main() -> int32 {
     );
     stdout(write_ok);
     stdout(written_count);
+
+    int64 counter = 0;
+    int64 frequency = 0;
+    int32 counter_ok = os::win32::QueryPerformanceCounter(
+            getmview(counter)
+    );
+    int32 frequency_ok = os::win32::QueryPerformanceFrequency(
+            getmview(frequency)
+    );
+    uint64 filetime = os::win32::GetSystemTimePreciseAsFileTime();
+    stdout(counter_ok);
+    stdout(frequency_ok);
+    if (counter > 0) {
+        stdout(1);
+    }
+    if (frequency > 0) {
+        stdout(2);
+    }
+    if (filetime > 116444736000000000) {
+        stdout(3);
+    }
 
     buf.uninit();
     return 0;

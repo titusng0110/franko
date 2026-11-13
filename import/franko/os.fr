@@ -38,12 +38,32 @@ namespace os {
             func WriteFile(const uint64 hFile, const view<[byte]> buf, const uint32 count, const mview<uint32> bytesWritten) -> int32 {
                 return 0
             }
+
+            // Timing primitives, bridged by import/franko/os.ffi.cpp.
+            // QueryPerformanceCounter/Frequency are the monotonic,
+            // nanosecond-capable pair; GetSystemTimePreciseAsFileTime is
+            // wall-clock UTC in 100-nanosecond intervals since 1601.
+            func QueryPerformanceCounter(const mview<int64> counter) -> int32 {
+                return 0
+            }
+            func QueryPerformanceFrequency(const mview<int64> frequency) -> int32 {
+                return 0
+            }
+            func GetSystemTimePreciseAsFileTime() -> uint64 {
+                return 0
+            }
         }
     } #else #if (#IS_LINUX || #IS_MACOS) {
         namespace posix {
             const int32 STDIN_FILENO = 0
             const int32 STDOUT_FILENO = 1
             const int32 STDERR_FILENO = 2
+            const int32 CLOCK_REALTIME = 0
+            #if (#IS_LINUX) {
+                const int32 CLOCK_MONOTONIC = 1
+            } #else {
+                const int32 CLOCK_MONOTONIC = 6
+            }
 
             // FFI intrinsics. When this module is used, the compiler
             // replaces the stubs with the bridge definitions from
@@ -53,6 +73,9 @@ namespace os {
                 return -1
             }
             func write(const int32 fd, const view<[byte]> buf, const uint64 count) -> int64 {
+                return -1
+            }
+            func clock_gettime(const int32 clock_id, const mview<int64> sec, const mview<int64> nanosec) -> int32 {
                 return -1
             }
         }

@@ -1,0 +1,34 @@
+// ============================================================
+// LIBRARY TEST (time/free_functions): time and mono_time
+// ============================================================
+// Uses the current clock, so the checks are range-based rather than
+// pinning an absolute timestamp.
+// ============================================================
+
+import "franko/stdio"
+import "franko/time"
+
+func main() -> int32 {
+    (int64 sec, int64 nanosec) now = std::time()
+    int64 mono1 = std::mono_time()
+    (int64 sec2, int64 nanosec2) later = std::time()
+    int64 mono2 = std::mono_time()
+
+    if (now.sec > 1700000000) {
+        stdout(1)
+    }
+    if (now.nanosec >= 0 && now.nanosec < 1000000000) {
+        stdout(2)
+    }
+    if (mono1 > 0) {
+        stdout(3)
+    }
+    if (mono2 >= mono1) {
+        stdout(4)
+    }
+    if (later.nanosec2 >= 0 && later.nanosec2 < 1000000000) {
+        stdout(5)
+    }
+
+    return 0
+}

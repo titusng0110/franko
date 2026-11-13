@@ -69,11 +69,5 @@ benchmark/**/*.compile.log
 *.diagnostic.json
 *.ast/
 
-# -Omax smoke artifacts (language_tests/run_omax_smoke.py).
-language_tests/**/*.omax.cpp
-language_tests/**/*.omax.bin
-language_tests/**/*.omax.actual
-language_tests/**/*.omax.compile.log
-
 # Hand-written FFI bridge sources are fixtures, not generated C++.
 !**/*.ffi.cpp

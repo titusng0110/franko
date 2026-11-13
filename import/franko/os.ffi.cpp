@@ -49,6 +49,10 @@
 //     declares the win32 namespace only for Windows, so this block is
 //     never inserted into a POSIX build. lpOverlapped is dropped: the
 //     bridge always passes NULL (synchronous I/O).
+//   - os::posix::clock_gettime and the os::win32 timing trio are thin
+//     wrappers over the platform clock primitives: clock_gettime on
+//     POSIX, and QueryPerformanceCounter/QueryPerformanceFrequency plus
+//     GetSystemTimePreciseAsFileTime on Windows.
 //   - Both FFI families check the array bound first: count > length aborts
 //     via franko_panic, so the FFI cannot corrupt memory. A null or
 //     uninitialized buffer returns the stub failure value instead of
@@ -66,6 +70,7 @@
 #  include <windows.h>
 #else
 #  include <unistd.h>
+#  include <time.h>
 #endif
 // @@end
 
@@ -124,6 +129,27 @@ int64_t FUNC_write_7c35a12f(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_
         franko_panic("os::posix::write: count exceeds buffer length");
     }
     return static_cast<int64_t>(::write(PARAM_fd, buffer, static_cast<size_t>(PARAM_count)));
+}
+}
+}
+// @@end
+
+// @@os::posix::clock_gettime
+namespace NS_os {
+namespace NS_posix {
+int32_t FUNC_clock_gettime_de6e7c37(int32_t PARAM_clock_id, Franko_Thin_Pointer<int64_t> PARAM_sec, Franko_Thin_Pointer<int64_t> PARAM_nanosec)
+{
+    struct timespec ts;
+    if (::clock_gettime(static_cast<clockid_t>(PARAM_clock_id), &ts) != 0) {
+        return -1;
+    }
+    if (PARAM_sec.data != nullptr) {
+        *PARAM_sec.data = static_cast<int64_t>(ts.tv_sec);
+    }
+    if (PARAM_nanosec.data != nullptr) {
+        *PARAM_nanosec.data = static_cast<int64_t>(ts.tv_nsec);
+    }
+    return 0;
 }
 }
 }
@@ -206,6 +232,58 @@ int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t
         *PARAM_bytesWritten.data = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
+}
+}
+}
+// @@end
+
+// @@os::win32::QueryPerformanceCounter
+namespace NS_os {
+namespace NS_win32 {
+int32_t FUNC_QueryPerformanceCounter_b452b59a(Franko_Thin_Pointer<int64_t> PARAM_counter)
+{
+    LARGE_INTEGER value;
+    if (!::QueryPerformanceCounter(&value)) {
+        return 0;
+    }
+    if (PARAM_counter.data != nullptr) {
+        *PARAM_counter.data = static_cast<int64_t>(value.QuadPart);
+    }
+    return 1;
+}
+}
+}
+// @@end
+
+// @@os::win32::QueryPerformanceFrequency
+namespace NS_os {
+namespace NS_win32 {
+int32_t FUNC_QueryPerformanceFrequency_b452b59a(Franko_Thin_Pointer<int64_t> PARAM_frequency)
+{
+    LARGE_INTEGER value;
+    if (!::QueryPerformanceFrequency(&value)) {
+        return 0;
+    }
+    if (PARAM_frequency.data != nullptr) {
+        *PARAM_frequency.data = static_cast<int64_t>(value.QuadPart);
+    }
+    return 1;
+}
+}
+}
+// @@end
+
+// @@os::win32::GetSystemTimePreciseAsFileTime
+namespace NS_os {
+namespace NS_win32 {
+uint64_t FUNC_GetSystemTimePreciseAsFileTime_16e9a907()
+{
+    FILETIME ft;
+    ::GetSystemTimePreciseAsFileTime(&ft);
+    ULARGE_INTEGER value;
+    value.LowPart = ft.dwLowDateTime;
+    value.HighPart = ft.dwHighDateTime;
+    return static_cast<uint64_t>(value.QuadPart);
 }
 }
 }

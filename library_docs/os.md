@@ -100,6 +100,8 @@ for Windows too.
 int32 STDIN_FILENO = 0
 int32 STDOUT_FILENO = 1
 int32 STDERR_FILENO = 2
+int32 CLOCK_REALTIME = 0
+int32 CLOCK_MONOTONIC = 1    // 6 on macOS
 ```
 
 ### os::posix::read
@@ -141,6 +143,19 @@ func main() -> int32 {
 ```
 
 Note: `stdout` (from `franko/stdio`) goes through the same OS bridge as raw fd writes, so interleaved output appears in program order.
+
+### os::posix::clock_gettime
+
+```franko
+func clock_gettime(int32 clock_id, mview<int64> sec, mview<int64> nanosec) -> int32
+```
+
+Reads the selected POSIX clock into `sec` and `nanosec` through the
+out-parameters. Returns `0` on success and `-1` on error. Pass
+`os::posix::CLOCK_REALTIME` for wall-clock Unix time, or
+`os::posix::CLOCK_MONOTONIC` for elapsed-time measurements. The bridge calls
+`::clock_gettime` directly; the second and nanosecond fields are copied
+from the native `struct timespec`.
 
 ## os::win32
 
@@ -207,16 +222,52 @@ func main() -> int32 {
 }
 ```
 
+## Timing primitives
+
+`os::win32` exposes the raw Windows performance and wall-clock counters.
+These are thin bridges, not the higher-level `franko/time` API.
+
+### os::win32::QueryPerformanceCounter
+
+```franko
+func QueryPerformanceCounter(mview<int64> counter) -> int32
+```
+
+Reads the current value of the high-resolution performance counter into
+`counter`. Returns nonzero on success and `0` on failure. The counter is
+monotonic; convert it to nanoseconds with
+`os::win32::QueryPerformanceFrequency`.
+
+### os::win32::QueryPerformanceFrequency
+
+```franko
+func QueryPerformanceFrequency(mview<int64> frequency) -> int32
+```
+
+Reads the performance-counter frequency in counts per second into
+`frequency`. Returns nonzero on success and `0` on failure.
+
+### os::win32::GetSystemTimePreciseAsFileTime
+
+```franko
+func GetSystemTimePreciseAsFileTime() -> uint64
+```
+
+Returns the current UTC wall-clock time as a Windows `FILETIME` value:
+100-nanosecond intervals since 1601-01-01 UTC. The bridge calls
+`::GetSystemTimePreciseAsFileTime` and combines the low and high `DWORD`
+halves. Use [`franko/time`](time.md) for Unix timestamps.
+
 ## Tests
 
 Module tests live in `library_tests/os/` (run with
 `uv run python library_tests/run_library_tests.py`):
 
 ```text
-library_tests/os/posix/  // read/write and fd constants (non-Windows)
-library_tests/os/win32/  // GetStdHandle/ReadFile/WriteFile and handle constants (Windows)
+library_tests/os/posix/  // read/write, clock_gettime, and fd constants (non-Windows)
+library_tests/os/win32/  // GetStdHandle/ReadFile/WriteFile, timing primitives, and handle constants (Windows)
 ```
 
-The POSIX fixture exercises `read`, `write`, and the stdio fd constants; the
-Win32 fixture exercises `GetStdHandle`, `ReadFile`, `WriteFile`, and the
-standard-handle constants.
+The POSIX fixture exercises `read`, `write`, `clock_gettime`, and the stdio fd
+constants; the Win32 fixture exercises `GetStdHandle`, `ReadFile`, `WriteFile`,
+the timing primitives, and the standard-handle constants.

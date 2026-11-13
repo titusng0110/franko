@@ -6,7 +6,6 @@ import os
 import statistics
 import subprocess
 import sys
-import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -124,8 +123,7 @@ def pin_cpu(cpu: int | None) -> None:
         print(f"warning: could not pin to CPU {cpu}: {exc}")
 
 
-def run_timed(binary: Path, args: Sequence[str] = ()) -> tuple[float, str]:
-    start = time.perf_counter()
+def run_capture(binary: Path, args: Sequence[str] = ()) -> str:
     completed = subprocess.run(
         [str(binary), *(str(arg) for arg in args)],
         cwd=ROOT,
@@ -133,13 +131,28 @@ def run_timed(binary: Path, args: Sequence[str] = ()) -> tuple[float, str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    elapsed = time.perf_counter() - start
     output = completed.stdout.decode("utf-8", errors="replace")
     if completed.returncode != 0:
         raise RuntimeError(
             f"{binary} exited {completed.returncode}:\n{output[-2000:]}"
         )
-    return elapsed, output
+    return output
+
+
+def elapsed_seconds(output: str) -> float:
+    for line in reversed(output.splitlines()):
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == "elapsed_ns":
+            return int(parts[1]) / 1_000_000_000.0
+    raise RuntimeError(f"missing elapsed_ns line in program output:\n{output[-2000:]}")
+
+
+def strip_elapsed(output: str) -> str:
+    lines = [
+        line for line in output.splitlines()
+        if not line.startswith("elapsed_ns ")
+    ]
+    return "\n".join(lines) + ("\n" if output.endswith("\n") else "")
 
 
 def summarize(times: list[float]) -> dict[str, float]:

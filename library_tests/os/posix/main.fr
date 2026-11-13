@@ -1,8 +1,8 @@
 // ============================================================
 // LIBRARY TEST: franko/os — POSIX free functions
 // ============================================================
-// Covers os::posix::read, os::posix::write, and the stdio fd
-// constants. Runs only on non-Windows targets.
+// Covers os::posix::read, os::posix::write, os::posix::clock_gettime,
+// and the stdio fd constants. Runs only on non-Windows targets.
 // ============================================================
 
 import "franko/os"
@@ -26,6 +26,33 @@ func main() -> int32 {
             3
     );
     stdout(written);
+
+    int64 sec = 0;
+    int64 nanosec = 0;
+    int32 clock_status = os::posix::clock_gettime(
+            os::posix::CLOCK_REALTIME,
+            getmview(sec),
+            getmview(nanosec)
+    );
+    stdout(clock_status);
+    if (sec > 1700000000) {
+        stdout(1);
+    }
+    if (nanosec >= 0 && nanosec < 1000000000) {
+        stdout(2);
+    }
+
+    int64 mono_sec = 0;
+    int64 mono_nanosec = 0;
+    int32 mono_status = os::posix::clock_gettime(
+            os::posix::CLOCK_MONOTONIC,
+            getmview(mono_sec),
+            getmview(mono_nanosec)
+    );
+    stdout(mono_status);
+    if (mono_sec >= 0 && mono_nanosec >= 0 && mono_nanosec < 1000000000) {
+        stdout(3);
+    }
 
     buf.uninit();
     return 0;

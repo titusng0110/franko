@@ -1,0 +1,98 @@
+// ============================================================
+// franko/time — wall-clock and monotonic time
+//
+// Import with:
+//
+//   import "franko/time"
+//
+//   (int64 sec, int64 nanosec) now = std::time()
+//   int64 mono = std::mono_time()
+//
+// `std::time()` returns the current Unix timestamp split into whole
+// seconds and nanoseconds. `std::mono_time()` returns a monotonic
+// nanosecond reading for measuring durations; only differences between
+// two `mono_time()` readings are meaningful.
+//
+// Platform mapping:
+//   - wall clock: clock_gettime(CLOCK_REALTIME) / GetSystemTimePreciseAsFileTime
+//   - monotonic: clock_gettime(CLOCK_MONOTONIC) / QueryPerformanceCounter
+// ============================================================
+
+import "./os"
+
+namespace std {
+    func time() -> (int64 sec, int64 nanosec) {
+        (int64 sec, int64 nanosec) result
+        result.sec = 0
+        result.nanosec = 0
+
+        #if (#IS_WINDOWS) {
+            // FILETIME counts 100-nanosecond intervals since
+            // 1601-01-01 UTC. The Unix epoch is 11644473600 seconds
+            // later; subtract it before splitting.
+            uint64 filetime = os::win32::GetSystemTimePreciseAsFileTime()
+            const uint64 UNIX_EPOCH_100NS = 116444736000000000
+            if (filetime < UNIX_EPOCH_100NS) {
+                return result
+            }
+            uint64 unix_100ns = filetime - UNIX_EPOCH_100NS
+            result.sec = unsafe_cast<int64>(unix_100ns / 10000000)
+            result.nanosec = unsafe_cast<int64>(
+                    (unix_100ns % 10000000) * 100)
+        } #else #if (#IS_LINUX || #IS_MACOS) {
+            int64 sec = 0
+            int64 nanosec = 0
+            if (os::posix::clock_gettime(
+                    os::posix::CLOCK_REALTIME,
+                    getmview(sec),
+                    getmview(nanosec)) != 0) {
+                return result
+            }
+            result.sec = sec
+            result.nanosec = nanosec
+        } #else {
+            #panic("franko/time supports only linux, windows, and macos targets")
+        }
+
+        return result
+    }
+
+    func mono_time() -> int64 {
+        int64 result = 0
+
+        #if (#IS_WINDOWS) {
+            int64 counter = 0
+            int64 frequency = 0
+            if (os::win32::QueryPerformanceCounter(getmview(counter)) == 0) {
+                return 0
+            }
+            if (os::win32::QueryPerformanceFrequency(getmview(frequency)) == 0) {
+                return 0
+            }
+            if (counter <= 0 || frequency <= 0) {
+                return 0
+            }
+            uint64 counts = unsafe_cast<uint64>(counter)
+            uint64 rate = unsafe_cast<uint64>(frequency)
+            uint64 seconds = counts / rate
+            uint64 remainder = counts % rate
+            result = unsafe_cast<int64>(
+                    seconds * 1000000000
+                    + (remainder * 1000000000) / rate)
+        } #else #if (#IS_LINUX || #IS_MACOS) {
+            int64 sec = 0
+            int64 nanosec = 0
+            if (os::posix::clock_gettime(
+                    os::posix::CLOCK_MONOTONIC,
+                    getmview(sec),
+                    getmview(nanosec)) != 0) {
+                return 0
+            }
+            result = sec * 1000000000 + nanosec
+        } #else {
+            #panic("franko/time supports only linux, windows, and macos targets")
+        }
+
+        return result
+    }
+}

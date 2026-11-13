@@ -212,11 +212,12 @@ Run the same suites as CI:
 ```bash
 uv run python programs/run_programs.py
 uv run python language_tests/run_language_tests.py
-uv run python language_tests/run_omax_smoke.py
 uv run python library_tests/run_library_tests.py
 ```
 
-The suites use the default build mode. On Windows, CI forces MSVC
+`run_programs.py` builds and runs every program in both the default and
+`-Omax` modes. The language and library suites use the default build mode.
+On Windows, CI forces MSVC
 `cl.exe` (`CXX=cl`) and verifies that the selected compiler family is
 MSVC; the MinGW fallback remains available for local builds but is not
 used by CI.
@@ -235,4 +236,5 @@ installation instructions.
 * **[Compiler Internals](compiler_docs.md)** — the compiler pipeline,
   C++14 generation, runtime, and build/test tooling.
 * **[Library Reference](library_docs/)** — `franko/error`, `franko/stdio`,
-  `franko/limit`, `franko/os`, `franko/pool`, and `franko/string`.
+  `franko/limit`, `franko/os`, `franko/pool`, `franko/string`, and
+  `franko/time`.

@@ -18,7 +18,15 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from _bench_common import BENCH, build_cpp, build_franko, pin_cpu, run_timed
+from _bench_common import (
+    BENCH,
+    build_cpp,
+    build_franko,
+    elapsed_seconds,
+    pin_cpu,
+    run_capture,
+    strip_elapsed,
+)
 
 DATASETS = (
     ("0-9", "3"),
@@ -154,7 +162,7 @@ def print_checksums(outputs, labels) -> None:
     for size, _count, _reps, _chunk in SIZES:
         for dataset, _arg in DATASETS:
             out = outputs[(size, dataset, labels[0])]
-            checksum = out.strip().splitlines()[-1].split()[-1]
+            checksum = strip_elapsed(out).strip().splitlines()[-1].split()[-1]
             print(f"| {size} | {dataset} | {checksum} |")
 
 
@@ -181,7 +189,7 @@ def main() -> int:
             for dataset, dataset_arg in DATASETS:
                 for label in labels:
                     print(f"[{size}][{dataset}][{label}] warm-up", flush=True)
-                    run_timed(binaries[label], [dataset_arg, count, "1"])
+                    run_capture(binaries[label], [dataset_arg, count, "1"])
 
         results: dict[tuple[str, str, str], list[float]] = {}
         chunk_totals: dict[tuple[str, str, str], float] = {}
@@ -194,9 +202,10 @@ def main() -> int:
                     rng.shuffle(order)
                 for label in order:
                     if chunk:
-                        elapsed, out = run_timed(
+                        out = run_capture(
                             binaries[label], [dataset_arg, count, str(reps)]
                         )
+                        elapsed = elapsed_seconds(out)
                         results[(size, dataset, label)] = [elapsed / reps]
                         chunk_totals[(size, dataset, label)] = elapsed
                         outputs[(size, dataset, label)] = out
@@ -206,9 +215,10 @@ def main() -> int:
                     else:
                         samples = []
                         for rep in range(reps):
-                            elapsed, out = run_timed(
+                            out = run_capture(
                                 binaries[label], [dataset_arg, count, "1"]
                             )
+                            elapsed = elapsed_seconds(out)
                             samples.append(elapsed)
                             outputs[(size, dataset, label)] = out
                             print(f"[{size}][{dataset}][{label}] rep "
@@ -218,7 +228,10 @@ def main() -> int:
         print()
         for size, _count, _reps, _chunk in SIZES:
             for dataset, _arg in DATASETS:
-                unique = {outputs[(size, dataset, label)] for label in labels}
+                unique = {
+                    strip_elapsed(outputs[(size, dataset, label)])
+                    for label in labels
+                }
                 print(f"[{size}][{dataset}] outputs agree: {len(unique) == 1}")
                 for out in sorted(unique):
                     print(f"  {out!r}")
