@@ -1,0 +1,22 @@
+import "franko/io"
+
+#generic struct Point<typename T> {
+    T value
+}
+
+#generic struct X<typename T, int32 N> {
+    T value
+    [T, N] items
+    int32 count = N
+}
+
+func main() -> int32 {
+    Point<int32> p = Point<int32> { value = 3 }
+    print(p.value)
+
+    X<int32, 5> a { value = 7 }
+    print(a.value)
+    print(a.count)
+    print(a.items.length())
+    return 0
+}

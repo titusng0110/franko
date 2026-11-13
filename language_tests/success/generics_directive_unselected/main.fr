@@ -1,0 +1,15 @@
+import "franko/io"
+
+#generic func choose<typename T>() -> int32 {
+    #if (#is_same_type(T, int32)) {
+        return 1
+    } #else {
+        #warning("unselected branch fired")
+        return 2
+    }
+}
+
+func main() -> int32 {
+    print(choose<int32>())
+    return 0
+}

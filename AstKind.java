@@ -43,6 +43,8 @@ enum AstKind {
     CAST("cast"),
     NULL("null"),
     QUALIFIED_NAME("qualifiedName"),
+    GENERIC_PARAM("genericParam"),
+    GENERIC_ARG("genericArg"),
     PRIMITIVE_TYPE("primitive"),
     VOID_TYPE("void"),
     DYNAMIC_ARRAY_TYPE("dynamicArray"),

@@ -156,6 +156,23 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                         current,
                         index
                 );
+            } else if (suffix.genericCallSuffix() != null) {
+                List<AstNode> genericArgs = genericArguments(
+                        suffix.genericCallSuffix().genericArgList());
+                List<AstNode> args = new ArrayList<>();
+
+                if (suffix.genericCallSuffix().argumentList() != null) {
+                    for (FrankoParser.ExprContext argCtx : suffix.genericCallSuffix().argumentList().expr()) {
+                        args.add(visit(argCtx));
+                    }
+                }
+
+                current = AstNode.call(
+                        merge(current.span, span(suffix)),
+                        current,
+                        args,
+                        genericArgs
+                );
             } else if (suffix.callSuffix() != null) {
                 List<AstNode> args = new ArrayList<>();
 
@@ -331,6 +348,58 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
         return segments;
     }
 
+    private List<AstNode> genericParameters(FrankoParser.GenericParamListContext ctx) {
+        List<AstNode> params = new ArrayList<>();
+
+        if (ctx == null) {
+            return params;
+        }
+
+        for (FrankoParser.GenericParamContext paramCtx : ctx.genericParam()) {
+            if (paramCtx.TYPENAME() != null) {
+                params.add(AstNode.genericParam(
+                        span(paramCtx),
+                        paramCtx.IDENTIFIER().getText(),
+                        null,
+                        true
+                ));
+            } else {
+                params.add(AstNode.genericParam(
+                        span(paramCtx),
+                        paramCtx.IDENTIFIER().getText(),
+                        visit(paramCtx.type()),
+                        false
+                ));
+            }
+        }
+
+        return params;
+    }
+
+    private List<AstNode> genericArguments(FrankoParser.GenericArgListContext ctx) {
+        List<AstNode> args = new ArrayList<>();
+
+        if (ctx == null) {
+            return args;
+        }
+
+        for (FrankoParser.GenericArgContext argCtx : ctx.genericArg()) {
+            if (argCtx.type() != null) {
+                args.add(AstNode.genericArgType(
+                        span(argCtx),
+                        visit(argCtx.type())
+                ));
+            } else {
+                args.add(AstNode.genericArgValue(
+                        span(argCtx),
+                        visit(argCtx.constExpr())
+                ));
+            }
+        }
+
+        return args;
+    }
+
     @Override
     public AstNode visitQualifiedStructType(FrankoParser.QualifiedStructTypeContext ctx) {
         List<String> segments = qualifiedNameSegments(ctx.qualifiedName());
@@ -340,7 +409,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
 
         String name = segments.get(segments.size() - 1);
 
-        return AstNode.structType(span(ctx), namespaceSegments, name);
+        return AstNode.structType(
+                span(ctx),
+                namespaceSegments,
+                name,
+                genericArguments(ctx.genericArgList())
+        );
     }
 
     @Override
@@ -381,7 +455,17 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
             }
         }
 
-        return AstNode.structDecl(span(ctx), name, fields, methods, nodes);
+        AstNode node = AstNode.structDecl(
+                span(ctx),
+                name,
+                fields,
+                methods,
+                nodes,
+                genericParameters(ctx.genericParamList())
+        );
+        node.genericModifier = ctx.HASH_GENERIC() != null;
+        node.isGeneric = node.genericModifier || !node.genericParams.isEmpty();
+        return node;
     }
 
     @Override
@@ -507,14 +591,18 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                     : InlineMode.NOINLINE;
         }
 
-        return AstNode.functionDecl(
+        AstNode node = AstNode.functionDecl(
                 span(ctx),
                 name,
                 parameters,
                 returnType,
                 body,
-                inlineMode
+                inlineMode,
+                genericParameters(ctx.genericParamList())
         );
+        node.genericModifier = ctx.HASH_GENERIC() != null;
+        node.isGeneric = node.genericModifier || !node.genericParams.isEmpty();
+        return node;
     }
 
     @Override
@@ -997,7 +1085,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
 
     @Override
     public AstNode visitStructType(FrankoParser.StructTypeContext ctx) {
-        return AstNode.structType(span(ctx), List.of(), ctx.IDENTIFIER().getText());
+        return AstNode.structType(
+                span(ctx),
+                List.of(),
+                ctx.IDENTIFIER().getText(),
+                genericArguments(ctx.genericArgList())
+        );
     }
 
     @Override
@@ -1045,13 +1138,15 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                 type = AstNode.structType(
                         span(nameCtx),
                         namespaceSegments,
-                        segments.get(segments.size() - 1)
+                        segments.get(segments.size() - 1),
+                        genericArguments(nameCtx.genericArgList())
                 );
             } else {
                 type = AstNode.structType(
                         span(nameCtx),
                         List.of(),
-                        nameCtx.IDENTIFIER().getText()
+                        nameCtx.IDENTIFIER().getText(),
+                        genericArguments(nameCtx.genericArgList())
                 );
             }
         } else {
@@ -1343,6 +1438,13 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
     public AstNode visitConstPrimary(FrankoParser.ConstPrimaryContext ctx) {
         if (ctx.integerLiteral() != null) {
             return visit(ctx.integerLiteral());
+        }
+
+        if (ctx.IDENTIFIER() != null) {
+            return AstNode.var(
+                    span(ctx.IDENTIFIER().getSymbol()),
+                    ctx.IDENTIFIER().getText()
+            );
         }
 
         if (ctx.constExpr() != null) {

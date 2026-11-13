@@ -17,14 +17,20 @@ public final class Frontend {
 
     private final JsonArtifacts artifacts;
     private final ModuleRegistry modules;
+    private final TargetInfo target;
 
     public Frontend(JsonArtifacts artifacts) {
-        this(artifacts, new ModuleRegistry());
+        this(artifacts, new ModuleRegistry(), null);
     }
 
     public Frontend(JsonArtifacts artifacts, ModuleRegistry modules) {
+        this(artifacts, modules, null);
+    }
+
+    public Frontend(JsonArtifacts artifacts, ModuleRegistry modules, TargetInfo target) {
         this.artifacts = artifacts;
         this.modules = modules == null ? new ModuleRegistry() : modules;
+        this.target = target;
     }
 
     public Result<AstDocument> parseFile(Path file) {
@@ -87,6 +93,10 @@ public final class Frontend {
             return new Result<>(null, diagnostics);
         }
 
+        if (target != null) {
+            root = EarlyTargetFolder.fold(root, target);
+        }
+
         AstDocument raw = new AstDocument(
                 AstPhase.RAW,
                 new SourceTable(),
@@ -118,7 +128,7 @@ public final class Frontend {
         }
 
         DiagnosticBag diagnostics = new DiagnosticBag();
-        Desugarer desugarer = new Desugarer(diagnostics);
+        PreGenericsDesugarer desugarer = new PreGenericsDesugarer(diagnostics);
         AstNode root = desugarer.desugar(raw.root);
 
         if (root == null || root.kind != AstKind.PROGRAM) {

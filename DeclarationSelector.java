@@ -54,7 +54,13 @@ final class DeclarationSelector {
     private final Map<AstNode, AstNode> selectedStructs =
             new IdentityHashMap<>();
 
+    private boolean preGenerics = false;
+
     DeclarationSelector(TargetInfo target) {
+        this(target, null);
+    }
+
+    DeclarationSelector(TargetInfo target, DeferredDirectives directives) {
         this.constEval = new ConstExpressionEvaluator(ctx);
 
         ExpressionLowering lowering = new ExpressionLowering(
@@ -62,7 +68,8 @@ final class DeclarationSelector {
                 constEval,
                 new ArrayLiteralHoister(),
                 new StaticStringHoister(),
-                target
+                target,
+                directives
         );
 
         this.analyzer = lowering.analyzer;
@@ -70,6 +77,19 @@ final class DeclarationSelector {
     }
 
     Selection select(AstNode program) {
+        return select(program, false);
+    }
+
+    Selection selectPreGenerics(AstNode program) {
+        return select(program, true);
+    }
+
+    Selection selectPostGenerics(AstNode program) {
+        return select(program, false);
+    }
+
+    private Selection select(AstNode program, boolean preGenericsMode) {
+        this.preGenerics = preGenericsMode;
         ctx.pushScope();
 
         Scope global = new Scope(null, null);
@@ -96,6 +116,9 @@ final class DeclarationSelector {
                 Scope child = namespaceFor(item, scope);
                 preRegisterShells(item.items, child);
             } else if (item.kind == AstKind.STRUCT_DECL) {
+                if (preGenerics && item.isGeneric) {
+                    continue;
+                }
                 registerStructShell(item, scope);
             } else if (item.kind == AstKind.ENUM_DECL) {
                 registerEnumShell(item, scope);
@@ -108,6 +131,9 @@ final class DeclarationSelector {
             if (item.kind == AstKind.NAMESPACE) {
                 preRegisterBodies(item.items, namespaceFor(item, scope));
             } else if (item.kind == AstKind.STRUCT_DECL) {
+                if (preGenerics && item.isGeneric) {
+                    continue;
+                }
                 StructSymbol symbol = registerStructShell(item, scope);
                 registerUnconditionalMembers(item, symbol);
             } else if (item.kind == AstKind.GLOBAL_VAR_DECL) {
@@ -301,7 +327,7 @@ final class DeclarationSelector {
                 return;
             }
 
-            SastType fieldType = typeResolver.analyzeNormalType(member.type);
+            SastType fieldType = resolveTypeForSelection(member.type);
             BigInteger defaultValue = null;
 
             if (member.value != null) {
@@ -320,13 +346,17 @@ final class DeclarationSelector {
         }
 
         if (member.kind == AstKind.FUNCTION_DECL) {
+            if (preGenerics && member.isGeneric) {
+                return;
+            }
+
             List<Symbol> params = new ArrayList<>();
 
             for (int i = 0; i < member.parameters.size(); i++) {
                 AstNode param = member.parameters.get(i);
                 params.add(Symbol.parameter(
                         param.name,
-                        typeResolver.analyzeNormalType(param.type),
+                        resolveTypeForSelection(param.type),
                         i,
                         param.isConst
                                 || (i == 0 && "self".equals(param.name))
@@ -337,7 +367,7 @@ final class DeclarationSelector {
                     symbol,
                     member.name,
                     params,
-                    typeResolver.analyzeReturnType(member.type),
+                    resolveReturnTypeForSelection(member.type),
                     false
             );
 
@@ -352,7 +382,7 @@ final class DeclarationSelector {
 
         ctx.setCurrentNamespace(scope.symbol);
 
-        SastType type = typeResolver.analyzeNormalType(node.type);
+        SastType type = resolveTypeForSelection(node.type);
         String namespaceName = scope.symbol == null
                 ? null
                 : scope.symbol.name;
@@ -365,6 +395,22 @@ final class DeclarationSelector {
         );
 
         ctx.declareGlobalVariable(symbol);
+    }
+
+    private SastType resolveTypeForSelection(AstNode type) {
+        if (preGenerics && GenericsResolver.containsGenericUse(type)) {
+            return SemanticTypeResolver.FALLBACK_TYPE;
+        }
+
+        return typeResolver.analyzeNormalType(type);
+    }
+
+    private SastType resolveReturnTypeForSelection(AstNode type) {
+        if (type != null && type.kind == AstKind.VOID_TYPE) {
+            return SemanticTypeResolver.VOID_TYPE;
+        }
+
+        return resolveTypeForSelection(type);
     }
 
     private void processStruct(AstNode node) {
@@ -414,6 +460,12 @@ final class DeclarationSelector {
     ) {
         for (AstNode item : items) {
             if (item.kind == AstKind.DECL_IF) {
+                if (preGenerics
+                        && GenericsResolver.containsGenericUse(item.condition)) {
+                    members.add(item);
+                    continue;
+                }
+
                 boolean condition = evaluateCondition(item.condition, scope);
                 List<AstNode> branch = condition
                         ? item.thenItems
@@ -505,6 +557,12 @@ final class DeclarationSelector {
 
         for (AstNode item : items) {
             if (item.kind == AstKind.DECL_IF) {
+                if (preGenerics
+                        && GenericsResolver.containsGenericUse(item.condition)) {
+                    out.add(item);
+                    continue;
+                }
+
                 boolean condition = evaluateCondition(item.condition, scope);
                 List<AstNode> branch = condition
                         ? item.thenItems
@@ -525,6 +583,14 @@ final class DeclarationSelector {
                 List<AstNode> selected = selectItems(item.items, child);
 
                 out.add(AstNode.namespace(item.span, item.name, selected));
+                continue;
+            }
+
+            if (item.isGeneric) {
+                if (preGenerics) {
+                    out.add(item);
+                }
+
                 continue;
             }
 

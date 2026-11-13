@@ -1,0 +1,29 @@
+import "franko/io"
+
+#generic struct Counter<typename T, int32 N> {
+    T value
+    int32 step = N
+
+    func add(ptr<Counter> self, T v) -> void {
+        $(self).value = $(self).value + v
+        return
+    }
+
+    func add(ptr<Counter> self, T a, T b) -> void {
+        $(self).value = $(self).value + a + b
+        return
+    }
+
+    func get(view<Counter> self) -> T {
+        return $(self).value
+    }
+}
+
+func main() -> int32 {
+    Counter<int32, 2> c
+    c.add(1)
+    c.add(2, 3)
+    print(c.get())
+    print(c.step)
+    return 0
+}

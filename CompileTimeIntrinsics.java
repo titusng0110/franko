@@ -34,18 +34,23 @@ final class CompileTimeIntrinsics {
     private final StaticStringHoister stringHoister;
     private final TargetInfo target;
     private final SemanticTypeResolver typeResolver;
+    private final DeferredDirectives directives;
 
     CompileTimeIntrinsics(
             SymbolTable ctx,
             TargetInfo target,
             StaticStringHoister stringHoister,
-            SemanticTypeResolver typeResolver
+            SemanticTypeResolver typeResolver,
+            DeferredDirectives directives
     ) {
         this.ctx = ctx;
         this.target = target;
         this.typeChecker = new TypeChecker(ctx.diagnostics());
         this.stringHoister = stringHoister;
         this.typeResolver = typeResolver;
+        this.directives = directives == null
+                ? new DeferredDirectives()
+                : directives;
     }
 
     SastNode analyzeCall(AstNode call) {
@@ -112,11 +117,11 @@ final class CompileTimeIntrinsics {
         }
 
         if ("panic".equals(name)) {
-            return evaluatePanic(name, args);
+            return evaluatePanic(name, args, span);
         }
 
         if ("warning".equals(name)) {
-            return evaluateWarning(name, args);
+            return evaluateWarning(name, args, span);
         }
 
         if ("is_matchable".equals(name)) {
@@ -319,7 +324,11 @@ final class CompileTimeIntrinsics {
         );
     }
 
-    private StaticValue evaluatePanic(String name, List<AstNode> args) {
+    private StaticValue evaluatePanic(
+            String name,
+            List<AstNode> args,
+            SourceSpan span
+    ) {
         if (!requireArity(name, args, 1)) {
             return null;
         }
@@ -334,12 +343,16 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        ctx.diagnostics().panic(decodeText(message));
+        directives.panic(decodeText(message), span);
 
         return StaticValue.voidValue();
     }
 
-    private StaticValue evaluateWarning(String name, List<AstNode> args) {
+    private StaticValue evaluateWarning(
+            String name,
+            List<AstNode> args,
+            SourceSpan span
+    ) {
         if (!requireArity(name, args, 1)) {
             return null;
         }
@@ -354,7 +367,7 @@ final class CompileTimeIntrinsics {
             return null;
         }
 
-        ctx.diagnostics().userWarning(decodeText(message));
+        directives.warning(decodeText(message), span);
 
         return StaticValue.voidValue();
     }

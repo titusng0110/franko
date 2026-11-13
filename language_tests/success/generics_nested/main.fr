@@ -1,0 +1,25 @@
+import "franko/io"
+
+#generic struct Inner<typename T> {
+    T value
+}
+
+#generic struct Outer<typename T> {
+    Inner<T> inner
+    view<[Inner<T>, 2]> items
+}
+
+func main() -> int32 {
+    Outer<int32> o = Outer<int32> {
+        inner = Inner<int32> { value = 5 }
+    }
+    print(o.inner.value)
+
+    [Inner<int32>, 2] arr
+    arr[0].value = 6
+    arr[1].value = 7
+    view<[Inner<int32>, 2]> v = getview(arr)
+    print($(v)[0].value)
+    print($(v)[1].value)
+    return 0
+}

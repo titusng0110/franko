@@ -125,7 +125,12 @@ public final class ExpressionAnalyzer {
         if (node.kind == AstKind.INT) {
             AstNode n = node;
             BigInteger val = constEval.parseIntegerLiteralSafe(n.text);
-            return SastNode.intLiteral(n.span, FALLBACK_TYPE, val, n.text);
+            SastType literalType = n.literalPrimitive == null
+                    ? FALLBACK_TYPE
+                    : SastType.primitive(
+                            SemanticPrimitiveKind.valueOf(
+                                    n.literalPrimitive.name()));
+            return SastNode.intLiteral(n.span, literalType, val, n.text);
         }
 
         if (node.kind == AstKind.NULL) {

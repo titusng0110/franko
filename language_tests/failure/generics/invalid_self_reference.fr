@@ -1,0 +1,9 @@
+#generic struct X<typename T, int32 N> {
+    T value
+    view<X<int32>> next
+}
+
+func main() -> int32 {
+    X<int32, 2> x
+    return 0
+}

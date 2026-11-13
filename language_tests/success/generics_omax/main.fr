@@ -1,0 +1,26 @@
+import "franko/io"
+
+#generic struct Box<typename T, int32 N> {
+    T value
+    [T, N] data
+    int32 count = N
+}
+
+#generic func sum<typename T, int32 N>(view<[T, N]> v) -> T {
+    T total = $(v)[0]
+    for (uint32 i = 1; i < $(v).length(); i++) {
+        total = total + $(v)[i]
+    }
+    return total
+}
+
+func main() -> int32 {
+    Box<int32, 3> b
+    b.value = 1
+    b.data[0] = 2
+    b.data[1] = 3
+    b.data[2] = 4
+    print(b.count)
+    print(sum<int32, 3>(getview(b.data)))
+    return 0
+}

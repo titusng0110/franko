@@ -18,7 +18,7 @@ By convention function names use `lower_case_snake_case`. A function whose
 name starts with `__` is internal to its declaring namespace and produces a
 warning when referenced from outside that namespace. Direct FFI mappings keep
 the platform API spelling, such as `os::win32::ReadFile`; see
-[Naming Conventions](36-naming-conventions.md).
+[Naming Conventions](37-naming-conventions.md).
 
 ## 19.2 Function Declaration Placement
 
@@ -44,10 +44,10 @@ Duplicate parameter names inside the same function are invalid.
 A parameter type must be a **passable type**:
 
 - a primitive integer type;
-- a declared enum type (see [Enums](30-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](25-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)); or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](26-structs.md); or
-- a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](28-tuples.md).
+- a declared enum type (see [Enums](31-enums.md));
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)); or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
+- a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](29-tuples.md).
 
 Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `getptr`/`getmview`/`getview` expression at the call site.
 
@@ -102,7 +102,7 @@ permission downgrades over an identical referenced type (`ptr`/`mview`/
 static-to-dynamic array pointer view decay (`mview`/`view` of
 `[T, N]`, or a `ptr` source downgraded in the same step, may pass
 where `mview`/`view` of `[T]` is expected; see
-[Pointers](25-pointers.md)). There are no other implicit conversions: pass
+[Pointers](26-pointers.md)). There are no other implicit conversions: pass
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](12-casts.md)).
 
@@ -163,10 +163,10 @@ A function return type must be either:
 
 - `void`;
 - a primitive integer type;
-- a declared enum type (see [Enums](30-enums.md));
+- a declared enum type (see [Enums](31-enums.md));
 - a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
-- a struct type whose fields are all assignable value types, recursively (see [Structs](26-structs.md)); or
-- a tuple type whose elements are all assignable value types, recursively (see [Tuples](28-tuples.md)).
+- a struct type whose fields are all assignable value types, recursively (see [Structs](27-structs.md)); or
+- a tuple type whose elements are all assignable value types, recursively (see [Tuples](29-tuples.md)).
 
 Arrays cannot currently be returned directly. A tuple containing an array or another non-assignable element cannot be returned by value; use a pointer to the tuple instead.
 
@@ -186,13 +186,13 @@ func foo(ptr<Buffer> outbuf) -> int32 {
 }
 ```
 
-The correct pattern for pointer-only output is the `ptr<Buffer>` out-parameter form. See [Aggregate Literals](29-aggregate-literals.md).
+The correct pattern for pointer-only output is the `ptr<Buffer>` out-parameter form. See [Aggregate Literals](30-aggregate-literals.md).
 
 ## 19.11 Forward References and Recursion
 
 Function signatures are known before function bodies are checked, allowing forward references, direct recursion, and mutual recursion.
 
-Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](27-methods.md).
+Struct methods follow the same signature, overload, and return rules with an explicit `self` first parameter of type `ptr<X>`, `mview<X>`, or `view<X>`; see [Methods](28-methods.md).
 
 ## 19.12 Compile-Time Intrinsics
 
@@ -200,7 +200,7 @@ The built-in `#name(...)` functions (`#is_primitive`, `#what_type`,
 `#strcmp`, `#strcat`, and the rest) are compile-time functions, not
 callable values. They are resolved at compile time; they cannot be stored
 in a variable, passed as a function argument, or referred to without a
-call. See [Compile-Time Reflection](34-compile-time-reflection.md).
+call. See [Compile-Time Reflection](35-compile-time-reflection.md).
 
 ## 19.13 Inlining Modifiers
 
@@ -248,3 +248,33 @@ the cycle `#noinline` does not exempt an `#inline` function from the rule.
 
 The modifiers only describe functions that the Franko compiler emits.
 FFI-bridged functions are provided by their bridge and ignore them.
+
+## 19.14 Generic Functions
+
+A function declaration may be a generic template:
+
+```franko
+#generic func identity<typename T>(T value) -> T {
+    return value
+}
+```
+
+Every call supplies explicit type and value arguments:
+
+```franko
+identity<int32>(7)
+```
+
+There is no type-argument inference. A generic function name used without
+arguments is an error unless a concrete function with the same name is also
+declared. Generic template overloading is not supported: a namespace may
+contain at most one generic function template per name, while concrete
+functions may share that name.
+
+`#generic` must precede `#inline`/`#noinline`:
+
+```franko
+#generic #inline func fast<typename T>(T value) -> T { return value }
+```
+
+See [Generics](20-generics.md) for the full reference.

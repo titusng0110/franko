@@ -37,6 +37,7 @@ SUCCESS_CASES = (
     "byte_static_views",
     "enums_defaults",
     "functions_inline",
+    "generics_basic",
 )
 
 BARE_STATIC_INDEX_CASE = ROOT / "language_tests/runtime/arrays/static_nested_index_oob.fr"

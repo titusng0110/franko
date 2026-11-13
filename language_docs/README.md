@@ -31,25 +31,25 @@ The cleaned section ordering is:
 17. Statements
 18. Declarations
 19. Functions
-20. Arrays
-21. Array Literals
-22. Array Intrinsics
-23. String Literals
-24. Shorthands and Equivalences
-25. Pointers
-26. Structs
-27. Methods
-28. Tuples
-29. Aggregate Literals
-30. Enums
-31. Memory Safety Checking
-32. Pool Allocation
-33. Foreign Function Interface
-34. Compile-Time Reflection
-35. Unsupported or Restricted Features
-36. Naming Conventions
-37. Examples
-38. Enums
+20. Generics
+21. Arrays
+22. Array Literals
+23. Array Intrinsics
+24. String Literals
+25. Shorthands and Equivalences
+26. Pointers
+27. Structs
+28. Methods
+29. Tuples
+30. Aggregate Literals
+31. Enums
+32. Memory Safety Checking
+33. Pool Allocation
+34. Foreign Function Interface
+35. Compile-Time Reflection
+36. Unsupported or Restricted Features
+37. Naming Conventions
+38. Examples
 
 ## How to rebuild one combined document
 
@@ -80,7 +80,7 @@ uv run python language_docs/build_reference.py
 
 ### Renumbering sections
 
-Section numbers are embedded in filenames (`26-structs.md`), headings
+Section numbers are embedded in filenames (`27-structs.md`), headings
 (`# 24. Structs`, `## 24.1 ...`), cross-links, and the three navigation files
 (`SUMMARY.md`, `00-title-and-toc.md`, `README.md`). Inserting or removing a
 chapter means shifting every later number. `renumber_sections.py` propagates

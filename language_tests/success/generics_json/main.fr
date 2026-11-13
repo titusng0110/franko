@@ -1,0 +1,17 @@
+import "franko/io"
+
+#generic struct Box<typename T, int32 N> {
+    T value
+    int32 count = N
+}
+
+#generic func make<typename T>(T v) -> Box<T, 2> {
+    return Box<T, 2> { value = v }
+}
+
+func main() -> int32 {
+    Box<int32, 2> b = make<int32>(5)
+    print(b.value)
+    print(b.count)
+    return 0
+}

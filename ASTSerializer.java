@@ -82,6 +82,11 @@ public final class ASTSerializer {
                 if (node.inlineMode != InlineMode.DEFAULT) {
                     obj.put("inlineMode", node.inlineMode.name());
                 }
+
+                if (node.isGeneric) {
+                    obj.put("generic", true);
+                    obj.put("genericParams", nodeArray(node.genericParams, sources));
+                }
             }
             case PARAMETER -> {
                 obj.put("node", node.kind.jsonName());
@@ -98,6 +103,29 @@ public final class ASTSerializer {
                 obj.put("fields", nodeArray(node.fields, sources));
                 obj.put("methods", nodeArray(node.methods, sources));
                 obj.put("members", nodeArray(node.members, sources));
+
+                if (node.isGeneric) {
+                    obj.put("generic", true);
+                    obj.put("genericParams", nodeArray(node.genericParams, sources));
+                }
+            }
+            case GENERIC_PARAM -> {
+                obj.put("node", node.kind.jsonName());
+                obj.put("name", node.name);
+                obj.put("typeParam", node.typeParameter);
+
+                if (!node.typeParameter) {
+                    obj.put("type", typeToJson(node.type, sources));
+                }
+            }
+            case GENERIC_ARG -> {
+                obj.put("node", node.kind.jsonName());
+
+                if (node.typeParameter) {
+                    obj.put("type", typeToJson(node.type, sources));
+                } else {
+                    obj.put("value", nodeToJson(node.value, sources));
+                }
             }
             case STRUCT_FIELD_DECL -> {
                 obj.put("node", node.kind.jsonName());
@@ -246,6 +274,10 @@ public final class ASTSerializer {
             case INT -> {
                 obj.put("node", node.kind.jsonName());
                 obj.put("value", node.text);
+
+                if (node.literalPrimitive != null) {
+                    obj.put("literalType", node.literalPrimitive.name());
+                }
             }
             case INFERRED_SIZE -> obj.put("node", node.kind.jsonName());
             case ARRAY_LITERAL -> {
@@ -281,6 +313,10 @@ public final class ASTSerializer {
                 obj.put("node", node.kind.jsonName());
                 obj.put("callee", nodeToJson(node.callee, sources));
                 obj.put("args", nodeArray(node.args, sources));
+
+                if (node.genericArgs != null && !node.genericArgs.isEmpty()) {
+                    obj.put("typeArgs", nodeArray(node.genericArgs, sources));
+                }
             }
             case GET_PTR -> {
                 obj.put("node", node.kind.jsonName());
@@ -355,14 +391,22 @@ public final class ASTSerializer {
                         )
                         : InlineMode.DEFAULT;
 
-                return AstNode.functionDecl(
+                AstNode node = AstNode.functionDecl(
                         span,
                         obj.requireString("name"),
                         nodesFromArray(obj.requireArray("parameters"), sources),
                         typeFromJson(obj.requireObject("returnType"), sources),
                         nodeFromJson(obj.optObject("body"), sources),
-                        inlineMode
+                        inlineMode,
+                        genericParamsFromJson(obj, sources)
                 );
+
+                if (obj.has("generic") && obj.requireBool("generic")) {
+                    node.genericModifier = true;
+                    node.isGeneric = true;
+                }
+
+                return node;
             }
             case PARAMETER: return AstNode.parameter(
                     span,
@@ -370,13 +414,48 @@ public final class ASTSerializer {
                     obj.requireString("name"),
                     obj.has("const") && obj.requireBool("const")
             );
-            case STRUCT_DECL: return AstNode.structDecl(
-                    span,
-                    obj.requireString("name"),
-                    nodesFromArray(obj.requireArray("fields"), sources),
-                    nodesFromArray(obj.requireArray("methods"), sources),
-                    nodesFromArray(obj.requireArray("members"), sources)
-            );
+            case STRUCT_DECL: {
+                AstNode node = AstNode.structDecl(
+                        span,
+                        obj.requireString("name"),
+                        nodesFromArray(obj.requireArray("fields"), sources),
+                        nodesFromArray(obj.requireArray("methods"), sources),
+                        nodesFromArray(obj.requireArray("members"), sources),
+                        genericParamsFromJson(obj, sources)
+                );
+
+                if (obj.has("generic") && obj.requireBool("generic")) {
+                    node.genericModifier = true;
+                    node.isGeneric = true;
+                }
+
+                return node;
+            }
+            case GENERIC_PARAM: {
+                boolean typeParam = obj.has("typeParam")
+                        && obj.requireBool("typeParam");
+                return AstNode.genericParam(
+                        span,
+                        obj.requireString("name"),
+                        typeParam
+                                ? null
+                                : typeFromJson(obj.requireObject("type"), sources),
+                        typeParam
+                );
+            }
+            case GENERIC_ARG: {
+                if (obj.has("type")) {
+                    return AstNode.genericArgType(
+                            span,
+                            typeFromJson(obj.requireObject("type"), sources)
+                    );
+                }
+
+                return AstNode.genericArgValue(
+                        span,
+                        nodeFromJson(obj.requireObject("value"), sources)
+                );
+            }
             case STRUCT_FIELD_DECL: return AstNode.structFieldDecl(
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
@@ -507,7 +586,20 @@ public final class ASTSerializer {
                     nodeFromJson(obj.optObject("value"), sources)
             );
             case VAR: return AstNode.var(span, obj.requireString("name"));
-            case INT: return AstNode.intLiteral(span, obj.requireString("value"));
+            case INT: {
+                AstNode node = AstNode.intLiteral(
+                        span,
+                        obj.requireString("value")
+                );
+
+                if (obj.has("literalType")) {
+                    node.literalPrimitive = PrimitiveKind.valueOf(
+                            obj.requireString("literalType")
+                    );
+                }
+
+                return node;
+            }
             case INFERRED_SIZE: return AstNode.inferredSize(span);
             case ARRAY_LITERAL: return AstNode.arrayLiteral(
                     span,
@@ -541,7 +633,8 @@ public final class ASTSerializer {
             case CALL: return AstNode.call(
                     span,
                     nodeFromJson(obj.requireObject("callee"), sources),
-                    nodesFromArray(obj.requireArray("args"), sources)
+                    nodesFromArray(obj.requireArray("args"), sources),
+                    genericArgsFromJson(obj, sources)
             );
             case GET_PTR: return AstNode.getPtr(
                     span,
@@ -610,6 +703,10 @@ public final class ASTSerializer {
                                 : String.join("::", type.names)
                 );
                 obj.put("name", type.name);
+
+                if (type.genericArgs != null && !type.genericArgs.isEmpty()) {
+                    obj.put("typeArgs", nodeArray(type.genericArgs, sources));
+                }
             }
             case TUPLE_TYPE -> {
                 obj.put("type", type.kind.jsonName());
@@ -672,7 +769,12 @@ public final class ASTSerializer {
                 List<String> segments = namespace == null || namespace.isEmpty()
                         ? List.of()
                         : List.of(namespace.split("::"));
-                return AstNode.structType(span, segments, obj.requireString("name"));
+                return AstNode.structType(
+                        span,
+                        segments,
+                        obj.requireString("name"),
+                        genericArgsFromJson(obj, sources)
+                );
             }
             case TUPLE_TYPE: {
                 List<AstNode> elements = new ArrayList<>();
@@ -753,6 +855,28 @@ public final class ASTSerializer {
         }
 
         return nodes;
+    }
+
+    private static List<AstNode> genericParamsFromJson(
+            JsonValue obj,
+            SourceTable sources
+    ) {
+        if (!obj.has("genericParams")) {
+            return List.of();
+        }
+
+        return nodesFromArray(obj.requireArray("genericParams"), sources);
+    }
+
+    private static List<AstNode> genericArgsFromJson(
+            JsonValue obj,
+            SourceTable sources
+    ) {
+        if (!obj.has("typeArgs")) {
+            return List.of();
+        }
+
+        return nodesFromArray(obj.requireArray("typeArgs"), sources);
     }
 
     private static JsonValue stringArray(List<String> values) {

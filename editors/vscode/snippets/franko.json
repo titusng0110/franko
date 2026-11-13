@@ -1,4 +1,22 @@
 {
+  "Generic Function": {
+    "prefix": "genericfunc",
+    "body": [
+      "#generic func ${1:name}<${2:typename T}>(${3}) -> ${4:void} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko generic function declaration"
+  },
+  "Generic Struct": {
+    "prefix": "genericstruct",
+    "body": [
+      "#generic struct ${1:Name}<${2:typename T}> {",
+      "    $0",
+      "}"
+    ],
+    "description": "Franko generic struct declaration"
+  },
   "Function": {
     "prefix": "func",
     "body": [

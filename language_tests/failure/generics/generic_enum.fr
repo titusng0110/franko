@@ -1,0 +1,8 @@
+#generic enum<uint8> Status {
+    a,
+    b
+}
+
+func main() -> int32 {
+    return 0
+}

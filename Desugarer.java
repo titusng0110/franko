@@ -10,17 +10,26 @@ public class Desugarer {
 
     private final DiagnosticBag diagnostics;
 
-    private final Map<String, AstNode> hoistedStringGlobals =
-        new LinkedHashMap<>();
+    private final Map<String, AstNode> hoistedStringGlobals;
 
     public Desugarer() {
-        this(new DiagnosticBag());
+        this(new DiagnosticBag(), new LinkedHashMap<>());
     }
 
     public Desugarer(DiagnosticBag diagnostics) {
+        this(diagnostics, new LinkedHashMap<>());
+    }
+
+    public Desugarer(
+            DiagnosticBag diagnostics,
+            Map<String, AstNode> hoistedStringGlobals
+    ) {
         this.diagnostics = diagnostics == null
                 ? new DiagnosticBag()
                 : diagnostics;
+        this.hoistedStringGlobals = hoistedStringGlobals == null
+                ? new LinkedHashMap<>()
+                : hoistedStringGlobals;
     }
 
     private static final class InferenceFailure extends RuntimeException {
@@ -100,7 +109,17 @@ public class Desugarer {
         return out;
     }
 
-    private void appendDesugaredTopLevelItem(AstNode item, List<AstNode> out) {
+    AstNode desugarSingleTopLevelItem(AstNode item) {
+        List<AstNode> out = new ArrayList<>();
+        appendDesugaredTopLevelItem(item, out);
+        return out.isEmpty() ? null : out.get(0);
+    }
+
+    List<AstNode> hoistedStringGlobalNodes() {
+        return new ArrayList<>(hoistedStringGlobals.values());
+    }
+
+    protected void appendDesugaredTopLevelItem(AstNode item, List<AstNode> out) {
         if (item == null) return;
 
         diagnostics.push(item.span);
@@ -234,7 +253,14 @@ public class Desugarer {
             }
         }
 
-        return AstNode.structDecl(n.span, n.name, fields, methods, members);
+        return AstNode.structDecl(
+            n.span,
+            n.name,
+            fields,
+            methods,
+            members,
+            n.genericParams
+        );
     }
 
     private AstNode desugarEnumDecl(AstNode n) {
@@ -364,7 +390,8 @@ public class Desugarer {
             parameters,
             desugarType(fn.type),
             body,
-            fn.inlineMode
+            fn.inlineMode,
+            fn.genericParams
         );
     }
 
@@ -1078,6 +1105,35 @@ public class Desugarer {
         return AstNode.block(n.span, outer);
     }
 
+    private List<AstNode> desugarGenericArguments(List<AstNode> args) {
+        if (args == null || args.isEmpty()) {
+            return List.of();
+        }
+
+        List<AstNode> out = new ArrayList<>();
+
+        for (AstNode arg : args) {
+            if (arg.kind != AstKind.GENERIC_ARG) {
+                out.add(arg);
+                continue;
+            }
+
+            if (arg.typeParameter) {
+                out.add(AstNode.genericArgType(
+                        arg.span,
+                        desugarType(arg.type)
+                ));
+            } else {
+                out.add(AstNode.genericArgValue(
+                        arg.span,
+                        desugarExpr(arg.value)
+                ));
+            }
+        }
+
+        return out;
+    }
+
     private AstNode desugarReflectionArgument(AstNode arg) {
         if (arg.kind == AstKind.STRING_LITERAL) {
             return arg;
@@ -1168,7 +1224,8 @@ public class Desugarer {
 
             return AstNode.call(expr.span,
                 desugarExpr(expr.callee),
-                args
+                args,
+                desugarGenericArguments(expr.genericArgs)
             );
         }
 

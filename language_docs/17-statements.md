@@ -32,13 +32,13 @@ The braces of a function body are an exception: they do not create an additional
 
 The condition must be an integer expression.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `if`. See [Shorthands and Equivalences](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `if`. See [Shorthands and Equivalences](25-desugaring.md).
 
 ## 17.3 While Statements
 
 The condition must be an integer expression.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `while`. See [Shorthands and Equivalences](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `while`. See [Shorthands and Equivalences](25-desugaring.md).
 
 ## 17.4 For Statements
 
@@ -99,7 +99,7 @@ which behaves as:
 
 The wrapping block scopes the loop variable declared by `init`: it is not visible after the loop. The `update` statement runs at the end of every body iteration, including the last; `continue` runs it and `break` skips it. See [Break and Continue](17-statements.md) below.
 
-Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `for`. See [Shorthands and Equivalences](24-desugaring.md).
+Braces are optional: the body may be a single statement. A braceless body behaves as if it were wrapped in an implicit block, so declarations inside it are scoped to that block and are not visible after the `for`. See [Shorthands and Equivalences](25-desugaring.md).
 
 ## 17.5 Break and Continue
 
@@ -180,7 +180,7 @@ A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(
 
 Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](19-functions.md).
 
-Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](35-unsupported-or-restricted-features.md).
+Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).
 
 ## 17.8 Expression Statements
 
@@ -215,4 +215,4 @@ A standalone `#else` is a syntax error.
 namespace, and inside a struct. Selected declarations and statements are
 inserted directly into the enclosing scope, so compile-time branch braces
 do not create a scope. See
-[Compile-Time Reflection](34-compile-time-reflection.md).
+[Compile-Time Reflection](35-compile-time-reflection.md).

@@ -1776,10 +1776,6 @@ public final class DynamicArrayMemoryChecker {
             }
         }
 
-        private void reportErrorOnce(SastNode site, String message) {
-            reportErrorOnce(site, null, message);
-        }
-
         private void reportErrorOnce(
                 SastNode site,
                 String code,
@@ -1794,10 +1790,6 @@ public final class DynamicArrayMemoryChecker {
             if (siteId < 0 || addBit(reportedErrorSites, siteId)) {
                 diagnostics.error(INTRA + message, code);
             }
-        }
-
-        private void reportWarningOnce(SastNode site, String message) {
-            reportWarningOnce(site, null, message);
         }
 
         private void reportWarningOnce(
@@ -1818,13 +1810,6 @@ public final class DynamicArrayMemoryChecker {
 
         private void reportInterErrorOnce(
                 SastNode site,
-                String message
-        ) {
-            reportInterErrorOnce(site, null, message);
-        }
-
-        private void reportInterErrorOnce(
-                SastNode site,
                 String code,
                 String message
         ) {
@@ -1837,13 +1822,6 @@ public final class DynamicArrayMemoryChecker {
             if (siteId < 0 || addBit(reportedErrorSites, siteId)) {
                 diagnostics.error(INTER + message, code);
             }
-        }
-
-        private void reportInterWarningOnce(
-                SastNode site,
-                String message
-        ) {
-            reportInterWarningOnce(site, null, message);
         }
 
         private void reportInterWarningOnce(

@@ -1,0 +1,8 @@
+#generic struct Buffer<typename T> {
+    [T, 3] data
+}
+
+func main() -> int32 {
+    Buffer<int32> b = Buffer<int32> { }
+    return 0
+}

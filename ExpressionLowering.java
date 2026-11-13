@@ -10,6 +10,17 @@ final class ExpressionLowering {
             StaticStringHoister staticStringHoister,
             TargetInfo target
     ) {
+        this(symbolTable, constEval, hoister, staticStringHoister, target, null);
+    }
+
+    ExpressionLowering(
+            SymbolTable symbolTable,
+            ConstExpressionEvaluator constEval,
+            ArrayLiteralHoister hoister,
+            StaticStringHoister staticStringHoister,
+            TargetInfo target,
+            DeferredDirectives directives
+    ) {
         this.analyzer = new ExpressionAnalyzer(symbolTable, constEval);
         this.typeResolver = new SemanticTypeResolver(symbolTable, analyzer);
         ArrayLowerer arrayLowerer = new ArrayLowerer(symbolTable, analyzer);
@@ -22,7 +33,8 @@ final class ExpressionLowering {
                 symbolTable,
                 target,
                 staticStringHoister,
-                typeResolver
+                typeResolver,
+                directives
         );
 
         analyzer.wire(

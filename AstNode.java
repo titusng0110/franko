@@ -10,6 +10,7 @@ final class AstNode {
     String text;
     String rawContent;
     PrimitiveKind primitive;
+    PrimitiveKind literalPrimitive;
     AstNode type;
     PtrPermission permission;
 
@@ -17,6 +18,9 @@ final class AstNode {
     boolean unsafe;
     boolean compileTimeConstant;
     boolean isConst;
+    boolean isGeneric;
+    boolean genericModifier;
+    boolean typeParameter;
 
     InlineMode inlineMode = InlineMode.DEFAULT;
 
@@ -47,6 +51,8 @@ final class AstNode {
     List<AstNode> thenItems;
     List<AstNode> elseItems;
     List<AstNode> updateItems;
+    List<AstNode> genericParams;
+    List<AstNode> genericArgs;
     List<String> names;
     List<BigInteger> literalBytes;
 
@@ -96,12 +102,28 @@ final class AstNode {
             AstNode body,
             InlineMode inlineMode
     ) {
+        return functionDecl(
+                span, name, parameters, returnType, body, inlineMode, List.of());
+    }
+
+    static AstNode functionDecl(
+            SourceSpan span,
+            String name,
+            List<AstNode> parameters,
+            AstNode returnType,
+            AstNode body,
+            InlineMode inlineMode,
+            List<AstNode> genericParams
+    ) {
         AstNode node = node(AstKind.FUNCTION_DECL, span);
         node.name = name;
         node.parameters = copy(parameters);
         node.type = returnType;
         node.body = body;
         node.inlineMode = inlineMode;
+        node.genericParams = copy(genericParams);
+        node.isGeneric = genericParams != null && !genericParams.isEmpty();
+        node.genericModifier = node.isGeneric;
         return node;
     }
 
@@ -129,11 +151,25 @@ final class AstNode {
             List<AstNode> methods,
             List<AstNode> members
     ) {
+        return structDecl(span, name, fields, methods, members, List.of());
+    }
+
+    static AstNode structDecl(
+            SourceSpan span,
+            String name,
+            List<AstNode> fields,
+            List<AstNode> methods,
+            List<AstNode> members,
+            List<AstNode> genericParams
+    ) {
         AstNode node = node(AstKind.STRUCT_DECL, span);
         node.name = name;
         node.fields = copy(fields);
         node.methods = copy(methods);
         node.members = copy(members);
+        node.genericParams = copy(genericParams);
+        node.isGeneric = genericParams != null && !genericParams.isEmpty();
+        node.genericModifier = node.isGeneric;
         return node;
     }
 
@@ -418,6 +454,39 @@ final class AstNode {
         return node;
     }
 
+    static AstNode typedIntLiteral(SourceSpan span, String value, PrimitiveKind kind) {
+        AstNode node = node(AstKind.INT, span);
+        node.text = value;
+        node.literalPrimitive = kind;
+        return node;
+    }
+
+    static AstNode genericParam(
+            SourceSpan span,
+            String name,
+            AstNode type,
+            boolean typeParameter
+    ) {
+        AstNode node = node(AstKind.GENERIC_PARAM, span);
+        node.name = name;
+        node.type = type;
+        node.typeParameter = typeParameter;
+        return node;
+    }
+
+    static AstNode genericArgType(SourceSpan span, AstNode typeNode) {
+        AstNode node = node(AstKind.GENERIC_ARG, span);
+        node.type = typeNode;
+        node.typeParameter = true;
+        return node;
+    }
+
+    static AstNode genericArgValue(SourceSpan span, AstNode exprNode) {
+        AstNode node = node(AstKind.GENERIC_ARG, span);
+        node.value = exprNode;
+        node.typeParameter = false;
+        return node;
+    }
     static AstNode inferredSize(SourceSpan span) {
         return node(AstKind.INFERRED_SIZE, span);
     }
@@ -470,9 +539,19 @@ final class AstNode {
     }
 
     static AstNode call(SourceSpan span, AstNode callee, List<AstNode> args) {
+        return call(span, callee, args, List.of());
+    }
+
+    static AstNode call(
+            SourceSpan span,
+            AstNode callee,
+            List<AstNode> args,
+            List<AstNode> genericArgs
+    ) {
         AstNode node = node(AstKind.CALL, span);
         node.callee = callee;
         node.args = copy(args);
+        node.genericArgs = copy(genericArgs);
         return node;
     }
 
@@ -538,9 +617,19 @@ final class AstNode {
     }
 
     static AstNode structType(SourceSpan span, List<String> namespaceSegments, String name) {
+        return structType(span, namespaceSegments, name, List.of());
+    }
+
+    static AstNode structType(
+            SourceSpan span,
+            List<String> namespaceSegments,
+            String name,
+            List<AstNode> genericArgs
+    ) {
         AstNode node = node(AstKind.STRUCT_TYPE, span);
         node.names = namespaceSegments == null ? List.of() : List.copyOf(namespaceSegments);
         node.name = name;
+        node.genericArgs = copy(genericArgs);
         return node;
     }
 
@@ -564,6 +653,56 @@ final class AstNode {
                 return true;
             default: return false;
         }
+    }
+
+    AstNode copyShallow() {
+        AstNode copy = new AstNode(kind, span);
+        copy.name = name;
+        copy.text = text;
+        copy.rawContent = rawContent;
+        copy.primitive = primitive;
+        copy.literalPrimitive = literalPrimitive;
+        copy.type = type;
+        copy.permission = permission;
+        copy.positional = positional;
+        copy.unsafe = unsafe;
+        copy.compileTimeConstant = compileTimeConstant;
+        copy.isConst = isConst;
+        copy.isGeneric = isGeneric;
+        copy.genericModifier = genericModifier;
+        copy.typeParameter = typeParameter;
+        copy.inlineMode = inlineMode;
+        copy.target = target;
+        copy.value = value;
+        copy.condition = condition;
+        copy.thenBranch = thenBranch;
+        copy.elseBranch = elseBranch;
+        copy.body = body;
+        copy.expr = expr;
+        copy.left = left;
+        copy.right = right;
+        copy.index = index;
+        copy.callee = callee;
+        copy.init = init;
+        copy.update = update;
+        copy.level = level;
+        copy.sizeExpr = sizeExpr;
+        copy.items = items;
+        copy.parameters = parameters;
+        copy.fields = fields;
+        copy.methods = methods;
+        copy.members = members;
+        copy.variants = variants;
+        copy.args = args;
+        copy.elements = elements;
+        copy.thenItems = thenItems;
+        copy.elseItems = elseItems;
+        copy.updateItems = updateItems;
+        copy.genericParams = genericParams;
+        copy.genericArgs = genericArgs;
+        copy.names = names;
+        copy.literalBytes = literalBytes;
+        return copy;
     }
 
     static String kindName(AstNode node) {

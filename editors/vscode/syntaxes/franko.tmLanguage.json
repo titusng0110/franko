@@ -87,7 +87,7 @@
           "name": "keyword.control.compile-time.franko"
         },
         {
-          "match": "#(inline|noinline)\\b",
+          "match": "#(inline|noinline|generic)\\b",
           "name": "storage.modifier.inline.franko"
         },
         {
@@ -184,6 +184,10 @@
         {
           "match": "\\b(const)\\b",
           "name": "storage.modifier.const.franko"
+        },
+        {
+          "match": "\\b(typename)\\b",
+          "name": "storage.type.generic.franko"
         },
         {
           "match": "\\b(self)\\b",

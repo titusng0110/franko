@@ -1,0 +1,7 @@
+#generic func f<typename T>() -> int32 {
+    return 1
+}
+
+func main() -> int32 {
+    return f<5>()
+}

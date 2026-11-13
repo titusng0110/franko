@@ -1,0 +1,4 @@
+func main() -> int32 {
+    int32 x = #panic("not a value")
+    return x
+}

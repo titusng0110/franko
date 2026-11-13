@@ -1,0 +1,11 @@
+#generic func f<typename T>(T v) -> T {
+    return v
+}
+
+#generic func f<int32 N>() -> int32 {
+    return N
+}
+
+func main() -> int32 {
+    return 0
+}

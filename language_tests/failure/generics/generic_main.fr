@@ -1,0 +1,3 @@
+#generic func main<typename T>() -> int32 {
+    return 0
+}

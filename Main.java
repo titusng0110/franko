@@ -135,7 +135,7 @@ public class Main {
         TargetInfo target = TargetInfo.parse(targetSpec);
 
         ModuleRegistry modules = new ModuleRegistry();
-        Frontend frontend = new Frontend(artifacts, modules);
+        Frontend frontend = new Frontend(artifacts, modules, target);
 
         System.out.println("==== Parsing ====");
         Result<AstDocument> rawResult = frontend.parseFile(sourceFile);

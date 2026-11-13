@@ -1,0 +1,10 @@
+import "franko/io"
+
+#generic func unused<typename T>(T v) -> T {
+    return v + v
+}
+
+func main() -> int32 {
+    print(7)
+    return 0
+}

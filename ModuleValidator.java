@@ -18,14 +18,26 @@ final class ModuleValidator {
         }
 
         Map<String, SourceSpan> functions = new LinkedHashMap<>();
+        Map<String, SourceSpan> genericFunctions = new LinkedHashMap<>();
 
-        collectItems(root.items, null, functions);
+        collectItems(root.items, null, functions, genericFunctions);
 
         Set<String> seenFunctions = new LinkedHashSet<>();
 
         for (ModuleFunction function : module.functions) {
             String name = function.qualifiedName();
             requireUnique(module, "function", name, seenFunctions, diagnostics);
+
+            if (genericFunctions.containsKey(name)
+                    && !functions.containsKey(name)) {
+                diagnostics.add(Diagnostic.error(
+                        genericFunctions.get(name),
+                        "Module '" + module.id + "': generic function '" + name
+                                + "' cannot be FFI-bridged"
+                ));
+                continue;
+            }
+
             requireDeclared(module, "function", name, functions, diagnostics);
         }
 
@@ -35,25 +47,32 @@ final class ModuleValidator {
     private static void collectItems(
             List<AstNode> items,
             String parentNamespace,
-            Map<String, SourceSpan> functions
+            Map<String, SourceSpan> functions,
+            Map<String, SourceSpan> genericFunctions
     ) {
         for (AstNode item : items) {
             if (item.kind == AstKind.NAMESPACE) {
                 String fullName = parentNamespace == null
                         ? item.name
                         : parentNamespace + "::" + item.name;
-                collectItems(item.items, fullName, functions);
+                collectItems(item.items, fullName, functions, genericFunctions);
                 continue;
             }
 
             if (item.kind == AstKind.DECL_IF) {
-                collectItems(item.thenItems, parentNamespace, functions);
-                collectItems(item.elseItems, parentNamespace, functions);
+                collectItems(item.thenItems, parentNamespace, functions, genericFunctions);
+                collectItems(item.elseItems, parentNamespace, functions, genericFunctions);
                 continue;
             }
 
             if (item.kind == AstKind.FUNCTION_DECL) {
-                functions.put(qualified(parentNamespace, item.name), item.span);
+                String name = qualified(parentNamespace, item.name);
+
+                if (item.isGeneric) {
+                    genericFunctions.put(name, item.span);
+                } else {
+                    functions.put(name, item.span);
+                }
             }
         }
     }

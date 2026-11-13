@@ -1,0 +1,17 @@
+import "franko/io"
+
+namespace ns {
+    #generic struct X<typename T> {
+        T value
+    }
+
+    #generic func make<typename T>(T v) -> X<T> {
+        return X<T> { value = v }
+    }
+}
+
+func main() -> int32 {
+    ns::X<int32> x = ns::make<int32>(5)
+    print(x.value)
+    return 0
+}

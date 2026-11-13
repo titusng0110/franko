@@ -66,7 +66,7 @@ The initializer must be a constant expression built from literals, so it is fold
 **Static address initializers.** A pointer-typed global may be
 initialized with `null`, with `getptr`/`getmview`/`getview` over another
 global variable, or with a string literal (which is a view over
-immutable constant storage; see [String Literals](23-string-literals.md)):
+immutable constant storage; see [String Literals](24-string-literals.md)):
 
 ```franko
 [byte, 5] greeting
@@ -104,8 +104,8 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
 - static array elements start with indeterminate values, except pointer elements, which are null;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **pointer storage is guaranteed null-initialized**: pointer variables, pointer struct fields, pointer tuple elements, pointer static-array elements, and pointer elements of initialized dynamic arrays are all null (see [Pointers](25-pointers.md));
-- **enum storage is default-initialized to the first variant**: enum variables, enum struct fields, enum tuple elements, enum static-array elements, and enum elements of initialized dynamic arrays all start as the enum's first declared variant, even when its backing value is not `0` (see [Enums](30-enums.md)).
+- **pointer storage is guaranteed null-initialized**: pointer variables, pointer struct fields, pointer tuple elements, pointer static-array elements, and pointer elements of initialized dynamic arrays are all null (see [Pointers](26-pointers.md));
+- **enum storage is default-initialized to the first variant**: enum variables, enum struct fields, enum tuple elements, enum static-array elements, and enum elements of initialized dynamic arrays all start as the enum's first declared variant, even when its backing value is not `0` (see [Enums](31-enums.md)).
 
 There is no implicit zero-initialization for locals other than pointer storage. Use `init_zero` for zeroed dynamic array storage.
 
@@ -125,10 +125,10 @@ struct X {
 
 Field defaults must be constant expressions on primitive fields only, and duplicate field names are rejected.
 
-The complete struct reference — field rules, by-value cycles, assignability, member access, and globals — is in [Structs](26-structs.md).
+The complete struct reference — field rules, by-value cycles, assignability, member access, and globals — is in [Structs](27-structs.md).
 
 Tuple declarations and tuple initialization are covered in
-[Tuples](28-tuples.md).
+[Tuples](29-tuples.md).
 
 ## 18.7 Aggregate Field Initializers
 
@@ -169,7 +169,7 @@ Rules:
 - the form is local-only and is invalid at global scope.
 
 The complete aggregate initialization reference is in
-[Aggregate Literals](29-aggregate-literals.md).
+[Aggregate Literals](30-aggregate-literals.md).
 
 ## 18.8 Const Storage
 

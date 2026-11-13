@@ -1,4 +1,3 @@
 # A global constant initializer accepts only literal-based constant
-# expressions, so referencing another global fails at parse time. The count
-# pins that both tokens of `base + 1` were rejected.
-Parse failed: 2 syntax error(s).
+# expressions, so referencing another global is rejected during desugaring.
+Invalid constant expression for global variable initializer

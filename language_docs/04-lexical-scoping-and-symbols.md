@@ -77,4 +77,26 @@ Access is allowed inside the declaration's own scope:
 These are compiler warnings, not errors: the program still compiles and runs.
 The complete naming style for structs, functions, methods, variables, fields,
 namespaces, constants, and standard-library imports is in
-[Naming Conventions](36-naming-conventions.md).
+[Naming Conventions](37-naming-conventions.md).
+
+## 4.9 Generic Parameter Scope
+
+`typename` is a reserved keyword. A generic declaration introduces its type
+and value parameter names in a scope that covers the declaration's fields,
+method signatures, method bodies, and return type:
+
+```franko
+#generic func f<typename T, int32 N>(T value) -> T {
+    [T, N] local
+    return value
+}
+```
+
+Type parameter names are types in that scope; value parameter names are
+compile-time integer constants in that scope. Both are resolved before
+ordinary lexical lookup. A declaration cannot use the same parameter name
+twice.
+
+Generic parameters are not visible outside their declaration. Inside the
+body of a generic struct, the struct's own name refers to the current
+instantiation (see [Generics](20-generics.md)).

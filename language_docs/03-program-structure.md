@@ -5,14 +5,16 @@ A Franko program is a sequence of **top-level items**.
 Current valid top-level items are:
 
 - struct declarations;
+- generic struct declarations (`#generic struct`);
 - global variable declarations;
 - function declarations;
+- generic function declarations (`#generic func`);
 - import directives;
 - namespace declarations;
 - `#if` declaration conditionals that select among the above (except
   imports).
 
-Struct declarations are described in full in [Structs](26-structs.md). Import directives are described in full in [Source Files](02-source-files.md).
+Struct declarations are described in full in [Structs](27-structs.md). Generic declarations are described in full in [Generics](20-generics.md). Import directives are described in full in [Source Files](02-source-files.md).
 
 ## Namespaces
 
@@ -55,7 +57,7 @@ Both forms declare the same namespace, whose full path is `a::b`. A path header 
 
 The same namespace may be declared more than once, in the same file or across imported files, in either form; the declarations merge into one namespace. Duplicate symbols inside the merged namespace are rejected exactly like global duplicates.
 
-By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](36-naming-conventions.md).
+By convention namespace names are short, lowercase, and underscore-free; a two-word name is written as one word (for example `bignum`). Names starting with `__` mark functions and structs that are internal to their namespace. See [Naming Conventions](37-naming-conventions.md).
 
 ### Qualified References
 
@@ -75,7 +77,7 @@ Inside a namespace, an unqualified name resolves in that namespace first, then f
 
 ### Entry Point
 
-The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error.
+The entry-point function `main` must be declared in the global namespace. A `main` inside a namespace is a compile error. `main` cannot be declared `#generic`.
 
 `main` must be declared in one of two shapes, and it cannot be overloaded:
 

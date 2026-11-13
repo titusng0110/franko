@@ -68,7 +68,7 @@ the implicit pointer conversions:
 
 Casting upward or across different pointee types is invalid. Raw
 integers cannot be converted to pointers. The `null` literal is valid for
-any pointer target. See [Pointers](25-pointers.md) and
+any pointer target. See [Pointers](26-pointers.md) and
 [Casts](12-casts.md).
 
 ## 16.3 Array Assignment
@@ -98,13 +98,13 @@ ys.init(3);
 ys.memcpy(getptr(xs));       // dynamic target is initialized first
 ```
 
-See [Array Literals](21-array-literals.md) for literal-source rules.
+See [Array Literals](22-array-literals.md) for literal-source rules.
 
 ## 16.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](28-tuples.md#286-assignment).
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](29-tuples.md#286-assignment).
 
-A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be value-assignable, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](29-aggregate-literals.md).
+A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be value-assignable, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](30-aggregate-literals.md).
 
 Valid:
 
@@ -139,7 +139,7 @@ read/write access is needed), and fields are accessed through
 An enum is assigned as a whole value: both sides must have the exact
 same enum type. An enum cannot be assigned to or from an integer or
 from a different enum type; convert explicitly with `cast` or
-`unsafe_cast` (see [Enums](30-enums.md)).
+`unsafe_cast` (see [Enums](31-enums.md)).
 
 ## 16.5 Compound Assignment
 
@@ -194,7 +194,7 @@ int64 y = 2;
 x += y;          // operands must have the same integer type
 ```
 
-The right-hand side may not be an array literal (`xs += [1, 2]` is rejected: operands must be integers). See [Array Literals](21-array-literals.md).
+The right-hand side may not be an array literal (`xs += [1, 2]` is rejected: operands must be integers). See [Array Literals](22-array-literals.md).
 
 ## 16.6 Increment and Decrement
 
@@ -222,7 +222,7 @@ for (int32 i = 0; i < n; i++) {
 
 Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `print(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](17-statements.md).
 
-See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](26-structs.md) for the full assignability rules.
+See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](27-structs.md) for the full assignability rules.
 
 ## 16.7 Operator Assignment
 
@@ -292,7 +292,7 @@ materialized as a temporary of the referenced primitive type.
 The borrowed view is valid only for the duration of the operator call.
 An operator method must not store or forward it into caller-owned or
 global storage; the compiler rejects that pattern (see
-[Memory Safety Checking](31-memory-safety-checking.md#299-dangling-pointer-checking)).
+[Memory Safety Checking](32-memory-safety-checking.md#299-dangling-pointer-checking)).
 A local `view<T>` copy inside the operator body is allowed because the
 local dies before the operator call returns.
 

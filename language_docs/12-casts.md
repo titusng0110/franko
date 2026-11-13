@@ -100,7 +100,7 @@ conversions visibly marked at every call site.
 ## 12.4 Enum Casts
 
 Enums convert to and from raw integers with the same strict split.
-See [Enums](30-enums.md) for the complete rules.
+See [Enums](31-enums.md) for the complete rules.
 
 | Source | Target | `cast` | `unsafe_cast` |
 |---|---|---|---|
@@ -131,7 +131,7 @@ uint8 bad = unsafe_cast<uint8>(300);   // invalid: 300 does not fit uint8
 ## 12.6 Pointer Permission Casts
 
 `cast<T>` with a pointer target is an explicit **permission downgrade**
-(see [Pointers](25-pointers.md)): the referenced type must stay
+(see [Pointers](26-pointers.md)): the referenced type must stay
 identical and the permission may only weaken
 (`ptr -> mview -> view`).
 
@@ -157,7 +157,7 @@ The same `cast` syntax spells the static-to-dynamic array pointer view
 decay: `mview<[T, N]>`/`view<[T, N]>` (and downgrade
 combinations from a `ptr` source) cast to `mview<[T]>`/
 `view<[T]>`, outermost dimension only
-(see [Pointers](25-pointers.md)):
+(see [Pointers](26-pointers.md)):
 
 ```franko
 [int32, 4] xs;

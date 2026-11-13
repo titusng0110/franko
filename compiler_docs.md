@@ -11,12 +11,14 @@ Do not add comments to the Java source files. All design notes belong here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, tuples, enums, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: 88 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: 97 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain. Enums lower to generated
   C++ wrapper structs with `from_integer_checked` conversion; integer
-  range checks use `franko_integer_unsafe_cast`.
+  range checks use `franko_integer_unsafe_cast`. Generics are explicit-
+  instantiation templates expanded AST-to-AST before semantic analysis, so the
+  semantic AST and backend see only concrete declarations.
 - **Runtime**: `include/FrankoRuntime.hpp`, one header for all build
   modes: `Franko_Dynamic_Array<T>` (owning dynamic arrays), raw C++ static
   arrays, `Franko_Thin_Pointer<T>` (pointers whose pointee is not an array;
@@ -41,7 +43,8 @@ source .fr
    │                        lexer+parser diagnostics become SourceSpans)
    ▼
 raw AstDocument                         -> <base>.raw.ast.json
-   │  Frontend.desugar    (one fresh Desugarer per file; AstKind.IMPORT survives)
+   │  EarlyTargetFolder   (fold #IS_* names to typed uint8 INT nodes)
+   │  PreGenericsDesugarer (skips #generic declarations; ordinary desugar)
    ▼
 desugared AstDocument                   -> <base>.desugared.ast.json
    │  ImportResolver      (recursively loads imports through
@@ -49,7 +52,15 @@ desugared AstDocument                   -> <base>.desugared.ast.json
    │                       deduplicates hoisted STRLIT_ globals)
    ▼
 import-resolved AstDocument             -> <base>.imports.ast.json
-   │  SemanticAnalyzer    (the only AST document -> SAST document boundary)
+   │  SemanticAnalyzer
+   │    ├─ PreGenericsCompileTimeFolder  (constant-only intrinsic folding)
+   │    ├─ DeclarationSelector.preGenerics
+   │    ├─ GenericsResolver.expand      (templates -> concrete instances)
+   │    │    └─ SpecializationDesugarer (per-instance full desugar)
+   │    ├─ PostGenericsCompileTimeFolder (remaining constant-only folding)
+   │    ├─ DeclarationSelector.postGenerics
+   │    ├─ normal registration/lowering
+   │    └─ DeferredDirectives.flush
    ▼
 semantic SastDocument                   -> <base>.semantic.sast.json
    │  LegalityChecker                     -> <base>.legality.sast.json
@@ -226,14 +237,16 @@ flowchart TD
 | Caller | Calls into |
 |---|---|
 | `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `MemoryAnalysisContext`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
-| `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `ModuleRegistry`, `ModuleValidator`, `Desugarer`, `JsonArtifacts` |
+| `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `EarlyTargetFolder`, `PreGenericsDesugarer`, `ModuleRegistry`, `ModuleValidator`, `JsonArtifacts` |
 | `ImportResolver` | `Frontend`, `AstDocument`, `AstNode` |
-| `DeclarationSelector` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `TargetInfo`, `AstNode` |
+| `DeclarationSelector` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `TargetInfo`, `GenericsResolver` (`containsGenericUse`), `DeferredDirectives`, `AstNode` |
 | `ASTSerializer` | `AstNode`, `AstDocument`, `SourceTable`, `Json`, `JsonAstSupport` |
 | `JsonArtifacts` | `ASTSerializer`, `SastSerializer`, `Json`, `JsonAstSupport`, filesystem |
 | `SastSerializer` | `SastNode`, `SastDocument`, `SymbolRegistry`, `SourceTable`, `Json` |
 | `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `AstNode` |
-| `SemanticAnalyzer` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `ConstExpressionEvaluator`, `Mangler` (static-string global names) |
+| `SemanticAnalyzer` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `ConstExpressionEvaluator`, `PreGenericsCompileTimeFolder`, `DeclarationSelector`, `GenericsResolver`, `PostGenericsCompileTimeFolder`, `DeferredDirectives`, `Mangler` (static-string global names) |
+| `GenericsResolver` | `AstNode`, `SpecializationDesugarer`, `CompileTimeIntrinsicCore`, `ConstExpressionEvaluator`, `TypeChecker`, `Mangler` |
+| `CompileTimeIntrinsics` | `CompileTimeIntrinsicCore`, `DeferredDirectives`, `StaticStringHoister`, `SemanticTypeResolver` |
 | `ExpressionLowering` | `ExpressionAnalyzer`, `SemanticTypeResolver`, `ArrayLowerer`, `ArrayLiteralLowerer`, `CompileTimeIntrinsics` |
 | `ExpressionAnalyzer` | `SymbolTable`, `ConstExpressionEvaluator`, `CompileTimeIntrinsics`, `ArrayLowerer` (mutually with), `ArrayLiteralLowerer` (mutually with), `TypeChecker` (static helpers) |
 | `CompileTimeIntrinsics` | `SymbolTable`, `TypeChecker`, `StringLiteralDecoder`, `SastNode`/`SastType` |
@@ -285,7 +298,12 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
   `ConstExpressionEvaluator`, and every raw-AST consumer. Type syntax uses
   `AstKind` constants (`PRIMITIVE_TYPE`, `DYNAMIC_ARRAY_TYPE`,
   `STATIC_ARRAY_TYPE`, `PTR_TYPE`, `STRUCT_TYPE`, `TUPLE_TYPE`) instead of a
-  `AstNode` hierarchy.
+  `AstNode` hierarchy. Generic metadata lives on the same nodes:
+  `isGeneric`, `genericModifier`, `genericParams`, `genericArgs`, and
+  `typeParameter`; `GENERIC_PARAM`/`GENERIC_ARG` are ordinary raw node kinds.
+  `literalPrimitive` marks folded integer results with an explicit primitive
+  type so early folding preserves overload behavior. `copyShallow()` is the
+  shared clone primitive for generic specialization.
 - `SastNode.java` / `SastKind.java` — one final tagged semantic-AST class,
   produced by `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`/
   `ArrayLiteralLowerer`; every node carries the originating `SourceSpan`,
@@ -492,16 +510,81 @@ working directory when possible, `/` separators on every platform), and
 `ModuleRegistry` and `ImportResolver`.
 
 #### `Frontend`
-Owns the per-file front end: lexer, parser, `FrankoASTVisitor`, and a fresh
-`Desugarer` per file. `parseFile` returns `Result<AstDocument>` and converts
-lexer/parser failures into structured diagnostics (with `SourceSpan`) instead
-of throwing, so `Main` stays the only abort point. After parsing, `Frontend`
-asks `ModuleRegistry` for a sibling `<stem>.module.json` and runs
-`ModuleValidator` before returning the raw document. `desugar` lowers one
-raw document and has no module or FFI knowledge. `loadDesugared` parses,
+Owns the per-file front end: lexer, parser, `FrankoASTVisitor`,
+`EarlyTargetFolder`, and a fresh `PreGenericsDesugarer` per file. `parseFile`
+returns `Result<AstDocument>` and converts lexer/parser failures into
+structured diagnostics (with `SourceSpan`) instead of throwing, so `Main`
+stays the only abort point. It folds `#IS_*` target names to typed `uint8`
+INT nodes immediately after parsing (also for imported files), asks
+`ModuleRegistry` for a sibling `<stem>.module.json`, and runs
+`ModuleValidator` before returning the raw document. `desugar` lowers one raw
+document with `PreGenericsDesugarer`, which leaves `#generic` declarations
+untouched; it has no module or FFI knowledge. `loadDesugared` parses,
 desugars, and emits per-file `.raw.ast.json` / `.desugared.ast.json`
 artifacts when `--emit-json` is enabled. Imported-file parse errors carry the
 imported file path in their spans.
+
+#### `EarlyTargetFolder`
+`AstRewriter` subclass that replaces `COMPILE_TIME_NAME` target constants
+(`#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`, `#IS_X86_64`, `#IS_ARM64`) with
+typed `uint8` INT nodes. It runs in `Frontend.parseFile`, needs no
+declarations or type analysis, and is idempotent.
+
+#### `AstRewriter`
+Generic in-place raw-AST walker: `rewriteNode` may return a replacement, and
+the base class recursively rewrites every `AstNode` slot and list. Used by
+the early target folder and both constant-only compile-time folders. The
+folders skip generic declarations by overriding `rewrite`.
+
+#### `PreGenericsDesugarer`
+`Desugarer` subclass used by `Frontend`. It appends top-level items whose
+`isGeneric` flag is set unchanged, so generic templates survive import
+resolution as raw AST; namespaces still recurse and ordinary items desugar
+normally.
+
+#### `SpecializationDesugarer`
+`Desugarer` subclass used by `GenericsResolver`. It desugars one cloned,
+already-substituted concrete declaration through
+`desugarSingleTopLevelItem` and shares the hoisted-string table so repeated
+literals across specializations produce one `STRLIT_<hash>` global.
+
+#### `PreGenericsCompileTimeFolder`
+`AstRewriter` subclass run by `SemanticAnalyzer` after import resolution and
+before the pre-generics selector. It folds constant-only `#` calls outside
+generic templates through `CompileTimeIntrinsicCore` and leaves strings,
+directives, and semantic-scope-dependent cases for the semantic fallback.
+
+#### `PostGenericsCompileTimeFolder`
+The same constant-only fold run after `GenericsResolver.expand`. It sees only
+concrete declarations, so remaining target/predicate/string operations that
+the raw core can decide are folded; everything else stays for
+`CompileTimeIntrinsics`.
+
+#### `DeferredDirectives`
+Collector for `#panic`/`#warning` entries (kind, message, span). The selector
+and semantic adapter enqueue instead of emitting; `SemanticAnalyzer` flushes
+the queue at the end of semantic analysis, sorted by source position, into
+`DiagnosticBag.panic`/`userWarning`.
+
+#### `CompileTimeIntrinsicCore`
+Shared constant-only core for the early folders: target-name lookup, raw type
+spelling for primitives/pointers/arrays/tuples, the predicate matrix,
+`#what_type`/`#strcat`/`#strcmp` bytes, and result primitive selection
+(`uint8` for predicates/targets, `int32` for `#strcmp`). It never emits
+diagnostics and never hoists strings; those remain the semantic adapter's
+responsibility.
+
+#### `GenericsResolver`
+AST-to-AST explicit-instantiation engine owned by `SemanticAnalyzer`. It
+collects struct/function templates, validates generic parameter lists,
+rejects duplicate templates, generic `main`, independent generic methods, and
+generic struct/concrete type collisions; binds explicit type/value arguments;
+canonicalizes them; caches instances by template plus canonical arguments;
+clones/substitutes templates with `AstNode.copyShallow`; renames instances to
+`<base>__<8hex FNV>`; runs `SpecializationDesugarer`; folds constant
+`#if`/declaration-`#if` conditions during substitution; and inserts generated
+declarations into their template namespaces. Limits are 1024 instances and
+depth 64. See §4.31.
 
 #### `ImportResolver`
 Consumes an already-desugared `AstDocument`. For each surviving `AstKind.IMPORT`
@@ -2745,9 +2828,11 @@ AST node kinds and additional fields (all also carry `span`):
 | `namespace` | `name`, `items` |
 | `import` | `path` |
 | `block` | `statements` |
-| `functionDecl` | `name`, `returnType`, `parameters`, `body`, optional `inlineMode` (`INLINE` or `NOINLINE`) |
+| `functionDecl` | `name`, `returnType`, `parameters`, `body`, optional `inlineMode` (`INLINE` or `NOINLINE`), optional `generic: true` + `genericParams` |
+| `genericParam` | `name`, `typeParam` (`true`/`false`), optional `type` for value parameters |
+| `genericArg` | either `type` or `value` |
 | `parameter` | `type`, `name` |
-| `structDecl` | `name`, `fields`, `methods`, `members` |
+| `structDecl` | `name`, `fields`, `methods`, `members`, optional `generic: true` + `genericParams` |
 | `structFieldDecl` | `type`, `name`, `constInitializer` |
 | `enumDecl` | `name`, `backingType`, `variants` |
 | `enumVariant` | `name`, `constInitializer` |
@@ -2771,7 +2856,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `for` | `init`, `condition`, `update`, `body` |
 | `return` | `value` |
 | `var` | `name` |
-| `int` | `value` (decimal string) |
+| `int` | `value` (decimal string), optional `literalType` |
 | `inferredSize` | none |
 | `arrayLiteral` | `elements` |
 | `stringLiteral` | `rawText` (including quotes) |
@@ -2779,7 +2864,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `binary` | `op`, `left`, `right` |
 | `arrayAccess` | `target`, `index` |
 | `memberAccess` | `target`, `member` |
-| `call` | `callee`, `args` |
+| `call` | `callee`, `args`, optional `typeArgs` |
 | `getPtr` | `permission`, `target` |
 | `deref` | `expr` |
 | `cast` | `unsafe`, `target`, `expr` |
@@ -2788,7 +2873,7 @@ AST node kinds and additional fields (all also carry `span`):
 
 AST type kinds (also carry `span`): `primitive` (`kind`), `void`, `dynamicArray`
 (`elementType`), `staticArray` (`elementType`, `sizeExpr`), `ptr` (`permission`,
-`referencedType`), `struct` (`namespace`, `name`), `tuple` (`elements`, an
+`referencedType`), `struct` (`namespace`, `name`, optional `typeArgs`), `tuple` (`elements`, an
 array of `{span, name, type}` objects where `name` is `null` for an unnamed
 element). Enums are serialized by name
 (`"INT32"`, `"OWNER"`, `"READ_ONLY"`).
@@ -4448,6 +4533,9 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `AstNode.java` + `ASTSerializer` |
 | Add a function declaration modifier | `Franko.g4` (`functionModifier`) + `FrankoASTVisitor` + `InlineMode`/`AstNode.inlineMode` + `ASTSerializer` + `Desugarer` + `Symbol.inlineMode`/`SemanticAnalyzer` + `CompileTimeLegalityChecker` + `Cpp14Codegen.emitFunctionHeader` + §4.30 |
+| Add or change generics | `Franko.g4` (`HASH_GENERIC`, `TYPENAME`, `genericParamList`, `genericArgList`, `genericCallSuffix`) + `FrankoASTVisitor` + `AstNode`/`AstKind` + `ASTSerializer` + `PreGenericsDesugarer`/`SpecializationDesugarer` + `GenericsResolver` + `DeclarationSelector` modes + §4.31 |
+| Add an early constant-only intrinsic | `CompileTimeIntrinsicCore` + `PreGenericsCompileTimeFolder`/`PostGenericsCompileTimeFolder` + §4.31 |
+| Add a compile-time directive | `DeferredDirectives` + `CompileTimeIntrinsics` + `SemanticAnalyzer` flush + §4.31 |
 | Change aggregate literal syntax or unnamed-tuple positional rules | `Franko.g4` (`aggregateLiteral`/`initItem`/`declSuffix`) + `FrankoASTVisitor` + `Desugarer` (field-wise form) + `ExpressionAnalyzer.lowerAggregateLiteral` + `ExpressionChecker.visitAggregateLiteral` + §4.26 |
 | Change field-wise declaration initialization | `Desugarer` (`appendDesugaredVarDeclFieldsInit`) + `SemanticAnalyzer.analyzeVarDeclFieldsInitStmt` + §4.26 / §4.28 |
 | Add compile-time branch syntax | `Franko.g4` (`compileTimeIfStmt`) + `AstKind.COMPILE_TIME_IF` + `SemanticAnalyzer.appendCompileTimeIf` (splicing, statement and declaration level) + §4.18 |
@@ -4521,3 +4609,150 @@ Allowed inheritance boundary:
 Everything else uses final/ordinary classes, enums, generics, collections,
 static factories, explicit loops, and ordinary `if`/`switch` statements.
 No comments are written in Java source; design notes live in this document.
+
+## 4.31 Generics and early compile-time folding
+
+The user-facing rules are in `language_docs/20-generics.md`; this section
+records the representation, phase ordering, and expansion contracts.
+
+**Grammar.** `HASH_GENERIC` (`#generic`) is a dedicated token placed before
+`HASH`, like `HASH_INLINE`/`HASH_NOINLINE`. `TYPENAME` (`typename`) is a
+reserved keyword. `structDecl` and `functionDecl` accept an optional
+`genericParamList` after the name; `functionDecl` requires `HASH_GENERIC`
+before `functionModifier`, so `#generic #inline` parses and
+`#inline #generic` is a syntax error. `genericParam` is
+`TYPENAME IDENTIFIER` (type parameter) or `type IDENTIFIER` (value
+parameter). A `#generic` declaration requires a non-empty parameter list.
+`type` alternatives `StructType`/`QualifiedStructType` accept an
+optional `genericArgList`; `genericArg` is `type | constExpr`. A bare
+identifier argument is parsed as a `STRUCT_TYPE` by the type alternative and
+is reinterpreted contextually by `GenericsResolver` when the declared
+parameter is a value parameter. `postfixSuffix` gains
+`genericCallSuffix: genericArgList LPAREN argumentList? RPAREN`, so
+`foo<int>(...)` is a call with `genericArgs`; a comparison chain ending in
+`>(` is therefore parsed as a generic call and must be parenthesized.
+`constPrimary` accepts `IDENTIFIER` so value parameters work in static array
+sizes, field defaults, and generic value arguments.
+
+**AST.** `AstKind.GENERIC_PARAM` and `AstKind.GENERIC_ARG` are added.
+`AstNode` carries `isGeneric`, `typeParameter`, `genericParams`,
+`genericArgs`, and `literalPrimitive`. `copyShallow()` is the shared clone
+primitive used by the resolver; it copies every slot including
+`literalPrimitive`, `inlineMode`, `isConst`, and `compileTimeConstant`.
+`AstNode.typedIntLiteral` produces a fluid literal with an explicit result
+primitive; `ExpressionAnalyzer` uses `literalPrimitive` instead of the
+fallback type. `ASTSerializer` writes/reads optional `"generic"`,
+`"genericParams"`, `"typeArgs"`, `"literalType"`, and the `genericParam` /
+`genericArg` node shapes; old artifacts default to no generics.
+
+**Early target folding.** `EarlyTargetFolder` runs in `Frontend.parseFile`
+after the visitor and before desugaring, for the root file and every imported
+file. It replaces `#IS_*` names with typed `uint8` INT nodes. This is the only
+compile-time work that needs no declarations, imports, or type analysis.
+
+**Desugarer split.** `PreGenericsDesugarer` extends `Desugarer` and appends
+generic declarations unchanged; namespace recursion still desugars ordinary
+items. It does not hoist strings, lower `for`/`x++`, infer `?`, or fold const
+slots inside templates. `SpecializationDesugarer` extends `Desugarer` and
+desugars one cloned concrete declaration at a time. Both share a hoisted
+string table; `GenericsResolver` collects the new `STRLIT_` globals and
+prepends them once, deduplicating by generated name.
+
+**GenericsResolver.** `GenericsResolver` is an AST-to-AST engine owned by
+`SemanticAnalyzer`. It collects `Template` records (struct/function,
+namespace, base name, ordered params, declaration), rejects duplicate
+templates and generic-struct/concrete-type collisions, rejects generic
+`main`, validates parameter lists, and rejects independent generic methods.
+`expand` then:
+1. rewrites non-generic items, dropping templates;
+2. binds each `STRUCT_TYPE.genericArgs` and `CALL.genericArgs` against the
+   unique template for the resolved name;
+3. caches instances by `(template key, canonical type/value arguments)` and
+   inserts the cache entry before cloning, so same-argument recursion hits the
+   in-progress entry;
+4. processes the worklist: clone via `AstNode.copyShallow` +
+   `substituteNode`, clear `genericParams`/`isGeneric`, rename to
+   `<base>__<8hex FNV hash>`, run `SpecializationDesugarer`, and insert the
+   concrete declaration into the template namespace;
+5. appends generated declarations to the matching namespace nodes and adds
+   hoisted string globals.
+
+Type binding canonicalizes primitive aliases, arrays, pointers, tuples
+(names ignored), qualified struct names, and nested generic uses. Value
+binding substitutes outer value parameters, folds with
+`ConstExpressionEvaluator`, fits the declared primitive type, and stores a
+typed INT node. Limits are `MAX_INSTANCES = 1024` and `MAX_DEPTH = 64`;
+instances carry their nesting depth.
+
+Self references: inside a generic struct, a bare template name and a use with
+the current canonical arguments both rewrite to the generated instance name;
+other arguments instantiate a different instance. A method's `self` type is
+rewritten by the same type substitution.
+
+`substituteNode` also folds `COMPILE_TIME_IF`/`DECL_IF` conditions when the
+substituted condition is a constant under `CompileTimeIntrinsicCore`. The
+selected branch is preserved as a one-branch conditional (with a constant
+`1` condition), so `SemanticAnalyzer`/`DeclarationSelector` still perform the
+scope-splicing behavior and unselected branches never instantiate nested
+generic calls.
+
+**Compile-time folders.** `CompileTimeIntrinsicCore` owns the shared
+target-name mapping and the raw constant-only predicate/string semantics.
+`PreGenericsCompileTimeFolder` runs before the pre-generics selector and
+folds constant-only `#` calls outside generic templates; it leaves strings
+and directives for the semantic fallback. `PostGenericsCompileTimeFolder`
+runs after expansion and folds the same constant-only subset on the concrete
+program. Anything requiring local scope, struct/enum field information, or
+string materialization stays for `CompileTimeIntrinsics`, which remains the
+semantic adapter over the same core. The semantic adapter still owns
+`StaticStringHoister` materialization, so early folders never duplicate
+string-hoisting logic.
+
+**DeclarationSelector modes.** `selectPreGenerics` registers only
+non-generic structs/enums/globals, treats generic declarations as opaque, and
+leaves a declaration-level `#if` untouched when its condition contains a
+generic use. It resolves struct field/global types containing generic uses to
+a fallback type rather than reporting an unknown type; the post mode resolves
+them concretely. `selectPostGenerics` re-runs the ordinary selector on the
+concrete expanded program, which resolves remaining struct-member and
+global/namespace `#if` conditions. Both modes share the same
+condition/splice helpers.
+
+**Deferred directives.** `DeferredDirectives` records `PANIC`/`WARNING`
+entries (message, span) and flushes them sorted by source position.
+`CompileTimeIntrinsics.evaluatePanic`/`evaluateWarning` enqueue instead of
+emitting; `DeclarationSelector` and `SemanticAnalyzer` share one collector.
+`SemanticAnalyzer.analyze(AstDocument)` flushes at the end of semantic
+analysis. Directives in unselected branches, uninstantiated templates, and
+non-matching generic `#if` branches never reach the queue. Runtime-dead
+branch suppression (`if (0)`) is a documented future extension: it would
+require non-code SAST markers through `BranchPruner`.
+
+**Interaction with later phases.** No generic declaration or generic type
+reaches the SAST. `SemanticTypeResolver` defensively reports an unresolved
+`STRUCT_TYPE.genericArgs` as a compiler error. The legality checkers, both
+pruners, all memory checkers, and `Cpp14Codegen` see ordinary concrete
+declarations; generated names are ordinary identifiers. `#inline` recursion
+is checked per concrete instance. `InactiveDeclarationPruner` prunes unused
+instances like any other declaration. Generic FFI functions are rejected by
+`ModuleValidator` at parse time.
+
+**Fixture list.** `language_tests/success/generics_*` covers basic structs,
+functions, value parameters, nesting, methods, self references, recursion,
+namespaces, imports, compile-time reflection, typed constants, unused
+templates, directives, JSON emission, and `-Omax`.
+`language_tests/failure/generics/` covers arity, argument-kind, constant-fit,
+unknown-name, missing-argument, duplicate-parameter/template, collision,
+generic-`main`, independent-method, expansion-depth, self-reference,
+unresolved-parameter, non-value-assignable literal, unsupported-operation,
+directive-position, unknown-intrinsic, invalid-size, generic-enum/global,
+`#inline #generic`, and generic-FFI cases.
+
+**Adding generic syntax or behavior.** Update `Franko.g4` (`HASH_GENERIC`,
+`TYPENAME`, `genericParamList`, `genericArgList`, `genericCallSuffix`) +
+`FrankoASTVisitor` + `AstNode`/`AstKind` + `ASTSerializer` +
+`PreGenericsDesugarer`/`SpecializationDesugarer` + `GenericsResolver` +
+`DeclarationSelector` modes + this section. New constant-only intrinsics
+belong in `CompileTimeIntrinsicCore`; semantic-only intrinsics stay in
+`CompileTimeIntrinsics`. New directives must enqueue through
+`DeferredDirectives`.

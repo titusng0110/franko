@@ -90,7 +90,7 @@ Enum comparisons require both operands to have the exact same enum
 type; all six operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) are allowed
 and compare backing integer values. Comparing an enum to an integer,
 to `null`, to a pointer, to a struct, or to a different enum type is an
-error. See [Enums](30-enums.md).
+error. See [Enums](31-enums.md).
 
 Pointer comparison is supported only between identical pointer types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
@@ -208,7 +208,7 @@ Tuple values have no operator methods and cannot use the struct `OPERATOR_*` ove
 Enum values have no operator methods either: their `==`, `!=`, `<`,
 `>`, `<=`, `>=`, and `=` are built in and require the exact same enum
 type on both sides. Arithmetic, bitwise, shift, logical, and
-compound-assignment operators reject enum operands. See [Enums](30-enums.md).
+compound-assignment operators reject enum operands. See [Enums](31-enums.md).
 
-See [Assignment](16-assignment.md) and [Methods](27-methods.md) for the
+See [Assignment](16-assignment.md) and [Methods](28-methods.md) for the
 full operator rules.

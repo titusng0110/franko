@@ -1,0 +1,5 @@
+#generic int32 value = 1
+
+func main() -> int32 {
+    return 0
+}

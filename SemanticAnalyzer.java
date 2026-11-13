@@ -37,6 +37,9 @@ public final class SemanticAnalyzer {
 
     private final TargetInfo target;
 
+    private final DeferredDirectives deferredDirectives =
+            new DeferredDirectives();
+
     public SemanticAnalyzer(TargetInfo target) {
         this.target = target;
         this.constEval = new ConstExpressionEvaluator(symbolTable);
@@ -46,7 +49,8 @@ public final class SemanticAnalyzer {
                 constEval,
                 new ArrayLiteralHoister(this),
                 new StaticStringHoister(this),
-                target
+                target,
+                deferredDirectives
         );
 
         this.exprAnalyzer = lowering.analyzer;
@@ -67,10 +71,27 @@ public final class SemanticAnalyzer {
         SastNode result;
 
         if (root != null && root.kind == AstKind.PROGRAM) {
-            DeclarationSelector.Selection selection =
-                    new DeclarationSelector(target).select(root);
-            symbolTable.diagnostics().addAll(selection.diagnostics);
-            result = analyzeProgram(selection.program);
+            root = PreGenericsCompileTimeFolder.fold(root, target);
+
+            DeclarationSelector preSelector =
+                    new DeclarationSelector(target, deferredDirectives);
+            DeclarationSelector.Selection preSelection =
+                    preSelector.selectPreGenerics(root);
+
+            GenericsResolver resolver =
+                    new GenericsResolver(symbolTable.diagnostics(), target);
+            AstNode expanded = resolver.expand(preSelection.program);
+            expanded = PostGenericsCompileTimeFolder.fold(expanded, target);
+
+            DeclarationSelector postSelector =
+                    new DeclarationSelector(target, deferredDirectives);
+            DeclarationSelector.Selection postSelection =
+                    postSelector.selectPostGenerics(expanded);
+
+            symbolTable.diagnostics().addAll(preSelection.diagnostics);
+            symbolTable.diagnostics().addAll(postSelection.diagnostics);
+
+            result = analyzeProgram(postSelection.program);
         } else if (root != null && root.kind == AstKind.FUNCTION_DECL) {
 
             registerFunctionSignature(root);
@@ -110,6 +131,7 @@ public final class SemanticAnalyzer {
         SymbolRegistry registry = new SymbolRegistry();
         SastSerializer.registerFromNode(program, registry);
         registry.registerAll(symbolTable.allSymbols());
+        deferredDirectives.flush(symbolTable.diagnostics());
         SastDocument document = new SastDocument(
                 SastPhase.SEMANTIC,
                 entryKind,

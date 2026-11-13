@@ -1,0 +1,8 @@
+#generic struct Pair<typename A, typename B> {
+    A first
+    B second
+}
+
+#generic func make_pair<typename A, typename B>(A a, B b) -> Pair<A, B> {
+    return Pair<A, B> { first = a, second = b }
+}

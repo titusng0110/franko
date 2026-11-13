@@ -1,0 +1,10 @@
+{
+  "format": "franko-module",
+  "version": 1,
+  "id": "tests/generic_ffi",
+  "source": "generic_ffi.fr",
+  "bridge": "generic_ffi.ffi.cpp",
+  "functions": [
+    {"namespace": null, "name": "bridged"}
+  ]
+}

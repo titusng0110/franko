@@ -1,0 +1,7 @@
+#generic func f<typename T>(T v) -> T {
+    return v
+}
+
+func main() -> int32 {
+    return f<int32, uint8>(1)
+}

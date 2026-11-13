@@ -1,0 +1,4 @@
+func main() -> int32 {
+    Missing<int32> x
+    return 0
+}

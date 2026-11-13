@@ -1,0 +1,20 @@
+import "franko/io"
+
+#generic struct Buffer<typename T, int32 N> {
+    [T, N] data
+    int32 count = N
+}
+
+#generic func local_size<int32 N>() -> uint32 {
+    [int32, N] local
+    local.memset(0)
+    return local.length()
+}
+
+func main() -> int32 {
+    Buffer<int32, 1 + 2> b
+    print(b.count)
+    print(b.data.length())
+    print(local_size<4>())
+    return 0
+}

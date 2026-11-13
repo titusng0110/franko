@@ -67,6 +67,16 @@ final class SemanticTypeResolver {
 
         if (node.kind == AstKind.STRUCT_TYPE) {
             AstNode s = node;
+
+            if (s.genericArgs != null && !s.genericArgs.isEmpty()) {
+                symbolTable.error("Generic type '"
+                        + (s.names == null || s.names.isEmpty()
+                                ? s.name
+                                : String.join("::", s.names) + "::" + s.name)
+                        + "' was not resolved to a concrete instance");
+                return FALLBACK_TYPE;
+            }
+
             StructSymbol structSymbol = resolveStructTypeSymbolQuiet(s);
 
             if (structSymbol != null) {

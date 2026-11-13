@@ -216,7 +216,8 @@ importDecl
 //   }
 //
 structDecl
-    : STRUCT IDENTIFIER separators* LBRACE separators* (structMember separators*)* RBRACE
+    : HASH_GENERIC? STRUCT IDENTIFIER genericParamList? separators*
+      LBRACE separators* (structMember separators*)* RBRACE
     ;
 
 structMember
@@ -373,7 +374,26 @@ constDeclInitializer
 //   ptr<void> p.
 //
 functionDecl
-    : functionModifier? FUNC IDENTIFIER LPAREN parameterList? RPAREN ARROW returnType separators* block
+    : HASH_GENERIC? functionModifier? FUNC IDENTIFIER genericParamList?
+      LPAREN parameterList? RPAREN ARROW returnType separators* block
+    ;
+
+genericParamList
+    : LT genericParam (COMMA genericParam)* GT
+    ;
+
+genericParam
+    : TYPENAME IDENTIFIER
+    | type IDENTIFIER
+    ;
+
+genericArgList
+    : LT genericArg (COMMA genericArg)* GT
+    ;
+
+genericArg
+    : type
+    | constExpr
     ;
 
 functionModifier
@@ -801,8 +821,13 @@ primary
 
 postfixSuffix
     : indexSuffix
+    | genericCallSuffix
     | callSuffix
     | memberSuffix
+    ;
+
+genericCallSuffix
+    : genericArgList LPAREN argumentList? RPAREN
     ;
 
 indexSuffix
@@ -970,6 +995,7 @@ constUnaryExpr
 
 constPrimary
     : integerLiteral
+    | IDENTIFIER
     | LPAREN constExpr RPAREN
     ;
 
@@ -1040,8 +1066,8 @@ aggregateLiteral
     ;
 
 structTypeName
-    : IDENTIFIER
-    | qualifiedName
+    : IDENTIFIER genericArgList?
+    | qualifiedName genericArgList?
     ;
 
 fieldInitList
@@ -1207,8 +1233,8 @@ type
     | UINT16                                 # Uint16Type
     | UINT32                                 # Uint32Type
     | UINT64                                 # Uint64Type
-    | IDENTIFIER                               # StructType
-    | qualifiedName                            # QualifiedStructType
+    | IDENTIFIER genericArgList?                  # StructType
+    | qualifiedName genericArgList?               # QualifiedStructType
     | LBRACK type RBRACK                         # DynamicArrayType
     | LBRACK type COMMA arraySize RBRACK        # StaticArrayType
     | PTR LT type GT                          # PtrType
@@ -1314,10 +1340,13 @@ COMMA   : ',' ;
 SEMI    : ';' ;
 HASH_INLINE   : '#inline' ;
 HASH_NOINLINE : '#noinline' ;
+HASH_GENERIC  : '#generic' ;
 HASH    : '#' ;
 LT      : '<' ;
 GT      : '>' ;
 QUESTION: '?' ;
+
+TYPENAME : 'typename' ;
 
 // Grouping with depth tracking
 LPAREN : '(' { groupingDepth++; } ;

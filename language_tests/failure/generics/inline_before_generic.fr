@@ -1,0 +1,7 @@
+#inline #generic func f<typename T>(T v) -> T {
+    return v
+}
+
+func main() -> int32 {
+    return 0
+}

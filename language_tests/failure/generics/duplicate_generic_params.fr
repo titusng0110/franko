@@ -1,0 +1,7 @@
+#generic struct X<typename T, typename T> {
+    T value
+}
+
+func main() -> int32 {
+    return 0
+}

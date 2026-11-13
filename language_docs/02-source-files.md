@@ -112,7 +112,7 @@ import "franko/pool"
 User code must not add files under the compiler's `import/franko/` directory
 or use the `franko/` prefix for user modules. Use a project-relative path or
 your own search-directory path instead, such as `import "./lib/my_module"` or
-`import "myproject/my_module"` (see [Naming Conventions](36-naming-conventions.md)).
+`import "myproject/my_module"` (see [Naming Conventions](37-naming-conventions.md)).
 
 ### How Imports Resolve
 
@@ -130,6 +130,6 @@ Namespaces still separate symbols by path; duplicate declarations that end up in
 An imported module may ship a sibling `<module>.module.json` descriptor that
 marks functions as implemented by a C++ bridge. The bundled `franko/os`
 module is the standard example. See
-[Foreign Function Interface](33-foreign-function-interface.md) for the
+[Foreign Function Interface](34-foreign-function-interface.md) for the
 descriptor format, bridge block naming, and examples. A module without a
 descriptor is just an ordinary Franko module.

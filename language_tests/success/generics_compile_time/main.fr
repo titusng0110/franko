@@ -1,0 +1,24 @@
+import "franko/io"
+
+#generic func info<typename T>(T v) -> int32 {
+    print(#what_type(T))
+    print(#has_default_value(T))
+    print(#is_primitive(v))
+    print(#strcmp(#what_type(T), "int32"))
+
+    #if (#is_same_type(T, int32)) {
+        #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
+            return 1
+        } #else {
+            return 0
+        }
+    } #else {
+        return 2
+    }
+}
+
+func main() -> int32 {
+    print(info<int32>(5))
+    print(info<uint8>(5))
+    return 0
+}

@@ -1,0 +1,7 @@
+#generic func grow<int32 N>() -> int32 {
+    return grow<N + 1>()
+}
+
+func main() -> int32 {
+    return grow<0>()
+}

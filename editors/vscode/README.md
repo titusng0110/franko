@@ -9,6 +9,8 @@ the Franko language (`.fr` and `.franko`).
 - `//` line comments
 - Bracket matching and auto-closing for `{}`, `[]`, and `()`
 - Function, struct, namespace, if, for, and tuple snippets
+- Generic struct and generic function snippets, plus `#generic` and
+  `typename` highlighting
 
 This is a declarative TextMate highlighting extension. It does not provide
 compiler diagnostics, IntelliSense, or a language server.

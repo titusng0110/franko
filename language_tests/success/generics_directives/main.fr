@@ -1,0 +1,22 @@
+import "franko/io"
+
+#generic func check<typename T>() -> int32 {
+    #if (#is_same_type(T, int32)) {
+        #warning(#strcat("instantiated ", #what_type(T)))
+        return 1
+    } #else {
+        #panic(#strcat("unsupported ", #what_type(T)))
+    }
+}
+
+#generic func never_used<typename T>() -> int32 {
+    #panic("never instantiated")
+}
+
+func main() -> int32 {
+    #if (0) {
+        #panic("dead")
+    }
+    print(check<int32>())
+    return 0
+}

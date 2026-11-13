@@ -1,0 +1,9 @@
+#generic func zero<int32 N>() -> int32 {
+    [int32, N] local
+    local.memset(0)
+    return 0
+}
+
+func main() -> int32 {
+    return zero<0>()
+}

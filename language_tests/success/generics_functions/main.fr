@@ -1,0 +1,30 @@
+import "franko/io"
+
+#generic func foo<typename T>(T a, T b) -> T {
+    return a + b
+}
+
+#generic func goo<typename T>(view<[T]> v) -> T {
+    return $(v)[0]
+}
+
+#generic func pair<typename T>(T a) -> (T val, int32 err) {
+    return (T val, int32 err) { val = a, err = 0 }
+}
+
+func main() -> int32 {
+    print(foo<int32>(1, 2))
+
+    [int32] arr
+    arr.init(2)
+    arr[0] = 7
+    arr[1] = 8
+    print(goo<int32>(getview(arr)))
+
+    (int32 val, int32 err) p = pair<int32>(42)
+    print(p.val)
+    print(p.err)
+
+    arr.uninit()
+    return 0
+}
