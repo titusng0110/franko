@@ -33,6 +33,7 @@ final class Symbol {
     BigInteger compileTimeConstantValue;
     List<BigInteger> literalBytes;
     List<BigInteger> literalValues;
+    SastNode parameterDefault;
 
     private Symbol(
             SymbolKind kind,

@@ -1,7 +1,280 @@
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 final class OverloadResolution {
+
+    static int findParameter(Symbol fn, String name, int start) {
+        if (fn == null || name == null) {
+            return -1;
+        }
+
+        for (int i = Math.max(0, start); i < fn.parameters.size(); i++) {
+            if (name.equals(fn.parameters.get(i).name)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    static int[] bindArguments(
+            Symbol fn,
+            List<CallArg> args,
+            boolean method
+    ) {
+        if (fn == null || args == null) {
+            return null;
+        }
+
+        int start = method ? 1 : 0;
+
+        if (fn.parameters.size() < start) {
+            return null;
+        }
+
+        int[] argAt = new int[fn.parameters.size()];
+        Arrays.fill(argAt, -1);
+        int position = start;
+        boolean namedSeen = false;
+
+        for (int i = 0; i < args.size(); i++) {
+            CallArg arg = args.get(i);
+
+            if (arg == null) {
+                return null;
+            }
+
+            if (!arg.isNamed()) {
+                if (namedSeen) {
+                    return null;
+                }
+
+                if (position >= fn.parameters.size()) {
+                    return null;
+                }
+
+                argAt[position++] = i;
+                continue;
+            }
+
+            namedSeen = true;
+            int target = findParameter(fn, arg.name, start);
+
+            if (target < 0 || argAt[target] >= 0) {
+                return null;
+            }
+
+            argAt[target] = i;
+        }
+
+        boolean anyPositionalRequired = false;
+        boolean anyNamedRequired = false;
+
+        for (int p = start; p < argAt.length; p++) {
+            Symbol parameter = fn.parameters.get(p);
+            boolean supplied = argAt[p] >= 0;
+            boolean optional = parameter.parameterDefault != null;
+
+            if (!supplied && !optional) {
+                return null;
+            }
+
+            if (!supplied) {
+                continue;
+            }
+
+            CallArg arg = args.get(argAt[p]);
+
+            if (optional && !arg.isNamed()) {
+                return null;
+            }
+
+            if (!optional) {
+                if (arg.isNamed()) {
+                    anyNamedRequired = true;
+                } else {
+                    anyPositionalRequired = true;
+                }
+            }
+        }
+
+        if (anyPositionalRequired && anyNamedRequired) {
+            return null;
+        }
+
+        return argAt;
+    }
+
+    static String describeBindingProblem(
+            String callName,
+            Symbol fn,
+            List<CallArg> args,
+            boolean method
+    ) {
+        if (fn == null || args == null) {
+            return null;
+        }
+
+        int start = method ? 1 : 0;
+
+        if (fn.parameters.size() < start) {
+            return null;
+        }
+
+        if (method) {
+            for (CallArg arg : args) {
+                if (arg != null && "self".equals(arg.name)) {
+                    return "Named argument 'self' is not valid in a method"
+                            + " call; self is implicit";
+                }
+            }
+        }
+
+        int[] argAt = new int[fn.parameters.size()];
+        Arrays.fill(argAt, -1);
+        int position = start;
+        boolean namedSeen = false;
+
+        for (int i = 0; i < args.size(); i++) {
+            CallArg arg = args.get(i);
+
+            if (arg == null) {
+                return null;
+            }
+
+            if (!arg.isNamed()) {
+                if (namedSeen) {
+                    return "Positional arguments must appear before named"
+                            + " arguments in call to '" + callName + "'";
+                }
+
+                if (position >= fn.parameters.size()) {
+                    return null;
+                }
+
+                argAt[position++] = i;
+                continue;
+            }
+
+            namedSeen = true;
+            int target = findParameter(fn, arg.name, start);
+
+            if (target < 0) {
+                return "Named argument '" + arg.name + "' does not match any"
+                        + " parameter of '" + callName + "'";
+            }
+
+            if (argAt[target] >= 0) {
+                if (args.get(argAt[target]).isNamed()) {
+                    return "Named argument '" + arg.name + "' is specified"
+                            + " more than once in call to '" + callName + "'";
+                }
+
+                return "Argument for parameter '" + arg.name + "' is already"
+                        + " supplied positionally";
+            }
+
+            argAt[target] = i;
+        }
+
+        boolean anyPositionalRequired = false;
+        boolean anyNamedRequired = false;
+        String optionalPositional = null;
+        String missingRequired = null;
+
+        for (int p = start; p < argAt.length; p++) {
+            Symbol parameter = fn.parameters.get(p);
+            boolean supplied = argAt[p] >= 0;
+            boolean optional = parameter.parameterDefault != null;
+
+            if (!supplied) {
+                if (!optional && missingRequired == null) {
+                    missingRequired = parameter.name;
+                }
+
+                continue;
+            }
+
+            CallArg arg = args.get(argAt[p]);
+
+            if (optional) {
+                if (!arg.isNamed() && optionalPositional == null) {
+                    optionalPositional = parameter.name;
+                }
+            } else if (arg.isNamed()) {
+                anyNamedRequired = true;
+            } else {
+                anyPositionalRequired = true;
+            }
+        }
+
+        if (anyPositionalRequired && anyNamedRequired) {
+            return "Compulsory arguments in call to '" + callName + "' must"
+                    + " be either all named or all unnamed";
+        }
+
+        if (optionalPositional != null) {
+            return "Optional parameter '" + optionalPositional + "' of '"
+                    + callName + "' must be passed by name";
+        }
+
+        if (missingRequired != null) {
+            return "Missing required argument '" + missingRequired
+                    + "' in call to '" + callName + "'";
+        }
+
+        return null;
+    }
+
+    static List<Symbol> preferFewestDefaultFills(
+            List<Symbol> matches,
+            List<CallArg> args,
+            boolean method
+    ) {
+        if (matches.size() <= 1) {
+            return matches;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (Symbol fn : matches) {
+            best = Math.min(best, countDefaultFills(fn, args, method));
+        }
+
+        List<Symbol> preferred = new ArrayList<>();
+
+        for (Symbol fn : matches) {
+            if (countDefaultFills(fn, args, method) == best) {
+                preferred.add(fn);
+            }
+        }
+
+        return preferred;
+    }
+
+    private static int countDefaultFills(
+            Symbol fn,
+            List<CallArg> args,
+            boolean method
+    ) {
+        int[] argAt = bindArguments(fn, args, method);
+
+        if (argAt == null) {
+            return Integer.MAX_VALUE;
+        }
+
+        int start = method ? 1 : 0;
+        int count = 0;
+
+        for (int p = start; p < argAt.length; p++) {
+            if (argAt[p] < 0) {
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     static int constantFitCost(
             CallArg arg,
@@ -73,17 +346,22 @@ final class OverloadResolution {
             Symbol fn,
             List<CallArg> args
     ) {
-        if (fn.arity() != args.size()) {
+        int[] argAt = bindArguments(fn, args, false);
+
+        if (argAt == null) {
             return false;
         }
 
-        List<SastType> parameterTypes = fn.parameterTypes();
+        for (int p = 0; p < fn.parameters.size(); p++) {
+            int argIndex = argAt[p];
 
-        for (int i = 0; i < args.size(); i++) {
-            SastType parameterType = parameterTypes.get(i);
-            CallArg arg = args.get(i);
+            if (argIndex < 0) {
+                continue;
+            }
 
-            if (!isArgumentApplicableToParameter(arg, parameterType)) {
+            if (!isArgumentApplicableToParameter(
+                    args.get(argIndex),
+                    fn.parameters.get(p).type)) {
                 return false;
             }
         }
@@ -95,16 +373,22 @@ final class OverloadResolution {
             Symbol method,
             List<CallArg> userArgs
     ) {
-        if (method.parameters.size() != userArgs.size() + 1) {
+        int[] argAt = bindArguments(method, userArgs, true);
+
+        if (argAt == null) {
             return false;
         }
 
-        for (int i = 0; i < userArgs.size(); i++) {
-            SastType parameterType =
-                    method.parameters.get(i + 1).type;
-            CallArg arg = userArgs.get(i);
+        for (int p = 1; p < method.parameters.size(); p++) {
+            int argIndex = argAt[p];
 
-            if (!isArgumentApplicableToParameter(arg, parameterType)) {
+            if (argIndex < 0) {
+                continue;
+            }
+
+            if (!isArgumentApplicableToParameter(
+                    userArgs.get(argIndex),
+                    method.parameters.get(p).type)) {
                 return false;
             }
         }
@@ -113,56 +397,32 @@ final class OverloadResolution {
     }
 
     static int countPermissionDowngrades(
+            Symbol fn,
             List<CallArg> args,
-            List<SastType> parameterTypes
+            boolean method
     ) {
-        int count = 0;
+        int[] argAt = bindArguments(fn, args, method);
 
-        for (int i = 0; i < args.size(); i++) {
-            CallArg arg = args.get(i);
-
-            if (arg == null) {
-                continue;
-            }
-
-            SastType parameterType = parameterTypes.get(i);
-
-            if (arg.isLiteral()) {
-                count += arrayLiteralDowngradeCost(arg.literal, parameterType);
-                continue;
-            }
-
-            if (arg.lowered == null || arg.lowered.type == null) {
-                continue;
-            }
-
-            if (!TypeChecker.sameType(arg.lowered.type, parameterType)
-                    && arg.lowered.type.kind == SastTypeKind.PTR) {
-                count += PointerPermissions.isStaticArrayViewDecay(
-                        arg.lowered.type,
-                        parameterType)
-                        ? 2
-                        : 1;
-            }
+        if (argAt == null) {
+            return Integer.MAX_VALUE;
         }
 
-        return count;
-    }
-
-    static int countMethodPermissionDowngrades(
-            Symbol method,
-            List<CallArg> userArgs
-    ) {
+        int start = method ? 1 : 0;
         int count = 0;
 
-        for (int i = 0; i < userArgs.size(); i++) {
-            CallArg arg = userArgs.get(i);
+        for (int p = start; p < fn.parameters.size(); p++) {
+            int argIndex = argAt[p];
+
+            if (argIndex < 0) {
+                continue;
+            }
+
+            CallArg arg = args.get(argIndex);
+            SastType parameterType = fn.parameters.get(p).type;
 
             if (arg == null) {
                 continue;
             }
-
-            SastType parameterType = method.parameters.get(i + 1).type;
 
             if (arg.isLiteral()) {
                 count += arrayLiteralDowngradeCost(arg.literal, parameterType);
@@ -483,13 +743,13 @@ final class OverloadResolution {
         for (Symbol fn : matches) {
             best = Math.min(
                     best,
-                    countPermissionDowngrades(args, fn.parameterTypes()));
+                    countPermissionDowngrades(fn, args, false));
         }
 
         List<Symbol> preferred = new ArrayList<>();
 
         for (Symbol fn : matches) {
-            if (countPermissionDowngrades(args, fn.parameterTypes()) == best) {
+            if (countPermissionDowngrades(fn, args, false) == best) {
                 preferred.add(fn);
             }
         }
@@ -510,13 +770,13 @@ final class OverloadResolution {
         for (Symbol method : matches) {
             best = Math.min(
                     best,
-                    countMethodPermissionDowngrades(method, userArgs));
+                    countPermissionDowngrades(method, userArgs, true));
         }
 
         List<Symbol> preferred = new ArrayList<>();
 
         for (Symbol method : matches) {
-            if (countMethodPermissionDowngrades(method, userArgs) == best) {
+            if (countPermissionDowngrades(method, userArgs, true) == best) {
                 preferred.add(method);
             }
         }
@@ -568,13 +828,13 @@ final class OverloadResolution {
         for (Symbol fn : matches) {
             best = Math.min(
                     best,
-                    totalConstantFitCost(args, fn.parameterTypes()));
+                    totalConstantFitCost(fn, args, false));
         }
 
         List<Symbol> preferred = new ArrayList<>();
 
         for (Symbol fn : matches) {
-            if (totalConstantFitCost(args, fn.parameterTypes()) == best) {
+            if (totalConstantFitCost(fn, args, false) == best) {
                 preferred.add(fn);
             }
         }
@@ -593,13 +853,13 @@ final class OverloadResolution {
         int best = Integer.MAX_VALUE;
 
         for (Symbol m : matches) {
-            best = Math.min(best, totalMethodConstantFitCost(m, userArgs));
+            best = Math.min(best, totalConstantFitCost(m, userArgs, true));
         }
 
         List<Symbol> preferred = new ArrayList<>();
 
         for (Symbol m : matches) {
-            if (totalMethodConstantFitCost(m, userArgs) == best) {
+            if (totalConstantFitCost(m, userArgs, true) == best) {
                 preferred.add(m);
             }
         }
@@ -608,28 +868,29 @@ final class OverloadResolution {
     }
 
     private static int totalConstantFitCost(
+            Symbol fn,
             List<CallArg> args,
-            List<SastType> parameterTypes
+            boolean method
     ) {
-        int total = 0;
+        int[] argAt = bindArguments(fn, args, method);
 
-        for (int i = 0; i < args.size(); i++) {
-            total += constantFitCost(args.get(i), parameterTypes.get(i));
+        if (argAt == null) {
+            return Integer.MAX_VALUE;
         }
 
-        return total;
-    }
-
-    private static int totalMethodConstantFitCost(
-            Symbol method,
-            List<CallArg> userArgs
-    ) {
+        int start = method ? 1 : 0;
         int total = 0;
 
-        for (int i = 0; i < userArgs.size(); i++) {
-            SastType parameterType =
-                    method.parameters.get(i + 1).type;
-            total += constantFitCost(userArgs.get(i), parameterType);
+        for (int p = start; p < fn.parameters.size(); p++) {
+            int argIndex = argAt[p];
+
+            if (argIndex < 0) {
+                continue;
+            }
+
+            total += constantFitCost(
+                    args.get(argIndex),
+                    fn.parameters.get(p).type);
         }
 
         return total;

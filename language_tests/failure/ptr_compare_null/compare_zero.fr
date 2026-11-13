@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: ptr_compare_null/compare_zero
 // An pointer may not be compared with the integer 0.
@@ -8,7 +8,7 @@ func main() -> int32 {
 
     p1 = getptr(x1)
 
-    print(p1 == 0)
+    stdout(p1 == 0)
 
     return 0
 }

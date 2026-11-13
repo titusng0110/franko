@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Function Recursion
@@ -29,9 +29,9 @@ func is_odd(int32 n) -> int32 {
 }
 
 func main() -> int32 {
-    print(factorial(5));
-    print(is_even(4));
-    print(is_even(7));
-    print(is_odd(7));
+    stdout(factorial(5));
+    stdout(is_even(4));
+    stdout(is_even(7));
+    stdout(is_odd(7));
     return 0;
 }

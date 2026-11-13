@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Type Equality - Static Array Size Comparison
@@ -27,7 +27,7 @@ func main() -> int32 {
     b.memset(0);
     a[0] = 42;
     b[0] = 24;
-    print(first(getptr(a)));
-    print(first(getptr(b)));
+    stdout(first(getptr(a)));
+    stdout(first(getptr(b)));
     return 0;
 }

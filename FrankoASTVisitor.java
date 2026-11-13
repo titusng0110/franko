@@ -160,10 +160,12 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                 List<AstNode> genericArgs = genericArguments(
                         suffix.genericCallSuffix().genericArgList());
                 List<AstNode> args = new ArrayList<>();
+                List<String> argumentNames = new ArrayList<>();
 
                 if (suffix.genericCallSuffix().argumentList() != null) {
-                    for (FrankoParser.ExprContext argCtx : suffix.genericCallSuffix().argumentList().expr()) {
-                        args.add(visit(argCtx));
+                    for (FrankoParser.ArgumentContext argCtx : suffix.genericCallSuffix().argumentList().argument()) {
+                        args.add(visit(argCtx.expr()));
+                        argumentNames.add(argumentName(argCtx));
                     }
                 }
 
@@ -171,18 +173,27 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                         merge(current.span, span(suffix)),
                         current,
                         args,
-                        genericArgs
+                        genericArgs,
+                        argumentNames
                 );
             } else if (suffix.callSuffix() != null) {
                 List<AstNode> args = new ArrayList<>();
+                List<String> argumentNames = new ArrayList<>();
 
                 if (suffix.callSuffix().argumentList() != null) {
-                    for (FrankoParser.ExprContext argCtx : suffix.callSuffix().argumentList().expr()) {
-                        args.add(visit(argCtx));
+                    for (FrankoParser.ArgumentContext argCtx : suffix.callSuffix().argumentList().argument()) {
+                        args.add(visit(argCtx.expr()));
+                        argumentNames.add(argumentName(argCtx));
                     }
                 }
 
-                current = AstNode.call(merge(current.span, span(suffix)), current, args);
+                current = AstNode.call(
+                        merge(current.span, span(suffix)),
+                        current,
+                        args,
+                        List.of(),
+                        argumentNames
+                );
             } else if (suffix.memberSuffix() != null) {
                 String memberName = suffix.memberSuffix().memberName().getText();
                 current = AstNode.memberAccess(
@@ -200,8 +211,23 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
         return current;
     }
 
-    private AstNode applyLvalueSuffixes(
-        AstNode base,
+    private static String argumentName(FrankoParser.ArgumentContext ctx) {
+        if (ctx == null || ctx.ASSIGN() == null) {
+            return "";
+        }
+
+        if (ctx.SELF() != null) {
+            return "self";
+        }
+
+        if (ctx.IDENTIFIER() == null) {
+            return "";
+        }
+
+        return ctx.IDENTIFIER().getText();
+    }
+
+    private AstNode applyLvalueSuffixes(        AstNode base,
         List<FrankoParser.LvalueSuffixContext> suffixes
     ) {
         AstNode current = base;
@@ -620,7 +646,10 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
                 span(ctx),
                 type,
                 name,
-                ctx.CONST() != null
+                ctx.CONST() != null,
+                ctx.parameterDefault() == null
+                        ? null
+                        : visit(ctx.parameterDefault().expr())
         );
     }
 

@@ -17,7 +17,7 @@ compiler warnings. The other conventions in this chapter are style guidance.
 | Enum | `CapitalLetterCamelCase` | `Status`, `AiState`, `NetworkState` |
 | Internal enum | `__` + `CapitalLetterCamelCase` | `__SecretState` |
 | Enum variant | `camelCaseStartingWithLowerCaseLetter` | `Types::type1`, `Types::complexType` |
-| Function | `lower_case_snake_case` | `read_line`, `new_index` |
+| Function | `lower_case_snake_case` | `stdin_line`, `new_index` |
 | Method | `lower_case_snake_case` | `write_active_indices`, `get_capacity` |
 | Private method | `_` + `lower_case_snake_case` | `_secret_function` |
 | Internal function | `__` + `lower_case_snake_case` | `__private_helper` |
@@ -220,7 +220,7 @@ The compiler's bundled standard library is stored under `./import/franko/`.
 The import prefix `franko/` is reserved for those standard modules:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/os"
 import "franko/pool"
 ```

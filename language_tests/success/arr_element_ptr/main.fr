@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Array Elements as Pointable Lvalues
@@ -17,8 +17,8 @@ func main() -> int32 {
     ptr<int32> p
     p = getptr(xs[0])
     $(p) = 9
-    print(xs[0])
-    print($(p))
+    stdout(xs[0])
+    stdout($(p))
 
     // Nested static array element pointer: each hop is storage-backed.
     [[int32, 2], 2] m
@@ -26,7 +26,7 @@ func main() -> int32 {
     ptr<int32> q
     q = getptr(m[1][0])
     $(q) = 6
-    print(m[1][0])
+    stdout(m[1][0])
 
     // Dynamic array element pointer.
     [int32] dyn
@@ -35,7 +35,7 @@ func main() -> int32 {
     ptr<int32> r
     r = getptr(dyn[1])
     $(r) = 4
-    print(dyn[1])
+    stdout(dyn[1])
 
     dyn.uninit()
     return 0

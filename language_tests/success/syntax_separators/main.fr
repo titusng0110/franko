@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Syntax — Statement Separators
@@ -12,32 +12,32 @@ func main() -> int32 {
     // Newline-separated statements (no semicolons at all).
     int32 a = 1
     int32 b = 2
-    print(a)
-    print(b)
+    stdout(a)
+    stdout(b)
 
     // Several statements on one line separated by ';'.
-    int32 c = 3; int32 d = 4; print(c + d)
+    int32 c = 3; int32 d = 4; stdout(c + d)
 
     // Consecutive separators: ';;' and runs of blank lines.
     a = 10;;
     b = 20;
 
 
-    print(a + b)
+    stdout(a + b)
 
     // Newlines inside parentheses are ignored: a single
     // expression may span several lines.
-    print(
+    stdout(
         a
         +
         b
     )
 
-    // Multi-line argument list in a print statement.
-    print(c, " "); print(d)
+    // Multi-line argument list in a stdout call.
+    stdout(c, end = " "); stdout(d)
 
     // A trailing separator before the closing brace is fine.
-    print(a);
+    stdout(a);
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: ptr_deref_null/null_guard_inside_deref
 // Dereferencing inside a null guard after a branch merge:
@@ -14,7 +14,7 @@ func main() -> int32 {
     }
 
     if (p7 == null) {
-        print($(p7))
+        stdout($(p7))
     }
 
     return 0

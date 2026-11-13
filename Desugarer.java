@@ -59,11 +59,7 @@ public class Desugarer {
             StringLiteralDecoder.toUtf8Bytes(literal);
 
         if (bytes.isEmpty()) {
-            diagnostics.error("Empty string literals are not supported: "
-                + "a string literal is a view<[byte, N]> value with "
-                + "N >= 1");
-            bytes = new ArrayList<>();
-            bytes.add(BigInteger.ZERO);
+            return AstNode.nullLiteral(literal.span);
         }
 
         StringBuilder contentKey = new StringBuilder();
@@ -308,6 +304,10 @@ public class Desugarer {
                 return globalVarDecl(n, type, null);
             }
 
+            if (hoisted.kind == AstKind.NULL) {
+                return globalVarDecl(n, type, null);
+            }
+
             return globalVarDecl(n, type, hoisted);
         }
 
@@ -318,6 +318,10 @@ public class Desugarer {
                     + "': only pointer-typed globals may be initialized with "
                     + "an array literal");
 
+                return globalVarDecl(n, type, null);
+            }
+
+            if (init.elements.isEmpty()) {
                 return globalVarDecl(n, type, null);
             }
 
@@ -400,7 +404,10 @@ public class Desugarer {
             param.span,
             desugarType(param.type),
             param.name,
-            param.isConst
+            param.isConst,
+            param.defaultValue == null
+                    ? null
+                    : desugarExpr(param.defaultValue)
         );
     }
 
@@ -1225,7 +1232,8 @@ public class Desugarer {
             return AstNode.call(expr.span,
                 desugarExpr(expr.callee),
                 args,
-                desugarGenericArguments(expr.genericArgs)
+                desugarGenericArguments(expr.genericArgs),
+                expr.argumentNames
             );
         }
 
@@ -1251,6 +1259,10 @@ public class Desugarer {
         }
 
         if (expr.kind == AstKind.ARRAY_LITERAL) {
+            if (expr.elements.isEmpty()) {
+                return AstNode.nullLiteral(expr.span);
+            }
+
             List<AstNode> elements = new ArrayList<>();
 
             for (AstNode element : expr.elements) {

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: memcmp Forms
@@ -25,19 +25,19 @@ func main() -> int32 {
     b[2] = 3
 
     // Equal arrays.
-    print(a.memcmp(getptr(b)) == 0)
+    stdout(a.memcmp(getptr(b)) == 0)
 
     // Byte-wise ordering: 3 < 4.
     b[2] = 4
-    print(a.memcmp(getptr(b)) < 0)
-    print(b.memcmp(getptr(a)) > 0)
+    stdout(a.memcmp(getptr(b)) < 0)
+    stdout(b.memcmp(getptr(a)) > 0)
 
     // Equal shared prefix orders by length (shorter is less).
     [int32, 2] shorter
     shorter[0] = 1
     shorter[1] = 2
-    print(shorter.memcmp(getptr(a)) < 0)
-    print(a.memcmp(getptr(shorter)) > 0)
+    stdout(shorter.memcmp(getptr(a)) < 0)
+    stdout(a.memcmp(getptr(shorter)) > 0)
 
     // Dynamic <-> static shapes.
     [int32] d
@@ -45,22 +45,22 @@ func main() -> int32 {
     d[0] = 1
     d[1] = 2
     d[2] = 3
-    print(d.memcmp(getptr(a)) == 0)
-    print(a.memcmp(getptr(d)) == 0)
+    stdout(d.memcmp(getptr(a)) == 0)
+    stdout(a.memcmp(getptr(d)) == 0)
 
     // Array-literal source.
-    print(a.memcmp([1, 2, 3]) == 0)
-    print(a.memcmp([1, 2, 9]) < 0)
+    stdout(a.memcmp([1, 2, 3]) == 0)
+    stdout(a.memcmp([1, 2, 9]) < 0)
 
     // Ranged form: equal prefix, then a difference at index 2.
-    print(a.memcmp(getptr(b), 0, 0, 2) == 0)
+    stdout(a.memcmp(getptr(b), 0, 0, 2) == 0)
     d[2] = 9
-    print(a.memcmp(getptr(d), 2, 2, 1) < 0)
-    print(d.memcmp(getptr(a), 2, 2, 1) > 0)
+    stdout(a.memcmp(getptr(d), 2, 2, 1) < 0)
+    stdout(d.memcmp(getptr(a), 2, 2, 1) > 0)
 
     // View receiver and view source.
     view<[int32, 3]> va = getview(a)
-    print($(va).memcmp(getview(b)) < 0)
+    stdout($(va).memcmp(getview(b)) < 0)
 
     // Struct elements are memcpy-safe.
     [Pair, 2] ps
@@ -73,7 +73,7 @@ func main() -> int32 {
     pt[0].second = 2
     pt[1].first = 3
     pt[1].second = 5
-    print(ps.memcmp(getptr(pt)) < 0)
+    stdout(ps.memcmp(getptr(pt)) < 0)
 
     d.uninit()
     return 0

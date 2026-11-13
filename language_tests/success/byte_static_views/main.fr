@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Byte Intrinsics on Static Array Receivers
@@ -23,10 +23,10 @@ func main() -> int32 {
     buf[3] = 68
 
     view<[byte]> v = getview(buf)
-    print($(v).length())
-    print($(v).memchr(67))
-    print($(v).read_uint16_LE(0))
-    print($(v).memchr(90))
+    stdout($(v).length())
+    stdout($(v).memchr(67))
+    stdout($(v).read_uint16_LE(0))
+    stdout($(v).memchr(90))
 
     [[byte, 4], 2] grid
     grid[0].memset(0)
@@ -35,10 +35,10 @@ func main() -> int32 {
     grid[1].write_uint16_BE(0, 0x1234)
     grid[1].flip_bit(0)
 
-    print(grid[0].memchr(0))
-    print(grid[0].read_bit(0))
-    print(grid[1].read_uint16_BE(0))
-    print(grid[1].count_set_bits())
+    stdout(grid[0].memchr(0))
+    stdout(grid[0].read_bit(0))
+    stdout(grid[1].read_uint16_BE(0))
+    stdout(grid[1].count_set_bits())
 
     return 0
 }

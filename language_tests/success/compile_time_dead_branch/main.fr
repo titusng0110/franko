@@ -7,15 +7,15 @@
 // exactly one OS constant is 1.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     #if (#IS_LINUX && #IS_WINDOWS) {
         no_such_function(1);
         int32 x = no_such_variable;
-        print(x);
+        stdout(x);
     } #else {
-        print("dead branch skipped");
+        stdout("dead branch skipped");
     }
 
     return 0;

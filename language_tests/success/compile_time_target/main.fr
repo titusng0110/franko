@@ -10,25 +10,25 @@
 // branch chosen for the current target.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     int32 os_sum = #IS_LINUX + #IS_WINDOWS + #IS_MACOS;
     int32 arch_sum = #IS_X86_64 + #IS_ARM64;
 
-    print(os_sum);
-    print(arch_sum);
+    stdout(os_sum);
+    stdout(arch_sum);
 
     #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
-        print("os-selected");
+        stdout("os-selected");
     } #else {
-        print("os-missing");
+        stdout("os-missing");
     }
 
     #if (#IS_X86_64 || #IS_ARM64) {
-        print("arch-selected");
+        stdout("arch-selected");
     } #else {
-        print("arch-missing");
+        stdout("arch-missing");
     }
 
     return 0;

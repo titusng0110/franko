@@ -395,6 +395,70 @@ final class SastNode {
         return constantValue != null;
     }
 
+    SastNode copyStaticDefault() {
+        if (kind == SastKind.INT_LITERAL) {
+            return intLiteral(span, type, constantValue, rawValue);
+        }
+
+        if (kind == SastKind.NULL_LITERAL) {
+            return nullLiteral(span, type);
+        }
+
+        if (kind == SastKind.ENUM_VARIANT) {
+            SastNode copy = enumVariant(span, enumSymbol, variant);
+            copy.type = type;
+            return copy;
+        }
+
+        if (kind == SastKind.VAR_EXPR) {
+            if (symbol == null
+                    || (symbol.literalBytes == null
+                        && symbol.literalValues == null)) {
+                return null;
+            }
+
+            return varExpr(span, type, symbol);
+        }
+
+        if (kind == SastKind.GET_PTR) {
+            if (target == null
+                    || target.kind != SastKind.VAR_EXPR
+                    || target.symbol == null
+                    || (target.symbol.literalBytes == null
+                        && target.symbol.literalValues == null)) {
+                return null;
+            }
+
+            return getPtr(span, type, target.copyStaticDefault(), temporary);
+        }
+
+        if (kind == SastKind.AGGREGATE_LITERAL) {
+            List<SastNode> copiedFields = new java.util.ArrayList<>();
+
+            for (SastNode fieldInit : fields) {
+                if (fieldInit.kind != SastKind.AGGREGATE_FIELD_INIT
+                        || fieldInit.value == null) {
+                    return null;
+                }
+
+                SastNode copiedValue = fieldInit.value.copyStaticDefault();
+
+                if (copiedValue == null) {
+                    return null;
+                }
+
+                copiedFields.add(aggregateFieldInit(
+                        fieldInit.field,
+                        copiedValue
+                ));
+            }
+
+            return aggregateLiteral(span, type, copiedFields);
+        }
+
+        return null;
+    }
+
     boolean isLValue() {
         if (kind == SastKind.VAR_EXPR
                 || kind == SastKind.ARRAY_ACCESS

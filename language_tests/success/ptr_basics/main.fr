@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Pointers — nested pointers and arrays behind ptr
@@ -23,12 +23,12 @@ func main() -> int32 {
 
     // Double dereference writes x through both pointer levels.
     $($(pp)) = 7
-    print($($(pp)))
-    print(x)
+    stdout($($(pp)))
+    stdout(x)
 
     // Writes through p are visible through pp (same pointee).
     $(p) = 8
-    print($($(pp)))
+    stdout($($(pp)))
 
     // --- Pointer of a dynamic array ---
     [int32] dyn
@@ -39,9 +39,9 @@ func main() -> int32 {
     $(ap).init(4)
     $(ap)[0] = 10
     $(ap)[3] = 40
-    print($(ap)[0])
-    print($(ap)[3])
-    print(dyn[3])
+    stdout($(ap)[0])
+    stdout($(ap)[3])
+    stdout(dyn[3])
 
     dyn.uninit()
 
@@ -52,10 +52,10 @@ func main() -> int32 {
 
     // Equivalent to copying [1, 2, 3] into the pointee array.
     $(sp).memcpy([1, 2, 3])
-    print($(sp)[0])
-    print($(sp)[1])
-    print($(sp)[2])
-    print(xs[2])
+    stdout($(sp)[0])
+    stdout($(sp)[1])
+    stdout($(sp)[2])
+    stdout(xs[2])
 
     return 0
 }

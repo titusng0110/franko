@@ -66,8 +66,8 @@ are `1`.
 int32 os_count = #IS_LINUX + #IS_WINDOWS + #IS_MACOS;
 int32 arch_count = #IS_X86_64 + #IS_ARM64;
 
-print(os_count);    // 1
-print(arch_count);  // 1
+stdout(os_count);    // 1
+stdout(arch_count);  // 1
 ```
 
 `#` names are not variables. They cannot be assigned to, passed around, or
@@ -105,19 +105,19 @@ Chaining uses `#else #if`:
 
 ```franko
 #if (#IS_WINDOWS) {
-    print("windows")
+    stdout("windows")
 } #else #if (#IS_LINUX) {
-    print("linux")
+    stdout("linux")
 } #else {
-    print("other")
+    stdout("other")
 }
 ```
 
 Braceless bodies are allowed:
 
 ```franko
-#if (#IS_WINDOWS) print("windows")
-#else print("other")
+#if (#IS_WINDOWS) stdout("windows")
+#else stdout("other")
 ```
 
 A standalone `#else` is a syntax error. `#if` is not allowed in a `for`
@@ -136,14 +136,14 @@ Before folding:
 } #else {
     int32 platform = 2
 }
-print(platform)
+stdout(platform)
 ```
 
 After folding on a Linux target, the program is exactly:
 
 ```franko
 int32 platform = 1
-print(platform)
+stdout(platform)
 ```
 
 The braces around the selected branch do not exist after folding. This is
@@ -296,12 +296,12 @@ struct Point {
 Point p;
 int32 i;
 
-print(#has_default_value(p));       // from a variable
-print(#has_default_value(Point));   // from a type
-print(#has_default_value(int32));
-print(#has_default_value([int32, 4]));
-print(#has_default_value(ptr<Point>));
-print(#has_default_value((int32, int32)));
+stdout(#has_default_value(p));       // from a variable
+stdout(#has_default_value(Point));   // from a type
+stdout(#has_default_value(int32));
+stdout(#has_default_value([int32, 4]));
+stdout(#has_default_value(ptr<Point>));
+stdout(#has_default_value((int32, int32)));
 ```
 
 A bare identifier resolves as a variable first when that name exists;
@@ -397,28 +397,28 @@ runtime value type and cannot be used in declarations or expressions, but
 - `#strcat(...)` results.
 
 Runtime `view<[byte]>` values and variables are rejected, even when they
-were initialized from a compile-time string. Empty string arguments and
-empty concatenation results are rejected consistently with ordinary
-string literals (`N >= 1`).
+were initialized from a compile-time string. Compile-time string arguments
+and concatenation results must be non-empty (`N >= 1`); unlike ordinary
+source string literals, they do not become `null`.
 
 `#strcat` accepts one or more arguments and concatenates them:
 
 ```franko
-print(#strcat("Franko", " ", "reflection"))
-print(#strcat(#what_type(int32), "_", #what_type(uint8)))
+stdout(#strcat("Franko", " ", "reflection"))
+stdout(#strcat(#what_type(int32), "_", #what_type(uint8)))
 
 #if (#strcmp(#strcat("a", "b"), "ab") == 0) {
-    print("equal")
+    stdout("equal")
 }
 ```
 
 `#strcmp` compares decoded UTF-8 bytes lexicographically:
 
 ```franko
-print(#strcmp("abc", "abd"));   // -1
-print(#strcmp("abc", "abc"));   // 0
-print(#strcmp("abd", "abc"));   // 1
-print(#strcmp("ab", "abc"));    // -1 (prefix sorts first)
+stdout(#strcmp("abc", "abd"));   // -1
+stdout(#strcmp("abc", "abc"));   // 0
+stdout(#strcmp("abd", "abc"));   // 1
+stdout(#strcmp("ab", "abc"));    // -1 (prefix sorts first)
 ```
 
 `#panic` stops compilation with its message:
@@ -530,11 +530,11 @@ struct Blob {
 WithDefault d;
 Blob b;
 
-print(#is_memset_safe(d));           // 1
-print(#has_default_value(d));        // 1: field default
-print(#is_memcpy_safe(b));           // 0: dynamic array field
-print(#has_default_value(b));        // 1: dynamic array field
-print(#is_assignable(b));            // 0: no built-in assignment
+stdout(#is_memset_safe(d));           // 1
+stdout(#has_default_value(d));        // 1: field default
+stdout(#is_memcpy_safe(b));           // 0: dynamic array field
+stdout(#has_default_value(b));        // 1: dynamic array field
+stdout(#is_assignable(b));            // 0: no built-in assignment
 ```
 
 A pointer-only struct that is not assignable by default can opt in with an
@@ -558,7 +558,7 @@ struct WithArray {
 }
 
 WithArray w;
-print(#is_value_assignable(w)); // 0: static array field
+stdout(#is_value_assignable(w)); // 0: static array field
 ```
 
 `#is_same_type` compares exact types. Aliases normalize first, so `int` and
@@ -582,8 +582,8 @@ struct Point {
 }
 
 Point p;
-print(#is_matchable(Point));  // 1
-print(#is_comparable(p));     // 1
+stdout(#is_matchable(Point));  // 1
+stdout(#is_comparable(p));     // 1
 ```
 
 ---
@@ -596,7 +596,7 @@ platform's functions do not need to exist on the current target:
 
 ```franko
 import "franko/os"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte] msg;
@@ -676,7 +676,7 @@ Do not expect `#if` to create a scope:
 
 ```franko
 #if (1) { int32 value = 3 }
-print(value)                  // valid: compile-time splice
+stdout(value)                  // valid: compile-time splice
 ```
 
 A runtime view is not a compile-time string:

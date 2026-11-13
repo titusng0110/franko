@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Capability Linter (Read-Only Warning)
@@ -14,10 +14,10 @@ func main() -> int32 {
 
     // Only reads through the pointer.
     ptr<[byte, 3]> p = getptr(buf);
-    print($(p)[1]);
+    stdout($(p)[1]);
 
     mview<[byte, 3]> m = getmview(buf);
-    print($(m)[2]);
+    stdout($(m)[2]);
 
     return 0;
 }

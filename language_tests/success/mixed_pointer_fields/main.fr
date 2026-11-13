@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Mixed Pointer Fields in a Struct
@@ -31,9 +31,9 @@ func main() -> int32 {
     s[2] = 3
 
     Holder empty
-    print(empty.single == null)
-    print(empty.dyn == null)
-    print(empty.fixed == null)
+    stdout(empty.single == null)
+    stdout(empty.dyn == null)
+    stdout(empty.fixed == null)
 
     Holder h
     h.id = 5
@@ -42,16 +42,16 @@ func main() -> int32 {
     h.fixed = getview(s)
 
     Holder h2 = h
-    print(h2.id)
-    print($(h2.single))
-    print($(h2.dyn)[1])
-    print($(h2.fixed)[2])
+    stdout(h2.id)
+    stdout($(h2.single))
+    stdout($(h2.dyn)[1])
+    stdout($(h2.fixed)[2])
 
     $(h2.single) = 9
     $(h2.dyn)[0] = 11
-    print(x)
-    print(d[0])
-    print($(h2.fixed).length())
+    stdout(x)
+    stdout(d[0])
+    stdout($(h2.fixed).length())
 
     d.uninit()
     return 0

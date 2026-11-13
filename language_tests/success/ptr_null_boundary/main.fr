@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Pointers — null across function boundaries
@@ -28,24 +28,24 @@ func main() -> int32 {
     int32 x = 20
 
     // null as an argument: the callee checks and returns a marker.
-    print(check_ptr(null))
-    print(check_ptr(getptr(x)))
+    stdout(check_ptr(null))
+    stdout(check_ptr(getptr(x)))
 
     // null returned from an ptr<T> function.
     ptr<int32> r1 = pick_ptr(0, getptr(x))
-    print(r1 == null)
+    stdout(r1 == null)
     ptr<int32> r2 = pick_ptr(1, getptr(x))
-    print(r2 == null)
+    stdout(r2 == null)
     if (r2 != null) {
-        print($(r2))
+        stdout($(r2))
     }
 
     // p = null makes a certified pointer null again.
     ptr<int32> p
     p = getptr(x)
-    print(p != null)
+    stdout(p != null)
     p = null
-    print(p == null)
+    stdout(p == null)
 
     return 0
 }

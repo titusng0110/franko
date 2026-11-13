@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {
     enum<uint8> Platform {
@@ -26,8 +26,8 @@ namespace ns {
 
 func main() -> int32 {
     Platform p = Platform::one;
-    print(p == Platform::one);
+    stdout(p == Platform::one);
     ns::Inner i = ns::Inner::b;
-    print(i == ns::Inner::b);
+    stdout(i == ns::Inner::b);
     return 0;
 }

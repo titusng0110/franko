@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: array_length/length_on_int
 // length() receiver must be an array.
 func main() -> int32 {
     int32 x;
     x = 1;
-    print(x.length());
+    stdout(x.length());
     return 0;
 }

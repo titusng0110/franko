@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Array Parameters via ptr<[T]>
@@ -24,11 +24,11 @@ func main() -> int32 {
     [int32] xs;
     xs.init_zero(4);
     fill_dynamic(getptr(xs));
-    print(xs[0], " "); print(xs[1], " "); print(xs[2], " "); print(xs[3]);
+    stdout(xs[0], end = " "); stdout(xs[1], end = " "); stdout(xs[2], end = " "); stdout(xs[3]);
 
     [int32, 8] grid;
     fill_static(getptr(grid));
-    print(grid[0], " "); print(grid[7]);
+    stdout(grid[0], end = " "); stdout(grid[7]);
 
     xs.uninit();
     return 0;

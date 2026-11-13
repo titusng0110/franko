@@ -156,7 +156,8 @@ final class GenericsResolver {
                 || containsGenericUse(node.init)
                 || containsGenericUse(node.update)
                 || containsGenericUse(node.level)
-                || containsGenericUse(node.sizeExpr)) {
+                || containsGenericUse(node.sizeExpr)
+                || containsGenericUse(node.defaultValue)) {
             return true;
         }
 
@@ -547,6 +548,7 @@ final class GenericsResolver {
         copy.update = substituteNode(node.update, env);
         copy.level = substituteNode(node.level, env);
         copy.sizeExpr = substituteNode(node.sizeExpr, env);
+        copy.defaultValue = substituteNode(node.defaultValue, env);
 
         copy.items = substituteList(node.items, env);
         copy.parameters = substituteList(node.parameters, env);
@@ -703,7 +705,13 @@ final class GenericsResolver {
                                     + "' is not a generic function");
                 }
 
-                return AstNode.call(node.span, callee, args);
+                return AstNode.call(
+                        node.span,
+                        callee,
+                        args,
+                        List.of(),
+                        node.argumentNames
+                );
             }
 
             BoundArguments bound = bindArguments(
@@ -714,7 +722,13 @@ final class GenericsResolver {
             );
 
             if (bound == null) {
-                return AstNode.call(node.span, callee, args);
+                return AstNode.call(
+                        node.span,
+                        callee,
+                        args,
+                        List.of(),
+                        node.argumentNames
+                );
             }
 
             String generated = instantiate(template, bound, env, node.span);
@@ -722,7 +736,9 @@ final class GenericsResolver {
             return AstNode.call(
                     node.span,
                     rewriteCalleeName(callee, template.namespace, generated),
-                    args
+                    args,
+                    List.of(),
+                    node.argumentNames
             );
         }
 
@@ -741,7 +757,13 @@ final class GenericsResolver {
             }
         }
 
-        return AstNode.call(node.span, callee, args);
+        return AstNode.call(
+                node.span,
+                callee,
+                args,
+                List.of(),
+                node.argumentNames
+        );
     }
 
     private AstNode rewriteCalleeName(

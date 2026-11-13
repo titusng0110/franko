@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Counter<typename T, int32 N> {
     T value
@@ -24,7 +24,7 @@ func main() -> int32 {
     c.value = 0
     c.add(1)
     c.add(2, 3)
-    print(c.get())
-    print(c.step)
+    stdout(c.get())
+    stdout(c.step)
     return 0
 }

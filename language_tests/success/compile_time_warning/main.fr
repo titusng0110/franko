@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: #warning
@@ -20,6 +20,6 @@ func main() -> int32 {
         #warning("dead statement warning");
     }
 
-    print(7);
+    stdout(7);
     return 0;
 }

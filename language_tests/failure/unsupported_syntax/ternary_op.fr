@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/ternary_op
 // The ternary conditional operator `?:` does not exist in the grammar
@@ -9,6 +9,6 @@ func main() -> int32 {
     int32 b = 4;
     int32 c = 0;
     c = a > 0 ? a : b;
-    print(c);
+    stdout(c);
     return 0;
 }

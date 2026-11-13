@@ -14,24 +14,24 @@
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func test_capacity() -> int32 {
     std::SparseSetAllocator a;
-    print(a.capacity());
-    print(a.init(3));
-    print(a.capacity());
-    print(a.grow(7));
-    print(a.capacity());
-    print(a.grow(7));
-    print(a.capacity());
-    print(a.grow(2));
-    print(a.capacity());
-    print(a.uninit());
-    print(a.capacity());
-    print(a.init(1));
-    print(a.capacity());
-    print(a.uninit());
+    stdout(a.capacity());
+    stdout(a.init(3));
+    stdout(a.capacity());
+    stdout(a.grow(7));
+    stdout(a.capacity());
+    stdout(a.grow(7));
+    stdout(a.capacity());
+    stdout(a.grow(2));
+    stdout(a.capacity());
+    stdout(a.uninit());
+    stdout(a.capacity());
+    stdout(a.init(1));
+    stdout(a.capacity());
+    stdout(a.uninit());
     return 0
 }
 
@@ -52,30 +52,30 @@ func test_capacity() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_1((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
 func test_exist() -> int32 {
     std::SparseSetAllocator a;
-    print(a.exist(0));
-    print(a.init(2));
-    print(a.exist(0));
-    print(a.exist(5));
+    stdout(a.exist(0));
+    stdout(a.init(2));
+    stdout(a.exist(0));
+    stdout(a.exist(5));
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
-    print(a.exist(i));
-    print(a.exist(1));
-    print(a.free_index(i));
-    print(a.exist(i));
-    print(a.uninit());
-    print(a.exist(0));
+    stdout(a.exist(i));
+    stdout(a.exist(1));
+    stdout(a.free_index(i));
+    stdout(a.exist(i));
+    stdout(a.uninit());
+    stdout(a.exist(0));
     return 0
 }
 
@@ -97,32 +97,32 @@ func test_exist() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_2((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
 func test_free_index() -> int32 {
     std::SparseSetAllocator a;
-    print(a.free_index(0));
-    print(a.init(3));
+    stdout(a.free_index(0));
+    stdout(a.init(3));
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
-    print(a.free_index(i));
-    print(a.free_index(i));
-    print(a.free_index(2));
-    print(a.free_index(9));
-    print(a.used());
-    print(a.exist(i));
+    stdout(a.free_index(i));
+    stdout(a.free_index(i));
+    stdout(a.free_index(2));
+    stdout(a.free_index(9));
+    stdout(a.used());
+    stdout(a.exist(i));
     show_new_2(a.new_index());
-    print(a.used());
-    print(a.uninit());
-    print(a.free_index(0));
+    stdout(a.used());
+    stdout(a.uninit());
+    stdout(a.free_index(0));
     return 0
 }
 
@@ -143,38 +143,38 @@ func test_free_index() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_3((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
 func test_grow() -> int32 {
     std::SparseSetAllocator a;
-    print(a.grow(8));
-    print(a.init(2));
-    print(a.grow(2));
-    print(a.grow(1));
+    stdout(a.grow(8));
+    stdout(a.init(2));
+    stdout(a.grow(2));
+    stdout(a.grow(1));
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
     (uint32 idx, int32 err) j_result = a.new_index();
     uint32 j = j_result.idx;
-    print(a.grow(5));
-    print(a.capacity());
-    print(a.used());
-    print(a.exist(i));
-    print(a.exist(j));
+    stdout(a.grow(5));
+    stdout(a.capacity());
+    stdout(a.used());
+    stdout(a.exist(i));
+    stdout(a.exist(j));
     show_new_3(a.new_index());
     show_new_3(a.new_index());
     show_new_3(a.new_index());
     show_new_3(a.new_index());
-    print(a.grow(6));
+    stdout(a.grow(6));
     show_new_3(a.new_index());
-    print(a.uninit());
+    stdout(a.uninit());
     return 0
 }
 
@@ -193,21 +193,21 @@ func test_grow() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func test_init() -> int32 {
     std::SparseSetAllocator a;
-    print(a.used());
-    print(a.capacity());
-    print(a.init(0));
-    print(a.init(4));
-    print(a.init(8));
-    print(a.capacity());
-    print(a.used());
-    print(a.uninit());
-    print(a.init(2));
-    print(a.capacity());
-    print(a.uninit());
+    stdout(a.used());
+    stdout(a.capacity());
+    stdout(a.init(0));
+    stdout(a.init(4));
+    stdout(a.init(8));
+    stdout(a.capacity());
+    stdout(a.used());
+    stdout(a.uninit());
+    stdout(a.init(2));
+    stdout(a.capacity());
+    stdout(a.uninit());
     return 0
 }
 
@@ -228,34 +228,34 @@ func test_init() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_5((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
 func test_new_index() -> int32 {
     std::SparseSetAllocator a;
     show_new_5(a.new_index());
-    print(a.init(3));
+    stdout(a.init(3));
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
     (uint32 idx, int32 err) j_result = a.new_index();
     uint32 j = j_result.idx;
     (uint32 idx, int32 err) k_result = a.new_index();
     uint32 k = k_result.idx;
-    print(i, " "); print(j, " "); print(k);
+    stdout(i, end = " "); stdout(j, end = " "); stdout(k);
     show_new_5(a.new_index());
-    print(a.used());
-    print(a.free_index(j));
+    stdout(a.used());
+    stdout(a.free_index(j));
     show_new_5(a.new_index());
     show_new_5(a.new_index());
-    print(a.used());
-    print(a.uninit());
+    stdout(a.used());
+    stdout(a.uninit());
     show_new_5(a.new_index());
     return 0
 }
@@ -276,31 +276,31 @@ func test_new_index() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_6((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
 func test_uninit() -> int32 {
     std::SparseSetAllocator a;
-    print(a.uninit());
-    print(a.init(3));
+    stdout(a.uninit());
+    stdout(a.init(3));
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
-    print(a.used());
-    print(a.uninit());
-    print(a.used());
-    print(a.capacity());
-    print(a.exist(i));
+    stdout(a.used());
+    stdout(a.uninit());
+    stdout(a.used());
+    stdout(a.capacity());
+    stdout(a.exist(i));
     show_new_6(a.new_index());
-    print(a.init(1));
-    print(a.uninit());
-    print(a.uninit());
+    stdout(a.init(1));
+    stdout(a.uninit());
+    stdout(a.uninit());
     return 0
 }
 
@@ -320,34 +320,34 @@ func test_uninit() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_7((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
 func test_used() -> int32 {
     std::SparseSetAllocator a;
-    print(a.used());
-    print(a.init(4));
-    print(a.used());
+    stdout(a.used());
+    stdout(a.init(4));
+    stdout(a.used());
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
     (uint32 idx, int32 err) j_result = a.new_index();
     uint32 j = j_result.idx;
-    print(a.used());
-    print(a.free_index(i));
-    print(a.used());
-    print(a.free_index(j));
-    print(a.used());
+    stdout(a.used());
+    stdout(a.free_index(i));
+    stdout(a.used());
+    stdout(a.free_index(j));
+    stdout(a.used());
     show_new_7(a.new_index());
-    print(a.used());
-    print(a.uninit());
-    print(a.used());
+    stdout(a.used());
+    stdout(a.uninit());
+    stdout(a.used());
     return 0
 }
 
@@ -368,13 +368,13 @@ func test_used() -> int32 {
 // ============================================================
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 func show_new_8((uint32 idx, int32 err) result) -> void {
     if (result.err != 0) {
-        print(result.err)
+        stdout(result.err)
     } else {
-        print(result.idx)
+        stdout(result.idx)
     }
 }
 
@@ -382,25 +382,25 @@ func test_write_active_indices() -> int32 {
     std::SparseSetAllocator a;
     [uint32] out;
     out.init(4);
-    print(a.write_active_indices(getptr(out)));
-    print(a.init(4));
+    stdout(a.write_active_indices(getptr(out)));
+    stdout(a.init(4));
     (uint32 idx, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
     (uint32 idx, int32 err) j_result = a.new_index();
     uint32 j = j_result.idx;
     (uint32 idx, int32 err) k_result = a.new_index();
     uint32 k = k_result.idx;
-    print(a.write_active_indices(getptr(out)));
-    print(out[0], " "); print(out[1], " "); print(out[2]);
-    print(a.free_index(i));
-    print(a.write_active_indices(getptr(out)));
-    print(out[0], " "); print(out[1]);
+    stdout(a.write_active_indices(getptr(out)));
+    stdout(out[0], end = " "); stdout(out[1], end = " "); stdout(out[2]);
+    stdout(a.free_index(i));
+    stdout(a.write_active_indices(getptr(out)));
+    stdout(out[0], end = " "); stdout(out[1]);
     [uint32] small;
     small.init(1);
-    print(a.write_active_indices(getptr(small)));
-    print(a.write_active_indices(null));
-    print(a.uninit());
-    print(a.write_active_indices(getptr(out)));
+    stdout(a.write_active_indices(getptr(small)));
+    stdout(a.write_active_indices(null));
+    stdout(a.uninit());
+    stdout(a.write_active_indices(getptr(out)));
     out.uninit();
     small.uninit();
     return 0

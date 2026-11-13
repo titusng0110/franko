@@ -1,11 +1,11 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: fluid_consts/uint8_overflow
 // Constant 256 does not fit the uint8 context (max 255).
 func main() -> int32 {
     uint8 x = 256;
 
-    print(x)
+    stdout(x)
 
     return 0
 }

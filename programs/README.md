@@ -12,7 +12,7 @@ Each program is self-contained: there is no shared helper module. Text
 parsing and formatting use `franko/string` (`std::String`), with small
 local helpers embedded in the programs that need them. Token parsers use
 `std::String::to_int64` / `to_uint32`; text output uses `std::String`
-slices and `print`.
+slices and `stdout`.
 
 ## Design notes
 

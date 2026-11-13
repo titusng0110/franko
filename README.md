@@ -11,33 +11,29 @@ Its defining features are:
 - **Pointer capabilities.** `ptr<T>` owns, `mview<T>` mutates, and `view<T>`
   reads. The permission lattice is enforced by the compiler, with no raw
   pointer arithmetic or ownership annotations.
-- **Whole-program memory safety, not just local checks.** The compiler builds
-  an exact call graph and runs three summary-aware interprocedural analyzers:
-  - **Null state:** tracks pointer values, pointee cells, argument
-    requirements, and call results across function boundaries; refines
-    `null` and compound guards; reports dereferences that may be null.
-  - **Dangling pointers:** tracks frame liveness through blocks, loops,
-    `break`/`continue`, returns, and calls; follows captures into globals,
-    fields, and dereferences; catches use-after-scope, returning a local
-    pointer, and storing a local pointer into caller-owned storage.
-  - **Dynamic-array lifecycle:** tracks aliases, element pointers, owner
-    arrays, and `init`/`resize`/`uninit` state across calls; catches
-    use-before-init, double-free, use-after-uninit, stale element aliases,
-    cross-parameter invalidation, and leaks.
-  The analyses use must/may certainty, SCC-aware recursion handling, and
-  bounded call-graph BFS summaries. No ownership annotations are required.
+- **No hidden heap allocation or copying.** Dynamic arrays have a monopoly
+  on the heap: they are explicitly `init`/`resize`/`uninit`ed. No garbage collection (GC), implicit deep copy, or hidden
+  memory allocation.
+- **Whole-program memory safety, not just local checks.** Three interprocedural
+  analyzers run over an exact call graph with summary-based BFS and must/may
+  facts: null-state analysis tracks pointers, pointee cells, argument
+  requirements, and call results; dangling-pointer analysis tracks frame
+  liveness through blocks, loops, breaks, returns, and calls, catching escapes
+  and use-after-scope; dynamic-array lifecycle analysis tracks aliases and
+  `init`/`resize`/`uninit` state across calls, catching double-frees, stale
+  aliases, and leaks. No ownership annotations are required.
+- **Compile-time generics.** `#generic` structs and
+  functions take explicit type and value arguments (`Box<int32>`,
+  `Buffer<uint8, 64>`, `identity<int32>(x)`). Templates expand to ordinary
+  concrete declarations before checking and code generation, with no type
+  erasure, vtables, or runtime representation.
 - **Compile-time `#if` / `#else` splices.** Select statements or declarations
   at function, global, namespace, and struct scope. The selected branch is
   ordinary code; the other branch does not exist. No trait solver, SFINAE, or
   template metaprogramming. There are built-in type predicates such as `#is_memcpy_safe`, `#is_value_assignable`, and `#is_comparable`.
-- **No hidden heap allocation or copying.** Dynamic arrays have a monopoly
-  on the heap: they are explicitly `init`/`resize`/`uninit`ed. No garbage collection (GC), implicit deep copy, or hidden
-  memory allocation.
-- **Readable, regular syntax.** C-like but predictable, with explicit `$(x)`
-  dereferencing and no semicolons. Declaration is always `TYPE IDENTIFIER`.
-- **Small type model.** Fixed-width integers, enums, structs with methods and
-  operators, tuples, aggregate literals, namespaces, arrays, and typed
-  pointers. No inheritance or implicit integer type casting.
+- **Named and optional arguments.** Calls may use `f(name = value)`; parameters
+  may declare compile-time defaults such as `func f(int32 x, int32 y = 0)`.
+  Ordinary methods support the same syntax, with `self` implicit.
 - **Byte-level array intrinsics without pointer arithmetic.** `memcpy`,
   `memset`, `memmove`, `memcmp`, searches, endian access, and bit operations
   are built in. They work on arrays and views directly, so byte-level work
@@ -54,7 +50,7 @@ Its defining features are:
 ## A taste
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Counter {
     int32 value = 0
@@ -72,18 +68,19 @@ func main() -> int32 {
     Counter c
     c.add(41)
     c.add(1)
-    print(c.get())
+    stdout("count: ", end = null)
+    stdout(c.get())
 
     #if (#IS_WINDOWS) {
-        print("windows")
+        stdout("windows")
     } #else {
-        print("posix")
+        stdout("posix")
     }
 
     for (int32 i = 0; i < 3; i++) {
         for (int32 j = 0; j < 3; j++) {
             if (j == 1) { break 2 }   // exits both loops
-            print(i + j)
+            stdout(i + j)
         }
     }
 
@@ -237,5 +234,5 @@ installation instructions.
   are in [`language_docs/`](language_docs/).
 * **[Compiler Internals](compiler_docs.md)** — the compiler pipeline,
   C++14 generation, runtime, and build/test tooling.
-* **[Library Reference](library_docs/)** — `franko/error`, `franko/io`,
+* **[Library Reference](library_docs/)** — `franko/error`, `franko/stdio`,
   `franko/limit`, `franko/os`, `franko/pool`, and `franko/string`.

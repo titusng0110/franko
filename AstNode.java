@@ -39,6 +39,7 @@ final class AstNode {
     AstNode update;
     AstNode level;
     AstNode sizeExpr;
+    AstNode defaultValue;
 
     List<AstNode> items;
     List<AstNode> parameters;
@@ -54,6 +55,7 @@ final class AstNode {
     List<AstNode> genericParams;
     List<AstNode> genericArgs;
     List<String> names;
+    List<String> argumentNames = List.of();
     List<BigInteger> literalBytes;
 
     private AstNode(AstKind kind, SourceSpan span) {
@@ -137,10 +139,21 @@ final class AstNode {
             String name,
             boolean isConst
     ) {
+        return parameter(span, type, name, isConst, null);
+    }
+
+    static AstNode parameter(
+            SourceSpan span,
+            AstNode type,
+            String name,
+            boolean isConst,
+            AstNode defaultValue
+    ) {
         AstNode node = node(AstKind.PARAMETER, span);
         node.type = type;
         node.name = name;
         node.isConst = isConst;
+        node.defaultValue = defaultValue;
         return node;
     }
 
@@ -548,10 +561,23 @@ final class AstNode {
             List<AstNode> args,
             List<AstNode> genericArgs
     ) {
+        return call(span, callee, args, genericArgs, List.of());
+    }
+
+    static AstNode call(
+            SourceSpan span,
+            AstNode callee,
+            List<AstNode> args,
+            List<AstNode> genericArgs,
+            List<String> argumentNames
+    ) {
         AstNode node = node(AstKind.CALL, span);
         node.callee = callee;
         node.args = copy(args);
         node.genericArgs = copy(genericArgs);
+        node.argumentNames = argumentNames == null
+                ? List.of()
+                : List.copyOf(argumentNames);
         return node;
     }
 
@@ -687,6 +713,7 @@ final class AstNode {
         copy.update = update;
         copy.level = level;
         copy.sizeExpr = sizeExpr;
+        copy.defaultValue = defaultValue;
         copy.items = items;
         copy.parameters = parameters;
         copy.fields = fields;
@@ -701,8 +728,19 @@ final class AstNode {
         copy.genericParams = genericParams;
         copy.genericArgs = genericArgs;
         copy.names = names;
+        copy.argumentNames = argumentNames;
         copy.literalBytes = literalBytes;
         return copy;
+    }
+
+    boolean hasNamedArguments() {
+        for (String argumentName : argumentNames) {
+            if (argumentName != null && !argumentName.isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     static String kindName(AstNode node) {

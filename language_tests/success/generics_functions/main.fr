@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic func foo<typename T>(T a, T b) -> T {
     return a + b
@@ -13,17 +13,17 @@ import "franko/io"
 }
 
 func main() -> int32 {
-    print(foo<int32>(1, 2))
+    stdout(foo<int32>(1, 2))
 
     [int32] arr
     arr.init(2)
     arr[0] = 7
     arr[1] = 8
-    print(goo<int32>(getview(arr)))
+    stdout(goo<int32>(getview(arr)))
 
     (int32 val, int32 err) p = pair<int32>(42)
-    print(p.val)
-    print(p.err)
+    stdout(p.val)
+    stdout(p.err)
 
     arr.uninit()
     return 0

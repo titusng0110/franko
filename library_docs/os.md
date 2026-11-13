@@ -37,7 +37,7 @@ Design rules:
 - These are FFI primitives and intentionally keep the OS/C return
   conventions: `os::posix::read`/`write` return a byte count or `-1`, and
   the win32 functions return a status plus an out-parameter. They are
-  not tuple-based; `franko/io` wraps the input path into
+  not tuple-based; `franko/stdio` wraps the input path into
   `(int64 val, int32 err)` tuples.
 
 ## Target selection
@@ -127,20 +127,20 @@ Example:
 
 ```franko
 import "franko/os"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte] msg;
     msg.init(5);
     msg.memcpy("hello");
     int64 n = os::posix::write(os::posix::STDOUT_FILENO, getview(msg), 5);
-    print(n);
+    stdout(n);
     msg.uninit();
     return 0;
 }
 ```
 
-Note: `print` (from `franko/io`) goes through the same OS bridge as raw fd writes, so interleaved output appears in program order.
+Note: `stdout` (from `franko/stdio`) goes through the same OS bridge as raw fd writes, so interleaved output appears in program order.
 
 ## os::win32
 
@@ -193,7 +193,7 @@ Example:
 
 ```franko
 import "franko/os"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
@@ -201,7 +201,7 @@ func main() -> int32 {
     msg.init(5);
     msg.memcpy("hello");
     int32 ok = os::win32::WriteFile(h, getview(msg), 5, null);
-    print(ok);
+    stdout(ok);
     msg.uninit();
     return 0;
 }

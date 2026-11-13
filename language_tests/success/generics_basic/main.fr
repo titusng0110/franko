@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Point<typename T> {
     T value
@@ -12,11 +12,11 @@ import "franko/io"
 
 func main() -> int32 {
     Point<int32> p = Point<int32> { value = 3 }
-    print(p.value)
+    stdout(p.value)
 
     X<int32, 5> a { value = 7 }
-    print(a.value)
-    print(a.count)
-    print(a.items.length())
+    stdout(a.value)
+    stdout(a.count)
+    stdout(a.items.length())
     return 0
 }

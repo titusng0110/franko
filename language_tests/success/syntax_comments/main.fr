@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Syntax — Comments
@@ -13,10 +13,10 @@ func main() -> int32 {
     int32 x = 40  // trailing comment after a declaration
     x = x + 2       // trailing comment after an assignment
 
-    print(x)  // trailing comment after a print statement
+    stdout(x)  // trailing comment after a stdout call
 
     // A whole-line comment between statements.
-    print(x * 2)  // trailing comment after another print
+    stdout(x * 2)  // trailing comment after another stdout call
 
     return 0  // trailing comment on a return statement
 }

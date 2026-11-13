@@ -1,11 +1,11 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: const_folding/negative_shift_const
 // A shift whose constant right operand is negative is rejected.
 func main() -> int32 {
     int32 x = 1 << -1;
 
-    print(x)
+    stdout(x)
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Overload Preference for Permission Downgrades
@@ -11,19 +11,19 @@ import "franko/io"
 // ============================================================
 
 func f(ptr<[byte, 3]> x) -> void {
-    print(1);
+    stdout(1);
 }
 
 func f(view<[byte, 3]> x) -> void {
-    print(2);
+    stdout(2);
 }
 
 func g(mview<[byte, 3]> a, mview<[byte, 3]> b) -> void {
-    print(3);
+    stdout(3);
 }
 
 func g(mview<[byte, 3]> a, view<[byte, 3]> b) -> void {
-    print(4);
+    stdout(4);
 }
 
 func main() -> int32 {

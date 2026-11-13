@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: desugaring/braceless_decl_visible_after
 // A braceless if body is wrapped in an implicit block during desugaring,
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int32 x = 1;
     if (x) int32 y = 5;
-    print(y);
+    stdout(y);
     return 0;
 }

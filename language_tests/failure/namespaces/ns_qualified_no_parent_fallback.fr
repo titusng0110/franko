@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: namespaces/ns_qualified_no_parent_fallback
 // A qualified name resolves strictly inside the named namespace path:
@@ -12,6 +12,6 @@ namespace a {
 }
 
 func main() -> int32 {
-    print(a::w)
+    stdout(a::w)
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Constant Folding
@@ -17,12 +17,12 @@ func main() -> int32 {
     uint8 not_zero = !0;
     int32 shift = 1 << 3;
 
-    print(sum);
-    print(prod);
-    print(eq);
-    print(not_zero);
-    print(shift);
-    print(g);
+    stdout(sum);
+    stdout(prod);
+    stdout(eq);
+    stdout(not_zero);
+    stdout(shift);
+    stdout(g);
 
     return 0;
 }

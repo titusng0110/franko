@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: compile-time void introspection
@@ -8,8 +8,8 @@ import "franko/io"
 // ============================================================
 
 func main() -> int32 {
-    print(#is_primitive(#warning("void predicate")));
-    print(#is_same_type(#warning("void left"), #warning("void right")));
-    print(#what_type(#warning("void spelling")));
+    stdout(#is_primitive(#warning("void predicate")));
+    stdout(#is_same_type(#warning("void left"), #warning("void right")));
+    stdout(#what_type(#warning("void spelling")));
     return 0;
 }

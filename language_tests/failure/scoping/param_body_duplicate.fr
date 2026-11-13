@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: scoping/param_body_duplicate
 // Function body braces do not create an extra scope, so a body-level
@@ -10,6 +10,6 @@ func f(int32 x) -> int32 {
 }
 
 func main() -> int32 {
-    print(f(1))
+    stdout(f(1))
     return 0
 }

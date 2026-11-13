@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func fill(mview<[int32]> v) -> void {
     $(v)[0] = 1
@@ -13,7 +13,7 @@ func main() -> int32 {
     d.init(1)
     fill(getmview(d))
     d[0] = 2
-    print(peek(getview(d)))
+    stdout(peek(getview(d)))
     d.uninit()
     return 0
 }

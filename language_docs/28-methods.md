@@ -16,7 +16,7 @@ func main() -> int32 {
     X s
     s.y = 41
     s.increment()
-    print(s.y)
+    stdout(s.y)
     return 0
 }
 ```
@@ -117,6 +117,30 @@ Rules:
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
 - Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
 
+Ordinary methods support named and optional user arguments. `self` is hidden
+and is never nameable, cannot have a default, and is never part of the call's
+argument list:
+
+```franko
+struct Counter {
+    int32 n = 0
+
+    func add(ptr<Counter> self, int32 amount = 1) -> void {
+        $(self).n = $(self).n + amount
+        return
+    }
+}
+
+Counter c
+c.add()
+c.add(amount = 5)
+c.add(self = 1)     // invalid: self is implicit
+```
+
+Operator methods are the exception: they are fixed-shape and reject both
+defaults and named arguments. See
+[Functions](19-functions.md#1915-named-and-optional-arguments).
+
 ## 28.4 Fields vs Methods Name Resolution
 
 Fields and methods share member-call syntax but resolve in separate namespaces:
@@ -165,7 +189,7 @@ Rules:
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
 - `self` as an expression (`self`, `getptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
-- `x.self` parses (member names accept keywords) but always fails resolution. A method named `print` is an ordinary method like any other.
+- `x.self` parses (member names accept keywords) but always fails resolution. A method named `stdout` is an ordinary method like any other.
 
 ## 28.7 Scope Inside Method Bodies
 

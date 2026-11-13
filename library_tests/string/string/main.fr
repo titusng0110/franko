@@ -6,47 +6,47 @@
 // exact-length byte-array output produced by to(ptr<[byte]>).
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_from_to() -> int32 {
     std::String s
-    print(s.length())
-    print(s.from("hello"))
-    print(s.length())
+    stdout(s.length())
+    stdout(s.from("hello"))
+    stdout(s.length())
     ptr<[byte]> nil_out = null
-    print(s.to(nil_out))
+    stdout(s.to(nil_out))
 
     [byte] out
-    print(s.to(getptr(out)))
-    print(out.length())
-    print(getview(out))
+    stdout(s.to(getptr(out)))
+    stdout(out.length())
+    stdout(getview(out))
     out.uninit()
 
     std::String t
-    print(t.from(getview(s)))
-    print(t.length())
-    print(t == s)
+    stdout(t.from(getview(s)))
+    stdout(t.length())
+    stdout(t == s)
 
     std::String u
-    print(s.to(getptr(u)))
-    print(u == s)
+    stdout(s.to(getptr(u)))
+    stdout(u == s)
 
     [byte, 3] fixed
     fixed[0] = 120
     fixed[1] = 121
     fixed[2] = 122
     std::String w
-    print(w.from(getview(fixed)))
-    print(w.length())
-    print(w.to(getptr(out)))
-    print(getview(out))
+    stdout(w.from(getview(fixed)))
+    stdout(w.length())
+    stdout(w.to(getptr(out)))
+    stdout(getview(out))
     out.uninit()
 
     view<[byte]> nil = null
-    print(s.from(nil))
-    print(s.length())
-    print(s.to(nil_out))
+    stdout(s.from(nil))
+    stdout(s.length())
+    stdout(s.to(nil_out))
 
     s.uninit()
     t.uninit()
@@ -64,61 +64,61 @@ func test_from_to() -> int32 {
 // is not inspected.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_reserve() -> int32 {
     std::String s
-    print(s.length())
+    stdout(s.length())
 
     [byte] p63
     p63.init_zero(63)
     std::String a
-    print(a.from(getview(p63)))
-    print(a.length())
-    print(a.is_utf8_compliant())
+    stdout(a.from(getview(p63)))
+    stdout(a.length())
+    stdout(a.is_utf8_compliant())
 
     [byte] p64
     p64.init_zero(64)
     std::String b
-    print(b.from(getview(p64)))
-    print(b.length())
-    print(b.is_utf8_compliant())
+    stdout(b.from(getview(p64)))
+    stdout(b.length())
+    stdout(b.is_utf8_compliant())
 
     [byte] p65
     p65.init_zero(65)
     std::String d
-    print(d.from(getview(p65)))
-    print(d.length())
-    print(d.is_utf8_compliant())
+    stdout(d.from(getview(p65)))
+    stdout(d.length())
+    stdout(d.is_utf8_compliant())
 
     std::String c
-    print(c.from("ab"))
+    stdout(c.from("ab"))
     c += "cd"
     c *= 2
-    print(c.length())
-    print(c.is_utf8_compliant())
+    stdout(c.length())
+    stdout(c.is_utf8_compliant())
     c *= 0
-    print(c.length())
-    print(c.is_utf8_compliant())
-    print(c.from(getview(p65)))
-    print(c.length())
-    print(c.is_utf8_compliant())
+    stdout(c.length())
+    stdout(c.is_utf8_compliant())
+    stdout(c.from(getview(p65)))
+    stdout(c.length())
+    stdout(c.is_utf8_compliant())
 
     c.clear()
-    print(c.length())
-    print(c.is_utf8_compliant())
-    print(c.from("reuse"))
-    print(c.length())
-    print(getview(c))
-    print(c.shrink_to_fit())
-    print(c.length())
-    print(getview(c))
+    stdout(c.length())
+    stdout(c.is_utf8_compliant())
+    stdout(c.from("reuse"))
+    stdout(c.length())
+    stdout(getview(c))
+    stdout(c.shrink_to_fit())
+    stdout(c.length())
+    stdout(getview(c))
     c.clear()
-    print(c.shrink_to_fit())
-    print(c.length())
-    print(c.from("again"))
-    print(getview(c))
+    stdout(c.shrink_to_fit())
+    stdout(c.length())
+    stdout(c.from("again"))
+    stdout(getview(c))
 
     p63.uninit()
     p64.uninit()
@@ -139,32 +139,32 @@ func test_reserve() -> int32 {
 // invalid lead bytes, stray continuation bytes, and truncation.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func check_2(view<[byte]> bytes) -> void {
     std::String s
     s.from(bytes)
-    print(s.is_utf8_compliant())
+    stdout(s.is_utf8_compliant())
     s.uninit()
     return
 }
 
 func test_utf8() -> int32 {
     std::String empty
-    print(empty.length())
-    print(empty.is_utf8_compliant())
+    stdout(empty.length())
+    stdout(empty.is_utf8_compliant())
     empty.uninit()
 
     std::String ascii
     ascii.from("hello")
-    print(ascii.is_utf8_compliant())
+    stdout(ascii.is_utf8_compliant())
     ascii.uninit()
 
     std::String unicode
     unicode.from("你好, Franko 😭😍")
-    print(unicode.length())
-    print(unicode.is_utf8_compliant())
+    stdout(unicode.length())
+    stdout(unicode.is_utf8_compliant())
     unicode.uninit()
 
     [byte, 2] two
@@ -320,7 +320,7 @@ func test_utf8() -> int32 {
 // counts; null String views; and get/set bounds behavior.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_find_count() -> int32 {
@@ -331,58 +331,58 @@ func test_find_count() -> int32 {
     view<[byte]> empty = null
 
     (uint32 idx, int32 err) hit = s.find(44)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find("c,")
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find(getview(needle))
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find("zz")
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find(empty)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
 
     hit = s.find_next(44, 2)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find_next("c", 0)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find_next(getview(needle), 4)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find_next(44, 99)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
     hit = s.find_next(empty, 7)
-    print(hit.idx)
-    print(hit.err)
+    stdout(hit.idx)
+    stdout(hit.err)
 
-    print(s.count(44))
-    print(s.count("c"))
-    print(s.count(getview(needle)))
-    print(s.count(empty))
-    print(s.count_from(44, 4))
-    print(s.count_from("c", 0))
-    print(s.count_from(getview(needle), 0))
-    print(s.count_from(empty, 7))
-    print(s.count_from(empty, 99))
+    stdout(s.count(44))
+    stdout(s.count("c"))
+    stdout(s.count(getview(needle)))
+    stdout(s.count(empty))
+    stdout(s.count_from(44, 4))
+    stdout(s.count_from("c", 0))
+    stdout(s.count_from(getview(needle), 0))
+    stdout(s.count_from(empty, 7))
+    stdout(s.count_from(empty, 99))
 
     std::String repeated
     repeated.from("aaa")
-    print(repeated.count("aa"))
-    print(repeated.count_from("aa", 1))
+    stdout(repeated.count("aa"))
+    stdout(repeated.count_from("aa", 1))
 
-    print(s.get(0))
-    print(s.get(99))
+    stdout(s.get(0))
+    stdout(s.get(99))
     s.set(0, 65)
-    print(s.get(0))
+    stdout(s.get(0))
     s.set(99, 66)
-    print(s.get(0))
+    stdout(s.get(0))
 
     repeated.uninit()
     needle.uninit()
@@ -398,76 +398,76 @@ func test_find_count() -> int32 {
 // longer existing string.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_from_integer() -> int32 {
     std::String s
 
     int8 a = -128
-    print(s.from_integer(a))
-    print(getview(s))
+    stdout(s.from_integer(a))
+    stdout(getview(s))
     a = 0
-    print(s.from_integer(a))
-    print(getview(s))
+    stdout(s.from_integer(a))
+    stdout(getview(s))
     a = 127
-    print(s.from_integer(a))
-    print(getview(s))
+    stdout(s.from_integer(a))
+    stdout(getview(s))
 
     int16 b = -32768
-    print(s.from_integer(b))
-    print(getview(s))
+    stdout(s.from_integer(b))
+    stdout(getview(s))
     b = 32767
-    print(s.from_integer(b))
-    print(getview(s))
+    stdout(s.from_integer(b))
+    stdout(getview(s))
 
     int32 c = -2147483648
-    print(s.from_integer(c))
-    print(getview(s))
+    stdout(s.from_integer(c))
+    stdout(getview(s))
     c = 2147483647
-    print(s.from_integer(c))
-    print(getview(s))
+    stdout(s.from_integer(c))
+    stdout(getview(s))
 
     int64 d = -9223372036854775808
-    print(s.from_integer(d))
-    print(getview(s))
+    stdout(s.from_integer(d))
+    stdout(getview(s))
     d = 9223372036854775807
-    print(s.from_integer(d))
-    print(getview(s))
+    stdout(s.from_integer(d))
+    stdout(getview(s))
 
     uint8 e = 0
-    print(s.from_integer(e))
-    print(getview(s))
+    stdout(s.from_integer(e))
+    stdout(getview(s))
     e = 255
-    print(s.from_integer(e))
-    print(getview(s))
+    stdout(s.from_integer(e))
+    stdout(getview(s))
 
     uint16 f = 0
-    print(s.from_integer(f))
-    print(getview(s))
+    stdout(s.from_integer(f))
+    stdout(getview(s))
     f = 65535
-    print(s.from_integer(f))
-    print(getview(s))
+    stdout(s.from_integer(f))
+    stdout(getview(s))
 
     uint32 g = 0
-    print(s.from_integer(g))
-    print(getview(s))
+    stdout(s.from_integer(g))
+    stdout(getview(s))
     g = 4294967295
-    print(s.from_integer(g))
-    print(getview(s))
+    stdout(s.from_integer(g))
+    stdout(getview(s))
 
     uint64 h = 0
-    print(s.from_integer(h))
-    print(getview(s))
+    stdout(s.from_integer(h))
+    stdout(getview(s))
     h = 18446744073709551615
-    print(s.from_integer(h))
-    print(getview(s))
+    stdout(s.from_integer(h))
+    stdout(getview(s))
 
     s.from("long text")
     int32 small = 7
-    print(s.from_integer(small))
-    print(s.length())
-    print(getview(s))
+    stdout(s.from_integer(small))
+    stdout(s.length())
+    stdout(getview(s))
 
     s.uninit()
     return 0
@@ -481,31 +481,31 @@ func test_from_integer() -> int32 {
 // and get/set bounds behavior.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_slice_edit() -> int32 {
     [byte] out
     std::String s
     s.from("abc")
-    print(s.append(100))
-    print(s.append("ef"))
+    stdout(s.append(100))
+    stdout(s.append("ef"))
     std::String tail
     tail.from("gh")
-    print(s.append(getview(tail)))
-    print(s.length())
-    print(s.to(getptr(out)))
-    print(getview(out))
+    stdout(s.append(getview(tail)))
+    stdout(s.length())
+    stdout(s.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String d
     d.from("xy")
-    print(d.append(getview(d)))
-    print(d.length())
-    print(d.append("xy"))
-    print(d.length())
+    stdout(d.append(getview(d)))
+    stdout(d.length())
+    stdout(d.append("xy"))
+    stdout(d.length())
 
     [byte] arr
     arr.init(2)
@@ -513,93 +513,93 @@ func test_slice_edit() -> int32 {
     arr[1] = 87
     std::String e
     e.from("ab")
-    print(e.append(getview(arr)))
-    print(e.length())
-    print(e.to(getptr(out)))
-    print(getview(out))
+    stdout(e.append(getview(arr)))
+    stdout(e.length())
+    stdout(e.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
     arr.uninit()
 
     std::String part
-    print(s.get_slice(1, 4, getptr(part)))
-    print(part.length())
-    print(part.to(getptr(out)))
-    print(getview(out))
+    stdout(s.get_slice(1, 4, getptr(part)))
+    stdout(part.length())
+    stdout(part.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    print(s.get_slice(4, 1, getptr(part)))
-    print(s.get_slice(1, 99, getptr(part)))
-    print(s.get_slice(0, 0, getptr(part)))
-    print(part.length())
+    stdout(s.get_slice(4, 1, getptr(part)))
+    stdout(s.get_slice(1, 99, getptr(part)))
+    stdout(s.get_slice(0, 0, getptr(part)))
+    stdout(part.length())
 
     std::String selfs
     selfs.from("abcdef")
-    print(selfs.get_slice(2, 5, getptr(selfs)))
-    print(selfs.length())
-    print(selfs.to(getptr(out)))
-    print(getview(out))
+    stdout(selfs.get_slice(2, 5, getptr(selfs)))
+    stdout(selfs.length())
+    stdout(selfs.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
     [byte] bslice
     bslice.init(1)
-    print(selfs.get_slice(0, 2, getptr(bslice)))
-    print(bslice.length())
-    print(getview(bslice))
+    stdout(selfs.get_slice(0, 2, getptr(bslice)))
+    stdout(bslice.length())
+    stdout(getview(bslice))
     if (bslice.length() != 0) {
         bslice.uninit()
     }
 
     std::String ins
     ins.from("abcd")
-    print(ins.insert(45, 2))
-    print(ins.insert("XY", 0))
-    print(ins.insert(getview(tail), 7))
-    print(ins.length())
-    print(ins.to(getptr(out)))
-    print(getview(out))
+    stdout(ins.insert(45, 2))
+    stdout(ins.insert("XY", 0))
+    stdout(ins.insert(getview(tail), 7))
+    stdout(ins.length())
+    stdout(ins.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    print(ins.insert(33, 99))
-    print(ins.insert("z", 9))
-    print(ins.length())
-    print(ins.to(getptr(out)))
-    print(getview(out))
+    stdout(ins.insert(33, 99))
+    stdout(ins.insert("z", 9))
+    stdout(ins.length())
+    stdout(ins.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String si
     si.from("ab")
-    print(si.insert(getview(si), 1))
-    print(si.length())
-    print(si.to(getptr(out)))
-    print(getview(out))
+    stdout(si.insert(getview(si), 1))
+    stdout(si.length())
+    stdout(si.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    print(si.erase(0))
-    print(si.erase(1, 2))
-    print(si.length())
-    print(si.to(getptr(out)))
-    print(getview(out))
+    stdout(si.erase(0))
+    stdout(si.erase(1, 2))
+    stdout(si.length())
+    stdout(si.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    print(si.erase(99))
-    print(si.erase(1, 0))
-    print(si.erase(0, 99))
+    stdout(si.erase(99))
+    stdout(si.erase(1, 0))
+    stdout(si.erase(0, 99))
 
-    print(si.get(0))
-    print(si.get(99))
+    stdout(si.get(0))
+    stdout(si.get(99))
     si.set(0, 65)
-    print(si.get(0))
+    stdout(si.get(0))
     si.set(99, 66)
-    print(si.get(0))
+    stdout(si.get(0))
 
     s.uninit()
     tail.uninit()
@@ -621,7 +621,7 @@ func test_slice_edit() -> int32 {
 // joiner that aliases the destination string.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_split_join() -> int32 {
@@ -630,32 +630,32 @@ func test_split_join() -> int32 {
     text.from("a,b,,c,")
     std::StringList parts
 
-    print(text.split(44, getptr(parts)))
-    print(parts.length())
+    stdout(text.split(44, getptr(parts)))
+    stdout(parts.length())
     for (uint32 i = 0; i < parts.length(); i++) {
         std::String item
-        print(parts.get(i, getptr(item)))
-        print(item.length())
+        stdout(parts.get(i, getptr(item)))
+        stdout(item.length())
         if (item.length() != 0) {
-            print(item.to(getptr(out)))
-            print(getview(out))
+            stdout(item.to(getptr(out)))
+            stdout(getview(out))
             if (out.length() != 0) {
                 out.uninit()
             }
         } else {
-            print(0)
+            stdout(0)
         }
         item.uninit()
     }
 
-    print(text.split(",,", getptr(parts)))
-    print(parts.length())
+    stdout(text.split(",,", getptr(parts)))
+    stdout(parts.length())
     for (uint32 i = 0; i < parts.length(); i++) {
         std::String item
-        print(parts.get(i, getptr(item)))
-        print(item.length())
-        print(item.to(getptr(out)))
-        print(getview(out))
+        stdout(parts.get(i, getptr(item)))
+        stdout(item.length())
+        stdout(item.to(getptr(out)))
+        stdout(getview(out))
         if (out.length() != 0) {
             out.uninit()
         }
@@ -664,81 +664,81 @@ func test_split_join() -> int32 {
 
     std::String sep
     sep.from(",,")
-    print(text.split(getview(sep), getptr(parts)))
-    print(parts.length())
+    stdout(text.split(getview(sep), getptr(parts)))
+    stdout(parts.length())
 
     view<[byte]> empty = null
-    print(text.split(empty, getptr(parts)))
-    print(parts.length())
+    stdout(text.split(empty, getptr(parts)))
+    stdout(parts.length())
     std::String whole
-    print(parts.get(0, getptr(whole)))
-    print(whole.length())
-    print(whole.to(getptr(out)))
-    print(getview(out))
+    stdout(parts.get(0, getptr(whole)))
+    stdout(whole.length())
+    stdout(whole.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
     whole.uninit()
 
-    print(text.split("zz", getptr(parts)))
-    print(parts.length())
+    stdout(text.split("zz", getptr(parts)))
+    stdout(parts.length())
 
     std::StringList words
     words.append("cc")
     words.append("aa")
     std::String joined
-    print(joined.join(44, getview(words)))
-    print(joined.to(getptr(out)))
-    print(getview(out))
+    stdout(joined.join(44, getview(words)))
+    stdout(joined.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
-    print(joined.join(getview(words)))
-    print(joined.to(getptr(out)))
-    print(getview(out))
+    stdout(joined.join(getview(words)))
+    stdout(joined.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String sep2
     sep2.from("--")
-    print(joined.join(getview(sep2), getview(words)))
-    print(joined.to(getptr(out)))
-    print(getview(out))
+    stdout(joined.join(getview(sep2), getview(words)))
+    stdout(joined.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String sep3
     sep3.from("|")
-    print(joined.join(getview(sep3), getview(words)))
-    print(joined.to(getptr(out)))
-    print(getview(out))
+    stdout(joined.join(getview(sep3), getview(words)))
+    stdout(joined.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     view<[byte]> nojoiner = null
-    print(joined.join(nojoiner, getview(words)))
-    print(joined.length())
+    stdout(joined.join(nojoiner, getview(words)))
+    stdout(joined.length())
 
     std::StringList empty_list
-    print(joined.join(44, getview(empty_list)))
-    print(joined.length())
+    stdout(joined.join(44, getview(empty_list)))
+    stdout(joined.length())
 
     view<std::StringList> nil_list = null
-    print(joined.join(44, nil_list))
-    print(joined.length())
+    stdout(joined.join(44, nil_list))
+    stdout(joined.length())
 
     std::String js
     js.from("X")
     std::StringList jl
     jl.append("a")
     jl.append("b")
-    print(js.join(getview(js), getview(jl)))
-    print(js.to(getptr(out)))
-    print(getview(out))
+    stdout(js.join(getview(js), getview(jl)))
+    stdout(js.to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -746,14 +746,14 @@ func test_split_join() -> int32 {
     std::StringList selflist
     selflist.append("ab")
     selflist.append("cd")
-    print(selflist._data[0].join(44, getview(selflist)))
-    print(selflist._data[0].to(getptr(out)))
-    print(getview(out))
+    stdout(selflist._data[0].join(44, getview(selflist)))
+    stdout(selflist._data[0].to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    print(selflist._data[1].to(getptr(out)))
-    print(getview(out))
+    stdout(selflist._data[1].to(getptr(out)))
+    stdout(getview(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -780,267 +780,267 @@ func test_split_join() -> int32 {
 // overflow, malformed input, and empty strings.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_to_integer() -> int32 {
     std::String s
 
     (int8 val, int32 err) r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
 
     s.from("127")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("+127")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("-128")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("128")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("-129")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0b101")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0B101")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0x7F")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0X7f")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0x80")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("-0x80")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("+0b101")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
 
     s.from("--1")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("++1")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("+-1")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("-+1")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0b2")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0xG")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0x")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("0b")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("+")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("-")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("12a")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from(" 12")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("12 ")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
     s.from("007")
     r8 = s.to_int8()
-    print(r8.val)
-    print(r8.err)
+    stdout(r8.val)
+    stdout(r8.err)
 
     (int16 val, int32 err) r16 = s.to_int16()
     s.from("-32768")
     r16 = s.to_int16()
-    print(r16.val)
-    print(r16.err)
+    stdout(r16.val)
+    stdout(r16.err)
     s.from("32767")
     r16 = s.to_int16()
-    print(r16.val)
-    print(r16.err)
+    stdout(r16.val)
+    stdout(r16.err)
     s.from("32768")
     r16 = s.to_int16()
-    print(r16.val)
-    print(r16.err)
+    stdout(r16.val)
+    stdout(r16.err)
     s.from("-0x8000")
     r16 = s.to_int16()
-    print(r16.val)
-    print(r16.err)
+    stdout(r16.val)
+    stdout(r16.err)
 
     (int32 val, int32 err) r32 = s.to_int32()
     s.from("-2147483648")
     r32 = s.to_int32()
-    print(r32.val)
-    print(r32.err)
+    stdout(r32.val)
+    stdout(r32.err)
     s.from("2147483647")
     r32 = s.to_int32()
-    print(r32.val)
-    print(r32.err)
+    stdout(r32.val)
+    stdout(r32.err)
     s.from("2147483648")
     r32 = s.to_int32()
-    print(r32.val)
-    print(r32.err)
+    stdout(r32.val)
+    stdout(r32.err)
     s.from("0x7FFFFFFF")
     r32 = s.to_int32()
-    print(r32.val)
-    print(r32.err)
+    stdout(r32.val)
+    stdout(r32.err)
     s.from("-0x80000000")
     r32 = s.to_int32()
-    print(r32.val)
-    print(r32.err)
+    stdout(r32.val)
+    stdout(r32.err)
 
     (int64 val, int32 err) r64 = s.to_int64()
     s.from("-9223372036854775808")
     r64 = s.to_int64()
-    print(r64.val)
-    print(r64.err)
+    stdout(r64.val)
+    stdout(r64.err)
     s.from("9223372036854775807")
     r64 = s.to_int64()
-    print(r64.val)
-    print(r64.err)
+    stdout(r64.val)
+    stdout(r64.err)
     s.from("9223372036854775808")
     r64 = s.to_int64()
-    print(r64.val)
-    print(r64.err)
+    stdout(r64.val)
+    stdout(r64.err)
     s.from("0x7FFFFFFFFFFFFFFF")
     r64 = s.to_int64()
-    print(r64.val)
-    print(r64.err)
+    stdout(r64.val)
+    stdout(r64.err)
     s.from("-0x8000000000000000")
     r64 = s.to_int64()
-    print(r64.val)
-    print(r64.err)
+    stdout(r64.val)
+    stdout(r64.err)
 
     (uint8 val, int32 err) u8 = s.to_uint8()
     s.from("0")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("255")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("+255")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("256")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("-1")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("-0")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("0xFF")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("0b11111111")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
     s.from("0x100")
     u8 = s.to_uint8()
-    print(u8.val)
-    print(u8.err)
+    stdout(u8.val)
+    stdout(u8.err)
 
     (uint16 val, int32 err) u16 = s.to_uint16()
     s.from("65535")
     u16 = s.to_uint16()
-    print(u16.val)
-    print(u16.err)
+    stdout(u16.val)
+    stdout(u16.err)
     s.from("65536")
     u16 = s.to_uint16()
-    print(u16.val)
-    print(u16.err)
+    stdout(u16.val)
+    stdout(u16.err)
     s.from("0xFFFF")
     u16 = s.to_uint16()
-    print(u16.val)
-    print(u16.err)
+    stdout(u16.val)
+    stdout(u16.err)
 
     (uint32 val, int32 err) u32 = s.to_uint32()
     s.from("4294967295")
     u32 = s.to_uint32()
-    print(u32.val)
-    print(u32.err)
+    stdout(u32.val)
+    stdout(u32.err)
     s.from("4294967296")
     u32 = s.to_uint32()
-    print(u32.val)
-    print(u32.err)
+    stdout(u32.val)
+    stdout(u32.err)
     s.from("0xFFFFFFFF")
     u32 = s.to_uint32()
-    print(u32.val)
-    print(u32.err)
+    stdout(u32.val)
+    stdout(u32.err)
 
     (uint64 val, int32 err) u64 = s.to_uint64()
     s.from("18446744073709551615")
     u64 = s.to_uint64()
-    print(u64.val)
-    print(u64.err)
+    stdout(u64.val)
+    stdout(u64.err)
     s.from("18446744073709551616")
     u64 = s.to_uint64()
-    print(u64.val)
-    print(u64.err)
+    stdout(u64.val)
+    stdout(u64.err)
     s.from("0xFFFFFFFFFFFFFFFF")
     u64 = s.to_uint64()
-    print(u64.val)
-    print(u64.err)
+    stdout(u64.val)
+    stdout(u64.err)
     s.from("0b1111111111111111111111111111111111111111111111111111111111111111")
     u64 = s.to_uint64()
-    print(u64.val)
-    print(u64.err)
+    stdout(u64.val)
+    stdout(u64.err)
 
     s.uninit()
     return 0
@@ -1054,7 +1054,7 @@ func test_to_integer() -> int32 {
 // and 0 (clear). Every result is inspected through to(ptr<[byte]>).
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_assign_append_multiply() -> int32 {
@@ -1064,54 +1064,54 @@ func test_assign_append_multiply() -> int32 {
     std::String b
     b = "cd"
     a += b
-    print(a.to(getptr(out)))
-    print(getview(out))
+    stdout(a.to(getptr(out)))
+    stdout(getview(out))
 
     a += "ef"
-    print(a.to(getptr(out)))
-    print(getview(out))
-    print(a.length())
+    stdout(a.to(getptr(out)))
+    stdout(getview(out))
+    stdout(a.length())
 
     [byte] arr
     arr.init(2)
     arr[0] = 88
     arr[1] = 89
     a = arr
-    print(a.to(getptr(out)))
-    print(getview(out))
-    print(a.length())
+    stdout(a.to(getptr(out)))
+    stdout(getview(out))
+    stdout(a.length())
 
     a += arr
-    print(a.to(getptr(out)))
-    print(getview(out))
+    stdout(a.to(getptr(out)))
+    stdout(getview(out))
 
     a *= 2
-    print(a.to(getptr(out)))
-    print(getview(out))
+    stdout(a.to(getptr(out)))
+    stdout(getview(out))
 
     a *= 1
-    print(a.to(getptr(out)))
-    print(getview(out))
+    stdout(a.to(getptr(out)))
+    stdout(getview(out))
 
     a *= 0
-    print(a.length())
-    print(a.to(getptr(out)))
-    print(out.length())
+    stdout(a.length())
+    stdout(a.to(getptr(out)))
+    stdout(out.length())
 
     std::String c
     c = a
-    print(c.length())
+    stdout(c.length())
 
     std::String dup
     dup = "xy"
-    print(dup.from(getview(dup)))
-    print(dup.length())
-    print(dup.to(getptr(out)))
-    print(getview(out))
+    stdout(dup.from(getview(dup)))
+    stdout(dup.length())
+    stdout(dup.to(getptr(out)))
+    stdout(getview(out))
     out.uninit()
     dup += dup
-    print(dup.to(getptr(out)))
-    print(getview(out))
+    stdout(dup.to(getptr(out)))
+    stdout(getview(out))
     out.uninit()
 
     a.uninit()
@@ -1130,7 +1130,7 @@ func test_assign_append_multiply() -> int32 {
 // the byte contents; the shorter string is less on a shared prefix.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func test_comparisons() -> int32 {
@@ -1145,19 +1145,19 @@ func test_comparisons() -> int32 {
     std::String e1
     std::String e2
 
-    print(a == c)
-    print(a != b)
-    print(a < b)
-    print(a > b)
-    print(a <= c)
-    print(a >= c)
-    print(p < a)
-    print(a > p)
-    print(e1 == e2)
-    print(e1 < a)
-    print(a > e1)
-    print(b < a)
-    print(b > a)
+    stdout(a == c)
+    stdout(a != b)
+    stdout(a < b)
+    stdout(a > b)
+    stdout(a <= c)
+    stdout(a >= c)
+    stdout(p < a)
+    stdout(a > p)
+    stdout(e1 == e2)
+    stdout(e1 < a)
+    stdout(a > e1)
+    stdout(b < a)
+    stdout(b > a)
 
     a.uninit()
     b.uninit()

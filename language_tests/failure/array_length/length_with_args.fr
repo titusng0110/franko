@@ -1,11 +1,11 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: array_length/length_with_args
 // length() takes no arguments.
 func main() -> int32 {
     [int32] xs;
     xs.init(4);
-    print(xs.length(3));
+    stdout(xs.length(3));
     xs.uninit();
     return 0;
 }

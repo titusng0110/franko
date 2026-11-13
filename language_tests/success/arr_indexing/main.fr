@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Array Indexing
@@ -21,13 +21,13 @@ func main() -> int32 {
     uint32 j = 2;
     da[j] = 12;
 
-    print(sa[0], " "); print(sa[i], " "); print(sa[4]);
-    print(da[0], " "); print(da[j], " "); print(da[3]);
+    stdout(sa[0], end = " "); stdout(sa[i], end = " "); stdout(sa[4]);
+    stdout(da[0], end = " "); stdout(da[j], end = " "); stdout(da[3]);
 
     for (uint32 k = 0; k < 4; k = k + 1) {
         da[k] = da[k] + 1;
     }
-    print(da[0], " "); print(da[1], " "); print(da[2], " "); print(da[3]);
+    stdout(da[0], end = " "); stdout(da[1], end = " "); stdout(da[2], end = " "); stdout(da[3]);
 
     da.uninit();
 

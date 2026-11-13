@@ -1,14 +1,14 @@
 import "lib/mathx"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
-    print(mathx::MAGIC)
-    print(mathx::add(20, 22))
-    print(mathx::scale(6, 7))
+    stdout(mathx::MAGIC)
+    stdout(mathx::add(20, 22))
+    stdout(mathx::scale(6, 7))
 
     int32 counter = 41
-    print(mathx::bump(getptr(counter)))
-    print(counter)
+    stdout(mathx::bump(getptr(counter)))
+    stdout(counter)
 
     return 0
 }

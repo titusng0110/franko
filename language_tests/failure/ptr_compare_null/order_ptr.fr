@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: ptr_compare_null/order_ptr
 // Pointer comparison is equality-only: ordering comparison between
@@ -11,7 +11,7 @@ func main() -> int32 {
     p2 = getptr(x2)
     q2 = getptr(x2)
 
-    print(p2 < q2)
+    stdout(p2 < q2)
 
     return 0
 }

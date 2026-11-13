@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Array Literals with Static Array Targets
@@ -14,19 +14,19 @@ func main() -> int32 {
     [int32, 3] a;
     a.memcpy([10, 20, 30]);
 
-    print(a[0]);
-    print(a[1]);
-    print(a[2]);
+    stdout(a[0]);
+    stdout(a[1]);
+    stdout(a[2]);
 
     // Partial copy: [7, 8] copies a[0] and a[1].
     [int32, 4] xs;
     xs.memset(0);
     xs.memcpy([7, 8]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
-    print(xs[3]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
+    stdout(xs[3]);
 
     return 0;
 }

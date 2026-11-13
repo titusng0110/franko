@@ -164,6 +164,10 @@ overload; if none applies it falls back to the normal whole-struct
 assignment rules. Compound assignment has no built-in struct fallback:
 `a += b` requires a matching `OPERATOR_ADDMOV`.
 
+Operator methods are fixed-shape: they cannot declare optional parameters,
+and operator calls reject named arguments. Explicit calls such as
+`a.OPERATOR_EQ(getview(b))` follow the same rule.
+
 A struct that is value-assignable (all fields value-assignable, recursively)
 **cannot declare `OPERATOR_MOV`**: its whole-value assignment is always the
 built-in field copy. This is a declaration error even if the operator is never

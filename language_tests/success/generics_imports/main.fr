@@ -1,9 +1,9 @@
-import "franko/io"
+import "franko/stdio"
 import "./lib/generic_lib"
 
 func main() -> int32 {
     Pair<int32, uint8> p = make_pair<int32, uint8>(7, 9)
-    print(p.first)
-    print(p.second)
+    stdout(p.first)
+    stdout(p.second)
     return 0
 }

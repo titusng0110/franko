@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: comments/block_comment
 // Block comments /* ... */ do not exist in Franko; only // line comments parse.
 func main() -> int32 {
     /* this is not a valid comment */
     int32 x = 1
-    print(x)
+    stdout(x)
     return 0
 }

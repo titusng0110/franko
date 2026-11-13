@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Desugaring — Declaration Initializer Sugar
@@ -10,12 +10,12 @@ import "franko/io"
 
 func main() -> int32 {
     int32 x = 10;
-    print(x);
+    stdout(x);
 
     // The desugared assignment is an ordinary assignment: x can be
     // reassigned afterwards.
     x = x + 5;
-    print(x);
+    stdout(x);
 
     return 0;
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/float_literal
 // Franko has no floating-point types or floating-point literals; only
@@ -6,6 +6,6 @@ import "franko/io"
 
 func main() -> int32 {
     int32 x = 3.14;
-    print(x);
+    stdout(x);
     return 0;
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<uint8> State {
     a,
@@ -12,21 +12,21 @@ enum<uint32> BigState {
 
 func main() -> int32 {
     uint8 exact = cast<uint8>(State::b);
-    print(exact);
+    stdout(exact);
 
     int32 wider = cast<int32>(State::b);
-    print(wider);
+    stdout(wider);
 
     BigState s1 = unsafe_cast<BigState>(0);
-    print(s1 == BigState::x);
+    stdout(s1 == BigState::x);
 
     BigState s2 = unsafe_cast<BigState>(300);
-    print(s2 == BigState::y);
+    stdout(s2 == BigState::y);
 
     uint8 narrow = unsafe_cast<uint8>(BigState::x);
-    print(narrow);
+    stdout(narrow);
 
     uint8 from_state = unsafe_cast<uint8>(State::b);
-    print(from_state);
+    stdout(from_state);
     return 0;
 }

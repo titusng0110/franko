@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Bracket Array Type Syntax
@@ -22,26 +22,26 @@ func main() -> int32 {
     dyn[0] = 10;
     dyn[1] = 20;
     dyn[2] = 30;
-    print(sum(getview(dyn)));
+    stdout(sum(getview(dyn)));
 
     // Explicit dynamic array init.
     [int] sized;
     sized.init(3);
     sized.memcpy(getptr(dyn));
-    print(sized[2]);
+    stdout(sized[2]);
 
     // Static declaration, nested static, nested dynamic.
     [uint8, 3000] buffer;
     buffer[2999] = 77;
-    print(buffer[2999]);
+    stdout(buffer[2999]);
     [[int32, 2], 2] matrix;
     matrix[1][1] = 42;
-    print(matrix[1][1]);
+    stdout(matrix[1][1]);
     [[int32]] nested;
     nested.init_zero(1);
     nested[0].init_zero(2);
     nested[0][1] = 9;
-    print(nested[0][1]);
+    stdout(nested[0][1]);
     nested[0].uninit();
     nested.uninit();
 
@@ -51,17 +51,17 @@ func main() -> int32 {
     fixed[1] = 2;
     fixed[2] = 3;
     view<[int32, 3]> fv = getview(fixed);
-    print($(fv)[2]);
+    stdout($(fv)[2]);
     mview<[int32, 3]> mv = getmview(fixed);
     $(mv)[0] = 100;
-    print(fixed[0]);
+    stdout(fixed[0]);
     ptr<[int32, 3]> p = getptr(fixed);
-    print($(p)[1]);
+    stdout($(p)[1]);
 
     // Inferred size from an array literal.
     view<[int32, ?]> inferred = [4, 5, 6];
-    print($(inferred).length());
-    print(sum(inferred));
+    stdout($(inferred).length());
+    stdout(sum(inferred));
 
     dyn.uninit();
     sized.uninit();

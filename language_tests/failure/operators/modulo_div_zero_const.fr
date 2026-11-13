@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: operators/modulo_div_zero_const
 // A fully constant `% 0` expression is division by zero and fails during
@@ -6,7 +6,7 @@ import "franko/io"
 func main() -> int32 {
     int32 a = 7 % 0;
 
-    print(a);
+    stdout(a);
 
     return 0;
 }

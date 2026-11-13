@@ -297,7 +297,7 @@ matches the handle, so the stale reference is detected instead of
 silently reading the new occupant's data.
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/pool"
 
 func main() -> int32 {
@@ -310,7 +310,7 @@ func main() -> int32 {
     // Allocate a slot and store data in its payload cell.
     (uint32 idx, uint32 gen, int32 err) handle = pool.new_index();
     payload[handle.idx] = 42;
-    print(payload[handle.idx]);
+    stdout(payload[handle.idx]);
 
     // Release the slot and take a new one: the slot comes back with
     // a bumped generation.
@@ -321,17 +321,17 @@ func main() -> int32 {
     // live again, but the generation no longer matches.
     (uint32 gen, int32 err) current = pool.generation(handle.idx);
     if (pool.exist(handle.idx) == 1 && current.err == 0 && current.gen == handle.gen) {
-        print(1);
+        stdout(1);
     } else {
-        print(0);
+        stdout(0);
     }
 
     // A handle captured now matches.
     (uint32 gen, int32 err) current_next = pool.generation(next.idx);
     if (pool.exist(next.idx) == 1 && current_next.err == 0 && next.gen == current_next.gen) {
-        print(1);
+        stdout(1);
     } else {
-        print(0);
+        stdout(0);
     }
 
     pool.free_index(next.idx);

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Byte Bit Intrinsics
@@ -15,71 +15,71 @@ func main() -> int32 {
     f.memset(0)
     f.write_bit(0, 1)
     f.write_bit(9, 1)
-    print(f.read_bit(0))
-    print(f.read_bit(1))
-    print(f.read_bit(9))
-    print(f.count_set_bits())
+    stdout(f.read_bit(0))
+    stdout(f.read_bit(1))
+    stdout(f.read_bit(9))
+    stdout(f.count_set_bits())
 
     f.flip_bit(1)
-    print(f.read_bit(1))
-    print(f.count_set_bits())
+    stdout(f.read_bit(1))
+    stdout(f.count_set_bits())
 
     f.flip_bit(9)
-    print(f.read_bit(9))
+    stdout(f.read_bit(9))
 
     // A nonzero write_bit value sets the bit.
     f.write_bit(4, 7)
-    print(f.read_bit(4))
+    stdout(f.read_bit(4))
     f.write_bit(4, 0)
-    print(f.read_bit(4))
+    stdout(f.read_bit(4))
 
     // Masks apply to every byte.
     [byte, 4] m
     m.memset(0)
     m.bitwise_or_mask(0x0F)
-    print(m[0])
-    print(m[3])
-    print(m.count_set_bits())
+    stdout(m[0])
+    stdout(m[3])
+    stdout(m.count_set_bits())
 
     m.bitwise_and_mask(0x03)
-    print(m[0])
-    print(m.count_set_bits())
+    stdout(m[0])
+    stdout(m.count_set_bits())
 
     m.bitwise_xor_mask(0xFF)
-    print(m[0])
+    stdout(m[0])
     m.bitwise_not_mask()
-    print(m[0])
-    print(m.count_set_bits())
+    stdout(m[0])
+    stdout(m.count_set_bits())
 
     // Shifts move the whole bit string across byte boundaries.
     [byte, 4] s
     s.memset(0)
     s.write_bit(0, 1)
     s.shift_bits_left(8)
-    print(s[0])
-    print(s[1])
+    stdout(s[0])
+    stdout(s[1])
     s.shift_bits_left(9)
-    print(s[1])
-    print(s[2])
+    stdout(s[1])
+    stdout(s[2])
     s.shift_bits_right(9)
-    print(s[1])
+    stdout(s[1])
     s.shift_bits_left(32)
-    print(s.count_set_bits())
+    stdout(s.count_set_bits())
 
     // Dynamic receiver.
     [byte] dyn
     dyn.init_zero(1)
     dyn.write_bit(7, 1)
-    print(dyn.read_bit(7))
-    print(dyn.count_set_bits())
+    stdout(dyn.read_bit(7))
+    stdout(dyn.count_set_bits())
     dyn.shift_bits_right(1)
-    print(dyn[0])
+    stdout(dyn[0])
     dyn.uninit()
 
     // Read-only receiver through a view.
     view<[byte, 4]> ro = getview(m)
-    print($(ro).count_set_bits())
-    print($(ro).read_bit(2))
+    stdout($(ro).count_set_bits())
+    stdout($(ro).read_bit(2))
 
     return 0
 }

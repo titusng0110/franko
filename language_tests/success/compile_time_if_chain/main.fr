@@ -6,7 +6,7 @@
 // unselected branch never escapes (or is even analyzed).
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     int32 selected = 0;
@@ -16,12 +16,12 @@ func main() -> int32 {
     #else #if (#IS_MACOS) selected = 3
     #else selected = 4
 
-    print(selected >= 1 && selected <= 4);
+    stdout(selected >= 1 && selected <= 4);
 
     #if (0)
         int32 hidden = 1
     #else
-        print("braceless else");
+        stdout("braceless else");
 
     #if (0) int32 also_hidden = 2
 

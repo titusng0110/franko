@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Increment and decrement statements: `x++` and `x--`.
 //
@@ -13,48 +13,48 @@ struct Box {
 func main() -> int32 {
     int32 a = 1;
     a++;
-    print(a); // 2
+    stdout(a); // 2
     a--;
     a--;
-    print(a); // 0
+    stdout(a); // 0
 
     int32 i = 0;
     while (i != 3) {
         i++;
     }
-    print(i); // 3
+    stdout(i); // 3
 
     int32 total = 0;
     for (int32 j = 0; j < 5; j++) {
         total += j;
     }
-    print(total); // 10
+    stdout(total); // 10
 
     for (int32 k = 3; k > 0; k--) {
-        print(k); // 3, 2, 1
+        stdout(k); // 3, 2, 1
     }
 
     // Unsigned wraparound follows the same modular rules as `x -= 1`.
     uint8 u = 255;
     u++;
-    print(u); // 0
+    stdout(u); // 0
     u--;
-    print(u); // 255
+    stdout(u); // 255
 
     [int32, 3] xs;
     xs.memcpy([0, 0, 0]);
     xs[0]++;
     xs[0]++;
-    print(xs[0]); // 2
+    stdout(xs[0]); // 2
 
     Box b;
     b.n = 39;
     b.n++;
-    print(b.n); // 40
+    stdout(b.n); // 40
 
     // Postfix increment as a braceless controlled statement.
     if (b.n == 40) b.n++;
-    print(b.n); // 41
+    stdout(b.n); // 41
 
     // Postfix increment inside a while-update position.
     int32 count = 0;
@@ -63,7 +63,7 @@ func main() -> int32 {
         count++;
         rounds++;
     }
-    print(rounds); // 2
+    stdout(rounds); // 2
 
     return 0;
 }

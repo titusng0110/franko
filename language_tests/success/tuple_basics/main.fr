@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     (int32 val, int32 err) res
@@ -17,15 +17,15 @@ func main() -> int32 {
     b = a
     b.different = b.different + 1
 
-    print(res.val)
-    print(res.err)
-    print(lazy._0)
-    print(lazy._1)
-    print(a.hello)
-    print(a.world)
-    print(b.different)
-    print(b.name)
-    print(#is_same_type(res, lazy))
+    stdout(res.val)
+    stdout(res.err)
+    stdout(lazy._0)
+    stdout(lazy._1)
+    stdout(a.hello)
+    stdout(a.world)
+    stdout(b.different)
+    stdout(b.name)
+    stdout(#is_same_type(res, lazy))
 
     return 0
 }

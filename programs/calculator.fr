@@ -9,7 +9,7 @@
 //
 //   ./programs/calculator.out < programs/calculator.stdin
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 namespace text {
@@ -21,7 +21,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -132,7 +132,7 @@ namespace text {
             return
         }
         view<[byte]> no_end = null
-        print(getview(token), no_end)
+        stdout(getview(token), end = no_end)
         token.uninit()
         return
     }
@@ -460,15 +460,15 @@ func main() -> int32 {
 
         // Echo the expression exactly, then evaluate and report.
         text::print_slice(getview(line), 0, len)
-        print(" = ", null)
+        stdout(" = ", end = null)
 
         (int64 value, CalcError error) result = evaluate(getview(line), len)
 
         if (result.error == CalcError::none) {
-            print(result.value)
+            stdout(result.value)
         } else {
-            print("error: ", null)
-            print(error_text(result.error))
+            stdout("error: ", end = null)
+            stdout(error_text(result.error))
         }
     }
 

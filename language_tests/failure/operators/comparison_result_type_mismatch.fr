@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: operators/comparison_result_type_mismatch
 // Comparisons always produce uint8 (docs 17.6, 17.9), and there are no
@@ -7,6 +7,6 @@ import "franko/io"
 func main() -> int32 {
     uint8 cmp = 1 < 2
     int32 y = cmp
-    print(y)
+    stdout(y)
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Assignability
@@ -39,14 +39,14 @@ func main() -> int32 {
     // Modifying b after the copy must not change a.
     b.first = 100;
     b.second = 200;
-    print(a.first, " "); print(a.second);
+    stdout(a.first, end = " "); stdout(a.second);
 
     // Argument copied at the call.
-    print(sum_of(a));
+    stdout(sum_of(a));
 
     // By-value return bound through declaration initializer sugar.
     Pair c = make_pair(7, 8);
-    print(c.first, " "); print(c.second);
+    stdout(c.first, end = " "); stdout(c.second);
 
     return 0;
 }

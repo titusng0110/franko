@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Capability Linter Ignores Globals
@@ -24,10 +24,10 @@ func main() -> int32 {
     global_value = getptr(b);
     alloc(global_value);
 
-    print($(global_value).length());
-    print($(global_value)[0]);
-    print($(global_value)[1]);
-    print($(global_value)[2]);
+    stdout($(global_value).length());
+    stdout($(global_value)[0]);
+    stdout($(global_value)[1]);
+    stdout($(global_value)[2]);
 
     return 0;
 }

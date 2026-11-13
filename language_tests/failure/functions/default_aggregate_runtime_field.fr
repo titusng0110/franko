@@ -1,0 +1,9 @@
+struct L {
+    int32 x
+}
+
+func f(int32 a, L l = L { x = a }) -> int32 { return l.x }
+
+func main() -> int32 {
+    return f(1)
+}

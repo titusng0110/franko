@@ -21,7 +21,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 Struct methods and the built-in array intrinsics use member-call syntax (see [Methods](28-methods.md) and [Array Intrinsics](23-array-intrinsics.md)). All other member calls are rejected, including:
 
 ```franko
-x.print();          // unsupported member call: no such struct method
+x.stdout();          // unsupported member call: no such struct method
 x.something(1);     // unsupported member call: unknown method
 ```
 
@@ -106,7 +106,7 @@ Escapes through very deep or recursive call chains may be missed. See
 
 ## 36.11 Output Is a Library Function
 
-Output is provided by `franko/io`, not by the compiler. The overloaded `print(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](17-statements.md) and [franko/io](../library_docs/io.md).
+Output is provided by `franko/stdio`, not by the compiler. The overloaded `stdout(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](17-statements.md) and [franko/stdio](../library_docs/stdio.md).
 
 ## 36.12 Unsupported Operators
 
@@ -235,3 +235,27 @@ Expansion is limited to 1024 generic instances per compilation and an
 instantiation depth of 64.
 
 See [Generics](20-generics.md).
+
+## 36.22 Named and Optional Argument Restrictions
+
+Named arguments and declaration-site defaults are supported for ordinary
+functions and struct methods, with these restrictions:
+
+- default values must be compile-time forms; runtime expressions such as
+  variables, parameters, globals, calls, casts, dereferences, indexing, and
+  member accesses are rejected;
+- aggregate literal defaults are limited to value-assignable struct literals
+  whose field values use the same static forms;
+- tuple aggregate-literal defaults are not part of the current default model;
+- optional arguments must be passed by name, and positional arguments must
+  precede named arguments;
+- required arguments must be supplied either all positionally or all by name;
+- `self` cannot have a default and cannot be passed by name;
+- `OPERATOR_*` methods cannot declare defaults and reject named arguments;
+- `main` cannot declare optional parameters;
+- array intrinsics and compile-time `#` intrinsics do not accept named
+  arguments;
+- defaults are not runtime values: they are resolved once at the declaration
+  and copied into each call site before C++ emission.
+
+See [Functions](19-functions.md#1915-named-and-optional-arguments).

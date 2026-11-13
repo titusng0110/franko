@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 struct Buffer {
     [int32] data
@@ -12,8 +12,8 @@ func main() -> int32 {
     Buffer b
     b.data.init(1)
     b.data[0] = 9
-    print(b.data[0])
+    stdout(b.data[0])
     b.release()
-    print(b.data.length())
+    stdout(b.data.length())
     return 0
 }

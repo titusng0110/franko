@@ -15,6 +15,9 @@ Franko is a small statically typed language with:
   - `$(...)`;
 - user-defined functions;
 - function overloading;
+- named and optional function arguments (`f(name = value)` and
+  `func f(T x = default)`, see
+  [Functions](19-functions.md#1915-named-and-optional-arguments));
 - generics with explicit type and value arguments on structs and functions
   (see [Generics](20-generics.md));
 - function calls inside function bodies;
@@ -73,7 +76,7 @@ Franko is a small statically typed language with:
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));
 - FFI modules described by sidecar manifests and C++ bridge blocks (see
   [Foreign Function Interface](34-foreign-function-interface.md));
-- standard modules including `franko/error`, `franko/io`, `franko/os`,
+- standard modules including `franko/error`, `franko/stdio`, `franko/os`,
   `franko/pool`, `franko/limit`, and `franko/string`;
 - compiler checks for pointer null state, dangling frame pointers, dynamic
   array lifecycle, unused pointer permissions, and private identifier access
@@ -119,7 +122,7 @@ func main() -> int32 {
     int32 x;
     x = 1;
 
-    print(x);
+    stdout(x);
 
     return 0;
 }
@@ -135,7 +138,7 @@ Example (newline-separated, no semicolons):
 func main() -> int32 {
     int32 x
     x = 1
-    print(x)
+    stdout(x)
     return 0
 }
 ```
@@ -214,7 +217,7 @@ The compiler's bundled standard library lives under its own
 those standard modules:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/os"
 import "franko/pool"
 ```
@@ -585,7 +588,7 @@ func main() -> int32 {
 
 Fluid constants also participate in function overload resolution. A folded integer constant may match a primitive integer parameter if its arbitrary-precision value fits that parameter type.
 
-When a constant fits several overloads, the call is resolved by a constant-fit preference, not rejected: the overload whose parameter type equals the constant's own type wins when the value fits there; otherwise the narrowest fitting type wins, with signed preferred over unsigned at equal width. For example, `print(1)` selects `print(int32)` (a literal's own type), `print(5000000000)` selects `print(int64)`, and `print(100)` selects `print(int16)` over `print(uint16)` when `int32` is not among the overloads. A call is ambiguous only if several overloads tie on both permission-downgrade and constant-fit costs.
+When a constant fits several overloads, the call is resolved by a constant-fit preference, not rejected: the overload whose parameter type equals the constant's own type wins when the value fits there; otherwise the narrowest fitting type wins, with signed preferred over unsigned at equal width. For example, `stdout(1)` selects `stdout(int32)` (a literal's own type), `stdout(5000000000)` selects `stdout(int64)`, and `stdout(100)` selects `stdout(int16)` over `stdout(uint16)` when `int32` is not among the overloads. A call is ambiguous only if several overloads tie on both permission-downgrade and constant-fit costs.
 
 ---
 
@@ -976,7 +979,7 @@ Casts compose freely with other expressions:
 ```franko
 uint8 cmp = 1 < 2;
 int32 wide = cast<int32>(cmp);
-print(unsafe_cast<uint8>(wide));
+stdout(unsafe_cast<uint8>(wide));
 ```
 
 ## 12.2 Static (Value-Preserving) Casts
@@ -1011,7 +1014,7 @@ A checked cast that fits succeeds normally:
 ```franko
 uint32 w = 70000;
 int32 s = unsafe_cast<int32>(w);   // valid: 70000 fits int32
-print(s);
+stdout(s);
 ```
 
 Writing `cast<T>` where the conversion can lose data is a compile error
@@ -1117,7 +1120,7 @@ func f(int64 x) -> int64 {
 func main() -> int32 {
     int32 v = 5;
     int64 r = f(cast<int64>(v));
-    print(r);
+    stdout(r);
     return 0;
 }
 ```
@@ -1290,6 +1293,10 @@ overload; if none applies it falls back to the normal whole-struct
 assignment rules. Compound assignment has no built-in struct fallback:
 `a += b` requires a matching `OPERATOR_ADDMOV`.
 
+Operator methods are fixed-shape: they cannot declare optional parameters,
+and operator calls reject named arguments. Explicit calls such as
+`a.OPERATOR_EQ(getview(b))` follow the same rule.
+
 A struct that is value-assignable (all fields value-assignable, recursively)
 **cannot declare `OPERATOR_MOV`**: its whole-value assignment is always the
 built-in field copy. This is a declaration error even if the operator is never
@@ -1353,7 +1360,7 @@ Valid:
 int32 x;
 
 if (x) {
-    print(x);
+    stdout(x);
 }
 ```
 
@@ -1363,7 +1370,7 @@ Invalid:
 [int32] arr;
 
 if (arr) {
-    print(1);
+    stdout(1);
 }
 ```
 
@@ -1373,7 +1380,7 @@ Invalid:
 ptr<int32> p;
 
 if (p) {
-    print(1);
+    stdout(1);
 }
 ```
 
@@ -1381,7 +1388,7 @@ To test pointers, compare them explicitly:
 
 ```franko
 if (p == q) {
-    print(1);
+    stdout(1);
 }
 ```
 
@@ -1658,11 +1665,11 @@ so every compound-assignment rule above applies unchanged: the target must be an
 
 ```franko
 for (int32 i = 0; i < n; i++) {
-    print(i)
+    stdout(i)
 }
 ```
 
-Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `print(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](17-statements.md).
+Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `stdout(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](17-statements.md).
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](27-structs.md) for the full assignability rules.
 
@@ -1765,7 +1772,7 @@ Franko supports the following statements inside function bodies and blocks:
 
 Executable statements are not allowed at global scope.
 
-Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so it cannot appear as a call argument (for example, `print(x++)` does not parse). See [Assignment](16-assignment.md).
+Assignments, compound assignments, and increment/decrement are statement forms only: `x++` never produces a value, so it cannot appear as a call argument (for example, `stdout(x++)` does not parse). See [Assignment](16-assignment.md).
 
 ## 17.1 Blocks
 
@@ -1804,19 +1811,19 @@ Valid:
 
 ```franko
 for (int32 i = 0; i < 5; i = i + 1) {
-    print(i)
+    stdout(i)
 }
 
 for (int32 i = 0; i < 5; i++) {
-    print(i)
+    stdout(i)
 }
 
 for (; i < 5; i = i + 1) {
-    print(i)
+    stdout(i)
 }
 
 for (i = 0; i < 5;) {
-    print(i)
+    stdout(i)
     i = i + 1
 }
 ```
@@ -1825,7 +1832,7 @@ The loop is equivalent to:
 
 ```franko
 for (int32 i = 0; i < 5; i = i + 1) {
-    print(i)
+    stdout(i)
 }
 ```
 
@@ -1836,7 +1843,7 @@ which behaves as:
     int32 i;
     i = 0;
     while (i < 5) {
-        print(i);
+        stdout(i);
         i = i + 1;
     }
 }
@@ -1859,7 +1866,7 @@ while (i < 10) {
     if (i == 3) {
         continue;
     }
-    print(i);
+    stdout(i);
 }
 ```
 
@@ -1873,7 +1880,7 @@ for (int32 i = 0; i < 5; i = i + 1) {
     if (i == 4) {
         break;       // i = i + 1 does not run
     }
-    print(i);
+    stdout(i);
 }
 ```
 
@@ -1885,7 +1892,7 @@ for (int32 a = 0; a < 3; a = a + 1) {
         if (b == 1) {
             break 2;    // exits both loops
         }
-        print(b);
+        stdout(b);
     }
 }
 ```
@@ -1902,30 +1909,30 @@ A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 17.7 Output (`franko/io`)
+## 17.7 Output (`franko/stdio`)
 
-Output is a library function, not a statement. Import `franko/io` and call the overloaded `print(...)` functions (see [franko/io](../library_docs/io.md) for the full API):
+Output is a library function, not a statement. Import `franko/stdio` and call the overloaded `stdout(...)` functions (see [franko/stdio](../library_docs/stdio.md) for the full API):
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
-    print(42)        // `42` followed by a newline
-    print("hi")      // text followed by a newline
-    print(1, " ")    // `1` followed by a space (no newline)
-    print(2)         // `2` followed by a newline
-    print()          // bare newline
+    stdout(42)        // `42` followed by a newline
+    stdout("hi")      // text followed by a newline
+    stdout(1, end = " ")    // `1` followed by a space (no newline)
+    stdout(2)         // `2` followed by a newline
+    stdout()          // bare newline
     return 0
 }
 ```
 
-A single-argument `print(x)` writes `x` followed by `\n`; a two-argument `print(x, end)` writes `x` followed by `end` verbatim (a null or empty `end` means no suffix and no newline). `print()` writes a bare newline. Overloads exist for all eight integer types, for `view<[uint8]>` text, and for `view<std::String>` from `franko/string`; a null or empty view/string prints nothing. `print_err` mirrors every `print` overload on stderr, with the same suffix and null/empty behavior.
+A single-argument `stdout(x)` writes `x` followed by `\n`; `stdout(x, end = suffix)` writes `x` followed by `suffix` verbatim (a null or empty `suffix` means no suffix and no newline). The `end` parameter is optional, so a supplied value must be named. `stdout()` writes a bare newline. Overloads exist for all eight integer types, for `view<[uint8]>` text, and for `view<std::String>` from `franko/string`; a null text view writes no text bytes, and a non-empty `end` is still written. `stderr` mirrors every `stdout` overload on stderr, with the same suffix behavior.
 
-`print` has no overloads for pointers or arrays. Struct printing is limited to `std::String`; print individual elements, fields, or bytes for other structs: `print(xs[0])`, `print(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `print(s[0])`. A bare `print(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
+`stdout` has no overloads for pointers or arrays. Struct printing is limited to `std::String`; print individual elements, fields, or bytes for other structs: `stdout(xs[0])`, `stdout(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `stdout(s[0])`. A bare `stdout(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
 
 Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](19-functions.md).
 
-Member-call printing such as `x.print()` is not supported; see [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).
+Member-call printing such as `x.stdout()` is not supported; see [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).
 
 ## 17.8 Expression Statements
 
@@ -2424,7 +2431,7 @@ A function declaration may carry exactly one inlining modifier before
 }
 
 #noinline func trace(int32 x) -> void {
-    print(x);
+    stdout(x);
     return;
 }
 ```
@@ -2489,6 +2496,131 @@ functions may share that name.
 ```
 
 See [Generics](20-generics.md) for the full reference.
+
+## 19.15 Named and Optional Arguments
+
+A call may pass arguments by parameter name, and a parameter may declare a
+default value:
+
+```franko
+func f(int32 a, int32 b, int32 c = 0) -> int32 {
+    return a + b + c
+}
+
+f(1, 2)                 // valid: c defaults to 0
+f(a = 1, b = 2)         // valid: all required arguments named
+f(b = 2, a = 1)         // valid: named order is free
+f(c = 3, a = 1, b = 2)  // valid: named order is free
+f(1, c = 3)             // valid: positional required arguments, named optional argument
+```
+
+The call rules are:
+
+- required arguments must be supplied either all positionally or all by name;
+- positional arguments must precede named arguments;
+- optional arguments must be passed by name;
+- a parameter may be supplied at most once;
+- named arguments must match a declared parameter name.
+
+Invalid:
+
+```franko
+f(1, c = 3, b = 2)      // invalid: required a is positional, b is named
+f(1, b = 2)             // invalid: required a is positional, b is named
+f(a = 1, 2)             // invalid: positional argument after a named one
+f(1, a = 2)             // invalid: a is supplied twice
+f(1, 2, 3)              // invalid: optional c must be named
+```
+
+Optional parameters trail all required parameters. A default must be a
+compile-time value; runtime expressions are rejected:
+
+```franko
+func f(int32 a, int32 b = 5) -> int32 { return a + b }   // valid
+func g(int32 a, int32 b = a) -> int32 { return a + b }   // invalid: runtime default
+```
+
+Allowed default forms are:
+
+- integer constant expressions (`1 + 2`, `1 << 3`, `#IS_LINUX`, folded `#`
+  predicates);
+- `null` for a pointer parameter;
+- string literals;
+- array literals;
+- enum variant references;
+- aggregate struct literals whose struct is value-assignable.
+
+An aggregate literal default restricts each field initializer to the same
+static forms: constant expressions, `null`, string literals, array literals,
+enum variants, folded `#` expressions, and nested value-assignable struct
+literals.
+
+```franko
+struct Literal {
+    int32 x
+    int32 def = 2
+}
+
+enum<uint8> Status { spawning, alive }
+
+func text(view<[byte, 5]> s = "hello") -> byte { return $(s)[0] }
+func numbers(view<[int32]> xs = [1, 2, 3]) -> uint32 { return $(xs).length() }
+func state(Status s = Status::alive) -> uint8 { return s == Status::alive }
+func literal(Literal lit = Literal { x = 1 }) -> int32 { return lit.x + lit.def }
+```
+
+Defaults are resolved at the declaration and copied into each omitted argument
+at the semantic call site. C++ emission sees an ordinary full-arity call.
+
+Overload resolution prefers an overload that needs no defaults over an
+otherwise equal overload that does:
+
+```franko
+func choose(int32 a) -> int32 { return 1 }
+func choose(int32 a, int32 b = 0) -> int32 { return 2 }
+
+choose(1)          // 1
+choose(1, b = 3)   // 2
+```
+
+Ordinary struct methods support named and optional user arguments. `self` is
+implicit and is never nameable:
+
+```franko
+struct Counter {
+    int32 n = 0
+
+    func add(ptr<Counter> self, int32 amount = 1) -> void {
+        $(self).n = $(self).n + amount
+        return
+    }
+}
+
+Counter c
+c.add()
+c.add(amount = 5)
+```
+
+Restrictions:
+
+- `self` cannot have a default and cannot be passed by name;
+- `OPERATOR_*` methods cannot declare defaults and reject named arguments;
+- `main` cannot declare optional parameters;
+- array intrinsics and compile-time `#` intrinsics do not accept named
+  arguments.
+
+Diagnostics include:
+
+```text
+Positional arguments must appear before named arguments in call to 'f'
+Named argument 'x' is specified more than once in call to 'f'
+Named argument 'x' does not match any parameter of 'f'
+Compulsory arguments in call to 'f' must be either all named or all unnamed
+Optional parameter 'x' of 'f' must be passed by name
+Missing required argument 'x' in call to 'f'
+Optional parameter 'b' in function 'f' must follow all required parameters
+Default value for parameter 'b' of function 'f' must be a compile-time value
+```
 
 ---
 
@@ -2569,8 +2701,22 @@ A generic function declares its parameters after the function name:
 Call a generic function with explicit arguments:
 
 ```franko
-print(identity<int32>(7))
-print(first<int32, 3>(values))
+stdout(identity<int32>(7))
+stdout(first<int32, 3>(values))
+stdout(identity<int32>(value = 7))
+```
+
+Generic calls accept the same named and optional arguments as ordinary calls.
+A default may use a generic value parameter; it becomes a concrete constant
+when the template is instantiated:
+
+```franko
+#generic func plus<int32 N>(int32 a, int32 b = N) -> int32 {
+    return a + b
+}
+
+plus<7>(3)          // 10
+plus<7>(a = 3)      // 10
 ```
 
 A generic function name used without arguments is an error unless a concrete
@@ -2639,7 +2785,7 @@ Methods of a generic struct use the struct's parameters directly:
 
 Counter<int32> c
 c.add(5)
-print(c.get())
+stdout(c.get())
 ```
 
 A method cannot declare its own independent generic parameter list in this
@@ -2841,7 +2987,7 @@ building:
     }
 }
 
-print(fact<5>())    // 120
+stdout(fact<5>())    // 120
 ```
 
 The compiler limits expansion to 1024 generic instances per compilation and
@@ -2917,7 +3063,7 @@ a < b > (c)         // parsed as a generic call; write (a < b) > (c)
 ## 20.16 Complete Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Pair<typename A, typename B> {
     A first
@@ -2938,10 +3084,10 @@ import "franko/io"
 
 func main() -> int32 {
     Pair<int32, uint8> p = make_pair<int32, uint8>(10, 20)
-    print(p.first)
-    print(p.second)
-    print(p.sum())
-    print(twice<3>(7))
+    stdout(p.first)
+    stdout(p.second)
+    stdout(p.sum())
+    stdout(twice<3>(7))
     return 0
 }
 ```
@@ -3299,12 +3445,14 @@ assignments, or copy a constant literal and modify it.
 ## 22.3 Length and Type
 
 A literal has exactly as many elements as written: `[1, 2, 3]` is
-`view<[int32, 3]>`, never a shorter or longer array. An empty
-literal `[]` is not supported (like `""`, `N >= 1`).
+`view<[int32, 3]>`, never a shorter or longer array. An empty literal
+`[]` is the `null` view: it is valid wherever a view of the expected
+array shape is allowed, and it has no length or element type of its own.
 
 ```franko
 view<[int32, 2]> v = [1, 2, 3];   // invalid: lengths 2 and 3 differ
 view<[int32, 3]> v = [1, 2, 3];   // valid
+view<[int32]> null_view = [];     // valid: null view
 ```
 
 Because the literal is a pointer, elements are reached through a
@@ -3312,7 +3460,7 @@ dereference of a view variable:
 
 ```franko
 view<[int32, 3]> v = [1, 2, 3];
-print($(v)[0]);            // 1
+stdout($(v)[0]);            // 1
 ```
 
 Indexing a literal directly is not supported: `[1, 2, 3][0]` is
@@ -3423,7 +3571,7 @@ constant elements, like a string literal:
 view<[int32, 4]> G = [1, 2, 3, 4];
 
 func main() -> int32 {
-    print($(G)[3]);         // 4
+    stdout($(G)[3]);         // 4
     return 0;
 }
 ```
@@ -3443,7 +3591,7 @@ Array literals in Franko are:
   contexts (integer primitives or enums);
 - compile-time constant expressions only, backed by shared constant
   storage with static lifetime (recursion-safe, like string literals);
-- exactly as long as written (`N >= 1`);
+- exactly as long as written; `[]` is the null view;
 - rectangular when nested, with inner dimensions static;
 - decayable to `view<[T]>` (outermost dimension only);
 - never assignable to arrays — copy with `memcpy`;
@@ -3718,13 +3866,13 @@ Dynamic arrays report their runtime length. A dynamic array that has never been 
 
 ```franko
 [int32] xs;
-print(xs.length());   // 0
+stdout(xs.length());   // 0
 xs.init(4);
-print(xs.length());   // 4
+stdout(xs.length());   // 4
 xs.resize(10);
-print(xs.length());   // 10
+stdout(xs.length());   // 10
 xs.uninit();
-print(xs.length());   // 0
+stdout(xs.length());   // 0
 ```
 
 Static arrays report their size as a compile-time constant: `ys.length()` for `[int32, 3] ys` compiles to the constant `3`, with no runtime read.
@@ -3733,11 +3881,11 @@ Nested receivers report the outermost dimension; index first for inner dimension
 
 ```franko
 [[int32, 2], 3] m;
-print(m.length());      // 3
-print(m[0].length());   // 2
+stdout(m.length());      // 3
+stdout(m[0].length());   // 2
 ```
 
-`length()` returns a value, so it may be used in any value context: arithmetic, loop bounds, assignments, and `print`.
+`length()` returns a value, so it may be used in any value context: arithmetic, loop bounds, assignments, and `stdout`.
 
 ## 23.11 `memcmp`
 
@@ -3775,7 +3923,7 @@ exactly `count` elements.
 a.memset(0);
 b.memset(0);
 if (a.memcmp(getptr(b)) == 0) {
-    print("equal");
+    stdout("equal");
 }
 ```
 
@@ -3824,9 +3972,9 @@ hay.memset(0);
 hay[1] = 65;
 hay[2] = 66;
 hay[3] = 66;
-print(hay.memchr(65));          // 1
-print(hay.memchr(67));          // 4294967295
-print(hay.memmem("BB"));        // 2
+stdout(hay.memchr(65));          // 1
+stdout(hay.memchr(67));          // 4294967295
+stdout(hay.memmem("BB"));        // 2
 ```
 
 ### Endian integer accessors
@@ -3882,11 +4030,11 @@ Rules:
 ```franko
 [byte, 8] header
 header.write_uint32_LE(0, 0x12345678);
-print(header.read_uint32_LE(0));   // 305419896
-print(header.read_uint32_BE(0));   // 2018915346
+stdout(header.read_uint32_LE(0));   // 305419896
+stdout(header.read_uint32_BE(0));   // 2018915346
 
 header.write_int16_BE(4, -2);
-print(header.read_int16_BE(4));    // -2
+stdout(header.read_int16_BE(4));    // -2
 ```
 
 ### Bit intrinsics
@@ -3936,12 +4084,12 @@ Rules:
 flags.memset(0);
 flags.write_bit(0, 1);
 flags.write_bit(9, 1);
-print(flags.count_set_bits());   // 2
-print(flags.read_bit(1));        // 0
+stdout(flags.count_set_bits());   // 2
+stdout(flags.read_bit(1));        // 0
 flags.flip_bit(1);
-print(flags.read_bit(1));        // 1
+stdout(flags.read_bit(1));        // 1
 flags.shift_bits_left(1);
-print(flags.read_bit(10));       // 1
+stdout(flags.read_bit(10));       // 1
 ```
 
 ---
@@ -3969,8 +4117,8 @@ Because the literal is a pointer, it must be dereferenced with `$(...)`
 to reach the bytes:
 
 ```franko
-print($("abc").length());   // 3
-print($("abc")[0]);         // 97
+stdout($("abc").length());   // 3
+stdout($("abc")[0]);         // 97
 ```
 
 A string literal may appear anywhere an expression may appear:
@@ -3978,7 +4126,7 @@ A string literal may appear anywhere an expression may appear:
 ```franko
 view<[byte, 3]> s = "abc";     // declaration initializer
 s = "xyz";                          // assignment to a view variable
-print($("hi").length());            // print argument
+stdout($("hi").length());            // print argument
 take("hi");                         // function argument
 return "hi";                        // return value (with a view return type)
 ```
@@ -3989,7 +4137,7 @@ A string literal stores the literal's **UTF-8 bytes**: one array element
 per byte. Multi-byte sequences expand accordingly:
 
 ```franko
-print($("你好").length());   // 6: 228 189 160 229 165 189
+stdout($("你好").length());   // 6: 228 189 160 229 165 189
 ```
 
 ## 24.3 Escapes
@@ -3999,7 +4147,7 @@ The supported escape sequences are `\\ \" \a \b \f \n \r \t \v`.
 invalid. Any other escape is a lex error.
 
 ```franko
-print($("\t\n\"\\"")[0]);   // 9
+stdout($("\t\n\"\\"")[0]);   // 9
 ```
 
 ## 24.4 Strings and Byte Buffers
@@ -4012,7 +4160,7 @@ bytes with the `memcpy` intrinsic instead — a string literal is a valid
 ```franko
 [byte, 6] buf;
 buf.memcpy("hello");      // copies 5 bytes; buf[5] is untouched
-print(buf[0]);            // 104
+stdout(buf[0]);            // 104
 ```
 
 For dynamic arrays, size the buffer first:
@@ -4037,27 +4185,38 @@ A pointer-typed global may be initialized with a string literal (or with
 view<[byte, 5]> GREETING = "hello";
 
 func main() -> int32 {
-    print($(GREETING).length());   // 5
+    stdout($(GREETING).length());   // 5
     return 0;
 }
 ```
 
 ## 24.6 Printing Strings
 
-`print` (from `franko/io`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `print(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
+`stdout` (from `franko/stdio`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `stdout(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
-print("hi")          // writes `hi` + newline
-print($("hi")[0])    // 104
-print($("hi")[1])    // 105
+stdout("hi")          // writes `hi` + newline
+stdout($("hi")[0])    // 104
+stdout($("hi")[1])    // 105
 ```
 
 ## 24.7 Empty Strings
 
-An empty string literal `""` is not supported: a string literal is a
-`view<[byte, N]>` with `N >= 1`.
+An empty string literal `""` is the `null` view: it is valid wherever a
+`view<[byte, ...]>` value is expected. It has no bytes and no element
+storage; dereferencing or indexing it is invalid until a non-null view is
+assigned.
+
+```franko
+view<[byte]> empty = "";       // valid: null view
+view<[byte, 5]> nil = "";      // valid: null view
+```
+
+Because `""` is `null`, `stdout("")` is ambiguous between the text and
+`std::String` overloads, just like `stdout(null)`. Use a typed null view or
+`stdout()` when a newline is intended.
 
 ---
 
@@ -4111,7 +4270,7 @@ storage holding its UTF-8 bytes. No null terminator is added, and
 identical literal texts share the same storage:
 
 ```franko
-print($("ABC")[0]);
+stdout($("ABC")[0]);
 ```
 
 The literal has type `view<[byte, 3]>` and can be indexed after a
@@ -4124,17 +4283,17 @@ initialize or assign an array: copy the bytes with `memcpy` instead. See
 `if`, `while`, and `for` bodies may be a single statement without braces:
 
 ```franko
-if (x) print(x);
+if (x) stdout(x);
 while (i < 10) i = i + 1;
-for (; i < 10; i = i + 1) print(i);
+for (; i < 10; i = i + 1) stdout(i);
 ```
 
 A braceless body behaves as if it were wrapped in an implicit block:
 
 ```franko
-if (x) { print(x); }
+if (x) { stdout(x); }
 while (i < 10) { i = i + 1; }
-for (; i < 10; i = i + 1) { print(i); }
+for (; i < 10; i = i + 1) { stdout(i); }
 ```
 
 This makes braceless and braced bodies scope identically: a declaration
@@ -4148,7 +4307,7 @@ A `for` loop is equivalent to declaration/assignment statements and a
 
 ```franko
 for (int32 i = 0; i < n; i = i + 1) {
-    print(i)
+    stdout(i)
 }
 ```
 
@@ -4159,7 +4318,7 @@ is equivalent to:
     int32 i;
     i = 0;
     while (i < n) {
-        print(i);
+        stdout(i);
         i = i + 1;
     }
 }
@@ -4212,8 +4371,8 @@ Inference rules:
   every level: a shorter literal is an error (the literal's length is
   its type), and sibling lists at each level must have equal length
   (perfect rectangle);
-- an empty array literal is invalid in general, so it cannot infer a
-  size.
+- an empty array literal becomes `null` and carries no length, so it
+  cannot infer a size.
 
 Misplaced `?` (parameters, return types, struct fields, globals,
 pointers, non-literal initializers) is rejected. See
@@ -4310,6 +4469,28 @@ mixed tuple spellings, and positional and named entries cannot be mixed. No
 temporary aggregate value is created, so the form also works for pointer-only
 aggregates; each entry must still obey ordinary assignment rules. See
 [Aggregate Literals](30-aggregate-literals.md).
+
+## 25.10 Named Arguments and Defaults
+
+Named arguments and omitted optional arguments are resolved during semantic
+analysis. A call is rewritten to a fully positional call in parameter order;
+each omitted optional argument is inserted as a copy of the declaration's
+compiled default:
+
+```franko
+func f(int32 a, int32 b = 5) -> int32 { return a + b }
+
+f(1)          // semantic call: f(1, 5)
+f(b = 7, a = 1)   // semantic call: f(1, 7)
+```
+
+The default expression is resolved once at its declaration, using the
+parameter type as the expected type. Only compile-time forms are allowed
+(integer constant expressions, `null`, strings, array literals, enum variants,
+folded `#` expressions, and value-assignable struct literals). The inserted
+argument is an ordinary semantic value; C++ code generation sees the same
+full-arity call it would see if the argument had been written explicitly.
+See [Functions](19-functions.md#1915-named-and-optional-arguments).
 
 ---
 
@@ -4459,7 +4640,7 @@ mview<[int32, 4]> m = getmview(xs);
 view<[int32]> v = m;             // implicit decay
 mview<[int32]> d = cast<mview<[int32]>>(m);   // explicit
 
-print($(v).length());                   // 4
+stdout($(v).length());                   // 4
 $(m)[1] = 99;                           // writes hit xs directly
 ```
 
@@ -4628,7 +4809,7 @@ Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`
 `null` may be passed to pointer parameters and returned from pointer
 functions.
 
-`print(null)` matches the `print(view<[uint8]>)` overload and prints nothing (a null view is treated as empty).
+A bare `stdout(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
 
 ### 26.9.1 Null-Initialized Pointer Storage
 
@@ -4636,7 +4817,7 @@ Pointer storage is **guaranteed null-initialized**, unlike ordinary storage, whi
 
 ```franko
 ptr<int32> p;        // p is null here, guaranteed
-print(p == null);       // true
+stdout(p == null);       // true
 ```
 
 The guarantee covers every pointer storage slot:
@@ -4777,7 +4958,7 @@ variants detect stale handles. The full API is in
 [franko/pool](../library_docs/pool.md).
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/pool"
 
 func main() -> int32 {
@@ -4804,7 +4985,7 @@ func main() -> int32 {
 
     uint32 i = a;
     while (i != 0xFFFFFFFF) {
-        print(payload[i]);
+        stdout(payload[i]);
         i = next[i];
     }
 
@@ -4891,7 +5072,7 @@ struct Point {
 Point p;
 p.x = 3;
 p.y = 4;
-print(p.x + p.y);
+stdout(p.x + p.y);
 ```
 
 Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](10-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](38-examples.md).
@@ -5031,7 +5212,7 @@ Consequences:
 
 Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](23-array-intrinsics.md).
 
-Structs are not integers: arithmetic, bitwise, shift, and logical operators reject whole structs, and `if`/`while` conditions reject bare struct values; `print` has no overload for a whole struct (see [Statements](17-statements.md)). The exception is the overloadable comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) and assignment operators (`=`, `+=`, ...), which use `OPERATOR_*` methods (see [Operators](13-operators.md#1310-struct-operator-overloading)). Operate on fields for everything else: `print(s.x)`.
+Structs are not integers: arithmetic, bitwise, shift, and logical operators reject whole structs, and `if`/`while` conditions reject bare struct values; `stdout` has no overload for a whole struct (see [Statements](17-statements.md)). The exception is the overloadable comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) and assignment operators (`=`, `+=`, ...), which use `OPERATOR_*` methods (see [Operators](13-operators.md#1310-struct-operator-overloading)). Operate on fields for everything else: `stdout(s.x)`.
 
 ## 27.7 Member Access and Field Lvalues
 
@@ -5082,7 +5263,7 @@ int32 scale = 2;
 
 - Structs are declared only at top level; no local or nested struct declarations.
 - Struct methods use member-call syntax alongside the built-in array intrinsics (see [Methods](28-methods.md)).
-- No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `print` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
+- No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `stdout` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
 - Aggregate literals construct assignable struct values as expressions; literal construction requires the struct to be value-assignable. Local field-wise declaration initializers initialize any struct, including pointer-only structs, one field at a time.
 - Field defaults are `constExpr` on primitive fields only.
 - An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
@@ -5138,7 +5319,7 @@ func main() -> int32 {
     X s
     s.y = 41
     s.increment()
-    print(s.y)
+    stdout(s.y)
     return 0
 }
 ```
@@ -5239,6 +5420,30 @@ Rules:
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
 - Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
 
+Ordinary methods support named and optional user arguments. `self` is hidden
+and is never nameable, cannot have a default, and is never part of the call's
+argument list:
+
+```franko
+struct Counter {
+    int32 n = 0
+
+    func add(ptr<Counter> self, int32 amount = 1) -> void {
+        $(self).n = $(self).n + amount
+        return
+    }
+}
+
+Counter c
+c.add()
+c.add(amount = 5)
+c.add(self = 1)     // invalid: self is implicit
+```
+
+Operator methods are the exception: they are fixed-shape and reject both
+defaults and named arguments. See
+[Functions](19-functions.md#1915-named-and-optional-arguments).
+
 ## 28.4 Fields vs Methods Name Resolution
 
 Fields and methods share member-call syntax but resolve in separate namespaces:
@@ -5287,7 +5492,7 @@ Rules:
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
 - `self` as an expression (`self`, `getptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
-- `x.self` parses (member names accept keywords) but always fails resolution. A method named `print` is an ordinary method like any other.
+- `x.self` parses (member names accept keywords) but always fails resolution. A method named `stdout` is an ordinary method like any other.
 
 ## 28.7 Scope Inside Method Bodies
 
@@ -5709,10 +5914,10 @@ assignability for tuples.
 
 ```franko
 (int32, int32) pair
-print(#is_value_assignable(pair))      // 1
-print(#has_default_value(pair))        // 0
-print(#what_type(pair))                 // (int32,int32)
-print(#is_same_type(pair, (int32 val, int32 err))) // 1
+stdout(#is_value_assignable(pair))      // 1
+stdout(#has_default_value(pair))        // 0
+stdout(#what_type(pair))                 // (int32,int32)
+stdout(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
 `#what_type` prints the canonical tuple form `(int32,int32)` with element
@@ -5747,7 +5952,7 @@ literals, whole-tuple assignment, and function returns.
 ## 29.11 Complete Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func split((int32 left, int32 right) pair) -> (int32 first, int32 second) {
     return (int32 first, int32 second) {
@@ -5760,9 +5965,9 @@ func main() -> int32 {
     (int32 x, int32 y) pair = (int32 x, int32 y) { x = 10, y = 20 }
 
     (int32 first, int32 second) result = split(pair)
-    print(result.first)
-    print(result.second)
-    print(#what_type(pair))
+    stdout(result.first)
+    stdout(result.second)
+    stdout(#what_type(pair))
     return 0
 }
 ```
@@ -6231,7 +6436,7 @@ int32 x { field = 1 }                       // field initializer requires a stru
 ## 30.12 Complete Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Literal {
     int32 x
@@ -6269,15 +6474,15 @@ func main() -> int32 {
     Outer outer = Outer { inner = Inner { value = 42 }, ok = 2 }
     Buffer buf { cap = 20 }
 
-    print(a.x + a.def)              // 1
-    print(b.x + b.def)              // 5
-    print(c.x + c.def)              // 9
-    print(pair.left + pair.right)   // 3
-    print(positional._0 + positional._1)   // 11
-    print(partial._0)               // 7
-    print(named.x + named.y)        // 7
-    print(outer.inner.value + outer.ok)   // 44
-    print(buf.cap)                  // 20
+    stdout(a.x + a.def)              // 1
+    stdout(b.x + b.def)              // 5
+    stdout(c.x + c.def)              // 9
+    stdout(pair.left + pair.right)   // 3
+    stdout(positional._0 + positional._1)   // 11
+    stdout(partial._0)               // 7
+    stdout(named.x + named.y)        // 7
+    stdout(outer.inner.value + outer.ok)   // 44
+    stdout(buf.cap)                  // 20
 
     return 0
 }
@@ -6389,7 +6594,7 @@ struct Entity {
 
 func main() -> int32 {
     Entity e;
-    print(e.state == Status::spawning); // 1 (true)
+    stdout(e.state == Status::spawning); // 1 (true)
     return 0;
 }
 ```
@@ -6518,7 +6723,7 @@ Franko avoids OOP. Behavior is driven by data classes and strict enum
 state machines. This example uses the implicit auto-increment form.
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 // Auto-increments: sleeping=0, hunting=1, attacking=2, dead=3
 enum<uint8> AiState {
@@ -6564,7 +6769,7 @@ func main() -> int32 {
 
     update_enemies(getmview(mob_pool));
 
-    print(mob_pool[0].state == AiState::hunting); // 1 (true)
+    stdout(mob_pool[0].state == AiState::hunting); // 1 (true)
 
     mob_pool.uninit();
     return 0;
@@ -7295,6 +7500,11 @@ The compiler rejects an FFI module when:
 
 Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.
 
+Named and optional arguments are resolved before emission: omitted defaults
+are copied into the semantic call site as ordinary positional arguments, so
+the bridge signature and block name are unchanged. See
+[Functions](19-functions.md#1915-named-and-optional-arguments).
+
 ---
 
 # 35. Compile-Time Reflection
@@ -7365,8 +7575,8 @@ are `1`.
 int32 os_count = #IS_LINUX + #IS_WINDOWS + #IS_MACOS;
 int32 arch_count = #IS_X86_64 + #IS_ARM64;
 
-print(os_count);    // 1
-print(arch_count);  // 1
+stdout(os_count);    // 1
+stdout(arch_count);  // 1
 ```
 
 `#` names are not variables. They cannot be assigned to, passed around, or
@@ -7404,19 +7614,19 @@ Chaining uses `#else #if`:
 
 ```franko
 #if (#IS_WINDOWS) {
-    print("windows")
+    stdout("windows")
 } #else #if (#IS_LINUX) {
-    print("linux")
+    stdout("linux")
 } #else {
-    print("other")
+    stdout("other")
 }
 ```
 
 Braceless bodies are allowed:
 
 ```franko
-#if (#IS_WINDOWS) print("windows")
-#else print("other")
+#if (#IS_WINDOWS) stdout("windows")
+#else stdout("other")
 ```
 
 A standalone `#else` is a syntax error. `#if` is not allowed in a `for`
@@ -7435,14 +7645,14 @@ Before folding:
 } #else {
     int32 platform = 2
 }
-print(platform)
+stdout(platform)
 ```
 
 After folding on a Linux target, the program is exactly:
 
 ```franko
 int32 platform = 1
-print(platform)
+stdout(platform)
 ```
 
 The braces around the selected branch do not exist after folding. This is
@@ -7595,12 +7805,12 @@ struct Point {
 Point p;
 int32 i;
 
-print(#has_default_value(p));       // from a variable
-print(#has_default_value(Point));   // from a type
-print(#has_default_value(int32));
-print(#has_default_value([int32, 4]));
-print(#has_default_value(ptr<Point>));
-print(#has_default_value((int32, int32)));
+stdout(#has_default_value(p));       // from a variable
+stdout(#has_default_value(Point));   // from a type
+stdout(#has_default_value(int32));
+stdout(#has_default_value([int32, 4]));
+stdout(#has_default_value(ptr<Point>));
+stdout(#has_default_value((int32, int32)));
 ```
 
 A bare identifier resolves as a variable first when that name exists;
@@ -7696,28 +7906,28 @@ runtime value type and cannot be used in declarations or expressions, but
 - `#strcat(...)` results.
 
 Runtime `view<[byte]>` values and variables are rejected, even when they
-were initialized from a compile-time string. Empty string arguments and
-empty concatenation results are rejected consistently with ordinary
-string literals (`N >= 1`).
+were initialized from a compile-time string. Compile-time string arguments
+and concatenation results must be non-empty (`N >= 1`); unlike ordinary
+source string literals, they do not become `null`.
 
 `#strcat` accepts one or more arguments and concatenates them:
 
 ```franko
-print(#strcat("Franko", " ", "reflection"))
-print(#strcat(#what_type(int32), "_", #what_type(uint8)))
+stdout(#strcat("Franko", " ", "reflection"))
+stdout(#strcat(#what_type(int32), "_", #what_type(uint8)))
 
 #if (#strcmp(#strcat("a", "b"), "ab") == 0) {
-    print("equal")
+    stdout("equal")
 }
 ```
 
 `#strcmp` compares decoded UTF-8 bytes lexicographically:
 
 ```franko
-print(#strcmp("abc", "abd"));   // -1
-print(#strcmp("abc", "abc"));   // 0
-print(#strcmp("abd", "abc"));   // 1
-print(#strcmp("ab", "abc"));    // -1 (prefix sorts first)
+stdout(#strcmp("abc", "abd"));   // -1
+stdout(#strcmp("abc", "abc"));   // 0
+stdout(#strcmp("abd", "abc"));   // 1
+stdout(#strcmp("ab", "abc"));    // -1 (prefix sorts first)
 ```
 
 `#panic` stops compilation with its message:
@@ -7829,11 +8039,11 @@ struct Blob {
 WithDefault d;
 Blob b;
 
-print(#is_memset_safe(d));           // 1
-print(#has_default_value(d));        // 1: field default
-print(#is_memcpy_safe(b));           // 0: dynamic array field
-print(#has_default_value(b));        // 1: dynamic array field
-print(#is_assignable(b));            // 0: no built-in assignment
+stdout(#is_memset_safe(d));           // 1
+stdout(#has_default_value(d));        // 1: field default
+stdout(#is_memcpy_safe(b));           // 0: dynamic array field
+stdout(#has_default_value(b));        // 1: dynamic array field
+stdout(#is_assignable(b));            // 0: no built-in assignment
 ```
 
 A pointer-only struct that is not assignable by default can opt in with an
@@ -7857,7 +8067,7 @@ struct WithArray {
 }
 
 WithArray w;
-print(#is_value_assignable(w)); // 0: static array field
+stdout(#is_value_assignable(w)); // 0: static array field
 ```
 
 `#is_same_type` compares exact types. Aliases normalize first, so `int` and
@@ -7881,8 +8091,8 @@ struct Point {
 }
 
 Point p;
-print(#is_matchable(Point));  // 1
-print(#is_comparable(p));     // 1
+stdout(#is_matchable(Point));  // 1
+stdout(#is_comparable(p));     // 1
 ```
 
 ---
@@ -7895,7 +8105,7 @@ platform's functions do not need to exist on the current target:
 
 ```franko
 import "franko/os"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte] msg;
@@ -7975,7 +8185,7 @@ Do not expect `#if` to create a scope:
 
 ```franko
 #if (1) { int32 value = 3 }
-print(value)                  // valid: compile-time splice
+stdout(value)                  // valid: compile-time splice
 ```
 
 A runtime view is not a compile-time string:
@@ -8040,7 +8250,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 Struct methods and the built-in array intrinsics use member-call syntax (see [Methods](28-methods.md) and [Array Intrinsics](23-array-intrinsics.md)). All other member calls are rejected, including:
 
 ```franko
-x.print();          // unsupported member call: no such struct method
+x.stdout();          // unsupported member call: no such struct method
 x.something(1);     // unsupported member call: unknown method
 ```
 
@@ -8125,7 +8335,7 @@ Escapes through very deep or recursive call chains may be missed. See
 
 ## 36.11 Output Is a Library Function
 
-Output is provided by `franko/io`, not by the compiler. The overloaded `print(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](17-statements.md) and [franko/io](../library_docs/io.md).
+Output is provided by `franko/stdio`, not by the compiler. The overloaded `stdout(...)` functions accept the eight integer types and `view<[uint8]>` text; there are no overloads for pointers, arrays, or structs, so passing one is a "No matching overload" error. See [Statements](17-statements.md) and [franko/stdio](../library_docs/stdio.md).
 
 ## 36.12 Unsupported Operators
 
@@ -8255,6 +8465,30 @@ instantiation depth of 64.
 
 See [Generics](20-generics.md).
 
+## 36.22 Named and Optional Argument Restrictions
+
+Named arguments and declaration-site defaults are supported for ordinary
+functions and struct methods, with these restrictions:
+
+- default values must be compile-time forms; runtime expressions such as
+  variables, parameters, globals, calls, casts, dereferences, indexing, and
+  member accesses are rejected;
+- aggregate literal defaults are limited to value-assignable struct literals
+  whose field values use the same static forms;
+- tuple aggregate-literal defaults are not part of the current default model;
+- optional arguments must be passed by name, and positional arguments must
+  precede named arguments;
+- required arguments must be supplied either all positionally or all by name;
+- `self` cannot have a default and cannot be passed by name;
+- `OPERATOR_*` methods cannot declare defaults and reject named arguments;
+- `main` cannot declare optional parameters;
+- array intrinsics and compile-time `#` intrinsics do not accept named
+  arguments;
+- defaults are not runtime values: they are resolved once at the declaration
+  and copied into each call site before C++ emission.
+
+See [Functions](19-functions.md#1915-named-and-optional-arguments).
+
 ---
 
 # 37. Naming Conventions
@@ -8276,7 +8510,7 @@ compiler warnings. The other conventions in this chapter are style guidance.
 | Enum | `CapitalLetterCamelCase` | `Status`, `AiState`, `NetworkState` |
 | Internal enum | `__` + `CapitalLetterCamelCase` | `__SecretState` |
 | Enum variant | `camelCaseStartingWithLowerCaseLetter` | `Types::type1`, `Types::complexType` |
-| Function | `lower_case_snake_case` | `read_line`, `new_index` |
+| Function | `lower_case_snake_case` | `stdin_line`, `new_index` |
 | Method | `lower_case_snake_case` | `write_active_indices`, `get_capacity` |
 | Private method | `_` + `lower_case_snake_case` | `_secret_function` |
 | Internal function | `__` + `lower_case_snake_case` | `__private_helper` |
@@ -8479,7 +8713,7 @@ The compiler's bundled standard library is stored under `./import/franko/`.
 The import prefix `franko/` is reserved for those standard modules:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/os"
 import "franko/pool"
 ```
@@ -8521,7 +8755,7 @@ their concrete counterparts. See [Generics](20-generics.md).
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-Examples that print assume `import "franko/io"` at the top of the file.
+Examples that print assume `import "franko/stdio"` at the top of the file.
 
 ## 38.1 Basic Integers
 
@@ -8533,7 +8767,7 @@ func main() -> int32 {
     x = 10;
     y = x + 5;
 
-    print(y);
+    stdout(y);
 
     return 0;
 }
@@ -8550,9 +8784,9 @@ func main() -> int32 {
 
     xs.memcpy([1, 2, 3]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -8568,9 +8802,9 @@ func main() -> int32 {
     xs[1] = 2;
     xs[2] = 3;
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -8601,9 +8835,9 @@ func main() -> int32 {
 
     xs.memcpy([10, 20, 30]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     xs.uninit();
 
@@ -8617,10 +8851,10 @@ func main() -> int32 {
 func main() -> int32 {
     view<[int32, 4]> v = [1, 5, 10, 1 + 2];
 
-    print($(v)[0]);
-    print($(v)[1]);
-    print($(v)[2]);
-    print($(v)[3]);
+    stdout($(v)[0]);
+    stdout($(v)[1]);
+    stdout($(v)[2]);
+    stdout($(v)[3]);
 
     return 0;
 }
@@ -8640,8 +8874,8 @@ func main() -> int32 {
         [3, 4]
     ]);
 
-    print(matrix[0][0]);
-    print(matrix[1][1]);
+    stdout(matrix[0][0]);
+    stdout(matrix[1][1]);
 
     return 0;
 }
@@ -8684,8 +8918,8 @@ func main() -> int32 {
     view<[int32, 3]> v = [1, 2, 3];
     view<[int32, ?]> w = [4, 5, 6, 7];
 
-    print($(v)[0]);
-    print($(w).length());    // 4
+    stdout($(v)[0]);
+    stdout($(w).length());    // 4
 
     return 0;
 }
@@ -8704,8 +8938,8 @@ func take(view<[int32]> v) -> int32 {
 func main() -> int32 {
     view<[int32]> d = [1, 2, 3];
 
-    print($(d)[2]);
-    print(take([4, 5, 6]));
+    stdout($(d)[2]);
+    stdout(take([4, 5, 6]));
 
     return 0;
 }
@@ -8722,9 +8956,9 @@ func main() -> int32 {
 
     $(p).memcpy([1, 2, 3]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -8743,9 +8977,9 @@ func main() -> int32 {
     $(p)[1] = 2;
     $(p)[2] = 3;
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -8762,7 +8996,7 @@ func main() -> int32 {
     str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
     for (uint i = 0; i < 22; i++) {
-        print(str[i]);
+        stdout(str[i]);
     }
 
     str.uninit();
@@ -8786,8 +9020,8 @@ func main() -> int32 {
 
     fill(getptr(grid));
 
-    print(grid[0][1]);
-    print(grid[1][2]);
+    stdout(grid[0][1]);
+    stdout(grid[1][2]);
 
     return 0;
 }
@@ -8815,7 +9049,7 @@ func main() -> int32 {
         return -1;
     }
 
-    print(status);
+    stdout(status);
 
     xs.uninit();
     return 0;
@@ -8833,8 +9067,8 @@ struct Point {
 func main() -> int32 {
     Point p = Point { x = 10, y = 20 };
 
-    print(p.x);
-    print(p.y);
+    stdout(p.x);
+    stdout(p.y);
 
     return 0;
 }
@@ -8848,8 +9082,8 @@ A field-wise declaration initializer is the direct alternative:
 func main() -> int32 {
     Point p { x = 10, y = 20 };
 
-    print(p.x);
-    print(p.y);
+    stdout(p.x);
+    stdout(p.y);
 
     return 0;
 }
@@ -8868,8 +9102,8 @@ struct Counter {
 func main() -> int32 {
     Counter c;
 
-    print(c.count);   // 0
-    print(c.limit);   // 100
+    stdout(c.count);   // 0
+    stdout(c.limit);   // 100
 
     return 0;
 }
@@ -8891,8 +9125,8 @@ func main() -> int32 {
 
     q = p;            // whole-value copy
 
-    print(q.a);       // 1
-    print(q.b);       // 2
+    stdout(q.a);       // 1
+    stdout(q.b);       // 2
 
     return 0;
 }
@@ -8920,12 +9154,12 @@ func move(ptr<Point> p) -> void {
 func main() -> int32 {
     Point p = Point { x = 3, y = 4 };
 
-    print(dist2(p));   // 25
+    stdout(dist2(p));   // 25
 
     move(getptr(p));
 
-    print(p.x);        // 4
-    print(p.y);        // 5
+    stdout(p.x);        // 4
+    stdout(p.y);        // 5
 
     return 0;
 }
@@ -8951,8 +9185,8 @@ func main() -> int32 {
     b.data[0] = 10;
     b.data[1] = 20;
 
-    print(b.data[0]);
-    print(b.size);
+    stdout(b.data[0]);
+    stdout(b.size);
 
     b.data.uninit();
     return 0;
@@ -8977,8 +9211,8 @@ Point origin;
 func main() -> int32 {
     origin.x = scale;
 
-    print(origin.x);   // 2
-    print(scale);      // 2
+    stdout(origin.x);   // 2
+    stdout(scale);      // 2
 
     return 0;
 }
@@ -8992,18 +9226,18 @@ Global declarations are checked before `main` runs; executable statements remain
 func main() -> int32 {
     [int32] xs;
     xs.init(4);
-    print(xs.length());   // 4
+    stdout(xs.length());   // 4
 
     [int32, 3] ys;
     ys.memcpy([10, 20, 30]);
-    print(ys.length());   // 3 (compile-time constant)
+    stdout(ys.length());   // 3 (compile-time constant)
 
     for (uint32 i = 0; i < ys.length(); i = i + 1) {
-        print(ys[i]);     // 10 20 30
+        stdout(ys[i]);     // 10 20 30
     }
 
     xs.uninit();
-    print(xs.length());   // 0
+    stdout(xs.length());   // 0
     return 0;
 }
 ```
@@ -9013,14 +9247,14 @@ func main() -> int32 {
 ```franko
 func main() -> int32 {
     view<[int32, ?]> a = [0, 1, 2, 3];
-    print($(a).length());   // 4
+    stdout($(a).length());   // 4
 
     view<[byte, ?]> s = [104, 101, 108, 108, 111];
-    print($(s).length());   // 5
+    stdout($(s).length());   // 5
 
     view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
-    print($(m).length());      // 2
-    print($(m)[0].length());   // 2
+    stdout($(m).length());      // 2
+    stdout($(m)[0].length());   // 2
 
     return 0;
 }
@@ -9031,10 +9265,10 @@ func main() -> int32 {
 ```franko
 func main(view<[[byte]]> args) -> int32 {
     uint32 n = $(args).length();
-    print(n - 1);   // user argument count (args[0] is the program name)
+    stdout(n - 1);   // user argument count (args[0] is the program name)
 
     for (uint32 i = 1; i < n; i++) {
-        print($(args)[i].length());   // byte length of argument i
+        stdout($(args)[i].length());   // byte length of argument i
     }
 
     return 0;
@@ -9046,7 +9280,7 @@ Running the binary with two arguments prints `2`, then each argument's length. E
 ## 38.23 Byte-Array Search, Endian, and Bit Intrinsics
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte, 8] packet;
@@ -9055,28 +9289,28 @@ func main() -> int32 {
     // Big-endian header: 0xCAFEBABE, then a little-endian length.
     packet.write_uint32_BE(0, 0xCAFEBABE);
     packet.write_uint16_LE(4, 300);
-    print(packet.read_uint32_BE(0));   // 3405691582
-    print(packet.read_uint16_LE(4));   // 300
+    stdout(packet.read_uint32_BE(0));   // 3405691582
+    stdout(packet.read_uint16_LE(4));   // 300
 
     // Search the payload with memchr / memmem.
     packet[6] = 65;
     packet[7] = 66;
-    print(packet.memchr(65));          // 6
-    print(packet.memmem("AB"));        // 6
-    print(packet.memchr(67));          // 4294967295 (not found)
+    stdout(packet.memchr(65));          // 6
+    stdout(packet.memmem("AB"));        // 6
+    stdout(packet.memchr(67));          // 4294967295 (not found)
 
     // Compare whole byte arrays.
     [byte, 8] copy;
     copy.memset(0);
     copy.memcpy(getptr(packet));
-    print(copy.memcmp(getptr(packet)) == 0);   // 1
+    stdout(copy.memcmp(getptr(packet)) == 0);   // 1
 
     // Bit flags across byte boundaries.
     [byte, 2] flags;
     flags.memset(0);
     flags.write_bit(15, 1);
-    print(flags.read_bit(15));         // 1
-    print(flags.count_set_bits());     // 1
+    stdout(flags.read_bit(15));         // 1
+    stdout(flags.count_set_bits());     // 1
 
     return 0;
 }
@@ -9087,7 +9321,7 @@ func main() -> int32 {
 Named and unnamed tuple declarations, assignment across different names, and a function round-trip:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func swap((int32 x, int32 y) pair) -> (int32 left, int32 right) {
     return (int32 left, int32 right) {
@@ -9106,14 +9340,14 @@ func main() -> int32 {
 
     (int32 low, int32 high) swapped = swap(res)
 
-    print(res.val)                 // 1
-    print(lazy._1)                 // 4
-    print(b.different)             // 6
-    print(b.name)                  // 6
-    print(swapped.low)             // 2
-    print(swapped.high)            // 1
-    print(#is_same_type(res, lazy))   // 1
-    print(#what_type(res))            // (int32,int32)
+    stdout(res.val)                 // 1
+    stdout(lazy._1)                 // 4
+    stdout(b.different)             // 6
+    stdout(b.name)                  // 6
+    stdout(swapped.low)             // 2
+    stdout(swapped.high)            // 1
+    stdout(#is_same_type(res, lazy))   // 1
+    stdout(#what_type(res))            // (int32,int32)
 
     return 0
 }
@@ -9125,7 +9359,7 @@ Struct literals, tuple literals, nested literals, and field-wise declaration
 initialization:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Literal {
     int32 x
@@ -9156,14 +9390,14 @@ func main() -> int32 {
 
     Outer outer = Outer { inner = Inner { value = 42 }, ok = 2 }
 
-    print(a.x + a.def)                    // 1
-    print(b.x + b.def)                    // 5
-    print(c.def)                          // 2
-    print(pair._0 + pair._1)              // 3
-    print(positional._0 + positional._1)  // 11
-    print(partial._0)                     // 7
-    print(named.left + named.right)       // 7
-    print(outer.inner.value + outer.ok)   // 44
+    stdout(a.x + a.def)                    // 1
+    stdout(b.x + b.def)                    // 5
+    stdout(c.def)                          // 2
+    stdout(pair._0 + pair._1)              // 3
+    stdout(positional._0 + positional._1)  // 11
+    stdout(partial._0)                     // 7
+    stdout(named.left + named.right)       // 7
+    stdout(outer.inner.value + outer.ok)   // 44
 
     return 0
 }
@@ -9176,7 +9410,7 @@ including the all-named/all-unnamed tuple spelling rule and the
 ## 38.26 Const Storage
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Point {
     int32 x = 0
@@ -9206,15 +9440,15 @@ func main() -> int32 {
 
     view<Point> v = getview(p)      // const storage: getview only
 
-    print(width)                    // 3
-    print(p.sum())                  // 9
-    print(q.x)                      // 6
-    print(pair._1)                  // 2
-    print($(v).y)                   // 5
-    print(value)                    // 8
-    print(MAX_POINTS)               // 10
-    print(ORIGIN.x)                 // 0
-    print(sum(1, 2))                // 3
+    stdout(width)                    // 3
+    stdout(p.sum())                  // 9
+    stdout(q.x)                      // 6
+    stdout(pair._1)                  // 2
+    stdout($(v).y)                   // 5
+    stdout(value)                    // 8
+    stdout(MAX_POINTS)               // 10
+    stdout(ORIGIN.x)                 // 0
+    stdout(sum(1, 2))                // 3
     return 0
 }
 ```
@@ -9224,7 +9458,7 @@ See [Declarations](18-declarations.md#188-const-storage).
 ## 38.27 Generic Structs and Functions
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Pair<typename A, typename B> {
     A first
@@ -9241,9 +9475,9 @@ import "franko/io"
 
 func main() -> int32 {
     Pair<int32, uint8> p = make_pair<int32, uint8>(10, 20)
-    print(p.first)              // 10
-    print(p.second)             // 20
-    print(repeat<3>(7))         // 21
+    stdout(p.first)              // 10
+    stdout(p.second)             // 20
+    stdout(repeat<3>(7))         // 21
     return 0
 }
 ```

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 struct Pair {
     int32 a = 0
@@ -10,7 +10,7 @@ struct Buffer {
     int32 marker = 0
 
     func OPERATOR_MOV(ptr<Buffer> self, view<Buffer> other) -> void {
-        print("op")
+        stdout("op")
         $(self).marker = $(other).marker
         return
     }
@@ -20,13 +20,13 @@ struct Comparable {
     int32 n = 0
 
     func OPERATOR_EQ(view<Comparable> self, view<Comparable> other) -> uint8 {
-        print("eq")
+        stdout("eq")
         return $(self).n == $(other).n
     }
 }
 
 func noisy(int32 value) -> int32 {
-    print("noisy")
+    stdout("noisy")
     return value
 }
 
@@ -41,7 +41,7 @@ func main() -> int32 {
 
     int32 effectful = noisy(7)
     int32 used = noisy(8)
-    print(used)
+    stdout(used)
 
     Buffer source { marker = 1 }
     Buffer target = source
@@ -52,7 +52,7 @@ func main() -> int32 {
 
     int32 assigned_later
     assigned_later = 9
-    print(assigned_later)
+    stdout(assigned_later)
 
     return 0
 }

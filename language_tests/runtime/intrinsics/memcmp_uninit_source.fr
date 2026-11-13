@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Runtime fixture: intrinsics/memcmp_uninit_source
 // Both arrays are passed as caller-owned pointers, so the checker cannot
@@ -14,6 +14,6 @@ func main() -> int32 {
     [int32, 4] a
     a.memset(0)
     [int32] b
-    print(compare(getptr(a), getptr(b)))
+    stdout(compare(getptr(a), getptr(b)))
     return 0
 }

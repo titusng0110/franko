@@ -48,7 +48,7 @@ storage holding its UTF-8 bytes. No null terminator is added, and
 identical literal texts share the same storage:
 
 ```franko
-print($("ABC")[0]);
+stdout($("ABC")[0]);
 ```
 
 The literal has type `view<[byte, 3]>` and can be indexed after a
@@ -61,17 +61,17 @@ initialize or assign an array: copy the bytes with `memcpy` instead. See
 `if`, `while`, and `for` bodies may be a single statement without braces:
 
 ```franko
-if (x) print(x);
+if (x) stdout(x);
 while (i < 10) i = i + 1;
-for (; i < 10; i = i + 1) print(i);
+for (; i < 10; i = i + 1) stdout(i);
 ```
 
 A braceless body behaves as if it were wrapped in an implicit block:
 
 ```franko
-if (x) { print(x); }
+if (x) { stdout(x); }
 while (i < 10) { i = i + 1; }
-for (; i < 10; i = i + 1) { print(i); }
+for (; i < 10; i = i + 1) { stdout(i); }
 ```
 
 This makes braceless and braced bodies scope identically: a declaration
@@ -85,7 +85,7 @@ A `for` loop is equivalent to declaration/assignment statements and a
 
 ```franko
 for (int32 i = 0; i < n; i = i + 1) {
-    print(i)
+    stdout(i)
 }
 ```
 
@@ -96,7 +96,7 @@ is equivalent to:
     int32 i;
     i = 0;
     while (i < n) {
-        print(i);
+        stdout(i);
         i = i + 1;
     }
 }
@@ -149,8 +149,8 @@ Inference rules:
   every level: a shorter literal is an error (the literal's length is
   its type), and sibling lists at each level must have equal length
   (perfect rectangle);
-- an empty array literal is invalid in general, so it cannot infer a
-  size.
+- an empty array literal becomes `null` and carries no length, so it
+  cannot infer a size.
 
 Misplaced `?` (parameters, return types, struct fields, globals,
 pointers, non-literal initializers) is rejected. See
@@ -247,3 +247,25 @@ mixed tuple spellings, and positional and named entries cannot be mixed. No
 temporary aggregate value is created, so the form also works for pointer-only
 aggregates; each entry must still obey ordinary assignment rules. See
 [Aggregate Literals](30-aggregate-literals.md).
+
+## 25.10 Named Arguments and Defaults
+
+Named arguments and omitted optional arguments are resolved during semantic
+analysis. A call is rewritten to a fully positional call in parameter order;
+each omitted optional argument is inserted as a copy of the declaration's
+compiled default:
+
+```franko
+func f(int32 a, int32 b = 5) -> int32 { return a + b }
+
+f(1)          // semantic call: f(1, 5)
+f(b = 7, a = 1)   // semantic call: f(1, 7)
+```
+
+The default expression is resolved once at its declaration, using the
+parameter type as the expected type. Only compile-time forms are allowed
+(integer constant expressions, `null`, strings, array literals, enum variants,
+folded `#` expressions, and value-assignable struct literals). The inserted
+argument is an ordinary semantic value; C++ code generation sees the same
+full-arity call it would see if the argument had been written explicitly.
+See [Functions](19-functions.md#1915-named-and-optional-arguments).

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Memory Management (Pointers)
@@ -21,11 +21,11 @@ func main() -> int32 {
     // --- Null pointer ---
     ptr<int32> null_ptr;
     if (null_ptr == null) {
-        print(1);
+        stdout(1);
     }
     null_ptr = getptr(stack_var);
     if (null_ptr != null) {
-        print(0);
+        stdout(0);
     }
 
     // --- Pointer of array ---
@@ -40,9 +40,9 @@ func main() -> int32 {
     ptr<[int32, 5]> static_arr_ptr = getptr(static_arr);
     $(static_arr_ptr)[0] = 5;
 
-    print(deref_val);
-    print($(stack_ptr));
-    print(arr_val);
+    stdout(deref_val);
+    stdout($(stack_ptr));
+    stdout(arr_val);
 
     return 0;
 }

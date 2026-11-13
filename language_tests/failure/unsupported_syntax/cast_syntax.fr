@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/cast_syntax
 // C-style cast syntax `(int32)x` does not exist in the grammar.
@@ -9,6 +9,6 @@ import "franko/io"
 func main() -> int32 {
     int32 x = 65;
     int32 y = (int32)x;
-    print(y);
+    stdout(y);
     return 0;
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Desugaring — For Loop Lowering
@@ -12,7 +12,7 @@ import "franko/io"
 func main() -> int32 {
     // All three header parts: init declares the loop variable.
     for (int32 i = 0; i < 3; i = i + 1) {
-        print(i);
+        stdout(i);
     }
 
     // Optional init: the loop variable lives outside the loop, so the
@@ -20,13 +20,13 @@ func main() -> int32 {
     // proves the update ran on the last iteration too.
     int32 i = 0;
     for (; i < 3; i = i + 1) {
-        print(i);
+        stdout(i);
     }
-    print(i);
+    stdout(i);
 
     // Optional update: the body advances the loop itself.
     for (i = 0; i < 3;) {
-        print(i);
+        stdout(i);
         i = i + 1;
     }
 

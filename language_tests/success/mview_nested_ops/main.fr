@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Permission Propagation Through Nested Types
@@ -23,10 +23,10 @@ func main() -> int32 {
     mview<[[byte]]> m = getmview(grid);
     $(m)[0][0] = 9;
     $(m)[1].memset(7);
-    print($(m).length());
-    print($(m)[0].length());
-    print(grid[0][0]);
-    print(grid[1][2]);
+    stdout($(m).length());
+    stdout($(m)[0].length());
+    stdout(grid[0][0]);
+    stdout(grid[1][2]);
 
     // memcpy through an inner nested array is allowed: mutation
     // rights propagate to the end, unlike allocation rights.
@@ -35,16 +35,16 @@ func main() -> int32 {
     three[1] = 2;
     three[2] = 3;
     $(m)[0].memcpy(getptr(three));
-    print(grid[0][0]);
-    print(grid[0][1]);
-    print(grid[0][2]);
+    stdout(grid[0][0]);
+    stdout(grid[0][1]);
+    stdout(grid[0][2]);
 
     // --- ptr propagates ownership to the end ---
     ptr<[[byte]]> p = getptr(grid);
     $(p)[0].uninit();
     $(p)[0].init(3);
     $(p)[0][0] = 4;
-    print(grid[0][0]);
+    stdout(grid[0][0]);
 
     // --- a pointer boundary resets the region: an inner ptr
     // restores full allocation rights on its pointee ---
@@ -54,7 +54,7 @@ func main() -> int32 {
     mview<ptr<[byte]>> mp = getmview(q);
     $($(mp)).uninit();
     $($(mp)).init(5);
-    print($($(mp)).length());
+    stdout($($(mp)).length());
 
     return 0;
 }

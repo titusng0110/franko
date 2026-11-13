@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Break / Continue and Pointer Null-State Checking
@@ -25,7 +25,7 @@ func main() -> int32 {
         }
         i = i + 1;
     }
-    print($(p));
+    stdout($(p));
 
     // continue path: the guard certification flows around the back
     // edge, so $(p) inside the loop body is accepted on every path.
@@ -47,7 +47,7 @@ func main() -> int32 {
     if (q != null) {
         seen = $(q);
     }
-    print(seen);
+    stdout(seen);
 
     return 0;
 }

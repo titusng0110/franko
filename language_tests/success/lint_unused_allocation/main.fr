@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Capability Linter (Unused Allocation Warning)
@@ -15,7 +15,7 @@ func main() -> int32 {
     // Writes only: mutation rights, never allocation rights.
     ptr<[byte, 3]> p = getptr(buf);
     $(p)[0] = 5;
-    print($(p)[0]);
+    stdout($(p)[0]);
 
     return 0;
 }

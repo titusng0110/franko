@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Method self Permissions
@@ -31,19 +31,19 @@ func main() -> int32 {
 
     // Owner receiver: every self type works.
     b.bump();
-    print(b.peek());
+    stdout(b.peek());
 
     // Read-only receiver: only a view<X> self method is callable.
     view<Box> v = getview(b);
-    print($(v).peek());
+    stdout($(v).peek());
 
     // Mutable receiver: mview<X> self works.
     mview<Box> m = getmview(b);
     $(m).touch();
-    print(b.x);
+    stdout(b.x);
 
     b.bump();
-    print($(v).peek());
+    stdout($(v).peek());
 
     return 0;
 }

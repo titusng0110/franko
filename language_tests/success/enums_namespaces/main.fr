@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 namespace ns {
     enum<uint8> Status {
@@ -14,14 +14,14 @@ enum<uint8> Global {
 
 func main() -> int32 {
     ns::Status s = ns::Status::ok;
-    print(s == ns::Status::ok);
-    print(s == ns::Status::err);
+    stdout(s == ns::Status::ok);
+    stdout(s == ns::Status::err);
     s = ns::Status::err;
-    print(s == ns::Status::err);
+    stdout(s == ns::Status::err);
 
     Global g = Global::on;
-    print(g == Global::on);
-    print(#is_enum(ns::Status));
-    print(#what_type(s));
+    stdout(g == Global::on);
+    stdout(#is_enum(ns::Status));
+    stdout(#what_type(s));
     return 0;
 }

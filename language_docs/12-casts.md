@@ -55,7 +55,7 @@ Casts compose freely with other expressions:
 ```franko
 uint8 cmp = 1 < 2;
 int32 wide = cast<int32>(cmp);
-print(unsafe_cast<uint8>(wide));
+stdout(unsafe_cast<uint8>(wide));
 ```
 
 ## 12.2 Static (Value-Preserving) Casts
@@ -90,7 +90,7 @@ A checked cast that fits succeeds normally:
 ```franko
 uint32 w = 70000;
 int32 s = unsafe_cast<int32>(w);   // valid: 70000 fits int32
-print(s);
+stdout(s);
 ```
 
 Writing `cast<T>` where the conversion can lose data is a compile error
@@ -196,7 +196,7 @@ func f(int64 x) -> int64 {
 func main() -> int32 {
     int32 v = 5;
     int64 r = f(cast<int64>(v));
-    print(r);
+    stdout(r);
     return 0;
 }
 ```

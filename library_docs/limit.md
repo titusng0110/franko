@@ -46,13 +46,13 @@ namespace std {
 Reference them with `::`, like every other std module:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/limit"
 
 func main() -> int32 {
     int64 n = 0;
     if (n == std::INT64_MIN) {
-        print("bottom");
+        stdout("bottom");
     }
     uint32 cap = std::UINT32_MAX;
     return 0;

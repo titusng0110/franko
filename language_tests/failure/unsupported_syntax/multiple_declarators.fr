@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/multiple_declarators
 // Multiple declarators in one declaration (`int32 a, b;`) do not exist in
@@ -8,7 +8,7 @@ func main() -> int32 {
     int32 a, b;
     a = 1;
     b = 2;
-    print(a);
-    print(b);
+    stdout(a);
+    stdout(b);
     return 0;
 }

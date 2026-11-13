@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: casts/constant_out_of_range
 // Folded constant unsafe_casts are validated at compile time: an
 // out-of-range constant value is an error, never a silent wraparound.
 func main() -> int32 {
     uint8 c = unsafe_cast<uint8>(300);
-    print(c);
+    stdout(c);
     return 0;
 }

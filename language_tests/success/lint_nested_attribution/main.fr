@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Capability Linter, Nested Attribution
@@ -20,8 +20,8 @@ func main() -> int32 {
 
     ptr<[mview<[byte]>]> v = getptr(store);
     $($(v)[0])[0] = 9;
-    print($(store[0]).length());
-    print($(store[0])[0]);
+    stdout($(store[0]).length());
+    stdout($(store[0])[0]);
 
     return 0;
 }

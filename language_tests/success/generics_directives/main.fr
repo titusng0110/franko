@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic func check<typename T>() -> int32 {
     #if (#is_same_type(T, int32)) {
@@ -17,6 +17,6 @@ func main() -> int32 {
     #if (0) {
         #panic("dead")
     }
-    print(check<int32>())
+    stdout(check<int32>())
     return 0
 }

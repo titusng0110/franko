@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Aggregate Literals and OPERATOR_MOV
@@ -37,24 +37,24 @@ func seed(ptr<Buffer> out, int32 v) -> void {
 
 func main() -> int32 {
     Literal a = Literal { x = 5, source = 0 }
-    print(a.x)
-    print(a.source)
+    stdout(a.x)
+    stdout(a.source)
 
     Literal b { x = 5, source = 0 }
-    print(b.x)
-    print(b.source)
+    stdout(b.x)
+    stdout(b.source)
 
     Literal c
     c = Literal { x = 6, source = 7 }
-    print(c.x)
-    print(c.source)
+    stdout(c.x)
+    stdout(c.source)
 
     Buffer p { v = 1, source = 2 }
     Buffer q { v = 0, source = 0 }
     seed(getptr(q), 8)
     p = q
-    print(p.v)
-    print(p.source)
+    stdout(p.v)
+    stdout(p.source)
 
     return 0
 }

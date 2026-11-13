@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func check(ptr<int32> p, ptr<int32> q) -> int32 {
     if (p == null || q == null) {
@@ -9,6 +9,6 @@ func check(ptr<int32> p, ptr<int32> q) -> int32 {
 
 func main() -> int32 {
     int32 a = 1
-    print(check(getptr(a), getptr(a)))
+    stdout(check(getptr(a), getptr(a)))
     return 0
 }

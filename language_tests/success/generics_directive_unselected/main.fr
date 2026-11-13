@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic func choose<typename T>() -> int32 {
     #if (#is_same_type(T, int32)) {
@@ -10,6 +10,6 @@ import "franko/io"
 }
 
 func main() -> int32 {
-    print(choose<int32>())
+    stdout(choose<int32>())
     return 0
 }

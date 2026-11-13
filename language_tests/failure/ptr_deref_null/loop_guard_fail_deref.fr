@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: ptr_deref_null/loop_guard_fail_deref
 // Dereferencing after a loop whose guard fails on exit.
@@ -12,7 +12,7 @@ func main() -> int32 {
         p6 = null
     }
 
-    print($(p6))
+    stdout($(p6))
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 namespace text {
@@ -10,7 +10,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -239,26 +239,26 @@ struct TopoSort {
     }
 
     func emit_case(mview<TopoSort> self, const uint32 case_number) -> void {
-        print("case ", null)
+        stdout("case ", end = null)
 
         if ($(self).has_cycle != 0) {
-            print(case_number, ": cycle detected")
-            print()
+            stdout(case_number, end = ": cycle detected")
+            stdout()
             return
         }
 
         if ($(self).verify_order() == 0) {
-            print(case_number, ": cycle detected")
-            print()
+            stdout(case_number, end = ": cycle detected")
+            stdout()
             return
         }
 
-        print(case_number, ": order")
+        stdout(case_number, end = ": order")
         for (uint32 i = 0; i < $(self).order_len; i++) {
-            print(" ", null)
-            print($(self).order[i], null)
+            stdout(" ", end = null)
+            stdout($(self).order[i], end = null)
         }
-        print()
+        stdout()
         return
     }
 }

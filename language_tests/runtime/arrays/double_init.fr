@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Runtime fixture: arrays/double_init
 // A repeated init is not rejected by the checker because an earlier init
@@ -8,6 +8,6 @@ func main() -> int32 {
     [int32] xs
     xs.init(4)
     xs.init(4)
-    print(xs[0])
+    stdout(xs[0])
     return 0
 }

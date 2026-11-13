@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Operator Overloading
@@ -159,42 +159,42 @@ func main() -> int32 {
     a.v = 3
     b.v = 7
 
-    print(a == b)
-    print(a != b)
-    print(a < b)
-    print(a > b)
-    print(a <= b)
-    print(a >= b)
+    stdout(a == b)
+    stdout(a != b)
+    stdout(a < b)
+    stdout(a > b)
+    stdout(a <= b)
+    stdout(a >= b)
 
     Num n
     n.v = 5
-    print(n.v)
+    stdout(n.v)
     n += 4
-    print(n.v)
+    stdout(n.v)
     n -= 2
-    print(n.v)
+    stdout(n.v)
     n *= 3
-    print(n.v)
+    stdout(n.v)
     n /= 4
-    print(n.v)
+    stdout(n.v)
     n %= 4
-    print(n.v)
+    stdout(n.v)
     n |= 6
-    print(n.v)
+    stdout(n.v)
     n &= 3
-    print(n.v)
+    stdout(n.v)
     n ^= 1
-    print(n.v)
+    stdout(n.v)
 
     n = b
-    print(n.v)
+    stdout(n.v)
     n = make_num(3)
-    print(n.v)
-    print(n == make_num(103))
-    print(make_num(103) == n)
+    stdout(n.v)
+    stdout(n == make_num(103))
+    stdout(make_num(103) == n)
 
     if (a < b) {
-        print(42)
+        stdout(42)
     }
 
     Num cur
@@ -205,7 +205,7 @@ func main() -> int32 {
         cur += 1
         iterations += 1
     }
-    print(iterations)
+    stdout(iterations)
 
     Blob b1
     Blob b2
@@ -214,31 +214,31 @@ func main() -> int32 {
     b1.xs[2] = 6
     b1.xs[3] = 7
     b2 = b1
-    print(b2.xs[0])
-    print(b2.xs[3])
+    stdout(b2.xs[0])
+    stdout(b2.xs[3])
 
     TextHolder h
     [byte] arr
     arr.init_zero(5)
     h = arr
-    print(h.n)
+    stdout(h.n)
     arr.uninit()
     h = "helloworld"
-    print(h.n)
+    stdout(h.n)
     h = [1, 2, 3, 4]
-    print(h.n)
+    stdout(h.n)
     h = 5
-    print(h.n)
+    stdout(h.n)
 
-    print(a.OPERATOR_EQ(getview(a)))
+    stdout(a.OPERATOR_EQ(getview(a)))
 
     ops::Wrapped w1
     ops::Wrapped w2
     w1.v = 9
-    print(w1.v)
+    stdout(w1.v)
     w2 = w1
-    print(w2.v)
-    print(w1 == w2)
+    stdout(w2.v)
+    stdout(w1 == w2)
 
     return 0
 }

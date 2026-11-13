@@ -157,7 +157,7 @@ Returns `0` on success and `-1` when the backing buffer cannot be sized.
 ```franko
 std::String s
 s.from("hello")
-print(s.length())      // 5
+stdout(s.length())      // 5
 
 [byte] bytes
 bytes.init(3)
@@ -188,13 +188,13 @@ s.from("hello")
 
 [byte] out
 s.to(getptr(out))
-print(out.length())    // 5
-print(getview(out))    // hello
+stdout(out.length())    // 5
+stdout(getview(out))    // hello
 out.uninit()
 
 std::String copy
 s.to(getptr(copy))
-print(copy == s)       // 1
+stdout(copy == s)       // 1
 copy.uninit()
 ```
 
@@ -210,9 +210,9 @@ string reports `0`.
 
 ```franko
 std::String s
-print(s.length())      // 0
+stdout(s.length())      // 0
 s.from("hello")
-print(s.length())      // 5
+stdout(s.length())      // 5
 ```
 
 ### is_utf8_compliant
@@ -241,14 +241,14 @@ reject noncharacters.
 ```franko
 std::String s
 s.from("hello")
-print(s.is_utf8_compliant())   // 1
+stdout(s.is_utf8_compliant())   // 1
 
 [byte] invalid
 invalid.init(2)
 invalid[0] = 0xC0              // overlong two-byte lead
 invalid[1] = 0x80
 s.from(getview(invalid))
-print(s.is_utf8_compliant())   // 0
+stdout(s.is_utf8_compliant())   // 0
 invalid.uninit()
 ```
 
@@ -275,11 +275,11 @@ reallocate. Use `uninit()` to release the buffer instead.
 ```franko
 std::String s
 s.from("hello")
-print(s.length())   // 5
+stdout(s.length())   // 5
 s.clear()
-print(s.length())   // 0
+stdout(s.length())   // 0
 s.from("reuse")     // reuses the existing buffer
-print(getview(s))   // reuse
+stdout(getview(s))   // reuse
 ```
 
 ### shrink_to_fit
@@ -299,11 +299,11 @@ std::String s
 s.from("hello")
 s.append(" world")
 s.erase(5, 11)      // "hello", buffer still has room
-print(s.shrink_to_fit())   // 0: buffer trimmed back to 5 bytes
-print(getview(s))          // hello
+stdout(s.shrink_to_fit())   // 0: buffer trimmed back to 5 bytes
+stdout(getview(s))          // hello
 s.clear()
-print(s.shrink_to_fit())   // 0: empty string frees its buffer
-print(s.length())          // 0
+stdout(s.shrink_to_fit())   // 0: empty string frees its buffer
+stdout(s.length())          // 0
 ```
 
 ### append
@@ -351,11 +351,11 @@ existing buffer is reused.
 std::String s
 int32 n = -123
 s.from_integer(n)
-print(getview(s))   // -123
+stdout(getview(s))   // -123
 
 uint64 big = 18446744073709551615
 s.from_integer(big)
-print(getview(s))   // 18446744073709551615
+stdout(getview(s))   // 18446744073709551615
 ```
 
 ### to_int8, to_int16, to_int32, to_int64, to_uint8, to_uint16, to_uint32, to_uint64
@@ -387,18 +387,18 @@ negative decimal value is rejected unless its magnitude is zero.
 std::String s
 s.from("-123")
 (int32 val, int32 err) n = s.to_int32()
-print(n.val)    // -123
-print(n.err)    // 0
+stdout(n.val)    // -123
+stdout(n.err)    // 0
 
 s.from("0x7F")
 (uint8 byte_val, int32 byte_err) b = s.to_uint8()
-print(b.val)    // 127
-print(b.err)    // 0
+stdout(b.val)    // 127
+stdout(b.err)    // 0
 
 s.from("-0x7F")
 b = s.to_uint8()
-print(b.val)    // 0
-print(b.err)    // -1: signs are not allowed on hexadecimal input
+stdout(b.val)    // 0
+stdout(b.err)    // -1: signs are not allowed on hexadecimal input
 ```
 
 ### find, find_next, count, count_from
@@ -438,8 +438,8 @@ s.from("a,b,,c,")
 (uint32 idx, int32 err) hit = s.find(44)       // (1, 0)
 hit = s.find("c,")                             // (5, 0)
 hit = s.find("zz")                             // (0, -1)
-print(s.count(44))                             // 4
-print(s.count_from(44, 4))                     // 2
+stdout(s.count(44))                             // 4
+stdout(s.count_from(44, 4))                     // 2
 ```
 
 ### get and set
@@ -457,7 +457,7 @@ should test `length()` first.
 ```franko
 std::String s
 s.from("abc")
-print(s.get(1))    // 98
+stdout(s.get(1))    // 98
 s.set(1, 66)       // "aBc"
 ```
 
@@ -664,12 +664,12 @@ list.append("aa")
 list.append("bb")
 list.append("aa")
 
-print(list.length())          // 3
-print(list.count("aa"))       // 2
+stdout(list.length())          // 3
+stdout(list.count("aa"))       // 2
 
 (uint32 idx, int32 err) hit = list.find_next("aa", 1)
-print(hit.idx)                // 2
-print(hit.err)                // 0
+stdout(hit.idx)                // 2
+stdout(hit.err)                // 0
 
 std::String out
 list.get(1, getptr(out))      // "bb"
@@ -678,13 +678,13 @@ out.uninit()
 list.set(1, "cc")
 list.insert("dd", 2)
 list.erase(0)
-print(list.length())          // 3
+stdout(list.length())          // 3
 
 list += "ee"                  // append through OPERATOR_ADDMOV
-print(list.length())          // 4
+stdout(list.length())          // 4
 
 list.clear()                  // release live elements, keep buffer
-print(list.length())          // 0
+stdout(list.length())          // 0
 list.uninit()                 // release the buffer
 ```
 
@@ -716,9 +716,9 @@ std::String a
 std::String b
 a = "abc"
 b = "abd"
-print(a == b)   // 0
-print(a < b)    // 1
-print(a <= b)   // 1
+stdout(a == b)   // 0
+stdout(a < b)    // 1
+stdout(a <= b)   // 1
 ```
 
 ### Assignment and append
@@ -758,16 +758,16 @@ s = "ab"
 s += "cd"        // "abcd"
 s += s           // "abcdabcd"
 s *= 3           // "abcdabcdabcdabcdabcdabcd"
-print(s.length()) // 24
+stdout(s.length()) // 24
 
 s *= 0
-print(s.length()) // 0
+stdout(s.length()) // 0
 ```
 
 ## Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func main() -> int32 {
@@ -776,18 +776,18 @@ func main() -> int32 {
     greeting += " world"
     greeting *= 2
 
-    print(greeting.length())
-    print(greeting.is_utf8_compliant())
+    stdout(greeting.length())
+    stdout(greeting.is_utf8_compliant())
 
     [byte] out
     greeting.to(getptr(out))
-    print(getview(out))
+    stdout(getview(out))
     out.uninit()
 
     std::String other
     other = greeting
-    print(greeting == other)
-    print(greeting != other)
+    stdout(greeting == other)
+    stdout(greeting != other)
 
     other.uninit()
     greeting.uninit()

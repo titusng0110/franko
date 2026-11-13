@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Fluid Integer Constants
@@ -15,11 +15,11 @@ func main() -> int32 {
     int32 w = -2147483648;
     uint64 q = 18446744073709551615;
 
-    print(x);
-    print(s);
-    print(h);
-    print(w);
-    print(q);
+    stdout(x);
+    stdout(s);
+    stdout(h);
+    stdout(w);
+    stdout(q);
 
     return 0;
 }

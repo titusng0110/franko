@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Function Overloads
@@ -24,8 +24,8 @@ func main() -> int32 {
     int32 a = 10;
     int64 b = 20;
     uint8 c = 30;
-    print(f(a));
-    print(f(b));
-    print(f(c));
+    stdout(f(a));
+    stdout(f(b));
+    stdout(f(c));
     return 0;
 }

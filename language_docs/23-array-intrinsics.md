@@ -265,13 +265,13 @@ Dynamic arrays report their runtime length. A dynamic array that has never been 
 
 ```franko
 [int32] xs;
-print(xs.length());   // 0
+stdout(xs.length());   // 0
 xs.init(4);
-print(xs.length());   // 4
+stdout(xs.length());   // 4
 xs.resize(10);
-print(xs.length());   // 10
+stdout(xs.length());   // 10
 xs.uninit();
-print(xs.length());   // 0
+stdout(xs.length());   // 0
 ```
 
 Static arrays report their size as a compile-time constant: `ys.length()` for `[int32, 3] ys` compiles to the constant `3`, with no runtime read.
@@ -280,11 +280,11 @@ Nested receivers report the outermost dimension; index first for inner dimension
 
 ```franko
 [[int32, 2], 3] m;
-print(m.length());      // 3
-print(m[0].length());   // 2
+stdout(m.length());      // 3
+stdout(m[0].length());   // 2
 ```
 
-`length()` returns a value, so it may be used in any value context: arithmetic, loop bounds, assignments, and `print`.
+`length()` returns a value, so it may be used in any value context: arithmetic, loop bounds, assignments, and `stdout`.
 
 ## 23.11 `memcmp`
 
@@ -322,7 +322,7 @@ exactly `count` elements.
 a.memset(0);
 b.memset(0);
 if (a.memcmp(getptr(b)) == 0) {
-    print("equal");
+    stdout("equal");
 }
 ```
 
@@ -371,9 +371,9 @@ hay.memset(0);
 hay[1] = 65;
 hay[2] = 66;
 hay[3] = 66;
-print(hay.memchr(65));          // 1
-print(hay.memchr(67));          // 4294967295
-print(hay.memmem("BB"));        // 2
+stdout(hay.memchr(65));          // 1
+stdout(hay.memchr(67));          // 4294967295
+stdout(hay.memmem("BB"));        // 2
 ```
 
 ### Endian integer accessors
@@ -429,11 +429,11 @@ Rules:
 ```franko
 [byte, 8] header
 header.write_uint32_LE(0, 0x12345678);
-print(header.read_uint32_LE(0));   // 305419896
-print(header.read_uint32_BE(0));   // 2018915346
+stdout(header.read_uint32_LE(0));   // 305419896
+stdout(header.read_uint32_BE(0));   // 2018915346
 
 header.write_int16_BE(4, -2);
-print(header.read_int16_BE(4));    // -2
+stdout(header.read_int16_BE(4));    // -2
 ```
 
 ### Bit intrinsics
@@ -483,10 +483,10 @@ Rules:
 flags.memset(0);
 flags.write_bit(0, 1);
 flags.write_bit(9, 1);
-print(flags.count_set_bits());   // 2
-print(flags.read_bit(1));        // 0
+stdout(flags.count_set_bits());   // 2
+stdout(flags.read_bit(1));        // 0
 flags.flip_bit(1);
-print(flags.read_bit(1));        // 1
+stdout(flags.read_bit(1));        // 1
 flags.shift_bits_left(1);
-print(flags.read_bit(10));       // 1
+stdout(flags.read_bit(10));       // 1
 ```

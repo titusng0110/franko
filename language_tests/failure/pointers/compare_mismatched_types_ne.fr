@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: pointers/compare_mismatched_types_ne
 // Pointer comparison requires identical pointer types (docs 17.6, 24.5):
@@ -11,7 +11,7 @@ func main() -> int32 {
     ptr<int32> p = getptr(x)
     ptr<uint8> q = getptr(b)
 
-    print(p != q)
+    stdout(p != q)
 
     return 0
 }

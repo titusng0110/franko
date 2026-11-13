@@ -10,11 +10,11 @@
 // ============================================================
 
 import "a"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
-    print(a_value())
-    print(b_value())
+    stdout(a_value())
+    stdout(b_value())
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Functions
@@ -14,7 +14,7 @@ func add(int32 a, int32 b) -> int32 {
 
 // --- Function with void return type ---
 func void_func() -> void {
-    print(2);
+    stdout(2);
 }
 
 // --- Recursive function ---
@@ -54,7 +54,7 @@ func main() -> int32 {
 
     void_func();
 
-    print(result);
-    print(result);
+    stdout(result);
+    stdout(result);
     return 0;
 }

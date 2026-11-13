@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: assignment/compound_const_out_of_range
 // The right-hand side of a compound assignment is a fluid constant that
@@ -13,8 +13,8 @@ func main() -> int32 {
     u &= 256;
     u ^= 256;
 
-    print(u);
-    print(i);
+    stdout(u);
+    stdout(i);
 
     return 0;
 }

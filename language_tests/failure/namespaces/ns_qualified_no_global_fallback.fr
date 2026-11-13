@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: namespaces/ns_qualified_no_global_fallback
 // A qualified name resolves strictly inside the named namespace; `n::g`
@@ -9,6 +9,6 @@ namespace n {
 }
 
 func main() -> int32 {
-    print(n::g);
+    stdout(n::g);
     return 0
 }

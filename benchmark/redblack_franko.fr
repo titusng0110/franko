@@ -9,7 +9,7 @@
 // the same result.
 
 import "franko/pool"
-import "franko/io"
+import "franko/stdio"
 
 const uint32 SIZE = 2000000
 
@@ -422,22 +422,22 @@ func main() -> int32 {
     gSum = 0
     gBad = 0
     int32 bh = audit(root)
-    print("count="); print(gCount)
-    print("sum="); print(gSum)
-    print("bad="); print(gBad)
-    print("bh="); print(bh)
+    stdout("count="); stdout(gCount)
+    stdout("sum="); stdout(gSum)
+    stdout("bad="); stdout(gBad)
+    stdout("bh="); stdout(bh)
 
     for (uint32 i = 0; i < SIZE; i = i + 1) {
         root = rbDelete(root, keyAt(unsafe_cast<int32>(i)))
     }
 
-    print("empty=")
+    stdout("empty=")
     if (root == NIL) {
-        print(1)
+        stdout(1)
     } else {
-        print(0)
+        stdout(0)
     }
-    print("used="); print(pool.used())
+    stdout("used="); stdout(pool.used())
 
     nodes.uninit()
     pool.uninit()

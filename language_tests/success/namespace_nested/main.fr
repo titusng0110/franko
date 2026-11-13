@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // Franko nested namespace test
@@ -63,23 +63,23 @@ namespace m {
 func main() -> int32 {
     // Qualified struct type at global scope.
     a::b::Point pt
-    print(pt.x)
-    print(pt.y)
+    stdout(pt.x)
+    stdout(pt.y)
 
     // Qualified variable read and write.
-    print(a::b::limit)
+    stdout(a::b::limit)
     a::b::limit = 101
-    print(a::b::limit)
+    stdout(a::b::limit)
 
     // Qualified calls, including into a merged-then-nested path.
-    print(a::b::add(1))
-    print(a::b::extra)
-    print(a::tag)
-    print(a::c::describe())
+    stdout(a::b::add(1))
+    stdout(a::b::extra)
+    stdout(a::tag)
+    stdout(a::c::describe())
 
     // Merged namespace members from both declaration forms.
-    print(m::n::p)
-    print(m::n::q)
+    stdout(m::n::p)
+    stdout(m::n::q)
 
     return 0
 }

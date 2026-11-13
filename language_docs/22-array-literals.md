@@ -90,12 +90,14 @@ assignments, or copy a constant literal and modify it.
 ## 22.3 Length and Type
 
 A literal has exactly as many elements as written: `[1, 2, 3]` is
-`view<[int32, 3]>`, never a shorter or longer array. An empty
-literal `[]` is not supported (like `""`, `N >= 1`).
+`view<[int32, 3]>`, never a shorter or longer array. An empty literal
+`[]` is the `null` view: it is valid wherever a view of the expected
+array shape is allowed, and it has no length or element type of its own.
 
 ```franko
 view<[int32, 2]> v = [1, 2, 3];   // invalid: lengths 2 and 3 differ
 view<[int32, 3]> v = [1, 2, 3];   // valid
+view<[int32]> null_view = [];     // valid: null view
 ```
 
 Because the literal is a pointer, elements are reached through a
@@ -103,7 +105,7 @@ dereference of a view variable:
 
 ```franko
 view<[int32, 3]> v = [1, 2, 3];
-print($(v)[0]);            // 1
+stdout($(v)[0]);            // 1
 ```
 
 Indexing a literal directly is not supported: `[1, 2, 3][0]` is
@@ -214,7 +216,7 @@ constant elements, like a string literal:
 view<[int32, 4]> G = [1, 2, 3, 4];
 
 func main() -> int32 {
-    print($(G)[3]);         // 4
+    stdout($(G)[3]);         // 4
     return 0;
 }
 ```
@@ -234,7 +236,7 @@ Array literals in Franko are:
   contexts (integer primitives or enums);
 - compile-time constant expressions only, backed by shared constant
   storage with static lifetime (recursion-safe, like string literals);
-- exactly as long as written (`N >= 1`);
+- exactly as long as written; `[]` is the null view;
 - rectangular when nested, with inner dimensions static;
 - decayable to `view<[T]>` (outermost dimension only);
 - never assignable to arrays — copy with `memcpy`;

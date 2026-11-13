@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/compound_array_literal_rhs
 // The right-hand side of a compound assignment must be an integer;
@@ -7,6 +7,6 @@ func main() -> int32 {
     [int32, 3] xs;
     xs.memcpy([1, 2, 3]);
     xs += [4, 5, 6];
-    print(xs[0]);
+    stdout(xs[0]);
     return 0;
 }

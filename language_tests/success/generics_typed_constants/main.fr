@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func pick(uint8 v) -> int32 {
     return 1
@@ -17,9 +17,9 @@ func pick(int64 v) -> int32 {
 }
 
 func main() -> int32 {
-    print(pick(#is_primitive(int32)))
-    print(pick(#strcmp("a", "b")))
-    print(pick(#IS_LINUX))
+    stdout(pick(#is_primitive(int32)))
+    stdout(pick(#strcmp("a", "b")))
+    stdout(pick(#IS_LINUX))
 
     Holder<int32> h
     h.value = 1

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 struct Inner {
     int32 n = 1
@@ -24,14 +24,14 @@ struct WithEnum {
 func main() -> int32 {
     const AllDefault value
 
-    print(value.a + value.inner.n)
-    print(value.link == null)
-    print(value.pair.item.n)
-    print(value.pair.link == null)
+    stdout(value.a + value.inner.n)
+    stdout(value.link == null)
+    stdout(value.pair.item.n)
+    stdout(value.pair.link == null)
 
     const WithEnum stateful
-    print(stateful.state == Status::idle)
-    print(stateful.inner.n)
+    stdout(stateful.state == Status::idle)
+    stdout(stateful.inner.n)
 
     return 0
 }

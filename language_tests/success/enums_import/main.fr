@@ -1,11 +1,11 @@
-import "franko/io"
+import "franko/stdio"
 import "./enum_helper"
 
 func main() -> int32 {
     Shared s = Shared::first;
-    print(s == Shared::first);
+    stdout(s == Shared::first);
     s = Shared::second;
-    print(s == Shared::second);
-    print(#is_enum(Shared));
+    stdout(s == Shared::second);
+    stdout(#is_enum(Shared));
     return 0;
 }

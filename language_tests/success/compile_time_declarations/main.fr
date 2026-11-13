@@ -5,7 +5,7 @@
 // constant are 1 for any supported target, so the same branch is selected
 // everywhere and main.expected stays portable.
 
-import "franko/io"
+import "franko/stdio"
 
 struct Point {
     int32 x
@@ -83,24 +83,24 @@ namespace outer {
 func main() -> int32 {
     Point p
     p.x = 41
-    print(p.get())
+    stdout(p.get())
 
     Chosen c
     c.y = G
-    print(c.y)
+    stdout(c.y)
 
-    print(n::V)
-    print(outer::inner::W)
-    print(H)
-    print(chosen_namespace::A)
-    print(chain_value)
+    stdout(n::V)
+    stdout(outer::inner::W)
+    stdout(H)
+    stdout(chosen_namespace::A)
+    stdout(chain_value)
 
     #if (!#has_default_value(Chosen)) {
         int32 visible = 9
     }
-    print(visible)
+    stdout(visible)
 
     #if (0) { int32 dead = 1 } #else #if (1) { int32 live = 2 }
-    print(live)
+    stdout(live)
     return 0
 }

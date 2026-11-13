@@ -6,7 +6,7 @@
 // ============================================================
 
 import "franko/os"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     uint64 hin = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
@@ -21,12 +21,12 @@ func main() -> int32 {
             8,
             getmview(read_count)
     );
-    print(read_ok);
-    print(read_count);
-    print(buf[0]);
-    print(buf[1]);
-    print(buf[2]);
-    print(buf[3]);
+    stdout(read_ok);
+    stdout(read_count);
+    stdout(buf[0]);
+    stdout(buf[1]);
+    stdout(buf[2]);
+    stdout(buf[3]);
 
     uint64 hout = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
     uint32 written_count = 0;
@@ -36,8 +36,8 @@ func main() -> int32 {
             3,
             getmview(written_count)
     );
-    print(write_ok);
-    print(written_count);
+    stdout(write_ok);
+    stdout(written_count);
 
     buf.uninit();
     return 0;

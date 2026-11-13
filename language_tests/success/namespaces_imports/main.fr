@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Namespaces and Print Statements
@@ -27,24 +27,24 @@ int32 global_offset = 100;
 
 func main() -> int32 {
     // --- Print statements (dedicated statement, not a function) ---
-    print(123);
-    print(1, " "); print(2, " "); print(3);
-    print();
+    stdout(123);
+    stdout(1, end = " "); stdout(2, end = " "); stdout(3);
+    stdout();
 
     // --- Namespace member access ---
-    print(math::scale);
-    print(math::scale_up(5));
+    stdout(math::scale);
+    stdout(math::scale_up(5));
 
     // --- Qualified struct references and aggregate literals ---
     math::Vec2 p = math::Vec2 { x = 10, y = 20 };
-    print(p.x + p.y);
+    stdout(p.x + p.y);
 
     // --- Field-wise declaration initialization ---
     math::Vec2 origin { x = 1, y = 2 };
-    print(origin.x + origin.y);
+    stdout(origin.x + origin.y);
 
     // --- Global variables ---
-    print(global_offset);
+    stdout(global_offset);
 
     return 0;
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: structs/struct_arithmetic
 // Structs are not integers: operators reject whole structs; arithmetic on a whole struct is invalid.
@@ -11,7 +11,7 @@ func main() -> int32 {
 
     s.a = 1;
 
-    print(s + s);
+    stdout(s + s);
 
     return 0;
 }

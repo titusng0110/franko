@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: scoping/braceless_scope_leak
 // A braceless if body is wrapped in an implicit block, so a variable
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int32 cond = 1
     if (cond) int32 leaked = 5
-    print(leaked)
+    stdout(leaked)
     return 0
 }

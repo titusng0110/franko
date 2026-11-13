@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // Franko null-for-pointers Showcase
@@ -42,42 +42,42 @@ func make_null() -> ptr<int32> {
 func main() -> int32 {
     int32 x = 0
 
-    print(1)
+    stdout(1)
 
     // Pointer declarations are guaranteed null-initialized.
     ptr<int32> p
-    print(p == null)
-    print(p != null)
+    stdout(p == null)
+    stdout(p != null)
 
     // getptr certifies the variable as non-null.
     p = getptr(x)
-    print(p != null)
+    stdout(p != null)
 
     $(p) = 42
-    print($(p))
+    stdout($(p))
 
     // Copying a certified variable keeps it certified.
     ptr<int32> a = p
     $(a) = 7
-    print($(a))
+    stdout($(a))
 
     // A null declaration, and a copy of it: the copy is null too.
     ptr<int32> b = null
     ptr<int32> c = b
-    print(c == null)
+    stdout(c == null)
 
     // Guard refinement: the deref here is valid on the refined path.
     if (c != null) {
         $(c) = 5
-        print($(c))
+        stdout($(c))
     } else {
-        print(111)
+        stdout(111)
     }
 
     // Equality-only comparison between two pointers.
-    print(a == p)
+    stdout(a == p)
 
-    print(2)
+    stdout(2)
 
     // Loop-guard refinement, and provable null after loop exit.
     ptr<int32> w
@@ -88,46 +88,46 @@ func main() -> int32 {
             w = null
         }
     }
-    print(w == null)
+    stdout(w == null)
 
-    print(3)
+    stdout(3)
 
     // Global pointer variable is null-initialized.
-    print(g == null)
+    stdout(g == null)
     g = getptr(g_target)
-    print(g != null)
+    stdout(g != null)
 
-    print(4)
+    stdout(4)
 
     // Struct field of pointer type defaults to null.
     Box bo
-    print(bo.link == null)
+    stdout(bo.link == null)
     bo.link = getmview(x)
-    print(bo.link != null)
+    stdout(bo.link != null)
     $(bo.link) = 5
-    print($(bo.link))
+    stdout($(bo.link))
 
-    print(5)
+    stdout(5)
 
     // ptr<ptr<int32>> null handling.
     ptr<ptr<int32>> pp
-    print(pp == null)
+    stdout(pp == null)
     pp = getptr(p)
-    print(pp != null)
+    stdout(pp != null)
 
     // Assignment from a certified variable chain stays certified.
     ptr<int32> cn
     cn = g
-    print(cn != null)
+    stdout(cn != null)
 
-    print(6)
+    stdout(6)
 
     // null across function boundaries.
-    print(take_ptr(null))
-    print(take_ptr(getptr(x)))
+    stdout(take_ptr(null))
+    stdout(take_ptr(getptr(x)))
 
     ptr<int32> r = make_null()
-    print(r == null)
+    stdout(r == null)
 
     return 0
 }

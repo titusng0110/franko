@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: strings/string_in_call_arg
 // A string literal is a view<[byte, N]> value; it cannot be passed
 // as an argument to an int32 parameter.
 func f(int32 x) -> void {
-    print(x);
+    stdout(x);
 }
 
 func main() -> int32 {

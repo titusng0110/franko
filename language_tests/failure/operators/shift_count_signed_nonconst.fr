@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: operators/shift_count_signed_nonconst
 // Nonconstant shift counts must have an unsigned integer type; a signed
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int32 x = 1;
     int32 s = 2;
-    print(x << s);
+    stdout(x << s);
     return 0
 }

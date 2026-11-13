@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Control Flow
@@ -46,12 +46,12 @@ func main() -> int32 {
     // --- For loop (braceless body) ---
     for (i = 0; i < 1; i = i + 1) sum = sum + 1;
 
-    print(sum);
+    stdout(sum);
     return 0;
 }
 
 // --- Void return function ---
 func void_check() -> void {
-    print(99);
+    stdout(99);
     return;
 }

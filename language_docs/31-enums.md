@@ -102,7 +102,7 @@ struct Entity {
 
 func main() -> int32 {
     Entity e;
-    print(e.state == Status::spawning); // 1 (true)
+    stdout(e.state == Status::spawning); // 1 (true)
     return 0;
 }
 ```
@@ -231,7 +231,7 @@ Franko avoids OOP. Behavior is driven by data classes and strict enum
 state machines. This example uses the implicit auto-increment form.
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 // Auto-increments: sleeping=0, hunting=1, attacking=2, dead=3
 enum<uint8> AiState {
@@ -277,7 +277,7 @@ func main() -> int32 {
 
     update_enemies(getmview(mob_pool));
 
-    print(mob_pool[0].state == AiState::hunting); // 1 (true)
+    stdout(mob_pool[0].state == AiState::hunting); // 1 (true)
 
     mob_pool.uninit();
     return 0;

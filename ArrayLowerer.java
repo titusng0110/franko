@@ -68,6 +68,13 @@ public final class ArrayLowerer {
             return null;
         }
 
+        if (isArrayIntrinsicMemberName(mac.name)
+                && call.hasNamedArguments()) {
+            ctx.error("Named arguments are not supported for array intrinsic '"
+                    + mac.name
+                    + "'");
+        }
+
         if ("init".equals(mac.name)) {
             return lowerDynamicArrayAlloc(
                     call,

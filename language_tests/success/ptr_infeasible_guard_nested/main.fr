@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     int32 x = 0
@@ -6,25 +6,25 @@ func main() -> int32 {
 
     if (p != null) {
         if (x != 0) {
-            print(1)
+            stdout(1)
         }
-        print($(p))
+        stdout($(p))
     }
 
     if (p == null) {
         x = 1
     } else {
         if (x != 0) {
-            print(2)
+            stdout(2)
         }
-        print($(p))
+        stdout($(p))
     }
 
     while (p != null) {
         if (x != 0) {
-            print(3)
+            stdout(3)
         }
-        print($(p))
+        stdout($(p))
     }
 
     return 0

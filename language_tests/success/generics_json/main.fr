@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Box<typename T, int32 N> {
     T value
@@ -11,7 +11,7 @@ import "franko/io"
 
 func main() -> int32 {
     Box<int32, 2> b = make<int32>(5)
-    print(b.value)
-    print(b.count)
+    stdout(b.value)
+    stdout(b.count)
     return 0
 }

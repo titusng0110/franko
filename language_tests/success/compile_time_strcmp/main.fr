@@ -5,16 +5,16 @@
 // positive results, plus prefix ordering.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
-    print(#strcmp("abc", "abd"));
-    print(#strcmp("abc", "abc"));
-    print(#strcmp("abd", "abc"));
-    print(#strcmp("ab", "abc"));
-    print(#strcmp("abc", "ab"));
-    print(#strcmp("a", "b"));
-    print(#strcmp("b", "a"));
+    stdout(#strcmp("abc", "abd"));
+    stdout(#strcmp("abc", "abc"));
+    stdout(#strcmp("abd", "abc"));
+    stdout(#strcmp("ab", "abc"));
+    stdout(#strcmp("abc", "ab"));
+    stdout(#strcmp("a", "b"));
+    stdout(#strcmp("b", "a"));
 
     return 0;
 }

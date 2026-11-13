@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Scoping — Shadowing
@@ -10,24 +10,24 @@ import "franko/io"
 
 func main() -> int32 {
     int32 x = 1
-    print(x)          // outermost x
+    stdout(x)          // outermost x
 
     {
         int32 x = 2  // depth-1 shadow
-        print(x)
+        stdout(x)
 
         {
             int32 x = 3  // depth-2 shadow
-            print(x)
+            stdout(x)
             x = 30          // assigns the depth-2 x only
-            print(x)
+            stdout(x)
         }
 
-        print(x)       // depth-2 shadow is out of scope again
+        stdout(x)       // depth-2 shadow is out of scope again
         x = 20          // assigns the depth-1 x only
-        print(x)
+        stdout(x)
     }
 
-    print(x)          // outermost x was never touched
+    stdout(x)          // outermost x was never touched
     return 0
 }

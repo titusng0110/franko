@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Globals
@@ -17,12 +17,12 @@ Conf g;
 
 func main() -> int32 {
     // Fields with defaults print their defaults.
-    print(g.w, " "); print(g.h);
+    stdout(g.w, end = " "); stdout(g.h);
 
     // Assign fields in main.
     g.w = 800;
     g.label = 24;
-    print(g.w, " "); print(g.label);
+    stdout(g.w, end = " "); stdout(g.label);
 
     return 0;
 }

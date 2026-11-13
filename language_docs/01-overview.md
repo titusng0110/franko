@@ -15,6 +15,9 @@ Franko is a small statically typed language with:
   - `$(...)`;
 - user-defined functions;
 - function overloading;
+- named and optional function arguments (`f(name = value)` and
+  `func f(T x = default)`, see
+  [Functions](19-functions.md#1915-named-and-optional-arguments));
 - generics with explicit type and value arguments on structs and functions
   (see [Generics](20-generics.md));
 - function calls inside function bodies;
@@ -73,7 +76,7 @@ Franko is a small statically typed language with:
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));
 - FFI modules described by sidecar manifests and C++ bridge blocks (see
   [Foreign Function Interface](34-foreign-function-interface.md));
-- standard modules including `franko/error`, `franko/io`, `franko/os`,
+- standard modules including `franko/error`, `franko/stdio`, `franko/os`,
   `franko/pool`, `franko/limit`, and `franko/string`;
 - compiler checks for pointer null state, dangling frame pointers, dynamic
   array lifecycle, unused pointer permissions, and private identifier access

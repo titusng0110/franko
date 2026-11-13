@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Aggregate Literal Contexts
@@ -22,7 +22,7 @@ struct Outer {
 }
 
 func mark(int32 value) -> int32 {
-    print(value)
+    stdout(value)
     return value
 }
 
@@ -36,19 +36,19 @@ func take(Pair pair) -> int32 {
 
 func main() -> int32 {
     Pair declared = Pair { b = mark(2), a = mark(1) }
-    print(declared.a + declared.b)
+    stdout(declared.a + declared.b)
 
     Pair assigned
     assigned = Pair { a = mark(10), b = mark(20) }
-    print(assigned.a + assigned.b)
+    stdout(assigned.a + assigned.b)
 
     Pair returned = make_pair()
-    print(returned.a + returned.b)
+    stdout(returned.a + returned.b)
 
-    print(take(Pair { a = mark(5), b = mark(6) }))
+    stdout(take(Pair { a = mark(5), b = mark(6) }))
 
     Outer nested = Outer { inner = Inner { v = mark(30) }, w = mark(40) }
-    print(nested.inner.v + nested.w)
+    stdout(nested.inner.v + nested.w)
 
     return 0
 }

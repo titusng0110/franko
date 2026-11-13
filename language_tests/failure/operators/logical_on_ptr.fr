@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: operators/logical_on_ptr
 // Logical operators require integer operands; pointers are not integers
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     ptr<int32> p;
     ptr<int32> q;
-    print(p && q);
+    stdout(p && q);
     return 0
 }

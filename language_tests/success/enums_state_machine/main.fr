@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Auto-increments: sleeping=0, hunting=1, attacking=2, dead=3
 enum<uint8> AiState {
@@ -39,7 +39,7 @@ func main() -> int32 {
 
     update_enemies(getmview(mob_pool));
 
-    print(mob_pool[0].state == AiState::hunting);
+    stdout(mob_pool[0].state == AiState::hunting);
 
     mob_pool.uninit();
     return 0;

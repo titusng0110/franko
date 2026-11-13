@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 struct Box {
     int32 value = 0
@@ -28,13 +28,13 @@ func main() -> int32 {
     Box box { value = 42 }
 
     (int32 val, int32 err) taken = box.take()
-    print(taken.val)
-    print(taken.err)
+    stdout(taken.val)
+    stdout(taken.err)
 
     (uint32 idx, uint32 gen, int32 err) handle = box.handle()
-    print(handle.idx)
-    print(handle.gen)
-    print(handle.err)
+    stdout(handle.idx)
+    stdout(handle.gen)
+    stdout(handle.err)
 
     return 0
 }

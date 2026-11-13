@@ -76,8 +76,12 @@ public class FunctionChecker {
 
     private void validateParameters(SastNode node) {
         Set<String> names = new HashSet<>();
+        int start = node.symbol.kind == SymbolKind.METHOD ? 1 : 0;
+        int firstOptional = -1;
 
-        for (Symbol param : node.parameterVariables) {
+        for (int i = 0; i < node.parameterVariables.size(); i++) {
+            Symbol param = node.parameterVariables.get(i);
+
             if (param == null) {
                 diagnostics.error("Function '"
                         + node.symbol.qualifiedName()
@@ -103,6 +107,52 @@ public class FunctionChecker {
                         + "' has invalid parameter type "
                         + types.describeSafe(param.type)
                         + ": parameters must have assignable value types");
+            }
+
+            if (param.parameterDefault != null) {
+                types.ensureAssignable(
+                        param.type,
+                        param.parameterDefault,
+                        "Default value for parameter '"
+                                + param.name
+                                + "' of function '"
+                                + node.symbol.qualifiedName()
+                                + "'"
+                );
+            }
+
+            if (i < start) {
+                if (param.parameterDefault != null) {
+                    diagnostics.error(
+                            "Parameter 'self' cannot have a default value");
+                }
+
+                continue;
+            }
+
+            if (param.parameterDefault != null) {
+                if (firstOptional < 0) {
+                    firstOptional = i;
+                }
+            } else if (firstOptional >= 0) {
+                diagnostics.error("Optional parameter '"
+                        + node.parameterVariables.get(firstOptional).name
+                        + "' in function '"
+                        + node.symbol.qualifiedName()
+                        + "' must follow all required parameters");
+                firstOptional = -1;
+            }
+        }
+
+        if (node.symbol.kind == SymbolKind.FUNCTION
+                && "main".equals(node.symbol.name)
+                && node.symbol.namespace == null) {
+            for (Symbol param : node.parameterVariables) {
+                if (param != null && param.parameterDefault != null) {
+                    diagnostics.error("The entry-point function 'main'"
+                            + " cannot declare optional parameters");
+                    break;
+                }
             }
         }
     }
@@ -161,6 +211,15 @@ public class FunctionChecker {
     }
 
     private void validateOperatorMethod(Symbol method) {
+        for (Symbol parameter : method.parameters) {
+            if (parameter.parameterDefault != null) {
+                diagnostics.error("Operator method '"
+                        + method.qualifiedName()
+                        + "' cannot declare optional parameters");
+                break;
+            }
+        }
+
         if (OperatorMethods.isComparisonMethodName(method.name)) {
             validateComparisonOperatorMethod(method);
         } else {

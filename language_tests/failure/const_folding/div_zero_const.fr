@@ -1,11 +1,11 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: const_folding/div_zero_const
 // Division by zero in a foldable constant expression is rejected.
 func main() -> int32 {
     int32 x = 1 / 0;
 
-    print(x)
+    stdout(x)
 
     return 0
 }

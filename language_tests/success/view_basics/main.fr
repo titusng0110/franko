@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: View and MView Basics
@@ -20,7 +20,7 @@ func take_mview(mview<[byte, 3]> m) -> void {
 }
 
 func take_view(view<[byte, 3]> v) -> void {
-    print($(v)[2]);
+    stdout($(v)[2]);
 }
 
 func main() -> int32 {
@@ -35,16 +35,16 @@ func main() -> int32 {
     // Writes through ptr and mview, reads through view.
     $(p)[0] = 5;
     $(m)[1] = 6;
-    print($(v)[0]);
-    print($(v)[1]);
+    stdout($(v)[0]);
+    stdout($(v)[1]);
 
     // Implicit downgrades on assignment.
     mview<[byte, 3]> down1 = p;
     view<[byte, 3]> down2 = p;
     view<[byte, 3]> down3 = m;
-    print($(down1)[0]);
-    print($(down2)[1]);
-    print($(down3)[2]);
+    stdout($(down1)[0]);
+    stdout($(down2)[1]);
+    stdout($(down3)[2]);
 
     // Implicit downgrades when passing arguments.
     take_ptr(p);
@@ -53,28 +53,28 @@ func main() -> int32 {
     take_mview(m);
     take_view(m);
     take_view(v);
-    print($(v)[0]);
-    print($(v)[1]);
+    stdout($(v)[0]);
+    stdout($(v)[1]);
 
     // Explicit permission downgrades via cast<T>.
     view<[byte, 3]> explicit1 = cast<view<[byte, 3]>>(p);
     mview<[byte, 3]> explicit2 = cast<mview<[byte, 3]>>(p);
     view<[byte, 3]> explicit3 = cast<view<[byte, 3]>>(m);
-    print($(explicit1)[0]);
+    stdout($(explicit1)[0]);
 
     // length() is a read: allowed through every permission.
-    print($(p).length());
-    print($(m).length());
-    print($(v).length());
+    stdout($(p).length());
+    stdout($(m).length());
+    stdout($(v).length());
 
     // Views are nullable.
     view<[byte, 3]> nothing = null;
-    print(nothing == null);
+    stdout(nothing == null);
 
     // Reassigning a view variable is fine: the pointer variable itself
     // is owner-protected local storage.
     v = getview(buf);
-    print($(v)[0]);
+    stdout($(v)[0]);
 
     return 0;
 }

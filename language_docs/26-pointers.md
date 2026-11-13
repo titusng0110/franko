@@ -144,7 +144,7 @@ mview<[int32, 4]> m = getmview(xs);
 view<[int32]> v = m;             // implicit decay
 mview<[int32]> d = cast<mview<[int32]>>(m);   // explicit
 
-print($(v).length());                   // 4
+stdout($(v).length());                   // 4
 $(m)[1] = 99;                           // writes hit xs directly
 ```
 
@@ -313,7 +313,7 @@ Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`
 `null` may be passed to pointer parameters and returned from pointer
 functions.
 
-`print(null)` matches the `print(view<[uint8]>)` overload and prints nothing (a null view is treated as empty).
+A bare `stdout(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
 
 ### 26.9.1 Null-Initialized Pointer Storage
 
@@ -321,7 +321,7 @@ Pointer storage is **guaranteed null-initialized**, unlike ordinary storage, whi
 
 ```franko
 ptr<int32> p;        // p is null here, guaranteed
-print(p == null);       // true
+stdout(p == null);       // true
 ```
 
 The guarantee covers every pointer storage slot:
@@ -462,7 +462,7 @@ variants detect stale handles. The full API is in
 [franko/pool](../library_docs/pool.md).
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/pool"
 
 func main() -> int32 {
@@ -489,7 +489,7 @@ func main() -> int32 {
 
     uint32 i = a;
     while (i != 0xFFFFFFFF) {
-        print(payload[i]);
+        stdout(payload[i]);
         i = next[i];
     }
 

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Global constant initializers
@@ -12,7 +12,7 @@ int32 g = 1 + 2
 uint64 mask = 1 << 8
 
 func main() -> int32 {
-    print(g)
-    print(mask)
+    stdout(g)
+    stdout(mask)
     return 0
 }

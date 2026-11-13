@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<uint32> BigState {
     a = 0,
@@ -7,6 +7,6 @@ enum<uint32> BigState {
 
 func main() -> int32 {
     uint8 crash = unsafe_cast<uint8>(BigState::b);
-    print(crash);
+    stdout(crash);
     return 0;
 }

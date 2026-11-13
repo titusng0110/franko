@@ -10,7 +10,7 @@ func main() -> int32 {
     int32 i = 1;
     view<[byte, 5]> spelling = #what_type(i);
 
-    print(#strcmp(spelling, "int32"));
+    stdout(#strcmp(spelling, "int32"));
 
     return 0;
 }

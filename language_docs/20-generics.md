@@ -75,8 +75,22 @@ A generic function declares its parameters after the function name:
 Call a generic function with explicit arguments:
 
 ```franko
-print(identity<int32>(7))
-print(first<int32, 3>(values))
+stdout(identity<int32>(7))
+stdout(first<int32, 3>(values))
+stdout(identity<int32>(value = 7))
+```
+
+Generic calls accept the same named and optional arguments as ordinary calls.
+A default may use a generic value parameter; it becomes a concrete constant
+when the template is instantiated:
+
+```franko
+#generic func plus<int32 N>(int32 a, int32 b = N) -> int32 {
+    return a + b
+}
+
+plus<7>(3)          // 10
+plus<7>(a = 3)      // 10
 ```
 
 A generic function name used without arguments is an error unless a concrete
@@ -145,7 +159,7 @@ Methods of a generic struct use the struct's parameters directly:
 
 Counter<int32> c
 c.add(5)
-print(c.get())
+stdout(c.get())
 ```
 
 A method cannot declare its own independent generic parameter list in this
@@ -347,7 +361,7 @@ building:
     }
 }
 
-print(fact<5>())    // 120
+stdout(fact<5>())    // 120
 ```
 
 The compiler limits expansion to 1024 generic instances per compilation and
@@ -423,7 +437,7 @@ a < b > (c)         // parsed as a generic call; write (a < b) > (c)
 ## 20.16 Complete Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Pair<typename A, typename B> {
     A first
@@ -444,10 +458,10 @@ import "franko/io"
 
 func main() -> int32 {
     Pair<int32, uint8> p = make_pair<int32, uint8>(10, 20)
-    print(p.first)
-    print(p.second)
-    print(p.sum())
-    print(twice<3>(7))
+    stdout(p.first)
+    stdout(p.second)
+    stdout(p.sum())
+    stdout(twice<3>(7))
     return 0
 }
 ```

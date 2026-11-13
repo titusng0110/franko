@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Declaration forms
@@ -35,19 +35,19 @@ func main() -> int32 {
 
     // Pointer: null-initialized, then certified with getptr of a local.
     ptr<int32> p
-    print(p == null)
+    stdout(p == null)
     p = getptr(y)
     $(p) = 99
 
-    print(x)
-    print(y)
-    print(b)
-    print(i)
-    print(xs[0])
-    print(xs[3])
-    print(buffer[0])
-    print(buffer[127])
-    print($(p))
+    stdout(x)
+    stdout(y)
+    stdout(b)
+    stdout(i)
+    stdout(xs[0])
+    stdout(xs[3])
+    stdout(buffer[0])
+    stdout(buffer[127])
+    stdout($(p))
 
     return 0
 }

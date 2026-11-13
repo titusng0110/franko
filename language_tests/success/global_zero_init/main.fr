@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Global zero-initialization
@@ -12,10 +12,10 @@ int32 gz
 [int32, 4] garr
 
 func main() -> int32 {
-    print(gz)
-    print(garr[0])
-    print(garr[1])
-    print(garr[2])
-    print(garr[3])
+    stdout(gz)
+    stdout(garr[0])
+    stdout(garr[1])
+    stdout(garr[2])
+    stdout(garr[3])
     return 0
 }

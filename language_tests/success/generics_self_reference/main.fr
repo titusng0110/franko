@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Node<typename T> {
     T value
@@ -14,16 +14,16 @@ func main() -> int32 {
     Node<int32> n
     n.value = 5
     n.next = getview(n)
-    print($(n.next).value)
+    stdout($(n.next).value)
 
     List<int32> l
     l.head = 3
     l.tail.init(2)
     l.tail[0].head = 4
     l.tail[1].head = 5
-    print(l.head)
-    print(l.tail[0].head)
-    print(l.tail[1].head)
+    stdout(l.head)
+    stdout(l.tail[0].head)
+    stdout(l.tail[1].head)
     l.tail.uninit()
     return 0
 }

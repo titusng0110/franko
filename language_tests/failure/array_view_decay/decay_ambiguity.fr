@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Two decay overloads that need the same number of conversion steps are
 // ambiguous.
@@ -11,6 +11,6 @@ func h(view<[int32]> x) -> uint32 {
 func main() -> int32 {
     [int32, 3] xs;
     mview<[int32, 3]> m = getmview(xs);
-    print(h(m));
+    stdout(h(m));
     return 0;
 }

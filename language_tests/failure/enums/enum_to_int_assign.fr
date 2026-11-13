@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<int32> E {
     a,
@@ -8,6 +8,6 @@ enum<int32> E {
 func main() -> int32 {
     E s = E::a;
     int32 x = s;
-    print(x);
+    stdout(x);
     return 0;
 }

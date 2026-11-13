@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Structs Composed with Other Type Constructors
@@ -21,13 +21,13 @@ func main() -> int32 {
     dyn[0].x = 1;
     dyn[0].y = 2;
     dyn[1].x = 3;
-    print(dyn[0].x, " "); print(dyn[0].y, " "); print(dyn[1].x);
+    stdout(dyn[0].x, end = " "); stdout(dyn[0].y, end = " "); stdout(dyn[1].x);
 
     // Static array of structs.
     [Point, 4] grid;
     grid[0].x = 4;
     grid[0].y = 5;
-    print(grid[0].x + grid[0].y);
+    stdout(grid[0].x + grid[0].y);
 
     // Pointer to a struct, fields assigned through $(p).
     Point p;
@@ -35,13 +35,13 @@ func main() -> int32 {
     pp = getptr(p);
     $(pp).x = 6;
     $(pp).y = 7;
-    print($(pp).x + $(pp).y);
+    stdout($(pp).x + $(pp).y);
 
     // Nested static arrays of structs.
     [[Point, 3], 2] cells;
     cells[1][2].x = 8;
     cells[1][2].y = 9;
-    print(cells[1][2].x, " "); print(cells[1][2].y);
+    stdout(cells[1][2].x, end = " "); stdout(cells[1][2].y);
 
     dyn.uninit();
 

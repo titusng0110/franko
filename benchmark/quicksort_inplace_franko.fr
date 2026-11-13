@@ -2,7 +2,7 @@
 // Same sortedness check, pivot table, partition, and 2..8 networks as the
 // index-sorting version, but swaps int128 values directly.
 
-import "franko/io"
+import "franko/stdio"
 
 view<[uint32, 128]> RANDOM_PIVOTS = [
     0x5694C774, 0xBCF2DC90, 0xC22D6ECF, 0x82DF89C3, 0x2E5D3BB4, 0x11754AC0, 0x68E420EE, 0xD2794F96,
@@ -1062,7 +1062,7 @@ func main(view<[[byte]]> args) -> int32 {
     [int64] values
     values.init(count)
     if (values.length() != count) {
-        print("allocation failed")
+        stdout("allocation failed")
         values.uninit()
         return 1
     }
@@ -1131,14 +1131,14 @@ func main(view<[[byte]]> args) -> int32 {
         rep = rep + 1
     }
 
-    print("sorted ", null)
+    stdout("sorted ", end = null)
     if (sorted_ok != 0) {
-        print("ok")
+        stdout("ok")
     } else {
-        print("FAILED")
+        stdout("FAILED")
     }
-    print("checksum ", null)
-    print(total_checksum)
+    stdout("checksum ", end = null)
+    stdout(total_checksum)
 
     values.uninit()
     return 0

@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: scoping/duplicate_decl
 // Declaring the same variable name twice in the same scope is illegal.
 func main() -> int32 {
     int32 x = 1
     int32 x = 2
-    print(x)
+    stdout(x)
     return 0
 }

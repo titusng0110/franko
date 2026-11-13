@@ -16,14 +16,14 @@
 import "shared"
 import "my-lib/mod a"
 import "local"
-// `franko/io` is imported via a file-relative path so this test's -p
+// `franko/stdio` is imported via a file-relative path so this test's -p
 // override (which points at ./search) does not affect stdlib lookup;
-// io's own `./os` import then resolves relative to io.fr itself.
-import "../../../import/franko/io"
+// stdio's own `./os` import then resolves relative to stdio.fr itself.
+import "../../../import/franko/stdio"
 
 func main() -> int32 {
-    print(shared_value)
-    print(space_value)
-    print(local_value)
+    stdout(shared_value)
+    stdout(space_value)
+    stdout(local_value)
     return 0
 }

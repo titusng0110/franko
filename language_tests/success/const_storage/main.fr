@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 struct Point {
     int32 x = 0
@@ -23,38 +23,38 @@ func sum_params(const int32 a, const int32 b) -> int32 {
 
 func main() -> int32 {
     const int32 x = 1
-    print(x)
+    stdout(x)
 
     const Point p = Point { x = 10, y = 20 }
     const Point q { x = 30 }
     const Point r
-    print(p.x + p.y)
-    print(q.x + q.y)
-    print(r.x + r.y)
+    stdout(p.x + p.y)
+    stdout(q.x + q.y)
+    stdout(r.x + r.y)
 
     const (int32, int32) pair = (int32, int32) { 3, 4 }
-    print(pair._0 + pair._1)
+    stdout(pair._0 + pair._1)
 
     const view<[int32, 3]> xs = [1, 2, 3]
-    print($(xs)[0] + $(xs)[2])
+    stdout($(xs)[0] + $(xs)[2])
 
     int32 mutable_value = 4
     const ptr<int32> pv = getptr(mutable_value)
     $(pv) = 9
-    print(mutable_value)
+    stdout(mutable_value)
 
     const Point cv = Point { x = 7, y = 8 }
     view<Point> v = getview(cv)
-    print($(v).x)
-    print(cv.sum())
-    print(cv.sum_const())
+    stdout($(v).x)
+    stdout(cv.sum())
+    stdout(cv.sum_const())
 
     const int32 uninit
 
-    print(GLOBAL)
-    print(GLOBAL_POINT.x + GLOBAL_POINT.y)
-    print($(GREETING)[0])
-    print(sum_params(2, 3))
+    stdout(GLOBAL)
+    stdout(GLOBAL_POINT.x + GLOBAL_POINT.y)
+    stdout($(GREETING)[0])
+    stdout(sum_params(2, 3))
 
     return 0
 }

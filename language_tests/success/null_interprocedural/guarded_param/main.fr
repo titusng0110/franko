@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func check(ptr<int32> p) -> int32 {
     if (p != null) {
@@ -8,8 +8,8 @@ func check(ptr<int32> p) -> int32 {
 }
 
 func main() -> int32 {
-    print(check(null))
+    stdout(check(null))
     int32 x = 5
-    print(check(getptr(x)))
+    stdout(check(getptr(x)))
     return 0
 }

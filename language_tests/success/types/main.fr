@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Types and Literals
@@ -52,23 +52,23 @@ func main() -> int32 {
     ptr<int32> ptr_int;
     ptr<Node> ptr_struct;
 
-    print(i8);
-    print(i16);
-    print(i32);
-    print(i64);
-    print(u8);
-    print(u16);
-    print(u32);
-    print(u64);
-    print(alias_int);
-    print(alias_uint);
-    print(alias_byte);
-    print(neg_val);
-    print(neg_val64);
-    print(dec);
-    print(bin);
-    print(hex);
-    print(hex_upper_prefix);
+    stdout(i8);
+    stdout(i16);
+    stdout(i32);
+    stdout(i64);
+    stdout(u8);
+    stdout(u16);
+    stdout(u32);
+    stdout(u64);
+    stdout(alias_int);
+    stdout(alias_uint);
+    stdout(alias_byte);
+    stdout(neg_val);
+    stdout(neg_val64);
+    stdout(dec);
+    stdout(bin);
+    stdout(hex);
+    stdout(hex_upper_prefix);
 
     return 0;
 }

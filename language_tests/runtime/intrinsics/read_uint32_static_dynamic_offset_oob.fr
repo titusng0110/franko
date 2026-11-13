@@ -2,11 +2,11 @@
 // A nonconstant endian offset into a raw static byte array is still
 // range-checked by the fat-pointer intrinsic receiver in ASan and -O
 // builds.
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte, 4] buf
     uint32 off = 2
-    print(buf.read_uint32_LE(off))
+    stdout(buf.read_uint32_LE(off))
     return 0
 }

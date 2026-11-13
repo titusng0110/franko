@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Nested Array Literals with Dynamic Arrays
@@ -19,8 +19,8 @@ func main() -> int32 {
     matrix[0].memcpy([1, 2, 3]);
     matrix[1].memcpy([4, 5, 6]);
 
-    print(matrix[0][0], " "); print(matrix[0][1], " "); print(matrix[0][2]);
-    print(matrix[1][0], " "); print(matrix[1][1], " "); print(matrix[1][2]);
+    stdout(matrix[0][0], end = " "); stdout(matrix[0][1], end = " "); stdout(matrix[0][2]);
+    stdout(matrix[1][0], end = " "); stdout(matrix[1][1], end = " "); stdout(matrix[1][2]);
 
     matrix[0].uninit();
     matrix[1].uninit();

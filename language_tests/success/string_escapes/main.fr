@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: String Escape Sequences
@@ -13,20 +13,20 @@ func main() -> int32 {
     [byte, 4] e;
     e.memcpy("\t\n\"\\");
 
-    print(e[0]);
-    print(e[1]);
-    print(e[2]);
-    print(e[3]);
+    stdout(e[0]);
+    stdout(e[1]);
+    stdout(e[2]);
+    stdout(e[3]);
 
     // Escapes mixed with ordinary characters: "a\tb\nc" -> 97, 9, 98, 10, 99.
     [byte, 5] f;
     f.memcpy("a\tb\nc");
 
-    print(f[0]);
-    print(f[1]);
-    print(f[2]);
-    print(f[3]);
-    print(f[4]);
+    stdout(f[0]);
+    stdout(f[1]);
+    stdout(f[2]);
+    stdout(f[3]);
+    stdout(f[4]);
 
     return 0;
 }

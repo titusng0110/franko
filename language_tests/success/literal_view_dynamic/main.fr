@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Literal Decay to Dynamic Views
@@ -35,18 +35,18 @@ func mstr() -> view<[byte]> {
 func main() -> int32 {
     // Assignment decay.
     view<[int32]> d = [1, 2, 3, 4];
-    print($(d)[3]);
+    stdout($(d)[3]);
 
     // Call-argument decay.
-    print(take([10, 20, 30]));
+    stdout(take([10, 20, 30]));
 
     // Return decay, recursive.
     view<[int32, 3]> w = mk(5);
-    print($(w)[0]);
+    stdout($(w)[0]);
     view<[byte]> b = mdyn(5);
-    print($(b)[2]);
+    stdout($(b)[2]);
     view<[byte]> s = mstr();
-    print($(s)[2]);
+    stdout($(s)[2]);
 
     return 0;
 }

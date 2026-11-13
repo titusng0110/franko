@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Function Inlining Modifiers
@@ -42,9 +42,9 @@ struct Box {
     Box b;
     b.v = 4;
 
-    print(compute(5));
-    print(sum_to(4));
-    print(b.bumped());
+    stdout(compute(5));
+    stdout(sum_to(4));
+    stdout(b.bumped());
 
     return 0;
 }

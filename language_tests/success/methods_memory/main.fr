@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Methods Memory Lifecycle
@@ -31,7 +31,7 @@ func main() -> int32 {
     b.setup(3)
     b.set(0, 11)
     b.set(2, 33)
-    print(b.get(0), " "); print(b.get(1), " "); print(b.get(2))
+    stdout(b.get(0), end = " "); stdout(b.get(1), end = " "); stdout(b.get(2))
     b.teardown()
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Methods Core
@@ -68,31 +68,31 @@ struct Big {
 func main() -> int32 {
     Counter c
     c.bump()
-    print(c.get())
+    stdout(c.get())
     c.add(5)
-    print(c.get())
+    stdout(c.get())
     c.add(1, 2)
-    print(c.get())
+    stdout(c.get())
     c.double_bump()
-    print(c.get())
-    print(c.shadow())
-    print(c.get())
+    stdout(c.get())
+    stdout(c.shadow())
+    stdout(c.get())
     c.bump_inner()
-    print(c.inner.get())
+    stdout(c.inner.get())
     [Counter, 2] arr
     arr[0].bump()
-    print(arr[0].get())
+    stdout(arr[0].get())
     ptr<Counter> p
     p = getptr(c)
     $(p).bump()
-    print(c.get())
+    stdout(c.get())
     Counter d
     d.n = 1
-    print(c.get())
-    print(d.get())
+    stdout(c.get())
+    stdout(d.get())
     Big b
     b.set(0, 11)
     b.set(3, 44)
-    print(b.get(0), " "); print(b.get(3))
+    stdout(b.get(0), end = " "); stdout(b.get(3))
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Aggregate Field Initializers on Pointer-Only Types
@@ -14,14 +14,14 @@ struct Buffer {
 
 func main() -> int32 {
     Buffer b { cap = 20 }
-    print(b.cap)
+    stdout(b.cap)
 
     Buffer empty {}
     empty.cap = 3
-    print(empty.cap)
+    stdout(empty.cap)
 
     (int32, [int32, 3]) t { _0 = 1 }
-    print(t._0)
+    stdout(t._0)
 
     return 0
 }

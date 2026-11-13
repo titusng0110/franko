@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/unary_plus_op
 // The unary plus operator `+x` does not exist in the grammar; only `!x` and
@@ -8,6 +8,6 @@ func main() -> int32 {
     int32 a = 7;
     int32 x = 0;
     x = +a;
-    print(x);
+    stdout(x);
     return 0;
 }

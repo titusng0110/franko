@@ -25,9 +25,7 @@ public final class ArrayLiteralLowerer {
 
     public SastNode lower(AstNode lit, SastType expectedType) {
         if (lit.elements.isEmpty()) {
-            ctx.error("Empty array literals are not supported: an array "
-                    + "literal is a view<[T, N]> value with N >= 1");
-            return hoistFallback(lit);
+            return SastNode.nullLiteral(lit.span, SastType.nullType());
         }
 
         SastType shape = literalShape(expectedType);

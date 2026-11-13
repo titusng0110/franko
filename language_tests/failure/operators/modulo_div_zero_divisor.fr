@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: operators/modulo_div_zero_divisor
 // A nonconstant dividend with a constant zero divisor is rejected before
@@ -7,7 +7,7 @@ func main() -> int32 {
     int32 y = 5;
     int32 b = y % 0;
 
-    print(b);
+    stdout(b);
 
     return 0;
 }

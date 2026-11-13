@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<uint8> Status {
     spawning = 10,
@@ -20,34 +20,34 @@ Status g;
 
 func main() -> int32 {
     Status t;
-    print(t == Status::spawning);
-    print(g == Status::spawning);
+    stdout(t == Status::spawning);
+    stdout(g == Status::spawning);
 
     Entity e;
-    print(e.state == Status::spawning);
+    stdout(e.state == Status::spawning);
 
     Wrapper w;
-    print(w.inner.state == Status::spawning);
+    stdout(w.inner.state == Status::spawning);
 
     [Status, 2] local_stats;
-    print(local_stats[0] == Status::spawning);
-    print(local_stats[1] == Status::spawning);
+    stdout(local_stats[0] == Status::spawning);
+    stdout(local_stats[1] == Status::spawning);
 
     [Status] dyn;
     dyn.init(2);
-    print(dyn[0] == Status::spawning);
-    print(dyn[1] == Status::spawning);
+    stdout(dyn[0] == Status::spawning);
+    stdout(dyn[1] == Status::spawning);
     dyn.uninit();
 
     [Status] dynz;
     dynz.init_zero(2);
-    print(dynz[0] == Status::spawning);
-    print(dynz[1] == Status::spawning);
+    stdout(dynz[0] == Status::spawning);
+    stdout(dynz[1] == Status::spawning);
     dynz.resize(3);
-    print(dynz[2] == Status::spawning);
+    stdout(dynz[2] == Status::spawning);
     dynz.uninit();
 
-    print(g_stats[0] == Status::spawning);
-    print(g_stats[1] == Status::spawning);
+    stdout(g_stats[0] == Status::spawning);
+    stdout(g_stats[1] == Status::spawning);
     return 0;
 }

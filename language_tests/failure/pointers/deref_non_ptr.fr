@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: pointers/deref_non_ptr
 // deref requires an pointer operand; dereferencing a plain integer
 // variable is invalid.
 func main() -> int32 {
     int32 x = 3
-    print($(x))
+    stdout($(x))
     return 0
 }

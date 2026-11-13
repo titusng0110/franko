@@ -6,15 +6,15 @@
 //
 //   ./programs/greetings.out < programs/greetings.stdin
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 func main() -> int32 {
     // Prompt without a newline; the greeting below completes the line.
-    print("What's your name? ", null)
+    stdout("What's your name? ", end = null)
 
     std::String name
-    if (read_line(getptr(name)) != 0) {
+    if (stdin_line(getptr(name)) != 0) {
         name.uninit()
         return 1
     }
@@ -23,7 +23,7 @@ func main() -> int32 {
     greeting.from("Hello, ")
     greeting += name
     greeting += "!"
-    print(getview(greeting))
+    stdout(getview(greeting))
 
     greeting.uninit()
     name.uninit()

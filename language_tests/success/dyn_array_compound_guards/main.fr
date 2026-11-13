@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func use_when_inited(ptr<[int32]> d, int32 c) -> int32 {
     if ($(d).length() == 0 || c == 0) {
@@ -29,11 +29,11 @@ func main() -> int32 {
     d.init(2)
     d[0] = 7
     d[1] = 9
-    print(use_when_inited(getptr(d), 1))
-    print(use_when_inited(getptr(d), 0))
-    print(use_when_nonzero(getptr(d), 1))
-    print(use_when_nonzero(getptr(d), 0))
-    print(loop_guard(getptr(d), 2))
+    stdout(use_when_inited(getptr(d), 1))
+    stdout(use_when_inited(getptr(d), 0))
+    stdout(use_when_nonzero(getptr(d), 1))
+    stdout(use_when_nonzero(getptr(d), 0))
+    stdout(loop_guard(getptr(d), 2))
     d.uninit()
     return 0
 }

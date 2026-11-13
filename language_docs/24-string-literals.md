@@ -21,8 +21,8 @@ Because the literal is a pointer, it must be dereferenced with `$(...)`
 to reach the bytes:
 
 ```franko
-print($("abc").length());   // 3
-print($("abc")[0]);         // 97
+stdout($("abc").length());   // 3
+stdout($("abc")[0]);         // 97
 ```
 
 A string literal may appear anywhere an expression may appear:
@@ -30,7 +30,7 @@ A string literal may appear anywhere an expression may appear:
 ```franko
 view<[byte, 3]> s = "abc";     // declaration initializer
 s = "xyz";                          // assignment to a view variable
-print($("hi").length());            // print argument
+stdout($("hi").length());            // print argument
 take("hi");                         // function argument
 return "hi";                        // return value (with a view return type)
 ```
@@ -41,7 +41,7 @@ A string literal stores the literal's **UTF-8 bytes**: one array element
 per byte. Multi-byte sequences expand accordingly:
 
 ```franko
-print($("你好").length());   // 6: 228 189 160 229 165 189
+stdout($("你好").length());   // 6: 228 189 160 229 165 189
 ```
 
 ## 24.3 Escapes
@@ -51,7 +51,7 @@ The supported escape sequences are `\\ \" \a \b \f \n \r \t \v`.
 invalid. Any other escape is a lex error.
 
 ```franko
-print($("\t\n\"\\"")[0]);   // 9
+stdout($("\t\n\"\\"")[0]);   // 9
 ```
 
 ## 24.4 Strings and Byte Buffers
@@ -64,7 +64,7 @@ bytes with the `memcpy` intrinsic instead — a string literal is a valid
 ```franko
 [byte, 6] buf;
 buf.memcpy("hello");      // copies 5 bytes; buf[5] is untouched
-print(buf[0]);            // 104
+stdout(buf[0]);            // 104
 ```
 
 For dynamic arrays, size the buffer first:
@@ -89,24 +89,35 @@ A pointer-typed global may be initialized with a string literal (or with
 view<[byte, 5]> GREETING = "hello";
 
 func main() -> int32 {
-    print($(GREETING).length());   // 5
+    stdout($(GREETING).length());   // 5
     return 0;
 }
 ```
 
 ## 24.6 Printing Strings
 
-`print` (from `franko/io`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `print(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
+`stdout` (from `franko/stdio`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `stdout(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
-print("hi")          // writes `hi` + newline
-print($("hi")[0])    // 104
-print($("hi")[1])    // 105
+stdout("hi")          // writes `hi` + newline
+stdout($("hi")[0])    // 104
+stdout($("hi")[1])    // 105
 ```
 
 ## 24.7 Empty Strings
 
-An empty string literal `""` is not supported: a string literal is a
-`view<[byte, N]>` with `N >= 1`.
+An empty string literal `""` is the `null` view: it is valid wherever a
+`view<[byte, ...]>` value is expected. It has no bytes and no element
+storage; dereferencing or indexing it is invalid until a non-null view is
+assigned.
+
+```franko
+view<[byte]> empty = "";       // valid: null view
+view<[byte, 5]> nil = "";      // valid: null view
+```
+
+Because `""` is `null`, `stdout("")` is ambiguous between the text and
+`std::String` overloads, just like `stdout(null)`. Use a typed null view or
+`stdout()` when a newline is intended.

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Field Forward References
@@ -34,9 +34,9 @@ func main() -> int32 {
     o.link = getmview(l)
     $(o.link).tag = 8
 
-    print(o.inner.x)
-    print(o.v)
-    print($(o.link).tag)
+    stdout(o.inner.x)
+    stdout(o.v)
+    stdout($(o.link).tag)
 
     return 0
 }

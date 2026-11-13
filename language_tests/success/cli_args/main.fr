@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: CLI Args
@@ -18,11 +18,11 @@ import "franko/io"
 
 func main(view<[[byte]]> args) -> int32 {
     uint32 n = $(args).length()
-    print(n - 1)
+    stdout(n - 1)
     for (uint32 i = 1; i < n; i++) {
-        print($(args)[i].length())
+        stdout($(args)[i].length())
         for (uint32 j = 0; j < $(args)[i].length(); j++) {
-            print($(args)[i][j])
+            stdout($(args)[i][j])
         }
     }
     return 0

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: assignment/compound_div_zero
 // A constant zero divisor is rejected for `/=` and `%=`, matching the
@@ -9,7 +9,7 @@ func main() -> int32 {
     x /= 0;
     x %= 0;
 
-    print(x);
+    stdout(x);
 
     return 0;
 }

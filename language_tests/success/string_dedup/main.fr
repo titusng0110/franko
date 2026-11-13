@@ -1,14 +1,14 @@
 import "lib/a"
 import "lib/b"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     view<[byte, 4]> a = a_text();
     view<[byte, 4]> b = b_text();
 
-    print($(a)[0]);
-    print($(b)[0]);
-    print(a == b);
+    stdout($(a)[0]);
+    stdout($(b)[0]);
+    stdout(a == b);
 
     return 0;
 }

@@ -1,0 +1,27 @@
+import "franko/stdio"
+
+view<[byte]> GLOBAL_TEXT = ""
+view<[int32]> GLOBAL_NUMBERS = []
+
+func text_is_null(view<[byte]> value) -> uint8 { return value == null }
+func numbers_are_null(view<[int32]> value) -> uint8 { return value == null }
+
+func default_text(view<[byte]> value = "") -> uint8 { return value == null }
+func default_numbers(view<[int32]> value = []) -> uint8 { return value == null }
+
+func main() -> int32 {
+    view<[byte]> text = ""
+    view<[int32]> numbers = []
+    view<[int32, 3]> typed = []
+
+    stdout(text == null)
+    stdout(numbers == null)
+    stdout(typed == null)
+    stdout(GLOBAL_TEXT == null)
+    stdout(GLOBAL_NUMBERS == null)
+    stdout(text_is_null(""))
+    stdout(numbers_are_null([]))
+    stdout(default_text())
+    stdout(default_numbers())
+    return 0
+}

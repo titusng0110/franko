@@ -1,11 +1,11 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: const_folding/global_default_out_of_range
 // Global initializer 300 is a folded constant out of range for int8.
 int8 g = 300;
 
 func main() -> int32 {
-    print(g)
+    stdout(g)
 
     return 0
 }

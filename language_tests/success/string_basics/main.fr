@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: String Basics
@@ -14,21 +14,21 @@ func main() -> int32 {
     s.memset(0);
     s.memcpy("ABCDE");
 
-    print(s[0]);
-    print(s[1]);
-    print(s[2]);
-    print(s[3]);
-    print(s[4]);
+    stdout(s[0]);
+    stdout(s[1]);
+    stdout(s[2]);
+    stdout(s[3]);
+    stdout(s[4]);
     // s[5] must still be 0: no null terminator is appended.
-    print(s[5]);
+    stdout(s[5]);
 
     // memcpy form with a shorter destination tail.
     [byte, 6] t;
     t.memcpy("XYZ");
 
-    print(t[0]);
-    print(t[1]);
-    print(t[2]);
+    stdout(t[0]);
+    stdout(t[1]);
+    stdout(t[2]);
 
     return 0;
 }

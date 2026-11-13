@@ -14,7 +14,7 @@
 // operator methods receive the allocation rights their ptr<Money> self
 // parameters require.
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 namespace text {
@@ -26,7 +26,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -466,35 +466,35 @@ func print_prefix(const view<Txn> txn) -> void {
     TxnKind kind = $(txn).kind
 
     if (kind == TxnKind::deposit) {
-        print("deposit ", null)
-        print($(txn).account_id, " ")
-        print($(txn).amount.amount, ": ")
+        stdout("deposit ", end = null)
+        stdout($(txn).account_id, end = " ")
+        stdout($(txn).amount.amount, end = ": ")
         return
     }
     if (kind == TxnKind::withdraw) {
-        print("withdraw ", null)
-        print($(txn).account_id, " ")
-        print($(txn).amount.amount, ": ")
+        stdout("withdraw ", end = null)
+        stdout($(txn).account_id, end = " ")
+        stdout($(txn).amount.amount, end = ": ")
         return
     }
     if (kind == TxnKind::transfer) {
-        print("transfer ", null)
-        print($(txn).account_id, " ")
-        print($(txn).target_id, " ")
-        print($(txn).amount.amount, ": ")
+        stdout("transfer ", end = null)
+        stdout($(txn).account_id, end = " ")
+        stdout($(txn).target_id, end = " ")
+        stdout($(txn).amount.amount, end = ": ")
         return
     }
     if (kind == TxnKind::balance) {
-        print("balance ", null)
-        print($(txn).account_id, ": ")
+        stdout("balance ", end = null)
+        stdout($(txn).account_id, end = ": ")
         return
     }
     if (kind == TxnKind::total) {
-        print("total: ", null)
+        stdout("total: ", end = null)
         return
     }
 
-    print("invalid command")
+    stdout("invalid command")
     return
 }
 
@@ -512,30 +512,30 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
     if (kind == TxnKind::deposit) {
         uint32 idx = find_account($(txn).account_id)
         if (idx == ACCOUNT_NONE) {
-            print("unknown account")
+            stdout("unknown account")
             return
         }
         ptr<Money> balance = getptr(accounts[idx].balance)
         $(balance) += $(txn).amount
         $(total) += $(txn).amount
-        print("ok")
+        stdout("ok")
         return
     }
 
     if (kind == TxnKind::withdraw) {
         uint32 idx = find_account($(txn).account_id)
         if (idx == ACCOUNT_NONE) {
-            print("unknown account")
+            stdout("unknown account")
             return
         }
         ptr<Money> balance = getptr(accounts[idx].balance)
         if ($(balance) < $(txn).amount) {
-            print("insufficient funds")
+            stdout("insufficient funds")
             return
         }
         $(balance) -= $(txn).amount
         $(total) -= $(txn).amount
-        print("ok")
+        stdout("ok")
         return
     }
 
@@ -543,37 +543,37 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
         uint32 from_idx = find_account($(txn).account_id)
         uint32 to_idx = find_account($(txn).target_id)
         if (from_idx == ACCOUNT_NONE || to_idx == ACCOUNT_NONE) {
-            print("unknown account")
+            stdout("unknown account")
             return
         }
         if (from_idx == to_idx) {
-            print("same account")
+            stdout("same account")
             return
         }
         ptr<Money> from_balance = getptr(accounts[from_idx].balance)
         ptr<Money> to_balance = getptr(accounts[to_idx].balance)
         if ($(from_balance) < $(txn).amount) {
-            print("insufficient funds")
+            stdout("insufficient funds")
             return
         }
         $(from_balance) -= $(txn).amount
         $(to_balance) += $(txn).amount
-        print("ok")
+        stdout("ok")
         return
     }
 
     if (kind == TxnKind::balance) {
         uint32 idx = find_account($(txn).account_id)
         if (idx == ACCOUNT_NONE) {
-            print("unknown account")
+            stdout("unknown account")
             return
         }
-        print(accounts[idx].balance.amount)
+        stdout(accounts[idx].balance.amount)
         return
     }
 
     if (kind == TxnKind::total) {
-        print($(total).amount)
+        stdout($(total).amount)
         return
     }
 
@@ -592,11 +592,11 @@ func main() -> int32 {
 
     uint32 txn_count = 0
     if (parse_count(getview(line), len, getmview(txn_count)) == 0) {
-        print("error: invalid transaction count")
+        stdout("error: invalid transaction count")
         return 1
     }
     if (txn_count > 16) {
-        print("error: too many transactions")
+        stdout("error: too many transactions")
         return 1
     }
 
@@ -616,16 +616,16 @@ func main() -> int32 {
         run_transaction(getview(txns[i]), getptr(total))
     }
 
-    print("final balances:")
+    stdout("final balances:")
     for (uint32 i = 0; i < accounts.length(); i++) {
-        print("  account ", null)
-        print(accounts[i].id, " ")
-        print(accounts[i].name, null)
-        print(": ", null)
-        print(accounts[i].balance.amount)
+        stdout("  account ", end = null)
+        stdout(accounts[i].id, end = " ")
+        stdout(accounts[i].name, end = null)
+        stdout(": ", end = null)
+        stdout(accounts[i].balance.amount)
     }
-    print("final total: ", null)
-    print(total.amount)
+    stdout("final total: ", end = null)
+    stdout(total.amount)
 
     return 0
 }

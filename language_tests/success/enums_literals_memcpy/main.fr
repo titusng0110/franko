@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<uint8> Status {
     idle = 1,
@@ -9,16 +9,16 @@ enum<uint8> Status {
 func main() -> int32 {
     [Status, 3] states;
     states.memcpy([Status::idle, Status::running, Status::done]);
-    print(states[0] == Status::idle);
-    print(states[1] == Status::running);
-    print(states[2] == Status::done);
-    print(states.memcmp([Status::idle, Status::running, Status::done]) == 0);
+    stdout(states[0] == Status::idle);
+    stdout(states[1] == Status::running);
+    stdout(states[2] == Status::done);
+    stdout(states.memcmp([Status::idle, Status::running, Status::done]) == 0);
 
     [Status] dyn;
     dyn.init(2);
     dyn.memcpy([Status::done, Status::done]);
-    print(dyn[0] == Status::done);
-    print(dyn[1] == Status::done);
+    stdout(dyn[0] == Status::done);
+    stdout(dyn[1] == Status::done);
     dyn.uninit();
     return 0;
 }

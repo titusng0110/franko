@@ -1,0 +1,107 @@
+import "franko/stdio"
+
+struct Literal {
+    int32 x
+    int32 def = 2
+}
+
+struct Inner {
+    int32 value = 7
+}
+
+struct Outer {
+    Inner inner
+    int32 ok = 1
+}
+
+struct Holder {
+    int32 n
+    view<[byte, 3]> text
+    view<[int32, 2]> nums
+    Status state
+    view<int32> maybe
+}
+
+enum<uint8> Status { spawning, alive }
+
+func required(int32 a, int32 b) -> int32 { return a * 10 + b }
+func optional(int32 a, int32 b = 1) -> int32 { return a * 10 + b }
+func string_default(view<[byte, 5]> s = "hello") -> byte { return $(s)[0] }
+func static_array_default(view<[int32, 3]> xs = [1, 2, 3]) -> int32 { return $(xs)[2] }
+func array_default(view<[int32]> xs = [1, 2, 3]) -> uint32 { return $(xs).length() }
+func ptr_default(ptr<int32> p = null) -> uint8 { return p == null }
+func enum_default(Status s = Status::alive) -> uint8 { return s == Status::alive }
+func struct_default(Literal lit = Literal {}) -> int32 { return lit.def }
+func partial_default(Literal lit = Literal { x = 9 }) -> int32 { return lit.x + lit.def }
+func pred_default(int32 x, int32 has = #has_default_value(Literal)) -> int32 { return x + has }
+func nested_default(Outer o = Outer { inner = Inner { value = 42 }, ok = 2 }) -> int32 {
+    return o.inner.value + o.ok
+}
+func holder_default(Holder h = Holder {
+    n = 1 + 2,
+    text = "abc",
+    nums = [4, 5],
+    state = Status::alive,
+    maybe = null
+}) -> int32 {
+    return (
+            h.n +
+            cast<int32>($(h.text)[0]) +
+            $(h.nums)[1] +
+            cast<int32>(h.state == Status::alive) +
+            cast<int32>(h.maybe == null)
+    )
+}
+
+struct Counter {
+    int32 n = 0
+
+    func add(ptr<Counter> self, int32 v = 5) -> void {
+        $(self).n = $(self).n + v
+        return
+    }
+
+    func get(view<Counter> self) -> int32 { return $(self).n }
+}
+
+#generic func plus<int32 N>(int32 a, int32 b = N) -> int32 {
+    return a + b
+}
+
+namespace util {
+    func scale(int32 v, int32 by = 3) -> int32 { return v * by }
+}
+
+func choose(int32 a) -> int32 { return 1 }
+func choose(int32 a, int32 b = 0) -> int32 { return 2 }
+
+func main() -> int32 {
+    stdout(required(2, 3))
+    stdout(required(b = 4, a = 1))
+    stdout(optional(2))
+    stdout(optional(b = 7, a = 2))
+    stdout(optional(2, b = 9))
+    stdout(string_default())
+    stdout(static_array_default())
+    stdout(array_default())
+    stdout(array_default(xs = [4, 5, 6, 7]))
+    stdout(ptr_default())
+    stdout(enum_default())
+    stdout(struct_default())
+    stdout(partial_default())
+    stdout(pred_default(10))
+    stdout(nested_default())
+    stdout(holder_default())
+
+    Counter c
+    c.add()
+    c.add(v = 7)
+    stdout(c.get())
+
+    stdout(plus<4>(3))
+    stdout(util::scale(5))
+    stdout(util::scale(by = 4, v = 5))
+    stdout(choose(1))
+    stdout(choose(1, b = 3))
+    return 0
+}

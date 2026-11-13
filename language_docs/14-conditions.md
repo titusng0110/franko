@@ -10,7 +10,7 @@ Valid:
 int32 x;
 
 if (x) {
-    print(x);
+    stdout(x);
 }
 ```
 
@@ -20,7 +20,7 @@ Invalid:
 [int32] arr;
 
 if (arr) {
-    print(1);
+    stdout(1);
 }
 ```
 
@@ -30,7 +30,7 @@ Invalid:
 ptr<int32> p;
 
 if (p) {
-    print(1);
+    stdout(1);
 }
 ```
 
@@ -38,7 +38,7 @@ To test pointers, compare them explicitly:
 
 ```franko
 if (p == q) {
-    print(1);
+    stdout(1);
 }
 ```
 

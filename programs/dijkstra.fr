@@ -12,7 +12,7 @@
 //
 //   ./programs/dijkstra.out < programs/dijkstra.stdin
 
-import "franko/io"
+import "franko/stdio"
 import "franko/limit"
 import "franko/string"
 
@@ -25,7 +25,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -322,14 +322,14 @@ func main() -> int32 {
     [uint32, 128] path
 
     for (uint32 node = 0; node < n; node++) {
-        print("node ", null)
-        print(node, ": ")
+        stdout("node ", end = null)
+        stdout(node, end = ": ")
 
         if (state[node] == NodeState::unseen) {
-            print("unreachable")
+            stdout("unreachable")
         } else {
-            print("distance ", null)
-            print(dist[node], ", path ")
+            stdout("distance ", end = null)
+            stdout(dist[node], end = ", path ")
 
             // Walk prev[] backwards, then print the path forwards.
             uint32 path_len = 0
@@ -351,11 +351,11 @@ func main() -> int32 {
 
             for (uint32 i = path_len; i > 0; i--) {
                 if (i != path_len) {
-                    print(" -> ", null)
+                    stdout(" -> ", end = null)
                 }
-                print(path[i - 1], null)
+                stdout(path[i - 1], end = null)
             }
-            print()
+            stdout()
         }
     }
 

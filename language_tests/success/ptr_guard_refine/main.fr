@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Pointers — guard refinement of null state
@@ -20,9 +20,9 @@ func main() -> int32 {
     ptr<int32> z
     if (z != null) {
         $(z) = 1
-        print($(z))
+        stdout($(z))
     } else {
-        print(100)
+        stdout(100)
     }
 
     // Branch merge: m is pointing on one path and null on the other,
@@ -38,10 +38,10 @@ func main() -> int32 {
     // Guard before deref: valid inside, clean at the merge point.
     if (m != null) {
         $(m) = 42
-        print($(m))
+        stdout($(m))
     }
 
-    print(x)
+    stdout(x)
 
     return 0
 }

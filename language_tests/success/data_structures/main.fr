@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Arrays, Structs, and Initializers
@@ -41,9 +41,9 @@ func main() -> int32 {
     // --- Struct field array access ---
     int32 cfg_val = cfg.data[0];
 
-    print(val);
-    print(cfg_val);
+    stdout(val);
+    stdout(cfg_val);
 
-    print(val + cfg_val);
+    stdout(val + cfg_val);
     return 0;
 }

@@ -18,7 +18,7 @@
 
 import "lib/util"
 import "merge"
-import "franko/io"
+import "franko/stdio"
 
 // A global-namespace struct used by value inside a namespace struct.
 struct Base {
@@ -56,37 +56,37 @@ int32 shared_seed = 5
 func main() -> int32 {
     // Qualified struct type at global scope.
     util::Point p
-    print(p.x)
-    print(p.y)
+    stdout(p.x)
+    stdout(p.y)
 
     // Qualified variable assignment and references.
-    print(util::offset)
+    stdout(util::offset)
     util::offset = 7
-    print(util::offset)
+    stdout(util::offset)
     util::offset = 100
-    print(util::double_it(10))
-    print(util::make_point_sum())
+    stdout(util::double_it(10))
+    stdout(util::make_point_sum())
 
     // Merged namespace member from merge.fr.
-    print(util::triple_it(1))
+    stdout(util::triple_it(1))
 
     // Namespace struct used by value at global scope.
     math::Scaled s
-    print(s.factor)
-    print(s.base.seed)
+    stdout(s.factor)
+    stdout(s.base.seed)
 
     // Unqualified fallback inside a namespace: scale_seed sees
     // math::scale and global Base.
-    print(math::scale_seed())
+    stdout(math::scale_seed())
 
     // Global namespace still works unqualified.
-    print(shared_seed)
+    stdout(shared_seed)
 
     // Same-named struct in another namespace, with a by-value field
     // pointing at util::Point.
     other::Point o
-    print(o.z)
-    print(o.inner.x)
+    stdout(o.z)
+    stdout(o.inner.x)
 
     return 0
 }

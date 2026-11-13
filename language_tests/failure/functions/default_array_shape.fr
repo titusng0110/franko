@@ -1,0 +1,7 @@
+func f(view<[int32, 2]> xs = [1, 2, 3]) -> int32 {
+    return $(xs)[0]
+}
+
+func main() -> int32 {
+    return f()
+}

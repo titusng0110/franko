@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: type_equality/static_size_mismatch
 // Passing an [int32, 20] pointer where [int32, 10] is required
@@ -16,6 +16,6 @@ func first(ptr<[int32, 10]> xs) -> int32 {
 func main() -> int32 {
     [int32, 20] big;
     big.memset(0);
-    print(first(getptr(big)));
+    stdout(first(getptr(big)));
     return 0;
 }

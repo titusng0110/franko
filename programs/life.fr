@@ -5,7 +5,7 @@
 // `cells`. Enum arrays are memcpy-safe but not memset-safe, so both
 // buffers are initialized with ordinary assignments.
 
-import "franko/io"
+import "franko/stdio"
 
 enum<uint8> Cell {
     dead,
@@ -110,9 +110,9 @@ struct LifeGrid {
         [byte] row_buffer
         row_buffer.init(16)
 
-        print("Generation ", null)
-        print(generation, ": alive ")
-        print($(self).alive_count())
+        stdout("Generation ", end = null)
+        stdout(generation, end = ": alive ")
+        stdout($(self).alive_count())
 
         for (uint32 row = 0; row < 16; row++) {
             for (uint32 col = 0; col < 16; col++) {
@@ -122,7 +122,7 @@ struct LifeGrid {
                     row_buffer[col] = 46
                 }
             }
-            print(getview(row_buffer))
+            stdout(getview(row_buffer))
         }
 
         row_buffer.uninit()

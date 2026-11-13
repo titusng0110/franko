@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: namespaces/ns_enclosing_not_searched
 // Unqualified lookup inside a nested namespace searches that
@@ -15,6 +15,6 @@ namespace a {
 }
 
 func main() -> int32 {
-    print(a::b::get())
+    stdout(a::b::get())
     return 0
 }

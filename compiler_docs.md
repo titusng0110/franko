@@ -60,6 +60,9 @@ import-resolved AstDocument             -> <base>.imports.ast.json
    │    ├─ PostGenericsCompileTimeFolder (remaining constant-only folding)
    │    ├─ DeclarationSelector.postGenerics
    │    ├─ normal registration/lowering
+   │    │    ├─ parameter-default resolution (after registration,
+   │    │    │   before function/method body lowering)
+   │    │    └─ body lowering
    │    └─ DeferredDirectives.flush
    ▼
 semantic SastDocument                   -> <base>.semantic.sast.json
@@ -332,6 +335,9 @@ grammar. Generates (via `update_toolchain.py`) `FrankoLexer`, `FrankoParser`,
 `FrankoBaseVisitor/Listener` and friends into `build/generated/`. Key rules:
 `program`/`topLevelItem`, namespace/import/struct/enum/function declarations
 (`functionDecl` accepts an optional `#inline`/`#noinline` modifier),
+`parameter` accepts an optional trailing `parameterDefault: ASSIGN expr`,
+`argumentList` uses `argument: ((IDENTIFIER | SELF) ASSIGN)? expr` so calls
+carry optional named arguments (generic call suffixes share the same rule),
 declaration-level `compileTimeDeclIf` in top-level, namespace, and struct
 member positions, a labeled-alternative `statement` rule (including the
 `#if` statement form), `hashExpr` (`#name` and `#name(...)`) with
@@ -404,7 +410,11 @@ and `positional = false`; a bare expression becomes a `AstKind.FIELD_INIT` with
 the two `declSuffix` alternatives with `instanceof`, producing
 `AstKind.VAR_DECL_INIT` for `DeclAssignInit` and `AstKind.VAR_DECL_FIELDS_INIT` for
 `DeclFieldInit`. `visitParameter`, `visitGlobalVarDecl`, `visitVarDecl`, and
-`visitStructFieldDecl` set `AstNode.isConst` from `ctx.CONST()`. `visitEnumDecl` builds an `AstKind.ENUM_DECL` with its
+`visitStructFieldDecl` set `AstNode.isConst` from `ctx.CONST()`;
+`visitParameter` also visits the optional `parameterDefault` expression into
+`AstNode.defaultValue`. `applyPostfixSuffixes` reads each `argument`'s optional
+name into a parallel `argumentNames` list (positional entries use `""`).
+`visitEnumDecl` builds an `AstKind.ENUM_DECL` with its
 desugared backing type and `AstKind.ENUM_VARIANT`s, and `visitEnumVariant`
 keeps the raw `constExpr` (or `null` for implicit variants); enum cases
 are dispatched in `visitTopLevelItem`, `visitNamespaceItem`, and
@@ -439,10 +449,15 @@ Slots are shared by kind: `name`, `text`, `rawContent`, `primitive`, `type`,
 `permission`, `positional`, `unsafe`, `compileTimeConstant`, `isConst`,
 `inlineMode`, `target`, `value`,
 `condition`, `thenBranch`, `elseBranch`, `body`, `expr`, `left`, `right`,
-`index`, `callee`, `init`, `update`, `level`, `sizeExpr`, the list slots
+`index`, `callee`, `init`, `update`, `level`, `sizeExpr`, `defaultValue`, the list slots
 (`items`, `parameters`, `fields`, `methods`, `members`, `variants`, `args`,
-`elements`, `thenItems`, `elseItems`, `updateItems`, `names`), and
+`elements`, `thenItems`, `elseItems`, `updateItems`, `names`,
+`argumentNames`), and
 `literalBytes`. Static factories in `AstNode` construct each kind.
+`defaultValue` is the raw default expression on a `PARAMETER` (null when
+required); `argumentNames` is parallel to `CALL.args`, with `""` for a
+positional argument and the parameter name for a named one. `copyShallow()`
+copies both slots; `hasNamedArguments()` reports whether any name is set.
 
 `GlobalVarDecl.literalBytes` is non-null only for string-literal globals
 hoisted by the Desugarer (§4.10): a literal-backed `[byte, N]` whose value is
@@ -489,7 +504,11 @@ Aggregate literals serialize as `"node": "aggregateLiteral"` with `type` and a
 initializer serializes as `"node": "varDeclFieldsInit"` with `type`, `name`,
 and `fields`. `parameter`, `globalVarDecl`, `varDecl`, `varDeclInit`,
 `varDeclFieldsInit`, and `structFieldDecl` emit `"const": true` only when the
-modifier was written; deserialization treats it as optional. `functionDecl`
+modifier was written; deserialization treats it as optional. `parameter`
+emits optional `"default": <node>` for a declaration-site default, and `call`
+emits `"argumentNames": ["", "b", ...]` only when at least one argument is
+named; deserialization defaults missing names to all-empty and rejects a
+present list whose length differs from `args`. `functionDecl`
 emits `"inlineMode"` (`"INLINE"` or `"NOINLINE"`) only when the modifier was
 written, and deserialization defaults it to `DEFAULT`. Enum declarations
 serialize as `"node": "enumDecl"` with `name`,
@@ -583,8 +602,11 @@ canonicalizes them; caches instances by template plus canonical arguments;
 clones/substitutes templates with `AstNode.copyShallow`; renames instances to
 `<base>__<8hex FNV>`; runs `SpecializationDesugarer`; folds constant
 `#if`/declaration-`#if` conditions during substitution; and inserts generated
-declarations into their template namespaces. Limits are 1024 instances and
-depth 64. See §4.31.
+declarations into their template namespaces. Substitution includes
+`PARAMETER.defaultValue`, reconstructed calls preserve `argumentNames`, and
+`containsGenericUse` inspects defaults, so value-parameter defaults become
+concrete literals before semantic default resolution. Limits are 1024
+instances and depth 64. See §4.31.
 
 #### `ImportResolver`
 Consumes an already-desugared `AstDocument`. For each surviving `AstKind.IMPORT`
@@ -627,14 +649,21 @@ literals only), string literals → hoisted literal-backed globals plus a
 every `constExpr` slot it owns (array sizes, global const initializers,
 field defaults) → a canonical decimal `AstKind.INT` via
 `ConstExpressionEvaluator`; `break N` levels are folded later during
-semantic analysis. Array literals are passed through untouched
+semantic analysis. An empty string literal `""` is rewritten to
+`AstKind.NULL`, and an empty array literal `[]` is likewise rewritten to
+`AstKind.NULL`; both denote the null view. Non-empty array literals are
+passed through untouched
 (§4.13). `AstKind.ENUM_DECL` is desugared in place (`desugarEnumDecl`): the
 backing `AstNode` is desugared and every explicit variant `constExpr` is
 folded to a canonical `AstKind.INT` (`null` is preserved for implicit
 variants); top-level and namespace enum declarations flow through the same
 top-level item list, so selected `#if` branches are desugared
 automatically. `desugarFunctionDecl` rebuilds each function declaration with
-its `inlineMode` unchanged. `ImportResolver` needs no special handling; it splices
+its `inlineMode` unchanged; `desugarParameter` desugars an optional default
+expression with the ordinary expression path (string defaults hoist to
+`STRLIT_` globals, array/aggregate literals stay raw for semantic lowering),
+and every reconstructed `CALL` preserves `argumentNames`. `ImportResolver`
+needs no special handling; it splices
 top-level items generically. `AstKind.COMPILE_TIME_IF` is preserved: its condition is desugared
 normally, braceless branches are grouped, and nested `#if` nodes survive for
 semantic selection (§4.18). Declaration-level `AstKind.DECL_IF`s are preserved
@@ -663,7 +692,9 @@ Static utility: decodes Franko string-literal escapes
 (`\\ \" \a \b \f \n \r \t \v`; rejects `\u \x \0` and unknown/trailing escapes
 with `RuntimeException`) and converts a `AstKind.STRING_LITERAL` into its UTF-8
 byte payload (`toUtf8Bytes`, unsigned bytes, no null terminator) for the
-hoisted string globals. Called by `Desugarer` (string hoisting),
+hoisted string globals. An empty payload is not hoisted: the Desugarer turns
+an empty string literal into `AstKind.NULL` (the null view). Called by
+`Desugarer` (string hoisting),
 `CompileTimeIntrinsics` (compile-time string arguments), and `FrankoASTVisitor`
 (import paths).
 
@@ -782,7 +813,21 @@ analysis runs eight internal phases:
 5. register methods,
 6. register globals,
 7. register functions,
-8. lower items in source order (enums, structs+methods, globals, function bodies).
+8. resolve parameter defaults, then lower items in source order (enums,
+   structs+methods, globals, function bodies).
+
+`resolveParameterDefaults` runs after all registration and before any body
+lowering, so forward calls see complete defaults. For every free function and
+struct method it pushes a temporary scope containing the parameter symbols,
+lowers each raw `AstNode.defaultValue` with the parameter type as expected
+type, folds remaining `#` intrinsics through `ExpressionAnalyzer`, and stores
+the canonical static value on `Symbol.parameterDefault`. `canonicalizeStaticDefault`
+accepts folded integer constants (fit-checked and retyped), `null`, enum
+variants, literal-backed string/array views (`GET_PTR` over a
+`literalBytes`/`literalValues` global), and value-assignable struct aggregate
+literals whose fields recursively satisfy the same forms. Anything else is a
+declaration-site error; recovery stores a type-correct fallback default so
+later call lowering can continue.
 
 Assignment statements to struct-typed targets are first offered to
 `ExpressionAnalyzer.tryLowerOperatorAssignment`, which lowers them to an
@@ -984,12 +1029,16 @@ level allows a weaker-or-equal one.
 The symbol model is one final tagged class with `SymbolKind` =
 `VARIABLE`, `PARAMETER`, `GLOBAL`, `FUNCTION`, `METHOD`. Fields: `name`,
 `namespace`, `type`, `parameters`, `isBuiltin`, `isConst`, `inlineMode`, `owner`, `index`,
-`compileTimeConstantValue`, `literalBytes`, `literalValues`. `isConst` is
+`compileTimeConstantValue`, `literalBytes`, `literalValues`,
+`parameterDefault`. `isConst` is
 carried only by variables, parameters, and globals; it is not part of the
 type, signature key, mangling, overload identity, or emitted C++ name.
 `inlineMode` (`DEFAULT`, `INLINE`, `NOINLINE`) is carried only by functions
 and methods and is likewise not part of any identity or mangling; it is
 copied from the declaration during semantic registration.
+`parameterDefault` is analysis-only: it holds the resolved static default on
+a `PARAMETER` symbol, is null for required parameters, and is not part of the
+type, signature, mangling, or emitted name.
 
 - `VARIABLE` — local variable, optional namespace.
 - `PARAMETER` — `index`, no namespace.
@@ -1050,9 +1099,14 @@ error; among applicable overloads exact permission matches win over
 downgrading ones, then pure downgrades, then decays, then a constant-fit
 preference (the parameter matching the constant's own type wins when the
 value fits, otherwise the narrowest fitting type, signed before unsigned
-at equal width — so `print(1)` selects `print(int32)` and
-`print(5000000000)` selects `print(int64)`), then ambiguity —
-the fewest-downgrades tally weights a decay twice a pure downgrade). Method overload
+at equal width — so `stdout(1)` selects `stdout(int32)` and
+`stdout(5000000000)` selects `stdout(int64)`), then the fewest-default-fills
+preference (an overload needing no defaults wins over an otherwise equal one),
+then ambiguity —
+the fewest-downgrades tally weights a decay twice a pure downgrade). Call
+applicability is binding-based through `OverloadResolution.bindArguments`, so
+optional parameters may be omitted; named and positional arguments are mapped
+to parameters before type applicability is checked. Method overload
 identity excludes `self`'s type: `resolveMethod` matches name + user
 arguments only, and the caller synthesizes the hidden `self` argument with
 `getptr`/`getmview`/`getview` matching the resolved method's declared self
@@ -1087,18 +1141,28 @@ argument descriptor shared by both classes.
 #### `OverloadResolution`
 Package-private static helper for overload resolution. `SymbolTable` keeps
 the public registration/lookup API plus scope and namespace bookkeeping;
-`OverloadResolution` owns the pure rules: applicability of a call/literal
+`OverloadResolution` owns the pure rules: argument-to-parameter binding
+(`bindArguments`/`findParameter`), applicability of a call/literal
 argument to a parameter, exact-permission preference, constant-fit
-preference/costs, pointer-conversion/downgrade costs, array-literal shape
+preference/costs, the fewest-default-fills preference, pointer-conversion/
+downgrade costs, array-literal shape
 matching, operator-method applicability/cost, duplicate-signature identity,
 and call-signature formatting, with `arrayLiteralRowsMatch` accepting
-`SastType.ENUM` in the scalar-element case. Keeping these rules in one helper leaves
+`SastType.ENUM` in the scalar-element case. `bindArguments` maps positional
+arguments left-to-right into required parameter slots, maps named arguments
+by parameter name (methods start at `self + 1`), rejects positional after
+named, duplicate/unknown names, mixed named/positional required arguments,
+positionally supplied optionals, and missing required parameters; a null
+binding means the overload is not applicable. `describeBindingProblem`
+produces the user-facing diagnosis for the single-overload case. Keeping
+these rules in one helper leaves
 `SymbolTable` focused on symbol tables and lookup order.
 
 #### `CallArg`
 Standalone overload-resolution argument descriptor. It holds either an
 already-lowered `SastNode` or a not-yet-lowered `AstKind.ARRAY_LITERAL`,
-plus an operator-form flag used by `SymbolTable.resolveOperatorMethodWithLiterals`.
+an argument name (empty for positional), plus an operator-form flag used by
+`SymbolTable.resolveOperatorMethodWithLiterals`.
 Keeping it outside `SymbolTable` lets `OverloadResolution` depend on the
 argument shape without depending on the symbol table.
 
@@ -1146,6 +1210,16 @@ context of §4.13: assignment target type, return type, or call parameter
 type); call arguments are lowered in two phases through
 `CallArg` so a literal argument participates in overload
 resolution before its element type is known (§4.13).
+`lowerCallArgs` also copies `call.argumentNames` into `CallArg.name`;
+`finalizeCallArgs` rebuilds the selected overload's arguments in parameter
+order, lowers pending literals with the final parameter type, and copies each
+omitted optional parameter's `Symbol.parameterDefault` through
+`SastNode.copyStaticDefault()`. Methods skip the hidden `self` slot. Invalid
+call shapes are reported by `validateCallShape` (positional after named,
+duplicate names, named `self`) and `describeBindingProblem` (unknown/missing
+parameters, mixed compulsory arguments, positional optionals). Operator
+explicit calls reject named arguments; `ArrayLowerer` reports named arguments
+on array intrinsics.
 
 Aggregate literals use a context flag: `analyzeValueExpr` allows them and is
 used at the exact value-consuming sites (declaration-initializer and
@@ -1215,8 +1289,9 @@ String consumers call `evaluateStaticStringArgument`, which accepts a raw
 or a nested `#strcat` result. Other compile-time results
 and runtime expressions are rejected as not being compile-time strings.
 `strcmp`, `strcat`, `panic`, and `warning` share this path, so any future
-string producer is accepted without consumer-specific logic. Empty strings are
-rejected with the same `N >= 1` rule as ordinary strings. Type and value
+string producer is accepted without consumer-specific logic. Empty
+compile-time strings are rejected with the `N >= 1` rule; ordinary source
+string literals desugar empty text to the null view instead. Type and value
 arguments are resolved through `resolveTypeOrValueArgument`: variables are
 resolved first, bare struct names fall back to struct types and then enum
 types, qualified names fall back to variable/struct/enum types with enum
@@ -1298,8 +1373,11 @@ expressions are rejected; underlying `BigInteger` values are stored in
 `literalValues` as usual): every literal is hoisted to a literal-backed global
 (`Symbol.literalValues`, deduplicated by element type +
 values, named `ARRLIT_<hash>`) and lowered to `getview(<global>)` — exactly
-like string literals. Non-constant elements, jagged nested rows, empty
-literals, and context-less literals are diagnostics; on failure it hoists
+like string literals. A top-level empty literal is the null view:
+`lower` returns `SastNode.NULL_LITERAL`, and the Desugarer normally performs
+the same rewrite before semantic analysis. Non-constant elements, jagged
+nested rows, empty nested rows, and context-less non-empty literals are
+diagnostics; on failure it hoists
 a zero-filled fallback global so the rest of the pipeline still sees a
 well-typed view. The hoisting itself is delegated through the concrete
 `ArrayLiteralHoister` class to `SemanticAnalyzer` (which owns global
@@ -1355,7 +1433,11 @@ but they emit no hint and their bridge bodies are invisible to the compiler.
 
 #### `FunctionChecker`
 Function-level legality: valid return type, valid parameters (no duplicates,
-assignable value types), method `self` shape (`ptr<X>`/`mview<X>`/`view<X>
+assignable value types), optional-parameter declaration rules (all optional
+parameters trail required ones; `self` cannot have a default; `main` and
+`OPERATOR_*` methods cannot declare optional parameters; each resolved
+default is rechecked with `TypeChecker.ensureAssignable`), method `self`
+shape (`ptr<X>`/`mview<X>`/`view<X>
 self` must be the first parameter and no other parameter may be named
 `self`; the `self` symbol is always built const), return statement rules
 (`return;` only in void functions; `return expr;` must be assignable to the
@@ -1378,7 +1460,8 @@ Intercepts `SastNode.RETURN` itself and delegates other statements to
 Operator method names are validated by dedicated signature checks instead
 of the generic `self` shape: comparison methods require
 `(view<X> self, view<X> other) -> uint8`; assignment methods require
-`(ptr<X> self, view<T> other) -> void` with any non-void `T`. A free
+`(ptr<X> self, view<T> other) -> void` with any non-void `T`. Operator
+methods reject optional parameters. A free
 function with a reserved `OPERATOR_*` name is rejected. A value-assignable
 struct must not declare `OPERATOR_MOV`
 (`Struct 'X' is value-assignable and cannot declare OPERATOR_MOV; built-in
@@ -2831,7 +2914,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `functionDecl` | `name`, `returnType`, `parameters`, `body`, optional `inlineMode` (`INLINE` or `NOINLINE`), optional `generic: true` + `genericParams` |
 | `genericParam` | `name`, `typeParam` (`true`/`false`), optional `type` for value parameters |
 | `genericArg` | either `type` or `value` |
-| `parameter` | `type`, `name` |
+| `parameter` | `type`, `name`, optional `default` |
 | `structDecl` | `name`, `fields`, `methods`, `members`, optional `generic: true` + `genericParams` |
 | `structFieldDecl` | `type`, `name`, `constInitializer` |
 | `enumDecl` | `name`, `backingType`, `variants` |
@@ -2864,7 +2947,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `binary` | `op`, `left`, `right` |
 | `arrayAccess` | `target`, `index` |
 | `memberAccess` | `target`, `member` |
-| `call` | `callee`, `args`, optional `typeArgs` |
+| `call` | `callee`, `args`, optional `typeArgs`, optional `argumentNames` (parallel to `args`; `""` is positional) |
 | `getPtr` | `permission`, `target` |
 | `deref` | `expr` |
 | `cast` | `unsafe`, `target`, `expr` |
@@ -3008,6 +3091,9 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   evaluation; array literals get the same treatment during semantic
   analysis (§4.13). Assigning a literal to an array is a checked error that
   suggests `memcpy`.
+- Empty string literals (`""`) and empty array literals (`[]`) are rewritten
+  to `AstKind.NULL` (the null view) and never hoisted. A non-empty array
+  literal keeps its elements; `[]` has no element type or length of its own.
 
 ### 4.2 Fluid integer constants
 Constant values are carried as `BigInteger` on raw-AST `AstKind.INT` nodes and
@@ -3271,8 +3357,10 @@ always const (§4.28).
 
 `Desugarer` hoists each distinct string literal to a literal-backed
 `[byte, N]` global named `STRLIT_<16hex-content-hash>` (the language-facing
-rules are in `23-string-literals.md`). Identical literals share one global;
-empty literals are rejected during decoding. C++ emission is a
+rules are in `23-string-literals.md`). Identical literals share one global.
+An empty literal is not hoisted: `hoistStringLiteral` returns
+`AstKind.NULL`/`SastNode.NULL_LITERAL`, so `""` is the null view and writes
+no text bytes. C++ emission is a
 `const uint8_t STRLIT_<hash>[N] = {…}` constant initializer, so declaration
 and static-init order never matter. The literal expression is a mode-2 fat
 pointer over that storage (`franko_make_fat_pointer(STRLIT_<hash>, N, 2)`);
@@ -3410,8 +3498,8 @@ remain well-formed C++14: an unsuffixed decimal literal whose value
 exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because
 decimal literals in C++14 do not fall back to unsigned integer types.
 
-**Output.** There is no builtin print statement: output is provided by the
-`franko/io` library, whose overloaded `print(...)` functions write through
+**Output.** There is no builtin output statement: output is provided by the
+`franko/stdio` library, whose overloaded `stdout(...)` functions write through
 the `franko/os` bridge (`os::posix::write` / `os::win32::WriteFile`).
 Generated C++ contains no `std::cout` insertions.
 
@@ -3489,14 +3577,16 @@ no labels, no `goto`, no extra blocks.
 
 `ArrayLiteralLowerer` lowers `AstKind.ARRAY_LITERAL` into a
 `SastNode.GET_PTR` over a hoisted `ARRLIT_<16hex>` global, which is a
-`view<[T, N]>` value. The language-facing rules are in `21-array-literals.md`.
+`view<[T, N]>` value. An empty `[]` is lowered to `SastNode.NULL_LITERAL`
+(the null view) and allocates no global. The language-facing rules are in
+`21-array-literals.md`.
 
 **Context and shape.** A literal carries no element type. `ExpressionAnalyzer`
 passes the expected type down at the inference sites (assignment/declaration
 RHS, return expression, call arguments including `memcpy` sources); the
 lowerer uses it to pick `T`, build the nested `view<[[T, M], N]>` type, and
 enforce a perfectly rectangular static nest. Missing context, nonconstant
-elements, jagged rows, empty literals, and shape mismatches are diagnostics;
+elements, jagged rows, empty nested rows, and shape mismatches are diagnostics;
 on failure the lowerer hoists a zero-filled fallback so later passes still see
 a well-typed view.
 
@@ -3939,8 +4029,8 @@ matching function signature hashing keys). `#strcat` accepts one or more
 compile-time strings and concatenates their decoded UTF-8 bytes.
 `#strcmp` compares decoded UTF-8 bytes lexicographically. `#panic` reports
 its compile-time string as a user-defined panic; `#warning` reports it as a
-user-defined warning and continues. Empty strings are rejected with the
-ordinary `N >= 1` rule. A nested `#panic`/`#warning` argument has compile-time
+user-defined warning and continues. Empty compile-time string arguments are
+rejected with the `N >= 1` rule. A nested `#panic`/`#warning` argument has compile-time
 type `void`: predicates over it return `0`, `#is_same_type` treats two void
 arguments as equal, and `#what_type` spells `void`.
 
@@ -4448,6 +4538,12 @@ language_tests/success/aggregate_literals_memory/
 language_tests/failure/aggregate_literals/
 ```
 
+Empty string/array literal fixture:
+
+```text
+language_tests/success/empty_literals/
+```
+
 Const-storage fixtures:
 
 ```text
@@ -4516,6 +4612,31 @@ language_tests/failure/functions/inline_method_recursion.fr
 language_tests/failure/functions/inline_recursion_through_noinline.fr
 ```
 
+Named and optional argument fixtures:
+
+```text
+language_tests/success/functions_named_arguments/
+language_tests/failure/functions/named_positional_after_named.fr
+language_tests/failure/functions/named_duplicate_argument.fr
+language_tests/failure/functions/named_unknown_argument.fr
+language_tests/failure/functions/named_missing_required.fr
+language_tests/failure/functions/named_mixed_compulsory.fr
+language_tests/failure/functions/named_optional_positional.fr
+language_tests/failure/functions/named_self_method.fr
+language_tests/failure/functions/named_array_intrinsic.fr
+language_tests/failure/functions/optional_before_required.fr
+language_tests/failure/functions/optional_operator_method.fr
+language_tests/failure/functions/optional_main.fr
+language_tests/failure/functions/default_runtime_variable.fr
+language_tests/failure/functions/default_runtime_call.fr
+language_tests/failure/functions/default_type_mismatch.fr
+language_tests/failure/functions/default_null_non_pointer.fr
+language_tests/failure/functions/default_array_shape.fr
+language_tests/failure/functions/default_enum_mismatch.fr
+language_tests/failure/functions/default_aggregate_runtime_field.fr
+language_tests/failure/functions/default_aggregate_pointer_only.fr
+```
+
 Compile-time directive fixtures:
 
 ```text
@@ -4576,6 +4697,11 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Change frame liveness | `DanglingPointerState` + `DanglingPointerChecker` (§4.14, §4.23) |
 | Change dense IDs / call graph / block locals | `MemoryAnalysisContext` + `MemoryCallGraph` |
 | Change the shared branch/loop traversal | `MemoryDataflowDriver` |
+| Add or change named/optional arguments | `Franko.g4` (`parameterDefault`/`argument`) + `FrankoASTVisitor` + `AstNode` (`defaultValue`/`argumentNames`) + `ASTSerializer` + `AstRewriter` + `Desugarer` + `GenericsResolver` + `Symbol.parameterDefault` + `SemanticAnalyzer.resolveParameterDefaults`/`canonicalizeStaticDefault` + §4.32 |
+| Change argument binding or the no-default preference | `OverloadResolution.bindArguments`/`describeBindingProblem`/`preferFewestDefaultFills` + `SymbolTable` resolution + `CallArg.name` |
+| Insert defaults into semantic calls | `ExpressionAnalyzer.lowerCallArgs`/`finalizeCallArgs` + `SastNode.copyStaticDefault` + §4.32 |
+| Change static default filtering | `SemanticAnalyzer.canonicalStaticValue` + `TypeChecker.isValueAssignableType` |
+| Change raw AST default/name serialization | `ASTSerializer` (`parameter.default`, `call.argumentNames`) + §3.8 |
 
 
 ## 7. Java subset and style rules
@@ -4756,3 +4882,92 @@ directive-position, unknown-intrinsic, invalid-size, generic-enum/global,
 belong in `CompileTimeIntrinsicCore`; semantic-only intrinsics stay in
 `CompileTimeIntrinsics`. New directives must enqueue through
 `DeferredDirectives`.
+
+## 4.32 Named and optional arguments
+
+The language rules are in `19-functions.md` §19.15. This section records the
+representation, resolution order, and insertion contract.
+
+**Raw AST.** `AstNode.defaultValue` holds the default expression on a
+`PARAMETER` node (null for required parameters). `AstNode.argumentNames` is
+parallel to `CALL.args`; positional entries are `""`, named entries hold the
+parameter name. `AstNode.call(...)` with the five-argument form sets both
+generic arguments and names; the four-argument form keeps all-empty names.
+`copyShallow` preserves both slots. `AstRewriter` traverses `defaultValue`, so
+`EarlyTargetFolder` and both compile-time folders fold `#IS_*` and
+constant-only `#` calls inside defaults. `ASTSerializer` writes
+`parameter.default` and `call.argumentNames`, validating that a present name
+list has the same length as `args`.
+
+**Desugaring and generics.** `Desugarer.desugarParameter` desugars the default
+with the ordinary expression path; string defaults therefore become the
+existing hoisted `STRLIT_` global plus `getptr`, while array and aggregate
+literals stay raw until semantic lowering. `GenericsResolver.substituteNode`
+substitutes `defaultValue`, `containsGenericUse` inspects it, and every
+reconstructed call preserves `argumentNames`. A value-parameter default such
+as `b = N` is therefore a concrete typed integer literal after expansion.
+
+**Resolution order.** `SemanticAnalyzer.resolveParameterDefaults` runs after
+all registration phases and before the item-lowering loop. It walks every free
+function and struct method per namespace, pushes a temporary scope containing
+the parameter symbols (so `#has_default_value(a)` / `#what_type(a)` see
+parameter types), lowers the raw default with the parameter type as expected
+type, and stores the canonical node on `Symbol.parameterDefault`. The symbol
+field is analysis-only and is not serialized.
+
+**Allowed static defaults.** `canonicalizeStaticDefault` accepts:
+
+- folded integer constants (`INT_LITERAL`, constant `UNARY_OP`, constant
+  `BIN_OP`), fit-checked against the parameter type and re-materialized as a
+  typed `INT_LITERAL`;
+- `NULL_LITERAL` for pointer parameters;
+- `ENUM_VARIANT` of the parameter's exact enum type;
+- `VAR_EXPR`/`GET_PTR` over a literal-backed global (`literalBytes` for
+  strings and `#what_type`/`#strcat`, `literalValues` for array literals);
+- `AGGREGATE_LITERAL` whose type is a value-assignable struct, with every
+  field value recursively using the same forms.
+
+Runtime expressions (variables, parameters, globals, calls, casts,
+dereferences, indexing, member access) are rejected with a declaration-site
+diagnostic. Each default is also checked against the parameter type. Recovery
+stores a type-correct fallback default so later lowering can continue.
+
+**Overload binding.** `OverloadResolution.bindArguments` maps a call's
+`CallArg` list to the callee's parameter list. Positional arguments fill the
+leading required slots left-to-right; named arguments resolve by parameter name
+(methods start at index 1, so `self` is never nameable). It rejects positional
+after named, duplicate or unknown names, mixed named/positional required
+arguments, positionally supplied optional arguments, and missing required
+arguments. `isApplicableFunction`/`isApplicableMethod`, permission-downgrade
+costs, constant-fit costs, and array-literal shape costs all operate through
+the binding. After constant-fit preference, `preferFewestDefaultFills` keeps
+the overloads that omit the fewest optional parameters, so an exact-arity
+overload wins over an otherwise equal defaulted overload.
+
+**Call insertion.** `ExpressionAnalyzer.lowerCallArgs` copies
+`call.argumentNames` into `CallArg.name`. After resolution,
+`finalizeCallArgs` rebuilds arguments in parameter order: supplied arguments
+are lowered with the final parameter type (array literals included), and each
+omitted optional parameter contributes
+`parameter.parameterDefault.copyStaticDefault()`. `SastNode.copyStaticDefault`
+deep-copies only the allowed static forms, so every call site owns a distinct
+semantic node for `MemoryAnalysisContext` and the memory checkers. Methods
+finalize user parameters from index 1 and prepend the synthesized `self`
+argument. Operator methods never enter named/default mapping.
+
+**Diagnostics.** Early shape checks report positional-after-named, duplicate
+names, and named `self`. When exactly one overload is a candidate and the call
+uses names or the overload has defaults, `describeBindingProblem` reports
+unknown named arguments, already-supplied parameters, mixed compulsory
+arguments, positionally supplied optional parameters, and missing required
+arguments; otherwise the historical no-matching-overload diagnostic remains.
+`ArrayLowerer` reports named arguments on array intrinsics, and explicit
+operator-method calls reject named arguments. `FunctionChecker` validates
+trailing optional parameters, `self` defaults, `main`/operator defaults, and
+rechecks default assignability.
+
+**Codegen and FFI.** Semantic `FUNCTION_CALL` nodes are fully positional and
+full-arity, so `Cpp14ExpressionEmitter.emitFunctionCall` and the bridge
+signature are unchanged. Defaults never reach C++ as metadata; the emitted
+call already contains the copied argument. SAST does not serialize
+`parameterDefault`.

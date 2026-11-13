@@ -216,11 +216,11 @@ so every compound-assignment rule above applies unchanged: the target must be an
 
 ```franko
 for (int32 i = 0; i < n; i++) {
-    print(i)
+    stdout(i)
 }
 ```
 
-Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `print(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](17-statements.md).
+Only the postfix statement forms exist. Prefix forms (`++x`) and value uses (`x = y++`, `stdout(x++)`) are syntax errors: `x++` never produces a value and cannot appear as a call argument. See [Statements](17-statements.md).
 
 See [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md) for field-level assignment targets, and [Structs](27-structs.md) for the full assignability rules.
 

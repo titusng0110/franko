@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 #generic func fact<int32 N>() -> int32 {
     #if (N <= 1) {
@@ -25,8 +25,8 @@ import "franko/io"
 }
 
 func main() -> int32 {
-    print(fact<5>())
-    print(is_even<10>())
-    print(is_odd<7>())
+    stdout(fact<5>())
+    stdout(is_even<10>())
+    stdout(is_odd<7>())
     return 0
 }

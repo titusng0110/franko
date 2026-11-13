@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 int32 G = 7
 
@@ -9,6 +9,6 @@ func set(ptr<ptr<int32>> out, ptr<int32> value) -> void {
 func main() -> int32 {
     ptr<int32> p
     set(getptr(p), getptr(G))
-    print($(p))
+    stdout($(p))
     return 0
 }

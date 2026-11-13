@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Type Equality - Alias Canonicalization
@@ -25,14 +25,14 @@ func main() -> int32 {
     uint32 u32 = u;
     uint u2 = u32;
 
-    print(i);
-    print(j);
-    print(k);
-    print(by);
-    print(u8);
-    print(by2);
-    print(u);
-    print(u32);
-    print(u2);
+    stdout(i);
+    stdout(j);
+    stdout(k);
+    stdout(by);
+    stdout(u8);
+    stdout(by2);
+    stdout(u);
+    stdout(u32);
+    stdout(u2);
     return 0;
 }

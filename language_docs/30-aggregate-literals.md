@@ -452,7 +452,7 @@ int32 x { field = 1 }                       // field initializer requires a stru
 ## 30.12 Complete Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Literal {
     int32 x
@@ -490,15 +490,15 @@ func main() -> int32 {
     Outer outer = Outer { inner = Inner { value = 42 }, ok = 2 }
     Buffer buf { cap = 20 }
 
-    print(a.x + a.def)              // 1
-    print(b.x + b.def)              // 5
-    print(c.x + c.def)              // 9
-    print(pair.left + pair.right)   // 3
-    print(positional._0 + positional._1)   // 11
-    print(partial._0)               // 7
-    print(named.x + named.y)        // 7
-    print(outer.inner.value + outer.ok)   // 44
-    print(buf.cap)                  // 20
+    stdout(a.x + a.def)              // 1
+    stdout(b.x + b.def)              // 5
+    stdout(c.x + c.def)              // 9
+    stdout(pair.left + pair.right)   // 3
+    stdout(positional._0 + positional._1)   // 11
+    stdout(partial._0)               // 7
+    stdout(named.x + named.y)        // 7
+    stdout(outer.inner.value + outer.ok)   // 44
+    stdout(buf.cap)                  // 20
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Runtime fixture: intrinsics/memmem_uninit_needle
 // The needle is passed as a caller-owned pointer, so the checker cannot
@@ -14,6 +14,6 @@ func main() -> int32 {
     [byte, 4] hay
     hay.memset(0)
     [byte] needle
-    print(find(getptr(hay), getptr(needle)))
+    stdout(find(getptr(hay), getptr(needle)))
     return 0
 }

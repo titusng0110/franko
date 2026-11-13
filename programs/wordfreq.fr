@@ -12,7 +12,7 @@
 // Output: total word count, distinct word count, then one "word count"
 // line per distinct word in alphabetical order (DFS over a, b, ..., z).
 
-import "franko/io"
+import "franko/stdio"
 import "franko/pool"
 import "franko/string"
 
@@ -25,7 +25,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -115,7 +115,7 @@ namespace text {
             return
         }
         view<[byte]> no_end = null
-        print(getview(token), no_end)
+        stdout(getview(token), end = no_end)
         token.uninit()
         return
     }
@@ -267,8 +267,8 @@ struct WordTrie {
 
         if ($(self).nodes[node].count > 0) {
             text::print_slice(path, 0, depth)
-            print(" ", null)
-            print($(self).nodes[node].count)
+            stdout(" ", end = null)
+            stdout($(self).nodes[node].count)
         }
 
         for (uint32 letter = 0; letter < 26; letter++) {
@@ -313,10 +313,10 @@ func main() -> int32 {
         }
     }
 
-    print("total words: ", null)
-    print(trie.total)
-    print("distinct words: ", null)
-    print(trie.distinct)
+    stdout("total words: ", end = null)
+    stdout(trie.total)
+    stdout("distinct words: ", end = null)
+    stdout(trie.distinct)
     trie.walk(trie.root, 0, getmview(path))
 
     trie.uninit()

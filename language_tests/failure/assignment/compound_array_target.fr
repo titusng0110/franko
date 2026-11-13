@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: assignment/compound_array_target
 // Arrays are not arithmetic values: `xs += 1` is rejected exactly like
@@ -13,7 +13,7 @@ func main() -> int32 {
     xs &= 1;
     xs ^= 1;
 
-    print(xs[0]);
+    stdout(xs[0]);
 
     return 0;
 }

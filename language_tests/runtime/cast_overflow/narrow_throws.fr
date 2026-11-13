@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Runtime fixture: cast_overflow/narrow_throws
 // A narrowing unsafe_cast whose value does not fit the target
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int32 big = 300;
     uint8 small = unsafe_cast<uint8>(big);
-    print(small);
+    stdout(small);
     return 0;
 }

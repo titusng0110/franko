@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Global Static Address Initializers
@@ -19,11 +19,11 @@ view<[byte, 5]> s = "hello";
 func main() -> int32 {
     greeting.memset(7);
 
-    print($(v).length());
-    print($(p)[0]);
-    print($(m)[1]);
-    print($(s).length());
-    print($("hello")[0]);
+    stdout($(v).length());
+    stdout($(p)[0]);
+    stdout($(m)[1]);
+    stdout($(s).length());
+    stdout($("hello")[0]);
 
     return 0;
 }

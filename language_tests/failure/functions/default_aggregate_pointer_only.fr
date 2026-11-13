@@ -1,0 +1,9 @@
+struct B {
+    [int32] d
+}
+
+func f(B b = B { }) -> int32 { return 0 }
+
+func main() -> int32 {
+    return f()
+}

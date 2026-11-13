@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/do_while_stmt
 // There is no do-while statement in the grammar; only if, while, and for
@@ -9,6 +9,6 @@ func main() -> int32 {
     do {
         i = i + 1;
     } while (i < 10);
-    print(i);
+    stdout(i);
     return 0;
 }

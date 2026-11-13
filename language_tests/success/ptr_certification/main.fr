@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Pointers — nullness certification via getptr
@@ -17,26 +17,26 @@ func main() -> int32 {
     ptr<int32> p
     p = getptr(x)
     $(p) = 5
-    print($(p))
+    stdout($(p))
 
     // The certification propagates through a copy.
     ptr<int32> q
     q = p
     $(q) = 6
-    print($(q))
-    print(x)
+    stdout($(q))
+    stdout(x)
 
     // ... and transitively through a copy of the copy.
     ptr<int32> r
     r = q
     $(r) = 7
-    print($(r))
+    stdout($(r))
 
     // Declaration-initializer copies carry the state as well.
     ptr<int32> s = r
     $(s) = 8
-    print($(s))
-    print(x)
+    stdout($(s))
+    stdout(x)
 
     // A null state propagates through copies too: b is null, and the
     // copies of b are null as well (no dereference of them).
@@ -44,9 +44,9 @@ func main() -> int32 {
     b = null
     ptr<int32> c
     c = b
-    print(c == null)
+    stdout(c == null)
     ptr<int32> d = c
-    print(d == null)
+    stdout(d == null)
 
     return 0
 }

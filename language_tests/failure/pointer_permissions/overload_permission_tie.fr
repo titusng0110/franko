@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: pointer_permissions/overload_permission_tie
 // When applicable overloads rely on the same number of pointer
@@ -9,7 +9,7 @@ func f(mview<[byte, 3]> x) -> void {
 }
 
 func f(view<[byte, 3]> x) -> void {
-    print($(x)[0]);
+    stdout($(x)[0]);
 }
 
 func main() -> int32 {

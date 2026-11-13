@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Static-to-Dynamic Array Pointer View Decay
@@ -45,25 +45,25 @@ func main() -> int32 {
     // implicit decay, same permission
     mview<[int32]> m = getmview(xs);
     view<[int32]> v = getview(xs);
-    print($(m).length());
-    print($(v)[2]);
+    stdout($(m).length());
+    stdout($(v)[2]);
 
     // writes through the decayed mview hit the original storage
     $(m)[1] = 99;
-    print(xs[1]);
+    stdout(xs[1]);
 
     // downgrade combos from a ptr source
     ptr<[int32, 4]> p = getptr(xs);
     mview<[int32]> m2 = p;
     view<[int32]> v2 = p;
-    print($(m2)[0]);
-    print($(v2).length());
+    stdout($(m2)[0]);
+    stdout($(v2).length());
 
     // argument conversions
-    print(take_view(p));
-    print(take_mview(p));
-    print(take_view(m));
-    print(take_view(v));
+    stdout(take_view(p));
+    stdout(take_mview(p));
+    stdout(take_view(m));
+    stdout(take_view(v));
 
     // return conversion of a non-literal decayed view is rejected by
     // DanglingPointerChecker (see failure/dangling_pointer/
@@ -74,18 +74,18 @@ func main() -> int32 {
     view<[int32]> c = cast<view<[int32]>>(getview(xs));
     mview<[int32]> c2 = cast<mview<[int32]>>(p);
     view<[int32]> c3 = cast<view<[int32]>>(p);
-    print($(c)[0]);
-    print($(c2)[3]);
-    print($(c3).length());
+    stdout($(c)[0]);
+    stdout($(c2)[3]);
+    stdout($(c3).length());
 
     // T can be a static array: outermost dimension only
     [[int32, 2], 3] g;
     g[0][0] = 1;
     g[2][1] = 6;
     view<[[int32, 2]]> gv = getview(g);
-    print($(gv).length());
-    print($(gv)[2][1]);
-    print($(gv)[0].length());
+    stdout($(gv).length());
+    stdout($(gv)[2][1]);
+    stdout($(gv)[0].length());
 
     // T can be a dynamic array
     [[int32], 2] dg;
@@ -93,26 +93,26 @@ func main() -> int32 {
     dg[1].init(2);
     mview<[[int32]]> dgv = cast<mview<[[int32]]>>(getmview(dg));
     $(dgv)[0][0] = 5;
-    print(dg[0][0]);
-    print($(dgv)[1].length());
+    stdout(dg[0][0]);
+    stdout($(dgv)[1].length());
 
     // overload preference: exact wins, downgrade beats decay
-    print(f(getview(xs)));
-    print(f(getmview(xs)));
-    print(take_view(getmview(xs)));
+    stdout(f(getview(xs)));
+    stdout(f(getmview(xs)));
+    stdout(take_view(getmview(xs)));
 
     // decay inside a while condition: no temporary descriptor is built
     uint32 i = 0;
     while (take_view(getview(xs)) == 4 && i < 2) {
         i += 1;
     }
-    print(i);
+    stdout(i);
 
     // decay in a global initializer
     global_xs[0] = 7;
     $(global_m)[0] = 8;
-    print(global_xs[0]);
-    print($(global_m).length());
+    stdout(global_xs[0]);
+    stdout($(global_m).length());
 
     return 0;
 }

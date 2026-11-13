@@ -11,7 +11,7 @@
 // arrays, and static arrays cover the remaining type shapes.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 
 struct Point {
     int32 x
@@ -60,55 +60,55 @@ func main() -> int32 {
     [int32, 3] sa
     [int32] da
 
-    print(#is_primitive(i));
-    print(#is_primitive(p));
+    stdout(#is_primitive(i));
+    stdout(#is_primitive(p));
 
-    print(#is_memcpy_safe(p));
-    print(#is_memcpy_safe(da));
+    stdout(#is_memcpy_safe(p));
+    stdout(#is_memcpy_safe(da));
 
-    print(#has_default_value(i));
-    print(#has_default_value(p));
-    print(#has_default_value(d));
-    print(#has_default_value(ip));
-    print(#has_default_value(sa));
-    print(#has_default_value(da));
-    print(#has_default_value(mixed));
+    stdout(#has_default_value(i));
+    stdout(#has_default_value(p));
+    stdout(#has_default_value(d));
+    stdout(#has_default_value(ip));
+    stdout(#has_default_value(sa));
+    stdout(#has_default_value(da));
+    stdout(#has_default_value(mixed));
 
-    print(#is_memset_safe(i));
-    print(#is_memset_safe(p));
-    print(#is_memset_safe(d));
-    print(#is_memset_safe(ip));
+    stdout(#is_memset_safe(i));
+    stdout(#is_memset_safe(p));
+    stdout(#is_memset_safe(d));
+    stdout(#is_memset_safe(ip));
 
-    print(#is_same_type(i, i));
-    print(#is_same_type(i, sa));
+    stdout(#is_same_type(i, i));
+    stdout(#is_same_type(i, sa));
 
-    print(#what_type(i));
+    stdout(#what_type(i));
 
-    print(#strcmp("abc", "abd"));
-    print(#strcmp("abc", "abc"));
-    print(#strcmp("abd", "abc"));
+    stdout(#strcmp("abc", "abd"));
+    stdout(#strcmp("abc", "abc"));
+    stdout(#strcmp("abd", "abc"));
 
-    print(#is_matchable(i));
-    print(#is_matchable(ip));
-    print(#is_matchable(p));
-    print(#is_matchable(q));
+    stdout(#is_matchable(i));
+    stdout(#is_matchable(ip));
+    stdout(#is_matchable(p));
+    stdout(#is_matchable(q));
 
-    print(#is_comparable(i));
-    print(#is_comparable(p));
-    print(#is_comparable(ip));
-    print(#is_comparable(sa));
+    stdout(#is_comparable(i));
+    stdout(#is_comparable(p));
+    stdout(#is_comparable(ip));
+    stdout(#is_comparable(sa));
 
-    print(#is_assignable(i));
-    print(#is_assignable(ip));
-    print(#is_assignable(q));
-    print(#is_assignable(d));
-    print(#is_assignable(h));
+    stdout(#is_assignable(i));
+    stdout(#is_assignable(ip));
+    stdout(#is_assignable(q));
+    stdout(#is_assignable(d));
+    stdout(#is_assignable(h));
 
-    print(#is_value_assignable(i));
-    print(#is_value_assignable(ip));
-    print(#is_value_assignable(q));
-    print(#is_value_assignable(hsa));
-    print(#is_value_assignable(da));
+    stdout(#is_value_assignable(i));
+    stdout(#is_value_assignable(ip));
+    stdout(#is_value_assignable(q));
+    stdout(#is_value_assignable(hsa));
+    stdout(#is_value_assignable(da));
 
     #if (0) {
         #panic("unreachable");

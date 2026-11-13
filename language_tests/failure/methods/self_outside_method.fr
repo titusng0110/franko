@@ -1,8 +1,8 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: methods/self_outside_method
 // `self` outside a method body is rejected (doc 26.6).
 func main() -> int32 {
-    print(self)
+    stdout(self)
     return 0
 }

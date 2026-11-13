@@ -34,6 +34,7 @@ abstract class AstRewriter {
         node.update = rewrite(node.update);
         node.level = rewrite(node.level);
         node.sizeExpr = rewrite(node.sizeExpr);
+        node.defaultValue = rewrite(node.defaultValue);
 
         node.items = rewriteList(node.items);
         node.parameters = rewriteList(node.parameters);

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     int32 x = 0
@@ -8,6 +8,6 @@ func main() -> int32 {
         p = null
     }
 
-    print($(p))
+    stdout($(p))
     return 0
 }

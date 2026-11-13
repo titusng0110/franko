@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: literals/type_alias_bool
 // No 'bool' type alias exists; boolean-like results use uint8.
@@ -7,7 +7,7 @@ func main() -> int32 {
 
     b = 1;
 
-    print(b)
+    stdout(b)
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Intrinsic Status Values
@@ -10,20 +10,20 @@ import "franko/io"
 func main() -> int32 {
     [int32] xs;
     int32 status = xs.init(4);
-    print(status);
+    stdout(status);
     xs[0] = 42;
     status = xs.resize(8);
-    print(status);
+    stdout(status);
     xs[7] = 43;
-    print(xs[0], " "); print(xs[7]);
+    stdout(xs[0], end = " "); stdout(xs[7]);
 
     [int32] ys;
     int32 s2 = ys.init_zero(3);
-    print(s2);
+    stdout(s2);
 
     [int32] zs;
     int32 s3 = zs.init(2);
-    print(s3);
+    stdout(s3);
 
     ys.uninit();
     zs.uninit();

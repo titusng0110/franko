@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: String UTF-8 Bytes
@@ -12,12 +12,12 @@ func main() -> int32 {
     [byte, 6] s;
     s.memcpy("你好");
 
-    print(s[0]);
-    print(s[1]);
-    print(s[2]);
-    print(s[3]);
-    print(s[4]);
-    print(s[5]);
+    stdout(s[0]);
+    stdout(s[1]);
+    stdout(s[2]);
+    stdout(s[3]);
+    stdout(s[4]);
+    stdout(s[5]);
 
     return 0;
 }

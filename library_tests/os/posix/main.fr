@@ -6,7 +6,7 @@
 // ============================================================
 
 import "franko/os"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte] buf;
@@ -14,18 +14,18 @@ func main() -> int32 {
     buf.memset(0);
 
     int64 n = os::posix::read(os::posix::STDIN_FILENO, getmview(buf), 8);
-    print(n);
-    print(buf[0]);
-    print(buf[1]);
-    print(buf[2]);
-    print(buf[3]);
+    stdout(n);
+    stdout(buf[0]);
+    stdout(buf[1]);
+    stdout(buf[2]);
+    stdout(buf[3]);
 
     int64 written = os::posix::write(
             os::posix::STDOUT_FILENO,
             getview(buf),
             3
     );
-    print(written);
+    stdout(written);
 
     buf.uninit();
     return 0;

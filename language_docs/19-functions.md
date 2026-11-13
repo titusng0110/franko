@@ -213,7 +213,7 @@ A function declaration may carry exactly one inlining modifier before
 }
 
 #noinline func trace(int32 x) -> void {
-    print(x);
+    stdout(x);
     return;
 }
 ```
@@ -278,3 +278,128 @@ functions may share that name.
 ```
 
 See [Generics](20-generics.md) for the full reference.
+
+## 19.15 Named and Optional Arguments
+
+A call may pass arguments by parameter name, and a parameter may declare a
+default value:
+
+```franko
+func f(int32 a, int32 b, int32 c = 0) -> int32 {
+    return a + b + c
+}
+
+f(1, 2)                 // valid: c defaults to 0
+f(a = 1, b = 2)         // valid: all required arguments named
+f(b = 2, a = 1)         // valid: named order is free
+f(c = 3, a = 1, b = 2)  // valid: named order is free
+f(1, c = 3)             // valid: positional required arguments, named optional argument
+```
+
+The call rules are:
+
+- required arguments must be supplied either all positionally or all by name;
+- positional arguments must precede named arguments;
+- optional arguments must be passed by name;
+- a parameter may be supplied at most once;
+- named arguments must match a declared parameter name.
+
+Invalid:
+
+```franko
+f(1, c = 3, b = 2)      // invalid: required a is positional, b is named
+f(1, b = 2)             // invalid: required a is positional, b is named
+f(a = 1, 2)             // invalid: positional argument after a named one
+f(1, a = 2)             // invalid: a is supplied twice
+f(1, 2, 3)              // invalid: optional c must be named
+```
+
+Optional parameters trail all required parameters. A default must be a
+compile-time value; runtime expressions are rejected:
+
+```franko
+func f(int32 a, int32 b = 5) -> int32 { return a + b }   // valid
+func g(int32 a, int32 b = a) -> int32 { return a + b }   // invalid: runtime default
+```
+
+Allowed default forms are:
+
+- integer constant expressions (`1 + 2`, `1 << 3`, `#IS_LINUX`, folded `#`
+  predicates);
+- `null` for a pointer parameter;
+- string literals;
+- array literals;
+- enum variant references;
+- aggregate struct literals whose struct is value-assignable.
+
+An aggregate literal default restricts each field initializer to the same
+static forms: constant expressions, `null`, string literals, array literals,
+enum variants, folded `#` expressions, and nested value-assignable struct
+literals.
+
+```franko
+struct Literal {
+    int32 x
+    int32 def = 2
+}
+
+enum<uint8> Status { spawning, alive }
+
+func text(view<[byte, 5]> s = "hello") -> byte { return $(s)[0] }
+func numbers(view<[int32]> xs = [1, 2, 3]) -> uint32 { return $(xs).length() }
+func state(Status s = Status::alive) -> uint8 { return s == Status::alive }
+func literal(Literal lit = Literal { x = 1 }) -> int32 { return lit.x + lit.def }
+```
+
+Defaults are resolved at the declaration and copied into each omitted argument
+at the semantic call site. C++ emission sees an ordinary full-arity call.
+
+Overload resolution prefers an overload that needs no defaults over an
+otherwise equal overload that does:
+
+```franko
+func choose(int32 a) -> int32 { return 1 }
+func choose(int32 a, int32 b = 0) -> int32 { return 2 }
+
+choose(1)          // 1
+choose(1, b = 3)   // 2
+```
+
+Ordinary struct methods support named and optional user arguments. `self` is
+implicit and is never nameable:
+
+```franko
+struct Counter {
+    int32 n = 0
+
+    func add(ptr<Counter> self, int32 amount = 1) -> void {
+        $(self).n = $(self).n + amount
+        return
+    }
+}
+
+Counter c
+c.add()
+c.add(amount = 5)
+```
+
+Restrictions:
+
+- `self` cannot have a default and cannot be passed by name;
+- `OPERATOR_*` methods cannot declare defaults and reject named arguments;
+- `main` cannot declare optional parameters;
+- array intrinsics and compile-time `#` intrinsics do not accept named
+  arguments.
+
+Diagnostics include:
+
+```text
+Positional arguments must appear before named arguments in call to 'f'
+Named argument 'x' is specified more than once in call to 'f'
+Named argument 'x' does not match any parameter of 'f'
+Compulsory arguments in call to 'f' must be either all named or all unnamed
+Optional parameter 'x' of 'f' must be passed by name
+Missing required argument 'x' in call to 'f'
+Optional parameter 'b' in function 'f' must follow all required parameters
+Default value for parameter 'b' of function 'f' must be a compile-time value
+```

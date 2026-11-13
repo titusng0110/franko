@@ -93,6 +93,10 @@ public final class ASTSerializer {
                 obj.put("type", typeToJson(node.type, sources));
                 obj.put("name", node.name);
 
+                if (node.defaultValue != null) {
+                    obj.put("default", nodeToJson(node.defaultValue, sources));
+                }
+
                 if (node.isConst) {
                     obj.put("const", true);
                 }
@@ -317,6 +321,10 @@ public final class ASTSerializer {
                 if (node.genericArgs != null && !node.genericArgs.isEmpty()) {
                     obj.put("typeArgs", nodeArray(node.genericArgs, sources));
                 }
+
+                if (node.hasNamedArguments()) {
+                    obj.put("argumentNames", stringArray(node.argumentNames));
+                }
             }
             case GET_PTR -> {
                 obj.put("node", node.kind.jsonName());
@@ -412,7 +420,8 @@ public final class ASTSerializer {
                     span,
                     typeFromJson(obj.requireObject("type"), sources),
                     obj.requireString("name"),
-                    obj.has("const") && obj.requireBool("const")
+                    obj.has("const") && obj.requireBool("const"),
+                    nodeFromJson(obj.optObject("default"), sources)
             );
             case STRUCT_DECL: {
                 AstNode node = AstNode.structDecl(
@@ -630,12 +639,30 @@ public final class ASTSerializer {
                     nodeFromJson(obj.requireObject("target"), sources),
                     obj.requireString("member")
             );
-            case CALL: return AstNode.call(
-                    span,
-                    nodeFromJson(obj.requireObject("callee"), sources),
-                    nodesFromArray(obj.requireArray("args"), sources),
-                    genericArgsFromJson(obj, sources)
-            );
+            case CALL: {
+                List<AstNode> args =
+                        nodesFromArray(obj.requireArray("args"), sources);
+                List<String> argumentNames = obj.has("argumentNames")
+                        ? stringsFromArray(obj.requireArray("argumentNames"))
+                        : List.of();
+
+                if (!argumentNames.isEmpty()
+                        && argumentNames.size() != args.size()) {
+                    throw new IllegalArgumentException(
+                            "CALL argumentNames length "
+                                    + argumentNames.size()
+                                    + " does not match args length "
+                                    + args.size());
+                }
+
+                return AstNode.call(
+                        span,
+                        nodeFromJson(obj.requireObject("callee"), sources),
+                        args,
+                        genericArgsFromJson(obj, sources),
+                        argumentNames
+                );
+            }
             case GET_PTR: return AstNode.getPtr(
                     span,
                     PtrPermission.valueOf(obj.requireString("permission")),

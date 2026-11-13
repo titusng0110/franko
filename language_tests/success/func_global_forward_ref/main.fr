@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Forward References to Globals and Functions
@@ -10,8 +10,8 @@ import "franko/io"
 // ============================================================
 
 func main() -> int32 {
-    print(later_global)
-    print(later_func(2))
+    stdout(later_global)
+    stdout(later_func(2))
     return 0
 }
 

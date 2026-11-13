@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Private Member Identifier Linting
@@ -38,17 +38,17 @@ struct Thief {
 
 func main() -> int32 {
     Wallet w
-    print(w._balance)
-    print(w._hidden())
-    print(w.inspect())
+    stdout(w._balance)
+    stdout(w._hidden())
+    stdout(w.inspect())
 
     Thief t
-    print(t.steal(w))
-    print(t.call_hidden(w))
-    print(w.visible)
+    stdout(t.steal(w))
+    stdout(t.call_hidden(w))
+    stdout(w.visible)
 
     Wallet lit = Wallet { _balance = 1 }
-    print(lit.visible)
+    stdout(lit.visible)
 
     return 0
 }

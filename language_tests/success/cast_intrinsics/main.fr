@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Explicit cast<T> and unsafe_cast<T> Intrinsics
@@ -14,35 +14,35 @@ func main() -> int32 {
     // Static widening casts stay plain casts.
     uint8 a = 200;
     uint16 b = cast<uint16>(a);
-    print(b);
+    stdout(b);
     int32 x = -5;
     int64 y = cast<int64>(x);
-    print(y);
+    stdout(y);
     uint32 w = 70000;
     int64 v = cast<int64>(w);
-    print(v);
+    stdout(v);
 
     // Same-type cast: no-op.
     uint32 u = cast<uint32>(w);
-    print(u);
+    stdout(u);
 
     // Conversions that can lose data use unsafe_cast.
     int32 s = unsafe_cast<int32>(w);
-    print(s);
+    stdout(s);
     uint8 ok = unsafe_cast<uint8>(200);
-    print(ok);
+    stdout(ok);
 
     // Constant folding through casts (constants are range-checked
     // at compile time).
     uint16 c = unsafe_cast<uint16>(1000);
-    print(c);
+    stdout(c);
 
     // Chained casts and casts on comparison results.
     uint8 cmp = 1 < 2;
     int32 wide = cast<int32>(cmp);
-    print(wide);
+    stdout(wide);
     uint8 back = unsafe_cast<uint8>(wide);
-    print(back);
+    stdout(back);
 
     return 0;
 }

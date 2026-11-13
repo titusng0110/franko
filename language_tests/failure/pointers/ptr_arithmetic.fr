@@ -1,10 +1,10 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: pointers/ptr_arithmetic
 // Pointers are not arithmetic values: p + 1 is invalid.
 func main() -> int32 {
     int32 x = 0
     ptr<int32> p = getptr(x)
-    print(p + 1)
+    stdout(p + 1)
     return 0
 }

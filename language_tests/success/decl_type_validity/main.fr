@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Declaration Type Validity
@@ -48,14 +48,14 @@ func main() -> int32 {
     ap = getptr(dyn);
     $(ap)[1] = 55;
 
-    print(s.n);
-    print(s.m);
-    print(xs[1].n);
-    print(bytes[63]);
-    print(grid[11][19]);
-    print($(p));
-    print($(ap)[0]);
-    print($(ap)[1]);
+    stdout(s.n);
+    stdout(s.m);
+    stdout(xs[1].n);
+    stdout(bytes[63]);
+    stdout(grid[11][19]);
+    stdout($(p));
+    stdout($(ap)[0]);
+    stdout($(ap)[1]);
 
     xs.uninit();
     dyn.uninit();

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/incdec_prefix
 // Only the postfix statement forms `x++` / `x--` exist; prefix `++x` is
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int32 a = 1;
     ++a;
-    print(a);
+    stdout(a);
     return 0;
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Nested Array Literals
@@ -10,18 +10,18 @@ import "franko/io"
 // ============================================================
 
 func show(view<[[int32, 2]]> m) -> void {
-    print($(m)[0][1]);
-    print($(m)[2][0]);
+    stdout($(m)[0][1]);
+    stdout($(m)[2][0]);
 }
 
 func main() -> int32 {
     [[int32, 2], 2] matrix;
     matrix.memcpy([[1, 2], [3, 4]]);
 
-    print(matrix[0][0]);
-    print(matrix[0][1]);
-    print(matrix[1][0]);
-    print(matrix[1][1]);
+    stdout(matrix[0][0]);
+    stdout(matrix[0][1]);
+    stdout(matrix[1][0]);
+    stdout(matrix[1][1]);
 
     show([[5, 6], [7, 8], [9, 10]]);
 

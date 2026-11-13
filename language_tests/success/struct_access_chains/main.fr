@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Member Access Chains
@@ -22,13 +22,13 @@ func main() -> int32 {
     // s.field on a local struct.
     Cell s;
     s.v = 1;
-    print(s.v);
+    stdout(s.v);
 
     // $(p).field, assigned through.
     ptr<Cell> p;
     p = getptr(s);
     $(p).v = 10;
-    print($(p).v);
+    stdout($(p).v);
 
     // $(a.next).field: dereference an mview-typed field, then
     // access a field of the struct it points to.
@@ -38,26 +38,26 @@ func main() -> int32 {
     l2.val = 200;
     l1.next = getmview(l2);
     $(l1.next).val = 222;
-    print(l1.val, " "); print($(l1.next).val);
+    stdout(l1.val, end = " "); stdout($(l1.next).val);
 
     // xs[i].field on a static array of structs.
     [Cell, 3] xs;
     xs[0].v = 5;
     xs[1].v = 6;
     xs[2].v = 7;
-    print(xs[0].v, " "); print(xs[1].v, " "); print(xs[2].v);
+    stdout(xs[0].v, end = " "); stdout(xs[1].v, end = " "); stdout(xs[2].v);
 
     // getptr(s.field): write the field through its pointer.
     ptr<int32> fa;
     fa = getptr(s.v);
     $(fa) = 42;
-    print(s.v);
+    stdout(s.v);
 
     // getptr of an array-element field.
     ptr<int32> fa2;
     fa2 = getptr(xs[2].v);
     $(fa2) = 77;
-    print(xs[2].v);
+    stdout(xs[2].v);
 
     return 0;
 }

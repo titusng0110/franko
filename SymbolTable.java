@@ -555,6 +555,12 @@ public final class SymbolTable {
 
         matches = OverloadResolution.preferConstantFitMethods(matches, userArgs);
 
+        matches = OverloadResolution.preferFewestDefaultFills(
+                matches,
+                userArgs,
+                true
+        );
+
         if (matches.size() == 1) {
             return matches.get(0);
         }
@@ -647,6 +653,12 @@ public final class SymbolTable {
 
         matches = OverloadResolution.preferConstantFitFunctions(matches, args);
 
+        matches = OverloadResolution.preferFewestDefaultFills(
+                matches,
+                args,
+                false
+        );
+
         if (matches.size() == 1) {
             return matches.get(0);
         }
@@ -690,6 +702,26 @@ public final class SymbolTable {
 
     public List<Symbol> getFunctionsByName(String name) {
         return List.copyOf(functions.getOrDefault(name, List.of()));
+    }
+
+    public List<Symbol> functionOverloadsNamed(String name) {
+        if (currentNamespace != null
+                && currentNamespace.functions.containsKey(name)) {
+            return List.copyOf(currentNamespace.functions.get(name));
+        }
+
+        return List.copyOf(functions.getOrDefault(name, List.of()));
+    }
+
+    public List<Symbol> functionOverloadsNamedIn(
+            NamespaceSymbol namespace,
+            String name
+    ) {
+        List<Symbol> overloads = namespace == null
+                ? functions.get(name)
+                : namespace.functions.get(name);
+
+        return overloads == null ? List.of() : List.copyOf(overloads);
     }
 
     public Collection<Symbol> allFunctions() {

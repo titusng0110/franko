@@ -10,7 +10,7 @@
 // the read_* accessors, re-encodes the decoded fields, and verifies that
 // the two packet images match byte for byte.
 
-import "franko/io"
+import "franko/stdio"
 import "franko/string"
 
 namespace text {
@@ -50,7 +50,7 @@ namespace text {
             return
         }
         view<[byte]> no_end = null
-        print(getview(token), no_end)
+        stdout(getview(token), end = no_end)
         token.uninit()
         return
     }
@@ -66,7 +66,7 @@ namespace text {
         [byte, 2] out
         out[0] = hex_digit(value / 16)
         out[1] = hex_digit(value % 16)
-        print(getview(out), null)
+        stdout(getview(out), end = null)
         return
     }
 
@@ -76,7 +76,7 @@ namespace text {
         }
         for (uint32 i = 0; i < count; i++) {
             if (i != 0) {
-                print(" ", null)
+                stdout(" ", end = null)
             }
             print_hex_byte($(buf)[start + i])
         }
@@ -255,7 +255,7 @@ func decode_header(const view<[byte]> bytes) -> PacketHeader {
 func print_hex_u32(const uint32 value) -> void {
     [byte, 4] raw
     raw.write_uint32_BE(0, value)
-    print("0x", null)
+    stdout("0x", end = null)
     for (uint32 i = 0; i < 4; i++) {
         text::print_hex_byte(raw[i])
     }
@@ -276,111 +276,111 @@ func kind_name(const PacketKind kind) -> view<[byte]> {
 }
 
 func print_header(const PacketHeader header) -> void {
-    print("magic: ", null)
+    stdout("magic: ", end = null)
     print_hex_u32(header.magic)
-    print()
+    stdout()
 
-    print("version: ", null)
-    print(header.version, null)
-    print()
+    stdout("version: ", end = null)
+    stdout(header.version, end = null)
+    stdout()
 
-    print("kind: ", null)
-    print(kind_name(header.kind), null)
-    print(" (", null)
-    print(cast<uint8>(header.kind), null)
-    print(")")
+    stdout("kind: ", end = null)
+    stdout(kind_name(header.kind), end = null)
+    stdout(" (", end = null)
+    stdout(cast<uint8>(header.kind), end = null)
+    stdout(")")
 
-    print("flags: 0x", null)
+    stdout("flags: 0x", end = null)
     text::print_hex_byte(header.flags)
     [byte, 1] flag_bits
     flag_bits[0] = header.flags
-    print(" (has_payload=", null)
-    print(flag_bits.read_bit(0), null)
-    print(" ack_required=", null)
-    print(flag_bits.read_bit(1), null)
-    print(" compressed=", null)
-    print(flag_bits.read_bit(2), null)
-    print(" encrypted=", null)
-    print(flag_bits.read_bit(3), null)
-    print(" last_fragment=", null)
-    print(flag_bits.read_bit(4), null)
-    print(")")
+    stdout(" (has_payload=", end = null)
+    stdout(flag_bits.read_bit(0), end = null)
+    stdout(" ack_required=", end = null)
+    stdout(flag_bits.read_bit(1), end = null)
+    stdout(" compressed=", end = null)
+    stdout(flag_bits.read_bit(2), end = null)
+    stdout(" encrypted=", end = null)
+    stdout(flag_bits.read_bit(3), end = null)
+    stdout(" last_fragment=", end = null)
+    stdout(flag_bits.read_bit(4), end = null)
+    stdout(")")
 
-    print("header_size: ", null)
-    print(header.header_size, null)
-    print()
+    stdout("header_size: ", end = null)
+    stdout(header.header_size, end = null)
+    stdout()
 
-    print("sequence: ", null)
-    print(header.sequence, null)
-    print(" (big-endian)")
+    stdout("sequence: ", end = null)
+    stdout(header.sequence, end = null)
+    stdout(" (big-endian)")
 
-    print("payload_length: ", null)
-    print(header.payload_length, null)
-    print(" (little-endian)")
+    stdout("payload_length: ", end = null)
+    stdout(header.payload_length, end = null)
+    stdout(" (little-endian)")
 
-    print("stream_id: ", null)
-    print(header.stream_id, null)
-    print(" (big-endian)")
+    stdout("stream_id: ", end = null)
+    stdout(header.stream_id, end = null)
+    stdout(" (big-endian)")
 
-    print("hop_count: ", null)
-    print(header.hop_count, null)
-    print(" (little-endian)")
+    stdout("hop_count: ", end = null)
+    stdout(header.hop_count, end = null)
+    stdout(" (little-endian)")
 
-    print("checksum: ", null)
+    stdout("checksum: ", end = null)
     print_hex_u32(header.checksum)
-    print(" (FNV-1a)")
+    stdout(" (FNV-1a)")
     return
 }
 
 func main(view<[[byte]]> args) -> int32 {
     if ($(args).length() < 2) {
-        print("usage: binary_codec <payload>")
+        stdout("usage: binary_codec <payload>")
         return 1
     }
 
     view<[byte]> payload = getview($(args)[1])
     if (payload == null) {
-        print("error: null payload argument")
+        stdout("error: null payload argument")
         return 1
     }
 
     uint32 payload_len = $(payload).length()
     if (payload_len == 0) {
-        print("error: empty payload")
+        stdout("error: empty payload")
         return 1
     }
     if (payload_len > CODEC_PAYLOAD_CAP) {
-        print("error: payload exceeds 32 bytes")
+        stdout("error: payload exceeds 32 bytes")
         return 1
     }
 
-    print("binary_codec: args-form packet codec")
-    print("payload: ", null)
+    stdout("binary_codec: args-form packet codec")
+    stdout("payload: ", end = null)
     text::print_slice(payload, 0, payload_len)
-    print(" (", null)
-    print(payload_len, null)
-    print(" bytes)")
-    print()
+    stdout(" (", end = null)
+    stdout(payload_len, end = null)
+    stdout(" bytes)")
+    stdout()
 
     [byte, 64] packet
     uint32 encoded_checksum = build_packet(getmview(packet), payload, payload_len, PacketKind::data, CODEC_SEQUENCE, CODEC_STREAM_ID, CODEC_HOP_COUNT)
 
     PacketHeader header = decode_header(getview(packet))
 
-    print("packet fields:")
+    stdout("packet fields:")
     print_header(header)
-    print()
+    stdout()
 
-    print("hex dump:")
+    stdout("hex dump:")
     for (uint32 start = 0; start < 64; start += 16) {
-        print("  ", null)
-        print(start, ": ")
+        stdout("  ", end = null)
+        stdout(start, end = ": ")
         text::print_hex(getview(packet), start, 16)
-        print()
+        stdout()
     }
-    print()
+    stdout()
 
-    print("verification:")
+    stdout("verification:")
     byte ok = 1
 
     if (header.magic != CODEC_MAGIC) {
@@ -412,27 +412,27 @@ func main(view<[[byte]]> args) -> int32 {
     }
 
     if (ok != 0) {
-        print("field validation: ok")
+        stdout("field validation: ok")
     } else {
-        print("field validation: failed")
+        stdout("field validation: failed")
     }
 
     uint32 recomputed_checksum = packet_checksum(getview(packet), header.payload_length)
     if (recomputed_checksum == header.checksum && encoded_checksum == header.checksum) {
-        print("checksum status: valid")
+        stdout("checksum status: valid")
     } else {
-        print("checksum status: invalid")
+        stdout("checksum status: invalid")
         ok = 0
     }
 
     uint32 payload_offset = packet.memmem(payload)
-    print("payload lookup: offset ", null)
-    print(payload_offset, null)
+    stdout("payload lookup: offset ", end = null)
+    stdout(payload_offset, end = null)
     if (payload_offset == 0xFFFFFFFF) {
-        print(" (not found)")
+        stdout(" (not found)")
         ok = 0
     } else {
-        print()
+        stdout()
     }
 
     [byte, 32] decoded_payload
@@ -440,18 +440,18 @@ func main(view<[[byte]]> args) -> int32 {
     decoded_payload.memcpy(getview(packet), 0, CODEC_PAYLOAD_OFFSET, header.payload_length)
 
     if (header.payload_length == payload_len && decoded_payload.memcmp(payload, 0, 0, payload_len) == 0) {
-        print("payload compare: equal")
+        stdout("payload compare: equal")
     } else {
-        print("payload compare: mismatch")
+        stdout("payload compare: mismatch")
         ok = 0
     }
 
     [byte, 64] rebuilt
     uint32 rebuilt_checksum = build_packet(getmview(rebuilt), getview(decoded_payload), header.payload_length, header.kind, header.sequence, header.stream_id, header.hop_count)
     if (packet.memcmp(getview(rebuilt)) == 0 && rebuilt_checksum == header.checksum) {
-        print("roundtrip: identical")
+        stdout("roundtrip: identical")
     } else {
-        print("roundtrip: mismatch")
+        stdout("roundtrip: mismatch")
         ok = 0
     }
 
@@ -461,30 +461,30 @@ func main(view<[[byte]]> args) -> int32 {
     PacketHeader damaged_header = decode_header(getview(damaged))
     uint32 damaged_checksum = packet_checksum(getview(damaged), damaged_header.payload_length)
     if (damaged_checksum == damaged_header.checksum) {
-        print("tamper check: not detected")
+        stdout("tamper check: not detected")
         ok = 0
     } else {
-        print("tamper check: rejected")
+        stdout("tamper check: rejected")
     }
-    print()
+    stdout()
 
-    print("reflection:")
-    print("type of packet: ", null)
-    print(#what_type(packet))
-    print("type of header: ", null)
-    print(#what_type(PacketHeader))
-    print("is_memcpy_safe(packet): ", null)
-    print(#is_memcpy_safe(packet))
-    print("is_memcpy_safe(PacketHeader): ", null)
-    print(#is_memcpy_safe(PacketHeader))
-    print(#strcat("strcat: packet=", #what_type(packet), " header=", #what_type(PacketHeader)))
-    print("layout assertion: ", null)
-    print(CODEC_LAYOUT_OK)
+    stdout("reflection:")
+    stdout("type of packet: ", end = null)
+    stdout(#what_type(packet))
+    stdout("type of header: ", end = null)
+    stdout(#what_type(PacketHeader))
+    stdout("is_memcpy_safe(packet): ", end = null)
+    stdout(#is_memcpy_safe(packet))
+    stdout("is_memcpy_safe(PacketHeader): ", end = null)
+    stdout(#is_memcpy_safe(PacketHeader))
+    stdout(#strcat("strcat: packet=", #what_type(packet), " header=", #what_type(PacketHeader)))
+    stdout("layout assertion: ", end = null)
+    stdout(CODEC_LAYOUT_OK)
 
     if (ok == 0) {
-        print("result: failed")
+        stdout("result: failed")
         return 1
     }
-    print("result: ok")
+    stdout("result: ok")
     return 0
 }

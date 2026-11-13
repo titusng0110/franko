@@ -408,7 +408,11 @@ parameterList
 // `const` is a storage modifier on parameters. It is not part of the
 // parameter type, the function signature, or overload identity.
 parameter
-    : CONST? type (IDENTIFIER | SELF)
+    : CONST? type (IDENTIFIER | SELF) parameterDefault?
+    ;
+
+parameterDefault
+    : ASSIGN expr
     ;
 
 returnType
@@ -839,7 +843,11 @@ callSuffix
     ;
 
 argumentList
-    : expr (COMMA expr)*
+    : argument (COMMA argument)*
+    ;
+
+argument
+    : ((IDENTIFIER | SELF) ASSIGN)? expr
     ;
 
 memberSuffix

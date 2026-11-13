@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func guarded_init() -> int32 {
     [int32] d
@@ -58,10 +58,10 @@ func reinit_after_uninit() -> int32 {
 }
 
 func main() -> int32 {
-    print(guarded_init())
-    print(guarded_use())
-    print(loop_init())
-    print(loop_uninit())
-    print(reinit_after_uninit())
+    stdout(guarded_init())
+    stdout(guarded_use())
+    stdout(loop_init())
+    stdout(loop_uninit())
+    stdout(reinit_after_uninit())
     return 0
 }

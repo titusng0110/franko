@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: casts/non_integer_operand
 // The operand of cast<T> must be an integer expression: pointers,
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     ptr<int32> p = null;
     int32 x = cast<int32>(p);
-    print(x);
+    stdout(x);
     return 0;
 }

@@ -1,9 +1,9 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: ptr_compare_null/null_to_int
 // Null may not be compared with a non-pointer value.
 func main() -> int32 {
-    print(null == 5)
+    stdout(null == 5)
 
     return 0
 }

@@ -11,14 +11,14 @@
 
 import "left"
 import "right"
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
-    print(shared_value)
-    print(left_value() + right_value())
+    stdout(shared_value)
+    stdout(left_value() + right_value())
 
     // shared.fr symbols are visible directly in the root program too.
-    print(shared_double(5))
+    stdout(shared_double(5))
 
     return 0
 }

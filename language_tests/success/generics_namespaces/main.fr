@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 namespace ns {
     #generic struct X<typename T> {
@@ -12,6 +12,6 @@ namespace ns {
 
 func main() -> int32 {
     ns::X<int32> x = ns::make<int32>(5)
-    print(x.value)
+    stdout(x.value)
     return 0
 }

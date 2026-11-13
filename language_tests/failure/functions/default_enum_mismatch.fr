@@ -1,0 +1,8 @@
+enum<uint8> A { x }
+enum<uint8> B { y }
+
+func f(A a = B::y) -> int32 { return 0 }
+
+func main() -> int32 {
+    return f()
+}

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 int32 C = 0
 
@@ -10,7 +10,7 @@ func main() -> int32 {
     if (C != 0) {
         d.resize(4)
     }
-    print($(e))
+    stdout($(e))
     d.uninit()
     return 0
 }

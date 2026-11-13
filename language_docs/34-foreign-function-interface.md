@@ -139,3 +139,8 @@ The compiler rejects an FFI module when:
 - a bridged function block does not contain the expected generated name.
 
 Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.
+
+Named and optional arguments are resolved before emission: omitted defaults
+are copied into the semantic call site as ordinary positional arguments, so
+the bridge signature and block name are unchanged. See
+[Functions](19-functions.md#1915-named-and-optional-arguments).

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Nested Arrays
@@ -15,7 +15,7 @@ func main() -> int32 {
     m[0][3] = 4;
     m[7][0] = 71;
     m[7][3] = 74;
-    print(m[0][0], " "); print(m[0][3], " "); print(m[7][0], " "); print(m[7][3]);
+    stdout(m[0][0], end = " "); stdout(m[0][3], end = " "); stdout(m[7][0], end = " "); stdout(m[7][3]);
 
     // dynamic array of dynamic arrays
     [[int32]] n;
@@ -27,7 +27,7 @@ func main() -> int32 {
     n[1][1] = 6;
     n[2][0] = 8;
     n[2][1] = 9;
-    print(n[0][0], " "); print(n[0][1], " "); print(n[1][0], " "); print(n[1][1], " "); print(n[2][0], " "); print(n[2][1]);
+    stdout(n[0][0], end = " "); stdout(n[0][1], end = " "); stdout(n[1][0], end = " "); stdout(n[1][1], end = " "); stdout(n[2][0], end = " "); stdout(n[2][1]);
 
     // uninit in reverse order: inner arrays first, then the outer
     n[2].uninit();

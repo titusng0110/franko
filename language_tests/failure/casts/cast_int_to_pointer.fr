@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: casts/cast_int_to_pointer
 // A pointer cast target requires a pointer or null operand: casting an
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int32 x = 5;
     int32 y = cast<ptr<int32>>(x);
-    print(y);
+    stdout(y);
     return 0;
 }

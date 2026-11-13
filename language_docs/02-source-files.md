@@ -9,7 +9,7 @@ func main() -> int32 {
     int32 x;
     x = 1;
 
-    print(x);
+    stdout(x);
 
     return 0;
 }
@@ -25,7 +25,7 @@ Example (newline-separated, no semicolons):
 func main() -> int32 {
     int32 x
     x = 1
-    print(x)
+    stdout(x)
     return 0
 }
 ```
@@ -104,7 +104,7 @@ The compiler's bundled standard library lives under its own
 those standard modules:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 import "franko/os"
 import "franko/pool"
 ```

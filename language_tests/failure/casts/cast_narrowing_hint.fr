@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: casts/cast_narrowing_hint
 // cast<T> only performs value-preserving widening; a conversion that
@@ -6,6 +6,6 @@ import "franko/io"
 func main() -> int32 {
     int64 big = 300;
     int32 n = cast<int32>(big);
-    print(n);
+    stdout(n);
     return 0;
 }

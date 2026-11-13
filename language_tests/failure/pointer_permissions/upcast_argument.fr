@@ -1,8 +1,8 @@
-import "franko/io"
+import "franko/stdio"
 
 // Passing a view<T> where an mview<T> is expected is not allowed.
 func needs_mview(mview<[byte, 3]> m) -> void {
-    print($(m)[0]);
+    stdout($(m)[0]);
 }
 
 func main() -> int32 {

@@ -333,10 +333,10 @@ assignability for tuples.
 
 ```franko
 (int32, int32) pair
-print(#is_value_assignable(pair))      // 1
-print(#has_default_value(pair))        // 0
-print(#what_type(pair))                 // (int32,int32)
-print(#is_same_type(pair, (int32 val, int32 err))) // 1
+stdout(#is_value_assignable(pair))      // 1
+stdout(#has_default_value(pair))        // 0
+stdout(#what_type(pair))                 // (int32,int32)
+stdout(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
 `#what_type` prints the canonical tuple form `(int32,int32)` with element
@@ -371,7 +371,7 @@ literals, whole-tuple assignment, and function returns.
 ## 29.11 Complete Example
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func split((int32 left, int32 right) pair) -> (int32 first, int32 second) {
     return (int32 first, int32 second) {
@@ -384,9 +384,9 @@ func main() -> int32 {
     (int32 x, int32 y) pair = (int32 x, int32 y) { x = 10, y = 20 }
 
     (int32 first, int32 second) result = split(pair)
-    print(result.first)
-    print(result.second)
-    print(#what_type(pair))
+    stdout(result.first)
+    stdout(result.second)
+    stdout(#what_type(pair))
     return 0
 }
 ```

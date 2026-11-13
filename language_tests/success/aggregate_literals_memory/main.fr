@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Memory Checkers Traverse Aggregate Field Values
@@ -33,8 +33,8 @@ func main() -> int32 {
         value = read_ptr(maybe),
         length = data.length()
     }
-    print(h.value)
-    print(h.length)
+    stdout(h.value)
+    stdout(h.length)
 
     data.uninit()
     return 0

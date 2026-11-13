@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Aggregate Literals
@@ -34,60 +34,60 @@ struct PtrHolder {
 
 func main() -> int32 {
     Literal a = Literal { def = 1, x = 0 }
-    print(a.x)
-    print(a.def)
+    stdout(a.x)
+    stdout(a.def)
 
     Literal b = Literal { x = 3 }
-    print(b.x)
-    print(b.def)
+    stdout(b.x)
+    stdout(b.def)
 
     Literal c = Literal {}
-    print(c.def)
+    stdout(c.def)
 
     (int32, int32) t1 = (int32, int32) { _1 = 2, _0 = 1 }
-    print(t1._0 + t1._1)
+    stdout(t1._0 + t1._1)
 
     (int32 first, int32 second) t2 = (int32 first, int32 second) {
         first = 3,
         second = 4
     }
-    print(t2.first + t2.second)
+    stdout(t2.first + t2.second)
 
     (int32, int32) t3 = (int32, int32) { _1 = 5 }
-    print(t3._1)
+    stdout(t3._1)
 
     (int32, int32) positional = (int32, int32) { 6, 7 }
-    print(positional._0 + positional._1)
+    stdout(positional._0 + positional._1)
 
     (int32, int32) positional_partial = (int32, int32) { 8 }
-    print(positional_partial._0)
+    stdout(positional_partial._0)
 
     (int32, int32) positional_decl { 9, 10 }
-    print(positional_decl._0 + positional_decl._1)
+    stdout(positional_decl._0 + positional_decl._1)
 
     (int32, int32) positional_partial_decl { 11 }
-    print(positional_partial_decl._0)
+    stdout(positional_partial_decl._0)
 
     (int32 a, int32 b) t4
     (int32 p, int32 q) source = (int32 p, int32 q) { p = 6, q = 7 }
     t4 = source
-    print(t4.a + t4.b)
+    stdout(t4.a + t4.b)
 
     Outer o = Outer { inner = Inner { v = 42 }, ok = 5 }
-    print(o.inner.v + o.ok)
+    stdout(o.inner.v + o.ok)
 
     Literal multiline = Literal {
         x = 12,
         def = 13
     }
-    print(multiline.x + multiline.def)
+    stdout(multiline.x + multiline.def)
 
     ViewHolder h = ViewHolder { values = [1, 2, 3], ok = 1 }
-    print($(h.values)[2] + h.ok)
+    stdout($(h.values)[2] + h.ok)
 
     int32 n = 9
     PtrHolder ph = PtrHolder { value = getview(n) }
-    print(ph.value != null)
+    stdout(ph.value != null)
 
     return 0
 }

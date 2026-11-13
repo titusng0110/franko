@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func foo((int32 x, int32 y) coord, uint8 somedata) -> (int32 val, int32 err) {
     return (int32 val, int32 err) { val = coord.x, err = coord.y }
@@ -8,8 +8,8 @@ func main() -> int32 {
     (int32 x, int32 y) coord = (int32 x, int32 y) { x = 3, y = 4 }
 
     (int32 left, int32 right) result = foo(coord, 9)
-    print(result.left)
-    print(result.right)
+    stdout(result.left)
+    stdout(result.right)
 
     return 0
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 [int32, 4] global_value
 view<[int32]> G_VIEW = [1, 2, 3, 4]
@@ -48,14 +48,14 @@ func local_deref_only() -> int32 {
 func main() -> int32 {
     int32 x = 3
     ptr<int32> p = return_param(getptr(x))
-    print($(p))
-    print($(return_global()))
-    print($(return_caller_pointee(getptr(x))))
-    print($(return_static_literal())[0])
-    print($(return_dynamic_literal()).length())
-    print($(return_global_dynamic_view()).length())
-    print($(return_global_static_view())[1])
-    print($(reassign_to_global()))
-    print(local_deref_only())
+    stdout($(p))
+    stdout($(return_global()))
+    stdout($(return_caller_pointee(getptr(x))))
+    stdout($(return_static_literal())[0])
+    stdout($(return_dynamic_literal()).length())
+    stdout($(return_global_dynamic_view()).length())
+    stdout($(return_global_static_view())[1])
+    stdout($(reassign_to_global()))
+    stdout(local_deref_only())
     return 0
 }

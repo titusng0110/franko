@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Integer Literal Forms
@@ -16,12 +16,12 @@ func main() -> int32 {
     int32 bin_upper = 0B1010;
     uint64 max_u64 = 18446744073709551615;
 
-    print(dec);
-    print(hex_lower);
-    print(hex_upper_prefix);
-    print(bin_lower);
-    print(bin_upper);
-    print(max_u64);
+    stdout(dec);
+    stdout(hex_lower);
+    stdout(hex_upper_prefix);
+    stdout(bin_lower);
+    stdout(bin_upper);
+    stdout(max_u64);
 
     return 0;
 }

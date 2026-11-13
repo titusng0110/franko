@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func choose(ptr<int32> p, ptr<int32> q) -> ptr<int32> {
     if (p == null || q == null) {
@@ -18,6 +18,6 @@ func main() -> int32 {
     if (r == null || n != null) {
         return 1
     }
-    print($(r))
+    stdout($(r))
     return 0
 }

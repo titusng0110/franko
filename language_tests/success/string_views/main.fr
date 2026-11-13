@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: String Literals as Views
@@ -12,35 +12,35 @@ import "franko/io"
 view<[byte, 6]> GREETING = "global";
 
 func blen(view<[byte, 3]> s) -> void {
-    print($(s).length());
-    print($(s)[0]);
+    stdout($(s).length());
+    stdout($(s)[0]);
 }
 
 func main() -> int32 {
     // Literals are views; reads go through $(...).
-    print($("abc").length());
+    stdout($("abc").length());
     blen("abc");
 
     // The same literal text shares one hoisted global.
     view<[byte, 3]> a = "abc";
     view<[byte, 3]> b = "abc";
-    print(a == b);
+    stdout(a == b);
 
     // Global string views.
-    print($(GREETING).length());
-    print($(GREETING)[0]);
-    print($("global")[0]);
+    stdout($(GREETING).length());
+    stdout($(GREETING)[0]);
+    stdout($("global")[0]);
 
     // Different content: different globals.
     view<[byte, 3]> c = "xyz";
-    print(a == c);
+    stdout(a == c);
 
     // Strings in initializer lists of view-typed slots.
     [view<[byte, 3]>, 2] pair;
     pair[0] = "abc";
     pair[1] = "xyz";
-    print($(pair[0])[1]);
-    print($(pair[1])[1]);
+    stdout($(pair[0])[1]);
+    stdout($(pair[1])[1]);
 
     return 0;
 }

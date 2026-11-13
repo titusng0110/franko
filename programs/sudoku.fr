@@ -9,7 +9,7 @@
 // The status line reports the solver outcome. "Backtracks" counts the
 // partial assignments that failed and caused the search to retreat.
 
-import "franko/io"
+import "franko/stdio"
 
 namespace text {
     func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
@@ -20,7 +20,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -212,7 +212,7 @@ struct Sudoku {
                     line[col] = v + 48
                 }
             }
-            print(getview(line))
+            stdout(getview(line))
         }
         return
     }
@@ -228,7 +228,7 @@ struct Sudoku {
                     line[col] = v + 48
                 }
             }
-            print(getview(line))
+            stdout(getview(line))
         }
         return
     }
@@ -252,7 +252,7 @@ func main() -> int32 {
         }
     }
 
-    print("Puzzle:")
+    stdout("Puzzle:")
     s.print_puzzle()
 
     byte valid = s.prepare()
@@ -266,19 +266,19 @@ func main() -> int32 {
     }
 
     if (result == SolveResult::solved) {
-        print("Result: solved")
-        print("Solution:")
+        stdout("Result: solved")
+        stdout("Solution:")
         s.print_solution()
     } else if (result == SolveResult::no_solution) {
-        print("Result: no solution")
+        stdout("Result: no solution")
     } else {
-        print("Result: invalid puzzle")
+        stdout("Result: invalid puzzle")
     }
 
-    print("Empty cells: ", null)
-    print(s.empty_count)
-    print("Backtracks: ", null)
-    print(s.backtrack_count)
+    stdout("Empty cells: ", end = null)
+    stdout(s.empty_count)
+    stdout("Backtracks: ", end = null)
+    stdout(s.backtrack_count)
 
     return 0
 }

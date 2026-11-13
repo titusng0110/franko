@@ -1,0 +1,5 @@
+func f(int32 a, int32 b = 1) -> int32 { return a + b }
+
+func main() -> int32 {
+    return f(1, 2)
+}

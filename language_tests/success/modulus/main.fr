@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // The modulus operator `%`.
 //
@@ -15,34 +15,34 @@ func main() -> int32 {
 
     int32 a = 7;
     int32 b = 3;
-    print(a % b); // 1
+    stdout(a % b); // 1
 
     // Folded constants: sign of the dividend.
-    print(-7 % 3); // -1
-    print(7 % -3); // 1
-    print(-7 % -3); // -1
-    print(100 % 7); // 2
+    stdout(-7 % 3); // -1
+    stdout(7 % -3); // 1
+    stdout(-7 % -3); // -1
+    stdout(100 % 7); // 2
 
     // Runtime values, signed truncation.
     int32 n = -7;
-    print(n % 3); // -1
-    print(n % -3); // -1
+    stdout(n % 3); // -1
+    stdout(n % -3); // -1
 
     // Unsigned operands.
     uint8 u = 17;
-    print(u % 5); // 2
+    stdout(u % 5); // 2
     uint64 q = 10000000000000000000;
-    print(q % 7); // 3
+    stdout(q % 7); // 3
 
     // Both sides nonconstant.
     int32 x = 100;
     int32 y = 7;
-    print(x % y); // 2
+    stdout(x % y); // 2
 
     // ConstExpr slots: global initializer and array size.
-    print(size); // 2
-    print(tiny.length()); // 2
-    print(tiny[0]); // 9
+    stdout(size); // 2
+    stdout(tiny.length()); // 2
+    stdout(tiny[0]); // 9
 
     return 0;
 }

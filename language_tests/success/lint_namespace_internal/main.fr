@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Namespace Internal Identifier Linting
@@ -44,11 +44,11 @@ namespace other {
 
 func main() -> int32 {
     lib::__Hidden h
-    print(h.get())
-    print(lib::__secret())
-    print(lib::public_api())
-    print(lib::nested::nested_api())
-    print(other::peek())
+    stdout(h.get())
+    stdout(lib::__secret())
+    stdout(lib::public_api())
+    stdout(lib::nested::nested_api())
+    stdout(other::peek())
 
     return 0
 }

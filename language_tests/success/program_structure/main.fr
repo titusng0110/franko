@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Program Structure
@@ -40,10 +40,10 @@ func main() -> int32 {
     }
 
     // Newlines inside parentheses (grouping depth).
-    print(
+    stdout(
         sum
     )
 
-    print(sum);
+    stdout(sum);
     return 0;
 }

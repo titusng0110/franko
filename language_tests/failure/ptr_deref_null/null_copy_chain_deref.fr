@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: ptr_deref_null/null_copy_chain_deref
 // Null state propagates transitively through a copy chain.
@@ -10,7 +10,7 @@ func main() -> int32 {
     a4 = b4
     c4 = a4
 
-    print($(c4))
+    stdout($(c4))
 
     return 0
 }

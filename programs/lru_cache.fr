@@ -21,7 +21,7 @@
 //
 //   ./programs/lru_cache.out < programs/lru_cache.stdin
 
-import "franko/io"
+import "franko/stdio"
 import "franko/pool"
 import "franko/string"
 
@@ -34,7 +34,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (read_line(getptr(line_text)) != 0) {
+        if (stdin_line(getptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -525,17 +525,17 @@ struct LruCache {
         uint32 idx = $(self).head
 
         if (idx == NIL) {
-            print("empty", no_end)
+            stdout("empty", end = no_end)
             return
         }
 
         while (idx != NIL) {
-            print($(self).keys[idx], "=")
+            stdout($(self).keys[idx], end = "=")
             uint32 following = $(self).next[idx]
             if (following == NIL) {
-                print($(self).values[idx], no_end)
+                stdout($(self).values[idx], end = no_end)
             } else {
-                print($(self).values[idx], " ")
+                stdout($(self).values[idx], end = " ")
             }
             idx = following
         }
@@ -543,14 +543,14 @@ struct LruCache {
     }
 
     func print_summary(view<LruCache> self) -> void {
-        print("hits ", null)
-        print($(self).hits)
-        print("misses ", null)
-        print($(self).misses)
-        print("evictions ", null)
-        print($(self).evictions)
-        print("live ", null)
-        print($(self).pool.used())
+        stdout("hits ", end = null)
+        stdout($(self).hits)
+        stdout("misses ", end = null)
+        stdout($(self).misses)
+        stdout("evictions ", end = null)
+        stdout($(self).evictions)
+        stdout("live ", end = null)
+        stdout($(self).pool.used())
         return
     }
 }
@@ -672,41 +672,41 @@ func main() -> int32 {
     uint32 len = 0
 
     if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
-        print("error: input failure")
+        stdout("error: input failure")
         return 1
     }
 
     uint32 capacity = 0
     if (parse_count(buf, len, getmview(capacity)) == 0 || capacity == 0) {
-        print("error: invalid capacity")
+        stdout("error: invalid capacity")
         return 1
     }
 
     if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
-        print("error: input failure")
+        stdout("error: input failure")
         return 1
     }
 
     uint32 op_count = 0
     if (parse_count(buf, len, getmview(op_count)) == 0) {
-        print("error: invalid operation count")
+        stdout("error: invalid operation count")
         return 1
     }
 
     LruCache cache
     if (cache.init(capacity) != 0) {
-        print("error: cache allocation failed")
+        stdout("error: cache allocation failed")
         return 1
     }
 
-    print("capacity ", null)
-    print(capacity)
-    print("operations ", null)
-    print(op_count)
+    stdout("capacity ", end = null)
+    stdout(capacity)
+    stdout("operations ", end = null)
+    stdout(op_count)
 
     for (uint32 op = 0; op < op_count; op++) {
         if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
-            print("error: input failure")
+            stdout("error: input failure")
             cache.uninit()
             return 1
         }
@@ -716,7 +716,7 @@ func main() -> int32 {
         uint32 word_count = 0
         if (next_token(buf, len, getmview(pos),
                        getmview(word_start), getmview(word_count)) == 0) {
-            print("error: empty operation")
+            stdout("error: empty operation")
             continue
         }
 
@@ -727,67 +727,67 @@ func main() -> int32 {
                     || parse_int_token(buf, len, getmview(pos),
                                        getmview(value)) == 0
                     || no_more_tokens(buf, len, getmview(pos)) == 0) {
-                print("put: parse error")
+                stdout("put: parse error")
                 continue
             }
 
             (PutOutcome outcome, int64 evicted_key) result = cache.put(key, value)
-            print("put ", null)
-            print(key, " ")
-            print(value, null)
+            stdout("put ", end = null)
+            stdout(key, end = " ")
+            stdout(value, end = null)
             if (result.outcome == PutOutcome::inserted) {
-                print(": inserted")
+                stdout(": inserted")
             } else if (result.outcome == PutOutcome::updated) {
-                print(": updated")
+                stdout(": updated")
             } else if (result.outcome == PutOutcome::evicted) {
-                print(": evicted ", null)
-                print(result.evicted_key)
+                stdout(": evicted ", end = null)
+                stdout(result.evicted_key)
             } else {
-                print(": failed")
+                stdout(": failed")
             }
         } else if (text::match_word(buf, word_start, word_count, "get") != 0) {
             int64 key = 0
             if (parse_int_token(buf, len, getmview(pos), getmview(key)) == 0
                     || no_more_tokens(buf, len, getmview(pos)) == 0) {
-                print("get: parse error")
+                stdout("get: parse error")
                 continue
             }
 
             (int64 value, uint8 found) result = cache.get(key)
-            print("get ", null)
-            print(key, null)
+            stdout("get ", end = null)
+            stdout(key, end = null)
             if (result.found != 0) {
-                print(": hit ", null)
-                print(result.value)
+                stdout(": hit ", end = null)
+                stdout(result.value)
             } else {
-                print(": miss")
+                stdout(": miss")
             }
         } else if (text::match_word(buf, word_start, word_count, "del") != 0) {
             int64 key = 0
             if (parse_int_token(buf, len, getmview(pos), getmview(key)) == 0
                     || no_more_tokens(buf, len, getmview(pos)) == 0) {
-                print("del: parse error")
+                stdout("del: parse error")
                 continue
             }
 
             uint8 removed = cache.remove(key)
-            print("del ", null)
-            print(key, null)
+            stdout("del ", end = null)
+            stdout(key, end = null)
             if (removed != 0) {
-                print(": removed")
+                stdout(": removed")
             } else {
-                print(": missing")
+                stdout(": missing")
             }
         } else if (text::match_word(buf, word_start, word_count, "dump") != 0) {
             if (no_more_tokens(buf, len, getmview(pos)) == 0) {
-                print("dump: parse error")
+                stdout("dump: parse error")
                 continue
             }
-            print("dump: ", null)
+            stdout("dump: ", end = null)
             cache.dump_entries()
-            print()
+            stdout()
         } else {
-            print("error: unknown operation")
+            stdout("error: unknown operation")
         }
     }
 

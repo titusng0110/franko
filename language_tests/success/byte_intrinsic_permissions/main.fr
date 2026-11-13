@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Byte Intrinsic Permissions
@@ -15,23 +15,23 @@ func main() -> int32 {
     buf.write_uint32_LE(0, 0x01020304)
 
     view<[byte, 4]> ro = getview(buf)
-    print($(ro).read_uint32_LE(0))
-    print($(ro).read_bit(2))
-    print($(ro).count_set_bits())
-    print($(ro).memchr(4))
-    print($(ro).memcmp(getview(buf)) == 0)
-    print($(ro).memmem("AB") == 0xFFFFFFFF)
+    stdout($(ro).read_uint32_LE(0))
+    stdout($(ro).read_bit(2))
+    stdout($(ro).count_set_bits())
+    stdout($(ro).memchr(4))
+    stdout($(ro).memcmp(getview(buf)) == 0)
+    stdout($(ro).memmem("AB") == 0xFFFFFFFF)
 
     mview<[byte, 4]> rw = getmview(buf)
     $(rw).write_bit(0, 0)
     $(rw).flip_bit(1)
     $(rw).bitwise_xor_mask(0xFF)
     $(rw).shift_bits_left(8)
-    print($(rw).read_uint32_LE(0))
+    stdout($(rw).read_uint32_LE(0))
 
     ptr<[byte, 4]> owner = getptr(buf)
     $(owner).write_bit(2, 1)
-    print(buf[0])
+    stdout(buf[0])
 
     return 0
 }

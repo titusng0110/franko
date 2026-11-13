@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func fill(ptr<[int32]> p) -> void {
     $(p)[0] = 1
@@ -18,7 +18,7 @@ func main() -> int32 {
     [int32] d
     d.init(2)
     fill(getptr(d))
-    print(d[0])
+    stdout(d[0])
     teardown(getptr(d))
     [int32] e
     init_use_free(getptr(e))

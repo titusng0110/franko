@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Pointers — null-initialization guarantees
@@ -19,14 +19,14 @@ ptr<int32> g
 func main() -> int32 {
     // Local pointer declaration: null, guaranteed.
     ptr<int32> local
-    print(local == null)
+    stdout(local == null)
 
     // Global pointer variable: null before any assignment.
-    print(g == null)
+    stdout(g == null)
 
     // Pointer-typed struct field: null.
     Box b
-    print(b.link == null)
+    stdout(b.link == null)
 
     return 0
 }

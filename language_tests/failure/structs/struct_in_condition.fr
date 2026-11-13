@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: structs/struct_in_condition
 // Structs are not integers: if/while conditions reject whole structs; conditions require integer expressions.
@@ -12,7 +12,7 @@ func main() -> int32 {
     s.a = 1;
 
     if (s) {
-        print(1);
+        stdout(1);
     }
 
     return 0;

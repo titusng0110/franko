@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Expressions and Operators
@@ -56,41 +56,41 @@ func main() -> int32 {
     // Equality binds tighter than bitwise AND.
     uint8 prec3 = 1 == 1 && 0; // (1 == 1) && 0 -> 1 && 0 -> 0
 
-    print(add);
-    print(sub);
-    print(mul);
-    print(div);
+    stdout(add);
+    stdout(sub);
+    stdout(mul);
+    stdout(div);
 
-    print(is_greater);
-    print(is_less);
-    print(is_eq);
-    print(is_neq);
-    print(is_ge);
-    print(is_le);
+    stdout(is_greater);
+    stdout(is_less);
+    stdout(is_eq);
+    stdout(is_neq);
+    stdout(is_ge);
+    stdout(is_le);
 
-    print(logic_and);
-    print(logic_or);
-    print(logic_not);
+    stdout(logic_and);
+    stdout(logic_or);
+    stdout(logic_not);
 
-    print(bit_and);
-    print(bit_or);
-    print(bit_xor);
-    print(bit_not_zero);
-    print(bit_not_five);
-    print(g_bit_not);
-    print(double_not);
-    print(bit_not_precedence);
-    print(byte_complement);
+    stdout(bit_and);
+    stdout(bit_or);
+    stdout(bit_xor);
+    stdout(bit_not_zero);
+    stdout(bit_not_five);
+    stdout(g_bit_not);
+    stdout(double_not);
+    stdout(bit_not_precedence);
+    stdout(byte_complement);
 
-    print(shift_left);
-    print(shift_right);
+    stdout(shift_left);
+    stdout(shift_right);
 
-    print(neg);
-    print(pos);
+    stdout(neg);
+    stdout(pos);
 
-    print(prec1);
-    print(prec2);
-    print(prec3);
+    stdout(prec1);
+    stdout(prec2);
+    stdout(prec3);
 
     return 0;
 }

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: const_folding/array_size_div_zero
 // Array size 10 / 0 is a constant expression dividing by zero.
@@ -7,7 +7,7 @@ func main() -> int32 {
 
     b[0] = 1;
 
-    print(b[0])
+    stdout(b[0])
 
     return 0
 }

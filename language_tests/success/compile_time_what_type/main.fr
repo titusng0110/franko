@@ -9,7 +9,7 @@
 // string that can feed #strcmp.
 // ============================================================
 
-import "franko/io"
+import "franko/stdio"
 
 namespace a {
     namespace b {
@@ -29,24 +29,24 @@ func main() -> int32 {
     view<[byte, 5]> text = "hello"
     a::b::Point p
 
-    print(#what_type(i));
-    print(#what_type(b));
-    print(#what_type(u));
-    print(#what_type(sa));
-    print(#what_type(da));
-    print(#what_type(ip));
-    print(#what_type(text));
-    print(#what_type(p));
+    stdout(#what_type(i));
+    stdout(#what_type(b));
+    stdout(#what_type(u));
+    stdout(#what_type(sa));
+    stdout(#what_type(da));
+    stdout(#what_type(ip));
+    stdout(#what_type(text));
+    stdout(#what_type(p));
 
-    print(#strcmp(#what_type(i), "int32"));
-    print(#strcmp("int32", #what_type(i)));
-    print(#strcmp(#what_type(i), #what_type(i)));
-    print(#strcmp(#what_type(i), "int64"));
+    stdout(#strcmp(#what_type(i), "int32"));
+    stdout(#strcmp("int32", #what_type(i)));
+    stdout(#strcmp(#what_type(i), #what_type(i)));
+    stdout(#strcmp(#what_type(i), "int64"));
 
     #if (#strcmp(#what_type(i), "int32") == 0) {
-        print("int32 branch");
+        stdout("int32 branch");
     } #else {
-        print("wrong branch");
+        stdout("wrong branch");
     }
 
     return 0;

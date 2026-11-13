@@ -1,30 +1,30 @@
-import "franko/io"
+import "franko/stdio"
 
 func f(int32 a) -> int32 {
-    print("i32")
+    stdout("i32")
     return a
 }
 
 func f(int64 b) -> int32 {
-    print("i64")
+    stdout("i64")
     return 1
 }
 
 func g(int16 a) -> int32 {
-    print("s16")
+    stdout("s16")
     return 0
 }
 
 func g(uint16 b) -> int32 {
-    print("u16")
+    stdout("u16")
     return 0
 }
 
 func main() -> int32 {
     int32 r = f(10)
-    print(r)
+    stdout(r)
     int32 s = f(5000000000)
-    print(s)
+    stdout(s)
     g(100)
     return 0
 }

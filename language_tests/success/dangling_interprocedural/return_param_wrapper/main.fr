@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func id(ptr<int32> p) -> ptr<int32> {
     return p
@@ -7,6 +7,6 @@ func id(ptr<int32> p) -> ptr<int32> {
 func main() -> int32 {
     int32 x = 4
     ptr<int32> p = id(getptr(x))
-    print($(p))
+    stdout($(p))
     return 0
 }

@@ -1,7 +1,0 @@
-// Failure fixture: init_lists/init_empty
-// Empty array literals are not supported: a literal is a
-// view<[T, N]> value with N >= 1, like string literals.
-func main() -> int32 {
-    view<[int32, 3]> v = [];
-    return 0;
-}

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: assignment/compound_type_mismatch
 // Compound assignment applies the base operator's operand rules (docs
@@ -17,7 +17,7 @@ func main() -> int32 {
     x |= y;
     x ^= y;
 
-    print(x);
+    stdout(x);
 
     return 0;
 }

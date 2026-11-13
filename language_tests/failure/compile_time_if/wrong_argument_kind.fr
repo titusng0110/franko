@@ -7,10 +7,10 @@
 
 
 func main() -> int32 {
-    print(#is_primitive("x"));
+    stdout(#is_primitive("x"));
 
     int32 x = 1;
-    print(#strcmp(x, "a"));
+    stdout(#strcmp(x, "a"));
 
     return 0;
 }

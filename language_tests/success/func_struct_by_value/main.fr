@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Structs By Value Through Functions
@@ -30,9 +30,9 @@ func main() -> int32 {
     p.a = 1;
     p.b = 2;
     bump(p);
-    print(p.a, " "); print(p.b);
+    stdout(p.a, end = " "); stdout(p.b);
 
     Pair r = make_pair(5);
-    print(r.a, " "); print(r.b);
+    stdout(r.a, end = " "); stdout(r.b);
     return 0;
 }

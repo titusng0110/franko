@@ -2,7 +2,7 @@
 
 Most executable examples should be placed inside a function body, typically `main`, because global scope allows only declarations.
 
-Examples that print assume `import "franko/io"` at the top of the file.
+Examples that print assume `import "franko/stdio"` at the top of the file.
 
 ## 38.1 Basic Integers
 
@@ -14,7 +14,7 @@ func main() -> int32 {
     x = 10;
     y = x + 5;
 
-    print(y);
+    stdout(y);
 
     return 0;
 }
@@ -31,9 +31,9 @@ func main() -> int32 {
 
     xs.memcpy([1, 2, 3]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -49,9 +49,9 @@ func main() -> int32 {
     xs[1] = 2;
     xs[2] = 3;
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -82,9 +82,9 @@ func main() -> int32 {
 
     xs.memcpy([10, 20, 30]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     xs.uninit();
 
@@ -98,10 +98,10 @@ func main() -> int32 {
 func main() -> int32 {
     view<[int32, 4]> v = [1, 5, 10, 1 + 2];
 
-    print($(v)[0]);
-    print($(v)[1]);
-    print($(v)[2]);
-    print($(v)[3]);
+    stdout($(v)[0]);
+    stdout($(v)[1]);
+    stdout($(v)[2]);
+    stdout($(v)[3]);
 
     return 0;
 }
@@ -121,8 +121,8 @@ func main() -> int32 {
         [3, 4]
     ]);
 
-    print(matrix[0][0]);
-    print(matrix[1][1]);
+    stdout(matrix[0][0]);
+    stdout(matrix[1][1]);
 
     return 0;
 }
@@ -165,8 +165,8 @@ func main() -> int32 {
     view<[int32, 3]> v = [1, 2, 3];
     view<[int32, ?]> w = [4, 5, 6, 7];
 
-    print($(v)[0]);
-    print($(w).length());    // 4
+    stdout($(v)[0]);
+    stdout($(w).length());    // 4
 
     return 0;
 }
@@ -185,8 +185,8 @@ func take(view<[int32]> v) -> int32 {
 func main() -> int32 {
     view<[int32]> d = [1, 2, 3];
 
-    print($(d)[2]);
-    print(take([4, 5, 6]));
+    stdout($(d)[2]);
+    stdout(take([4, 5, 6]));
 
     return 0;
 }
@@ -203,9 +203,9 @@ func main() -> int32 {
 
     $(p).memcpy([1, 2, 3]);
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -224,9 +224,9 @@ func main() -> int32 {
     $(p)[1] = 2;
     $(p)[2] = 3;
 
-    print(xs[0]);
-    print(xs[1]);
-    print(xs[2]);
+    stdout(xs[0]);
+    stdout(xs[1]);
+    stdout(xs[2]);
 
     return 0;
 }
@@ -243,7 +243,7 @@ func main() -> int32 {
     str.memcpy("Hello,\tWorld!\n\"Franko\"");   // 22 bytes copied in
 
     for (uint i = 0; i < 22; i++) {
-        print(str[i]);
+        stdout(str[i]);
     }
 
     str.uninit();
@@ -267,8 +267,8 @@ func main() -> int32 {
 
     fill(getptr(grid));
 
-    print(grid[0][1]);
-    print(grid[1][2]);
+    stdout(grid[0][1]);
+    stdout(grid[1][2]);
 
     return 0;
 }
@@ -296,7 +296,7 @@ func main() -> int32 {
         return -1;
     }
 
-    print(status);
+    stdout(status);
 
     xs.uninit();
     return 0;
@@ -314,8 +314,8 @@ struct Point {
 func main() -> int32 {
     Point p = Point { x = 10, y = 20 };
 
-    print(p.x);
-    print(p.y);
+    stdout(p.x);
+    stdout(p.y);
 
     return 0;
 }
@@ -329,8 +329,8 @@ A field-wise declaration initializer is the direct alternative:
 func main() -> int32 {
     Point p { x = 10, y = 20 };
 
-    print(p.x);
-    print(p.y);
+    stdout(p.x);
+    stdout(p.y);
 
     return 0;
 }
@@ -349,8 +349,8 @@ struct Counter {
 func main() -> int32 {
     Counter c;
 
-    print(c.count);   // 0
-    print(c.limit);   // 100
+    stdout(c.count);   // 0
+    stdout(c.limit);   // 100
 
     return 0;
 }
@@ -372,8 +372,8 @@ func main() -> int32 {
 
     q = p;            // whole-value copy
 
-    print(q.a);       // 1
-    print(q.b);       // 2
+    stdout(q.a);       // 1
+    stdout(q.b);       // 2
 
     return 0;
 }
@@ -401,12 +401,12 @@ func move(ptr<Point> p) -> void {
 func main() -> int32 {
     Point p = Point { x = 3, y = 4 };
 
-    print(dist2(p));   // 25
+    stdout(dist2(p));   // 25
 
     move(getptr(p));
 
-    print(p.x);        // 4
-    print(p.y);        // 5
+    stdout(p.x);        // 4
+    stdout(p.y);        // 5
 
     return 0;
 }
@@ -432,8 +432,8 @@ func main() -> int32 {
     b.data[0] = 10;
     b.data[1] = 20;
 
-    print(b.data[0]);
-    print(b.size);
+    stdout(b.data[0]);
+    stdout(b.size);
 
     b.data.uninit();
     return 0;
@@ -458,8 +458,8 @@ Point origin;
 func main() -> int32 {
     origin.x = scale;
 
-    print(origin.x);   // 2
-    print(scale);      // 2
+    stdout(origin.x);   // 2
+    stdout(scale);      // 2
 
     return 0;
 }
@@ -473,18 +473,18 @@ Global declarations are checked before `main` runs; executable statements remain
 func main() -> int32 {
     [int32] xs;
     xs.init(4);
-    print(xs.length());   // 4
+    stdout(xs.length());   // 4
 
     [int32, 3] ys;
     ys.memcpy([10, 20, 30]);
-    print(ys.length());   // 3 (compile-time constant)
+    stdout(ys.length());   // 3 (compile-time constant)
 
     for (uint32 i = 0; i < ys.length(); i = i + 1) {
-        print(ys[i]);     // 10 20 30
+        stdout(ys[i]);     // 10 20 30
     }
 
     xs.uninit();
-    print(xs.length());   // 0
+    stdout(xs.length());   // 0
     return 0;
 }
 ```
@@ -494,14 +494,14 @@ func main() -> int32 {
 ```franko
 func main() -> int32 {
     view<[int32, ?]> a = [0, 1, 2, 3];
-    print($(a).length());   // 4
+    stdout($(a).length());   // 4
 
     view<[byte, ?]> s = [104, 101, 108, 108, 111];
-    print($(s).length());   // 5
+    stdout($(s).length());   // 5
 
     view<[[int32, ?], ?]> m = [[1, 2], [3, 4]];
-    print($(m).length());      // 2
-    print($(m)[0].length());   // 2
+    stdout($(m).length());      // 2
+    stdout($(m)[0].length());   // 2
 
     return 0;
 }
@@ -512,10 +512,10 @@ func main() -> int32 {
 ```franko
 func main(view<[[byte]]> args) -> int32 {
     uint32 n = $(args).length();
-    print(n - 1);   // user argument count (args[0] is the program name)
+    stdout(n - 1);   // user argument count (args[0] is the program name)
 
     for (uint32 i = 1; i < n; i++) {
-        print($(args)[i].length());   // byte length of argument i
+        stdout($(args)[i].length());   // byte length of argument i
     }
 
     return 0;
@@ -527,7 +527,7 @@ Running the binary with two arguments prints `2`, then each argument's length. E
 ## 38.23 Byte-Array Search, Endian, and Bit Intrinsics
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func main() -> int32 {
     [byte, 8] packet;
@@ -536,28 +536,28 @@ func main() -> int32 {
     // Big-endian header: 0xCAFEBABE, then a little-endian length.
     packet.write_uint32_BE(0, 0xCAFEBABE);
     packet.write_uint16_LE(4, 300);
-    print(packet.read_uint32_BE(0));   // 3405691582
-    print(packet.read_uint16_LE(4));   // 300
+    stdout(packet.read_uint32_BE(0));   // 3405691582
+    stdout(packet.read_uint16_LE(4));   // 300
 
     // Search the payload with memchr / memmem.
     packet[6] = 65;
     packet[7] = 66;
-    print(packet.memchr(65));          // 6
-    print(packet.memmem("AB"));        // 6
-    print(packet.memchr(67));          // 4294967295 (not found)
+    stdout(packet.memchr(65));          // 6
+    stdout(packet.memmem("AB"));        // 6
+    stdout(packet.memchr(67));          // 4294967295 (not found)
 
     // Compare whole byte arrays.
     [byte, 8] copy;
     copy.memset(0);
     copy.memcpy(getptr(packet));
-    print(copy.memcmp(getptr(packet)) == 0);   // 1
+    stdout(copy.memcmp(getptr(packet)) == 0);   // 1
 
     // Bit flags across byte boundaries.
     [byte, 2] flags;
     flags.memset(0);
     flags.write_bit(15, 1);
-    print(flags.read_bit(15));         // 1
-    print(flags.count_set_bits());     // 1
+    stdout(flags.read_bit(15));         // 1
+    stdout(flags.count_set_bits());     // 1
 
     return 0;
 }
@@ -568,7 +568,7 @@ func main() -> int32 {
 Named and unnamed tuple declarations, assignment across different names, and a function round-trip:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 func swap((int32 x, int32 y) pair) -> (int32 left, int32 right) {
     return (int32 left, int32 right) {
@@ -587,14 +587,14 @@ func main() -> int32 {
 
     (int32 low, int32 high) swapped = swap(res)
 
-    print(res.val)                 // 1
-    print(lazy._1)                 // 4
-    print(b.different)             // 6
-    print(b.name)                  // 6
-    print(swapped.low)             // 2
-    print(swapped.high)            // 1
-    print(#is_same_type(res, lazy))   // 1
-    print(#what_type(res))            // (int32,int32)
+    stdout(res.val)                 // 1
+    stdout(lazy._1)                 // 4
+    stdout(b.different)             // 6
+    stdout(b.name)                  // 6
+    stdout(swapped.low)             // 2
+    stdout(swapped.high)            // 1
+    stdout(#is_same_type(res, lazy))   // 1
+    stdout(#what_type(res))            // (int32,int32)
 
     return 0
 }
@@ -606,7 +606,7 @@ Struct literals, tuple literals, nested literals, and field-wise declaration
 initialization:
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Literal {
     int32 x
@@ -637,14 +637,14 @@ func main() -> int32 {
 
     Outer outer = Outer { inner = Inner { value = 42 }, ok = 2 }
 
-    print(a.x + a.def)                    // 1
-    print(b.x + b.def)                    // 5
-    print(c.def)                          // 2
-    print(pair._0 + pair._1)              // 3
-    print(positional._0 + positional._1)  // 11
-    print(partial._0)                     // 7
-    print(named.left + named.right)       // 7
-    print(outer.inner.value + outer.ok)   // 44
+    stdout(a.x + a.def)                    // 1
+    stdout(b.x + b.def)                    // 5
+    stdout(c.def)                          // 2
+    stdout(pair._0 + pair._1)              // 3
+    stdout(positional._0 + positional._1)  // 11
+    stdout(partial._0)                     // 7
+    stdout(named.left + named.right)       // 7
+    stdout(outer.inner.value + outer.ok)   // 44
 
     return 0
 }
@@ -657,7 +657,7 @@ including the all-named/all-unnamed tuple spelling rule and the
 ## 38.26 Const Storage
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 struct Point {
     int32 x = 0
@@ -687,15 +687,15 @@ func main() -> int32 {
 
     view<Point> v = getview(p)      // const storage: getview only
 
-    print(width)                    // 3
-    print(p.sum())                  // 9
-    print(q.x)                      // 6
-    print(pair._1)                  // 2
-    print($(v).y)                   // 5
-    print(value)                    // 8
-    print(MAX_POINTS)               // 10
-    print(ORIGIN.x)                 // 0
-    print(sum(1, 2))                // 3
+    stdout(width)                    // 3
+    stdout(p.sum())                  // 9
+    stdout(q.x)                      // 6
+    stdout(pair._1)                  // 2
+    stdout($(v).y)                   // 5
+    stdout(value)                    // 8
+    stdout(MAX_POINTS)               // 10
+    stdout(ORIGIN.x)                 // 0
+    stdout(sum(1, 2))                // 3
     return 0
 }
 ```
@@ -705,7 +705,7 @@ See [Declarations](18-declarations.md#188-const-storage).
 ## 38.27 Generic Structs and Functions
 
 ```franko
-import "franko/io"
+import "franko/stdio"
 
 #generic struct Pair<typename A, typename B> {
     A first
@@ -722,9 +722,9 @@ import "franko/io"
 
 func main() -> int32 {
     Pair<int32, uint8> p = make_pair<int32, uint8>(10, 20)
-    print(p.first)              // 10
-    print(p.second)             // 20
-    print(repeat<3>(7))         // 21
+    stdout(p.first)              // 10
+    stdout(p.second)             // 20
+    stdout(repeat<3>(7))         // 21
     return 0
 }
 ```

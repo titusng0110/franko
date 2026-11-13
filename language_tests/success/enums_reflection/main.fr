@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<uint8> Status {
     spawning = 10,
@@ -7,20 +7,20 @@ enum<uint8> Status {
 
 func main() -> int32 {
     Status s = Status::spawning;
-    print(#is_enum(Status));
-    print(#is_enum(s));
-    print(#is_enum(Status::alive));
-    print(#is_primitive(Status));
-    print(#has_default_value(Status));
-    print(#is_memset_safe(Status));
-    print(#is_memcpy_safe(Status));
-    print(#is_matchable(Status));
-    print(#is_comparable(Status));
-    print(#is_assignable(Status));
-    print(#is_value_assignable(Status));
-    print(#what_type(Status));
-    print(#what_type(Status::alive));
-    print(#is_same_type(Status::alive, Status::spawning));
-    print(#is_same_type(Status, Status));
+    stdout(#is_enum(Status));
+    stdout(#is_enum(s));
+    stdout(#is_enum(Status::alive));
+    stdout(#is_primitive(Status));
+    stdout(#has_default_value(Status));
+    stdout(#is_memset_safe(Status));
+    stdout(#is_memcpy_safe(Status));
+    stdout(#is_matchable(Status));
+    stdout(#is_comparable(Status));
+    stdout(#is_assignable(Status));
+    stdout(#is_value_assignable(Status));
+    stdout(#what_type(Status));
+    stdout(#what_type(Status::alive));
+    stdout(#is_same_type(Status::alive, Status::spawning));
+    stdout(#is_same_type(Status, Status));
     return 0;
 }

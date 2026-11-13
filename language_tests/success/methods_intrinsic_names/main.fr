@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Methods Named Like Array Intrinsics
@@ -34,12 +34,12 @@ struct Box {
 func main() -> int32 {
     Counter c
     c.init(7)
-    print(c.get())
+    stdout(c.get())
     Box b
     b.init(2)
     b.data[0] = 11
     b.data[1] = 22
-    print(b.data[0], " "); print(b.data[1])
+    stdout(b.data[0], end = " "); stdout(b.data[1])
     b.uninit()
     return 0
 }

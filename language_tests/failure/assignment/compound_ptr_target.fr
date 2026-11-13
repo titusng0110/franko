@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: assignment/compound_ptr_target
 // Pointers are not arithmetic values: `p += 1` is rejected the same way
@@ -12,7 +12,7 @@ func main() -> int32 {
     p &= 1;
     p ^= 1;
 
-    print(v);
+    stdout(v);
 
     return 0;
 }

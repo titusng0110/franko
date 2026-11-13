@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Array Literals Are view<[T, N]> Values
@@ -21,26 +21,26 @@ func mk() -> view<[int32, 3]> {
 func main() -> int32 {
     // Declaration and assignment form.
     view<[int32, 3]> v = [1, 2, 3];
-    print($(v)[0]);
-    print($(v)[2]);
+    stdout($(v)[0]);
+    stdout($(v)[2]);
 
     v = [4, 5, 6];
-    print($(v)[1]);
+    stdout($(v)[1]);
 
     // memcpy copies literal elements into an array.
     [int32, 3] buf;
     buf.memcpy([7, 8, 9]);
-    print(buf[0]);
-    print(buf[2]);
+    stdout(buf[0]);
+    stdout(buf[2]);
 
     // Call-argument and return contexts.
-    print(take([100, 200, 300]));
+    stdout(take([100, 200, 300]));
     view<[int32, 3]> w = mk();
-    print($(w)[2]);
+    stdout($(w)[2]);
 
     // Decay to a dynamic view.
     view<[int32]> d = [1, 2, 3, 4];
-    print($(d)[3]);
+    stdout($(d)[3]);
 
     return 0;
 }

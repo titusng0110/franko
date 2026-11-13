@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 func pick(int32 n, ptr<int32> p) -> ptr<int32> {
     if (n == 0) {
@@ -10,6 +10,6 @@ func pick(int32 n, ptr<int32> p) -> ptr<int32> {
 func main() -> int32 {
     int32 x = 3
     ptr<int32> p = pick(2, getptr(x))
-    print($(p))
+    stdout($(p))
     return 0
 }

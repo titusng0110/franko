@@ -2,8 +2,8 @@
 // `%` requires integer operands exactly like the other arithmetic
 // operators: pointers and arrays are rejected (doc 17.3).
 // Bare expression statements keep the operator errors as the reported
-// diagnostics (wrapping them in `print(...)` would report a
-// `print` overload error first, since neither result is printable).
+// diagnostics (wrapping them in `stdout(...)` would report a
+// `stdout` overload error first, since neither result is printable).
 func main() -> int32 {
     int32 v = 1;
     ptr<int32> p = getptr(v);

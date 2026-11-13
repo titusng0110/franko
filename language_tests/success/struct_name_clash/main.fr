@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Struct Name Clash with a Variable and a Function
@@ -22,15 +22,15 @@ func main() -> int32 {
     // Variable named 'Item' of struct type 'Item'.
     Item Item;
     Item.id = 5;
-    print(Item.id);
+    stdout(Item.id);
 
     // In a call position, Item(...) resolves to the function.
-    print(Item());
+    stdout(Item());
 
     // The struct type still names a type for other variables.
     Item other;
     other.id = 9;
-    print(other.id);
+    stdout(other.id);
 
     return 0;
 }

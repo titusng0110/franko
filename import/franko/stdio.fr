@@ -1,21 +1,21 @@
 import "./os"
 import "./string"
 
-// Shared stdin buffer. Bytes read ahead by read_bytes/read_line stay
+// Shared stdin buffer. Bytes read ahead by stdin_bytes/stdin_line stay
 // here until the next call consumes them.
 [byte, 8192] __io_input
 uint32 __io_input_pos = 0
 uint32 __io_input_len = 0
 
 // Internal line accumulator. The dynamic array lives in a struct so the
-// local-array lifecycle checker does not track it. read_line initializes
+// local-array lifecycle checker does not track it. stdin_line initializes
 // it to the exact size of the first chunk and doubles it up to the
 // 81920-byte line limit.
 struct __IoLineBuffer {
     [byte] data
 }
 
-// Internal write helpers. Formatting happens in the print/print_err
+// Internal write helpers. Formatting happens in the stdout/stderr
 // functions; these only flush a byte view to a standard stream.
 func __io_write_stdout(const view<[byte]> payload, const uint32 count) -> void {
     if (payload == null || count == 0) {
@@ -41,18 +41,20 @@ func __io_write_stderr(const view<[byte]> payload, const uint32 count) -> void {
     }
 }
 
-// franko/io — user-level output and input.
+// franko/stdio — user-level output and input.
 //
-// `print` is an ordinary overloaded function (not a statement).
-// Single-argument `print(x)` writes `x` followed by `\n`. Two-argument
-// `print(x, end)` writes `x` followed by `end` verbatim (a null or
-// empty `end` means no suffix, so no newline either). `print()`
-// writes a bare newline. `print(str)` writes the UTF-8 bytes verbatim
-// followed by `\n`; a null or empty view prints nothing. The
+// `stdout` is an ordinary overloaded function (not a statement).
+// Single-argument `stdout(x)` writes `x` followed by `\n`. Supplying the
+// optional end argument uses a named argument:
+// `stdout(x, end = suffix)` writes `x` followed by `suffix` verbatim (a
+// null or empty `suffix` means no suffix, so no newline either).
+// `stdout()` writes a bare newline. `stdout(str)` writes the UTF-8 bytes
+// verbatim followed by `\n`; a null or empty view writes no text bytes,
+// but the `end` suffix is still written. The
 // `std::String` overloads write only the live bytes, not the backing
 // buffer's unused capacity.
 //
-// `print_err` mirrors every `print` overload on stderr.
+// `stderr` mirrors every `stdout` overload on stderr.
 //
 // Integer printing formats into a 25-byte stack buffer. The longest
 // integer is 20 digits (plus a possible sign), so the separator is
@@ -64,23 +66,23 @@ func __io_write_stderr(const view<[byte]> payload, const uint32 count) -> void {
 // Output goes through the OS bridge (posix `write` on linux/macos,
 // `WriteFile` on windows), so it shares a channel with raw fd writes.
 //
-// Input: `read_bytes` reads into a caller-provided buffer and reports
-// how much arrived; `read_line` reads one line into a `std::String`
+// Input: `stdin_bytes` reads into a caller-provided buffer and reports
+// how much arrived; `stdin_line` reads one line into a `std::String`
 // using an internal growable buffer. See their comments below.
 
-func print() -> void {
+func stdout() -> void {
     __io_write_stdout([10], 1)
 }
 
-func print_err() -> void {
+func stderr() -> void {
     __io_write_stderr([10], 1)
 }
 
 // ------------------------------------------------------------
-// print: unsigned integers
+// stdout: unsigned integers
 // ------------------------------------------------------------
 
-func print(const uint64 num, const view<[uint8]> end) -> void {
+func stdout(const uint64 num, const view<[uint8]> end = "\n") -> void {
     [byte, 25] out
     uint32 len = 0
     if (num == 0) {
@@ -118,41 +120,25 @@ func print(const uint64 num, const view<[uint8]> end) -> void {
     }
 }
 
-func print(const uint8 num, const view<[uint8]> end) -> void {
-    print(cast<uint64>(num), end)
+func stdout(const uint8 num, const view<[uint8]> end = "\n") -> void {
+    stdout(cast<uint64>(num), end = end)
 }
 
-func print(const uint16 num, const view<[uint8]> end) -> void {
-    print(cast<uint64>(num), end)
+func stdout(const uint16 num, const view<[uint8]> end = "\n") -> void {
+    stdout(cast<uint64>(num), end = end)
 }
 
-func print(const uint32 num, const view<[uint8]> end) -> void {
-    print(cast<uint64>(num), end)
-}
-
-func print(const uint64 num) -> void {
-    print(num, [10])
-}
-
-func print(const uint8 num) -> void {
-    print(cast<uint64>(num))
-}
-
-func print(const uint16 num) -> void {
-    print(cast<uint64>(num))
-}
-
-func print(const uint32 num) -> void {
-    print(cast<uint64>(num))
+func stdout(const uint32 num, const view<[uint8]> end = "\n") -> void {
+    stdout(cast<uint64>(num), end = end)
 }
 
 // ------------------------------------------------------------
-// print: signed integers
+// stdout: signed integers
 // ------------------------------------------------------------
 
-func print(const int64 num, const view<[uint8]> end) -> void {
+func stdout(const int64 num, const view<[uint8]> end = "\n") -> void {
     if (num >= 0) {
-        print(unsafe_cast<uint64>(num), end)
+        stdout(unsafe_cast<uint64>(num), end = end)
         return
     }
     [byte, 25] out
@@ -190,49 +176,23 @@ func print(const int64 num, const view<[uint8]> end) -> void {
     }
 }
 
-func print(const int8 num, const view<[uint8]> end) -> void {
-    print(cast<int64>(num), end)
+func stdout(const int8 num, const view<[uint8]> end = "\n") -> void {
+    stdout(cast<int64>(num), end = end)
 }
 
-func print(const int16 num, const view<[uint8]> end) -> void {
-    print(cast<int64>(num), end)
+func stdout(const int16 num, const view<[uint8]> end = "\n") -> void {
+    stdout(cast<int64>(num), end = end)
 }
 
-func print(const int32 num, const view<[uint8]> end) -> void {
-    print(cast<int64>(num), end)
-}
-
-func print(const int64 num) -> void {
-    print(num, [10])
-}
-
-func print(const int8 num) -> void {
-    print(cast<int64>(num))
-}
-
-func print(const int16 num) -> void {
-    print(cast<int64>(num))
-}
-
-func print(const int32 num) -> void {
-    print(cast<int64>(num))
+func stdout(const int32 num, const view<[uint8]> end = "\n") -> void {
+    stdout(cast<int64>(num), end = end)
 }
 
 // ------------------------------------------------------------
-// print: text and std::String
+// stdout: text and std::String
 // ------------------------------------------------------------
 
-func print(const view<[uint8]> utf8str) -> void {
-    if (utf8str == null) {
-        return
-    }
-    if ($(utf8str).length() == 0) {
-        return
-    }
-    print(utf8str, [10])
-}
-
-func print(const view<[uint8]> utf8str, const view<[uint8]> end) -> void {
+func stdout(const view<[uint8]> utf8str, const view<[uint8]> end = "\n") -> void {
     if (utf8str != null) {
         uint32 n = $(utf8str).length()
         if (n != 0) {
@@ -247,18 +207,7 @@ func print(const view<[uint8]> utf8str, const view<[uint8]> end) -> void {
     }
 }
 
-func print(const view<std::String> str) -> void {
-    if (str == null) {
-        return
-    }
-    if ($(str).length() == 0) {
-        return
-    }
-    print(str, [10])
-    return
-}
-
-func print(const view<std::String> str, const view<std::String> end) -> void {
+func stdout(const view<std::String> str, const view<std::String> end) -> void {
     [byte] endbuf
     view<[uint8]> endbytes = null
     if (end != null) {
@@ -267,20 +216,20 @@ func print(const view<std::String> str, const view<std::String> end) -> void {
             endbytes = getview(endbuf)
         }
     }
-    print(str, endbytes)
+    stdout(str, end = endbytes)
     if (endbuf.length() != 0) {
         endbuf.uninit()
     }
     return
 }
 
-func print(const view<std::String> str, const view<[byte]> end) -> void {
+func stdout(const view<std::String> str, const view<[byte]> end = "\n") -> void {
     if (str != null) {
         uint32 n = $(str).length()
         if (n != 0) {
             [byte] buf
             if ($(str).to(getptr(buf)) == 0) {
-                print(getview(buf), end)
+                stdout(getview(buf), end = end)
             }
             if (buf.length() != 0) {
                 buf.uninit()
@@ -289,15 +238,15 @@ func print(const view<std::String> str, const view<[byte]> end) -> void {
         }
     }
     view<[uint8]> empty = null
-    print(empty, end)
+    stdout(empty, end = end)
     return
 }
 
 // ------------------------------------------------------------
-// print_err: unsigned integers
+// stderr: unsigned integers
 // ------------------------------------------------------------
 
-func print_err(const uint64 num, const view<[uint8]> end) -> void {
+func stderr(const uint64 num, const view<[uint8]> end = "\n") -> void {
     [byte, 25] out
     uint32 len = 0
     if (num == 0) {
@@ -335,41 +284,25 @@ func print_err(const uint64 num, const view<[uint8]> end) -> void {
     }
 }
 
-func print_err(const uint8 num, const view<[uint8]> end) -> void {
-    print_err(cast<uint64>(num), end)
+func stderr(const uint8 num, const view<[uint8]> end = "\n") -> void {
+    stderr(cast<uint64>(num), end = end)
 }
 
-func print_err(const uint16 num, const view<[uint8]> end) -> void {
-    print_err(cast<uint64>(num), end)
+func stderr(const uint16 num, const view<[uint8]> end = "\n") -> void {
+    stderr(cast<uint64>(num), end = end)
 }
 
-func print_err(const uint32 num, const view<[uint8]> end) -> void {
-    print_err(cast<uint64>(num), end)
-}
-
-func print_err(const uint64 num) -> void {
-    print_err(num, [10])
-}
-
-func print_err(const uint8 num) -> void {
-    print_err(cast<uint64>(num))
-}
-
-func print_err(const uint16 num) -> void {
-    print_err(cast<uint64>(num))
-}
-
-func print_err(const uint32 num) -> void {
-    print_err(cast<uint64>(num))
+func stderr(const uint32 num, const view<[uint8]> end = "\n") -> void {
+    stderr(cast<uint64>(num), end = end)
 }
 
 // ------------------------------------------------------------
-// print_err: signed integers
+// stderr: signed integers
 // ------------------------------------------------------------
 
-func print_err(const int64 num, const view<[uint8]> end) -> void {
+func stderr(const int64 num, const view<[uint8]> end = "\n") -> void {
     if (num >= 0) {
-        print_err(unsafe_cast<uint64>(num), end)
+        stderr(unsafe_cast<uint64>(num), end = end)
         return
     }
     [byte, 25] out
@@ -407,49 +340,23 @@ func print_err(const int64 num, const view<[uint8]> end) -> void {
     }
 }
 
-func print_err(const int8 num, const view<[uint8]> end) -> void {
-    print_err(cast<int64>(num), end)
+func stderr(const int8 num, const view<[uint8]> end = "\n") -> void {
+    stderr(cast<int64>(num), end = end)
 }
 
-func print_err(const int16 num, const view<[uint8]> end) -> void {
-    print_err(cast<int64>(num), end)
+func stderr(const int16 num, const view<[uint8]> end = "\n") -> void {
+    stderr(cast<int64>(num), end = end)
 }
 
-func print_err(const int32 num, const view<[uint8]> end) -> void {
-    print_err(cast<int64>(num), end)
-}
-
-func print_err(const int64 num) -> void {
-    print_err(num, [10])
-}
-
-func print_err(const int8 num) -> void {
-    print_err(cast<int64>(num))
-}
-
-func print_err(const int16 num) -> void {
-    print_err(cast<int64>(num))
-}
-
-func print_err(const int32 num) -> void {
-    print_err(cast<int64>(num))
+func stderr(const int32 num, const view<[uint8]> end = "\n") -> void {
+    stderr(cast<int64>(num), end = end)
 }
 
 // ------------------------------------------------------------
-// print_err: text and std::String
+// stderr: text and std::String
 // ------------------------------------------------------------
 
-func print_err(const view<[uint8]> utf8str) -> void {
-    if (utf8str == null) {
-        return
-    }
-    if ($(utf8str).length() == 0) {
-        return
-    }
-    print_err(utf8str, [10])
-}
-
-func print_err(const view<[uint8]> utf8str, const view<[uint8]> end) -> void {
+func stderr(const view<[uint8]> utf8str, const view<[uint8]> end = "\n") -> void {
     if (utf8str != null) {
         uint32 n = $(utf8str).length()
         if (n != 0) {
@@ -464,18 +371,7 @@ func print_err(const view<[uint8]> utf8str, const view<[uint8]> end) -> void {
     }
 }
 
-func print_err(const view<std::String> str) -> void {
-    if (str == null) {
-        return
-    }
-    if ($(str).length() == 0) {
-        return
-    }
-    print_err(str, [10])
-    return
-}
-
-func print_err(const view<std::String> str, const view<std::String> end) -> void {
+func stderr(const view<std::String> str, const view<std::String> end) -> void {
     [byte] endbuf
     view<[uint8]> endbytes = null
     if (end != null) {
@@ -484,20 +380,20 @@ func print_err(const view<std::String> str, const view<std::String> end) -> void
             endbytes = getview(endbuf)
         }
     }
-    print_err(str, endbytes)
+    stderr(str, end = endbytes)
     if (endbuf.length() != 0) {
         endbuf.uninit()
     }
     return
 }
 
-func print_err(const view<std::String> str, const view<[byte]> end) -> void {
+func stderr(const view<std::String> str, const view<[byte]> end = "\n") -> void {
     if (str != null) {
         uint32 n = $(str).length()
         if (n != 0) {
             [byte] buf
             if ($(str).to(getptr(buf)) == 0) {
-                print_err(getview(buf), end)
+                stderr(getview(buf), end = end)
             }
             if (buf.length() != 0) {
                 buf.uninit()
@@ -506,15 +402,15 @@ func print_err(const view<std::String> str, const view<[byte]> end) -> void {
         }
     }
     view<[uint8]> empty = null
-    print_err(empty, end)
+    stderr(empty, end = end)
     return
 }
 
-// franko/io — input.
+// franko/stdio — input.
 //
 // Input fills a caller-provided buffer (arrays cannot be returned
 // directly) and reports how much arrived. Both functions go through
-// the same OS bridge `print` writes with: os::posix::read on
+// the same OS bridge `stdout` writes with: os::posix::read on
 // linux/macos, os::win32::ReadFile on windows, so input shares a
 // channel with raw fd reads.
 
@@ -574,7 +470,7 @@ func __io_fill() -> int32 {
 // of succeeding with 0 bytes as POSIX read does. The os::win32 bridge
 // stays a thin ReadFile wrapper, so that end-of-input normalization
 // lives here.
-func read_bytes(mview<[byte]> buf, const uint32 count) -> (uint32 val, int32 err) {
+func stdin_bytes(mview<[byte]> buf, const uint32 count) -> (uint32 val, int32 err) {
     (uint32 val, int32 err) result
     result.val = 0
     result.err = -1
@@ -631,7 +527,7 @@ func read_bytes(mview<[byte]> buf, const uint32 count) -> (uint32 val, int32 err
 // read error. Returns 0 on success, -1 for a null `out`, a read error,
 // or an allocation failure, and -2 for an over-long line. An empty
 // string means an empty line or end of input with nothing pending.
-func read_line(ptr<std::String> out) -> int32 {
+func stdin_line(ptr<std::String> out) -> int32 {
     if (out == null) {
         return -1
     }

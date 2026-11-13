@@ -1162,14 +1162,22 @@ public final class ExpressionAnalyzer {
         return SastNode.enumVariant(q.span, enumSymbol, variant);
     }
 
-    private List<CallArg> lowerCallArgs(List<AstNode> rawArgs) {
+    private List<CallArg> lowerCallArgs(
+            List<AstNode> rawArgs,
+            List<String> argumentNames
+    ) {
         List<CallArg> out = new ArrayList<>();
 
-        for (AstNode arg : rawArgs) {
+        for (int i = 0; i < rawArgs.size(); i++) {
+            AstNode arg = rawArgs.get(i);
+            String name = argumentNames != null && i < argumentNames.size()
+                    ? argumentNames.get(i)
+                    : "";
+
             if (arg.kind == AstKind.ARRAY_LITERAL) {
-                out.add(CallArg.literal(arg));
+                out.add(CallArg.literal(arg, name));
             } else {
-                out.add(CallArg.lowered(analyzeValueExpr(arg)));
+                out.add(CallArg.lowered(analyzeValueExpr(arg), name));
             }
         }
 
@@ -1178,27 +1186,175 @@ public final class ExpressionAnalyzer {
 
     private List<SastNode> finalizeCallArgs(
             List<CallArg> callArgs,
-            List<SastType> parameterTypes
+            Symbol fn,
+            boolean method
+    ) {
+        if (fn == null) {
+            return finalizePositionalCallArgs(callArgs);
+        }
+
+        int[] argAt = OverloadResolution.bindArguments(fn, callArgs, method);
+
+        if (argAt == null) {
+            return finalizePositionalCallArgs(callArgs);
+        }
+
+        List<SastNode> out = new ArrayList<>();
+        int start = method ? 1 : 0;
+
+        for (int p = start; p < fn.parameters.size(); p++) {
+            int argIndex = argAt[p];
+            Symbol parameter = fn.parameters.get(p);
+
+            if (argIndex >= 0) {
+                out.add(finalizeCallArg(
+                        callArgs.get(argIndex),
+                        parameter.type
+                ));
+                continue;
+            }
+
+            SastNode defaultValue = parameter.parameterDefault == null
+                    ? null
+                    : parameter.parameterDefault.copyStaticDefault();
+
+            if (defaultValue == null) {
+                ctx.error("Internal compiler error: parameter '"
+                        + parameter.name
+                        + "' of '"
+                        + fn.qualifiedName()
+                        + "' has no resolved default value");
+                defaultValue = SastNode.intLiteral(
+                        SourceSpan.NONE,
+                        FALLBACK_TYPE,
+                        BigInteger.ZERO,
+                        "0"
+                );
+            }
+
+            out.add(defaultValue);
+        }
+
+        return out;
+    }
+
+    private List<SastNode> finalizePositionalCallArgs(
+            List<CallArg> callArgs
     ) {
         List<SastNode> out = new ArrayList<>();
 
-        for (int i = 0; i < callArgs.size(); i++) {
-            CallArg callArg = callArgs.get(i);
-
+        for (CallArg callArg : callArgs) {
             if (!callArg.isLiteral()) {
                 out.add(callArg.lowered);
                 continue;
             }
 
-            SastType context = parameterTypes != null
-                    && i < parameterTypes.size()
-                    ? parameterTypes.get(i)
-                    : null;
-
-            out.add(lowerArrayLiteral(callArg.literal, context));
+            out.add(lowerArrayLiteral(callArg.literal, null));
         }
 
         return out;
+    }
+
+    private SastNode finalizeCallArg(
+            CallArg callArg,
+            SastType parameterType
+    ) {
+        if (!callArg.isLiteral()) {
+            return callArg.lowered;
+        }
+
+        return lowerArrayLiteral(callArg.literal, parameterType);
+    }
+
+    private boolean validateCallShape(
+            String displayName,
+            List<CallArg> args,
+            boolean method
+    ) {
+        boolean valid = true;
+        boolean namedSeen = false;
+        Set<String> names = new HashSet<>();
+
+        for (CallArg arg : args) {
+            if (arg == null) {
+                valid = false;
+                continue;
+            }
+
+            if (!arg.isNamed()) {
+                if (namedSeen) {
+                    ctx.error("Positional arguments must appear before named"
+                            + " arguments in call to '" + displayName + "'");
+                    valid = false;
+                }
+
+                continue;
+            }
+
+            namedSeen = true;
+
+            if (method && "self".equals(arg.name)) {
+                ctx.error("Named argument 'self' is not valid in a method"
+                        + " call; self is implicit");
+                valid = false;
+            }
+
+            if (!names.add(arg.name)) {
+                ctx.error("Named argument '" + arg.name + "' is specified"
+                        + " more than once in call to '" + displayName + "'");
+                valid = false;
+            }
+        }
+
+        return valid;
+    }
+
+    private boolean reportCallBindingProblem(
+            String displayName,
+            List<Symbol> overloads,
+            List<CallArg> args,
+            boolean method
+    ) {
+        if (overloads == null || overloads.size() != 1) {
+            return false;
+        }
+
+        Symbol overload = overloads.get(0);
+        boolean relevant = false;
+
+        for (CallArg arg : args) {
+            if (arg != null && arg.isNamed()) {
+                relevant = true;
+                break;
+            }
+        }
+
+        if (!relevant) {
+            for (Symbol parameter : overload.parameters) {
+                if (parameter.parameterDefault != null) {
+                    relevant = true;
+                    break;
+                }
+            }
+        }
+
+        if (!relevant) {
+            return false;
+        }
+
+        String problem = OverloadResolution.describeBindingProblem(
+                displayName,
+                overload,
+                args,
+                method
+        );
+
+        if (problem == null) {
+            return false;
+        }
+
+        ctx.error(problem);
+        return true;
     }
 
     private static List<SastType> callArgTypes(List<SastNode> args) {
@@ -1232,36 +1388,45 @@ public final class ExpressionAnalyzer {
 
         if (call.callee.kind == AstKind.VAR) {
             AstNode calleeVar = call.callee;
-            List<CallArg> callArgs = lowerCallArgs(call.args);
+            List<CallArg> callArgs = lowerCallArgs(
+                    call.args,
+                    call.argumentNames
+            );
+            boolean shapeValid = validateCallShape(
+                    calleeVar.name,
+                    callArgs,
+                    false
+            );
 
             Symbol fn = ctx.resolveFunctionWithLiterals(
                     calleeVar.name,
                     callArgs
             );
 
-            List<SastType> parameterTypes =
-                    fn == null ? null : fn.parameterTypes();
-
-            List<SastNode> args =
-                    finalizeCallArgs(callArgs, parameterTypes);
+            List<SastNode> args = finalizeCallArgs(callArgs, fn, false);
 
             if (fn == null) {
-                Symbol resolved = ctx.resolveFunction(
-                        calleeVar.name,
-                        args
-                );
+                boolean explained = !shapeValid;
 
-                if (resolved == null) {
-                    if (ctx.resolve(calleeVar.name) != null
-                            && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
-                        ctx.error("'" + calleeVar.name + "' is not a function");
-                    } else {
-                        ctx.error("No matching overload for function call '"
-                                + formatCallSignature(
-                                        calleeVar.name,
-                                        callArgTypes(args))
-                                + "'");
-                    }
+                if (ctx.resolve(calleeVar.name) != null
+                        && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
+                    ctx.error("'" + calleeVar.name + "' is not a function");
+                    explained = true;
+                } else if (shapeValid) {
+                    explained = reportCallBindingProblem(
+                            calleeVar.name,
+                            ctx.functionOverloadsNamed(calleeVar.name),
+                            callArgs,
+                            false
+                    );
+                }
+
+                if (!explained) {
+                    ctx.error("No matching overload for function call '"
+                            + formatCallSignature(
+                                    calleeVar.name,
+                                    callArgTypes(args))
+                            + "'");
                 }
 
                 Symbol fallbackFn = Symbol.function(
@@ -1290,7 +1455,10 @@ public final class ExpressionAnalyzer {
 
         if (call.callee.kind == AstKind.QUALIFIED_NAME) {
             AstNode calleeQ = call.callee;
-            List<CallArg> callArgs = lowerCallArgs(call.args);
+            List<CallArg> callArgs = lowerCallArgs(
+                    call.args,
+                    call.argumentNames
+            );
 
             List<String> namespaceSegments = calleeQ.names.subList(
                     0, calleeQ.names.size() - 1);
@@ -1314,26 +1482,36 @@ public final class ExpressionAnalyzer {
                 );
             }
 
+            boolean shapeValid = validateCallShape(
+                    qualifiedCallee,
+                    callArgs,
+                    false
+            );
+
             Symbol fn = ctx.resolveFunctionInWithLiterals(
                     namespace,
                     calleeName,
                     callArgs
             );
 
-            List<SastType> parameterTypes =
-                    fn == null ? null : fn.parameterTypes();
-
-            List<SastNode> args =
-                    finalizeCallArgs(callArgs, parameterTypes);
+            List<SastNode> args = finalizeCallArgs(callArgs, fn, false);
 
             if (fn == null) {
-                Symbol resolved = ctx.resolveFunctionIn(
-                        namespace,
-                        calleeName,
-                        args
-                );
+                boolean explained = !shapeValid;
 
-                if (resolved == null) {
+                if (shapeValid) {
+                    explained = reportCallBindingProblem(
+                            qualifiedCallee,
+                            ctx.functionOverloadsNamedIn(
+                                    namespace,
+                                    calleeName
+                            ),
+                            callArgs,
+                            false
+                    );
+                }
+
+                if (!explained) {
                     ctx.error("No matching overload for function call '"
                             + formatCallSignature(
                                     qualifiedCallee,
@@ -1438,33 +1616,47 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        List<CallArg> callArgs = lowerCallArgs(call.args);
+        List<CallArg> callArgs = lowerCallArgs(
+                call.args,
+                call.argumentNames
+        );
+
+        String displayName = owner.qualifiedName() + "." + mac.name;
+
+        if (OperatorMethods.isOperatorMethodName(mac.name)
+                && call.hasNamedArguments()) {
+            ctx.error("Named arguments are not supported for operator method"
+                    + " calls");
+        }
+
+        boolean shapeValid = validateCallShape(
+                displayName,
+                callArgs,
+                true
+        );
 
         Symbol method = ctx.resolveMethodWithLiterals(owner, mac.name, callArgs);
 
-        List<SastType> userParameterTypes = null;
-
-        if (method != null) {
-            userParameterTypes = new ArrayList<>();
-
-            for (int i = 1; i < method.parameters.size(); i++) {
-                userParameterTypes.add(method.parameters.get(i).type);
-            }
-        }
-
-        List<SastNode> userArgs =
-                finalizeCallArgs(callArgs, userParameterTypes);
+        List<SastNode> userArgs = finalizeCallArgs(
+                callArgs,
+                method,
+                true
+        );
 
         if (method == null) {
             List<SastType> userArgTypes = callArgTypes(userArgs);
+            boolean explained = !shapeValid;
 
-            Symbol resolved = ctx.resolveMethod(
-                    owner,
-                    mac.name,
-                    userArgs
-            );
+            if (shapeValid) {
+                explained = reportCallBindingProblem(
+                        displayName,
+                        owner.getMethods(mac.name),
+                        callArgs,
+                        true
+                );
+            }
 
-            if (resolved == null) {
+            if (!explained) {
                 ctx.error("No matching overload for method call '"
                         + owner.qualifiedName()
                         + "."

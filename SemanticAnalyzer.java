@@ -15,6 +15,7 @@ public final class SemanticAnalyzer {
     private final ConstExpressionEvaluator constEval;
     private final ExpressionAnalyzer exprAnalyzer;
     private final SemanticTypeResolver typeResolver;
+    private final TypeChecker typeChecker;
 
     private Symbol currentFunction = null;
 
@@ -55,6 +56,7 @@ public final class SemanticAnalyzer {
 
         this.exprAnalyzer = lowering.analyzer;
         this.typeResolver = lowering.typeResolver;
+        this.typeChecker = new TypeChecker(symbolTable.diagnostics());
     }
 
     public SastNode analyze(AstNode root) {
@@ -477,6 +479,11 @@ public final class SemanticAnalyzer {
 
         for (NamespaceProgramItems space : spaces) {
             symbolTable.setCurrentNamespace(space.space);
+            resolveParameterDefaults(space);
+        }
+
+        for (NamespaceProgramItems space : spaces) {
+            symbolTable.setCurrentNamespace(space.space);
 
             for (AstNode item : space.items) {
                 if (item.kind == AstKind.ENUM_DECL) {
@@ -780,10 +787,21 @@ public final class SemanticAnalyzer {
             boolean noArgs = params.isEmpty();
             boolean hasArgsShape = params.size() == 1
                     && isArgsArrayParamType(params.get(0).type);
+            boolean hasOptional = false;
+
+            for (AstNode param : fn.parameters) {
+                if (param.defaultValue != null) {
+                    hasOptional = true;
+                    break;
+                }
+            }
 
             globalMainCount++;
 
-            if (globalMainCount > 1) {
+            if (hasOptional) {
+                symbolTable.error("The entry-point function 'main' cannot"
+                        + " declare optional parameters");
+            } else if (globalMainCount > 1) {
                 symbolTable.error(
                         "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32', not both"
                 );
@@ -908,6 +926,344 @@ public final class SemanticAnalyzer {
 
         symbol.inlineMode = methodNode.inlineMode;
         symbolTable.declareMethod(owner, methodNode, symbol);
+    }
+
+    private void resolveParameterDefaults(NamespaceProgramItems space) {
+        for (AstNode item : space.items) {
+            if (item.kind == AstKind.FUNCTION_DECL) {
+                Symbol symbol = symbolTable.findRegisteredFunction(item);
+                resolveParameterDefaults(item, symbol);
+                continue;
+            }
+
+            if (item.kind != AstKind.STRUCT_DECL) {
+                continue;
+            }
+
+            StructSymbol structSymbol = symbolTable.resolveStruct(item.name);
+
+            if (structSymbol == null) {
+                continue;
+            }
+
+            for (AstNode methodNode : item.methods) {
+                Symbol methodSymbol = symbolTable.findRegisteredMethod(
+                        structSymbol,
+                        methodNode
+                );
+
+                resolveParameterDefaults(methodNode, methodSymbol);
+            }
+        }
+    }
+
+    private void resolveParameterDefaults(
+            AstNode declaration,
+            Symbol functionSymbol
+    ) {
+        if (functionSymbol == null) {
+            return;
+        }
+
+        symbolTable.pushScope();
+
+        try {
+            for (Symbol parameter : functionSymbol.parameters) {
+                symbolTable.declare(parameter);
+            }
+
+            for (int i = 0; i < declaration.parameters.size(); i++) {
+                AstNode parameterAst = declaration.parameters.get(i);
+
+                if (parameterAst.defaultValue == null
+                        || i >= functionSymbol.parameters.size()) {
+                    continue;
+                }
+
+                Symbol parameter = functionSymbol.parameters.get(i);
+                symbolTable.diagnostics().push(parameterAst.defaultValue.span);
+
+                try {
+                    SastNode value = exprAnalyzer.analyzeExprWithExpectedType(
+                            parameterAst.defaultValue,
+                            parameter.type
+                    );
+
+                    parameter.parameterDefault = canonicalizeStaticDefault(
+                            value,
+                            parameter,
+                            functionSymbol,
+                            parameterAst.defaultValue.span
+                    );
+                } finally {
+                    symbolTable.diagnostics().pop();
+                }
+            }
+        } finally {
+            symbolTable.popScope();
+        }
+    }
+
+    private SastNode canonicalizeStaticDefault(
+            SastNode value,
+            Symbol parameter,
+            Symbol function,
+            SourceSpan span
+    ) {
+        String where = "Default value for parameter '"
+                + parameter.name
+                + "' of function '"
+                + function.qualifiedName()
+                + "'";
+
+        if (value != null
+                && value.kind == SastKind.AGGREGATE_LITERAL
+                && (value.type == null
+                    || value.type.kind != SastTypeKind.STRUCT
+                    || !typeChecker.isValueAssignableType(value.type))) {
+            symbolTable.error("Default aggregate literal for parameter '"
+                    + parameter.name
+                    + "' must be a value-assignable struct literal");
+            return fallbackStaticDefault(parameter, span);
+        }
+
+        SastNode canonical = canonicalStaticValue(
+                value,
+                parameter.type,
+                where,
+                span
+        );
+
+        if (canonical == null) {
+            return fallbackStaticDefault(parameter, span);
+        }
+
+        if (!isAssignableStaticDefault(parameter.type, canonical)) {
+            symbolTable.error(where
+                    + " has type '"
+                    + canonical.type.describe()
+                    + "', expected '"
+                    + parameter.type.describe()
+                    + "'");
+
+            return fallbackStaticDefault(parameter, span);
+        }
+
+        return canonical;
+    }
+
+    private SastNode canonicalStaticValue(
+            SastNode value,
+            SastType expectedType,
+            String where,
+            SourceSpan span
+    ) {
+        if (value == null) {
+            symbolTable.error(where + " must be a compile-time value");
+            return null;
+        }
+
+        if (value.isConstant()
+                && value.type != null
+                && value.type.kind == SastTypeKind.PRIMITIVE
+                && (value.kind == SastKind.INT_LITERAL
+                    || value.kind == SastKind.UNARY_OP
+                    || value.kind == SastKind.BIN_OP)) {
+            if (expectedType.kind == SastTypeKind.PRIMITIVE) {
+                if (!TypeChecker.fitsBigIntegerToPrimitive(
+                        value.constantValue,
+                        expectedType.primitive)) {
+                    symbolTable.error(where
+                            + " does not fit type '"
+                            + expectedType.describe()
+                            + "'");
+                    return null;
+                }
+
+                return SastNode.intLiteral(
+                        value.span,
+                        expectedType,
+                        value.constantValue,
+                        value.rawValue == null
+                                ? value.constantValue.toString(10)
+                                : value.rawValue
+                );
+            }
+
+            return SastNode.intLiteral(
+                    value.span,
+                    value.type,
+                    value.constantValue,
+                    value.rawValue == null
+                            ? value.constantValue.toString(10)
+                            : value.rawValue
+            );
+        }
+
+        if (value.kind == SastKind.NULL_LITERAL) {
+            return SastNode.nullLiteral(value.span, value.type);
+        }
+
+        if (value.kind == SastKind.ENUM_VARIANT) {
+            SastNode copy = SastNode.enumVariant(
+                    value.span,
+                    value.enumSymbol,
+                    value.variant
+            );
+            copy.type = value.type;
+            return copy;
+        }
+
+        if (value.kind == SastKind.VAR_EXPR) {
+            if (value.symbol != null
+                    && (value.symbol.literalBytes != null
+                        || value.symbol.literalValues != null)) {
+                return SastNode.varExpr(value.span, value.type, value.symbol);
+            }
+
+            symbolTable.error(where + " must be a compile-time value");
+            return null;
+        }
+
+        if (value.kind == SastKind.GET_PTR) {
+            if (value.target != null
+                    && value.target.kind == SastKind.VAR_EXPR
+                    && value.target.symbol != null
+                    && (value.target.symbol.literalBytes != null
+                        || value.target.symbol.literalValues != null)) {
+                return SastNode.getPtr(
+                        value.span,
+                        value.type,
+                        SastNode.varExpr(
+                                value.target.span,
+                                value.target.type,
+                                value.target.symbol
+                        ),
+                        value.temporary
+                );
+            }
+
+            symbolTable.error(where + " must be a compile-time value");
+            return null;
+        }
+
+        if (value.kind == SastKind.AGGREGATE_LITERAL) {
+            if (value.type == null
+                    || value.type.kind != SastTypeKind.STRUCT
+                    || !typeChecker.isValueAssignableType(value.type)) {
+                symbolTable.error(where
+                        + " must be a value-assignable struct literal");
+                return null;
+            }
+
+            List<SastNode> fields = new ArrayList<>();
+
+            for (SastNode fieldInit : value.fields) {
+                if (fieldInit.kind != SastKind.AGGREGATE_FIELD_INIT
+                        || fieldInit.field == null) {
+                    symbolTable.error(where + " must be a compile-time value");
+                    return null;
+                }
+
+                SastNode fieldValue = canonicalStaticValue(
+                        fieldInit.value,
+                        fieldInit.field.type,
+                        "Default aggregate literal field '"
+                                + fieldInit.field.name
+                                + "'",
+                        span
+                );
+
+                if (fieldValue == null) {
+                    return null;
+                }
+
+                fields.add(SastNode.aggregateFieldInit(
+                        fieldInit.field,
+                        fieldValue
+                ));
+            }
+
+            return SastNode.aggregateLiteral(
+                    value.span,
+                    value.type,
+                    fields
+            );
+        }
+
+        symbolTable.error(where + " must be a compile-time value");
+        return null;
+    }
+
+    private boolean isAssignableStaticDefault(
+            SastType targetType,
+            SastNode value
+    ) {
+        if (targetType == null || value == null || value.type == null) {
+            return false;
+        }
+
+        if (value.type.kind == SastTypeKind.NULL) {
+            return targetType.kind == SastTypeKind.PTR;
+        }
+
+        if (TypeChecker.sameType(targetType, value.type)) {
+            return true;
+        }
+
+        if (value.isConstant()
+                && targetType.kind == SastTypeKind.PRIMITIVE) {
+            return TypeChecker.fitsBigIntegerToPrimitive(
+                    value.constantValue,
+                    targetType.primitive
+            );
+        }
+
+        return PointerPermissions.isPointerConversion(
+                value.type,
+                targetType
+        );
+    }
+
+    private SastNode fallbackStaticDefault(
+            Symbol parameter,
+            SourceSpan span
+    ) {
+        SastType type = parameter.type;
+
+        if (type.kind == SastTypeKind.PTR) {
+            return SastNode.nullLiteral(span, SastType.nullType());
+        }
+
+        if (type.kind == SastTypeKind.ENUM
+                && type.enumSymbol != null
+                && !type.enumSymbol.variants.isEmpty()) {
+            return SastNode.enumVariant(
+                    span,
+                    type.enumSymbol,
+                    type.enumSymbol.variants.get(0)
+            );
+        }
+
+        if (type.kind == SastTypeKind.STRUCT) {
+            return SastNode.aggregateLiteral(span, type, List.of());
+        }
+
+        if (type.kind == SastTypeKind.PRIMITIVE) {
+            return SastNode.intLiteral(
+                    span,
+                    type,
+                    BigInteger.ZERO,
+                    "0"
+            );
+        }
+
+        return SastNode.intLiteral(
+                span,
+                SastType.primitive(SemanticPrimitiveKind.INT32),
+                BigInteger.ZERO,
+                "0"
+        );
     }
 
     private SastNode analyzeFunctionDecl(AstNode fn) {

@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // ============================================================
 // LANGUAGE TEST: Methods In Namespaces
@@ -29,10 +29,10 @@ func main() -> int32 {
     util::Counter c
     c.bump()
     c.bump()
-    print(c.value())
-    print(read_it(getptr(c)))
+    stdout(c.value())
+    stdout(read_it(getptr(c)))
     ptr<util::Counter> q
     q = getptr(c)
-    print($(q).value())
+    stdout($(q).value())
     return 0
 }

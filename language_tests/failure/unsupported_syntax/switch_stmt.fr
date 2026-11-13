@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 // Failure fixture: unsupported_syntax/switch_stmt
 // There is no switch statement in the grammar; only if, while, and for
@@ -8,11 +8,11 @@ func main() -> int32 {
     int32 x = 2;
     switch (x) {
         case 1:
-            print(1);
+            stdout(1);
         case 2:
-            print(2);
+            stdout(2);
         default:
-            print(0);
+            stdout(0);
     }
     return 0;
 }

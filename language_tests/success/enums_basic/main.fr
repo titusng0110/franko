@@ -1,4 +1,4 @@
-import "franko/io"
+import "franko/stdio"
 
 enum<int32> Types {
     type1 = 1,
@@ -14,23 +14,23 @@ enum<int32> States {
 
 func main() -> int32 {
     Types t = Types::type1;
-    print(t == Types::type1);
-    print(t == Types::type2);
-    print(Types::type2 == Types::type2);
+    stdout(t == Types::type1);
+    stdout(t == Types::type2);
+    stdout(Types::type2 == Types::type2);
     t = Types::type3;
-    print(t == Types::type3);
-    print(Types::type1 < Types::type2);
-    print(Types::type3 > Types::type2);
-    print(Types::type1 <= Types::type1);
-    print(Types::type2 >= Types::type3);
-    print(Types::type1 != Types::type2);
+    stdout(t == Types::type3);
+    stdout(Types::type1 < Types::type2);
+    stdout(Types::type3 > Types::type2);
+    stdout(Types::type1 <= Types::type1);
+    stdout(Types::type2 >= Types::type3);
+    stdout(Types::type1 != Types::type2);
 
     States s = States::state1;
-    print(s == States::state1);
+    stdout(s == States::state1);
     s = States::state3;
-    print(s == States::state3);
-    print(States::state1 < States::state2);
-    print(#is_enum(Types));
-    print(#is_enum(s));
+    stdout(s == States::state3);
+    stdout(States::state1 < States::state2);
+    stdout(#is_enum(Types));
+    stdout(#is_enum(s));
     return 0;
 }
