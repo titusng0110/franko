@@ -114,12 +114,30 @@ final class Cpp14ExpressionEmitter {
         BigInteger magnitude = value.abs();
         String digits = magnitude.toString();
 
+        if (negative) {
+            if (value.equals(BigInteger.valueOf(Long.MIN_VALUE))) {
+                // INT64_MIN has no positive int64 representation. Building
+                // it from two representable values avoids negating an
+                // unsigned literal (MSVC C4146) and the implementation-
+                // defined unsigned-to-signed conversion that follows.
+                return "(-9223372036854775807LL - 1)";
+            }
+            if (magnitude.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                return "-" + digits + "ULL";
+            }
+            if (magnitude.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                // MSVC gives a plain decimal literal above int32 max an
+                // unsigned type, so an unsuffixed negative literal would
+                // apply unary minus to an unsigned value (C4146).
+                return "-" + digits + "LL";
+            }
+            return "-" + digits;
+        }
+
         boolean needsUllSuffix =
                 magnitude.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0;
 
-        String core = needsUllSuffix ? digits + "ULL" : digits;
-
-        return negative ? "-" + core : core;
+        return needsUllSuffix ? digits + "ULL" : digits;
     }
 
     private String emitUnaryOp(SastNode node) {
